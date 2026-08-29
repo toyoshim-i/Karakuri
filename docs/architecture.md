@@ -36,16 +36,18 @@ graph TD
     CLI --> OPRECORD[karakuri-operation-record]
     CLI --> OPERATION
     CLI --> AUDIO[karakuri-audio]
-    CLI --> MIDI[karakuri-midi]
     CLI --> STORE[karakuri-store]
     CLI --> IR[karakuri-ir]
     CLI --> SIGNAL[karakuri-signal]
 
     ENV --> ENGINE
     ENV --> AUDIO
+    ENV --> MIDI[karakuri-midi]
     ENV --> STORE
     ENV --> IR
     ENV --> SIGNAL
+    ENV --> OPERATION
+    ENV --> OPRECORD
 
     OPRECORD --> OPERATION
     OPRECORD --> STORE
@@ -84,8 +86,8 @@ graph TD
 | [karakuri-operation-record](../crates/karakuri-operation-record) | `crates/karakuri-operation-record` | **Where an operation becomes a record** — the step P-0028 needs and the one place it happens (ADR-0194). Depends on `karakuri-operation` and `karakuri-store` and on nothing else, because neither of those two may depend on the other. The conversion is not pure: it takes an operation **and a reading of what is running**, since `Record::Look` carries a tone map operator no exposure control can name. One exhaustive match over all 50 operations, answering the records it writes, the settled reason it writes none, or the gap that stops it |
 | [karakuri-layout](../crates/karakuri-layout) | `crates/karakuri-layout` | The console's arrangement as arithmetic: views and splits with a size, a minimum and a maximum each, solved to rectangles. No toolkit, no device, no window (ADR-0156) |
 | [karakuri-console](../crates/karakuri-console) | `crates/karakuri-console` | The console: its arrangement, the panel model a pointer and a keyboard act on, and the `egui` view. **The destination the CLI is scaffolding for** — `src/` still takes no device, and the window is `examples/panel.rs`'s |
-| [karakuri-environment](../crates/karakuri-environment) | `crates/karakuri-environment` | **The program: everything this instrument deals with that is not itself.** A module belongs here if what it deals with lives outside this process — a disk, a device, a port, a socket, another program — or is the record of what happened (ADR-0215). It exists because `karakuri-cli` has no library target and the panel could therefore reach none of it, a boundary this repository had already paid for five times (ADR-0214). **Two thin binaries sit over it**, and no module in it may know which surface it is under. Holds seven of the thirteen modules in scope so far — audio input, the `.kir` compile step, the edit history, the PNG writer, the scratch store, session recording and the external tempo-source protocol |
-| [karakuri-cli](../crates/karakuri-cli) | `crates/karakuri-cli` | V1 entry point, and **scaffolding rather than the destination** (`README.md`): flag parsing, the `winit` event loop, the clock, the key handler, replay, the hot-reloading watcher, MCP server integration. What it is losing to `karakuri-environment` it loses one slice at a time |
+| [karakuri-environment](../crates/karakuri-environment) | `crates/karakuri-environment` | **The program: everything this instrument deals with that is not itself.** A module belongs here if what it deals with lives outside this process — a disk, a device, a port, a socket, another program — or is the record of what happened (ADR-0215). It exists because `karakuri-cli` has no library target and the panel could therefore reach none of it, a boundary this repository had already paid for five times (ADR-0214). **Two thin binaries sit over it**, and no module in it may know which surface it is under. Holds **all thirteen** modules that were in scope — audio input, the `.kir` compile step, the edit history, the metadata card, the mixer's records and wire spellings, the MIDI map's surface, the MCP server, the PNG writer, the scratch store, session recording, the Set file format, the external tempo-source protocol and the hot-reloading watcher |
+| [karakuri-cli](../crates/karakuri-cli) | `crates/karakuri-cli` | V1 entry point, and **scaffolding rather than the destination** (`README.md`). Since ADR-0214's move it is **one file** — flag parsing, the `winit` event loop, the clock, the key handler, `Live`, and replay. Everything that deals with a disk, a device, a port or the record went to `karakuri-environment`; what is left is a surface, and splitting `main.rs` is the next thing rather than moving more out of it |
 
 ### Repository Layout
 

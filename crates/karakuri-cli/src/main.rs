@@ -17,24 +17,28 @@
 //! replay it is read back from the stream instead. Keeping the measurement out
 //! here is what lets the same engine code be deterministic.
 
-mod mcp;
-mod midi;
-mod mix;
-mod watch;
-
-// **The program is not this binary's**, and these nine modules are how much of
-// it has said so: they moved to `karakuri-environment` under ADR-0214 and
-// ADR-0215, and they are reached here by name so that every call site below
-// reads exactly as it did. This binary is a surface over them.
+// **The program is not this binary's**, and there is no `mod` line above this
+// one any more: all thirteen modules moved to `karakuri-environment` under
+// ADR-0214 and ADR-0215, and they are reached here by name so that every call
+// site below reads exactly as it did. What is left in this file is the window,
+// the arguments, the key handler and `Live` — a surface over them.
 use karakuri_environment::{
-    audio, compile, history, meta, render, scratch, session, setfile, tempo_source,
+    audio, compile, history, mcp, midi, mix, render, scratch, session, setfile, tempo_source, watch,
 };
 // **Brought into scope rather than reached through their modules**, because
-// both were written here and every call site below is the one it already was.
-// `Names` is a Set file's per-layer node names and `put_meta` writes a card to
-// a store, so both crossed with the modules whose shape they are part of.
-use karakuri_environment::meta::put_meta;
-use karakuri_environment::setfile::Names;
+// each was written here and every call site below is the one it already was.
+// `Names` crossed with `setfile` in the second slice; the rest crossed with the
+// watcher, the MCP server, the mixer and the MIDI map — the material types
+// those read a slot off a disk through, the layer spelling a Set file and a
+// `--param` share, the save path's own values, the operator's name for a tone
+// map, and the sentences P-0061 says belong where every surface can reach them.
+// Four more are reached only from the tests below and are brought in there.
+use karakuri_environment::compile::{sort_slot, Material, Named, Placed};
+use karakuri_environment::mix::{op_name, op_wire_names, parse_op};
+use karakuri_environment::setfile::{layer_named, Names, SavedNode, Sources};
+use karakuri_environment::{
+    accepted_save, no_such_renderer, no_such_slot, nothing_to_save, SAVE_WAIT,
+};
 
 use std::fmt::Write as _;
 use std::path::PathBuf;
@@ -122,14 +126,6 @@ const MASK_SHAPES: [(MaskKind, f32, &str); 6] = [
     ),
     (MaskKind::Radial, 0.0, "an iris"),
 ];
-
-/// How wide a wipe's soft edge is.
-///
-/// Not zero, and not a key. A hard front is an aliased staircase wherever it is
-/// not axis-aligned, and this is the narrowest edge that hides that at the
-/// resolutions this renders at — narrow enough that a wipe still reads as a
-/// wipe rather than a gradient.
-const MASK_SOFTNESS: f32 = 0.02;
 
 /// The shape every scheduled fade takes.
 ///
@@ -685,66 +681,6 @@ keys:
   esc        quit
 ";
 
-/// Every tone map operator there is. The one list, and its length is in its
-/// type, so adding an operator to it is a deliberate act rather than an
-/// oversight in a `Vec`.
-pub const TONEMAPS: [TonemapOp; 4] = [
-    TonemapOp::Clamp,
-    TonemapOp::Reinhard,
-    TonemapOp::Aces,
-    TonemapOp::AgX,
-];
-
-/// Both of an operator's spellings: the one a stream and a flag use, and the
-/// one a human reads.
-///
-/// **An exhaustive match, and that is the point.** There were two hand-written
-/// lists — `--tonemap`'s parser and `op_name`'s display arm — and the `look`
-/// record wanted a third. A lookup over a table would have been one list but
-/// would still answer for an operator missing from it, by falling back to
-/// something plausible; a match does not compile until every operator has both
-/// names. Everything below derives from here, parsing included, so the two
-/// directions cannot disagree.
-fn spellings(op: TonemapOp) -> (&'static str, &'static str) {
-    match op {
-        TonemapOp::Clamp => ("clamp", "clamp"),
-        TonemapOp::Reinhard => ("reinhard", "Reinhard"),
-        TonemapOp::Aces => ("aces", "ACES"),
-        TonemapOp::AgX => ("agx", "AgX"),
-    }
-}
-
-/// How a human reads it. Free to be capitalised the way the papers are,
-/// because nothing parses it.
-fn op_name(op: TonemapOp) -> &'static str {
-    spellings(op).1
-}
-
-/// How a stream and a flag spell it. Lower case, stable, and the only spelling
-/// anything parses.
-pub fn op_wire_name(op: TonemapOp) -> &'static str {
-    spellings(op).0
-}
-
-/// The wire spelling back to an operator, by searching the one list with the
-/// one spelling function. `None` for a name this build does not have, which is
-/// the caller's to report against [`op_wire_names`].
-pub fn parse_op(name: &str) -> Option<TonemapOp> {
-    TONEMAPS
-        .iter()
-        .copied()
-        .find(|op| op_wire_name(*op) == name)
-}
-
-/// Every wire spelling, for an error message that says what was available.
-pub fn op_wire_names() -> String {
-    TONEMAPS
-        .iter()
-        .map(|op| op_wire_name(*op))
-        .collect::<Vec<_>>()
-        .join(", ")
-}
-
 /// What a Set file said that no flag can say.
 ///
 /// Not flags: there is no `--seed` and no `--camera`, and inventing two so that
@@ -782,79 +718,6 @@ struct FromSet {
     /// first source's count onto every source — which is the bug
     /// [`capacities_for`] exists to have stopped making.
     capacities: Vec<Option<u32>>,
-}
-
-/// A `.kir` named on the command line, with the name the operator gave it.
-///
-/// **A name belongs to the *use*, not to the procedure** — see `docs/ir-spec.md`,
-/// "Naming a source, on the terms HTML gives an `id`". The same lattice twice is
-/// one `proc` name and two nodes, so the name is written where the file is
-/// spelled and travels with that mention of it.
-///
-/// `None` is a path written bare. Something still has to address that node, so a
-/// name is derived from the procedure once it has compiled, and from the moment
-/// it is recorded — derived or written — it *is* the address.
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct Named {
-    name: Option<String>,
-    path: PathBuf,
-}
-
-impl Named {
-    fn bare(path: impl Into<PathBuf>) -> Named {
-        Named {
-            name: None,
-            path: path.into(),
-        }
-    }
-
-    /// `name=path`, or a bare path.
-    ///
-    /// **The separator is `=` and not `:`**, which `--param` and `--publish`
-    /// already use to mean "a layer and an index follow". `=` is not a path
-    /// character anywhere, where `:` is one on Windows.
-    fn parse(spelled: &str) -> Result<Named, String> {
-        let Some((name, path)) = spelled.split_once('=') else {
-            return Ok(Named::bare(spelled));
-        };
-        check_node_name(name)?;
-        if path.is_empty() {
-            return Err(format!("`{spelled}` — a name with no file after it"));
-        }
-        Ok(Named {
-            name: Some(name.to_string()),
-            path: PathBuf::from(path),
-        })
-    }
-}
-
-/// What a node may be called.
-///
-/// **Refused rather than mangled**, because a name is an address: something
-/// silently renamed is something a mask or a `--param` written against it stops
-/// finding, and the author is the only one who can pick the replacement.
-fn check_node_name(name: &str) -> Result<(), String> {
-    if name.is_empty() {
-        return Err("a node name cannot be empty".to_string());
-    }
-    // **The layer spellings are reserved**, so that `--param near:radius=1` and
-    // `--param L4:0:exposure=1` can never be the same sentence about different
-    // things. The two forms are told apart by counting colons, and a node called
-    // `L4` would make that count a lie.
-    if layer_named(name).is_some() {
-        return Err(format!(
-            "`{name}` is a layer, so it cannot also be a node's name — a `--param` is told              which of the two it names by the shape of what follows"
-        ));
-    }
-    if let Some(bad) = name
-        .chars()
-        .find(|c| !c.is_ascii_alphanumeric() && *c != '_' && *c != '-')
-    {
-        return Err(format!(
-            "`{name}` cannot be a node name: `{bad}` is not allowed. Letters, digits, `_` and `-`"
-        ));
-    }
-    Ok(())
 }
 
 #[cfg_attr(test, derive(Debug))]
@@ -1407,21 +1270,6 @@ fn record_layer(kind: karakuri_ir::Kind) -> Layer {
         karakuri_ir::Kind::L4 => Layer::L4,
         karakuri_ir::Kind::Field => Layer::Field,
     }
-}
-
-fn layer_named(name: &str) -> Option<karakuri_ir::Kind> {
-    Some(match name {
-        "L1" => karakuri_ir::Kind::L1,
-        "L2" => karakuri_ir::Kind::L2,
-        "L3" => karakuri_ir::Kind::L3,
-        "L4" => karakuri_ir::Kind::L4,
-        // **Addressed by its kind, like everything else.** A field has no node,
-        // and its params are still an operator's to ride — every procedure that
-        // evaluates it writes the same value into its own uniform, so one
-        // address reaches all of them.
-        "Field" => karakuri_ir::Kind::Field,
-        _ => return None,
-    })
 }
 
 /// `--publish name=L4:0:exposure[0.2..0.8]`, or `--publish level=exposure[0..2]`
@@ -2051,344 +1899,6 @@ fn salts_for(seed: u32, recorded: &[Option<u32>], geometries: usize) -> Vec<u32>
                 .unwrap_or_else(|| karakuri_engine::set::derived_salt(seed, at))
         })
         .collect()
-}
-
-/// One deck slot's material, sorted into the chain a `Set` is built from: the
-/// procedure that simulates, the deformations between, and the renderers drawn
-/// over the result.
-///
-/// **The sorting happens here rather than on the command line**, because every
-/// `.kir` declares its own `kind` — so `--set` is one comma-separated list and
-/// the loader reads which is which off the files. Order *within* a kind is list
-/// order, which is chain order for L2s and draw order for L4s.
-struct Material {
-    /// **The geometry sources**, in the order their paths appeared. At least
-    /// one; several is a merge.
-    l1s: Vec<karakuri_ir::typed::Checked>,
-    l2s: Vec<karakuri_ir::typed::Checked>,
-    /// **The cameras, in the order their paths appeared.** Empty leaves the
-    /// slot looking from the built-in orbit, which is a node all the same — so
-    /// a Set has at least one camera however this list comes out.
-    l3s: Vec<karakuri_ir::typed::Checked>,
-    /// **The fields, in the order their paths appeared.** Empty for a slot that
-    /// evaluates none.
-    fields: Vec<karakuri_ir::typed::Checked>,
-    l4s: Vec<karakuri_ir::typed::Checked>,
-    /// What each of those is called, in the same per-layer shape.
-    names: Names,
-}
-
-/// Where one of a slot's files ended up: the layer its own `kind` declaration
-/// puts it on, and which node of that layer it is, beside the name and path it
-/// was spelled with.
-///
-/// **Kept beside the compiled [`Material`] rather than worked out again.** A
-/// Set file records a node's layer and its index, and a run that answered "what
-/// layer is this file on" once for the engine and once for the file it saves
-/// would hold two answers to one question — the shape this project has been
-/// bitten by twice. See [`setfile::Node`], which is this as the record.
-// **`Eq` and not merely `PartialEq` is what the metadata card costs**: a record
-// carries the declared range as `f32`, so the lines are comparable and not
-// totally so. Nothing asks for `Eq` — no `Placed` is a map key — and the
-// comparison that is used, in the tests below, is unchanged: two nodes with the
-// same source have the same card, because the card is a function of it.
-#[derive(Clone, Debug, PartialEq)]
-struct Placed {
-    named: Named,
-    /// The name the procedure itself declares, which is not the name in
-    /// `named`: that one belongs to the *use* and is `None` for a bare path.
-    ///
-    /// **Read where the file was compiled, not scanned for again.** The edit
-    /// history files a version under the procedure's name and a session's
-    /// `procedure` record carries it, and both of them are looking at a node
-    /// this already knows the layer and index of — asking a second reader would
-    /// be a second answer to a question already settled here.
-    proc: String,
-    layer: karakuri_ir::Kind,
-    index: u32,
-    /// **The text this node was compiled from**, carried from the read that
-    /// produced the `Checked` beside it.
-    ///
-    /// This is the *one* derivation of "what bytes is this node running", and
-    /// everything downstream is a function of it: [`Placed::hash`] is the
-    /// address a live save writes and a `procedure` record names,
-    /// [`Placed::put`] is how those bytes reach the store, and the edit history
-    /// files this same buffer. It used to be re-read from `named.path` by each
-    /// of them, which made the answer whatever the disk happened to hold at the
-    /// moment they asked — and between the compile and the first frame sit the
-    /// adapter request, the deck build, `measure_slots`, and the audio, MIDI,
-    /// tempo and **MCP server** starts. Anything rewriting a `.kir` in that
-    /// window moved the launch hash onto bytes the deck had never compiled; if
-    /// the rewrite did not compile, no watcher ever corrected it, and `k` wrote
-    /// a Set naming a procedure that had never reached the screen and did not
-    /// load back.
-    ///
-    /// **Shared rather than copied**, because a slot's `Placed` list is cloned
-    /// into [`Live::startup`] and crosses onto a save thread; the bytes
-    /// themselves are read once and never again.
-    source: std::sync::Arc<str>,
-    /// **This node's metadata card**, built from the `Checked` the compile
-    /// produced — see [`meta::card`].
-    ///
-    /// It rides here for the reason `source` does, and it is the same reason
-    /// twice: this is the one compile the run will do of these bytes, and the
-    /// card is a function of it. The alternative was to build it where the
-    /// artifact is written, which would mean **re-compiling the source at save
-    /// time** — a second pass whose answer can differ from the one on screen
-    /// the moment anything about the checker is version-dependent, and a
-    /// compile on the path of a keypress besides. `Checked` itself is not
-    /// carried: what a card says is decided once, and holding the whole checked
-    /// tree per node to re-derive it would be holding the question instead of
-    /// the answer.
-    ///
-    /// Shared, because a slot's list is cloned onto the save thread.
-    meta: std::sync::Arc<[karakuri_store::ndjson::Line]>,
-}
-
-impl Placed {
-    /// **Where this node's source is addressed**, derived from the bytes above
-    /// and from nothing else.
-    ///
-    /// A method rather than a field beside `source`, because a hash is a pure
-    /// function of the bytes: computed here it cannot disagree with them, where
-    /// a stored copy would be a second thing to keep true. It is a few
-    /// kilobytes hashed at launch and again per save, which is not a rate
-    /// anything here is bounded by.
-    fn hash(&self) -> karakuri_store::hash::Hash {
-        karakuri_store::hash::Hash::of(self.source.as_bytes())
-    }
-
-    /// This node as [`setfile::Node`]. **No store and no disk** — the address
-    /// comes off the bytes the compile read.
-    fn node(&self) -> setfile::Node {
-        setfile::Node {
-            hash: self.hash(),
-            layer: self.layer,
-            index: self.index,
-            name: self.named.name.clone(),
-        }
-    }
-
-    /// **Put this node's source in `store`**, so that a file or a record naming
-    /// [`Placed::hash`] resolves on the way back in.
-    ///
-    /// **Separate from [`Placed::node`], and called later than it.** Knowing
-    /// what a slot is running costs nothing and every windowed run needs it;
-    /// writing the bytes down creates a directory and a file, and only two
-    /// callers need that — a save that actually happened, and a run recording a
-    /// session, whose `procedure` records a replay has to resolve. Folding the
-    /// two together is what made a plain windowed run create a store it was
-    /// never asked for; see [`Running::at_launch`].
-    ///
-    /// **The card goes down beside the artifact, and a card that will not write
-    /// does not fail the put.** The artifact is the thing; its metadata is
-    /// derived from the `.kir` plus a compile pass and regenerates on the next
-    /// one, so a store holding the source and no card holds everything that
-    /// cannot be recovered. Failing here instead would mean an operator losing
-    /// a save — or a session losing a `procedure` record's source — over a file
-    /// nothing has read yet. It is still said out loud: silence would leave a
-    /// library quietly thinning out as it grew.
-    fn put(
-        &self,
-        store: &karakuri_store::store::Store,
-    ) -> Result<karakuri_store::hash::Hash, String> {
-        let hash = store
-            .put_artifact(self.source.as_bytes())
-            .map_err(|e| format!("{}: {e}", self.named.path.display()))?;
-        put_meta(store, &hash, &self.meta);
-        Ok(hash)
-    }
-}
-
-/// **Sort one slot's compiled procedures by the `kind` each declares**, keeping
-/// list order within a kind.
-///
-/// **The one place that answers "which layer is this file on, and which node of
-/// it".** Both ways into a slot come through here: [`sort_slot`] compiles from
-/// paths at startup, and [`crate::watch::Watch::poll`] compiles from text it has
-/// already read — it needs the bytes for the edit history and for the artifacts
-/// a session stores. Loading is the only thing they do differently, so the seam
-/// is after the compile and this takes procedures rather than paths. The two
-/// used to hold a copy each of this match, and they had already drifted: the
-/// rebuild still took its head for the L1 whatever the file declared.
-///
-/// **The first procedure is the first source**, and every later `kind L1` is
-/// another one. Each simulates independently — its own `seed` from zero, its own
-/// hash salt, its own compaction — and the renderers draw all of them. See
-/// `docs/ir-spec.md`, "Multiple L1 sources".
-///
-/// The head is sorted by its declaration like everything after it. It used to
-/// be taken as the L1 whatever it said, which cost nothing while the engine was
-/// the only reader — it refuses a non-L1 there with `WrongKind` — and starts
-/// costing as soon as a Set file records the layer: an L2 written down as
-/// `slot L1` is a file that reads back as a Set nobody assembled.
-///
-/// **`Err` is a sentence and not an exit**, because the two callers answer a
-/// refusal differently and that difference is the only reason there were ever
-/// two of these: a startup that cannot assemble its slot has nothing to run and
-/// stops, while a rebuild that cannot leaves the Set that *is* running alone.
-/// Each prefixes the slot it is about and decides.
-fn sort_compiled(
-    compiled: Vec<(Named, karakuri_ir::typed::Checked, std::sync::Arc<str>)>,
-) -> Result<(Material, Vec<Placed>), String> {
-    // Taken before the loop consumes the list. The "nothing draws" refusal
-    // names the file the slot was given, which is the one an operator looks at
-    // first — and by then it has been moved from.
-    let head = compiled
-        .first()
-        .map(|(named, ..)| named.path.display().to_string());
-    // **A name per node, in the same per-layer shape the engine takes its
-    // procedures in.** Not one flat list in node order: that order is the
-    // engine's, and a caller that reproduced it would be the second place a
-    // fact this project has already been bitten by lives.
-    let mut names = Names::default();
-    let mut l1s = Vec::new();
-    let mut l2s = Vec::new();
-    let mut l3s: Vec<karakuri_ir::typed::Checked> = Vec::new();
-    let mut fields: Vec<karakuri_ir::typed::Checked> = Vec::new();
-    let mut l4s = Vec::new();
-    let mut placed = Vec::new();
-    for (named, checked, source) in compiled {
-        let name = named.name.clone();
-        let proc = checked.name.clone();
-        // **Each arm hands back the `Checked` it just filed**, because the
-        // card below is read off it and the arm is where it otherwise goes out
-        // of reach. This loop is the last point in the run holding both the
-        // checked procedure and the bytes it came from — see [`Placed::meta`]
-        // for why the card is kept and the tree is not.
-        let (layer, index, filed) = match checked.kind {
-            karakuri_ir::Kind::L2 => {
-                names.l2s.push(name);
-                l2s.push(checked);
-                (karakuri_ir::Kind::L2, l2s.len() - 1, l2s.last())
-            }
-            karakuri_ir::Kind::L4 => {
-                names.l4s.push(name);
-                l4s.push(checked);
-                (karakuri_ir::Kind::L4, l4s.len() - 1, l4s.last())
-            }
-            // **A second camera is a second camera**, and this was the last
-            // refusal in this file that said otherwise. It said a slot looks
-            // from one viewpoint, which was true of the plumbing and not of
-            // the material: a renderer declares `uses view : Camera` and an
-            // `edge` names which node fills it, so two cameras are two nodes
-            // with two names and nothing has to arbitrate between them. A
-            // renderer that names none draws from the first, which is what it
-            // has always drawn from.
-            karakuri_ir::Kind::L3 => {
-                names.l3s.push(name);
-                l3s.push(checked);
-                (karakuri_ir::Kind::L3, l3s.len() - 1, l3s.last())
-            }
-            // **A second field is a second field**, not a mistake — the last
-            // refusal in this file that said otherwise, and it said so about
-            // the plumbing rather than about the material. A caller declares
-            // `uses shape : Field` and an `edge` names which node fills it, so
-            // two fields are two nodes with two names and nothing has to
-            // arbitrate between them. What it took was a `Vec` here, in
-            // `Loaded`, in `Wiring` and in the engine — an `Option` apiece was
-            // all that was left of "there is exactly one, so it needs no name".
-            karakuri_ir::Kind::Field => {
-                names.fields.push(name);
-                fields.push(checked);
-                (karakuri_ir::Kind::Field, fields.len() - 1, fields.last())
-            }
-            // **A second L1 is a second source**, not a mistake. Each one
-            // simulates independently — its own `seed` from zero, its own hash
-            // salt, its own compaction — and the renderers draw all of them,
-            // and rebuilding one needs nothing a first does not: a request
-            // carries a list, and every record of a build addresses a node as
-            // `(slot, layer, index)`. The rebuild's copy of this used to refuse
-            // — a slot with two geometries started, then printed a refusal on
-            // every save for the rest of the run with the picture frozen at its
-            // startup build.
-            karakuri_ir::Kind::L1 => {
-                names.l1s.push(name);
-                l1s.push(checked);
-                (karakuri_ir::Kind::L1, l1s.len() - 1, l1s.last())
-            }
-        };
-        let checked = filed.expect("the procedure was pushed onto that layer's list above");
-        // **The node first, and its card read off the node.** A card names the
-        // artifact it describes by its hash, and [`Placed::hash`] is where a
-        // node's address is derived — spelling `Hash::of(source)` here as well
-        // would be a second derivation of one fact, which is the defect this
-        // file has been bitten by twice and the reason `hash` is a method
-        // rather than a field beside `source`. `meta` is therefore empty for
-        // exactly one statement, and nothing can observe a `Placed` in that
-        // state: the node is not reachable until it is pushed.
-        let mut node = Placed {
-            named,
-            proc,
-            layer,
-            index: index as u32,
-            source,
-            meta: Vec::new().into(),
-        };
-        node.meta = meta::card(&node.hash(), checked).into();
-        placed.push(node);
-    }
-    if l4s.is_empty() {
-        return Err(match head {
-            Some(head) => format!(
-                "nothing here draws — {head} names no L4, and a Set with no \
-                 renderer has no frame to give"
-            ),
-            // Nothing at all to sort is the same refusal with no file to point
-            // at. Neither caller can reach it — a slot is spelled with a head —
-            // and answering it here is cheaper than making that a precondition.
-            None => "nothing here draws — a Set with no renderer has no frame to give".to_string(),
-        });
-    }
-    names.check_unique()?;
-    Ok((
-        Material {
-            l1s,
-            l2s,
-            l3s,
-            fields,
-            l4s,
-            names,
-        },
-        placed,
-    ))
-}
-
-/// **Compile one slot's files and sort them**, which is [`sort_compiled`] with
-/// the loading in front of it and the exit behind it.
-///
-/// Fatal on anything the sort refuses, and fatal here rather than at the build,
-/// because the file is what an operator can fix. A run that cannot assemble a
-/// slot has no picture to keep showing — which is exactly what the rebuild
-/// path, over the same sort, does instead.
-fn sort_slot(slot: usize, l1: &Named, rest: &[Named]) -> (Material, Vec<Placed>) {
-    let named: Vec<String> = rest.iter().map(|p| p.path.display().to_string()).collect();
-    eprintln!(
-        "  slot {slot}: {} + {}",
-        l1.path.display(),
-        named.join(" + ")
-    );
-    // **The text each file was compiled from travels with it**, because it is
-    // the only copy this run will ever make of those bytes — see [`Placed`],
-    // which is where it lands and why re-reading the path later was wrong.
-    let compiled: Vec<(Named, karakuri_ir::typed::Checked, std::sync::Arc<str>)> =
-        std::iter::once(l1)
-            .chain(rest)
-            .map(|named| match compile::load(&named.path) {
-                Ok((checked, src)) => (named.clone(), checked, std::sync::Arc::from(src.as_str())),
-                Err(report) => {
-                    eprintln!("{report}");
-                    std::process::exit(1);
-                }
-            })
-            .collect();
-    match sort_compiled(compiled) {
-        Ok(sorted) => sorted,
-        Err(e) => {
-            eprintln!("slot {slot}: {e}");
-            std::process::exit(1);
-        }
-    }
 }
 
 /// **Render a recorded session.** The material comes from the stream's head and
@@ -4682,134 +4192,6 @@ impl Clock {
     }
 }
 
-/// One node of a live save: its layer as a record spells it, which node of that
-/// layer, the address its source has, the name the operator gave the file, and
-/// — for a node still at the version the run launched with — the bytes to put
-/// in the store on the way past.
-///
-/// **The name is the part no hash could carry**, which is why this is not
-/// [`Nodes`]: a name belongs to the *use* rather than to the procedure, so it
-/// comes from the command line and travels beside the address rather than
-/// inside it.
-struct SavedNode {
-    layer: &'static str,
-    index: u32,
-    hash: karakuri_store::hash::Hash,
-    name: Option<String>,
-    /// The launch source, when this node is still running it, and `None` when a
-    /// build put the version there instead.
-    ///
-    /// **Which is the whole of what "lazily" means.** The watcher puts what it
-    /// builds in the store as it builds it, so a rebuilt node's bytes are
-    /// already there and there is nothing to carry. A node still on its launch
-    /// version has bytes that live only in this process — see [`Placed`] — so
-    /// they ride along and reach the store at the moment a file names them.
-    /// That is why a windowed run creates nothing until somebody presses `k`.
-    ///
-    /// These are the *compiled* bytes and never a re-read of the path, so a
-    /// `.kir` rewritten since launch cannot reach a saved file.
-    source: Option<std::sync::Arc<str>>,
-    /// The card that goes down with those bytes, carried on exactly the same
-    /// condition and for the same reason — see [`Placed::meta`]. `None`
-    /// wherever `source` is `None`: a rebuilt node's card was written by the
-    /// build that stored it, and there is nothing here to add.
-    ///
-    /// **That is held by construction rather than asserted.** [`live_sources`]
-    /// asks the one predicate once and takes the pair off it, because it used
-    /// to ask it twice — two derivations of "are these the bytes on screen"
-    /// with nothing keeping them equal, where [`Sources::into_nodes`] writes the
-    /// card *inside* the branch that puts the source and would have dropped a
-    /// card whose `source` had gone `None` without a word.
-    ///
-    /// A field beside `source` rather than derived from it, because deriving it
-    /// would mean re-compiling the source on the save thread — see
-    /// [`Placed::meta`], which declined the same thing on the same grounds.
-    meta: Option<std::sync::Arc<[karakuri_store::ndjson::Line]>>,
-}
-
-/// **Where one live save's sources come from**: the hashes of the versions this
-/// slot is running, with the name the operator gave each file beside them.
-///
-/// **One answer, not two.** This used to be an enum — the landed hashes where a
-/// build had landed, and the startup *paths* where none had — and the second arm
-/// was a save that read the disk. Reading the disk answers a different question:
-/// a slot rolled back to what it launched with, an edit that never compiled, and
-/// a run with no watcher at all are all states where the file and the picture
-/// disagree, and every one of them wrote down a version nobody had seen. The
-/// hashes are seeded at launch instead — see [`Running::at_launch`] — so there
-/// is one representation of "what bytes is this node running", derived once
-/// from the text the compile read and a hash from the first frame onward.
-///
-/// See `Live::save_set`. Owned, because it crosses onto the thread that does the
-/// store I/O.
-struct Sources(Vec<SavedNode>);
-
-impl Sources {
-    /// How many nodes this names. Zero is a slot with nothing behind it — see
-    /// `Live::save_set`, which refuses rather than writing a file describing no
-    /// Set.
-    fn len(&self) -> usize {
-        self.0.len()
-    }
-
-    fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-
-    /// The nodes a Set file will name, **with every one of them in the store**.
-    ///
-    /// **Nothing here reads a `.kir`**, which is what collapsing the two arms
-    /// bought: a node a build put there was stored by the watcher that built
-    /// it, and a node still on its launch version carries the bytes the compile
-    /// read. Either way the address was derived from bytes this process has
-    /// held all along, and the only thing left to do is make sure the store has
-    /// them — `put_artifact` is content-addressed, so putting one that is
-    /// already there costs an `exists` and writes nothing.
-    ///
-    /// **This is the moment a windowed run first touches the store.** Seeding
-    /// it at launch instead created a directory for every run whether or not
-    /// anything was ever saved; see [`Running::at_launch`].
-    fn into_nodes(
-        self,
-        store: &karakuri_store::store::Store,
-    ) -> Result<Vec<setfile::Node>, String> {
-        self.0
-            .into_iter()
-            .map(|node| {
-                let SavedNode {
-                    layer,
-                    index,
-                    hash,
-                    name,
-                    source,
-                    meta,
-                } = node;
-                let layer = layer_named(layer)
-                    .ok_or_else(|| format!("a node on layer `{layer}` cannot be saved"))?;
-                if let Some(source) = source {
-                    store
-                        .put_artifact(source.as_bytes())
-                        .map_err(|e| format!("the source of a `{layer:?}` node: {e}"))?;
-                    // **Beside the bytes, on [`Placed::put`]'s terms**: the
-                    // card is derived and the artifact is not, so a card that
-                    // will not write is said and not raised. Inside the `if`
-                    // because it is the same condition — a node whose bytes
-                    // were already in the store has a card there too.
-                    if let Some(meta) = meta {
-                        put_meta(store, &hash, &meta);
-                    }
-                }
-                Ok(setfile::Node {
-                    hash,
-                    layer,
-                    index,
-                    name,
-                })
-            })
-            .collect()
-    }
-}
-
 /// **Every save still in flight, collected until they are all in or `deadline`
 /// passes.**
 ///
@@ -4837,14 +4219,6 @@ fn drained_saves(
     }
     landed
 }
-
-/// **How long the end of a run waits for saves still being written.**
-///
-/// Long enough that a save of a few dozen lines and a handful of artifacts
-/// finishes on any disk that is answering, and short enough that one which is
-/// not answering costs a quit five seconds rather than the window. See
-/// [`Live::awaited_saves`] for why the wait exists at all.
-const SAVE_WAIT: Duration = Duration::from_secs(5);
 
 /// **One live save, from the frame that asked for it to the file on disk.**
 struct Save {
@@ -4922,75 +4296,6 @@ fn refused(reply: Option<mcp::Reply>, said: String) {
     }
 }
 
-/// **No such slot**, in the words every surface says it in.
-///
-/// Extracted where a second caller appeared, rather than copied to it: focusing
-/// a slot that does not exist and saving one are the same mistake and were about
-/// to be two sentences about it.
-///
-/// **And "every surface" is now literally every one of them**, which it was not
-/// when this sentence was first written. There were four spellings of one
-/// refusal — the keys said `no slot 9: this deck holds slots 0-3`, `--mcp` said
-/// `holds 0-3`, MIDI said `no slot 9 — this deck holds slots 0-3`, and a `gain`
-/// record naming a slot said `slot 9: this deck holds slots 0-3` — so a model
-/// calling `save_set {"slot":9}` and an operator pressing `9` got different
-/// sentences for the same mistake on the same control. That was tolerable while
-/// each surface reached different controls; it stopped being tolerable when
-/// `save_set` made one control reachable from two of them: the refusals are
-/// the same sentences whoever meets them — see
-/// `docs/principles/0061-a-refusal-a-person-can-reach-from-two-surfaces-is-one-sentence.md`.
-/// `mcp.rs`, `midi.rs` and
-/// `mix.rs` all call this now. Each of them pins it with an `assert_eq!`
-/// against this function rather than trusting this comment — see
-/// `mcp::tests::a_slot_a_layer_and_a_renderer_resolve_and_anything_else_is_refused`,
-/// `mcp::wire_tests::a_save_for_a_slot_that_does_not_exist_is_refused_here`,
-/// `midi::tests::an_unmapped_control_and_a_missing_slot_are_each_reported_once`
-/// and `mix::tests::a_slot_past_the_deck_is_refused_with_the_range_it_missed`.
-/// Every one of them asked only `contains(...)` before, which is why four
-/// spellings could live side by side unnoticed.
-///
-/// The engine's own `no slot` messages are deliberately *not* routed here: they
-/// are `assert!`s on a call that should never have been made, addressed to
-/// whoever is holding the debugger, and a refusal an operator reads and a panic
-/// a programmer reads are two audiences that happen to share a phrase.
-fn no_such_slot(slot: usize, slot_count: usize) -> String {
-    match slot_count {
-        // Cannot happen — a run with no slots does not reach a window — and
-        // written anyway, because `slot_count - 1` on it is an underflow and a
-        // panic, which is what the arm that "cannot happen" costs when the shape
-        // around it changes.
-        0 => format!("no slot {slot}: this deck holds none"),
-        n => format!("no slot {slot}: this deck holds slots 0-{}", n - 1),
-    }
-}
-
-/// **A renderer the slot does not draw with**, in the words every surface says
-/// it in.
-///
-/// [`no_such_slot`]'s shape, one address down: the thing named, then what there
-/// was to name. A selection is the first control that addresses *inside* a
-/// slot, so it is the first refusal that needed this — and it is a free
-/// function beside that one rather than a sentence in `Live`, because the key
-/// press and a replayed record both meet it and telling one operator two
-/// stories about one mistake is what `no_such_slot` exists to have stopped.
-///
-/// **The count comes from the Set on screen, not from the flags the run
-/// started with**, which is what makes it true after a hot swap: a rebuilt
-/// slot draws with however many renderers its new sources declare.
-fn no_such_renderer(slot: usize, at: usize, count: usize) -> String {
-    match count {
-        // Cannot happen — a Set with no renderer does not build — and written
-        // anyway, because `count - 1` on it underflows and panics, which is
-        // what the arm that "cannot happen" costs when the shape around it
-        // changes. The same reasoning as [`no_such_slot`]'s empty deck.
-        0 => format!("no renderer {at}: slot {slot} draws with none"),
-        n => format!(
-            "no renderer {at}: slot {slot} draws with renderers 0-{}",
-            n - 1
-        ),
-    }
-}
-
 /// Whether `at` names a renderer of a slot that draws with `count` of them, and
 /// the sentence if it does not. [`slot_in_range`]'s companion, returning the
 /// refusal rather than a bool because both callers print it.
@@ -5000,93 +4305,6 @@ fn renderer_in_range(slot: usize, at: usize, count: usize) -> Result<(), String>
     } else {
         Err(no_such_renderer(slot, at, count))
     }
-}
-
-/// **Why a slot has nothing to save**, in the words the operator is given.
-///
-/// **Named, and with the flag that changes the answer.** Every refusal around
-/// this one names the file or the range it is about; this one used to name
-/// neither the id the run came from nor anything the operator could do, which
-/// leaves them pressing a key that reports a fact about the world rather than a
-/// way out of it.
-///
-/// A free function over the two facts it turns on, for the reason
-/// [`drained_saves`] is one: it has to reach a model as well as a terminal now,
-/// which makes it worth a test, and `Live` needs a window and a GPU.
-///
-/// `no_files` is whether this slot has any startup sources at all — see
-/// `Live::startup`, which is empty exactly for a slot filled straight from a Set
-/// file by hash.
-fn nothing_to_save(slot: usize, loaded_set: Option<&str>, no_files: bool) -> String {
-    match loaded_set {
-        // **Both flags, because `editable()` is both.** It is `editable()` that
-        // materialises a loaded Set into the scratch and puts it in
-        // `args.sets`, and that is `--watch || --mcp` — so `--load-set X --mcp
-        // PORT` with no `--watch` already saves like any other slot. Naming only
-        // `--watch` sent an operator who had `--mcp` off to restart a set for a
-        // flag they did not need.
-        Some(id) if no_files => format!(
-            "slot {slot}: nothing to save — it was filled from set `{id}` by hash, with no \
-             files behind it and nothing able to rebuild it. Start the run with `--watch` \
-             or `--mcp` and this slot saves like any other"
-        ),
-        _ => format!(
-            "slot {slot}: nothing to save — this slot's sources are not in the store, which \
-             was said at startup, and no rebuild of it has landed since"
-        ),
-    }
-}
-
-/// **A save has been taken and named**, said to the terminal and to whoever
-/// asked for it if that was not a hand. Returns the id it will be filed under.
-///
-/// Said before the store thread starts, because the operator pressed a key and
-/// the answer to "did it take" is owed now rather than when the disk gets round
-/// to it. Where it went is said on arrival — see [`Live::took_save`].
-///
-/// **The same sentence to a waiting client, and this half is the one a timeout
-/// depends on.** [`mcp::Reply`] carries two messages because "accepted, under
-/// this id, outcome not yet known" is a third fact the protocol's one boolean
-/// cannot hold: a client whose deadline passes with this message in hand is
-/// told to go looking under the id, and one without it is told *nothing was
-/// saved and asking again is safe* — which is a false claim to a model about a
-/// save that is running and will land.
-///
-/// **A free function over the four facts it turns on**, for the reason
-/// [`nothing_to_save`] and [`drained_saves`] are, and the reason bites harder
-/// here. Those are refusals — said *instead of* a save, and reachable without a
-/// window. This is said *during* one, and inline it sat below
-/// [`playing_values`], which reads `deck.slot(slot)` and is the single line of
-/// [`Live::save_set`] that genuinely needs a GPU. So it was the one half of the
-/// accept-then-settle sequence no test could reach: deleting the `accepted`
-/// call left the whole suite green, because every `--mcp` test drives a
-/// stand-in loop that sends `accepted` itself. Above that line it is testable,
-/// and `mcp::tests::a_save_the_loop_has_taken_names_its_id_to_a_client_that_times_out`
-/// is what deleting the call now costs.
-fn accepted_save(
-    slot: usize,
-    id: Option<String>,
-    sources: &Sources,
-    root: &std::path::Path,
-    reply: Option<&mcp::Reply>,
-) -> String {
-    // **A name is a stamp, because a key press cannot type one.** See
-    // `history::stamped_id`, whose convention this is: an operator looks for
-    // the time they saved it. A client that named one gets the name it named —
-    // see `mcp::checked_id` on why a set filed under a name its caller did not
-    // ask for is the worse answer.
-    let id = id.unwrap_or_else(history::stamped_id);
-    let said = format!(
-        "slot {slot}: saving {} node{} as set `{id}` in {}",
-        sources.len(),
-        if sources.len() == 1 { "" } else { "s" },
-        root.display()
-    );
-    eprintln!("{said}");
-    if let Some(reply) = reply {
-        reply.accepted(&said);
-    }
-    id
 }
 
 struct Live {
@@ -6998,7 +6216,8 @@ impl Live {
     /// Built, decoded, and only then applied — so what drives the deck is what
     /// a replay would decode from a session stream, rather than a second path
     /// that happens to agree with it today. `karakuri-environment`'s `audio.rs`
-    /// does the same thing with the two records it emits; see `mix.rs` for the
+    /// does the same thing with the two records it emits; see the program's
+    /// `mix.rs` for the
     /// whole argument.
     ///
     /// A record this build cannot obey is printed and nothing moves. It cannot
@@ -7095,7 +6314,8 @@ impl Live {
             // the ones before it, so a sweep of several hundred messages
             // reaches here once
             // (`docs/adr/0207-a-continuous-control-says-one-thing-per-frame.md`;
-            // `mix.rs` carries the measurement, which is why the coalescer is
+            // the program's `mix.rs` carries the measurement, which is why the
+            // coalescer is
             // there).
             recorder.push(record.clone());
         }
@@ -7608,6 +6828,11 @@ fn slot_in_range(slot: usize, slot_count: usize) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    // **Reached from here and from nowhere above**, which is why they are not in
+    // the file's own imports: the sort's `Err` arm and the tone map table are
+    // both things only a test asks about directly.
+    use karakuri_environment::compile::sort_compiled;
+    use karakuri_environment::mix::{op_wire_name, TONEMAPS};
     use karakuri_signal::NoiseKind;
 
     fn parse(args: &[&str]) -> Result<Args, String> {
@@ -9570,6 +8795,9 @@ mod value_tests {
 #[cfg(test)]
 mod live_save_tests {
     use super::*;
+    // The card writer, reached only by the test that pins what it says when a
+    // disk refuses it.
+    use karakuri_environment::meta::put_meta;
     use std::path::Path;
 
     /// Integration tests get the *package* as their working directory, and unit
@@ -11377,7 +10605,8 @@ mod live_save_tests {
         /// far the file underneath it has moved.
         ///
         /// Nothing picks a `.kir` up without `--watch`: an editor writing over the
-        /// path, an `--mcp` write with no watcher behind it — which `mcp.rs` says
+        /// path, an `--mcp` write with no watcher behind it — which the program's
+        /// `mcp.rs` says
         /// out loud when it takes one — and an edit that failed to compile all leave
         /// the same state, and it is a state that never resolves on its own. The
         /// disk moved and the picture did not.

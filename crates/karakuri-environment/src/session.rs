@@ -42,7 +42,7 @@
 //! of opening a device — so a binding to `energy` replays at what a microphone
 //! heard rather than at what the bus invents — and applies the mix and
 //! transport records where they sit. That is the whole of it — the arrangement
-//! `audio.rs` beside this file and `karakuri-cli`'s `mix.rs` were built for,
+//! `audio.rs` and `mix.rs`, both beside this file now, were built for,
 //! with a file on the other end instead of a device and a keyboard.
 
 use std::io::Write;

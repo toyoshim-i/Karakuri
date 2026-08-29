@@ -74,6 +74,11 @@ use karakuri_store::ndjson::Line;
 use karakuri_store::record::{BindNoise, Layer, Record, Value};
 use karakuri_store::store::{Store, StoreError};
 
+// **The card goes down with the artifact**, which is the policy `meta` states
+// and `Sources::into_nodes` is now the second caller of — the first being the
+// startup put in `compile`.
+use crate::meta::put_meta;
+
 /// The Set file format version this build writes. One number for the whole
 /// file, on `Record::Set`.
 const VERSION: u32 = 1;
@@ -499,7 +504,8 @@ pub fn layer_name(layer: Layer) -> &'static str {
 /// which node of that layer it is, and what the operator called it.
 ///
 /// **The layer is read where the chain was sorted, not worked out again here.**
-/// `main.rs` already sorts a `--set` list by the `kind` each file declares —
+/// [`crate::compile::sort_compiled`] already sorts a `--set` list by the `kind`
+/// each file declares —
 /// that is how the engine gets its nodes — so asking the same question a second
 /// time is how a Set file comes to disagree with the run it was saved from.
 /// A `slot` record is exactly this, which is why the fields are these four.
@@ -1800,6 +1806,167 @@ pub fn written_at(at: std::time::SystemTime) -> String {
     chrono::DateTime::<chrono::Local>::from(at)
         .format("%Y-%m-%d %H:%M:%S")
         .to_string()
+}
+
+/// **A layer as an operator writes it**, in the compiler's own `Kind`.
+///
+/// [`kind_name`]'s inverse, and here beside it rather than beside either
+/// caller, because the two are one table read in two directions: a `--param
+/// L4:0:exposure`, a `--bind`'s layer, a `slot` record read back and a node on
+/// its way into a file all spell a layer the same way, and a second table would
+/// be a second spelling of an address an operator types. That the two are
+/// inverses is pinned by a test rather than by this sentence — see the CLI's
+/// `every_kind_survives_the_round_trip_a_saved_node_makes`, which is the one
+/// caller that asks the question in both directions at once.
+///
+/// **`pub` for two readers one crate over and two beside it**: the command
+/// line's `--param` and `--bind`, [`Sources::into_nodes`] below, and
+/// [`crate::compile`]'s check on what a node may be called.
+pub fn layer_named(name: &str) -> Option<karakuri_ir::Kind> {
+    Some(match name {
+        "L1" => karakuri_ir::Kind::L1,
+        "L2" => karakuri_ir::Kind::L2,
+        "L3" => karakuri_ir::Kind::L3,
+        "L4" => karakuri_ir::Kind::L4,
+        // **Addressed by its kind, like everything else.** A field has no node,
+        // and its params are still an operator's to ride — every procedure that
+        // evaluates it writes the same value into its own uniform, so one
+        // address reaches all of them.
+        "Field" => karakuri_ir::Kind::Field,
+        _ => return None,
+    })
+}
+
+/// One node of a live save: its layer as a record spells it, which node of that
+/// layer, the address its source has, the name the operator gave the file, and
+/// — for a node still at the version the run launched with — the bytes to put
+/// in the store on the way past.
+///
+/// **The name is the part no hash could carry**, which is why this is not
+/// the surface's `Nodes`: a name belongs to the *use* rather than to the procedure, so it
+/// comes from the command line and travels beside the address rather than
+/// inside it.
+pub struct SavedNode {
+    pub layer: &'static str,
+    pub index: u32,
+    pub hash: karakuri_store::hash::Hash,
+    pub name: Option<String>,
+    /// The launch source, when this node is still running it, and `None` when a
+    /// build put the version there instead.
+    ///
+    /// **Which is the whole of what "lazily" means.** The watcher puts what it
+    /// builds in the store as it builds it, so a rebuilt node's bytes are
+    /// already there and there is nothing to carry. A node still on its launch
+    /// version has bytes that live only in this process — see [`crate::compile::Placed`] — so
+    /// they ride along and reach the store at the moment a file names them.
+    /// That is why a windowed run creates nothing until somebody presses `k`.
+    ///
+    /// These are the *compiled* bytes and never a re-read of the path, so a
+    /// `.kir` rewritten since launch cannot reach a saved file.
+    pub source: Option<std::sync::Arc<str>>,
+    /// The card that goes down with those bytes, carried on exactly the same
+    /// condition and for the same reason — see [`crate::compile::Placed::meta`]. `None`
+    /// wherever `source` is `None`: a rebuilt node's card was written by the
+    /// build that stored it, and there is nothing here to add.
+    ///
+    /// **That is held by construction rather than asserted.** The surface's
+    /// `live_sources`
+    /// asks the one predicate once and takes the pair off it, because it used
+    /// to ask it twice — two derivations of "are these the bytes on screen"
+    /// with nothing keeping them equal, where [`Sources::into_nodes`] writes the
+    /// card *inside* the branch that puts the source and would have dropped a
+    /// card whose `source` had gone `None` without a word.
+    ///
+    /// A field beside `source` rather than derived from it, because deriving it
+    /// would mean re-compiling the source on the save thread — see
+    /// [`crate::compile::Placed::meta`], which declined the same thing on the same grounds.
+    pub meta: Option<std::sync::Arc<[karakuri_store::ndjson::Line]>>,
+}
+
+/// **Where one live save's sources come from**: the hashes of the versions this
+/// slot is running, with the name the operator gave each file beside them.
+///
+/// **One answer, not two.** This used to be an enum — the landed hashes where a
+/// build had landed, and the startup *paths* where none had — and the second arm
+/// was a save that read the disk. Reading the disk answers a different question:
+/// a slot rolled back to what it launched with, an edit that never compiled, and
+/// a run with no watcher at all are all states where the file and the picture
+/// disagree, and every one of them wrote down a version nobody had seen. The
+/// hashes are seeded at launch instead — see the surface's `Running::at_launch` —
+/// so there
+/// is one representation of "what bytes is this node running", derived once
+/// from the text the compile read and a hash from the first frame onward.
+///
+/// See `Live::save_set`. Owned, because it crosses onto the thread that does the
+/// store I/O.
+pub struct Sources(pub Vec<SavedNode>);
+
+impl Sources {
+    /// How many nodes this names. Zero is a slot with nothing behind it — see
+    /// the surface's `Live::save_set`, which refuses rather than writing a file
+    /// describing no Set.
+    ///
+    /// **`pub(crate)` where [`Sources::is_empty`] is `pub`**, which is the
+    /// widening rule and not an oversight: the surface asks *whether* there is
+    /// anything to save and this crate's own [`crate::accepted_save`] asks
+    /// *how many*, to say "saving 3 nodes" out loud.
+    pub(crate) fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// The nodes a Set file will name, **with every one of them in the store**.
+    ///
+    /// **Nothing here reads a `.kir`**, which is what collapsing the two arms
+    /// bought: a node a build put there was stored by the watcher that built
+    /// it, and a node still on its launch version carries the bytes the compile
+    /// read. Either way the address was derived from bytes this process has
+    /// held all along, and the only thing left to do is make sure the store has
+    /// them — `put_artifact` is content-addressed, so putting one that is
+    /// already there costs an `exists` and writes nothing.
+    ///
+    /// **This is the moment a windowed run first touches the store.** Seeding
+    /// it at launch instead created a directory for every run whether or not
+    /// anything was ever saved; see the surface's `Running::at_launch`.
+    pub fn into_nodes(self, store: &Store) -> Result<Vec<Node>, String> {
+        self.0
+            .into_iter()
+            .map(|node| {
+                let SavedNode {
+                    layer,
+                    index,
+                    hash,
+                    name,
+                    source,
+                    meta,
+                } = node;
+                let layer = layer_named(layer)
+                    .ok_or_else(|| format!("a node on layer `{layer}` cannot be saved"))?;
+                if let Some(source) = source {
+                    store
+                        .put_artifact(source.as_bytes())
+                        .map_err(|e| format!("the source of a `{layer:?}` node: {e}"))?;
+                    // **Beside the bytes, on [`Placed::put`]'s terms**: the
+                    // card is derived and the artifact is not, so a card that
+                    // will not write is said and not raised. Inside the `if`
+                    // because it is the same condition — a node whose bytes
+                    // were already in the store has a card there too.
+                    if let Some(meta) = meta {
+                        put_meta(store, &hash, &meta);
+                    }
+                }
+                Ok(Node {
+                    hash,
+                    layer,
+                    index,
+                    name,
+                })
+            })
+            .collect()
+    }
 }
 
 #[cfg(test)]

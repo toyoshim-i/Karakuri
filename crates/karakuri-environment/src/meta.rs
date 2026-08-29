@@ -38,7 +38,7 @@
 //! a type checker to write a file name would be the wrong shape, and nothing
 //! about a `.kir`'s *bytes* needs one. This package holds both, and it is also
 //! the one holding a `Checked` at the moment an artifact is put — see
-//! `Placed` in `karakuri-cli`, which is the caller.
+//! [`crate::compile::Placed`], which is the caller and is in this package now.
 
 use karakuri_ir::typed::Checked;
 use karakuri_store::hash::Hash;
@@ -53,7 +53,7 @@ const VERSION: u32 = 1;
 /// **What one artifact's metadata file says**, in the order it is written.
 ///
 /// `hash` is passed in rather than hashed from the source here, because the
-/// caller has it — it is `Placed::hash` in `karakuri-cli`, derived off the node
+/// caller has it — it is [`crate::compile::Placed::hash`], derived off the node
 /// the card belongs to — and a second derivation would be a second answer to
 /// "which artifact is this", which is the mistake `Placed::hash` being a method
 /// rather than a field exists to stop being made twice. `sort_compiled` builds
@@ -121,7 +121,7 @@ pub fn card(hash: &Hash, checked: &Checked) -> Vec<Line> {
 ///
 /// The one place either put path says this, so that the judgement — the card is
 /// derived and the artifact is not — is made once and the sentence is one
-/// sentence. See `Placed::put` in `karakuri-cli`, which is the other caller's
+/// sentence. See [`crate::compile::Placed::put`], which is the other caller's
 /// other half.
 ///
 /// The hash is passed rather than recomputed: the caller has just put the bytes

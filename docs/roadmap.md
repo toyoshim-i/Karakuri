@@ -658,22 +658,33 @@ reference nothing through `crate::` at all — `audio`, `compile`, `history`, `r
 `session`, `tempo_source` — then `meta` → `setfile` → `watch`, then `mcp`, then `mix` and `midi`,
 which are held back only by the shared refusal sentence.
 
-**Nine have landed and the package exists**, with its charter in
+**All thirteen have landed and the package exists**, with its charter in
 [`karakuri-environment`](../crates/karakuri-environment)'s `lib.rs` — the test, why its second clause
 is load-bearing, and the rule that follows from two binaries sitting over it: **no module here may
 know which surface it is under.** The move needed no shim and nothing had to be pulled across, which
-is the measurement above holding: the first slice widened exactly one item
-(`history::declared_kind`, whose own comment already said it is shared with `mcp` on purpose), and
-`png` and `serde` left `karakuri-cli` with the files that used them; the second took `meta` and
-`setfile` and with them the first two items out of `main.rs` — `put_meta`, which writes to a disk,
-and `Names`, which is a Set file's shape — and `chrono` left too. **Four modules are left**: `watch`,
-`mcp`, `mix` and `midi`.
+is the measurement above holding: **`crates/karakuri-cli/src/` is `main.rs` and nothing
+else**, at 10,718 lines, and every one of the sixteen items the modules reached into it for went
+with them. `karakuri-cli` lost `png`, `serde`, `chrono`, `serde_json` and `karakuri-midi` on the way,
+each with the last file that used it.
 
-**The seam is larger than the sixteen items measured above, and the difference is invisible to a
-compiler.** That count was taken on code lines. The second slice found four more dependencies
-carried by **intra-doc links** — `crate::Placed`, `Placed::hash`, `Placed::put` and `bundled_set` —
-every one of which would have compiled after the move and rotted in silence. Measure both when
-planning the rest.
+**The seam was measured three times and each measurement found what the one before it could not
+see.** Code lines gave sixteen items. Adding **intra-doc links** found four more — `crate::Placed`,
+`Placed::hash`, `Placed::put`, `bundled_set` — which compile after a move and rot in silence. Then
+the last slice found a third class both had missed: **brace-grouped imports**, because a pattern
+anchored on `crate::` followed by a letter never matches `use crate::{op_wire_name,
+op_wire_names};`. Three commands, not one:
+
+```sh
+sed 's|//.*||' <file> | grep -o 'crate::[A-Za-z_][A-Za-z0-9_]*' | sort -u   # code
+grep -o 'crate::[A-Za-z_][A-Za-z0-9_]*' <file> | sort -u                    # and doc links
+grep -o 'crate::{[^}]*}' <file> | sort -u                                   # and brace groups
+```
+
+**Two intra-doc links in the moved code had been broken all along** and nobody could have known: a
+binary crate gets no rustdoc run, so `[`crate::watch::Watch::poll`]` — naming a trait method as an
+inherent one — resolved for nobody and failed nothing. They became hard errors the moment the code
+was in a library. That is a second thing the package boundary buys, beside the five ADR-0214
+counted.
 
 **The ~10–14 week estimate does not carry this, which is the second time.** *What the range assumes*
 names the four undrawn bays, three decisions and the manual's missing deck head, and not a program to
