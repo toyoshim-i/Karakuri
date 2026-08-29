@@ -39,6 +39,91 @@
 //! [ADR-0170](../../../docs/adr/0170-a-deck-preview-cell-is-drawn-whether-or-not-a-deck-is-behind-it.md)
 //! for the alternative that lost and for what would reopen it.
 //!
+//! # The Staging lane is the one bay whose rows have no producer, so it draws none
+//!
+//! [ADR-0200](../../../docs/adr/0200-a-bays-first-pass-draws-the-values-that-exist-and-omits-the-rest.md)
+//! draws every part of the mock that has a value behind it and omits the
+//! rest. Applied to the Staging bay it omits the entire body, and the reason
+//! is neither a missing spelling nor a missing control — it is that **nothing
+//! in this workspace can put a row there.**
+//!
+//! **What a row would be.** `console.html` specifies four things: the node
+//! (`L4:0`), what the procedure calls itself, whether it is *on screen* —
+//! landed, rolled back for costing too much, or refused by the checker — and
+//! when it arrived. So the lane is a list of **nodes whose newest version has
+//! not been settled**: `karakuri_operation::Operation`'s `KeepCandidate` and
+//! `RestoreProcedure` both address a node and not a version, because a node
+//! has at most one unsettled version.
+//!
+//! **That set is empty here structurally, and not merely for now.** The
+//! program this panel is drawn by builds both its deck slots with
+//! `karakuri_engine::HotSwap::fixed` — no watcher, no MCP, no build `Source`
+//! of any kind — and `fixed` keeps a `Receiver` whose `Sender` was dropped at
+//! construction. So `install_if_ready` finds a disconnected channel and
+//! installs nothing, `trial` is never `Some` and the watchdog returns on its
+//! first line, and **not one `swap::Event` of any variant is emitted in any
+//! run of this program.** A candidate row would be
+//! [ADR-0191](../../../docs/adr/0191-the-panels-parked-deck-is-parked-by-the-governor-or-it-is-a-drawing-of-one.md)'s
+//! parked chip: a drawing of a state the engine never entered.
+//!
+//! **And the row's address is not on the wire even once a producer is.** A
+//! `swap::Event` carries an `id` and a `label` and no node, because a
+//! `karakuri_engine::Request` restates *every* node of the slot — so a
+//! verdict is over a build. Which node of that build changed is derivable:
+//! `karakuri_environment::watch::Built` carries `(layer, index, hash)` for the
+//! whole stack on every build, and consecutive builds differ where the hashes
+//! do. Nothing derives it. `karakuri_environment::history::Snapshots::record`
+//! computes exactly that discrimination on the worker thread — it returns the
+//! path it wrote, or `None` for a source that did not change — and the
+//! watcher drops the answer. The per-node `proc` name never crosses the
+//! channel at all; only the `label`, which is every node's name joined.
+//!
+//! **The rest of the mock's lane, each omission with what it waits on.**
+//!
+//! - **The coloured dot, and the `you` in `you, 14:41`** — who wrote it.
+//!   `origin` — the prompt, the model, the seed — is specified in
+//!   `docs/ir-spec.md` and produced by nothing, so a hand in an editor and a
+//!   model over MCP are the same save down the same path. The dot goes with
+//!   it, because the colour *is* the producer.
+//! - **`14:41`** — when it arrived. It waits on what the Library bay's `.dim`
+//!   column waits on and is refused for its reason: the value would exist and
+//!   a *spelling* does not. `karakuri_environment::history`'s is
+//!   `%H%M%S-%3f`, which is half a filename; `karakuri-cli`'s
+//!   `setfile::written_at` is local to the second, in a package with no
+//!   library target; the mock's `14:41` is a third.
+//! - **The head's `2 waiting`** — a count. It is not a queue depth: a
+//!   finished build is installed at a frame boundary rather than held for a
+//!   verdict, so the number would be *unsettled nodes* and waits on the rows.
+//!   One thing does wait and it is not this one: `install_if_ready` declines
+//!   to install while a candidate is on trial, so a build that finishes
+//!   inside a judging window sits in the channel until the verdict is in, and
+//!   a build superseded there is retired without ever having been drawn.
+//!   Nothing exposes either number, and no row is counted by either.
+//! - **The mock's third `.cand`,** *a rejected candidate costs nothing*. The
+//!   page says what that is: a note to whoever is reading the mock, and not a
+//!   thing the lane draws. Empty, this lane draws *"no row, no placeholder,
+//!   and no standing sentence"*.
+//!
+//! So the bay is its card and its head, which is the shapes the Sequencer bay
+//! draws — the lane's twin in this console's furniture, a title with no pill
+//! and no grip over nothing; `tests/staging.rs` counts the two against each
+//! other. **What the lane is for is still the row the mock does not draw** —
+//! after
+//! `swap::Event::RolledBack` the watchdog puts the previous *Set* back on
+//! screen and does not put the previous *file* back, while the watcher
+//! re-reads every file of the slot on every rebuild, so the picture is the
+//! old version and the disk is the over-budget one — and that row waits on
+//! the same producer every other row here does.
+//!
+//! **The height is what this leaves wrong, and it is not this module's to
+//! fix.** `lib.rs` pins the lane at `fixed(125.0)` with a minimum of `66.0` —
+//! the mock's three `.cand` rows, and one — and empty is not only this lane's
+//! ordinary state but the only state this program can reach, so those pixels
+//! are held open over nothing at the expense of the Library, which is the bay
+//! in that column that absorbs. A content-height lane needs `arrangement()`
+//! to take an argument, or `karakuri-layout` to grow a setter for a view's
+//! size, and it has neither. The numbers stay where they are.
+//!
 //! # The Program bay's body arranges itself, and that is one derivation
 //!
 //! The picture and the four cells are **not** where the two regions that hold
@@ -446,6 +531,10 @@ pub const REGIONS: &[Region] = &[
     },
     Region {
         name: "staging",
+        // **No pill, and the mock's head has one**: `2 waiting` is a count of
+        // rows, and this lane has no row and no producer for one. The module
+        // documentation is where that is argued, omission by omission, and
+        // `tests/staging.rs` is what holds the bay to a card and a head.
         kind: Kind::Bay {
             title: "Staging",
             pills: &[],

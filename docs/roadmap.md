@@ -1080,10 +1080,19 @@ re-taken once that boundary is drawn.
     [P-0019](principles/0019-prefer-the-mechanism-that-already-exists.md)'s worked shape a third
     time: the subsystem was a producer.
 
-    **What the lane is actually gated on is its own premise.** *Candidates wait* is not what the
-    machinery does — nothing holds a finished build out of the picture, `install_if_ready` puts it in
-    at the next frame boundary, and the head's `2 waiting` is not a queue depth and cannot become one
-    without engine work nobody has costed. **And the most valuable row is one the mock does not
+    **What the lane is actually gated on is its own premise.** *Candidates wait* is not quite what the
+    machinery does, **and the first version of this sentence overstated it**. `install_if_ready`
+    opens with *"not while something is on trial"* — a build that finishes during a judging window
+    **does** stay in the channel until the verdict is in, and one superseded inside that window is
+    retired without ever being drawn. What holds is the conclusion rather than the claim: **nothing
+    exposes either the window or what is in it**, so the head's `2 waiting` is not a queue depth and
+    cannot become one without engine work nobody has costed.
+
+    **And in this program the set is empty structurally rather than not-yet.** `crates/karakuri`
+    builds both slots with `HotSwap::fixed`, which constructs a receiver whose sender is dropped at
+    construction and no worker at all — so **not one `swap::Event` of any variant is emitted in any
+    run of the binary**. A candidate row here would be ADR-0191's parked chip: a drawing of a state
+    the program cannot enter. **And the most valuable row is one the mock does not
     draw**: after `Event::RolledBack` the watchdog puts the previous *Set* back on screen and **does
     not put the previous file back**, while the watcher re-reads every file of the slot on every
     rebuild — so the picture is the old version, the disk is the over-budget one, and the next
