@@ -46,7 +46,7 @@
       <span><i class="gap"></i> nothing &mdash; this surface cannot reach it at all</span>
     </div>
     <p>
-      <strong>50 operations, and 51 of the 216 ways in exist.</strong> Six of them
+      <strong>50 operations, and 56 of the 216 ways in exist.</strong> Six of them
       arrived with the console's own shape &mdash; moving a boundary, folding a bay
       or a pane, bringing one back, solo, and resetting the arrangement &mdash; and
       every one of their twenty-four
@@ -54,10 +54,15 @@
       no route at all: a folded region has no rectangle for a
       pointer to find, and resetting is the default case of a family &mdash; keeping an
       arrangement and putting one back &mdash; that has nowhere on the console to live
-      until the rest of it exists. <strong>No <em>panel</em> route is marked
-      built</strong>, and the reason is not that the panel is unbuilt: it draws
-      part of itself, and some of its controls already emit these operations.
-      What no program does is put it in front of a player. Where a badge names a
+      until the rest of it exists. <strong>Five <em>panel</em> routes are
+      marked built</strong>, and they are the whole of that column: the strip
+      trim, the strip fader, the strip button, the tally chip and the strip mask
+      mini, every one of them in the Mixer bay. Those five controls already emitted
+      these operations while the console was an example; what changed is that
+      <code>cargo run -p karakuri</code> puts them in front of a player, which is
+      what a <em>panel</em> badge claims and what no program did until it existed.
+      Forty-one more are designed and out of reach, most of them in bays nothing
+      draws yet, and four the panel cannot reach at all. Where a badge names a
       region, that is where the control lives in
       <a href="console.html">the console</a>; three name none yet, and naming one
       is a change to this specification rather than a note on it. The counts
@@ -169,7 +174,7 @@
         <div class="op-head"><h3>Put a deck on air, prime it, or take it off</h3><span class="op-when ">immediate; priming is a request</span></div>
         <p>Three states, not two switches: <b>live</b> is stepped and composited, <b>priming</b> is stepped out of sight and adds nothing to the mix, <b>allocated</b> is held &mdash; compiled, buffers kept, its <i>t</i> where it stopped, so a deck taken off and brought back resumes rather than restarts. Live is honoured: nothing demotes a deck that is on air. Priming is a request the governor reconsiders every pass, and a deck asked to prime with no room is <b>parked</b> &mdash; the request stands and takes effect when there is room, so what the console shows is the residency the deck reports, not the one it was asked for. MIDI names the deck <em>and the state</em>, so it needs no selection and no notion of which way to flip &mdash; a pad per state, and a key acts on the selected deck.</p>
         <div class="rts">
-          <span class="rt plan">panel <b>tally chip</b></span>
+          <span class="rt has">panel <b>tally chip</b></span>
           <span class="rt has">key <b>space, w</b></span>
           <span class="rt has">MIDI <b>note &rarr; residency N live|priming|allocated</b></span>
           <span class="rt gap">MCP <b>&mdash;</b></span>
@@ -208,7 +213,7 @@
         <div class="op-head"><h3>Gain</h3><span class="op-when ">immediate</span></div>
         <p>The trim: the level material arrives at, colour only. A key steps it; a MIDI control sets it outright.</p>
         <div class="rts">
-          <span class="rt plan">panel <b>strip trim</b></span>
+          <span class="rt has">panel <b>strip trim</b></span>
           <span class="rt has">key <b>[ ] \\</b></span>
           <span class="rt has">MIDI <b>cc &rarr; gain N</b></span>
           <span class="rt gap">MCP <b>&mdash;</b></span>
@@ -218,7 +223,7 @@
         <div class="op-head"><h3>Opacity</h3><span class="op-when ">immediate</span></div>
         <p>The fader across the blend, and the only one of the two that touches what a layer covers.</p>
         <div class="rts">
-          <span class="rt plan">panel <b>strip fader</b></span>
+          <span class="rt has">panel <b>strip fader</b></span>
           <span class="rt has">key <b>; '</b></span>
           <span class="rt has">MIDI <b>cc &rarr; opacity N</b></span>
           <span class="rt gap">MCP <b>&mdash;</b></span>
@@ -228,7 +233,7 @@
         <div class="op-head"><h3>Blend mode</h3><span class="op-when ">immediate</span></div>
         <p>How a deck meets the ones under it in the fold. The key cycles the three; a map names the one it wants, which is why a pad is per mode rather than per deck.</p>
         <div class="rts">
-          <span class="rt plan">panel <b>strip button</b></span>
+          <span class="rt has">panel <b>strip button</b></span>
           <span class="rt has">key <b>m</b></span>
           <span class="rt has">MIDI <b>note &rarr; blend N add|over|max</b></span>
           <span class="rt gap">MCP <b>&mdash;</b></span>
@@ -268,7 +273,7 @@
         <div class="op-head"><h3>Set a deck's mask shape</h3><span class="op-when ">immediate</span></div>
         <p>What shape of the frame a deck's layer reaches &mdash; none, a straight front at an angle, or an iris &mdash; and it leaves the front where it is. Not the row <b>z</b> presses: that one chooses what the <em>next</em> wipe will be, where this one changes the mask a deck has now. A pad would name a shape the way it names a blend mode; the angle it could not name at all, because a map line has no way to write a bare number. <strong>The badge is empty on purpose rather than pending.</strong> Teaching the map a bare number would be teaching it the one kind of value it can check against nothing, and taking the angle off this row would hand it to a default. So this waits for a control that <em>shows</em> an angle, which is what would say what a map ought to write &mdash; and until then the front is the half of the mask a knob reaches.</p>
         <div class="rts">
-          <span class="rt plan">panel <b>strip mask mini</b></span>
+          <span class="rt has">panel <b>strip mask mini</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt gap">MCP <b>&mdash;</b></span>

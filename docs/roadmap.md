@@ -1736,11 +1736,13 @@ event rather than an operation), and **the camera**.
 could be edited there until nodes had names, and nothing can be routed here until operations
 do. [Every operation](manual/operations.html) is where that enumeration is written down, and a
 surface missing from an operation's row is a line of this milestone's work. **It is written**:
-50 operations, and 51 of the 216 ways in exist. **Six of those arrived from
+50 operations, and 56 of the 216 ways in exist. **Six of those arrived from
 the console's own shape** — moving a boundary, folding a bay or a pane, bringing one back, solo, and
 resetting the arrangement — and all twenty-four of their routes are empty except the pointer, which
 four of the six have, and which is the first rule broken by the surface the first rule is about.
-**This sentence has gone stale twice, the same way both times.** It was written as 50 of 208 while
+**This sentence has now gone stale three times, the same way every time**, and the third was
+2026-08-29, when five panel badges became `has` and this figure was 51.
+**Do not transcribe it again**: the paragraph below already says so, and saying it did not stop it. It was written as 50 of 208 while
 the page said 51 of 208 — the mask's front gained a MIDI route in
 [ADR-0202](adr/0202-the-map-reaches-the-masks-front-and-the-shape-has-no-spelling.md) and this
 sentence was not recounted with it — and it then read 49 of 212 while the reset row
