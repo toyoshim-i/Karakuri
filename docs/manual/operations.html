@@ -66,16 +66,16 @@
       second copy of it here would be a list that goes stale.
     </p>
     <p>
-      <strong>52 operations, and 42 of the 224 ways in exist.</strong> Six of them
-      arrived with the console's own shape &mdash; moving a boundary, folding a bay
-      or a pane, bringing one back, solo, and resetting the arrangement &mdash; and
-      six of their twenty-four routes exist: the drag, and a key on each of the
-      other five. <strong>Every row of that section has a route now</strong>,
-      where two of them had none at all: a folded region still has no rectangle
-      for a pointer to find, and <code>z</code> brings it back without one;
-      resetting is still the default case of a family &mdash; keeping an
-      arrangement and putting one back &mdash; that has nowhere on the console to
-      live until the rest of it exists, and <code>r</code> performs it anyway.
+      <strong>54 operations, and 42 of the 232 ways in exist.</strong> Eight of
+      them are the console's own shape &mdash; moving a boundary, folding a bay
+      or a pane, bringing one back, solo, and the three that reset, keep and put
+      back an arrangement &mdash; and six of their thirty-two routes exist: the
+      drag, and a key on each of five. <strong>Two rows of that section have no
+      route at all, and they are the two that carry a name</strong>: a key press
+      cannot type one, so keeping an arrangement and putting one back wait on a
+      control, where every other row there waits on nothing. Resetting is the
+      default case of those two and <code>r</code> performs it today, which is
+      the family reachable at the one member that needs no name.
       <strong>Twenty <em>key</em> badges are designed rather than built, and
       every one of them is a key the command line binds today.</strong> The
       column is the instrument's keyboard and the instrument binds nine keys, so
@@ -104,11 +104,20 @@
       across a switchable list of sinks. One entry of that list is not the list,
       so the control performs part of what the row names and the badge would be
       an over-claim.
-      Forty-two more are designed and out of reach, most of them in bays nothing
-      draws yet, and four the panel cannot reach at all. Where a badge names a
+      Forty-five more are designed and out of reach, most of them in bays nothing
+      draws yet, and three the panel cannot reach at all. Where a badge names a
       region, that is where the control lives in
       <a href="console.html">the console</a>; three name none yet, and naming one
-      is a change to this specification rather than a note on it. The counts
+      is a change to this specification rather than a note on it.
+      <strong>Three of them are named here for the first time</strong>: the
+      arrangement family &mdash; reset it, save it, put one back &mdash; lives in
+      the <em>transport</em> row, beside the pill that names the MIDI map in use.
+      That pill is already the shape this family needs and the reason the row is
+      the right one: a named file, with <em>save</em>, <em>load</em> and
+      <em>start a new one</em> under a single control, and <em>a new one</em> is
+      exactly what the reset is. The console page draws no such control yet, so
+      these three badges are this page specifying one rather than describing one.
+      The counts
       here are read off the code rather than estimated, and they are what the
       Interface milestone is for.
     </p>
@@ -685,10 +694,30 @@
       </div>
       <div class="op">
         <div class="op-head"><h3>Reset the arrangement</h3><span class="op-when ">immediate</span></div>
-        <p>The default arrangement back, in the window you already have. <strong>It is the one operation here that forgets</strong>, and what it forgets is what the rest of this section promises to keep: every fold, every boundary you have dragged, the solo, and the remembered sizes a folded bay and a window dragged too small are both holding for you. This is the special case of putting a saved arrangement back &mdash; and it is the only member of that family that exists, because naming an arrangement, keeping one and restoring one are not built, so there is nothing to reset <em>to</em> but the default and nothing to return to afterwards. A pad could name it: it addresses nothing, where every other row here needs a region a map line has no way to spell. None does yet.</p>
+        <p>The default arrangement back, in the window you already have. <strong>It is the one operation here that forgets</strong>, and what it forgets is what the rest of this section promises to keep: every fold, every boundary you have dragged, the solo, and the remembered sizes a folded bay and a window dragged too small are both holding for you. This is the special case of putting a saved arrangement back, and the two rows under it are the rest of that family: <strong>the default is one arrangement among the ones you could name</strong>, and it is the one that came with the program. It reaches code rather than a file, so there is no name it answers to and nothing you save can shadow it. A pad could name it: it addresses nothing, where every other row here needs a region a map line has no way to spell. None does yet.</p>
         <div class="rts">
-          <span class="rt gap">panel <b>&mdash;</b></span>
+          <span class="rt plan">panel <b>transport</b></span>
           <span class="rt has">key <b>r</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+        </div>
+      </div>
+      <div class="op">
+        <div class="op-head"><h3>Save the arrangement</h3><span class="op-when ">immediate</span></div>
+        <p>The console as it stands &mdash; every fold, every boundary you have dragged, the solo and both sets of remembered sizes &mdash; filed under a name you pick, and saving over that name again is what you mean by saving it again. It goes beside your Sets rather than beside the program: <code>arrangements/</code> under the store, so it travels with the library it was arranged around and nothing you save can reach what ships. <strong>The name is the whole of the handle</strong>, which is why you type one rather than being given a number: a slot moves when you delete the slot above it, and a name does not. The window it was saved at is not part of it.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>transport</b></span>
+          <span class="rt gap">key <b>&mdash;</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+        </div>
+      </div>
+      <div class="op">
+        <div class="op-head"><h3>Put a saved arrangement back</h3><span class="op-when ">immediate</span></div>
+        <p>The arrangement you kept under that name, in the window you already have &mdash; the same sentence as the reset with a name in it, which is what makes the reset the special case rather than a convenience. <strong>The window is not restored.</strong> An arrangement carries the viewport it was saved at and comes back at the one you are looking at now, so a console arranged on a laptop opens on a projector without a margin round it. Two things are refused rather than guessed: a name nothing is filed under is said back to you and your console does not move, and an arrangement that disagrees with itself is refused whole rather than repaired into something you did not save.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>transport</b></span>
+          <span class="rt gap">key <b>&mdash;</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt gap">MCP <b>&mdash;</b></span>
         </div>
@@ -749,7 +778,7 @@
     <h2>What the gaps say</h2>
     <p>
       <strong>MIDI is the narrowest by a wide margin.</strong> It reaches
-      eight of these fifty-two operations, and it cannot express a node
+      eight of these fifty-four operations, and it cannot express a node
       address, a parameter name or an id &mdash; nor a bare number, which is
       why it reaches one half of the mask and not the other. A map line carries
       a slot number, a word out of a value list, or a range, and an angle is
@@ -804,7 +833,7 @@
       <strong>Arranging the console is reached from the keyboard</strong>, and
       until the instrument existed it was reachable from a pointer and nothing
       else &mdash; which is what this paragraph said, and it called it the first
-      rule broken by the surface the first rule is about. Five of its six rows
+      rule broken by the surface the first rule is about. Five of its eight rows
       are built in the <em>key</em> column and one in the <em>panel</em> column:
       <code>f</code> and <code>g</code> fold whatever the pointer is over,
       <code>z</code> brings everything back, <code>s</code> and <code>u</code>
@@ -823,6 +852,26 @@
       reached at all &mdash; <code>r</code> performs it &mdash; but MIDI is still
       empty: it names no region, so a pad could reach it the way a pad reaches
       <em>tap</em>, and none does.
+    </p>
+    <p>
+      <strong>The two new rows here are empty in every column, and a name is why
+      all four are.</strong> Keeping an arrangement and putting one back each
+      carry a name the operator picked, and none of the four surfaces can say one
+      yet. A bare key press cannot type a name and there is nowhere on this
+      console to show the operator a name it picked for them, so a keyboard route
+      would file arrangements under stamps nobody could ask for again &mdash; and
+      putting one back could not be bound at all, because nothing at a key press
+      says <em>which</em>. A map line carries a slot number, a word from a closed
+      list or a range, and a name is none of the three, which is the same refusal
+      <em>Load material into a deck</em> meets over a Set id. MCP is the one
+      surface whose grammar has no objection: it already spells a Set id, an
+      arrangement name is the same shape, and the tools are simply not published.
+      <strong>So what these two wait on is one control</strong>, and the
+      <em>panel</em> badges say where it goes &mdash; the transport row, beside
+      the map pill, which is already a named file with <em>save</em>,
+      <em>load</em> and <em>start a new one</em> on it. The console page has to
+      draw it; until it does, this page is specifying a home rather than
+      describing one, and it is the only place on this page that does.
     </p>
     <p>
       <strong>The command line is the only way into most of what a Set is</strong>

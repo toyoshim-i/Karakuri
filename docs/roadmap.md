@@ -2101,11 +2101,14 @@ comes back to exactly what it left.
 
 **It left the operations page short, and the naming has since happened.** Arranging the panel is
 operations, and the page carried no row for folding a pane, for moving a divider, or for `solo`.
-[Every operation](manual/operations.html) now heads an *Arranging the console* section of six —
-moving a boundary, folding a bay, folding a pane, bringing one back, solo, and resetting the
-arrangement — which is how the vocabulary reached its present width. **What the naming did not
+[Every operation](manual/operations.html) now heads an *Arranging the console* section —
+moving a boundary, folding a bay, folding a pane, bringing one back, solo, resetting the
+arrangement, and since 2026-08-29 saving one and putting one back — which is how the vocabulary
+reached its present width. **No count of that section is written here**: it was *six* until the
+family landed, and the sentence beneath it went stale in the same commit for the same reason. Run
+the second command in *The meter is one column* instead. **What the naming did not
 close is the rule that made it worth doing**: every operation is reachable from the keyboard alone,
-and six of their twenty-four routes exist now, and **no row of that section has none** — the pointer has four and the instrument's keyboard has five, which is what [ADR-0220](adr/0220-the-key-column-is-the-instruments-keyboard-and-the-clis-keys-are-its-own.md) settled.
+and most of that section's routes are still empty. The pointer reaches exactly one — the drag — and the instrument's keyboard has five, which is what [ADR-0220](adr/0220-the-key-column-is-the-instruments-keyboard-and-the-clis-keys-are-its-own.md) settled.
 *Move a boundary* is the sharpest of them and is `Undecided` for exactly this reason —
 `set_divider` takes a viewport pixel a key press cannot mean. So the count is right now and the
 first rule is not yet kept here, which is a different debt from the one this paragraph opened

@@ -29,10 +29,13 @@
 //!   than a rename. [`Op::Reset`] was the second of the two until that edit
 //!   was made: *Reset the arrangement* is its row now (ADR-0208), and the
 //!   mapping to it is what [`rows_of`] pins.
-//! - **One row has no `Op`**: *Move a boundary*, which is
+//! - **Three rows have no `Op`**: *Move a boundary*, which is
 //!   [`karakuri_console::panel::Panel::press`], `moved` and `released` — a
-//!   gesture rather than an operation. The vocabulary carries it as
-//!   `Undecided` for the same reason, and says so at the variant.
+//!   gesture rather than an operation, and the vocabulary carries it as
+//!   `Undecided` for the same reason — and the two that carry a name, *Save
+//!   the arrangement* and *Put a saved arrangement back*, whose payload is a
+//!   file under a store this crate cannot reach. [`NO_OP`] holds all three
+//!   with the two reasons written out.
 //! - **Two splits in the console's arrangement have no name**, so nothing but
 //!   the pointer can reach them: the root column and the body row. `Layout`
 //!   hands both to a caller as `Hit::Divider { split, .. }`, the program's `g`
@@ -176,7 +179,30 @@ const ROW: &str = r#"<div class="op-head">"#;
 /// `Operation::MoveBoundary` carries `Undecided` and gives the same two
 /// reasons: more than half the boundaries here belong to a split the
 /// arrangement left unnamed, and `Layout::set_divider` takes a pixel.
-const NO_OP: &[&str] = &["Move a boundary"];
+///
+/// **Two more, and their reason is a payload rather than a gesture.** *Save
+/// the arrangement* and *Put a saved arrangement back* each carry a name the
+/// operator picked, and what stands behind that name is a file under the store
+/// — `arrangements/<name>.arrangement.json`
+/// (`docs/adr/0221-an-arrangement-is-named-by-the-operator-and-kept-in-a-fourth-place.md`).
+/// **This crate has no store and cannot have one** (ADR-0156), so neither row
+/// can be an `Op`: an `Op` is `Copy`, names a [`NodeId`] or nothing, and could
+/// not carry a whole arrangement even if it wanted to. The operator's
+/// operations are `karakuri_operation::Operation::SaveArrangement` and
+/// `RestoreArrangement`, whoever holds the store performs them, and the half
+/// that lands here is `Panel::layout` on the way out and
+/// [`karakuri_console::panel::Panel::restore`] on the way back — a method
+/// rather than a variant, and its own documentation says why.
+///
+/// **So this list is now two different reasons under one name**: a drag is not
+/// an operation, and an operation whose payload only a third party can produce
+/// is not this type's. A row landing here for a third reason wants that reason
+/// written down beside these two.
+const NO_OP: &[&str] = &[
+    "Move a boundary",
+    "Save the arrangement",
+    "Put a saved arrangement back",
+];
 
 /// [`Op`] variants that no row names, with why.
 ///
@@ -654,7 +680,7 @@ fn the_sweep_finds_the_section_and_the_panel() {
         badges.len()
     );
     assert!(
-        badges.len() >= 6,
+        badges.len() >= 8,
         "only {} rows with a panel badge under `{SECTION}` in {PAGE}",
         badges.len()
     );
@@ -670,8 +696,10 @@ fn the_sweep_finds_the_section_and_the_panel() {
 /// A row this section marks built in the panel column that no gesture on a
 /// running panel performs — ADR-0213's failure mode from the side where the
 /// page moved first, which for this section is the likelier of the two,
-/// because four of its six rows name a home on a console that draws the
-/// furniture and hit-tests none of it.
+/// because seven of its eight rows name a home on a console that draws the
+/// furniture and hit-tests none of it — and three of the seven name the
+/// transport row, where `docs/manual/console.html` draws no arrangement
+/// control at all yet.
 #[test]
 fn every_arrangement_row_marked_built_is_reached_by_the_pointer() {
     let reached = reached_by_the_pointer();
