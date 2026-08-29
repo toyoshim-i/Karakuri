@@ -49,7 +49,7 @@ several hundred, and the rule is met by removing the cause rather than by wideni
 
 ### Where it goes, and why not a step earlier
 
-`Router::route` in [`crates/karakuri-cli/src/midi.rs`](../../crates/karakuri-cli/src/midi.rs). It
+`Router::route` in [`crates/karakuri-cli/src/midi.rs`](../../crates/karakuri-environment/src/midi.rs). It
 already holds the per-run state a frame's worth of accounting belongs beside, and it already has the
 habit: **everything it says is said once per control** rather than once per message, through
 `seen_unmapped` and `seen_no_slot`, for this exact reason — *"a line per message is a blocking I/O

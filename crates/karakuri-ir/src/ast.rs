@@ -736,7 +736,7 @@ impl Param {
     /// **It lives here rather than in a reader, and that is the whole point.**
     /// It was private to `karakuri-engine`'s `Set`, with a note saying a second
     /// evaluator elsewhere would agree with the shader only by coincidence.
-    /// There is now a second reader — `karakuri-cli`'s metadata writer records
+    /// There is now a second reader — `karakuri-environment`'s metadata writer records
     /// this number in a `param_decl` — and a metadata file whose `default`
     /// disagreed with the uniform the run actually loaded would be a card
     /// describing a procedure nobody ran. One function, so they cannot differ.

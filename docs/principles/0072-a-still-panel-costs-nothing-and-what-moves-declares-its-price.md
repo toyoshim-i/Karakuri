@@ -60,7 +60,7 @@ remove the cost, it clumps it, and a periodic hitch is more visible than a const
 **The first clause is not reachable on the example as it opens** — and it is **four** folds away
 now, which was three between 2026-08-26 and the beat declaring on 2026-08-28 — and that is a fact
 about what the panel holds rather than about this rule.
-`crates/karakuri-console/examples/panel.rs` opens a window with a live picture in the Program bay,
+`crates/karakuri/src/main.rs` opens a window with a live picture in the Program bay,
 deck A auditioning in the preview row under it, a mixer bay, a transport, an outputs row, and deck
 B parked by the governor with its tally rolling once a second. Nothing on it is still. Over three
 seconds with nothing touching that window it draws **58.3 to 59.3 frames a second and spends 18.1

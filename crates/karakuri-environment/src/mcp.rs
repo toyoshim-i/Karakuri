@@ -28,7 +28,7 @@
 //!
 //! ## It names its operations, and it performs them itself
 //!
-//! Every one of the six tools is one of the fifty operations
+//! Every one of the six tools is one of the vocabulary's operations
 //! `docs/manual/operations.html` specifies — `read_procedure`,
 //! `write_procedure`, `swap_outcome`, `save_set`, `read_set` and `list_sets`
 //! are `ReadProcedure`, `WriteProcedure`, `SwapOutcome`, `SaveSet`, `ReadSet`
