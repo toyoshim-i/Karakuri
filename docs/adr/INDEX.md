@@ -243,6 +243,8 @@ number; new records continue from the end.
 | [ADR-0215](0215-the-package-is-karakuri-environment-and-a-module-belongs-if-what-it-deals-with-is-outside-this-process.md) | The package is `karakuri-environment`, and a module belongs in it if what it deals with is outside this process | 2026-08-28 | accepted |
 | [ADR-0216](0216-a-node-nobody-has-spoken-for-is-manual-and-a-request-states-only-what-was-said.md) | A node nobody has spoken for is manual, and a request states only what was said | 2026-08-29 | accepted |
 | [ADR-0217](0217-the-counting-allocator-ships-because-a-written-number-nothing-checks-goes-stale.md) | The counting allocator ships, because a written number nothing checks goes stale | 2026-08-29 | accepted |
+| [ADR-0218](0218-re-anchoring-is-set-sync-naming-the-mode-the-deck-is-in-and-a-cycle-cannot-say-it.md) | Re-anchoring is `SetSync` naming the mode the deck is in, and a cycle cannot say it | 2026-08-29 | accepted |
+| [ADR-0219](0219-the-crossfader-spans-the-selection-and-the-one-after-it.md) | The crossfader spans the selection and the one after it | 2026-08-29 | accepted |
 
 ## Retired numbers
 

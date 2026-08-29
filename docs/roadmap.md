@@ -650,8 +650,38 @@ draws six of that row's ten items, so it has slack the mock does not. This wants
 treatment, which is to measure through `egui`'s own text layout rather than to argue from the
 stylesheet.
 
-**Five things the drawing found that look designed wrong**, each one a control whose sentence could
-not be written cleanly, which is the manual's stated reason for existing. **Re-anchoring has no route
+**Five things the drawing found that look designed wrong were adjudicated on 2026-08-29, and two of
+the five were not faults.** The tempo-sync refusal is arithmetically right rather than
+over-cautious: `beats` is the grid evaluated at the material's own `t`, and under tempo-sync `t`
+itself advances at the tempo ratio, so the pair runs beats-driven motion at the *square* of it —
+`deck.rs` states exactly that, and
+[P-0027](principles/0027-a-silently-wrong-image-loses-to-a-loud-failure.md) is what makes a refusal
+the right answer rather than a quiet picture. And the crossfader's mark is right as a readout: it is
+one number derived from two recorded ones, and a draggable mark would have to invert a projection
+that is not invertible, inventing the split between two `SetOpacity` records by a law no record
+names ([P-0028](principles/0028-every-control-ends-in-the-same-record.md)). That answers a tension
+[ADR-0180](adr/0180-the-operation-vocabulary-is-a-crate-with-no-dependencies.md) recorded and left
+open — *"one of those needs a different name or a different control"* — and it got a different
+control.
+
+**Three were faults and are taken.** Re-anchoring is `SetSync` naming the mode the deck is already
+in, and the fault is in the cycling affordances rather than in the vocabulary
+([ADR-0218](adr/0218-re-anchoring-is-set-sync-naming-the-mode-the-deck-is-in-and-a-cycle-cannot-say-it.md)) — a `ReAnchor` variant lost to
+[P-0074](principles/0074-an-operation-says-what-it-wants-never-which-way-to-move.md), which
+predicted this shape by name. The crossfader spans the selection and the one after it, so the panel
+and the `x` key are one gesture ([ADR-0219](adr/0219-the-crossfader-spans-the-selection-and-the-one-after-it.md)); fixed `A…B` and assignable ends both lost. And
+**the beat anchor's `±offset` is renamed the scrub** — it already had that name and was not using
+it, since its control is *Scrub*, its operation is `ScrubDeck`, and `Transport`'s own field
+documentation calls it *"the operator's scrub"*; the latency offset keeps the word because it is the
+flag-facing one and, once the scrub is the scrub, the only offset left.
+
+**One was neither**: `SetCompositing`'s row prose describes the flag rather than the operation,
+which is what its `launch` badge means, and the sentence is only misreadable. It owes a clause
+saying the operation names both directions and that a stream record for per-slot layering does not
+yet exist.
+
+**Each one was a control whose sentence could not be written cleanly, which is the manual's stated
+reason for existing.** **Re-anchoring has no route
 on any surface**: `Transport::engage` says re-engaging the mode a slot is already in is how an
 operator re-anchors, and `cycle_sync` always moves to the next *allowed* mode, so neither the `y` key
 nor a cycling chip can ask for the mode it is in. **The crossfader's ends were unspecified** — the
