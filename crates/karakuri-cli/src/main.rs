@@ -17,19 +17,18 @@
 //! replay it is read back from the stream instead. Keeping the measurement out
 //! here is what lets the same engine code be deterministic.
 
-mod audio;
-mod compile;
-mod history;
 mod mcp;
 mod meta;
 mod midi;
 mod mix;
-mod render;
-mod scratch;
-mod session;
 mod setfile;
-mod tempo_source;
 mod watch;
+
+// **The program is not this binary's**, and these seven modules are the first
+// of it to say so: they moved to `karakuri-environment` under ADR-0214 and
+// ADR-0215, and they are reached here by name so that every call site below
+// reads exactly as it did. This binary is a surface over them.
+use karakuri_environment::{audio, compile, history, render, scratch, session, tempo_source};
 
 use std::fmt::Write as _;
 use std::path::PathBuf;
@@ -3848,8 +3847,9 @@ fn main() {
     // Only when the run can write one. `--watch` and `--mcp` are the two things
     // that edit a procedure; a render or a replay opens every file read-only,
     // so copying would leave a directory behind for a run that is supposed to
-    // be a function of its arguments. See `scratch.rs` for the rest of the
-    // reasoning, including what happened when there was no such place.
+    // be a function of its arguments. See `karakuri-environment`'s `scratch.rs`
+    // for the rest of the reasoning, including what happened when there was no
+    // such place.
     // The run's edit history, seeded below from the scratch. `None` for a run
     // that cannot be edited, which is the same condition the scratch has and
     // for the same reason: nothing writes a `.kir`, so there is no version to
@@ -4658,7 +4658,7 @@ fn measure_audio(
     // operator who cannot see that happen cannot tell a lock from a coincidence.
     // Scalars only, so pushing it allocates nothing — which is why the tempo
     // half of the audio path can be recorded on a frame and the measurement half
-    // cannot yet. See the note in `session.rs`.
+    // cannot yet. See the note in `karakuri-environment`'s `session.rs`.
     let reason = audio.reason();
     if let Some(record) = tempo {
         if let (karakuri_store::record::Record::Tempo { bpm, .. }, Some(reason)) = (&record, reason)
@@ -7079,8 +7079,9 @@ impl Live {
     ///
     /// Built, decoded, and only then applied — so what drives the deck is what
     /// a replay would decode from a session stream, rather than a second path
-    /// that happens to agree with it today. `audio.rs` does the same thing with
-    /// the two records it emits; see `mix.rs` for the whole argument.
+    /// that happens to agree with it today. `karakuri-environment`'s `audio.rs`
+    /// does the same thing with the two records it emits; see `mix.rs` for the
+    /// whole argument.
     ///
     /// A record this build cannot obey is printed and nothing moves. It cannot
     /// happen from a key press — every caller here built the record a moment

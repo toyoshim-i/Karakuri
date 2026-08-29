@@ -30,7 +30,7 @@ below.
 ## The input side is built
 
 `--tempo-source COMMAND` runs a program and follows the beat it reports. The wire format is
-specified in `crates/karakuri-cli/src/tempo_source.rs`: versioned ndjson over a pipe, an
+specified in `crates/karakuri-environment/src/tempo_source.rs`: versioned ndjson over a pipe, an
 **anchor** rather than a sample — a beat, a tempo, and the source's own clock reading at
 which both were true — so the transport's delay never becomes phase error. Karakuri
 estimates the offset between that clock and its own as the minimum over a sliding window,

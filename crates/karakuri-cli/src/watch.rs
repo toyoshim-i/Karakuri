@@ -230,7 +230,7 @@ pub struct Watch {
     /// difference is the whole value — a build that was rolled back for costing
     /// too much never becomes a `Record::Procedure`, never reaches a save, and
     /// is exactly the version an operator wants back.
-    snapshots: Option<crate::history::Shared>,
+    snapshots: Option<karakuri_environment::history::Shared>,
 }
 
 impl Watch {
@@ -311,7 +311,7 @@ impl Watch {
 
     /// Keep every version that compiles under `store_root`, so an edit can be
     /// walked back. See [`crate::history`].
-    pub fn snapshotting_to(mut self, snapshots: crate::history::Shared) -> Watch {
+    pub fn snapshotting_to(mut self, snapshots: karakuri_environment::history::Shared) -> Watch {
         self.snapshots = Some(snapshots);
         self
     }

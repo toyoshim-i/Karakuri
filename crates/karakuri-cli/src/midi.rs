@@ -318,8 +318,8 @@ pub struct Surface {
 /// hundred messages a second — so a 60 Hz frame sees single figures, and a
 /// stall of a second's worth of eight faders moving together is still under
 /// this. Reserved at construction so the frame path does not `realloc`, which
-/// is the same reason `audio.rs` sizes its buffers up front rather than
-/// letting them find their own high-water mark.
+/// is the same reason `karakuri-environment`'s `audio.rs` sizes its buffers
+/// up front rather than letting them find their own high-water mark.
 const INBOX: usize = 256;
 
 impl Surface {

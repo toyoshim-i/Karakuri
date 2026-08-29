@@ -18,7 +18,8 @@
 //! ```
 //!
 //! **Built and read back, never applied directly**, which is the same
-//! arrangement `audio.rs` has and is there for the same reason: the path the
+//! arrangement `karakuri-environment`'s `audio.rs` has and is there for the
+//! same reason: the path the
 //! engine is driven through is the record's rather than one that happens to
 //! agree with it. A decode that only a test exercises is a decode that is
 //! correct until the day it matters.
@@ -70,7 +71,8 @@
 //! an exception in the first rule with no measured threshold behind it).
 //!
 //! The numbers are kept rather than deleted because they are the reason the
-//! coalescer exists, and whoever removes it should meet them.  `audio.rs`'s
+//! coalescer exists, and whoever removes it should meet them.
+//! `karakuri-environment`'s `audio.rs`'s
 //! record is reused in place because that one was on the frame path from the
 //! start; this one arrived on it later and is now on it a frame at a time.
 //!
@@ -1256,8 +1258,9 @@ mod tests {
         .is_err());
     }
 
-    /// A record that is not the mix's is not an error. `audio.rs` decodes
-    /// those, and both decoders see every record a session carries.
+    /// A record that is not the mix's is not an error.
+    /// `karakuri-environment`'s `audio.rs` decodes those, and both decoders see
+    /// every record a session carries.
     #[test]
     fn a_record_that_is_not_the_mixs_is_left_alone() {
         assert_eq!(change(&Record::Tick { steps: 1 }, 4), Ok(None));
