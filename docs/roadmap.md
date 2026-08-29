@@ -1093,7 +1093,7 @@ re-taken once that boundary is drawn.
     repository's own pair all nine resolve to one node each, so the bay draws all nine. **Where a row
     that names no one node goes is the page's to answer.**
 
-    **Three smaller places the page and the code disagree.** `Set::published` sorts alphabetically,
+    **Three smaller places the page and the code disagreed, and the first is closed.** `Set::published` sorted alphabetically,
     with the engine's own reason — *a console showing its controls in a different order each run is
     not a console* — while the page promises declaration order, which the engine does not keep, so
     **the page's sentence is not satisfiable today**. The mock's folded `L4 renderers` head carries
@@ -1105,9 +1105,10 @@ re-taken once that boundary is drawn.
     worse than the questions.** A wildcard that names no one node gets **a group of its own, first**,
     headed by reach rather than by address — a row in every group it touches lost because the ordinal
     is a MIDI position, so one control would be knob 6 twice and one binding would have two *take
-    back*s. Declaration order wins over the engine's alphabetical sort, and the engine's reason —
-    stability — is conceded and answered: **stability is the requirement and alphabetical is the
-    wrong way to meet it**, and the order is already reachable, since every node's `param_names`
+    back*s. Declaration order won over the engine's alphabetical sort, **and the engine
+    follows now** — the sort is gone, `Set::published` walks each procedure's own parameter list and
+    the map of ranges is only looked up. The engine's reason, stability, was conceded and answered:
+    **stability is the requirement and alphabetical is the wrong way to meet it**, and the order is already reachable, since every node's `param_names`
     is built in declaration order and only the `HashMap` of ranges loses it. The folded `L4` head
     keeps a **readout** (`man ×2 · sug`, a count rather than a fourth value) and gains a fold, because
     rule 06's own example — *this renderer is yours and that one is not* — is only expressible

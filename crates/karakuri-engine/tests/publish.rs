@@ -101,6 +101,100 @@ proc {name} {{
         .expect("one L1 and two L4s")
     }
 
+    /// **A fixture whose declaration order and alphabetical order are
+    /// different at every scale the walk has**, which is the whole of what
+    /// makes the ordering test say anything.
+    ///
+    /// Declared, in the order the nodes run and each procedure declares:
+    /// `radius`, `amount`, `exposure`, `gain`, `blur`. Sorted by spelling:
+    /// `amount`, `blur`, `exposure`, `gain`, `radius`. Nothing is in the same
+    /// place in both — first and last are exchanged, and inside one node
+    /// `radius` precedes `amount`. A fixture that happened to declare its
+    /// parameters alphabetically would pass this test under the sort it exists
+    /// to refuse.
+    ///
+    /// **And `exposure` is declared by both renderers**, so the list also says
+    /// where a repeated key goes: once, where it first appears, over the
+    /// intersection of the two declared ranges.
+    const SHELL: &str = r#"
+proc shell {
+  kind     L1
+  topology points
+  capacity [4, 4] = 4
+
+  param radius : float [0.5, 8.0] = 2.0
+  param amount : float [0.0, 1.0] = 0.5
+
+  emit position
+
+  element {
+    position = sphere_point(hash1(seed), hash1(seed + 7u)) * radius * amount;
+  }
+}
+"#;
+
+    const WARM: &str = r#"
+proc warm {
+  kind  L4
+  blend additive
+
+  param exposure : float [0.0, 8.0] = 1.0
+  param gain     : float [0.0, 2.0] = 1.0
+
+  consumes position
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    point_size = 4.0;
+  }
+
+  fragment {
+    color = vec4(exposure * gain, exposure, exposure, 1.0);
+  }
+}
+"#;
+
+    const COOL: &str = r#"
+proc cool {
+  kind  L4
+  blend additive
+
+  param exposure : float [0.0, 4.0] = 1.0
+  param blur     : float [0.0, 1.0] = 0.25
+
+  consumes position
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    point_size = 4.0;
+  }
+
+  fragment {
+    color = vec4(exposure, blur, exposure, 1.0);
+  }
+}
+"#;
+
+    /// One L1 and two L4s over [`SHELL`], [`WARM`] and [`COOL`].
+    fn ordered(gpu: &Gpu) -> Set {
+        let warm = compile(WARM);
+        let cool = compile(COOL);
+        Set::build_many(
+            &gpu.device,
+            &gpu.queue,
+            &[(&compile(SHELL), 4)],
+            &[],
+            &[],
+            &[],
+            &[&warm, &cool],
+            Layering::Overdraw,
+            1,
+            &[],
+            karakuri_engine::set::Wiring::default(),
+        )
+        .expect("one L1 and two L4s")
+    }
+
     fn control(name: &str, layer: Kind, index: u32, key: &str, range: [f32; 2]) -> Published {
         Published {
             name: name.to_string(),
@@ -141,11 +235,17 @@ proc {name} {{
         // **The intersection, not the union.** `near` declares `[0, 8]` and `far`
         // declares `[0, 4]`; one knob moving both must not offer a position only one
         // of them said it still looks like itself at.
+        // **In declaration order**: the L1 runs first and declares `radius`, and
+        // the two renderers after it declare `exposure`. Alphabetically it is
+        // the other way round, which is what this pair asserts as well as the
+        // ranges — see
+        // `a_default_interface_is_in_declaration_order_and_does_not_move` for
+        // the fixture that says so at both scales.
         assert_eq!(
             all,
             vec![
-                every("exposure", "exposure", [0.0, 4.0]),
-                every("radius", "radius", [0.5, 8.0])
+                every("radius", "radius", [0.5, 8.0]),
+                every("exposure", "exposure", [0.0, 4.0])
             ]
         );
 
@@ -425,6 +525,69 @@ proc {name} {{
         assert!(
             set.bind(bind("twist")).attached(),
             "the control that is there"
+        );
+    }
+
+    /// **The default interface is in declaration order**, and it holds still.
+    ///
+    /// `docs/manual/console.html`, "A knob is bound to a deck, not to a Set":
+    /// a MIDI control is learned against *the position in the deck's published
+    /// interface*, so this list's order is an address and not a presentation.
+    /// Where a Set published nothing the order is its own — node by node in the
+    /// order the nodes run, inside a node the order its procedure declared
+    /// them, each key taken where it first appears.
+    ///
+    /// **Stability is the requirement, and it is asserted here rather than
+    /// assumed.** The engine sorted these keys alphabetically for exactly this
+    /// reason — they came out of a `HashMap` and a console whose controls move
+    /// between runs is not a console — so an order that is not sorted has to
+    /// say for itself that it does not move. Two Sets built the same way must
+    /// publish the same list.
+    #[test]
+    fn a_default_interface_is_in_declaration_order_and_does_not_move() {
+        let gpu = Gpu::headless().expect("no GPU available");
+        let set = ordered(&gpu);
+
+        let all = set.published();
+        let names: Vec<&str> = all.iter().map(|p| p.name.as_str()).collect();
+        assert_eq!(
+            names,
+            vec!["radius", "amount", "exposure", "gain", "blur"],
+            "not the order the procedures declare them in"
+        );
+
+        // **The fixture is half the test.** Declaration order and alphabetical
+        // order have to differ, or a sort passes this and nothing was asserted.
+        let mut sorted = names.clone();
+        sorted.sort_unstable();
+        assert_eq!(sorted, vec!["amount", "blur", "exposure", "gain", "radius"]);
+        assert_ne!(
+            names, sorted,
+            "the fixture declares its parameters alphabetically, so it proves nothing"
+        );
+
+        // **A repeated key is one control, where it first appears** — and still
+        // the intersection of what both renderers declared, which is the rule
+        // publishing a wildcard already follows.
+        assert_eq!(
+            all.iter().filter(|p| p.key == "exposure").count(),
+            1,
+            "{all:#?}"
+        );
+        assert_eq!(all[2], every("exposure", "exposure", [0.0, 4.0]));
+
+        // **It holds still.** Twice off one Set, and once off a second Set built
+        // the same way — the second is the one that catches an order read out of
+        // a map, since two maps in one process do not agree.
+        assert_eq!(
+            set.published(),
+            all,
+            "one Set answered twice with two orders"
+        );
+        assert_eq!(
+            ordered(&gpu).published(),
+            all,
+            "the same Set built twice published two different orders"
         );
     }
 }
