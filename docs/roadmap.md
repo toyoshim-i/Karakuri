@@ -1185,7 +1185,7 @@ than work, and every one of them was found by building the thing next to it.
   **A sixth was found beside them and is a routing question rather than a gap**: the page routes
   *Tone map* and *Exposure* to `panel transport`, and the mock's transport row draws neither.
 - **The library's two questions are `console.html`'s own, and building the bay is what made them
-  due.** *Whether a folder scope reads Sets or artifacts* is what the scope row is waiting on — a
+  due — and by the rule above they are written into the manual now rather than waiting.** *Whether a folder scope reads Sets or artifacts* is what the scope row is waiting on — a
   directory of `.kir` files, a directory of Set files and a bundle are three different things, and
   the chip is a control over whichever it turns out to be. *How a Set gets from the library to a
   deck* is the `load → C` pill, and the manual already says what should decide it: the
@@ -1238,16 +1238,18 @@ than work, and every one of them was found by building the thing next to it.
   an operation), and the camera.
 - **The console's window has no `a`.** `karakuri-cli`'s snaps the window to the canvas so a capture
   is one texel to one texel; ADR-0181 made the picture the canvas's shape and created that gap.
-- **Whether any of M5's gated items belongs in another milestone**, which is the maintainer's and
-  nobody else's. The seven *Adds* at the end of *M5 — Interface* each say now whether they are
-  ready, gated or partly done and on what, and they still read alike on the page: a bullet waiting
-  on a decision nobody has taken and a bullet waiting on an afternoon's drawing are the same shape.
-  That list says **two of these are candidates** for a move and does not say which two, and nothing
-  has been moved. So the question is open in its weakest form — the candidates are not written down
-  — and naming them is the cheap half of taking it. Two of the seven already carry their own answer
-  and it is *stay*: the Set browser's thumbnail judgement is M5's to make even though the machinery
-  it revives is M4's, and the `man / sug / auto` control is gated inside M5 on a region the console
-  does not draw.
+- ~~**Whether any of M5's gated items belongs in another milestone.**~~ **Taken, on 2026-08-29, and
+  the answer is that nothing moves: all seven of the *Adds* are this milestone's.** The question had
+  been open in its weakest form — the list said *two of these are candidates* and never said which
+  two — and the maintainer closed it against splitting rather than by naming them. **The reason is
+  worth keeping, because it is a rule rather than a ruling**: none of the seven is blocked by
+  anything outside M5, and where nothing is actually in the way, deferring is not caution. It reads
+  as caution and is the expensive choice, because two half-milestones have to be re-understood
+  before either can be finished.
+
+  **What that turns the seven into is an order rather than a filter.** Each still says whether it is
+  ready, gated or partly done, and *gated* now means only *not yet* — the gate is another item on
+  this same list, and the one that unblocks the most of them is the manual, below.
 
 #### What the three words mean, and where
 
