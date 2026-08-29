@@ -357,10 +357,6 @@ impl Demo {
 /// within that layer, and the hash of the source it was compiled from.
 type Nodes = Vec<(&'static str, u32, karakuri_store::hash::Hash)>;
 
-/// Elements per geometry where nothing else says — neither `--capacity` nor the
-/// procedure's own `capacity` declaration.
-pub const DEFAULT_CAPACITY: u32 = 262144;
-
 const DEFAULT_STORE: &str = ".karakuri";
 
 /// One press of the scrub keys, in beats. A quarter beat — a sixteenth of a bar
@@ -906,6 +902,9 @@ struct Args {
     /// renderer is the ordinary case; several is one simulation drawn several
     /// ways, which costs a draw pass apiece and no extra memory.
     sets: Vec<(Named, Vec<Named>)>,
+    /// What `--capacity` was given, or [`karakuri_ir::DEFAULT_CAPACITY`] when
+    /// it was not — read only through [`capacity_for`], which prefers the
+    /// procedure's own declaration to this unless `capacity_given`.
     capacity: u32,
     /// Whether `--capacity` was *typed*. Without it a procedure's own declared
     /// default is used — see [`capacity_for`].
@@ -1507,7 +1506,7 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
         edges: Vec::new(),
         bpm: DEFAULT_BPM,
         sets: Vec::new(),
-        capacity: 262_144,
+        capacity: karakuri_ir::DEFAULT_CAPACITY,
         capacity_given: false,
         render_to: None,
         seq_to: None,
