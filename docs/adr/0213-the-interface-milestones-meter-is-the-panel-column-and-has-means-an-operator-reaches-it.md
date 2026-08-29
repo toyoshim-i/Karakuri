@@ -78,7 +78,8 @@ it"*.
 **What this commits to.** When the panel column's first badge flips to `has`, a test asserts that
 each `has` row's operation is actually emitted by a console control, and fails in both directions —
 a control reaching past the page, and the page claiming a control that does not exist. That is not
-a new idea to invent: `crates/karakuri-cli/src/mcp.rs` already does it for the MCP column, in
+a new idea to invent: `crates/karakuri-environment/src/mcp.rs` already does it for the MCP column
+(`karakuri-cli/src/mcp.rs` when this was written; it moved in ADR-0214), in
 `every_tool_this_server_publishes_has_a_route_on_the_page` and
 `every_mcp_route_the_page_claims_is_a_tool_this_server_publishes`, matching on the badge's **text**
 as well as on the title so that *"the page names a call nobody can make"* fails too. The
