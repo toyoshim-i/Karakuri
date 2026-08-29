@@ -1388,6 +1388,7 @@ dependencies = [
  "karakuri-signal",
  "karakuri-store",
  "pollster",
+ "serde_json",
  "wgpu",
  "winit",
 ]
