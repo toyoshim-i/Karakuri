@@ -1070,7 +1070,47 @@ re-taken once that boundary is drawn.
      none — so the date is formatted by the host and handed in, the way every other derived value in
      `view` is. The example lists `.karakuri` once at
      startup, which is why a Set saved while the window is up does not appear until the next run.
-   - **Staging — blocked on machinery, and there is not even an empty case.** Candidates waiting,
+   - **Staging — surveyed and specified on 2026-08-29, and the survey found the roadmap's own
+    diagnosis half wrong.** This entry said the bay is *gated inside M5 on naming that operation*.
+    **It needs no operation.** *Regeneration of a slot* is `WriteProcedure` with a different
+    producer — ADR-0022 calls the act *regenerate, compile, prime* and what crosses into Karakuri is
+    a new source for one node, ADR-0083 already settled that **MCP is the lane's first producer and
+    replaces operator-driven generation**, and `mcp.rs`'s `write_procedure` already checks, hands
+    back the diagnostics, writes, snapshots and swaps at a frame boundary. That is
+    [P-0019](principles/0019-prefer-the-mechanism-that-already-exists.md)'s worked shape a third
+    time: the subsystem was a producer.
+
+    **What the lane is actually gated on is its own premise.** *Candidates wait* is not what the
+    machinery does — nothing holds a finished build out of the picture, `install_if_ready` puts it in
+    at the next frame boundary, and the head's `2 waiting` is not a queue depth and cannot become one
+    without engine work nobody has costed. **And the most valuable row is one the mock does not
+    draw**: after `Event::RolledBack` the watchdog puts the previous *Set* back on screen and **does
+    not put the previous file back**, while the watcher re-reads every file of the slot on every
+    rebuild — so the picture is the old version, the disk is the over-budget one, and the next
+    unrelated save swaps it in again. **Nothing in the instrument says so, and that is what this lane
+    is for.**
+
+    Two operations were added and they are not the ones the page's words suggested: **`Keep a
+    candidate`** and **`Put a node's previous version back`**. *Accept* and *reject* were refused
+    because `swap::Event` has already spent `Accepted`, `Rejected` and `RolledBack` on the budget's
+    verdict over the same object, and the lane is the one surface where a budget's verdict and an
+    operator's taste are read at once ([P-0031](principles/0031-a-name-means-one-thing-across-the-system.md)).
+    They are addressed by node rather than by version, because a node has at most one unsettled
+    version — choosing among older ones is `WalkHistory`, still `Undecided` for want of exactly that
+    address, and **this lane is the surface that row has been waiting for**.
+
+    **Two things the bay still cannot say, and both are records rather than drawings.** `origin` —
+    the prompt, the model, the seed — is specified in [ir-spec.md](ir-spec.md) and **produced by
+    nothing**, so `you, 14:41` against `agent` cannot be told apart: a hand in an editor and a model
+    over MCP reach the same file by the same path. The coloured dot goes with it, because the colour
+    *is* the producer. And **the bay's height is pinned to its fullest state while empty is its
+    ordinary state** — `fixed(125.0)` is three candidate rows held open over nothing in every run
+    that starts, taken from the Library, and it is not expressible: `arrangement()` takes no
+    arguments and `karakuri-layout` has no setter for a view's size. A content-height lane needs the
+    arrangement to stop being static.
+
+    *(The survey this replaced follows, because its accounting is what the work was measured
+    against.)* **Staging — blocked on machinery, and there is not even an empty case.** Candidates waiting,
      *"whether they came from you or from an agent"*. Nothing in this workspace produces one: there
      are no agents, and `HotSwap`'s rolled-back candidate is a different thing — a build that lost,
      not a proposal waiting to be accepted. The head's `2 waiting` and each row's `you, 14:41` are

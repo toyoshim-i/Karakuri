@@ -138,9 +138,10 @@ fn the_manual_and_the_vocabulary_name_the_same_operations() {
     // two residency rows became one (ADR-0186), 46 again since the look split
     // into a tone map and an exposure (ADR-0192), and 48 since the mask took a
     // row for its shape and a row for its position (ADR-0201), 49 since
-    // the arrangement took one for its reset (ADR-0208), and 50 since a node
-    // took one for its authority (ADR-0211); it is meant to
-    // move with the page, never to be lowered to fit a smaller scan.
+    // the arrangement took one for its reset (ADR-0208), 50 since a node
+    // took one for its authority (ADR-0211), and 52 since the staging lane
+    // took one to keep a candidate and one to put a version back; it is meant
+    // to move with the page, never to be lowered to fit a smaller scan.
     assert!(
         rows.len() >= 50,
         "only {} operations found in {PAGE} — is a row still `{ROW}` followed by an `<h3>`?",

@@ -474,9 +474,29 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
         | Operation::SwapOutcome => Written::Silent(Silent::Question),
 
         // ----- Silent: the record is written where the work lands ----------
-        Operation::SaveSet { .. } | Operation::WriteProcedure { .. } => {
-            Written::Silent(Silent::OnLanding)
-        }
+        //
+        // `RestoreProcedure` is beside `WriteProcedure` because it **is** one:
+        // putting a node's previous version back is the same check, the same
+        // worker and the same frame boundary, so the `Record::Procedure` is
+        // written at the swap and can itself be rolled back. What it restores
+        // is the file rather than the picture, which is the gap the staging
+        // lane exists to show — a rolled-back build leaves the previous *Set*
+        // on screen and the over-budget *file* on disk, and nothing else in
+        // the instrument says so.
+        Operation::SaveSet { .. }
+        | Operation::WriteProcedure { .. }
+        | Operation::RestoreProcedure { .. } => Written::Silent(Silent::OnLanding),
+
+        // ----- Silent: the surface holds the state ------------------------
+        //
+        // **Keeping a candidate writes nothing because nothing is pending.**
+        // The material already changed: a write lands, `install_if_ready` puts
+        // a finished build in at the next frame boundary, and the
+        // `Record::Procedure` for it was written at that swap. What a keep
+        // settles is the *lane* — this node is no longer one an operator has
+        // still to look at — and that is a surface's own state in exactly the
+        // sense the four *Arranging the console* rows are.
+        Operation::KeepCandidate { .. } => Written::Silent(Silent::Surface),
 
         // ----- Silent: nothing in the session vocabulary carries it --------
         //
