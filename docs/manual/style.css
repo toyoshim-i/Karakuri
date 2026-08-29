@@ -332,6 +332,10 @@
   .lib-row { display: flex; gap: 7px; padding: 3px 7px; color: var(--c-dim); align-items: center; border-radius: 7px; }
   .lib-row.cursor { background: color-mix(in srgb, var(--c-lav) 13%, transparent); color: var(--c-text); }
   .lib-row .star { color: var(--c-sun); }
+  /* Not a favourite. A class rather than an inline colour, because the star
+     is a control with two states and the off one is the state most rows are
+     in — added beside the rule above rather than changing it. */
+  .lib-row .star.off { color: var(--c-faint); }
   .lib-row .dim { color: var(--c-faint); margin-left: auto; font-size: 10px; }
   .lib-foot { padding: 5px 10px; color: var(--c-faint); font-size: 10px; display: flex; gap: 8px; align-items: center; border-top: 1px solid var(--c-hair); }
 

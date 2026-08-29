@@ -92,22 +92,22 @@
             <div class="bay" style="flex:1; display:flex; flex-direction:column;">
               <div class="bay-head"><span>Library</span><span class="grip">&#8942;&#8942;</span></div>
               <div class="scopes">
-                <span class="scope sel">favourites</span>
+                <span class="scope sel" data-tip="Favourites. Selected. It is this library filtered rather than a fifth place a Set can be &mdash; the star is kept beside the Sets, in the store, so this scope is a question asked of `my sets` and never a collection of its own. Click to show it; click another scope to leave it. &#8853; MIDI: unassigned &mdash; there is no operation for a map to name yet.">favourites</span>
                 <span class="scope">my sets</span>
                 <span class="scope">presets</span>
-                <span class="scope">folder</span>
+                <span class="scope" data-tip="A folder, and what it lists is Sets. A Set file and a bundle are one file &mdash; the same `.set.ndjson`, differing only in whether the sources are appended inside it &mdash; so this scope draws one kind of row, not two. A `.kir` is not one of them: it is a single node's source addressed by its content, and nothing takes one. A row here is taken into the store and then loaded, which is one press because taking it in is what gives it a name. &#8853; MIDI: unassigned &mdash; a map line names a state from a closed list and a directory is not one.">folder</span>
                 <span class="scope" data-tip="Add a scope. A library is asked questions rather than read end to end, so what you browse gets both wider and narrower with use.">+</span>
               </div>
               <div class="path">~/sets/tour&#8209;2026/night&#8209;b &nbsp;&#8250;&nbsp; opening</div>
               <div class="lib-filters"><span class="field">holds&hellip;</span><span class="field">layer&hellip;</span></div>
               <div class="lib-list">
-                <div class="lib-row cursor"><span class="star">&#9733;</span><span>drift_night</span><span class="dim">16:09</span></div>
+                <div class="lib-row cursor"><span class="star" data-tip="A favourite. Kept beside the Sets in the store rather than inside the Set file, so it survives a copy of this library and does not survive a copy of one Set: hand somebody a bundle and it arrives unstarred. Click to unstar. &#8853; MIDI: unassigned &mdash; no operation names a favourite yet, so there is nothing for a map to reach.">&#9733;</span><span>drift_night</span><span class="dim">16:09</span></div>
                 <div class="lib-row"><span class="star">&#9733;</span><span>lattice_veil</span><span class="dim">15:52</span></div>
-                <div class="lib-row"><span style="color:var(--c-faint)">&#9734;</span><span>glass_shell</span><span class="dim">15:31</span></div>
-                <div class="lib-row"><span style="color:var(--c-faint)">&#9734;</span><span>night01</span><span class="dim">14:58</span></div>
-                <div class="lib-row"><span style="color:var(--c-faint)">&#9734;</span><span>strand_bloom</span><span class="dim">14:12</span></div>
+                <div class="lib-row"><span class="star off" data-tip="Not a favourite. Click to star it &mdash; which writes beside the Sets and never into this one, so the file keeps its bytes and its time and the row does not jump to the top of a listing ordered by when it was written. &#8853; MIDI: unassigned.">&#9734;</span><span>glass_shell</span><span class="dim">15:31</span></div>
+                <div class="lib-row"><span class="star off">&#9734;</span><span>night01</span><span class="dim">14:58</span></div>
+                <div class="lib-row"><span class="star off">&#9734;</span><span>strand_bloom</span><span class="dim">14:12</span></div>
               </div>
-              <div class="lib-foot"><span>5 of 27</span><span class="sep"></span><span class="pill lav">load &rarr; C</span></div>
+              <div class="lib-foot"><span>5 of 27</span><span class="sep"></span><span class="pill lav" data-tip="Load the Set under the cursor into deck A &mdash; the deck the selection is on, which is the same deck `x` reads and the reason the selection stays put while your hands are in this list. So a load is the cursor and a key and no pointer at all. A is on air here and nothing refuses the press: what may be asked for is the instrument's to decide, so the letter is what says where it lands before you press it. Select another deck and the letter follows. Dragging a row onto a strip is the same command with the deck named by the strip you drop on rather than by the selection. &#8853; MIDI: unassigned &mdash; every target a map can name carries a slot, a range or a word from a closed list, and a Set id is none of the three.">load &rarr; A</span></div>
             </div>
 
             <div class="bay">
@@ -860,6 +860,157 @@
       </div>
 
       <div class="note">
+        <h3>A folder scope reads Sets, and a bundle is not a third thing</h3>
+        <p>
+          The question was whether a folder holds Sets or artifacts, and it had
+          three candidates: a directory of <code>.kir</code> files, a directory
+          of Set files, and a bundle. <strong>Two of the three are one thing and
+          the third is out.</strong> A Set file and a bundle are the same file
+          &mdash; one record per line, and a bundle is that file with the
+          sources it names appended inside it &mdash; so the scope draws one
+          kind of row rather than two. A <code>.kir</code> is not one of them:
+          it is a single node's source, addressed by its content, carrying no
+          layer, no slot, no parameters and no name a person chose. Nothing in
+          the vocabulary takes one. <em>Load material into a deck</em> and
+          <em>read what one Set holds</em> both name a Set the library already
+          keeps, and the one operation that names a <em>file</em> is
+          <em>take one in</em>, which takes a Set. <strong>A directory of
+          <code>.kir</code> files is a directory of parts</strong>, and a
+          library lists what you can put on a deck.
+        </p>
+        <p>
+          <strong>So a folder row is a <em>take</em>, and the reader for it
+          already draws the line the scope was waiting on.</strong> A bundle
+          arrives whole. A Set file with nothing inlined arrives exactly when
+          this library already holds every artifact it names, and where it does
+          not it is refused <em>naming the node that is missing</em> rather than
+          being called a bad file. That is one row, one operation and one
+          refusal sentence for both spellings, which is why the difference
+          between them never has to appear in the scope list: it is a property
+          of a file, not a kind of collection.
+        </p>
+        <p>
+          <strong>Two limits, and they are the whole price of browsing outside
+          the store.</strong> A name you already own is refused rather than
+          overwritten, because an id that arrived inside somebody else's file is
+          not the instruction that an id you typed is &mdash; so a folder row
+          can meet a Set of yours and ask for a rename. And a folder row is not
+          a row you play from directly: the Set is in the library before it is
+          on a deck. That is one press rather than two because taking it in is
+          what gives it the name the load needs, and it is the same order the
+          scope list is drawn in &mdash; a folder is a way <em>in</em>, and
+          <em>my sets</em> is where things are.
+        </p>
+        <p>
+          <strong>What is owed is the asking.</strong> <em>List what the store
+          holds</em> carries what a Set holds and which layer it uses, and it
+          has nowhere at all to put a directory &mdash; so no operation in the
+          vocabulary can ask a folder for its listing. The chip and the walk
+          under it are specified here and the operation behind them is named as
+          owed rather than written from this drawing, which is the way round
+          that keeps a specification a specification.
+        </p>
+      </div>
+
+      <div class="note">
+        <h3>What keeps a favourite, and where it does not travel</h3>
+        <p>
+          The star is a control over a fact <strong>nothing in this workspace
+          keeps</strong>: no field on a Set listing, no record that carries one,
+          no operation that names one. So what is decided here is <em>where a
+          favourite lives</em>, and it is decided by what happens when a Set is
+          copied to another machine rather than by where it is convenient to
+          write.
+        </p>
+        <p>
+          <strong>In the Set file, a star travels with the material</strong>,
+          which makes your attention somebody else's the moment you send one on
+          &mdash; and it has to be <em>written</em>: a Set file's own time is
+          what the column beside each name reads, so starring one would push it
+          to the top of a listing ordered by when it was made, and a favourite
+          would be indistinguishable from an edit. <strong>In a session, a star
+          is a thing that happened at a moment</strong>: a session is written
+          only while the recording is on, so a press with <em>rec</em> off would
+          keep nothing, and a stream that replays would hand the favourite back
+          as an event rather than as something that is true.
+        </p>
+        <p>
+          <strong>So it is kept beside the Sets, in the library itself, and the
+          cost is that a favourite does not travel with a Set.</strong> Copy the
+          library and the stars come with it; hand somebody one Set and it
+          arrives unstarred; a Set that leaves here loses its star. That is the
+          right consequence twice over. It keeps a Set file byte for byte what
+          it was, which is what the whole instrument's determinism is measured
+          against and is not a thing to spend on a star. And it keeps
+          <em>favourites</em> a statement about this room rather than about the
+          material &mdash; which is also what makes the scope a filter over
+          <em>my sets</em> rather than a fifth place a Set can be, so nothing is
+          in two collections and nothing has to be kept agreeing.
+        </p>
+        <p>
+          <strong>The operation is owed, and the star is drawn as a control
+          anyway.</strong> Nothing in the vocabulary names a favourite, so there
+          is nothing yet for a key, a map or a model to reach &mdash; and a row
+          invented from this drawing would be the specification written
+          backwards. What this page settles is the half a control cannot be
+          specified without: the value it reads, and where that value lives.
+        </p>
+      </div>
+
+      <div class="note">
+        <h3>How a Set reaches a deck</h3>
+        <p>
+          The operation exists and is called <em>load material into a deck</em>.
+          It names a deck and a Set, which is exactly the two things this bay and
+          the mixer already carry between them, so <strong>what was missing was
+          never the operation but the route</strong>.
+        </p>
+        <p>
+          <strong>The pill names the deck selection, so both operands are
+          already on screen.</strong> The cursor in the list says which Set; the
+          selection says which deck &mdash; the same value <code>x</code> reads,
+          and the reason the selection <em>persists while your hands are in the
+          library</em> instead of following focus. A load is then a cursor and a
+          key with no pointer anywhere in it, which is rule 01's constraint met
+          by the arrangement rather than by a second control. That is why the
+          constraint was allowed to decide the question: the answer that
+          satisfies it needs nothing added, and the answer that does not
+          &mdash; a destination chosen in the library's own foot &mdash; would
+          be a third selection on a panel that already has to explain two.
+        </p>
+        <p>
+          <strong>The letter on the pill is the whole warning.</strong> Deck A
+          above is selected and on air, so the pill reads <code>load &rarr; A</code>
+          and a press would replace what the room is watching. Nothing refuses
+          it: what may be asked for is the instrument's to decide, and a panel
+          refusing what the key allows would be a second rule kept in a second
+          place. What the control owes instead is to say where it lands
+          <em>before</em> the press, and the letter is that. Select the deck you
+          are preparing and the letter follows you.
+        </p>
+        <p>
+          <strong>Dragging a row onto a strip is a second route to the same
+          command, and never the first.</strong> It is worth having because it
+          names both operands in the one gesture, which makes it the only way to
+          load a deck without selecting it first; it is second because a route
+          the keyboard cannot take would break rule 01 on its own. Two ways in,
+          one name &mdash; which is the only reason a drag is safe to add later.
+        </p>
+        <p>
+          <strong>The key is owed and this page does not choose the
+          letter</strong>, because which keys exist is the operations page's to
+          say and that row has no key on it yet. <strong>MIDI is empty for a
+          reason of its own rather than for want of a letter</strong>: every
+          target a map can name carries a deck number, a range, or a word from a
+          closed list, and a Set is none of the three. A map belongs to the
+          hardware in the room and this list belongs to the store, so a line
+          naming a Set would be a line about something the map has no reason to
+          know &mdash; and the same argument that keeps a map a file is what
+          says a Set id does not belong in one.
+        </p>
+      </div>
+
+      <div class="note">
         <h3>Program, sized by height</h3>
         <p>
           A 16:9 view filling a wide centre column would be 763 pixels tall and
@@ -986,15 +1137,6 @@
   <section class="open">
     <h2>Still open</h2>
     <div class="open-item">
-      <h4>Whether a folder scope reads Sets or artifacts</h4>
-      <p>
-        A directory of <code>.kir</code> files is a different thing from a
-        directory of Set files, and a bundle is a third. The scope list is where
-        that difference becomes visible, so it wants deciding before the first
-        scope beyond the store is added.
-      </p>
-    </div>
-    <div class="open-item">
       <h4>Where the tracker's own doubt goes</h4>
       <p>
         The estimator can already say it thinks the grid is at half the music's
@@ -1007,15 +1149,6 @@
         needs deciding next to a second fact: a grid at half the music's tempo
         can only be doubled below 100 BPM, so above that the hint and the
         refusal would arrive together.
-      </p>
-    </div>
-    <div class="open-item">
-      <h4>How a Set gets from the library to a deck</h4>
-      <p>
-        Dragging a row onto a strip is one answer. A focused deck and a load key
-        is the one that also satisfies keyboard-only operation &mdash; and the
-        constraint should decide it, with dragging added afterwards as a second
-        route to the same command.
       </p>
     </div>
   </section>
