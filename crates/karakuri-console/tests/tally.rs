@@ -31,7 +31,7 @@
 //!
 //! At the operation, exactly as `blend.rs` and `fader.rs` do. Turning it into
 //! a `Record::Residency`, applying it and letting the governor answer is the
-//! harness's — `examples/panel.rs`, where there is a deck — and this crate has
+//! harness's — `crates/karakuri/src/main.rs`, where there is a deck — and this crate has
 //! none (ADR-0156).
 
 mod common;

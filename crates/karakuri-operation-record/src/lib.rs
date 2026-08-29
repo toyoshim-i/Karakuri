@@ -7,8 +7,9 @@
 //! surface emits an [`Operation`] and applies nothing
 //! ([ADR-0185](../../../docs/adr/0185-a-fader-translates-a-drag-into-an-operation-and-applies-nothing.md));
 //! this is the step on the other side of that seam, and until it existed there
-//! was nowhere for it to happen — `karakuri-console/examples/panel.rs` built
-//! three records by hand and said so.
+//! was nowhere for it to happen — the panel program, then
+//! `karakuri-console/examples/panel.rs` and now `crates/karakuri/src/main.rs`,
+//! built three records by hand and said so.
 //!
 //! # Why it is a crate and not a `From` impl
 //!

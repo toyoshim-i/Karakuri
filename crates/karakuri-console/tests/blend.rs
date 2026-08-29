@@ -20,7 +20,7 @@
 //!
 //! At the operation, exactly as `fader.rs` does. Turning it into a
 //! `Record::Blend` and moving a deck with it is the harness's —
-//! `examples/panel.rs`, where there is a deck — and this crate has none
+//! `crates/karakuri/src/main.rs`, where there is a deck — and this crate has none
 //! (ADR-0156).
 
 mod common;

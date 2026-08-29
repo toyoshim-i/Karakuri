@@ -277,7 +277,7 @@ grows taller with the window and the arrangement's is pinned at 72.
 
 **Each preview is an audition and costs a pass**, which is now literally what the code does: one
 `Present`, one canvas, presented twice — into the picture's region and again into deck A's cell.
-What a panel frame costs is measured and printed by the example rather than estimated. The still
+What a panel frame costs is measured and printed by the program rather than estimated. The still
 reading — **0 frames and 0 allocations**
 ([P-0072](principles/0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md)'s
 first clause) — **is no longer reachable on this example at all**, and folding does not get back
@@ -299,7 +299,7 @@ recording beside the number: 10.9% was the picture and the preview row alone, an
 was the mixer bay arriving rather than the parked deck. Nobody re-took it, because a figure in
 prose goes stale in silence. The example now holds its own quoted figure against the run it has
 just taken and says so when the two part company — `WRITTEN_ALLOCS` in
-`crates/karakuri-console/examples/panel.rs`.
+`crates/karakuri/src/main.rs`.
 
 **Four figures have stood on this line, and only the last of the steps between them is the
 work.** It read 10.7%, then 8.2%, then 10.9% across a preview row being added and the console
@@ -347,7 +347,7 @@ a second — the two-loops-that-drift failure `frame.rs` was written to end, one
 `PngSink`, the clock and the recorder stayed with the program that owns them. No crate gained a
 dependency, and the workspace count did not move, which is what a move should do.
 
-**And the console uses it.** `examples/panel.rs` no longer has a frame loop: the picture and deck
+**And the console uses it.** `crates/karakuri`'s `main.rs` has no frame loop of its own: the picture and deck
 A's cell are two `Sink`s in a slice, `compose` advances the deck and draws into the ones that took
 the frame, and the panel's whole `egui` pass goes in `finally` — the caller's own work in the
 frame's encoder, which is what ADR-0166's one submission requires and what
@@ -562,8 +562,8 @@ the one scheduled move the console cannot draw** — an under-draw named in ADR-
 discovered later, and closed by whatever surface gives the mask's front a position. **The Library
 bay lists what the store holds** and
 the other four bays are empty, and the keyboard, a MIDI map and MCP reach none of it — the panel
-routes in `manual/operations.html` are still `plan`, because the console is an example rather than
-the program.
+routes in `manual/operations.html` are still `plan`, and what they are waiting on now is a badge
+flip and the test ADR-0213 owes with it rather than a program to be reachable from.
 
 **What is already under this, and how much is left.** The list below is the second half of M5, and
 reading it as the whole milestone is what makes the progress invisible. The floor it stands on is
@@ -695,10 +695,9 @@ rather than a boundary move because the case-folding is a real difference
 ([P-0031](principles/0031-a-name-means-one-thing-across-the-system.md) is the question to answer).
 **A test in `main.rs` now checks two `setfile` functions** — `every_kind_survives_the_round_trip_a_saved_node_makes`
 holds `layer_named(kind_name(k)) == Some(k)` and both ends moved; it still guards what it guarded,
-and its home is one crate over. And **`examples/panel.rs` still transcribes `262144`**, which is
-[the console example's own reference workload](../crates/karakuri-console/examples/panel.rs) rather
-than the language default that moved to `karakuri-ir` — the honest fix is for it to read
-`l1.capacity` off the `Checked` it already holds, following the declaration rather than a constant.
+and its home is one crate over. And **the `262144` the example transcribed is gone**: `crates/karakuri` reads `l1.capacity` off the
+`Checked` it already holds, which is the honest fix this bullet asked for. It landed with the
+program.
 
 **What the whole-workspace run caught that four rounds of `--skip gpu::` could not**: the convention
 guard `gpu_binaries_still_take_a_device` asserts a floor on how many source files
@@ -1042,7 +1041,7 @@ than work, and every one of them was found by building the thing next to it.
   - **`--bpm` has a record now.** `SetFreeRunTempo` writes the `tempo` record `Record::Tempo`'s own
     documentation describes — no shift, no confidence — which closes the gap P-0028 names. Nothing
     routes through it yet.
-  - **`examples/panel.rs`'s hand-written conversion is deleted, and it was deleted rather than
+  - **The example's hand-written conversion is deleted, and it was deleted rather than
     moved** — which is ADR-0185's promise, kept. The console's example asks
     `karakuri-operation-record` now. Its four mixer controls emit `SetGain`, `SetOpacity`,
     `SetBlendMode` and `SetResidency`, every one of which writes its record from the operation

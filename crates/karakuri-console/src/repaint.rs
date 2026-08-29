@@ -9,7 +9,7 @@
 //! measured 184 allocations and 226.2 kB a frame with every bay empty, and the
 //! panel as it now stands — a live picture, the preview row, the mixer bay, the
 //! transport and the outputs row — reads 525 and 694.3 kB in the middle of
-//! nine runs on 2026-08-26, which spread 524 to 538 (`examples/panel.rs` takes
+//! nine runs on 2026-08-26, which spread 524 to 538 (`crates/karakuri/src/main.rs` takes
 //! it, and holds its own quoted figure against every run of it). This is the
 //! decision that stops those frames being drawn at all.
 //!

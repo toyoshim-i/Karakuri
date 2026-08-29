@@ -95,7 +95,7 @@ fn nothing_resolves_that_is_not_a_named_region() {
 
 /// The body row — the one holding the two panes and the centre — has **no
 /// name**, and *nothing reaches it* is not the reason. `Layout::hit` hands the
-/// row out as `Hit::Divider { split, .. }` and `examples/panel.rs`'s
+/// row out as `Hit::Divider { split, .. }` and `crates/karakuri/src/main.rs`'s
 /// fold-at-pointer turns that into `Op::Fold(split)`, so `g` over the gap
 /// between two panes folds this row today. What it cannot be is reached by
 /// anything holding only a name — a keyboard, a MIDI map or MCP — and giving

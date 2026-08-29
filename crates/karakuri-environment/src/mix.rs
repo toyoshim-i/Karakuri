@@ -228,7 +228,7 @@ pub enum Change {
 /// `BlendMode` is `karakuri-operation`'s — so the orphan rule refuses the impl
 /// and there is nothing to be done about it short of one of those two crates
 /// depending on the other, which is the thing neither of them may do. Plain
-/// functions, then, exactly as `karakuri-console/examples/panel.rs`'s
+/// functions, then, exactly as the panel program's own
 /// `blend_mode` already is. See ADR-0194.
 ///
 /// **A match apiece, so a value added to the engine stops the build here**
@@ -434,7 +434,16 @@ pub fn residency_wire_name(level: Residency) -> &'static str {
     }
 }
 
-fn parse_residency(name: &str) -> Option<Residency> {
+/// **A wire spelling back to the engine's residency** — [`residency_wire_name`]
+/// read the other way, over [`LEVELS`], so the two directions cannot disagree.
+///
+/// **`pub` for a second surface.** [`change`] below is the one caller in this
+/// crate; the other is the panel program, whose `apply` decodes a
+/// `Record::Residency` a control just wrote. That program transcribed these
+/// three words for as long as they lived in a package with no library target
+/// (ADR-0214), which is the transcription this `pub` deletes rather than
+/// carries.
+pub fn parse_residency(name: &str) -> Option<Residency> {
     LEVELS
         .iter()
         .copied()

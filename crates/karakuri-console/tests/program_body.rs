@@ -27,7 +27,7 @@ use karakuri_console::room::size;
 use karakuri_console::view::{picture_rect, preview_rects, program_body, Placement, DECKS};
 
 /// **The canvas the picture is fitted to**, and it is the workspace's
-/// reference workload — 1280x720, which `examples/panel.rs` names `CANVAS` and
+/// reference workload — 1280x720, which `crates/karakuri/src/main.rs` names `CANVAS` and
 /// builds its `Present` at.
 const CANVAS: (u32, u32) = (1280, 720);
 

@@ -34,7 +34,7 @@
 //!
 //! At the operation, exactly as `blend.rs` and `tally.rs` do. Turning it into
 //! a `Record::Mask` — whole, with the front and the soft edge read off the
-//! deck — and applying it is the harness's, and `examples/panel.rs`'s
+//! deck — and applying it is the harness's, and `crates/karakuri/src/main.rs`'s
 //! `a_press_on_the_mask_mini_chooses_a_shape_and_keeps_the_angle` is that end
 //! of the same press. This crate has no deck (ADR-0156).
 

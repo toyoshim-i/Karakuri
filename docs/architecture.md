@@ -27,10 +27,14 @@ Why each is the way it is — and what was rejected to get there — is in
 
 ## 2. Workspace & Crate Architecture
 
-Karakuri is structured as a Cargo workspace with 13 dedicated crates under [crates/](../crates):
+Karakuri is structured as a Cargo workspace with 14 dedicated crates under [crates/](../crates):
 
 ```mermaid
 graph TD
+    APP[karakuri] --> CONSOLE
+    APP --> ENV
+    APP --> ENGINE
+
     CLI[karakuri-cli] --> ENV[karakuri-environment]
     CLI --> ENGINE[karakuri-engine]
     CLI --> OPRECORD[karakuri-operation-record]
@@ -85,7 +89,8 @@ graph TD
 | [karakuri-operation](../crates/karakuri-operation) | `crates/karakuri-operation` | **The operation vocabulary**: the 50 named operations `docs/manual/operations.html` specifies, which every surface is to route into (ADR-0180). A leaf crate with **no dependencies at all** — `std` only — because the surfaces that must reach it share nothing. `karakuri-console`, `karakuri-midi`, `karakuri-operation-record` and `karakuri-cli` depend on it; the mixer's faders were its first customer, the CLI's mix controls its second, and the MIDI map its third — which took `Action` away with it (ADR-0196). The console's `panel::Op` has not moved and what blocks it is the operations page rather than the code (ADR-0197); the CLI's key handler is surveyed and partly moved — fifteen of its thirty-nine keys route through `Live::operate`, nine keep their own path because their record is `Owed::NotSettled`, twelve name a `Silent` operation and cannot route at all, and three name nothing in the vocabulary (ADR-0198). The fourth surface is `karakuri-cli`'s MCP server, whose six tools name six of these operations and **perform them here** rather than through `Live::operate`: all six are `Silent` — four ask, and two owe a record written where the work lands — and there is no `Live` on a connection thread anyway (ADR-0199). It is the only surface that can say a node address, so `NodeAt` and `Layer` have no other caller |
 | [karakuri-operation-record](../crates/karakuri-operation-record) | `crates/karakuri-operation-record` | **Where an operation becomes a record** — the step P-0028 needs and the one place it happens (ADR-0194). Depends on `karakuri-operation` and `karakuri-store` and on nothing else, because neither of those two may depend on the other. The conversion is not pure: it takes an operation **and a reading of what is running**, since `Record::Look` carries a tone map operator no exposure control can name. One exhaustive match over all 50 operations, answering the records it writes, the settled reason it writes none, or the gap that stops it |
 | [karakuri-layout](../crates/karakuri-layout) | `crates/karakuri-layout` | The console's arrangement as arithmetic: views and splits with a size, a minimum and a maximum each, solved to rectangles. No toolkit, no device, no window (ADR-0156) |
-| [karakuri-console](../crates/karakuri-console) | `crates/karakuri-console` | The console: its arrangement, the panel model a pointer and a keyboard act on, and the `egui` view. **The destination the CLI is scaffolding for** — `src/` still takes no device, and the window is `examples/panel.rs`'s |
+| [karakuri-console](../crates/karakuri-console) | `crates/karakuri-console` | The console: its arrangement, the panel model a pointer and a keyboard act on, and the `egui` view. **The destination the CLI is scaffolding for.** `src/` takes no device and now cannot: the eight dev-dependencies that could reach one left with the example (ADR-0214), so ADR-0156's seam is enforced by the manifest holding nothing rather than by a rule |
+| [karakuri](../crates/karakuri) | `crates/karakuri` | **The panel as a program** — the window, the event loop, the engine behind the Program bay and the store behind the Library bay, over `karakuri-console` and `karakuri-environment`. `cargo run -p karakuri`. It is what the panel column of [the operations page](manual/operations.html) is measured against (ADR-0213), and it has no library target on purpose: nothing may depend on a surface |
 | [karakuri-environment](../crates/karakuri-environment) | `crates/karakuri-environment` | **The program: everything this instrument deals with that is not itself.** A module belongs here if what it deals with lives outside this process — a disk, a device, a port, a socket, another program — or is the record of what happened (ADR-0215). It exists because `karakuri-cli` has no library target and the panel could therefore reach none of it, a boundary this repository had already paid for five times (ADR-0214). **Two thin binaries sit over it**, and no module in it may know which surface it is under. Holds **all thirteen** modules that were in scope — audio input, the `.kir` compile step, the edit history, the metadata card, the mixer's records and wire spellings, the MIDI map's surface, the MCP server, the PNG writer, the scratch store, session recording, the Set file format, the external tempo-source protocol and the hot-reloading watcher |
 | [karakuri-cli](../crates/karakuri-cli) | `crates/karakuri-cli` | V1 entry point, and **scaffolding rather than the destination** (`README.md`). Since ADR-0214's move it is **one file** — flag parsing, the `winit` event loop, the clock, the key handler, `Live`, and replay. Everything that deals with a disk, a device, a port or the record went to `karakuri-environment`; what is left is a surface, and splitting `main.rs` is the next thing rather than moving more out of it |
 
@@ -107,6 +112,7 @@ crates/
                       where an operation becomes a record, and the reading it takes
   karakuri-layout/    the console's arrangement, solved to rectangles
   karakuri-console/   the console: arrangement, panel model, and the egui view
+  karakuri/           the panel as a program: `cargo run -p karakuri`
   karakuri-environment/  the program: the disk, the devices, the ports, the record
   karakuri-cli/       V1 entry point, and scaffolding rather than the destination
 .githooks/            pre-commit: `cargo fmt --check` on what is staged

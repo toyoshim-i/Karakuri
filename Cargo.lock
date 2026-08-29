@@ -1375,6 +1375,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "karakuri"
+version = "0.1.0"
+dependencies = [
+ "karakuri-console",
+ "karakuri-engine",
+ "karakuri-environment",
+ "karakuri-ir",
+ "karakuri-layout",
+ "karakuri-operation",
+ "karakuri-operation-record",
+ "karakuri-signal",
+ "karakuri-store",
+ "pollster",
+ "wgpu",
+ "winit",
+]
+
+[[package]]
 name = "karakuri-audio"
 version = "0.1.0"
 dependencies = [
@@ -1416,17 +1434,9 @@ dependencies = [
  "egui",
  "egui-wgpu",
  "egui-winit",
- "karakuri-engine",
- "karakuri-ir",
  "karakuri-layout",
  "karakuri-operation",
- "karakuri-operation-record",
- "karakuri-signal",
- "karakuri-store",
- "pollster",
  "serde_json",
- "wgpu",
- "winit",
 ]
 
 [[package]]
