@@ -461,7 +461,7 @@ impl Source for Watch {
                     // pair a node with its source, correct only for as long as
                     // the sort kept file order.
                     for node in &placed {
-                        let layer = crate::setfile::kind_name(node.layer);
+                        let layer = karakuri_environment::setfile::kind_name(node.layer);
                         let index = node.index as usize;
                         if let Err(e) =
                             snapshots.record(slot, layer, index, &node.proc, node.source.as_bytes())
@@ -495,8 +495,13 @@ impl Source for Watch {
             let stored: Result<Vec<_>, _> = placed
                 .iter()
                 .map(|node| {
-                    node.put(store)
-                        .map(|hash| (crate::setfile::kind_name(node.layer), node.index, hash))
+                    node.put(store).map(|hash| {
+                        (
+                            karakuri_environment::setfile::kind_name(node.layer),
+                            node.index,
+                            hash,
+                        )
+                    })
                 })
                 .collect();
             match stored {
@@ -1057,7 +1062,12 @@ mod tests {
             .collect();
         let started: Vec<(&str, u32)> = placed
             .iter()
-            .map(|node| (crate::setfile::kind_name(node.layer), node.index))
+            .map(|node| {
+                (
+                    karakuri_environment::setfile::kind_name(node.layer),
+                    node.index,
+                )
+            })
             .collect();
         assert_eq!(
             rebuilt, started,

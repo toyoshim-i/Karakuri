@@ -36,9 +36,9 @@
 //! `karakuri-store`'s and the declarations are `karakuri-ir`'s, and the store
 //! does not depend on the IR — a content-addressed blob store that had to link
 //! a type checker to write a file name would be the wrong shape, and nothing
-//! about a `.kir`'s *bytes* needs one. `karakuri-cli` is the one crate that
-//! holds both, and it is also the one holding a `Checked` at the moment an
-//! artifact is put. See [`crate::Placed`].
+//! about a `.kir`'s *bytes* needs one. This package holds both, and it is also
+//! the one holding a `Checked` at the moment an artifact is put — see
+//! `Placed` in `karakuri-cli`, which is the caller.
 
 use karakuri_ir::typed::Checked;
 use karakuri_store::hash::Hash;
@@ -53,12 +53,12 @@ const VERSION: u32 = 1;
 /// **What one artifact's metadata file says**, in the order it is written.
 ///
 /// `hash` is passed in rather than hashed from the source here, because the
-/// caller has it — it is [`crate::Placed::hash`], derived off the node the card
-/// belongs to — and a second derivation would be a second answer to "which
-/// artifact is this", which is the mistake `Placed::hash` being a method rather
-/// than a field exists to stop being made twice. `sort_compiled` builds the
-/// node before it builds the card for exactly that reason. See
-/// [`crate::Placed::put`], which puts the source and then this.
+/// caller has it — it is `Placed::hash` in `karakuri-cli`, derived off the node
+/// the card belongs to — and a second derivation would be a second answer to
+/// "which artifact is this", which is the mistake `Placed::hash` being a method
+/// rather than a field exists to stop being made twice. `sort_compiled` builds
+/// the node before it builds the card for exactly that reason. See
+/// `Placed::put`, which puts the source and then this.
 ///
 /// **A `Vec<Line>` and not a written file**: what a card says is decided here,
 /// where a `Checked` is, and where it lands is `karakuri-store`'s. That split
@@ -115,4 +115,37 @@ pub fn card(hash: &Hash, checked: &Checked) -> Vec<Line> {
         }));
     }
     lines
+}
+
+/// **Write an artifact's metadata card, and never let it stop a save.**
+///
+/// The one place either put path says this, so that the judgement — the card is
+/// derived and the artifact is not — is made once and the sentence is one
+/// sentence. See `Placed::put` in `karakuri-cli`, which is the other caller's
+/// other half.
+///
+/// The hash is passed rather than recomputed: the caller has just put the bytes
+/// under it, and deriving it again here would be a second answer to which
+/// artifact this card is for.
+///
+/// **It hands back what it said, and both callers drop it.** The policy — a
+/// card that will not write is reported and does not fail the save — was
+/// asserted in prose and nowhere else, because a sentence that is only printed
+/// is a sentence no test can hold. Returning it costs one `Option` and buys
+/// `karakuri-cli`'s
+/// `live_save_tests::a_card_that_will_not_write_is_said_and_does_not_fail_the_save`,
+/// which reads it back. `None` is a card on disk.
+pub fn put_meta(
+    store: &karakuri_store::store::Store,
+    hash: &karakuri_store::hash::Hash,
+    card: &[karakuri_store::ndjson::Line],
+) -> Option<String> {
+    let e = store.write_meta(hash, card).err()?;
+    let said = format!(
+        "  the metadata for {}: {e} — the artifact is stored and the library will \
+         regenerate its card from the source on the next compile",
+        hash.short(12)
+    );
+    eprintln!("{said}");
+    Some(said)
 }

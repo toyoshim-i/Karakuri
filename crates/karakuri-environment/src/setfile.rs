@@ -82,6 +82,63 @@ const VERSION: u32 = 1;
 /// `karakuri-store`'s `BindNoise` default, which is the record this stands for.
 pub const DEFAULT_OCTAVES: u32 = 4;
 
+/// A name for every node of a slot, in the shape the procedures themselves are
+/// passed in.
+///
+/// **Per layer rather than one list in node order**, because the node order is
+/// the engine's — `slot_of` and `nodes_of` decide it — and a caller that
+/// reproduced it here would be a second place for a fact this project has
+/// already been bitten by twice.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Names {
+    pub l1s: Vec<Option<String>>,
+    pub l2s: Vec<Option<String>>,
+    /// **A list, like the renderers'.** A slot holds as many cameras as its
+    /// files declare, and the built-in orbit is a node beside them — one
+    /// nobody can name from the command line, since a name is written beside
+    /// a path and the built-in has none. It is called `orbit`; see
+    /// `karakuri_engine::set::BUILTIN_CAMERA`.
+    pub l3s: Vec<Option<String>>,
+    pub l4s: Vec<Option<String>>,
+    pub fields: Vec<Option<String>>,
+}
+
+impl Names {
+    /// Every name that was actually written, which is the only thing worth
+    /// checking for a collision: a derived one is disambiguated where it is
+    /// derived, in `Set::build_many`.
+    fn written(&self) -> impl Iterator<Item = &String> {
+        self.l1s
+            .iter()
+            .flatten()
+            .chain(self.l2s.iter().flatten())
+            .chain(self.l3s.iter().flatten())
+            .chain(self.l4s.iter().flatten())
+            .chain(self.fields.iter().flatten())
+    }
+
+    /// **Unique within a slot**, which is the scope a name resolves in: a Set is
+    /// what holds the nodes, so two slots may each have a `near` and neither is
+    /// ambiguous.
+    ///
+    /// Refused rather than disambiguated. A derived name is disambiguated
+    /// where it is derived — that is what `-2` is for — so a collision reaching
+    /// here is two *written* names, and picking one for the author would leave
+    /// a `--param` pointing at whichever the tie-break preferred.
+    pub fn check_unique(&self) -> Result<(), String> {
+        let mut seen: Vec<&str> = Vec::new();
+        for name in self.written() {
+            if seen.contains(&name.as_str()) {
+                return Err(format!(
+                    "two nodes are both called `{name}` — a name addresses one node in a slot"
+                ));
+            }
+            seen.push(name);
+        }
+        Ok(())
+    }
+}
+
 /// What a Set file said, in the terms the engine takes.
 ///
 /// **Per layer, which is the shape `Set::build_many` takes its nodes in.** A
@@ -148,7 +205,7 @@ pub struct Loaded {
     /// a node by name, so a name was noted as unhonoured and dropped; an `edge`
     /// points at two of them, so a loaded Set whose names were dropped is a
     /// loaded Set whose edges cannot resolve.
-    pub names: crate::Names,
+    pub names: Names,
     /// **Which node fills each declared input slot**, as the file recorded it.
     pub edges: Vec<karakuri_engine::set::Edge>,
     pub camera: Option<Orbit>,
@@ -386,7 +443,7 @@ fn kind_of(layer: Layer) -> Kind {
 /// The record `Layer` an engine [`Kind`] names. The inverse of [`kind_of`], and
 /// total for the same reason: every layer a Set can hold is a layer a record
 /// can address.
-pub(crate) fn layer_of(kind: Kind) -> Layer {
+pub fn layer_of(kind: Kind) -> Layer {
     match kind {
         Kind::L1 => Layer::L1,
         Kind::L2 => Layer::L2,
@@ -423,10 +480,11 @@ pub fn record_from_binding(binding: &Binding) -> Record {
     }
 }
 
-/// A record [`Layer`] spelled the way every surface spells it. `pub(crate)`
-/// because `--list-sets` names a node's layer in a line, and a second table in
-/// `main.rs` would be a second spelling of an address an operator then types.
-pub(crate) fn layer_name(layer: Layer) -> &'static str {
+/// A record [`Layer`] spelled the way every surface spells it. Public because
+/// `--list-sets` names a node's layer in a line, and a second table in the
+/// command line would be a second spelling of an address an operator then
+/// types.
+pub fn layer_name(layer: Layer) -> &'static str {
     match layer {
         Layer::L1 => "L1",
         Layer::L2 => "L2",
@@ -654,7 +712,7 @@ fn refuse_unwritable(nodes: &[Node], capacities: &[u32], seeds: &[u32]) -> Resul
 /// history and into a session's `procedure` records. A second table would be a
 /// second spelling, and a snapshot filed under one and addressed by the other is
 /// a version an operator cannot walk back to.
-pub(crate) fn kind_name(kind: Kind) -> &'static str {
+pub fn kind_name(kind: Kind) -> &'static str {
     match kind {
         Kind::L1 => "L1",
         Kind::L2 => "L2",
@@ -1219,7 +1277,7 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
 
     let check = |srcs: &[String]| {
         srcs.iter()
-            .map(|src| karakuri_environment::compile::check(src))
+            .map(|src| crate::compile::check(src))
             .collect::<Result<Vec<_>, _>>()
     };
     let l1s = check(&l1_srcs)?;
@@ -1241,7 +1299,7 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
     // **Trimmed to the nodes that came back**, so the two lists cannot
     // disagree: a name past the end of its layer belongs to a `slot` record the
     // refusals above have already dealt with.
-    let mut names = crate::Names {
+    let mut names = Names {
         l1s: std::mem::take(&mut slot_names[layer_ordinal(Kind::L1) as usize]),
         l2s: std::mem::take(&mut slot_names[layer_ordinal(Kind::L2) as usize]),
         l3s: std::mem::take(&mut slot_names[layer_ordinal(Kind::L3) as usize]),
@@ -1287,8 +1345,8 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
 /// for.
 ///
 /// **Lines back rather than a file written.** Where a bundle goes is the
-/// caller's, and the caller writes it to standard output; see
-/// [`crate::bundled_set`].
+/// caller's, and the caller writes it to standard output; see `bundled_set` in
+/// `karakuri-cli`, which is `--bundle`'s half of this.
 pub fn bundle(store: &Store, id: &str) -> Result<Vec<Line>, String> {
     let lines = store
         .read_set(id)
@@ -1509,9 +1567,10 @@ pub fn unbundle(store: &Store, lines: &[Line]) -> Result<String, String> {
         // **The card is what a compile produces**, so it is written here and by
         // `put_meta` — the one both compile paths already go through — rather
         // than by a second writer of the same file.
-        match karakuri_environment::compile::check(text) {
+        match crate::compile::check(text) {
             Ok(checked) => {
-                if crate::put_meta(store, hash, &crate::meta::card(hash, &checked)).is_none() {
+                if crate::meta::put_meta(store, hash, &crate::meta::card(hash, &checked)).is_none()
+                {
                     cards += 1;
                 }
             }
@@ -1732,7 +1791,7 @@ pub fn summarise(store: &Store) -> Result<Vec<SetSummary>, StoreError> {
 
 /// When a Set was written, spelled the one way every listing spells it.
 ///
-/// **Local, for the reason [`karakuri_environment::history::stamped_id`] is local**: the
+/// **Local, for the reason [`crate::history::stamped_id`] is local**: the
 /// answer has to be the one the person would say out loud, and a UTC clock is
 /// the wrong one for half the world and half the day. To the second, because
 /// that is as fine as a filesystem mtime is worth reading and finer than
@@ -3560,8 +3619,7 @@ proc dissolve {
         let bare = Store::open(elsewhere.path()).expect("store");
         let said = unbundle(&bare, &as_a_file(&lines)).expect("one bad source is not a refusal");
 
-        let report =
-            karakuri_environment::compile::check(broken).expect_err("the fixture must not compile");
+        let report = crate::compile::check(broken).expect_err("the fixture must not compile");
         let first = report.lines().next().expect("a diagnostic").trim();
         assert!(said.contains("veil"), "the node is not named: {said}");
         assert!(

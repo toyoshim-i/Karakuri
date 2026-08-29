@@ -45,21 +45,23 @@
 //! ## What is here, and what is not yet
 //!
 //! ADR-0215 applied its test to thirteen modules and thirteen passed. This
-//! crate holds seven of them — [`audio`], [`compile`], [`history`],
-//! [`render`], [`scratch`], [`session`] and [`tempo_source`] — because ADR-0214
-//! left open whether the move lands in one commit or several and answered its
-//! own question with *several is the likelier*. The seven that came first are
-//! the seven that named nothing else in `karakuri-cli`, so this slice is a
-//! package boundary and not a redesign: `use` paths changed, `pub` appeared
-//! where crate-private had been enough, and the code inside the functions did
-//! not.
+//! crate holds nine of them — [`audio`], [`compile`], [`history`], [`meta`],
+//! [`render`], [`scratch`], [`session`], [`setfile`] and [`tempo_source`] —
+//! because ADR-0214 left open whether the move lands in one commit or several
+//! and answered its own question with *several is the likelier*. The seven that
+//! came first were the seven that named nothing else in `karakuri-cli`; the
+//! metadata card and the Set file came second, and they brought the two items
+//! they named with them — the card writer that puts a card in a store, and a
+//! Set file's per-layer node names, which are part of that file's shape. Each
+//! slice is a package boundary and not a redesign: `use` paths changed, `pub`
+//! appeared where crate-private had been enough, and the code inside the
+//! functions did not.
 //!
-//! The metadata card, the Set file, the watcher, the MCP server, the mixer and
-//! the MIDI map are still in `karakuri-cli` and still pass the test. They are
-//! owed the same move. So is `Clock`, which ADR-0214 refused to guess at and
-//! ADR-0215 settled: wall-clock time comes from outside this process, so it
-//! belongs here — while `Live`, which holds a window and a device, does not and
-//! stays with the surface.
+//! The watcher, the MCP server, the mixer and the MIDI map are still in
+//! `karakuri-cli` and still pass the test. They are owed the same move. So is
+//! `Clock`, which ADR-0214 refused to guess at and ADR-0215 settled: wall-clock
+//! time comes from outside this process, so it belongs here — while `Live`,
+//! which holds a window and a device, does not and stays with the surface.
 //!
 //! **These are one-line restatements; the canonical text is one file each in
 //! `docs/principles/` and one record each in `docs/adr/`, and where this
@@ -75,14 +77,18 @@
 // - `audio` — a microphone, the beat it is tracking, and the record for both.
 // - `compile` — a `.kir` off a disk, through the pipeline, with its bytes kept.
 // - `history` — the edit history: a directory per day, a chain per procedure.
+// - `meta` — an artifact's card: what a compile pass can say, and where it lands.
 // - `render` — a frame written to a PNG: the window's path, minus the window.
 // - `scratch` — the copies a live run edits, so an original is untouched.
 // - `session` — the recorder that writes the stream and the split that reads it.
+// - `setfile` — the material as a record: what a Set was, written down and read back.
 // - `tempo_source` — another program's clock, and what to believe of it.
 pub mod audio;
 pub mod compile;
 pub mod history;
+pub mod meta;
 pub mod render;
 pub mod scratch;
 pub mod session;
+pub mod setfile;
 pub mod tempo_source;
