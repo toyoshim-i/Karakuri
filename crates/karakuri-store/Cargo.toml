@@ -13,3 +13,12 @@ thiserror.workspace = true
 
 [dev-dependencies]
 tempfile = "3"
+
+# **The arrangement half of the store is bytes, and this is how the tests prove
+# they are an arrangement's.** `src/` does not name this crate and must not: an
+# arrangement's format belongs to `karakuri-layout`, whose loader is the one
+# place a broken one is refused (ADR-0158), and a second reader here would be a
+# second answer. The test suite is where the two halves meet, so a real
+# `Layout` goes through a real file rather than a fixture that only looks like
+# one — see ADR-0221 and `tests/store.rs`.
+karakuri-layout = { version = "0.1.0", path = "../karakuri-layout" }
