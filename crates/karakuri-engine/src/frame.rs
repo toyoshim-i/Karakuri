@@ -93,9 +93,18 @@ use crate::present::{Present, TonemapOp};
 /// Exactly [`Present::set_tonemap`]'s arguments, which is why it is here rather
 /// than with whoever puts an operator on a key: a look is what a frame is drawn
 /// under, and every sink is drawn under the same one.
+///
+/// **The master out is deliberately not here.** It is a level too, and at 1.0
+/// it does what `exposure` at 1.0 does — but it is applied at the entry to the
+/// master chain, where the mix writes the composited frame, and this struct is
+/// what the *tone mapper* is told at the other end of that chain. It lives on
+/// the deck, as [`Deck::set_out`], because that is what owns the fold. See
+/// `docs/adr/0224-out-and-exposure-are-two-levels-that-multiply-in-different-places.md`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Look {
     pub op: TonemapOp,
+    /// The level going into the transfer, applied by the present pass. Not the
+    /// master out; see this struct's own documentation.
     pub exposure: f32,
     /// Reinhard's only, ignored by the other three. Not on a key: it is one
     /// operator's parameter rather than a control the mix needs.

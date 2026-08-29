@@ -1252,9 +1252,26 @@ fn run_worker(
                 for write in &request.params {
                     // Addressed or not — `Set::write_param` is the one place
                     // that decides, so this path and the command line's cannot
-                    // disagree about what a bare name means.
-                    if set.write_param(write) == 0 {
-                        eprintln!("  no parameter named `{}`, ignoring", write.key);
+                    // disagree about what a bare name means. That includes the
+                    // refusal it carries: a bare name over nodes that are not
+                    // under one authority is refused here in the words a
+                    // `--param` is refused in
+                    // (`crate::set::CrossesAuthority`).
+                    //
+                    // **A restatement cannot meet it, because the authorities
+                    // this request states are applied below.** Every node of a
+                    // freshly built Set is at `Authority::default`, so the
+                    // landing is uniform whatever the request goes on to grant,
+                    // and a rebuild restores the params it was given rather
+                    // than re-asking permission for them. That is deliberate:
+                    // what is restated here is where the operator left the
+                    // controls, which is a fact rather than a new write, and a
+                    // rebuild that dropped it would silently put every one of
+                    // them back to the `.kir` default.
+                    match set.write_param(write) {
+                        Ok(0) => eprintln!("  no parameter named `{}`, ignoring", write.key),
+                        Ok(_) => {}
+                        Err(refused) => eprintln!("  {refused}"),
                     }
                 }
                 // **Before the bindings**, because a macro is a binding whose

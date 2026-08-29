@@ -1016,6 +1016,80 @@ pub enum PublishError {
     DuplicateName(String),
 }
 
+/// **Why a bare-name parameter write was refused.**
+///
+/// A [`ParamWrite`] with no address moves every node that declares the key —
+/// `docs/ir-spec.md`'s *one control per key, not one per declaration*, which is
+/// what the default published interface is made of and therefore what nearly
+/// every control a surface draws is. An authority is per **node**
+/// (`docs/adr/0211-authority-is-set-per-node-and-the-record-is-the-sessions.md`).
+/// So where one key is declared by nodes that are not under one authority, a
+/// bare name is one control over two arrangements: granting an agent one
+/// renderer would grant it, through that control, a renderer the operator kept.
+///
+/// **Refused whole rather than landed on the nodes that permit it.** A control
+/// that moved three renderers of four and looked like it moved all of them is
+/// exactly
+/// `docs/principles/0027-a-silently-wrong-image-loses-to-a-loud-failure.md`, and
+/// the addressed write is never refused — so what is taken away is one spelling
+/// and not the reach. Argued in
+/// `docs/adr/0223-a-wildcard-write-is-refused-where-the-nodes-it-lands-on-disagree.md`.
+///
+/// **The sentence is here and nowhere else**, which is
+/// `docs/principles/0061-a-refusal-a-person-can-reach-from-two-surfaces-is-one-sentence.md`:
+/// a `--param`, a published control and a `param` record are the same wildcard
+/// and reach it through the one entry point, [`Set::write_param`].
+#[derive(Debug, thiserror::Error, PartialEq, Eq)]
+#[error(
+    "`{key}` is declared by nodes that are not under one authority — {landing} — and a bare \
+     name writes every node that declares it\n\
+     hint: an authority is per node, so this write would cross a grant. Address the node \
+     it is meant for, or put the nodes it lands on under one authority"
+)]
+pub struct CrossesAuthority {
+    /// The parameter's name — what the caller wrote, so the sentence names the
+    /// control the operator or the model actually asked for.
+    pub key: String,
+    /// **Every node the write lands on and the authority it is under**, in node
+    /// order: `L1:0 manual, L4:0 automatic`.
+    ///
+    /// The whole landing rather than the minority. Three nodes under three
+    /// authorities have no majority for the odd one out to disagree with, and
+    /// the question a reader has is *which nodes is this control over*, which
+    /// only the whole list answers.
+    pub landing: String,
+}
+
+impl CrossesAuthority {
+    /// The refusal a bare-name write of `key` earns, or `None` where every node
+    /// it lands on is under one authority.
+    ///
+    /// **A Set that declares `key` nowhere lands on nothing and is not a
+    /// refusal**: an empty landing is uniform, and the caller's answer is the
+    /// `0` it already prints *no parameter named* for. A name a regenerated
+    /// artifact no longer has should not take the show down, and it does not
+    /// start doing so by way of an authority it never had.
+    ///
+    /// **Taken apart from the walk that finds the nodes**, which needs a built
+    /// `Set` and therefore a device. This is the decision and it is checked
+    /// without one —
+    /// `docs/adr/0130-a-wrapper-that-needs-a-gpu-does-not-excuse-the-decision-inside-it.md`.
+    fn over(key: &str, landing: &[(Kind, u32, Authority)]) -> Option<CrossesAuthority> {
+        let first = landing.first()?.2;
+        if landing.iter().all(|(_, _, held)| *held == first) {
+            return None;
+        }
+        let named: Vec<String> = landing
+            .iter()
+            .map(|(layer, index, held)| format!("{layer:?}:{index} {}", held.name()))
+            .collect();
+        Some(CrossesAuthority {
+            key: key.to_string(),
+            landing: named.join(", "),
+        })
+    }
+}
+
 /// **One binding of a procedure's declared input slot to a node of this Set.**
 ///
 /// `uses far : Geometry` says what a procedure takes and refuses to say where
@@ -3407,18 +3481,72 @@ impl Set {
         }
     }
 
+    /// **Every node that declares `key`**, addressed and with the authority it
+    /// is under — the walk [`CrossesAuthority::over`] decides on.
+    ///
+    /// Addressed through [`Set::nodes_of`] for [`Set::params`]'s reason: where a
+    /// layer's nodes are is one fact, and a second copy of the arithmetic is a
+    /// copy that can be right about `L2` and wrong about `L3`. A node whose
+    /// authority is missing reads as [`Authority::default`], which is what a
+    /// node nobody has spoken for is.
+    fn landing(&self, key: &str) -> Vec<(Kind, u32, Authority)> {
+        Kind::ALL
+            .into_iter()
+            .flat_map(|layer| {
+                self.nodes_of(layer)
+                    .enumerate()
+                    .map(move |(index, slot)| (layer, index as u32, slot))
+            })
+            .filter(|(_, _, slot)| self.params[*slot].contains_key(key))
+            .map(|(layer, index, slot)| {
+                (
+                    layer,
+                    index,
+                    self.authorities.get(slot).copied().unwrap_or_default(),
+                )
+            })
+            .collect()
+    }
+
     /// Apply one [`ParamWrite`], addressed or not. Returns how many nodes it
     /// reached; zero is the caller's cue to say so.
     ///
     /// The one entry point a `param` record and a `--param` both come through,
     /// so the wildcard and the address cannot come to mean different things on
-    /// the two paths.
-    pub fn write_param(&mut self, write: &ParamWrite) -> usize {
+    /// the two paths — and, since it is the one entry point, the place the
+    /// refusal below belongs
+    /// (`docs/principles/0061-a-refusal-a-person-can-reach-from-two-surfaces-is-one-sentence.md`).
+    ///
+    /// **A bare name is refused where the nodes it lands on are not under one
+    /// authority**, and the refusal names them: see [`CrossesAuthority`]. It is
+    /// checked before anything is written, so a refused write moves nothing —
+    /// half of a wildcard landing is the plausible wrong picture
+    /// `docs/principles/0027-a-silently-wrong-image-loses-to-a-loud-failure.md`
+    /// rules out.
+    ///
+    /// **The addressed form is not checked, and that is what this decision
+    /// leaves for the asker.** Authority says *who* may move a node, so
+    /// refusing one write of a node and not another needs the write to say
+    /// whether an operator or an agent is asking — and nothing in this
+    /// workspace does: no surface writes a param on an agent's behalf at all.
+    /// What is refused here needs no asker, because a control spanning two
+    /// arrangements is one whoever is holding it. See
+    /// `docs/adr/0223-a-wildcard-write-is-refused-where-the-nodes-it-lands-on-disagree.md`.
+    pub fn write_param(&mut self, write: &ParamWrite) -> Result<usize, CrossesAuthority> {
         match write.at {
-            None => self.set_param(&write.key, write.value),
-            Some((layer, index)) => {
-                usize::from(self.set_param_at(layer, index, &write.key, write.value))
+            None => {
+                if let Some(refused) = CrossesAuthority::over(&write.key, &self.landing(&write.key))
+                {
+                    return Err(refused);
+                }
+                Ok(self.set_param(&write.key, write.value))
             }
+            Some((layer, index)) => Ok(usize::from(self.set_param_at(
+                layer,
+                index,
+                &write.key,
+                write.value,
+            ))),
         }
     }
 
@@ -3564,26 +3692,38 @@ impl Set {
     }
 
     /// **Set a published control, in the units the console shows it in.**
-    /// `false` if nothing publishes that name.
+    /// `Ok(false)` if nothing publishes that name.
     ///
     /// The value is clamped to the *published* range, which is the one place
     /// narrowing bites: a console cannot ask for more than a Set offered. An
     /// agent that wants the whole declared range writes the param by address
     /// instead — see [`Published`] on why that is deliberate.
-    pub fn set_published(&mut self, name: &str, value: f32) -> bool {
+    ///
+    /// **The refusal is carried rather than flattened, and this is the route it
+    /// was decided for.** A published control is a wildcard unless the author
+    /// named a node — `Published::at` is an `Option` and the default interface
+    /// is entirely bare names — so this is the path
+    /// [`CrossesAuthority`] exists to stop, and answering it with the same
+    /// `false` that means *nothing publishes that name* would lose the sentence
+    /// on the one route the decision was about
+    /// (`docs/adr/0223-a-wildcard-write-is-refused-where-the-nodes-it-lands-on-disagree.md`,
+    /// `docs/principles/0061-a-refusal-a-person-can-reach-from-two-surfaces-is-one-sentence.md`).
+    /// The two answers are two types now: *there is no such control* and *this
+    /// control spans two authorities* are not the same news.
+    pub fn set_published(&mut self, name: &str, value: f32) -> Result<bool, CrossesAuthority> {
         let Some(control) = self.published().into_iter().find(|p| p.name == name) else {
-            return false;
+            return Ok(false);
         };
         let clamped = value.clamp(control.range[0], control.range[1]);
         // **Through `write_param`**, which is the one entry point a `--param`
         // and a `param` record both come through — so a wildcard control means
         // exactly what a bare name means everywhere else, and an addressed one
         // means exactly what an addressed `--param` does.
-        self.write_param(&ParamWrite {
+        Ok(self.write_param(&ParamWrite {
             at: control.at,
             key: control.key,
             value: clamped,
-        }) > 0
+        })? > 0)
     }
 
     /// A published control's position in `[0, 1]`, which is what a binding's
@@ -4833,7 +4973,68 @@ proc signed_defaults {
         );
     }
 
-    // The two that build a Set for real. The ones above check the layout arithmetic
+    /// **A bare name over nodes that disagree is refused, and the refusal names
+    /// every node it would have landed on.**
+    ///
+    /// The decision half of the wildcard rule
+    /// (`docs/adr/0223-a-wildcard-write-is-refused-where-the-nodes-it-lands-on-disagree.md`),
+    /// taken apart from the walk that finds the nodes so it can be checked with
+    /// no device — `docs/adr/0130-…`. `Set::landing` supplies the pairs in a
+    /// run and the `mod gpu` test below drives the whole path through a real
+    /// Set; what is pinned here is what counts as disagreement and what the
+    /// sentence says.
+    ///
+    /// **The three uniform cases are the negative control**
+    /// (`docs/principles/0025-…`): a check that refused every landing would
+    /// pass the mixed case on its own, and today every node of every Set is
+    /// `Manual`, so an over-eager rule would refuse every `--param` in the
+    /// program and this is the assertion that would not let it.
+    #[test]
+    fn a_bare_name_is_refused_only_where_the_nodes_it_lands_on_disagree() {
+        let uniform = [
+            (Kind::L1, 0, Authority::Manual),
+            (Kind::L4, 0, Authority::Manual),
+            (Kind::L4, 1, Authority::Manual),
+        ];
+        assert_eq!(
+            CrossesAuthority::over("radius", &uniform),
+            None,
+            "three nodes the operator kept are one arrangement, not a disagreement"
+        );
+        assert_eq!(
+            CrossesAuthority::over("radius", &[]),
+            None,
+            "a key this Set declares nowhere lands on nothing, which is `no parameter \
+             named` and not a refusal"
+        );
+        assert_eq!(
+            CrossesAuthority::over("radius", &[(Kind::L4, 0, Authority::Automatic)]),
+            None,
+            "one node cannot disagree with itself, whatever it was granted to"
+        );
+
+        let refused = CrossesAuthority::over(
+            "radius",
+            &[
+                (Kind::L1, 0, Authority::Manual),
+                (Kind::L4, 0, Authority::Automatic),
+            ],
+        )
+        .expect("a node the operator kept and a node an agent acts on are two arrangements");
+        assert_eq!(refused.key, "radius");
+        assert_eq!(
+            refused.landing, "L1:0 manual, L4:0 automatic",
+            "the refusal names every node the write lands on, with what each is under"
+        );
+        let sentence = refused.to_string();
+        assert!(
+            sentence.contains("L1:0 manual, L4:0 automatic") && sentence.contains("`radius`"),
+            "the one sentence has to carry the control and the nodes that disagreed: \
+             {sentence}"
+        );
+    }
+
+    // The three that build a Set for real. The ones above check the layout arithmetic
     // `Set::build` would go on to use, and take no device — which is most of what
     // `cargo test -p karakuri-engine --lib -- --skip gpu::` is for.
     // See `../tests/gpu_tests_are_under_mod_gpu.rs`.
@@ -4903,6 +5104,138 @@ proc probe_l4 {
                 "a spawn-block procedure starts empty"
             );
         }
+        /// **A wildcard write is refused where the nodes it lands on are not
+        /// under one authority, and it moves nothing when it is.**
+        ///
+        /// The whole path through a real Set:
+        /// [`Set::landing`] finds the nodes a bare name reaches,
+        /// [`CrossesAuthority::over`] decides, and [`Set::write_param`] is the
+        /// one entry point that asks. The CPU test above pins the decision; this
+        /// pins the two things only a built Set can answer — that the walk
+        /// pairs each node with *its own* authority, and that a refusal leaves
+        /// every value where it was.
+        ///
+        /// **What it is about**
+        /// (`docs/adr/0223-a-wildcard-write-is-refused-where-the-nodes-it-lands-on-disagree.md`):
+        /// granting an agent one node of a Set would otherwise grant it, through
+        /// any bare-name control declaring that key, the node the operator kept
+        /// — which is rule 06's *"there is no switch that hands the whole
+        /// instrument to an agent"* at the width of a key. Landing on the
+        /// permitted nodes instead is the alternative that lost, to
+        /// `docs/principles/0027-a-silently-wrong-image-loses-to-a-loud-failure.md`,
+        /// and the assertion that the values did not move is what holds that
+        /// half.
+        ///
+        /// **The addressed write at the end is the second negative control.**
+        /// What this rule takes away is one spelling and never the reach: an
+        /// operator who granted a node can still write it, and a rule that had
+        /// refused this too would have made a granted node unreachable.
+        #[test]
+        fn a_wildcard_write_is_refused_where_the_nodes_it_lands_on_disagree() {
+            let gpu = Gpu::headless().expect("no GPU available");
+            let l1_src = r#"
+proc probe_shared_l1 {
+  kind     L1
+  topology points
+  capacity [4, 64] = 8
+
+  param radius : float [0.0, 8.0] = 1.0
+
+  emit position
+
+  element {
+    position = vec3(radius, 0.0, 0.0);
+  }
+}
+"#;
+            let l4_src = r#"
+proc probe_shared_l4 {
+  kind  L4
+  blend additive
+
+  param radius : float [0.0, 8.0] = 1.0
+
+  consumes position
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    point_size = radius;
+  }
+
+  fragment {
+    color = vec4(1.0, 1.0, 1.0, 1.0);
+  }
+}
+"#;
+            let compile = |src: &str| -> Checked {
+                let proc = karakuri_ir::parse(src).unwrap_or_else(|e| panic!("parse: {e:?}"));
+                let checked =
+                    karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("check: {e:?}"));
+                karakuri_ir::cost::estimate(&checked).unwrap_or_else(|e| panic!("cost: {e:?}"));
+                checked
+            };
+            let l1 = compile(l1_src);
+            let l4 = compile(l4_src);
+            let mut set =
+                Set::build(&gpu.device, &gpu.queue, &l1, &l4, 8, 1).expect("compatible pair");
+            let radius = |set: &Set| -> Vec<(Kind, u32, f32)> {
+                let mut found: Vec<(Kind, u32, f32)> = set
+                    .params()
+                    .filter(|(_, _, key, _)| *key == "radius")
+                    .map(|(layer, index, _, value)| (layer, index, value))
+                    .collect();
+                found.sort_by_key(|(layer, index, _)| (format!("{layer:?}"), *index));
+                found
+            };
+
+            // Nobody has spoken for either node, so the bare name is one
+            // control over one arrangement and reaches both.
+            assert_eq!(
+                set.write_param(&ParamWrite::everywhere("radius", 2.0)),
+                Ok(2),
+                "a Set nobody has spoken for is uniform, and a bare name reaches every \
+                 declaration of the key"
+            );
+            assert_eq!(
+                radius(&set),
+                vec![(Kind::L1, 0, 2.0), (Kind::L4, 0, 2.0)],
+                "both declarations should hold what the wildcard wrote"
+            );
+
+            // One node handed to an agent, and the same control now spans two
+            // arrangements.
+            assert!(
+                set.set_authority(Kind::L4, 0, Authority::Automatic),
+                "the renderer is a node of this Set"
+            );
+            let refused = set
+                .write_param(&ParamWrite::everywhere("radius", 7.0))
+                .expect_err("a bare name over a kept node and a granted one is refused");
+            assert_eq!(refused.key, "radius");
+            assert_eq!(
+                refused.landing, "L1:0 manual, L4:0 automatic",
+                "the refusal names the nodes it would have landed on and what each is under"
+            );
+            assert_eq!(
+                radius(&set),
+                vec![(Kind::L1, 0, 2.0), (Kind::L4, 0, 2.0)],
+                "a refused write moves nothing — landing on the permitted node is the \
+                 silently partial control P-0027 rules out"
+            );
+
+            // And the reach is not what was taken away.
+            assert_eq!(
+                set.write_param(&ParamWrite::at(Kind::L4, 0, "radius", 7.0)),
+                Ok(1),
+                "an addressed write says which node it means, so it crosses nothing"
+            );
+            assert_eq!(
+                radius(&set),
+                vec![(Kind::L1, 0, 2.0), (Kind::L4, 0, 7.0)],
+                "the addressed write lands on the node it names and on no other"
+            );
+        }
+
         /// **Every field of a derived `Counts` means what its name says**, including
         /// the ones nothing below an amplifier reads.
         ///

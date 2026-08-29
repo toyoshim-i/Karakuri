@@ -148,9 +148,18 @@ const OPACITY_STEP: f32 = 0.1;
 /// invisible at 8.0. This is a quarter of a stop, near enough.
 const EXPOSURE_STEP: f32 = 1.189_207;
 
-/// Exposure bounds, shared by `--exposure` and the `-`/`=` keys, so a value
-/// typed at the command line and a value reached by nudging a key mean the
-/// same range. Zero and negative are excluded outright — see [`clamp_exposure`].
+/// **The interactive bounds, and only the interactive ones.** `-` and `=` nudge
+/// inside them, because a key that steps has to stop somewhere and a stop it
+/// cannot see is worse than one it can. `--exposure` is **not** held to them,
+/// which is deliberate and is `exposure_positive_is_accepted_unclamped`'s own
+/// sentence: a batch render asks for something extreme on purpose, and a flag
+/// is read once by somebody who typed it rather than nudged into a corner. What
+/// the flag refuses is what has no meaning at all — see [`clamp_exposure`] for
+/// why zero and negative are neither clamped nor accepted anywhere.
+///
+/// **This comment said the two shared a range and they never have.** It was
+/// written beside a constant pair pulled out so the bound would not drift, and
+/// the drift was the sentence rather than the numbers.
 const EXPOSURE_MIN: f32 = 1.0 / 64.0;
 const EXPOSURE_MAX: f32 = 64.0;
 
@@ -1475,10 +1484,12 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
                 // zero, NaN, infinite, or unparsable exposure used to be
                 // silently swapped for 1.0, which reads as "the flag was
                 // ignored" rather than "the value was wrong". `--tonemap` and
-                // `--set` already fail loudly on a bad value; this now does
-                // the same, and the bound matches what `-`/`=` clamp to at
-                // runtime so a value typed at the command line and one
-                // reached by nudging a key mean the same range.
+                // `--set` already fail loudly on a bad value; this does the
+                // same. **What it does not do is clamp**: `100` is accepted and
+                // lands at 100, well outside what `-`/`=` reach, because a
+                // batch render is allowed to ask for something extreme. See
+                // `exposure_positive_is_accepted_unclamped` and
+                // [`EXPOSURE_MIN`], whose comment claimed the opposite.
                 match value.parse::<f32>() {
                     Ok(v) if v.is_finite() && v > 0.0 => args_out.look.exposure = v,
                     _ => return Err(format!("`--exposure {value}` — expected a positive number")),
@@ -3913,8 +3924,18 @@ fn build(
                 }
             }
             for write in overrides {
-                if set.write_param(write) == 0 {
-                    eprintln!("  no parameter named `{}`, ignoring", write.key);
+                // **The refusal is the engine's sentence, printed rather than
+                // reworded** — a `--param` and a `param` record reach the same
+                // wall in the same words, which is
+                // `docs/principles/0061-a-refusal-a-person-can-reach-from-two-surfaces-is-one-sentence.md`.
+                // Unreachable in a run today, because nothing grants a node's
+                // authority yet and a Set nobody has spoken for lands
+                // uniformly; the day a grant arrives, this line is what an
+                // operator reads.
+                match set.write_param(write) {
+                    Ok(0) => eprintln!("  no parameter named `{}`, ignoring", write.key),
+                    Ok(_) => {}
+                    Err(refused) => eprintln!("  {refused}"),
                 }
             }
             // After the overrides: a binding blends from the param's value, so
@@ -10430,7 +10451,8 @@ mod live_save_tests {
 
             // What a `param` record does mid-set, through the one entry point both
             // a record and a key press come through.
-            set.write_param(&ParamWrite::everywhere("radius", 2.6));
+            set.write_param(&ParamWrite::everywhere("radius", 2.6))
+                .expect("every node of a Set nobody has spoken for is manual");
 
             let root = dir.path().join("store");
             let running = launched(&placed);

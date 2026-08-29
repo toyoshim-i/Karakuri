@@ -395,7 +395,7 @@
               <div class="master-body">
                 <div class="master-row">
                   <span style="color:var(--c-faint)">out</span>
-                  <span class="fader" style="flex:1"><b style="width:100%"></b><s style="left:94%"></s></span>
+                  <span class="fader" style="flex:1" data-tip="The master out, at 1.00: one level on the composited frame, at this chain's entry &mdash; above feedback, bloom and rgb shift, and upstream of everything they do. It is not the tone mapper's exposure, which is a second level at the far end of the same chain: two numbers that multiply in different places. With the chain empty they are indistinguishable, and the day an effect lands between them they stop being. &#8853; MIDI: unassigned &mdash; no operation names the master out yet, so there is nothing for a map to reach."><b style="width:100%"></b><s style="left:94%"></s></span>
                   <span class="val">1.00</span>
                 </div>
                 <div class="chain">
@@ -404,7 +404,7 @@
                   <div class="fx off"><i class="dot"></i>rgb shift<span class="amt">&mdash;</span></div>
                   <div class="fx off" style="justify-content:center">+ add</div>
                 </div>
-                <div style="color:var(--c-faint);font-size:10px">runs in linear HDR, before the one tonemap</div>
+                <div style="color:var(--c-faint);font-size:10px">runs in linear HDR, before the one tonemap &mdash; out is this chain's entry, the tonemap's exposure its far end</div>
               </div>
             </div>
 
@@ -1117,6 +1117,43 @@
           of it for the instrument; the one in a deck head is beats, there is
           one per deck, and it is where a scrub goes. The unit is what tells
           them apart, so neither is ever drawn without it.
+        </p>
+      </div>
+
+      <div class="note">
+        <h3>Master, and the two levels that are not one level</h3>
+        <p>
+          <strong>The bay's <code>out</code> and the tone mapper's
+          <code>exposure</code> are two values, and what makes them two is the
+          chain drawn under the row.</strong> <code>out</code> is the level the
+          composited frame enters this chain at; <code>exposure</code> is the
+          level going into the transfer at the other end of it; feedback, bloom
+          and rgb shift sit between them. A frame effect reads what it is
+          handed, so which side of it a level is applied on is the picture: a
+          feedback trail fed at half the level decays from half, and one fed at
+          full level and dimmed afterwards decays from full.
+        </p>
+        <p>
+          <strong>The cost of saying so now is that today they are the same
+          number.</strong> With nothing in the chain, <code>out</code> and
+          <code>exposure</code> multiply in two places with nothing between
+          them, and no frame this program can draw distinguishes 0.5 on one
+          from 0.5 on the other. That is the price of the alternative reversed:
+          one value costs nothing today and costs the separation the day the
+          first effect lands, because a value folded into the tone mapper's
+          would have to be pulled back out of it. The engine holds them apart
+          already &mdash; the mix applies <code>out</code> where it writes the
+          composited frame, and the present pass applies <code>exposure</code>
+          where it reads that frame &mdash; so what is left to land is the
+          chain, not the arithmetic.
+        </p>
+        <p>
+          <strong>Nothing can move this fader yet</strong>, and the row says so
+          the way every other unreachable control on this panel does: no
+          operation names the master out, so there is no record, no key, no
+          MIDI target and nothing for a map to learn. The tone mapper's
+          exposure keeps all of those and keeps them in the transport, where
+          the operator it belongs to is.
         </p>
       </div>
 

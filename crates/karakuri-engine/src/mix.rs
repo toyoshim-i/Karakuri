@@ -20,6 +20,17 @@
 //! rather than a `Residency`: the deck decides what silence and residency mean
 //! and hands down the answer, and a nested merge has neither question.
 //!
+//! **The master out is a third thing and is neither of those**, which is why it
+//! is an argument to [`Composite::write_uniform`] rather than a field of
+//! [`Input`] or a member of [`crate::deck::Deck`]'s slots. It belongs to
+//! nothing being played and to no edge: it is the level the *folded frame*
+//! leaves this pass at, which is the entry to the master chain. It is applied
+//! here because here is where that frame is written, and because the alternative
+//! — the present pass, where `exposure` already multiplies — is downstream of
+//! every master effect that will ever be built and is therefore the wrong end
+//! of the chain. See
+//! `docs/adr/0224-out-and-exposure-are-two-levels-that-multiply-in-different-places.md`.
+//!
 //! # Why a skip rather than a blend at zero
 //!
 //! An input that does not contribute is skipped. `0.0 * x` is only zero for
@@ -33,8 +44,14 @@ use crate::deck::{Blend, Mask, MAX_SLOTS};
 use crate::present::Present;
 
 /// Byte size of the `Mix` uniform: eight `vec4`s, one field per column and one
-/// input per lane.
-const UNIFORM_SIZE: u64 = 128;
+/// input per lane, and the master out as a ninth column holding one scalar —
+/// 132 bytes rounded up to the 16 a uniform struct is sized in.
+const UNIFORM_SIZE: u64 = 144;
+
+/// Where the master out sits in that block, immediately after the eight
+/// per-input columns. A named constant because the write and the shader's
+/// struct have to agree and only one of them is Rust.
+const MASTER_OUT_AT: usize = 128;
 
 /// **One edge into an L5.** Everything the mix knows about an input, and
 /// nothing about where it came from.
@@ -254,9 +271,23 @@ impl Composite {
     /// in `draw`. The deck calls the two back to back because it has both in
     /// hand at once.
     ///
-    /// The write is a fixed 128 bytes off the stack — the render thread does not
+    /// **`out` is not an edge**, and it is the one argument here that is not.
+    /// It is the master chain's entry level — one gain on the folded frame,
+    /// applied where this pass writes it and not where the tone mapper reads
+    /// it, with the master effects between the two. Nothing about it travels
+    /// with an input, so it is an argument rather than a field of [`Input`],
+    /// and a nested [`crate::node::Merge`] is inside a Set rather than at the
+    /// head of a master chain and passes 1.0. See
+    /// `docs/adr/0224-out-and-exposure-are-two-levels-that-multiply-in-different-places.md`.
+    ///
+    /// Written every frame with the rest of the block rather than once when it
+    /// changes: a uniform half of which is refreshed and half of which is
+    /// remembered is one more thing that can go stale, and this costs 16 more
+    /// bytes on a write that was already happening.
+    ///
+    /// The write is a fixed 144 bytes off the stack — the render thread does not
     /// allocate, and this is the render thread.
-    pub(crate) fn write_uniform(&self, queue: &wgpu::Queue, inputs: &[Input]) {
+    pub(crate) fn write_uniform(&self, queue: &wgpu::Queue, inputs: &[Input], out: f32) {
         let mut bytes = [0u8; UNIFORM_SIZE as usize];
         for (i, input) in inputs.iter().enumerate().take(MAX_SLOTS) {
             // The blend mode is the shader's index rather than its name; the
@@ -276,6 +307,7 @@ impl Composite {
                 bytes[at..at + 4].copy_from_slice(value);
             }
         }
+        bytes[MASTER_OUT_AT..MASTER_OUT_AT + 4].copy_from_slice(&out.to_le_bytes());
         queue.write_buffer(&self.uniform, 0, &bytes);
     }
 

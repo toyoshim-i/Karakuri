@@ -251,7 +251,9 @@ proc cool {
 
         // And it moves both, exactly as `--param exposure=` does.
         let mut set = set;
-        assert!(set.set_published("exposure", 4.0));
+        assert!(set
+            .set_published("exposure", 4.0)
+            .expect("one authority over the nodes it lands on"));
         let held: Vec<f32> = set
             .params()
             .filter(|(_, _, key, _)| *key == "exposure")
@@ -349,12 +351,15 @@ proc cool {
         set.publish(control("size", Kind::L1, 0, "radius", [1.0, 4.0]))
             .expect("published");
 
-        assert!(set.set_published("size", 3.0));
+        assert!(set
+            .set_published("size", 3.0)
+            .expect("one authority over the nodes it lands on"));
         assert_eq!(set.published_value("size"), Some(3.0));
         assert_eq!(set.param("radius"), Some(3.0), "the param itself moved");
 
         assert!(
-            set.set_published("size", 7.5),
+            set.set_published("size", 7.5)
+                .expect("one authority over the nodes it lands on"),
             "a write past the published top is still a write"
         );
         assert_eq!(
@@ -364,7 +369,8 @@ proc cool {
         );
 
         assert!(
-            !set.set_published("radius", 2.0),
+            !set.set_published("radius", 2.0)
+                .expect("one authority over the nodes it lands on"),
             "the internal name is not on the console"
         );
     }
@@ -431,7 +437,7 @@ proc cool {
 
         // Bottom of the published range: the first renderer at its own bottom, the
         // second at its own top.
-        set.set_published("blend", 1.0);
+        let _ = set.set_published("blend", 1.0);
         set.prepare(&gpu.queue, 1, &Signals::default());
         assert!(
             (exposure(&set, 0) - 0.0).abs() < 1e-4,
@@ -445,7 +451,7 @@ proc cool {
         );
 
         // Top of it, and the two have swapped.
-        set.set_published("blend", 3.0);
+        let _ = set.set_published("blend", 3.0);
         set.prepare(&gpu.queue, 1, &Signals::default());
         assert!(
             (exposure(&set, 0) - 2.0).abs() < 1e-4,
@@ -460,7 +466,7 @@ proc cool {
 
         // And the middle is the middle, which is what says the position is mapped
         // rather than thresholded.
-        set.set_published("blend", 2.0);
+        let _ = set.set_published("blend", 2.0);
         set.prepare(&gpu.queue, 1, &Signals::default());
         assert!(
             (exposure(&set, 0) - 1.0).abs() < 1e-3,

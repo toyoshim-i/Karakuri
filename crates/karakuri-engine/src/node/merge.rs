@@ -79,8 +79,16 @@ impl Merge {
     }
 
     /// This frame's edges, written where a Set writes every other uniform.
+    ///
+    /// **At a master out of 1.0, and there is no second caller waiting for
+    /// another value.** A merge is an L5 inside a Set, folding renderers into
+    /// the one texture that Set produces; the master chain begins where the
+    /// *deck's* mix writes the composited frame, which is one L5 further out.
+    /// A level here would be a second name for the edges' own gains. 1.0 is
+    /// exact, so a merge is what it was before the master out existed — see
+    /// `docs/adr/0224-out-and-exposure-are-two-levels-that-multiply-in-different-places.md`.
     pub(crate) fn write_uniform(&self, queue: &wgpu::Queue, inputs: &[Input]) {
-        self.composite.write_uniform(queue, inputs);
+        self.composite.write_uniform(queue, inputs, 1.0);
     }
 
     /// Fold the inputs into `target`, after every one of them has drawn.
