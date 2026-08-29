@@ -66,11 +66,14 @@
           <div class="transport">
             <span class="bpm">128.0</span>
             <span style="color:var(--c-faint)">BPM</span>
-            <span class="pill armed">audio&#8209;in</span>
             <span class="beat-grid" data-tip="Where the beat is, and the one thing on this panel that moves whether or not anything is happening. The light travels the grid once a bar rather than one dot lighting at a time, so you can tell at any instant that the panel is live &mdash; a flip only tells you that between two flips. A grid that has stopped is a panel that has stopped, and nothing else looks like it."><i class="on"></i><i></i><i></i><i></i></span>
             <span style="color:var(--c-dim)">bar 37</span>
-            <span class="pill">tap</span>
-            <span class="pill" data-tip="The latency offset, at &minus;15 ms: the delay between what a room hears and what it sees. Negative and the picture waits for the music; positive and it leads &mdash; the sign is the half that gets read wrong at two in the morning, so it is said in words here rather than left to be worked out. Which of the two is late depends on the room, so it is signed both ways and held inside 200 ms either way. Click to set it outright; o and p step it five milliseconds a press. It only means anything with an audio input attached, and the audio&#8209;in pill is what says whether there is one. &#8853; MIDI: unassigned &mdash; the value is absolute and a fader has to be able to reach it, and no map target names it yet.">offset &minus;15 ms</span>
+            <span class="tracker">
+              <span class="pill armed">audio&#8209;in</span>
+              <span class="pill" data-tip="The latency offset, at &minus;15 ms: the delay between what a room hears and what it sees. Negative and the picture waits for the music; positive and it leads &mdash; the sign is the half that gets read wrong at two in the morning, so it is said in words here rather than left to be worked out. Which of the two is late depends on the room, so it is signed both ways and held inside 200 ms either way. Click to set it outright; o and p step it five milliseconds a press. It only means anything with an audio input attached, and the audio&#8209;in pill is what says whether there is one. &#8853; MIDI: unassigned &mdash; the value is absolute and a fader has to be able to reach it, and no map target names it yet.">offset &minus;15 ms</span>
+              <span class="pill">tap</span>
+              <span class="octave"><i data-tip="Halve the grid, to 64.0 BPM, and the tracker's octave window goes with it &mdash; which is the whole of why this is a hand's control rather than a measurement. The tracker folds every candidate into the window the grid is already in, so a grid an octave low stays an octave low however long it listens, and nothing here finds an octave for you. The phase does not move: halving takes every other beat and the one you can see stays where it is. Authoritative like a tap &mdash; the run of evidence behind the old octave is discarded, so the estimates still arriving from it cannot pull the grid back. Refused if the result would leave the trackable range, 60 to 200 BPM. Needs an audio input, like everything else in this group. &#8853; MIDI: unassigned &mdash; a note could reach it, and no map target names one yet.">&frac12;</i><i class="idle" data-tip="Double the grid: refused at this tempo, and inert rather than gone. 128.0 doubled is 256 and the tracker searches 60 to 200 BPM &mdash; outside that there is nothing to lock to, so the next estimate that disagreed would drag the grid back, and a control that undoes itself two seconds later is worse than one that says no. The panel knows the tempo, so it says this before the press rather than after it. The range is under two octaves wide, which is why this half and the one beside it are never both live. &#8853; MIDI: unassigned.">&times;2</i></span>
+            </span>
             <span class="pill lav" data-tip="MIDI learn. Off. Click, then point at any control and move a knob on your surface, and the two are mapped. Every control that has a tooltip can be learned, so nothing is unreachable by accident.">learn</span>
             <span class="pill" data-tip="The map in use, and it is a file. Which knob is which belongs to the hardware in the room, so a map is saved and recalled per controller and never travels in a session. Click to save, load, or start a new one.">map &middot; nanoKONTROL2 &#9662;</span>
             <span class="sep"></span>
@@ -736,6 +739,62 @@
       </div>
 
       <div class="note">
+        <h3>The octave is a person's, and only one half of it is ever live</h3>
+        <p>
+          <code>&frac12;</code> and <code>&times;2</code> move the grid an
+          octave, and <strong>they are the one thing about the tempo that no
+          measurement is allowed to decide</strong>. The tracker folds every
+          candidate it hears into the window the grid is already in, so a set
+          that started an octave low stays an octave low however long it
+          listens &mdash; folding is what keeps a drifting tempo in one octave,
+          and it is exactly what cannot climb out of one. Pressing this moves
+          the grid <em>and</em> the window together, so tracking carries on in
+          the new octave instead of folding straight back. The phase does not
+          move either way: doubling subdivides the beats already there and
+          halving takes every other one, so the beat you can see stays where it
+          is. It is as authoritative as a tap &mdash; the run of evidence behind
+          the old octave is thrown away, so the estimates still arriving from it
+          for the next quarter second cannot pull the grid back.
+        </p>
+        <p>
+          <strong>The refusal is drawn rather than reported, because this is one
+          the panel can work out before you press.</strong> A move is refused
+          when the result would leave the range the tracker searches, 60 to 200
+          BPM: outside it there is nothing to lock to, so the next estimate that
+          disagreed would drag the grid back, and a control that undoes itself
+          two seconds later is worse than one that says no. The panel is holding
+          the tempo already, so it can say which press will be refused; a tap
+          that turns out to be a performer still finding the beat can only be
+          reported afterwards, and that is the difference in what the two
+          controls are allowed to promise. Above the row, <code>&times;2</code>
+          keeps its shape and its reason at 128.0, where doubling would ask for
+          256.
+        </p>
+        <p>
+          <strong>That range is under two octaves wide, so the two halves are
+          never both available</strong> &mdash; above 120 only <code>&frac12;</code>
+          is, below 100 only <code>&times;2</code>, and between the two neither
+          of them is. It is a control with two faces of which at most one is
+          ever live, which is a thing to know about it rather than a fault in
+          the drawing: the alternative is a single chip whose face changes with
+          the tempo, and a control that renames itself is worse than one that
+          says no twice.
+        </p>
+        <p>
+          <strong>The four things beside it are one group because they need one
+          thing.</strong> The pill that says whether a room is being listened
+          to, the latency offset, the tap and the octave all mean nothing
+          without an audio input &mdash; the offset is a term in the lead the
+          tracker corrects against, not only a delay on the picture, and the
+          other three write to the tracker outright. So they are drawn at the
+          pills' own tighter gap rather than spread at the row's, with the pill
+          that says whether there is an input at their head, and they sit after
+          the bar rather than among the readouts: the tempo, its label, the beat
+          grid and the bar are one clock and now read as one.
+        </p>
+      </div>
+
+      <div class="note">
         <h3>Health, in the transport</h3>
         <p>
           Frame time against the budget, and what the last write did &mdash;
@@ -933,6 +992,21 @@
         directory of Set files, and a bundle is a third. The scope list is where
         that difference becomes visible, so it wants deciding before the first
         scope beyond the store is added.
+      </p>
+    </div>
+    <div class="open-item">
+      <h4>Where the tracker's own doubt goes</h4>
+      <p>
+        The estimator can already say it thinks the grid is at half the music's
+        tempo &mdash; it is <code>x2?</code> on the status line the program
+        prints, shown only when the estimate behind it is worth trusting &mdash;
+        and it is the thing that tells a performer to reach for
+        <code>&times;2</code> at all. The panel draws the control and not the
+        prompt, which leaves the operator to notice for themselves the one thing
+        the instrument already knows. It needs a home in the transport, and it
+        needs deciding next to a second fact: a grid at half the music's tempo
+        can only be doubled below 100 BPM, so above that the hint and the
+        refusal would arrive together.
       </p>
     </div>
     <div class="open-item">
