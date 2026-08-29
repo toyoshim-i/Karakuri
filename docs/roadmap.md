@@ -612,6 +612,48 @@ on is written region by region under *The remaining bays, surveyed* below and on
 third is *Composite a deck's renderers*, which routes to the same home the manual does not have. A
 `grep` caught what a survey written region by region against the manual had read past twice.
 
+**The manual has caught up, and writing it found more than it closed** ([console.html](manual/console.html),
+2026-08-29). Three homes were reported missing and **one of the three was already drawn**: the
+crossfader is `.xfade`'s first row, which `karakuri-console`'s own arithmetic already counts as 61
+of the mixer's 316 — it had no name and no tooltip rather than no markup, so it gained prose and a
+tooltip and no second control. The **deck head** and the **latency offset** were genuinely absent and
+now exist: the deck head under each `.half-head` in the **inspector** rather than on a preview cell,
+because a `free | tempo | beat` triplet is about 106px against a preview cell's 112 and rule 05
+already says everything about what a deck *is* lives there; the offset beside the `audio-in` pill
+rather than beside the tempo, because the operation refuses without an audio input and belongs
+against the thing that says whether there is one.
+
+**A fourth home is missing and the earlier sweep did not list it**: *Halve or double the grid* routes
+to `panel ½ ×2` and the transport row draws no such control. **And the sweep's method was wrong in a
+way worth writing down** — it tested for the home's *words* on the page, and `transition row`,
+`renderer chips`, `sensitivity row`, `tally chip`, `strip fader`, `health readout` and `pane edge`
+all appear zero times there and are all drawn. A word test is not a region test; the reliable one is
+reading the mock.
+
+**Two numbers the manual moved, and only one of them is settled.** `karakuri-console`'s
+`inspector().min(126.0)` becomes 151.5 once a `.deck-head` is drawn, and its comment carries the
+arithmetic to update. The transport row's `fixed(48.0)` is **at risk and was not settled**: with the
+offset pill added the mock's row is about 898px of a 966px inner width at the console's 1010px
+minimum, so it wraps there and the 48 stops being the height of its contents — but the built console
+draws six of that row's ten items, so it has slack the mock does not. This wants ADR-0190's
+treatment, which is to measure through `egui`'s own text layout rather than to argue from the
+stylesheet.
+
+**Five things the drawing found that look designed wrong**, each one a control whose sentence could
+not be written cleanly, which is the manual's stated reason for existing. **Re-anchoring has no route
+on any surface**: `Transport::engage` says re-engaging the mode a slot is already in is how an
+operator re-anchors, and `cycle_sync` always moves to the next *allowed* mode, so neither the `y` key
+nor a cycling chip can ask for the mode it is in. **The crossfader's ends were unspecified** — the
+operation names both decks and the mock hardcodes `A … B`, with nothing saying which two a
+four-deck mixer's fader spans; the page now resolves it to the selection and the one after it, so
+the panel and `x` are one gesture. **The crossfader's knob has no record for a half-done throw**, so
+it is written as a readout of the two channel faders plus a throw rather than as a drag. **`offset`
+names two different things** — the latency offset and a beat anchor's `±offset` — and both now carry
+their unit, but read strictly [P-0031](principles/0031-a-name-means-one-thing-across-the-system.md)
+wants one of them renamed, which is `operations.html`'s row to change. And **`SetCompositing` is a
+`launch` row whose prose says the flag can only turn it on**, while the vocabulary carries a `bool`
+and the page now draws a chip that can be clicked off.
+
 #### What no list here has ever carried is the application
 
 **This milestone opens *Goal: the application*, and nothing in it names building one.** Not the seven
@@ -2102,7 +2144,11 @@ it.
 - **Per-slot tempo-sync and beat-sync toggles, with beat-sync greyed out for accumulating
   material.** The two are different requests and only one of them is always available:
   tempo-sync changes the *rate*, which any procedure can follow because it only ever means
-  stepping more or fewer times; beat-sync locks the *position*, which needs the ability to
+  stepping more or fewer times — **except one, and this sentence was wrong about it until
+  2026-08-29**: `Transport::allows` refuses `Sync::Tempo` on material that reads `beats`, because
+  it is already on the room's grid by its own hand and scaling its clock as well would make it
+  follow twice (`Refusal::AlreadyOnTheGrid`). **Two of the three modes are conditional, not one**,
+  which is what the sync chip has to be able to say; beat-sync locks the *position*, which needs the ability to
   jump and reverse. Continuous beat-sync is therefore closed-form only — an accumulating
   slot re-running its whole history on every correction is not a feature. A *one-off* scrub
   is available to anything that fits the budget, so what the surface shows there is a price

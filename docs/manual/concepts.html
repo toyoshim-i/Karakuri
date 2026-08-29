@@ -141,8 +141,11 @@
     <p>
       Two different requests hide under the word <em>sync</em>.
       <strong>Tempo-sync</strong> changes the <em>rate</em> a deck advances at,
-      and anything can follow it, because it only ever means taking more or
-      fewer steps. <strong>Beat-sync</strong> locks the <em>position</em>, which
+      and following it only ever means taking more or fewer steps &mdash; so it
+      is offered to anything except material that is already following.
+      A procedure that reads <code>beats</code> is on the room's grid by its own
+      hand, and scaling its clock as well would make it follow twice; that one
+      is refused, and says so. <strong>Beat-sync</strong> locks the <em>position</em>, which
       needs the ability to jump &mdash; so it is offered where material can be
       evaluated at a moment, and refused where material has to be arrived at by
       running it, since re-running a deck's whole history to correct it is not a
