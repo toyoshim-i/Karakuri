@@ -132,6 +132,7 @@
 use karakuri_engine::binding::Curve;
 use karakuri_engine::deck::{Blend, Mask, MaskKind, Residency};
 use karakuri_engine::present::TonemapOp;
+use karakuri_engine::set::Authority;
 use karakuri_engine::transition::Control;
 use karakuri_engine::transport::{Sync, Transport};
 use karakuri_engine::Look;
@@ -278,6 +279,25 @@ pub fn tonemap(op: TonemapOp) -> karakuri_operation::Tonemap {
         TonemapOp::Reinhard => karakuri_operation::Tonemap::Reinhard,
         TonemapOp::Aces => karakuri_operation::Tonemap::Aces,
         TonemapOp::AgX => karakuri_operation::Tonemap::AgX,
+    }
+}
+
+/// The engine's authority level, as the vocabulary's. See [`blend_mode`].
+///
+/// **Written before there is a reader for it**, which is why the lint has to be
+/// told, and it is here anyway for the reason the five above it are here at
+/// all: the two spellings have to be *checked* against each other somewhere,
+/// this is the only crate that can see both, and the check below needs a
+/// conversion to check. Nothing on the CLI's paths reads `Set::authority` yet —
+/// the console's `man / sug / auto` chip and a live save that writes a
+/// `Record::Authority` are both the reader this is waiting for, and the first
+/// of them to arrive deletes this attribute.
+#[cfg_attr(not(test), allow(dead_code))]
+pub fn authority(level: Authority) -> karakuri_operation::Authority {
+    match level {
+        Authority::Manual => karakuri_operation::Authority::Manual,
+        Authority::Suggesting => karakuri_operation::Authority::Suggesting,
+        Authority::Automatic => karakuri_operation::Authority::Automatic,
     }
 }
 
@@ -676,8 +696,9 @@ mod tests {
     /// **The two copies of every list, checked against each other — and this
     /// is the only place in the workspace where that can happen.**
     ///
-    /// `karakuri-operation` owns its own `BlendMode`, `Residency`, `Sync` and
-    /// `Tonemap` because a vocabulary that refuses to name a value cannot say
+    /// `karakuri-operation` owns its own `BlendMode`, `Residency`, `Sync`,
+    /// `Tonemap` and `Authority` because a vocabulary that refuses to name a
+    /// value cannot say
     /// *set blend to over*, and the cost is stated rather than hidden: they
     /// are third spellings of lists the engine and the store already hold
     /// (P-0074, ADR-0180). A record carries the **name**, so a level spelled
@@ -725,6 +746,19 @@ mod tests {
                 op_wire_name(op),
                 "the vocabulary and the flag spell one tone map operator two ways, and \
                  `Record::Look` carries the name"
+            );
+        }
+        // Over the engine's `ALL` and not the vocabulary's, which has none —
+        // `karakuri_operation::Authority` says so at its `name`, on
+        // `WipeKind`'s terms: that constant exists for a map target, and no map
+        // line can say a node address. The engine's list is the one this has to
+        // be exhaustive over anyway, for the reason stated above.
+        for level in Authority::ALL {
+            assert_eq!(
+                authority(level).name(),
+                level.name(),
+                "the vocabulary and the engine spell one authority level two ways, and \
+                 `Record::Authority` carries the name"
             );
         }
     }

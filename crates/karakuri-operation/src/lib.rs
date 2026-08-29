@@ -116,9 +116,9 @@
 //! # The cost this crate pays, stated plainly
 //!
 //! Naming a value means owning the list of values. [`BlendMode`], [`Sync`],
-//! [`Residency`], [`Tonemap`], [`Curve`], [`Layer`] and [`WipeKind`] are this
-//! crate's copies of lists `karakuri-engine` and `karakuri-store` already
-//! hold. That is duplication and it is deliberate: the alternative is
+//! [`Residency`], [`Tonemap`], [`Curve`], [`Layer`], [`WipeKind`] and
+//! [`Authority`] are this crate's copies of lists `karakuri-engine` and
+//! `karakuri-store` already hold. That is duplication and it is deliberate: the alternative is
 //! `karakuri_store`'s,
 //! which carries these as `String` because *"what a name is allowed to be is
 //! the engine's to say"* — and a map file whose typo is refused on the render
@@ -459,11 +459,17 @@ impl WipeKind {
 /// those three words are a surface's abbreviations rather than this list —
 /// exactly as the status line's `LIVE`/`prim`/`park` is not [`Residency::name`].
 ///
-/// **The value list is this crate's, which is the cost the module documentation
-/// states.** `karakuri-engine` holds no copy of it at all yet, so for once this
-/// is not a duplicate — see the record at
+/// **This is a copy, and the engine holds the list it is a copy of.** It was
+/// not one when it landed — `karakuri-engine` held no authority at all, which
+/// is what
 /// `docs/adr/0211-authority-is-set-per-node-and-the-record-is-the-sessions.md`
-/// for what the engine still owes.
+/// says the engine still owed — and it became one when
+/// `karakuri_engine::set::Authority` arrived with the per-node flag a rebuild
+/// restates. So it is now [`Residency`]'s and [`Sync`]'s case exactly, and it
+/// is the cost the module documentation states: what a node's authority is
+/// allowed to be is the engine's to say, this crate names the same three so a
+/// surface can refuse a typo without a device, and the two are checked against
+/// each other in `karakuri-cli`'s `mix.rs` where every other pair already is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Authority {
     /// Yours alone. Nothing else writes this node's params.

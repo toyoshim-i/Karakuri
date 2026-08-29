@@ -169,6 +169,86 @@ pub enum Layering {
     Composite,
 }
 
+/// **Who may move one node of a Set.** The manual's sixth rule as a list of
+/// three: *"Each node of a Set is manual, suggesting, or automatic, and you set
+/// that node by node"* —
+/// `docs/adr/0211-authority-is-set-per-node-and-the-record-is-the-sessions.md`.
+///
+/// **A permission granted forward, not a record of who moved something last.**
+/// The second is read off the binding that is driving a param
+/// ([`Set::bindings`]); this is the other question, asked before anything
+/// moves.
+///
+/// **The engine's own copy of the list, which is [`Layering`]'s and
+/// [`crate::deck::Residency`]'s and [`crate::transport::Sync`]'s position and
+/// not a new one.** `karakuri-operation` names three destinations for a
+/// vocabulary every surface can depend on without pulling in a device, and it
+/// says at [`Residency`](crate::deck::Residency)'s counterpart that its copies
+/// of `Blend`, `Sync` and `Residency` are "this crate's copies of lists
+/// `karakuri-engine` and `karakuri-store` already hold". This is the list they
+/// are a copy *of*: what a node's authority is allowed to be is the engine's to
+/// say, the same way what a residency or a sync mode is allowed to be is. The
+/// two are checked against each other where every other pair already is —
+/// `karakuri-cli`'s `mix.rs`, the one crate that sees both spellings at once
+/// (`docs/adr/0194-…`).
+///
+/// **[`Authority::Manual`] is the default and nothing else could be.** Rule 06
+/// is about what an operator *grants* — *"There is no switch that hands the
+/// whole instrument to an agent"* — so a node nobody has spoken for is not
+/// granted, and a build that came up any other way would hand every node of
+/// every Set to an agent nobody asked for. It is also the only default that
+/// leaves
+/// `docs/principles/0078-the-operator-wins-and-an-automatic-writer-yields-to-a-hand.md`
+/// true of a Set that has just been built.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Authority {
+    /// Yours alone. Nothing else writes this node's params.
+    #[default]
+    Manual,
+    /// An agent proposes and you accept.
+    Suggesting,
+    /// An agent acts.
+    Automatic,
+}
+
+impl Authority {
+    /// Every level there is, in the order a control conventionally shows them —
+    /// the order this enum declares them, most restrictive first.
+    ///
+    /// **A list is not a cycle**, on [`crate::deck::Blend::ALL`]'s terms: the
+    /// console's `man / sug / auto` chip is an affordance built over the three
+    /// (`docs/principles/0074-…`), and the cycle belongs to whoever draws it.
+    pub const ALL: [Authority; 3] = [
+        Authority::Manual,
+        Authority::Suggesting,
+        Authority::Automatic,
+    ];
+
+    /// **The lower-case word for this level**, which is what
+    /// `karakuri_store::record::Record::Authority` carries and what
+    /// `karakuri_operation::Authority::name` writes. The console's `man / sug /
+    /// auto` is a node head's abbreviation for a reader and deliberately not
+    /// this.
+    ///
+    /// A match rather than a table, for [`crate::transport::Sync::name`]'s
+    /// reason: a level added to the enum does not compile until it has a name.
+    pub fn name(self) -> &'static str {
+        match self {
+            Authority::Manual => "manual",
+            Authority::Suggesting => "suggesting",
+            Authority::Automatic => "automatic",
+        }
+    }
+
+    /// The level a record's word names, or `None` for a word this build does
+    /// not have — a stream from a newer build reaches a diagnostic rather than
+    /// a parser that refuses the line, which is why the record carries a
+    /// `String`.
+    pub fn from_name(name: &str) -> Option<Authority> {
+        Authority::ALL.into_iter().find(|a| a.name() == name)
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum SetError {
     /// **Two nodes answering to one name.** Refused rather than disambiguated:
@@ -741,6 +821,20 @@ pub struct Set {
     /// disambiguates before handing them over. What arrives here is refused if
     /// two are the same.
     names: Vec<String>,
+    /// **Who may move each node**, in the same node order [`Set::names`],
+    /// `params` and `ranges` are in — one walk decides all four.
+    ///
+    /// **Every node has one, and a Set that was built and never spoken for is
+    /// every node at [`Authority::default`].** There is no `Option` here for
+    /// [`Request::camera`](crate::swap::Request::camera)'s reason: a `None`
+    /// would mean nothing, because "nobody has said" and "manual" are the same
+    /// arrangement — the node is the operator's.
+    ///
+    /// **Not carried across a hot swap by being read out of the outgoing Set.**
+    /// A rebuild states it, on
+    /// [`Request::authorities`](crate::swap::Request::authorities); see there
+    /// for what reading it off whatever happened to be live would cost.
+    authorities: Vec<Authority>,
     /// **How many L1 *procedures* the Set was built from**, which is not
     /// `sources.len()` when the chain pairs: two procedures become one source
     /// with two simulations in it. `params` and `ranges` are per procedure and
@@ -2607,8 +2701,14 @@ impl Set {
             .chain(l4s.iter().map(|n| declared(n)))
             .chain(fields.iter().map(|n| declared(n)))
             .collect();
+        // **Every node the operator's, on a Set nobody has spoken for yet.**
+        // Derived from the same `names` walk the params and the ranges are, so
+        // a node's authority cannot end up at a different index from its name.
+        // A request states the rest — see `swap::Request::authorities`.
+        let authorities = vec![Authority::default(); names.len()];
         let set = Set {
             names,
+            authorities,
             seed_salt,
             source_salts,
             steps_taken: 0,
@@ -3239,6 +3339,42 @@ impl Set {
         match self.params.get_mut(slot).and_then(|n| n.get_mut(name)) {
             Some(held) => {
                 *held = value;
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// **Who may move one node.** `None` if that node does not exist.
+    ///
+    /// The read the console's `man / sug / auto` chip has been missing:
+    /// `Operation::SetAuthority` and `Record::Authority` landed with
+    /// `docs/adr/0211-authority-is-set-per-node-and-the-record-is-the-sessions.md`
+    /// and had a vocabulary to speak and nothing to answer them. This is the
+    /// value a surface draws.
+    ///
+    /// Addressed the way every other per-node read is — `(layer, index)`
+    /// stepped through `nodes_of` rather than added to `slot_of`. See
+    /// [`Set::set_param_at`] for the walk-out-the-other-end that refuses.
+    pub fn authority(&self, layer: Kind, index: u32) -> Option<Authority> {
+        let slot = self.nodes_of(layer).nth(index as usize)?;
+        self.authorities.get(slot).copied()
+    }
+
+    /// **Grant or take back one node.** `false` if that node does not exist,
+    /// which is the caller's cue to say so — a rebuild may name fewer nodes
+    /// than the Set an authority was recorded against.
+    ///
+    /// A destination and never a step, which is
+    /// `docs/principles/0074-an-operation-says-what-it-wants-never-which-way-to-move.md`:
+    /// a control that cycles the three is an affordance built over this.
+    pub fn set_authority(&mut self, layer: Kind, index: u32, authority: Authority) -> bool {
+        let Some(slot) = self.nodes_of(layer).nth(index as usize) else {
+            return false;
+        };
+        match self.authorities.get_mut(slot) {
+            Some(held) => {
+                *held = authority;
                 true
             }
             None => false,
@@ -4578,7 +4714,60 @@ proc signed_defaults {
         );
     }
 
-    // The two that build a Set for real. The two above check the layout arithmetic
+    /// **A node nobody has spoken for is the operator's.**
+    ///
+    /// `docs/adr/0211-…` never states a default in so many words, so this is
+    /// where the one the engine took is written down and held. Rule 06 is about
+    /// what an operator *grants* — *"There is no switch that hands the whole
+    /// instrument to an agent"* — and any other default would be exactly that
+    /// switch, thrown for every node of every Set at build time and by nobody.
+    ///
+    /// Asserted through `Default` rather than by naming the variant twice: the
+    /// build path fills the list with `Authority::default()`, so this is the
+    /// value it actually puts there.
+    ///
+    /// No GPU: this is the value list and its default, and pinning it here
+    /// rather than through a built `Set` is what keeps the failure legible.
+    #[test]
+    fn a_node_nobody_has_spoken_for_is_manual() {
+        assert_eq!(Authority::default(), Authority::Manual);
+        assert_eq!(
+            Authority::ALL[0],
+            Authority::default(),
+            "the list should start where a node starts"
+        );
+    }
+
+    /// **The three words a record is read back with**, and the round trip that
+    /// keeps `Record::Authority`'s `String` readable by this build.
+    ///
+    /// They are rule 06's own — *manual*, *suggesting*, *automatic* — and not
+    /// the console's `man / sug / auto`, which is a node head's abbreviation
+    /// for a reader. `karakuri_operation::Authority::name` writes the same
+    /// three, and `karakuri-operation-record`'s
+    /// `the_three_authority_levels_are_named_as_the_record_spells_them` is the
+    /// other half of the pair.
+    #[test]
+    fn every_authority_has_a_name_and_answers_to_it() {
+        assert_eq!(Authority::Manual.name(), "manual");
+        assert_eq!(Authority::Suggesting.name(), "suggesting");
+        assert_eq!(Authority::Automatic.name(), "automatic");
+        for level in Authority::ALL {
+            assert_eq!(
+                Authority::from_name(level.name()),
+                Some(level),
+                "`{}` does not read back as the level that wrote it",
+                level.name()
+            );
+        }
+        assert_eq!(
+            Authority::from_name("man"),
+            None,
+            "the console's abbreviation is a surface's vocabulary, not a record's"
+        );
+    }
+
+    // The two that build a Set for real. The ones above check the layout arithmetic
     // `Set::build` would go on to use, and take no device — which is most of what
     // `cargo test -p karakuri-engine --lib -- --skip gpu::` is for.
     // See `../tests/gpu_tests_are_under_mod_gpu.rs`.

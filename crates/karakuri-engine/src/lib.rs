@@ -68,7 +68,7 @@ pub use meter::{Level, Meters};
 pub use points::{Params, Points};
 pub use present::{letterbox, Present, TonemapOp};
 pub use probe::{Measurement, Probe};
-pub use set::{Set, SetError};
+pub use set::{Authority, Set, SetError};
 pub use swap::{measure, Event, HotSwap, Request, Source, DEFAULT_BUDGET_MS};
 pub use transition::{Control, Transition};
 pub use video_source::VideoSource;

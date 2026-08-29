@@ -2584,6 +2584,7 @@ proc wash {
             salts: Vec::new(),
             params: Vec::new(),
             bindings: Vec::new(),
+            authorities: Vec::new(),
             label: "slot 0, second".to_string(),
         })
         .expect("worker alive");
@@ -2704,6 +2705,7 @@ proc wash {
             salts: Vec::new(),
             params: Vec::new(),
             bindings: Vec::new(),
+            authorities: Vec::new(),
             label: "off air".to_string(),
         })
         .expect("worker alive");

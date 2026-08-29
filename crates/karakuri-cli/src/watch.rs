@@ -215,6 +215,34 @@ pub struct Watch {
     /// these out would turn every save of a morph's `.kir` into a build that
     /// does not land, with the picture frozen at whatever startup produced.
     edges: Vec<karakuri_engine::set::Edge>,
+    /// **Who may move each node the operator has spoken for**, restated on
+    /// every rebuild for the reason the edges above it are: a request that
+    /// depended on what happened to be live is not reproducible from a record
+    /// stream. Concretely, and this is the whole of it — an operator grants a
+    /// node to an agent, a `.kir` in the slot is saved, and the rebuild takes
+    /// the grant back without a word. A picture that changed says so; an
+    /// arrangement about who may write does not.
+    ///
+    /// **Empty in every run there is today, and said here rather than hidden
+    /// at the request.** Nothing writes an authority into a watcher yet, and
+    /// the startup path is not the thing that will: `Record::Authority` is
+    /// deliberately *not* Set-file state — `setfile` and
+    /// `karakuri_store::project` both drop it, because an authority is an
+    /// arrangement made during a performance and a Set file carrying one would
+    /// hand the node over wherever it was next loaded. So there is no
+    /// `--load-set` reading to seed this from, and a `Vec::new()` spelled at
+    /// the `Request` would have been the truth of today and unreachable
+    /// tomorrow. It is a field, taken through [`Watch::new`] like the bindings
+    /// and the edges beside it, so that the day a writer exists there is
+    /// somewhere for it to write: a field that cannot be filled is worse than
+    /// no field at all.
+    ///
+    /// **The run's own grants are not tracked here**, which is a limit on
+    /// `Watch::live`'s exact terms rather than an oversight: an
+    /// `Operation::SetAuthority` moves a node at a frame this watcher never
+    /// sees, so a rebuild restates what the slot was *handed*, and what a hand
+    /// did later is in the stream as an `authority` record.
+    authorities: Vec<karakuri_engine::swap::AuthorityAt>,
     /// A hash of each file's contents as of the previous poll. `None` for a
     /// file that does not exist or cannot be read, which compares equal to
     /// itself and so reads as "unchanged" rather than as a change every
@@ -234,11 +262,11 @@ pub struct Watch {
 }
 
 impl Watch {
-    // Thirteen, where clippy's line is seven. Every one of them is a piece of
+    // Fourteen, where clippy's line is seven. Every one of them is a piece of
     // one slot's identity — its files, its layering, its fold, its capacity,
-    // its seed, its salts, its camera and the values it was started with — and
-    // a struct to carry them would be `Watch` itself, constructed one field
-    // short.
+    // its seed, its salts, its camera, and the values and grants it was
+    // started with — and a struct to carry them would be `Watch` itself,
+    // constructed one field short.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         slot: usize,
@@ -254,6 +282,7 @@ impl Watch {
         published: Vec<karakuri_engine::set::Published>,
         bindings: Vec<Binding>,
         edges: Vec<karakuri_engine::set::Edge>,
+        authorities: Vec<karakuri_engine::swap::AuthorityAt>,
     ) -> Watch {
         let mut watch = Watch {
             builds: 0,
@@ -272,6 +301,7 @@ impl Watch {
             published,
             bindings,
             edges,
+            authorities,
             stamps: Vec::new(),
             settling: false,
         };
@@ -544,6 +574,13 @@ impl Source for Watch {
             params: self.overrides.clone(),
             published: self.published.clone(),
             bindings: self.bindings.clone(),
+            // **Who may move each node, restated with them.** Empty in every
+            // run today, and cloned from the field rather than spelled
+            // `Vec::new()` here for the reason `Watch::authorities` gives: what
+            // is stated at the request is what the rebuild carries, so the day
+            // a grant is handed to a watcher this is already the line that
+            // stops the next save from taking it back.
+            authorities: self.authorities.clone(),
             label,
         })
     }
@@ -564,6 +601,7 @@ mod tests {
             1,
             vec![1],
             karakuri_engine::camera::Orbit::default(),
+            Vec::new(),
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -620,6 +658,7 @@ mod tests {
             Vec::new(),
             Vec::new(),
             Vec::new(),
+            Vec::new(),
         );
         for (file, path) in files.iter().zip(&paths) {
             std::fs::copy(root.join("examples").join(file), path).expect("copy an example");
@@ -666,6 +705,7 @@ mod tests {
             salts[0],
             salts.clone(),
             karakuri_engine::camera::Orbit::default(),
+            Vec::new(),
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -720,6 +760,7 @@ mod tests {
             1,
             vec![1],
             aimed,
+            Vec::new(),
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -779,6 +820,7 @@ mod tests {
             1,
             vec![1],
             karakuri_engine::camera::Orbit::default(),
+            Vec::new(),
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -851,6 +893,7 @@ mod tests {
             Vec::new(),
             Vec::new(),
             edges.clone(),
+            Vec::new(),
         );
         for (file, path) in files.iter().zip(&paths) {
             std::fs::copy(root.join("examples").join(file), path).expect("copy an example");
@@ -866,6 +909,73 @@ mod tests {
         assert_eq!(
             request.edges, edges,
             "a rebuild dropped the wiring, so the slot it rebuilds is unbound"
+        );
+    }
+
+    /// **A rebuild restates the authority the slot's nodes were handed.**
+    ///
+    /// The failure this is against is the one every field beside it is against,
+    /// and it is the quietest of them: an operator grants a node to an agent,
+    /// somebody saves a `.kir` in that slot, and the rebuild hands back a Set
+    /// where every node is `Authority::Manual` again — the default, and the
+    /// only default it could be. Nothing refuses it, because a rebuild is not a
+    /// surface, and nothing looks wrong, because an arrangement about who may
+    /// write a param does not draw. The grant is simply gone.
+    ///
+    /// **Asserted over a request rather than over a Set**, which is as far as
+    /// this side goes: applying the list is `HotSwap`'s, tested where it lives,
+    /// and reaching a built Set from here would want a device. What is this
+    /// watcher's to get wrong is whether the list survives the rebuild at all,
+    /// and that is exactly what this reads.
+    ///
+    /// **Two levels and two layers, neither of them the default.** A test that
+    /// granted one node `Manual` would pass against a request that dropped the
+    /// list entirely, since that is where the build would land anyway.
+    #[test]
+    fn a_rebuild_restates_the_authority_the_slots_nodes_were_handed() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let tmp = tempfile::tempdir().expect("temp dir");
+        // Two geometries and a renderer, so that a wrong index and a wrong
+        // layer are both failures this can see.
+        let files = ["drift_shell.kir", "lattice_shell.kir", "soft_points.kir"];
+        let paths: Vec<PathBuf> = files.iter().map(|f| tmp.path().join(f)).collect();
+        let authorities = vec![
+            karakuri_engine::swap::AuthorityAt::new(
+                karakuri_ir::Kind::L1,
+                1,
+                karakuri_engine::set::Authority::Automatic,
+            ),
+            karakuri_engine::swap::AuthorityAt::new(
+                karakuri_ir::Kind::L4,
+                0,
+                karakuri_engine::set::Authority::Suggesting,
+            ),
+        ];
+        let mut watch = Watch::new(
+            0,
+            crate::Named::bare(paths[0].clone()),
+            paths[1..].iter().cloned().map(crate::Named::bare).collect(),
+            karakuri_engine::set::Layering::Overdraw,
+            None,
+            Some(4096),
+            1,
+            vec![1, 2],
+            karakuri_engine::camera::Orbit::default(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            authorities.clone(),
+        );
+        for (file, path) in files.iter().zip(&paths) {
+            std::fs::copy(root.join("examples").join(file), path).expect("copy an example");
+        }
+
+        let request = rebuild(&mut watch).expect("a build");
+        assert_eq!(
+            request.authorities, authorities,
+            "a rebuild dropped the grants, so the next save takes back every node \
+             an operator gave away"
         );
     }
 
@@ -1010,6 +1120,7 @@ mod tests {
                 1,
                 vec![1],
                 karakuri_engine::camera::Orbit::default(),
+                Vec::new(),
                 Vec::new(),
                 Vec::new(),
                 Vec::new(),
