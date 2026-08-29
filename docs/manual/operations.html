@@ -42,19 +42,52 @@
     <h2>How to read a row</h2>
     <div class="legend">
       <span><i class="has"></i> built &mdash; this surface reaches it today</span>
-      <span><i class="plan"></i> designed &mdash; this surface is meant to reach it, and no program a player runs does yet</span>
+      <span><i class="plan"></i> designed &mdash; this surface is meant to reach it and does not yet</span>
       <span><i class="gap"></i> nothing &mdash; this surface cannot reach it at all</span>
     </div>
     <p>
-      <strong>50 operations, and 57 of the 216 ways in exist.</strong> Six of them
+      <strong>The <em>key</em> column is the instrument's keyboard</strong>
+      &mdash; the keys <code>cargo run -p karakuri</code> binds, and no other
+      program's. Two programs in this repository have a keyboard and they are
+      not the same keyboard: the instrument binds nine keys,
+      <code>karakuri-cli</code> binds thirty-nine, and eight letters mean one
+      thing at the panel and something else at the command line. Only
+      <code>esc</code> agrees. So a <em>built</em> key badge names a key an
+      operator at the panel can press today, for the same reason a
+      <em>built</em> panel badge names a control they can reach: both columns
+      are about the one program a player launches, and a badge that mixed the
+      two would tell a reader to press a letter that does something else in
+      front of them. A <em>designed</em> key badge names the key this page has
+      specified &mdash; <a href="console.html">the console</a> defers to it,
+      because which keys exist is this page's to say &mdash; and the instrument
+      does not bind it yet. The command line's own keyboard is printed by
+      <code>cargo run -p karakuri-cli -- --help</code>, which is derived from
+      its key handler and checked against it; it is not this column, and a
+      second copy of it here would be a list that goes stale.
+    </p>
+    <p>
+      <strong>50 operations, and 42 of the 216 ways in exist.</strong> Six of them
       arrived with the console's own shape &mdash; moving a boundary, folding a bay
       or a pane, bringing one back, solo, and resetting the arrangement &mdash; and
-      one of their twenty-four routes exists: the drag. Four of the six name a
-      pointer home and nothing but the pointer is named anywhere here; two have
-      no route at all: a folded region has no rectangle for a
-      pointer to find, and resetting is the default case of a family &mdash; keeping an
-      arrangement and putting one back &mdash; that has nowhere on the console to live
-      until the rest of it exists. <strong>Six <em>panel</em> routes are
+      six of their twenty-four routes exist: the drag, and a key on each of the
+      other five. <strong>Every row of that section has a route now</strong>,
+      where two of them had none at all: a folded region still has no rectangle
+      for a pointer to find, and <code>z</code> brings it back without one;
+      resetting is still the default case of a family &mdash; keeping an
+      arrangement and putting one back &mdash; that has nowhere on the console to
+      live until the rest of it exists, and <code>r</code> performs it anyway.
+      <strong>Twenty <em>key</em> badges are designed rather than built, and
+      every one of them is a key the command line binds today.</strong> The
+      column is the instrument's keyboard and the instrument binds nine keys, so
+      the twenty are what the command line reaches and the panel does not; the
+      letters stay because this page is where a key is specified, and seven of
+      them are already spoken for at the panel &mdash; <code>f</code> and
+      <code>g</code> fold, <code>z</code> brings back what is folded,
+      <code>u</code> unsolos, <code>r</code> resets, <code>p</code> asks the
+      panel to report itself and <code>n</code> changes its colours. Whether the
+      instrument takes those letters or the command line gives them up is a
+      decision nobody has made, and it is a change to this specification rather
+      than a note on it. <strong>Six <em>panel</em> routes are
       marked built</strong>, and they are the whole of that column: the strip
       trim, the strip fader, the strip button, the tally chip and the strip mask
       mini, every one of them in the Mixer bay, and every divider on the panel,
@@ -96,7 +129,7 @@
         <p>Three taps or more set the tempo; any tap sets the phase. Refused without an audio input attached.</p>
         <div class="rts">
           <span class="rt plan">panel <b>tap</b></span>
-          <span class="rt has">key <b>b</b></span>
+          <span class="rt plan">key <b>b</b></span>
           <span class="rt has">MIDI <b>note &rarr; tap</b></span>
           <span class="rt gap">MCP <b>&mdash;</b></span>
         </div>
@@ -106,7 +139,7 @@
         <p>Moves the tracker's octave window with it, and is refused if it would leave the trackable range.</p>
         <div class="rts">
           <span class="rt plan">panel <b>&frac12; &times;2</b></span>
-          <span class="rt has">key <b>, .</b></span>
+          <span class="rt plan">key <b>, .</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt gap">MCP <b>&mdash;</b></span>
         </div>
@@ -116,7 +149,7 @@
         <p>Five milliseconds a press, for the delay between what a room hears and what it sees.</p>
         <div class="rts">
           <span class="rt plan">panel <b>offset</b></span>
-          <span class="rt has">key <b>o p</b></span>
+          <span class="rt plan">key <b>o p</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt gap">MCP <b>&mdash;</b></span>
         </div>
@@ -126,7 +159,7 @@
         <p>Free, tempo-synced, or beat-synced &mdash; and a mode a deck's material cannot honour is skipped with a reason.</p>
         <div class="rts">
           <span class="rt plan">panel <b>deck head</b></span>
-          <span class="rt has">key <b>y</b></span>
+          <span class="rt plan">key <b>y</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt gap">MCP <b>&mdash;</b></span>
         </div>
@@ -136,7 +169,7 @@
         <p>Only where the deck is beat-synced: closed-form material can be moved to a position, accumulating material cannot.</p>
         <div class="rts">
           <span class="rt plan">panel <b>deck head</b></span>
-          <span class="rt has">key <b>u i</b></span>
+          <span class="rt plan">key <b>u i</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt gap">MCP <b>&mdash;</b></span>
         </div>
@@ -175,7 +208,7 @@
         <p>Which deck the keys are addressed to. A console pointer &mdash; it writes no record, and it is not the same as keyboard focus.</p>
         <div class="rts">
           <span class="rt plan">panel <b>click a strip</b></span>
-          <span class="rt has">key <b>0&ndash;3</b></span>
+          <span class="rt plan">key <b>0&ndash;3</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt gap">MCP <b>&mdash;</b></span>
         </div>
@@ -185,7 +218,7 @@
         <p>Three states, not two switches: <b>live</b> is stepped and composited, <b>priming</b> is stepped out of sight and adds nothing to the mix, <b>allocated</b> is held &mdash; compiled, buffers kept, its <i>t</i> where it stopped, so a deck taken off and brought back resumes rather than restarts. Live is honoured: nothing demotes a deck that is on air. Priming is a request the governor reconsiders every pass, and a deck asked to prime with no room is <b>parked</b> &mdash; the request stands and takes effect when there is room, so what the console shows is the residency the deck reports, not the one it was asked for. MIDI names the deck <em>and the state</em>, so it needs no selection and no notion of which way to flip &mdash; a pad per state, and a key acts on the selected deck.</p>
         <div class="rts">
           <span class="rt has">panel <b>tally chip</b></span>
-          <span class="rt has">key <b>space, w</b></span>
+          <span class="rt plan">key <b>space, w</b></span>
           <span class="rt has">MIDI <b>note &rarr; residency N live|priming|allocated</b></span>
           <span class="rt gap">MCP <b>&mdash;</b></span>
         </div>
@@ -224,7 +257,7 @@
         <p>The trim: the level material arrives at, colour only. A key steps it; a MIDI control sets it outright.</p>
         <div class="rts">
           <span class="rt has">panel <b>strip trim</b></span>
-          <span class="rt has">key <b>[ ] \\</b></span>
+          <span class="rt plan">key <b>[ ] \\</b></span>
           <span class="rt has">MIDI <b>cc &rarr; gain N</b></span>
           <span class="rt gap">MCP <b>&mdash;</b></span>
         </div>
@@ -234,7 +267,7 @@
         <p>The fader across the blend, and the only one of the two that touches what a layer covers.</p>
         <div class="rts">
           <span class="rt has">panel <b>strip fader</b></span>
-          <span class="rt has">key <b>; '</b></span>
+          <span class="rt plan">key <b>; '</b></span>
           <span class="rt has">MIDI <b>cc &rarr; opacity N</b></span>
           <span class="rt gap">MCP <b>&mdash;</b></span>
         </div>
@@ -244,7 +277,7 @@
         <p>How a deck meets the ones under it in the fold. The key cycles the three; a map names the one it wants, which is why a pad is per mode rather than per deck.</p>
         <div class="rts">
           <span class="rt has">panel <b>strip button</b></span>
-          <span class="rt has">key <b>m</b></span>
+          <span class="rt plan">key <b>m</b></span>
           <span class="rt has">MIDI <b>note &rarr; blend N add|over|max</b></span>
           <span class="rt gap">MCP <b>&mdash;</b></span>
         </div>
@@ -254,7 +287,7 @@
         <p>Starts at the current quantum and lasts the current length. Opacity only &mdash; a gain fade exists in the record vocabulary and has no control.</p>
         <div class="rts">
           <span class="rt plan">panel <b>strip</b></span>
-          <span class="rt has">key <b>f g</b></span>
+          <span class="rt plan">key <b>f g</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt gap">MCP <b>&mdash;</b></span>
         </div>
@@ -264,7 +297,7 @@
         <p>One gesture, four records: the incoming deck is silenced and put on air at once, and the two fades land on the grid.</p>
         <div class="rts">
           <span class="rt plan">panel <b>crossfader</b></span>
-          <span class="rt has">key <b>x</b></span>
+          <span class="rt plan">key <b>x</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt gap">MCP <b>&mdash;</b></span>
         </div>
@@ -274,7 +307,7 @@
         <p>Mask, opacity, blend and residency land immediately; the mask's travel is scheduled. Refused with no shape chosen.</p>
         <div class="rts">
           <span class="rt plan">panel <b>transition row</b></span>
-          <span class="rt has">key <b>c</b></span>
+          <span class="rt plan">key <b>c</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt gap">MCP <b>&mdash;</b></span>
         </div>
@@ -304,7 +337,7 @@
         <p>These change nothing you can see and write nothing to the stream. They decide what the <em>next</em> fade, crossfade or wipe means.</p>
         <div class="rts">
           <span class="rt plan">panel <b>transition row</b></span>
-          <span class="rt has">key <b>z n j</b></span>
+          <span class="rt plan">key <b>z n j</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt gap">MCP <b>&mdash;</b></span>
         </div>
@@ -314,7 +347,7 @@
         <p>Only where the deck composites and holds two or more. One-way: no position in the cycle folds them all back in.</p>
         <div class="rts">
           <span class="rt plan">panel <b>renderer chips</b></span>
-          <span class="rt has">key <b>r</b></span>
+          <span class="rt plan">key <b>r</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt gap">MCP <b>&mdash;</b></span>
         </div>
@@ -324,7 +357,7 @@
         <p>The mix, or one deck auditioned. MIDI can name a deck or the mix directly.</p>
         <div class="rts">
           <span class="rt plan">panel <b>preview</b></span>
-          <span class="rt has">key <b>v</b></span>
+          <span class="rt plan">key <b>v</b></span>
           <span class="rt has">MIDI <b>note &rarr; preview N|mix</b></span>
           <span class="rt gap">MCP <b>&mdash;</b></span>
         </div>
@@ -334,7 +367,7 @@
         <p>The transfer from unbounded linear HDR to something displayable &mdash; clamp, Reinhard, ACES or AgX. The key cycles the four; a map or a model would name the one it wants.</p>
         <div class="rts">
           <span class="rt plan">panel <b>transport</b></span>
-          <span class="rt has">key <b>t</b></span>
+          <span class="rt plan">key <b>t</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt gap">MCP <b>&mdash;</b></span>
           <span class="rt has">CLI <b>--tonemap</b></span>
@@ -345,7 +378,7 @@
         <p>The level going into that transfer. A key steps it in stops and returns it to 1.0; a MIDI control sets it outright. The record it lands in names the operator beside it, and whoever writes that record fills the operator in from the look that is running &mdash; a control turning exposure alone does not have to know one.</p>
         <div class="rts">
           <span class="rt plan">panel <b>transport</b></span>
-          <span class="rt has">key <b>- = `</b></span>
+          <span class="rt plan">key <b>- = `</b></span>
           <span class="rt has">MIDI <b>cc &rarr; exposure</b></span>
           <span class="rt gap">MCP <b>&mdash;</b></span>
           <span class="rt has">CLI <b>--exposure</b></span>
@@ -455,7 +488,7 @@
         <p>Writes the material <em>on screen</em> &mdash; the versions running, with their parameters, capacities, salts, layering and fold &mdash; not what any file on disk says. The tool waits for the disk and reports; the key does not.</p>
         <div class="rts">
           <span class="rt plan">panel <b>keep</b></span>
-          <span class="rt has">key <b>k</b></span>
+          <span class="rt plan">key <b>k</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt has">MCP <b>save_set</b></span>
         </div>
@@ -572,7 +605,7 @@
         <p>A folded bay takes no space at all and no divider is drawn beside it; what it had goes to the bay that takes height back in that pane. Its size is remembered, so bringing it back puts it where it was.</p>
         <div class="rts">
           <span class="rt plan">panel <b>bay head</b></span>
-          <span class="rt gap">key <b>&mdash;</b></span>
+          <span class="rt has">key <b>f g</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt gap">MCP <b>&mdash;</b></span>
         </div>
@@ -582,17 +615,17 @@
         <p>The whole left or right pane, with everything in it, and the centre takes the width. The centre is not a third pane and does not fold &mdash; what you want there is solo.</p>
         <div class="rts">
           <span class="rt plan">panel <b>pane edge</b></span>
-          <span class="rt gap">key <b>&mdash;</b></span>
+          <span class="rt has">key <b>f g</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt gap">MCP <b>&mdash;</b></span>
         </div>
       </div>
       <div class="op">
         <div class="op-head"><h3>Bring back what is folded</h3><span class="op-when ">immediate</span></div>
-        <p><strong>A folded region has no rectangle, so a pointer cannot reach it.</strong> That makes this the one operation here that a mouse cannot be the only way into &mdash; folding is one-way for a pointer, and something else has to undo it.</p>
+        <p><strong>A folded region has no rectangle, so a pointer cannot reach it.</strong> That makes this the one operation here that a mouse cannot be the only way into &mdash; folding is one-way for a pointer, and something else has to undo it. <code>z</code> is that something else, and it brings back everything folded rather than one region, because a region a pointer cannot reach is a region a key has no way to name either.</p>
         <div class="rts">
           <span class="rt gap">panel <b>&mdash;</b></span>
-          <span class="rt gap">key <b>&mdash;</b></span>
+          <span class="rt has">key <b>z</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt gap">MCP <b>&mdash;</b></span>
         </div>
@@ -602,7 +635,7 @@
         <p>Everything that is not this region, on the way to it, or inside it folds away, and it holds the window. On the program that is the panel folding away and only the picture left, which is also how you capture this window. Undoing it restores what was folded before, including whatever was already folded.</p>
         <div class="rts">
           <span class="rt plan">panel <b>solo</b></span>
-          <span class="rt gap">key <b>&mdash;</b></span>
+          <span class="rt has">key <b>s u</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt gap">MCP <b>&mdash;</b></span>
         </div>
@@ -612,7 +645,7 @@
         <p>The default arrangement back, in the window you already have. <strong>It is the one operation here that forgets</strong>, and what it forgets is what the rest of this section promises to keep: every fold, every boundary you have dragged, the solo, and the remembered sizes a folded bay and a window dragged too small are both holding for you. This is the special case of putting a saved arrangement back &mdash; and it is the only member of that family that exists, because naming an arrangement, keeping one and restoring one are not built, so there is nothing to reset <em>to</em> but the default and nothing to return to afterwards. A pad could name it: it addresses nothing, where every other row here needs a region a map line has no way to spell. None does yet.</p>
         <div class="rts">
           <span class="rt gap">panel <b>&mdash;</b></span>
-          <span class="rt gap">key <b>&mdash;</b></span>
+          <span class="rt has">key <b>r</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt gap">MCP <b>&mdash;</b></span>
         </div>
@@ -629,7 +662,7 @@
         <p>The window is a preview and has no say in what is drawn: the canvas is fixed for the run, and the window fits it with the leftover black.</p>
         <div class="rts">
           <span class="rt plan">panel <b>drag</b></span>
-          <span class="rt has">key <b>a</b></span>
+          <span class="rt plan">key <b>a</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt gap">MCP <b>&mdash;</b></span>
           <span class="rt has">CLI <b>--size, --canvas</b></span>
@@ -689,9 +722,22 @@
       own, though: a map line names one of the operations on this page, and it
       names it outright &mdash; which state, which mode &mdash; rather than
       saying <em>step it</em>. It also has no idea of a selected deck &mdash;
-      it names the deck in the message &mdash; where the keys have nothing but
-      the selected deck. The same operation is addressed two different ways on
-      two surfaces.
+      it names the deck in the message &mdash; where the command line's keys
+      have nothing but the selected deck. The same operation is addressed two
+      different ways on two surfaces.
+    </p>
+    <p>
+      <strong>The keyboard's twenty designed rows are one program's keys waiting
+      for another's.</strong> This column is the instrument's keyboard, and
+      twenty rows on it &mdash; across the transport, the decks, the mixer, the
+      library and the window &mdash; are reached by pressing a key today, in
+      <code>karakuri-cli</code>, which is not the program the panel is in. That
+      is a gap of a kind none of the others here are: nothing is undecided,
+      nothing is unspellable, and no control is unbuilt. The keys exist, they
+      are specified on this page, and the window a player opens does not read
+      them yet. What it waits on is the work of putting those operations behind
+      the panel's own keyboard, and one decision beside it: which of the two
+      keyboards keeps the seven letters they both want.
     </p>
     <p>
       <strong>A model can rewrite a whole procedure and cannot turn one knob.</strong>
@@ -712,17 +758,28 @@
       it, the row is a word the instrument can say and cannot keep.
     </p>
     <p>
-      <strong>Arranging the console is reachable from a pointer and nothing else</strong>,
-      which is the first rule broken by the surface the first rule is about. A
-      divider that can only be dragged is a control the keyboard cannot touch,
-      and folding is worse than that: a folded region has no rectangle, so a
-      pointer cannot even reach it to undo itself. <strong>How a pane is sized and
-      unfolded without a mouse is not decided</strong>, and it is decided by naming
-      these operations rather than by drawing anything. <em>Reset the arrangement</em>
-      is the exception that says what the rest of the section is short of rather
-      than what a surface is: it names no region, so a pad could reach it the way a
-      pad reaches <em>tap</em>, and what it is waiting for is the family it is the
-      default case of.
+      <strong>Arranging the console is reached from the keyboard</strong>, and
+      until the instrument existed it was reachable from a pointer and nothing
+      else &mdash; which is what this paragraph said, and it called it the first
+      rule broken by the surface the first rule is about. Five of its six rows
+      are built in the <em>key</em> column and one in the <em>panel</em> column:
+      <code>f</code> and <code>g</code> fold whatever the pointer is over,
+      <code>z</code> brings everything back, <code>s</code> and <code>u</code>
+      solo and unsolo, <code>r</code> resets, and the pointer's own route is the
+      drag. <strong>How a region is unfolded without a mouse is decided, and
+      <code>z</code> is the answer</strong>: a folded region still has no
+      rectangle, so a pointer still cannot reach it to undo itself, and it no
+      longer has to. <strong>What is still short is the boundary.</strong> A
+      divider is dragged and nothing else, because
+      <code>Layout::set_divider</code> takes a viewport pixel and a key press
+      cannot mean one &mdash; the vocabulary carries <em>Move a boundary</em> as
+      undecided for exactly that reason. It is the one row here with no route but
+      the pointer's, and it is what is left of the first rule being broken by the
+      surface the first rule is about. <em>Reset the arrangement</em> is no
+      longer waiting on the family it is the default case of in order to be
+      reached at all &mdash; <code>r</code> performs it &mdash; but MIDI is still
+      empty: it names no region, so a pad could reach it the way a pad reaches
+      <em>tap</em>, and none does.
     </p>
     <p>
       <strong>The command line is the only way into most of what a Set is</strong>

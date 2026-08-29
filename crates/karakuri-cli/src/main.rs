@@ -5083,9 +5083,17 @@ impl Live {
     /// - **The vocabulary does not name it at all.** `s` prints the status line
     ///   and `h`/`?` print [`BINDINGS`]. Neither has a row on
     ///   `docs/manual/operations.html`, which is the specification for which
-    ///   keys exist — so neither is an operation anybody has specified. Left
-    ///   as found and reported, because a row invented here would be a
-    ///   specification written from the implementation.
+    ///   **operations** exist — so neither is an operation anybody has
+    ///   specified. Left as found and reported, because a row invented here
+    ///   would be a specification written from the implementation.
+    ///
+    ///   *(This clause said that page is the specification for which keys
+    ///   exist, and that stopped being true of **this** keyboard on
+    ///   2026-08-29. Its `key` column is the instrument's keyboard — the keys
+    ///   `cargo run -p karakuri` binds — and these thirty-nine are the command
+    ///   line's own, which no column measures. The two collide on eight
+    ///   letters. See
+    ///   `docs/adr/0220-the-key-column-is-the-instruments-keyboard-and-the-clis-keys-are-its-own.md`.)*
     fn key(&mut self, key: &Key) -> bool {
         match key.as_ref() {
             Key::Named(NamedKey::Escape) => return true,

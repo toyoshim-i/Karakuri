@@ -5215,6 +5215,423 @@ mod tests {
 }
 
 #[cfg(test)]
+mod key_column {
+    //! **The key column of the manual, against the keys this window binds.**
+    //!
+    //! [ADR-0213](../../../docs/adr/0213-the-interface-milestones-meter-is-the-panel-column-and-has-means-an-operator-reaches-it.md)
+    //! defined the *panel* column of `docs/manual/operations.html` — `has`
+    //! means an operator running the instrument reaches the operation — and
+    //! said nothing about the other three. The *key* column then stopped being
+    //! well defined, because
+    //! [ADR-0214](../../../docs/adr/0214-the-program-moves-out-of-the-cli-and-two-thin-binaries-sit-over-it.md)
+    //! gave this workspace a second keyboard: `karakuri-cli` binds thirty-nine
+    //! keys and this program binds nine, **eight letters mean different things
+    //! on the two**, and a badge saying `key f g` did not say whose.
+    //!
+    //! The page now says whose, in its legend: **the key column is the
+    //! instrument's keyboard**, which is this file's `match` on
+    //! `key.logical_key`. That is ADR-0213's definition one column along — the
+    //! property is *the operator at the panel presses it*, and *which cargo
+    //! target binds a letter* is the shape ([P-0060](../../../docs/principles/0060-name-the-property-not-the-shape.md)).
+    //! This is the check that definition owes, both ways round, in the shape
+    //! `karakuri-environment/src/mcp.rs` uses for the MCP column and
+    //! `karakuri-console/tests/panel_column.rs` for the panel one.
+    //!
+    //! # Why the check is here and can be nowhere else
+    //!
+    //! The keys are in this file, and **nothing in this workspace may depend on
+    //! this package** — it is a binary with no library target on purpose, as
+    //! the crate header says: *a surface is where the buck stops*. The two
+    //! files that check the panel column both stop at exactly this boundary and
+    //! say so: `panel_column.rs` — *"reachability is a property of
+    //! `crates/karakuri/src/main.rs` … and this crate takes no device and
+    //! cannot depend on that binary (ADR-0156). So this file checks the
+    //! necessary half and not the sufficient one"* — and `vocabulary.rs` the
+    //! same. A key column check has that problem twice over, because the other
+    //! keyboard is in `karakuri-cli`, which no crate can depend on either.
+    //!
+    //! So it is a unit test in the binary that holds the keys. It cannot be an
+    //! integration test under `crates/karakuri/tests/`, because a package with
+    //! no library target has nothing for one to `use`; the arms are reachable
+    //! only from inside this file's own `#[cfg(test)]`.
+    //!
+    //! **The command line's keyboard is not this file's and not this column's.**
+    //! `karakuri-cli` documents its own keys in `BINDINGS` and has its own test
+    //! that every key `Live::key` acts on is in it. Nothing here reads that
+    //! package, and a second copy of its list here would be the thing
+    //! [P-0045](../../../docs/principles/0045-generate-the-vocabulary-prose-drifts-from-code.md)
+    //! forbids.
+    //!
+    //! # What it cannot see, and which way each one fails
+    //!
+    //! - **A key bound anywhere but a literal arm** — through a table, a
+    //!   helper, or `egui`'s own shortcut handling. Invisible to [`bound`], and
+    //!   a *false negative*: it cannot fail the direction that says every bound
+    //!   key is on the page, and it surfaces from the other direction the
+    //!   moment somebody marks that row built.
+    //! - **A key arm inside a block comment.** `/* … */` is not a line comment
+    //!   and reads as bound. A *false positive*, and it fails loudly: [`KEYS`]
+    //!   has no entry for it and
+    //!   [`the_keys_this_file_lists_are_the_keys_the_window_loop_binds`] names
+    //!   it.
+    //! - **This file does not press a key.** It reads an arm and reads the
+    //!   page. That `Op::Solo` actually solos is
+    //!   `karakuri-console/tests/vocabulary.rs`'s, which asks a running `Panel`;
+    //!   that the arm is reached at all is what
+    //!   `tests::a_drag_through_the_window_loops_own_routing_never_reaches_egui`
+    //!   asks about the pointer, and nothing asks it for keys.
+    //!   **`egui` sees every key before this `match` does**, and if it ever
+    //!   grew a focused widget that consumed one, the arm would still be here
+    //!   and this file would go on claiming an operator reaches it. That is the
+    //!   sufficient half, and it is not checked here either — one boundary
+    //!   further out than the two files above stop at.
+    //! - **Which rows a key lands on is written down rather than derived**, in
+    //!   [`KEYS`]. It has to be: `Op::Fold` folds a bay or a pane depending on
+    //!   what the pointer is over, and only the page separates those two rows.
+    //!   A wrong entry is a wrong claim, and it cannot be *quietly* wrong —
+    //!   both assertions below read the same list, so an entry naming a row
+    //!   that is not marked built fails one and a badge naming a key no entry
+    //!   claims fails the other.
+    //! - **Only the key column.** The panel column is
+    //!   `karakuri-console`'s two files, the MCP column is
+    //!   `karakuri-environment/src/mcp.rs`, and **the MIDI column is checked by
+    //!   nothing** — which this file says rather than being read as covering
+    //!   it.
+
+    use std::collections::BTreeSet;
+    use std::fs;
+    use std::path::{Path, PathBuf};
+
+    /// The specification, relative to the workspace root.
+    const PAGE: &str = "docs/manual/operations.html";
+
+    /// The keys, relative to the same root: this file, read as text. There is
+    /// no other way to ask *which keys does this program bind* from inside its
+    /// own test binary — the `match` is a `match`, not a table.
+    const SRC: &str = "crates/karakuri/src/main.rs";
+
+    /// What marks a row on the page — the marker `panel_column.rs`,
+    /// `vocabulary.rs` and `mcp.rs` all match, for the reason the first of them
+    /// gives: sections are `<h2>` and a heading somebody adds for looks is
+    /// neither.
+    const ROW: &str = r#"<div class="op-head">"#;
+
+    /// The badge text of a route that names nothing. A `plan` or `gap` badge is
+    /// allowed to be this; a `has` badge is not, because it would claim an
+    /// operator reaches the operation and decline to say what to press.
+    const NOWHERE: &str = "&mdash;";
+
+    /// Where [`bound`] stops reading. Everything below the first of these in
+    /// this file is a test, and a key spelled in a test is not a key this
+    /// program binds — including the ones spelled in [`KEYS`] a few lines down,
+    /// which would otherwise make the scan agree with itself.
+    const TESTS: &str = "#[cfg(test)]";
+
+    /// The two arm shapes the window loop's `match` is written in.
+    const CHARACTER: &str = r#"Key::Character(""#;
+    const NAMED: &str = "Key::Named(NamedKey::";
+
+    /// How the page spells a named key. Nothing in `NamedKey::Escape` says
+    /// `esc`, and the page is written for a person rather than for `winit`;
+    /// `karakuri-cli` keeps the same two-column table for the same reason.
+    const NAMED_KEYS: &[(&str, &str)] = &[("Escape", "esc")];
+
+    /// **Every key this program binds, and the rows of [`PAGE`] it reaches.**
+    ///
+    /// One entry per arm of the `match` in `window_event`, and the rows are the
+    /// page's headings byte for byte. Where an arm resolves through
+    /// `karakuri_console::panel::Op`, the rows are that variant's — the mapping
+    /// `karakuri-console/tests/vocabulary.rs` pins in `rows_of`, which is why
+    /// `f` and `g` each name two rows: a fold is a bay or a pane depending on
+    /// the region under the pointer, and the page describes those as two
+    /// consequences.
+    ///
+    /// An empty list is a key that reaches no row, and [`NO_ROW`] is where the
+    /// reason goes.
+    const KEYS: &[(&str, &[&str])] = &[
+        // `Op::Fold` of the region under the pointer.
+        ("f", &["Fold a bay away", "Fold a pane away"]),
+        // `Op::FoldEnclosing` over a region, `Op::Fold` of the split over a
+        // gap — one step up the tree either way, so the same two rows.
+        ("g", &["Fold a bay away", "Fold a pane away"]),
+        // The room's colours. Nothing in the arrangement moves and no
+        // `Outcome` says so, which is why it is not an operation.
+        ("n", &[]),
+        // `Op::Report`, and it has no row for good: its reply is a list of
+        // pixel rectangles keyed by a private handle, which three of the four
+        // surfaces could not carry (ADR-0205).
+        ("p", &[]),
+        ("r", &["Reset the arrangement"]),
+        ("s", &["Solo a region"]),
+        // `Op::UnfoldAll` — the page carries the region and the everything
+        // under one heading, as `vocabulary.rs` does.
+        ("u", &["Solo a region"]),
+        ("z", &["Bring back what is folded"]),
+        ("esc", &["Quit"]),
+    ];
+
+    /// The keys that reach no row, so that one which starts reaching one stops
+    /// being an exception, and a new exception is written down rather than
+    /// discovered. The reasons are at the entries in [`KEYS`].
+    const NO_ROW: &[&str] = &["n", "p"];
+
+    fn workspace() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .canonicalize()
+            .expect("workspace root")
+    }
+
+    fn page() -> String {
+        let path = workspace().join(PAGE);
+        fs::read_to_string(&path).unwrap_or_else(|e| {
+            panic!(
+                "{} is the specification and could not be read: {e}",
+                path.display()
+            )
+        })
+    }
+
+    /// **Every key the window loop's `match` binds**, read out of this file.
+    ///
+    /// Two cuts, `panel_column.rs`'s: a line whose first non-space characters
+    /// are `//` is dropped whole, and what is left is truncated at its first
+    /// `//`. The read stops at [`TESTS`].
+    fn bound() -> BTreeSet<String> {
+        let path = workspace().join(SRC);
+        let text = fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("{} holds the keys and is unreadable: {e}", path.display()));
+        let mut found = BTreeSet::new();
+        for line in text.lines() {
+            let line = line.trim();
+            if line == TESTS {
+                break;
+            }
+            if line.starts_with("//") {
+                continue;
+            }
+            let code = match line.find("//") {
+                Some(at) => &line[..at],
+                None => line,
+            };
+            for after in code.split(CHARACTER).skip(1) {
+                let Some(shut) = after.find('"') else {
+                    continue;
+                };
+                found.insert(after[..shut].to_owned());
+            }
+            for after in code.split(NAMED).skip(1) {
+                let end = after
+                    .find(|c: char| !c.is_alphanumeric() && c != '_')
+                    .unwrap_or(after.len());
+                let name = &after[..end];
+                let spelled = NAMED_KEYS
+                    .iter()
+                    .find(|(winit, _)| *winit == name)
+                    .map(|(_, page)| *page)
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "this file binds `NamedKey::{name}` and `NAMED_KEYS` has no spelling \
+                             for it — {PAGE} names a key in the words a person would say, and \
+                             nothing in `winit`'s name is those words"
+                        )
+                    });
+                found.insert(spelled.to_owned());
+            }
+        }
+        found
+    }
+
+    /// **Every row's title and its key badge**, in page order: the badge's
+    /// class — `has`, `plan` or `gap` — and the keys it names.
+    ///
+    /// Read verbatim and never decoded, which is `mcp.rs`'s rule and
+    /// `panel_column.rs`'s after it: a badge that names nothing says `&mdash;`,
+    /// and a key that needed decoding to match would be a key nobody could find
+    /// on their keyboard.
+    fn key_badges() -> Vec<(String, String, String)> {
+        let html = page();
+        let mut found = Vec::new();
+        for row in html.split(ROW).skip(1) {
+            let Some(open) = row.find("<h3>") else {
+                continue;
+            };
+            let rest = &row[open + "<h3>".len()..];
+            let Some(close) = rest.find("</h3>") else {
+                continue;
+            };
+            let title = rest[..close].to_string();
+            // The row ends where the next section does; a badge found past
+            // that would belong to another row.
+            let body = &rest[close..];
+            let body = &body[..body.find("</section>").unwrap_or(body.len())];
+            let mut badge = None;
+            for span in body.split(r#"<span class="rt "#).skip(1) {
+                let Some(quote) = span.find('"') else {
+                    continue;
+                };
+                let class = span[..quote].to_string();
+                let Some(text) = span[quote..].strip_prefix(r#"">key <b>"#) else {
+                    continue;
+                };
+                let Some(shut) = text.find("</b>") else {
+                    continue;
+                };
+                badge = Some((class, text[..shut].to_string()));
+                break;
+            }
+            let Some((class, keys)) = badge else {
+                continue;
+            };
+            found.push((title, class, keys));
+        }
+        found
+    }
+
+    /// The rows [`KEYS`] says a key reaches, or `None` if this program does not
+    /// bind it at all.
+    fn rows_of(key: &str) -> Option<&'static [&'static str]> {
+        KEYS.iter().find(|(k, _)| *k == key).map(|(_, rows)| *rows)
+    }
+
+    /// The floor under both directions: a scan that matched nothing would
+    /// satisfy every loop below by iterating over nothing at all.
+    #[test]
+    fn the_scan_finds_the_page_and_the_keys() {
+        let badges = key_badges();
+        assert!(
+            badges.len() >= 50,
+            "only {} rows with a key badge found in {PAGE} — is a row still `{ROW}` followed by \
+             an `<h3>` and its `rt` badges?",
+            badges.len()
+        );
+        assert!(
+            bound().len() >= 9,
+            "only {} keys found bound in {SRC} — the window loop's `match` has more arms than \
+             this, and a scan below it is a scan that has stopped matching code",
+            bound().len()
+        );
+    }
+
+    /// **The list and the `match` are the same list.** [`KEYS`] is the one
+    /// thing here the compiler cannot check, so an arm added without an entry —
+    /// or an entry left behind by an arm that went — arrives as a failure
+    /// rather than as a row nobody noticed had stopped being reachable.
+    #[test]
+    fn the_keys_this_file_lists_are_the_keys_the_window_loop_binds() {
+        let listed: BTreeSet<String> = KEYS.iter().map(|(k, _)| (*k).to_owned()).collect();
+        assert_eq!(
+            bound(),
+            listed,
+            "the keys the `match` in `window_event` binds are not the ones `KEYS` lists. An arm \
+             this file does not know about reaches an operation nothing checks the badge of; an \
+             entry with no arm claims a key an operator presses to no effect"
+        );
+    }
+
+    /// And the keys that reach no row are exactly [`NO_ROW`], both ways round.
+    #[test]
+    fn the_keys_that_reach_no_row_are_the_ones_written_down() {
+        let silent: Vec<&str> = KEYS
+            .iter()
+            .filter(|(_, rows)| rows.is_empty())
+            .map(|(k, _)| *k)
+            .collect();
+        assert_eq!(
+            silent, NO_ROW,
+            "the keys that reach no row on {PAGE} are not the ones this file says they are — a \
+             key that performs something the page never specified is a route nobody named"
+        );
+    }
+
+    /// **A key reaching past the page.**
+    ///
+    /// A key this program binds whose row is not marked built in the key column
+    /// — ADR-0213's failure mode from the side where the code moved first,
+    /// which is how this whole column came to be wrong: the panel binary was
+    /// given six arrangement keys and six rows went on reading `gap`.
+    #[test]
+    fn every_key_the_instrument_binds_reaches_a_route_marked_built() {
+        let badges = key_badges();
+        for (key, rows) in KEYS {
+            for row in *rows {
+                let found = badges
+                    .iter()
+                    .find(|(title, _, _)| title == row)
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "`{key}` reaches `{row}` and {PAGE} has no row with that heading — \
+                             the page is the specification, so add the row there first"
+                        )
+                    });
+                assert_eq!(
+                    found.1, "has",
+                    "`{key}` performs `{row}` at the panel, which {PAGE} marks `{}` in the key \
+                     column — an operation an operator reaches from the keyboard and a page \
+                     that says the instrument does not. Flip the badge, or say here why the key \
+                     does not reach it",
+                    found.1
+                );
+                assert!(
+                    found.2.split_whitespace().any(|k| k == *key),
+                    "`{key}` performs `{row}` and {PAGE} marks that row built in the key column \
+                     naming `{}` — a badge that says an operator reaches it by pressing \
+                     something else",
+                    found.2
+                );
+            }
+        }
+    }
+
+    /// **The page claiming a key nothing binds.**
+    ///
+    /// It fails apart from the test above because it is the other failure: that
+    /// one says the program reached past the specification, this one says the
+    /// specification tells a player to press a key the instrument does not
+    /// read. It is the likelier of the two here, because twenty rows carried a
+    /// built badge for `karakuri-cli`'s keyboard before the column said whose
+    /// it was.
+    #[test]
+    fn every_key_route_the_page_marks_built_is_bound_by_the_instrument() {
+        let badges = key_badges();
+        let claimed: Vec<&(String, String, String)> = badges
+            .iter()
+            .filter(|(_, class, _)| class == "has")
+            .collect();
+        assert!(
+            claimed.len() >= 6,
+            "only {} rows of {PAGE} mark a key route built — the scan found less than the column \
+             holds, which would pass this test by finding nothing",
+            claimed.len()
+        );
+        for (title, _, keys) in claimed {
+            assert_ne!(
+                keys, NOWHERE,
+                "{PAGE} marks `{title}` built in the key column and names no key for it — a \
+                 `has` badge says an operator reaches the operation, so it has to say what to \
+                 press"
+            );
+            for key in keys.split_whitespace() {
+                let rows = rows_of(key).unwrap_or_else(|| {
+                    panic!(
+                        "{PAGE} marks `{title}` built in the key column and names `{key}`, which \
+                         this program does not bind — the page tells a player to press a key the \
+                         instrument does not read. Either the key went and the badge is `plan` \
+                         again, or it is another program's: the key column is the instrument's \
+                         keyboard, and `karakuri-cli`'s keys are its own"
+                    )
+                });
+                assert!(
+                    rows.contains(&title.as_str()),
+                    "{PAGE} marks `{title}` built in the key column and names `{key}`, which \
+                     this program binds to {rows:?} instead — one letter, two operations"
+                );
+            }
+        }
+    }
+}
+
+#[cfg(test)]
 mod gpu {
     //! The console, through `egui`, through `wgpu` 30, onto a real device.
 

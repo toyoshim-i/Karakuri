@@ -1834,7 +1834,7 @@ the shape `crates/karakuri-engine/tests/gpu_tests_are_under_mod_gpu.rs` already 
 shape `Record::vocabulary` already uses for records.
 
 **The four surfaces barely overlap today, and here is the count**, read off the code rather
-than estimated: **35 live operations reachable from keys** — and only from the *focused* slot,
+than estimated: **35 live operations reachable from `karakuri-cli`'s keys** — a figure that says nothing about whose keyboard, which is the ambiguity [ADR-0220](adr/0220-the-key-column-is-the-instruments-keyboard-and-the-clis-keys-are-its-own.md) closed — and only from the *focused* slot,
 since nothing but `0`–`3` addresses another; **8 from MIDI** — `gain`, `opacity`, `exposure`,
 `mask-position`, `residency`, `blend`, `preview` and `tap`, which is what a map file's grammar
 accepts and no
@@ -2037,7 +2037,7 @@ operations, and the page carried no row for folding a pane, for moving a divider
 moving a boundary, folding a bay, folding a pane, bringing one back, solo, and resetting the
 arrangement — which is how the vocabulary reached its present width. **What the naming did not
 close is the rule that made it worth doing**: every operation is reachable from the keyboard alone,
-and all twenty-four of those routes are still empty except the pointer, which four of the six have.
+and six of their twenty-four routes exist now, and **no row of that section has none** — the pointer has four and the instrument's keyboard has five, which is what [ADR-0220](adr/0220-the-key-column-is-the-instruments-keyboard-and-the-clis-keys-are-its-own.md) settled.
 *Move a boundary* is the sharpest of them and is `Undecided` for exactly this reason —
 `set_divider` takes a viewport pixel a key press cannot mean. So the count is right now and the
 first rule is not yet kept here, which is a different debt from the one this paragraph opened
