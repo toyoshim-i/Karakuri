@@ -208,7 +208,7 @@ pub enum Change {
         slot: usize,
         sync: Sync,
         anchor_bpm: f32,
-        offset_beats: f64,
+        scrub_beats: f64,
     },
 }
 
@@ -314,13 +314,13 @@ pub fn current_look(look: &Look) -> karakuri_operation_record::Look {
 }
 
 /// **What one slot's clock is doing, as the reading the conversion needs.**
-/// `Operation::ScrubDeck` moves an offset by an amount and `Record::Transport`
+/// `Operation::ScrubDeck` moves the scrub by an amount and `Record::Transport`
 /// is absolute, so the conversion reads where the slot is.
 pub fn current_transport(transport: &Transport) -> karakuri_operation_record::Transport {
     karakuri_operation_record::Transport {
         sync: sync(transport.sync()),
         anchor_bpm: transport.anchor_bpm(),
-        offset_beats: transport.offset_beats(),
+        scrub_beats: transport.scrub_beats(),
     }
 }
 
@@ -406,7 +406,7 @@ pub fn transport_record(slot: usize, transport: &Transport) -> Record {
         slot: slot as u8,
         sync: transport.sync().name().to_string(),
         anchor_bpm: transport.anchor_bpm(),
-        offset_beats: transport.offset_beats(),
+        scrub_beats: transport.scrub_beats(),
     }
 }
 
@@ -628,7 +628,7 @@ pub fn change(record: &Record, slot_count: usize) -> Result<Option<Change>, Stri
             slot,
             sync,
             anchor_bpm,
-            offset_beats,
+            scrub_beats,
         } => {
             let slot = in_range(*slot)?;
             let sync = Sync::from_name(sync).ok_or_else(|| {
@@ -645,7 +645,7 @@ pub fn change(record: &Record, slot_count: usize) -> Result<Option<Change>, Stri
                 slot,
                 sync,
                 anchor_bpm: *anchor_bpm,
-                offset_beats: *offset_beats,
+                scrub_beats: *scrub_beats,
             }))
         }
         Record::Look {
@@ -1042,7 +1042,7 @@ mod tests {
                     slot: 3,
                     sync: Sync::Beat,
                     anchor_bpm: 126.0,
-                    offset_beats: 0.0,
+                    scrub_beats: 0.0,
                 },
             ),
             (
@@ -1178,7 +1178,7 @@ mod tests {
                     // Carried under every mode, including the two that do
                     // nothing with it — a slot moved back onto the grid returns
                     // to where the operator left it.
-                    offset_beats: -0.75,
+                    scrub_beats: -0.75,
                 }),
                 "{} did not survive its own wire name",
                 sync.name()

@@ -2510,14 +2510,18 @@ decoder's to reject before anything can say what the alternatives were.
 because the mode alone does not mean anything without them:
 
 ```ndjson
-{"t":"transport","slot":0,"sync":"beat","anchor_bpm":126.0,"offset_beats":-0.25}
+{"t":"transport","slot":0,"sync":"beat","anchor_bpm":126.0,"scrub_beats":-0.25}
 ```
 
 `anchor_bpm` is the tempo at which this material runs at 1×, and it has to be recorded
 because **material has no intrinsic tempo**: a `.kir` declares parameters and a capacity,
 not a bar length, so "one beat of music is how many seconds of material" is an operator's
-answer rather than the artifact's. `offset_beats` is the scrub — signed, unbounded, and the
-one value in this format that is meant to go backwards. Both are carried under every mode,
+answer rather than the artifact's. `scrub_beats` is where the operator scrubbed the slot to, in
+beats off the room's position — signed, unbounded, and the one value in this format that is meant to
+go backwards. **It was `offset_beats` until 2026-08-29**, and the rename reached the wire on purpose:
+the word *offset* also names the latency offset, which the record format is expected to gain, and a
+pre-rename line fails loudly rather than reading as a zero scrub, because the field has no serde
+default. Both are carried under every mode,
 including `free` where neither does anything, so that a slot moved back onto the grid
 returns to where the operator left it rather than to a default.
 

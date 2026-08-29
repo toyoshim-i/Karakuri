@@ -37,11 +37,19 @@
 //!
 //! None of the three is renamed.
 //! `docs/adr/0049-slot-means-two-things-and-the-clash-is-recorded.md` recorded the first
-//! clash rather than resolving it, and a wire field cannot be renamed for a wording reason
-//! anyway — every session stream on disk carries it. What the prose does instead is **never
-//! write the deck one bare**: it is *a deck slot*, everywhere, so
+//! clash rather than resolving it, and the bill is the reason it stayed recorded: `slot`
+//! is a field of thirteen record types across all three files, so no rename of it is a
+//! rename of one field. What the prose does instead is **never write the deck one bare**:
+//! it is *a deck slot*, everywhere, so
 //! `docs/principles/0031-a-name-means-one-thing-across-the-system.md`'s *"they have to be
 //! disjoint by name"* is met by the sentence where the field cannot meet it.
+//!
+//! **A wire field can be renamed, and one has been.** [`Record::Transport`]'s scrub was
+//! spelled `offset_beats` and collided with the operator's latency offset; it is
+//! `scrub_beats` now, on disk as well as in Rust, because before v1 the bill is a bill and
+//! not an argument — see that variant's own documentation and
+//! `docs/principles/0058-before-v1-compatibility-is-a-bill-not-an-argument.md`. What made
+//! that affordable and `slot` not is the size of the bill, not a rule against the move.
 //!
 //! **The one collision there was is settled, and it is the metadata name that
 //! moved.** `docs/ir-spec.md` listed a metadata `preview` carrying a `path`
@@ -766,8 +774,27 @@ pub enum Record {
     /// to be recorded because **material has no intrinsic tempo**: a `.kir`
     /// declares parameters and a capacity, not a bar length, so "one beat of
     /// music is how many seconds of material" is an operator's answer rather
-    /// than the artifact's. `offset_beats` is the scrub — signed, unbounded,
-    /// and the one value in this format that is meant to go backwards.
+    /// than the artifact's. `scrub_beats` is where the operator scrubbed the
+    /// slot to, in beats off the room's position — signed, unbounded, and the
+    /// one value in this format that is meant to go backwards.
+    ///
+    /// **It was spelled `offset_beats`, and the rename reaches the wire.** The
+    /// word `offset` already names the operator's *latency* offset — the
+    /// milliseconds of `--latency-offset-ms` — and one word for two controls on
+    /// one panel is what
+    /// `docs/principles/0031-a-name-means-one-thing-across-the-system.md`
+    /// forbids. The beat side had a name it was not using: its control is the
+    /// scrub, its operation is `ScrubDeck`, and `Transport`'s own field doc
+    /// already called it *"the operator's scrub"*. Keeping the old spelling on
+    /// disk behind a `serde(rename)` was the alternative, and it is the
+    /// compatibility alias
+    /// `docs/adr/0117-before-v1-pay-the-cost-of-changing-toward-the-ideal.md`
+    /// refused for `field(p)`: two spellings for one thing, forever. Before v1
+    /// the bill is a bill and not an argument
+    /// (`docs/principles/0058-before-v1-compatibility-is-a-bill-not-an-argument.md`),
+    /// and the bill here is loud rather than silent — a stream carrying
+    /// `offset_beats` fails its line with serde's missing-field error, not with
+    /// a scrub silently read as zero.
     ///
     /// Both are carried even under `free`, where neither does anything, so that
     /// a deck slot moved back onto the grid returns to where the operator left it
@@ -776,7 +803,7 @@ pub enum Record {
         slot: u8,
         sync: String,
         anchor_bpm: f32,
-        offset_beats: f64,
+        scrub_beats: f64,
     },
     /// **A deck slot's material was written out as a Set file**, under `id`.
     ///
@@ -1393,6 +1420,62 @@ mod tests {
             }
         );
         assert!(!rec.is_set_state());
+    }
+
+    /// **The scrub round-trips through the line the spec prints, bytes and
+    /// all** — and it is `scrub_beats` on the wire, not just in Rust.
+    ///
+    /// This record had no round-trip test at all until the rename, which is
+    /// exactly the gap that lets a serialised field's writer and reader drift
+    /// apart in silence: a half-applied rename compiles in neither direction
+    /// here, but a `serde(rename)` on one side and not the other compiles in
+    /// both and only fails on disk.
+    ///
+    /// `round_trip_verbatim` rather than `round_trip`, on
+    /// [`Record::Procedure`]'s terms: every field is required and written in
+    /// declaration order, so a field appearing, vanishing or moving is a
+    /// changed stream and only the byte comparison sees it.
+    #[test]
+    fn a_transport_round_trips_through_the_line_the_spec_prints() {
+        let line =
+            r#"{"t":"transport","slot":0,"sync":"beat","anchor_bpm":126.0,"scrub_beats":-0.25}"#;
+        let rec = round_trip_verbatim(line);
+        assert_eq!(
+            rec,
+            Record::Transport {
+                slot: 0,
+                sync: "beat".to_string(),
+                anchor_bpm: 126.0,
+                scrub_beats: -0.25,
+            }
+        );
+        assert!(
+            !rec.is_set_state(),
+            "a transport is session state, not something a Set file may carry"
+        );
+    }
+
+    /// **The old spelling fails loudly, and that is the whole bill.**
+    ///
+    /// `offset_beats` was renamed to `scrub_beats` on disk rather than kept
+    /// behind a `serde(rename)`, so a stream written before the rename does not
+    /// replay. What this pins is *how* it does not replay: serde has no default
+    /// for the field, so the line is a parse error naming the missing field —
+    /// [`crate::store::StoreError::Record`] with its line number — and not a
+    /// scrub silently read as zero, which is the failure mode
+    /// `docs/adr/0134-the-metadata-preview-becomes-thumbnail.md` was written
+    /// about. An unknown key is dropped without comment; a *missing required*
+    /// one is not, and that asymmetry is what makes this rename affordable.
+    #[test]
+    fn a_stream_with_the_old_offset_beats_fails_its_line_rather_than_reading_a_zero_scrub() {
+        let old =
+            r#"{"t":"transport","slot":0,"sync":"beat","anchor_bpm":126.0,"offset_beats":-0.25}"#;
+        let err = serde_json::from_str::<Record>(old)
+            .expect_err("the pre-rename spelling parsed — the rename left an alias behind");
+        assert!(
+            err.to_string().contains("scrub_beats"),
+            "the error does not name the field that is missing: {err}"
+        );
     }
 
     fn round_trip(line: &str) -> Record {

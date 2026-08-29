@@ -1233,12 +1233,12 @@ impl Deck {
         slot: usize,
         sync: Sync,
         anchor_bpm: f32,
-        offset_beats: f64,
+        scrub_beats: f64,
     ) -> Result<(), crate::transport::Refusal> {
         self.sync_allowed(slot, sync)?;
         self.slots[slot]
             .transport
-            .set(sync, anchor_bpm, offset_beats);
+            .set(sync, anchor_bpm, scrub_beats);
         Ok(())
     }
 
