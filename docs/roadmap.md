@@ -1623,7 +1623,7 @@ than work, and every one of them was found by building the thing next to it.
   writer has to be a live-session one. The chip can read; nothing can yet make it change, and the
   manual's row says so. **What an agent is one *of* is a separate question and is still open** — see the
   control plane above.
-- **Is the Master bay's `out` the same thing as `exposure`?** `karakuri-engine`'s `Look` already
+- ~~**Is the Master bay's `out` the same thing as `exposure`?**~~ **Taken on 2026-08-30, and it is c** — [ADR-0224](adr/0224-out-and-exposure-are-two-levels-that-multiply-in-different-places.md). `karakuri-engine`'s `Look` already
   carries `exposure: f32`, *"the level going into that transfer"* — a scalar gain on the composited
   frame **in linear HDR, before the one tonemap**. [The console page](manual/console.html)'s Master
   bay draws `out 1.00` under a footnote reading *"runs in linear HDR, before the one tonemap"*, which
@@ -1648,7 +1648,22 @@ than work, and every one of them was found by building the thing next to it.
   program can draw. **a costs nothing today and costs the separation later.** Whoever takes this
   should say which cost they prefer rather than which name.
 
-- **A wildcard write crosses authority, and nothing says what an authority may refuse.**
+  **The cost was the argument and was taken deliberately, and it is now measured rather than
+  predicted**: with the chain empty, a master out of 0.5 and an exposure of 0.5 produce
+  **byte-identical** pictures, and a test says so. **The engine half has landed** — `Deck::set_out`,
+  one scalar on the mix uniform and one multiply at the end of `composite.wgsl`, which is where the
+  mix writes the composited frame and therefore the chain's entry; `exposure` stays where the present
+  pass reads that frame. It is deliberately **not** on `Look`, which is documented as exactly
+  `set_tonemap`'s arguments — a chain-entry level there would contradict the decision it records.
+  **What is left is a route**: no operation, no `Record`, no key, no MIDI target and no flag reaches
+  the value, so only a test writes it, and a flag is refused by
+  [ADR-0046](adr/0046-a-flag-writes-into-a-record-it-does-not-invent.md) until a record exists to
+  write into. `docs/manual/operations.html` gains a *Master out* row when there is an operation to
+  name; the Exposure row does **not** move, which is the routing this decision did not change.
+  **And the test asserting the two are indistinguishable is deleted the day a master effect lands
+  between them** — it is a measurement of an empty chain, not a property of the design.
+
+- ~~**A wildcard write crosses authority, and nothing says what an authority may refuse.**~~ **Taken on 2026-08-30, and it is a** — [ADR-0223](adr/0223-a-wildcard-write-is-refused-where-the-nodes-it-lands-on-disagree.md).
   `Operation::WriteParam` carries `ParamAt { node: Option<NodeAt> }`, and when `node` is `None` the
   write moves **every node that declares the key** — which is what a wildcard control is, and what
   [ir-spec.md](ir-spec.md) states as the default: *one control per key, not one per declaration*. The
@@ -1674,6 +1689,24 @@ than work, and every one of them was found by building the thing next to it.
   [P-0061](principles/0061-a-refusal-a-person-can-reach-from-two-surfaces-is-one-sentence.md)'s.
   **Its cost is real and is the argument for b**: a partial grant makes a published control unusable
   until the operator grants the rest or narrows the interface.
+
+  **It needed no asker, which is why it could land at all.** The survey found that nothing in this
+  workspace distinguishes an agent's write from the operator's — and the reason is sharper than *not
+  yet*: **no agent write of a parameter exists.** MCP publishes six tools and not one moves a value,
+  and `Operation::WriteParam` is constructed nowhere and executed nowhere. What the refusal turns on
+  is uniformity of the **landing** rather than the identity of the hand, and a control spanning two
+  arrangements is incoherent whoever holds it. The sentence lives in `Set::write_param`, the one
+  entry point a `--param`, a published control and a `param` record all come through, and it names
+  every node the write lands on with what each is under.
+  **What is left is the asker** — whether an *addressed* write by an agent onto a node the operator
+  kept is refused is undecided, and cannot be decided until something writes a param on an agent's
+  behalf. **Nothing meets the refusal in a run today**, because `swap::Request::authorities` is empty
+  in every one: nothing calls `set_authority` outside tests, so every node of every Set is `Manual`.
+  **One thing the ADR names as owed was closed in the same commit**: `Set::set_published` answered a
+  refusal with `false`, the same answer as *nothing publishes that name*, which lost the sentence on
+  the one route the question was about — a published control is a wildcard unless the author named a
+  node. It carries the `Result` now. It had no non-test caller, so what that cost was ten `.expect`
+  lines in two test files.
 
   **Both of these were found by drawing a bay rather than by reading for faults**, which is this
   milestone's pattern — the Library's questions, the Staging lane's premise, the Inspector's ordinals

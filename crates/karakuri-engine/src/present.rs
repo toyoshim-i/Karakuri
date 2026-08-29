@@ -90,9 +90,19 @@ pub struct Present {
     hdr_view: wgpu::TextureView,
     /// The operator, exposure, and (Reinhard's) white point, packed together
     /// because they are read together — see `shaders/present.wgsl`'s `Tonemap`
-    /// struct. Exposure here is the operator's own control, distinct from a
-    /// procedure's `param exposure` (how bright that material is) and from
-    /// L5's future per-Set gain (how it balances against the others).
+    /// struct.
+    ///
+    /// **Exposure here is the level going into the transfer, and it is the
+    /// fourth thing in this engine called a level.** It is not a procedure's
+    /// `param exposure` (how bright that material is), not
+    /// `Deck::set_gain`'s per-slot L5 gain (how one Set balances against the
+    /// others), and not `Deck::set_out`, the master out — which is the same
+    /// arithmetic as this one applied at the other end of the master chain,
+    /// where the composited frame is *written* rather than read. That
+    /// separation is
+    /// `docs/adr/0224-out-and-exposure-are-two-levels-that-multiply-in-different-places.md`,
+    /// and until the chain between them has an effect in it the two are
+    /// indistinguishable in the picture.
     tonemap: wgpu::Buffer,
     bind_group: wgpu::BindGroup,
     width: u32,
@@ -270,6 +280,10 @@ impl Present {
 
     /// Selects the tone-mapping operator and its exposure, and — for
     /// `TonemapOp::Reinhard` only — the input level that maps to exactly 1.0.
+    ///
+    /// **`exposure` is the level at this pass's input**, which is the far end
+    /// of the master chain from `Deck::set_out`'s. Anything the chain does to
+    /// the frame has already happened when this multiply lands.
     /// `white_point` is ignored by the other three operators; pass whatever is
     /// convenient, since a uniform write is all this costs regardless.
     ///

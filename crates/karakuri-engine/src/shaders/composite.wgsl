@@ -55,6 +55,22 @@
 // needs it, and because coverage is what anything handed this frame outside
 // the present pass would key on.
 //
+// **The master out is the last thing this shader does, and that is where it
+// belongs rather than a convenience.** It is one level on the folded frame —
+// the level the composited picture enters the master chain at — and the chain
+// is what will sit between here and the present pass: feedback, bloom, an rgb
+// shift. The present pass has a level of its own, `exposure`, and the two are
+// deliberately not the same number applied twice: this one is upstream of every
+// master effect and that one is downstream of all of them. With no effect built
+// yet there is nothing between them and no frame can tell them apart, which is
+// the accepted cost of writing the separation down now — see
+// `docs/adr/0224-out-and-exposure-are-two-levels-that-multiply-in-different-places.md`.
+//
+// Colour only, exactly as `gain` is: alpha is coverage, and a level says how
+// bright the material is rather than how much of the frame it reaches. At 1.0
+// the multiply is exact for every value including an infinity, so a deck of one
+// at unity is still a bare Set bit for bit.
+//
 // A layer this shader *skips* contributes no coverage either, which is the one
 // place a level reaches alpha: `gain` scales colour and nothing else, but a
 // gain of exactly zero silences the layer under `add` and `max`, and a
@@ -85,6 +101,11 @@ struct Mix {
     mask_angle: vec4<f32>,
     mask_position: vec4<f32>,
     mask_softness: vec4<f32>,
+    // **Not per slot** — the one field here that is a property of the fold
+    // rather than of an input, which is why it is a scalar where everything
+    // above is a lane per slot. The master chain's entry level; see the head of
+    // this file. `master_out` rather than `out`, which WGSL reserves.
+    master_out: f32,
 };
 
 @group(0) @binding(0) var<uniform> mix_in: Mix;
@@ -287,5 +308,7 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
         let m = mask_at(uv, aspect, mix_in.mask.w, mix_in.mask_angle.w, mix_in.mask_position.w, mix_in.mask_softness.w);
         acc = layer(acc, textureLoad(slot3, at, 0i), mix_in.gain.w, mix_in.opacity.w * m, mix_in.mode.w);
     }
-    return acc;
+    // The master chain's entry, and the last thing this pass does. Colour only:
+    // `acc.a` is coverage and a level does not change what a frame covers.
+    return vec4<f32>(acc.rgb * mix_in.master_out, acc.a);
 }

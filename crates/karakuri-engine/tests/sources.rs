@@ -548,7 +548,9 @@ proc lit {
         // place, silencing renderer 0 must take light out and leave some, and
         // silencing renderer 1 as well must take the rest — which is only true if
         // the control put a value into both.
-        assert!(set.set_published("level", 2.0));
+        assert!(set
+            .set_published("level", 2.0)
+            .expect("one authority over the nodes it lands on"));
         let both = total(&gpu, &mut set);
 
         assert!(set.set_param_at(karakuri_ir::Kind::L4, 0, "exposure", 0.0));
@@ -573,7 +575,9 @@ proc lit {
         // "first onto this attachment" has to mean when several sources draw into
         // one: the composited frame carries twice a single source's light, not one
         // source's because the second cleared it.
-        assert!(set.set_published("level", 2.0));
+        assert!(set
+            .set_published("level", 2.0)
+            .expect("one authority over the nodes it lands on"));
         let two_sources = total(&gpu, &mut set);
         let mut alone = build_with(&gpu, &[&one_src], &[LIT, HALO], Layering::Composite);
         alone
@@ -584,7 +588,9 @@ proc lit {
                 range: [0.0, 2.0],
             })
             .expect("the same interface");
-        assert!(alone.set_published("level", 2.0));
+        assert!(alone
+            .set_published("level", 2.0)
+            .expect("one authority over the nodes it lands on"));
         let one_source = total(&gpu, &mut alone);
         assert!(
             two_sources > one_source * 1.5,

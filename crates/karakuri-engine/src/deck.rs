@@ -763,6 +763,11 @@ pub struct Deck {
     /// "Determinism" in the module doc.
     slots: Vec<Slot>,
     composite: Composite,
+    /// **The master chain's entry level**, applied to the composited frame
+    /// where [`Composite`] writes it. See [`Deck::set_out`]: it is not the tone
+    /// mapper's `exposure`, which is a second level at the far end of that
+    /// chain.
+    out: f32,
     /// `None` until [`Deck::enable_meters`]. Metering is opt-in because a
     /// caller that will never read a level should not pay for one — see
     /// "Level metering" in the module doc.
@@ -796,8 +801,10 @@ pub struct Deck {
 
 impl Deck {
     /// A deck over `swaps`, in that order. Every slot comes up [`Live`] at
-    /// unity gain and full opacity, so a deck of one is a bare Set with a
-    /// multiply by 1.0 in front of it.
+    /// unity gain and full opacity, and the master out comes up at 1.0, so a
+    /// deck of one is a bare Set with two multiplies by 1.0 in front of it —
+    /// both exact, which is what keeps that a bit-for-bit claim rather than a
+    /// close one.
     ///
     /// Allocates: one HDR target per slot, a pipeline, a bind group. None of
     /// that may happen on the render thread, which is why it happens here and
@@ -842,6 +849,7 @@ impl Deck {
         Deck {
             slots,
             composite,
+            out: 1.0,
             meters: None,
             signals: Signals::default(),
             governor: Governor::default(),
@@ -1473,6 +1481,50 @@ impl Deck {
         self.slots[slot].opacity = clamp_opacity(opacity);
     }
 
+    pub fn out(&self) -> f32 {
+        self.out
+    }
+
+    /// **The master out: one level on the composited frame, at the entry to
+    /// the master chain.** Not per slot — the whole fold, after every edge has
+    /// been applied and before anything downstream reads the frame.
+    ///
+    /// **It is not the tone mapper's `exposure`, and the difference is where
+    /// each one multiplies rather than what either one means.** This one is
+    /// applied by the mix pass, where the composited frame is written;
+    /// `exposure` is applied by the present pass, where that frame is read.
+    /// The master effects go between them, so a level set here is the level
+    /// they are fed at and a level set there is the level their output is
+    /// judged at. **Until such an effect exists there is nothing between the
+    /// two multiplications and no frame distinguishes them** — that cost was
+    /// weighed and taken, in
+    /// `docs/adr/0224-out-and-exposure-are-two-levels-that-multiply-in-different-places.md`.
+    ///
+    /// **Bounded exactly as [`Deck::set_gain`] is, and through the same
+    /// function**: floored at zero, NaN reads as zero, and deliberately open
+    /// above 1.0 because the pipeline is HDR and this level is applied to
+    /// linear values a tone mapper has not seen yet — see
+    /// `docs/principles/0064-the-pipeline-is-linear-hdr-and-srgb-is-encoded-once-at-final-output.md`.
+    /// A negative master out would invert the whole frame and a NaN one would
+    /// take every channel of it, which is a level of one and the same failure a
+    /// per-slot gain has.
+    ///
+    /// **No [`Deck::cancel`] here, because nothing can be moving it.** A
+    /// [`Control`] is per slot and the master out is not; a scheduled move on
+    /// it would need a control that names the deck rather than a slot, and
+    /// there is no operation, record or key that reaches this at all yet. What
+    /// it is for is drawn in `docs/manual/console.html`'s Master bay.
+    ///
+    /// **An audition is not exempt.** Previewing a slot replaces what the mix
+    /// folds, not what happens to the fold: the master out applies to an
+    /// auditioned frame exactly as the tone mapper and its exposure do, and for
+    /// the same reason — the audition is injected into the master chain rather
+    /// than routed around it. See [`Deck::set_preview`], which is about the
+    /// edges.
+    pub fn set_out(&mut self, out: f32) {
+        self.out = clamp_gain(out);
+    }
+
     pub fn preview(&self) -> Option<usize> {
         self.preview
     }
@@ -2039,7 +2091,14 @@ impl Frame<'_> {
                 },
             });
         }
-        self.deck.composite.write_uniform(self.queue, &edges);
+        // **The master out is written with the edges and is not one of them.**
+        // It is the level the folded frame leaves this pass at — the entry to
+        // the master chain — and it applies to an audition exactly as it
+        // applies to the mix, because an audition changes what is folded and
+        // not what happens to the fold. See [`Deck::set_out`].
+        self.deck
+            .composite
+            .write_uniform(self.queue, &edges, self.deck.out);
         self.deck.composite.record(encoder, target);
     }
 

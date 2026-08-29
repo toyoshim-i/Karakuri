@@ -197,6 +197,21 @@ pub struct NodeAt {
 /// declares `key`. That is `Record::Param`'s rule and `Published::at`'s rule
 /// and `--param exposure=2.0`'s meaning, and it is the useful default: one
 /// knob moving every renderer that has an `exposure`.
+///
+/// **A wildcard is refused where the nodes it lands on are not under one
+/// authority**, and the refusal names them. An authority is per node
+/// (`docs/adr/0211-authority-is-set-per-node-and-the-record-is-the-sessions.md`)
+/// and a bare name reaches every node declaring the key, so one such control
+/// spanning a node the operator kept and a node an agent acts on would hand the
+/// first over through the second. Landing on the permitted nodes instead was
+/// the alternative, and it lost to
+/// `docs/principles/0027-a-silently-wrong-image-loses-to-a-loud-failure.md`:
+/// see
+/// `docs/adr/0223-a-wildcard-write-is-refused-where-the-nodes-it-lands-on-disagree.md`.
+/// **A surface owns none of this**
+/// (`docs/principles/0076-a-surface-owns-the-affordance-never-the-authority.md`):
+/// the rule lives where the write lands, so every route meets it, and an
+/// addressed [`ParamAt`] meets nothing — it says which node it means.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParamAt {
     pub node: Option<NodeAt>,
