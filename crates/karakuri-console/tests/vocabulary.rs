@@ -76,13 +76,86 @@
 //! gaining an operation this rule says it does not need, and
 //! [`every_row_on_the_page_has_an_operation`] is the assertion that fails
 //! then: a row no `Op` reaches is a row somebody has to account for.
+//!
+//! # The panel column of this section, and what the pointer actually reaches
+//!
+//! Everything above is about *which operations exist*. The second half of this
+//! file is about a different question on the same six rows —
+//! [ADR-0213](../../../docs/adr/0213-the-interface-milestones-meter-is-the-panel-column-and-has-means-an-operator-reaches-it.md)
+//! made the **panel column** of this page the Interface milestone's meter and
+//! defined its badge: *`has` means an operator running the instrument reaches
+//! the operation*. [`panel_column.rs`](../tests/panel_column.rs) is the pair
+//! that flip owed, and the last thing its header says is what it cannot see:
+//! these rows reach an operator through [`Op`] and never through
+//! `karakuri_operation::Operation`, so a scan for `Operation::` finds none of
+//! them. **This is where that column meets this type**, and it names the
+//! variants outright where that file has to read its own crate as text.
+//!
+//! **What the pointer reaches is demonstrated rather than declared.** A list
+//! here of which rows have a control would be a second copy of one
+//! ([P-0045](../../../docs/principles/0045-generate-the-vocabulary-prose-drifts-from-code.md)),
+//! and a copy of something nothing states: the pointer's whole route into this
+//! section is [`Panel::press`], [`Panel::moved`] and [`Panel::released`], and
+//! whether any of them folds, unfolds or solos anything is a question that can
+//! be **asked of a running panel**. So [`reached_by_the_pointer`] asks one. It
+//! presses every boundary the arrangement has, at the middle of that
+//! boundary's own gap, and drags it — that is *Move a boundary*, demonstrated,
+//! and the extent of the region beside it is read back either side. Then it
+//! presses, drags and releases at every point of a [`STEP`]-pixel grid over
+//! the whole console, and compares what is folded and what is soloed against
+//! what they were.
+//!
+//! **The one row an operator reaches is the one row no `Op` names.** *Move a
+//! boundary* is in [`NO_OP`] because a drag is a gesture rather than an
+//! operation, and it is the only row of this section whose panel badge is
+//! `has`. The two statements are about different things — which operations the
+//! console can be *asked* for, and what a hand on the panel can *do* — and
+//! this file now pins both.
+//!
+//! # What the sweep cannot see, and which way each one fails
+//!
+//! - **Reachability is `crates/karakuri/src/main.rs`'s, and this crate cannot
+//!   depend on it** (ADR-0156). The window loop is what turns a `winit` press
+//!   into [`Panel::press`] and draws the panel in front of somebody, and
+//!   ADR-0213's definition is P-0030's sentence — *a window that opens and
+//!   cannot be touched is a demo, not a tool*. **So this file checks the
+//!   necessary half and not the sufficient one**, exactly as `panel_column.rs`
+//!   does one column along. The sufficient half for the one `has` row is a
+//!   test in that binary rather than a claim here:
+//!   `a_drag_through_the_window_loops_own_routing_never_reaches_egui` grabs a
+//!   boundary, drags it and lets go through `Readout::pointer` — the window
+//!   loop's own routing — and reads the left pane's width back either side.
+//!   A gesture this file demonstrates and that binary never wires would pass
+//!   here, and the badge would be a lie the page tells on its own authority.
+//! - **A control this crate draws and a caller applies is invisible to the
+//!   sweep**, because the press never goes through [`Panel::press`].
+//!   `view::Outputs::op` is one, and it is the console's only such control:
+//!   the Outputs row's sink chip answers [`Op::Fold`] or [`Op::Unfold`] for
+//!   the picture. It is not this section's — the page gives that control its
+//!   own row, *Choose where the frame goes*, in *Output and recording* — and
+//!   **nothing in this workspace checks that row's badge**. This file is not
+//!   it, and says so rather than being read as covering the column.
+//! - **A control smaller than [`STEP`] in both directions** could sit between
+//!   two presses. Nothing on the console is: a divider is [`Panel::press`]'s
+//!   grab width either side of a gap, and a bay head is 27 tall. It is a
+//!   *false negative* — a fold nobody demonstrated — and it fails the
+//!   direction that says a `has` badge is reached, from the other side, the
+//!   moment somebody flips the badge for the control they just drew.
+//! - **Which row a new fold lands on.** The sweep can say that something
+//!   folded and not whether what folded was a bay or a pane, so it panics
+//!   naming the point and the node rather than guessing a row — the shape
+//!   `panel_column.rs`'s `sample` uses for the same reason.
+//! - **A badge whose home is wrong.** A `has` badge has to name a home and the
+//!   home is checked for being *something*, as `mcp.rs` and `panel_column.rs`
+//!   both check it; that the region it names is where the control actually is
+//!   is a claim about `docs/manual/console.html` and is nobody's test here.
 
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use karakuri_console::panel::{Op, Panel};
-use karakuri_layout::NodeId;
+use karakuri_console::panel::{Dragged, Op, Panel, Pressed};
+use karakuri_layout::{Axis, NodeId, Point};
 
 /// The specification, relative to the workspace root.
 const PAGE: &str = "docs/manual/operations.html";
@@ -122,6 +195,31 @@ const NO_OP: &[&str] = &["Move a boundary"];
 /// here fails [`the_variants_with_no_row_are_the_ones_written_down`] in one
 /// direction and [`every_row_on_the_page_has_an_operation`] in the other.
 const NO_ROW: &[&str] = &["Report"];
+
+/// The badge text of a route that names nowhere. `panel_column.rs` holds the
+/// same constant for the same reason: a `plan` or a `gap` badge is allowed to
+/// be this — four in this section are — and a `has` badge is not, because it
+/// would claim an operator reaches the operation and decline to say from
+/// where.
+const NOWHERE: &str = "&mdash;";
+
+/// How far apart the sweep's presses are, in the panel's own pixels, and the
+/// whole of what makes it affordable: 8 over a 1280 x 720 console is 14,400
+/// presses. See the header for what a control smaller than this in both
+/// directions would cost, and why nothing on the console is.
+const STEP: f32 = 8.0;
+
+/// How far a press drags before it lets go, along the axis of whatever it took
+/// hold of. Wider than a divider's own gap, so a drag that grabbed one asks it
+/// to go somewhere it is not already.
+const DRAG: f32 = 24.0;
+
+/// What a boundary has to move by to count as moved. A drag reports itself
+/// when the *layout* does something rather than when the pointer does, so this
+/// is read off the region beside the boundary instead: a whole pixel is more
+/// than the half-pixel `Panel::moved` thinks is worth saying and far less than
+/// [`DRAG`].
+const MOVED: f32 = 1.0;
 
 fn workspace() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -350,4 +448,277 @@ fn exactly_two_splits_have_no_name_for_an_operation_to_use() {
          region only the pointer can fold"
     );
     assert!(l.name(root).is_none() && l.name(body).is_none());
+}
+
+/// **The section this crate answers for, as text.** Sliced once so that a
+/// badge found past the section's end belongs to another section's row, which
+/// is the same cut [`rows`] makes for the same reason.
+fn arranging() -> String {
+    let text = page();
+    let start = text.find(SECTION).unwrap_or_else(|| {
+        panic!("`{SECTION}` is gone from {PAGE} — the section this crate answers for")
+    });
+    let rest = &text[start + SECTION.len()..];
+    let end = rest.find("<h2").unwrap_or(rest.len());
+    rest[..end].to_owned()
+}
+
+/// **Every row of the section with its panel badge**: the title, the badge's
+/// class — `has`, `plan` or `gap` — and the text it names the control's home
+/// with.
+///
+/// Read verbatim and never decoded, which is `mcp.rs`'s rule and
+/// `panel_column.rs`'s after it: a badge that names nowhere says `&mdash;`,
+/// and a home that needed decoding to match would be a home nobody could find
+/// on the console page.
+fn panel_badges() -> Vec<(String, String, String)> {
+    let mut found = Vec::new();
+    for part in arranging().split(ROW).skip(1) {
+        let open = part.find("<h3>").expect("a row opens with its heading");
+        let close = part[open..].find("</h3>").expect("a heading closes");
+        let title = part[open + 4..open + close].to_owned();
+        let body = &part[open + close..];
+        let mut badge = None;
+        for span in body.split(r#"<span class="rt "#).skip(1) {
+            let Some(quote) = span.find('"') else {
+                continue;
+            };
+            let class = span[..quote].to_owned();
+            let Some(text) = span[quote..].strip_prefix(r#"">panel <b>"#) else {
+                continue;
+            };
+            let Some(shut) = text.find("</b>") else {
+                continue;
+            };
+            badge = Some((class, text[..shut].to_owned()));
+            break;
+        }
+        let (class, home) = badge.unwrap_or_else(|| {
+            panic!(
+                "`{title}` under `{SECTION}` in {PAGE} has no panel badge — every row carries \
+                 one, and a row that has stopped is a row this file stops measuring"
+            )
+        });
+        found.push((title, class, home));
+    }
+    found
+}
+
+/// **What is folded and what is soloed**, which is the whole of what an
+/// operation in this section can change about an arrangement that nothing has
+/// resized. A boundary drag moves rectangles and leaves this alone, which is
+/// why the drag is demonstrated separately and this is what the sweep compares.
+fn shape(p: &mut Panel) -> (Vec<bool>, bool) {
+    p.solve();
+    let ids: Vec<NodeId> = p.nodes().iter().map(|n| n.id).collect();
+    let layout = p.layout();
+    (
+        ids.iter().map(|id| layout.visible(*id)).collect(),
+        layout.is_soloed(),
+    )
+}
+
+/// The point in the middle of a boundary's own gap: along the split's axis,
+/// half way between the two regions it is between, and across it, half way
+/// down the first of them.
+fn on_the_boundary(p: &mut Panel, split: NodeId, index: usize) -> Option<(Axis, Point, NodeId)> {
+    p.solve();
+    let axis = p.layout().axis(split)?;
+    let (a, b) = p.pair(split, index)?;
+    let (ra, rb) = (p.layout().rect(a), p.layout().rect(b));
+    let along = (axis.far(ra) + axis.origin(rb)) * 0.5;
+    Some((
+        axis,
+        match axis {
+            Axis::Row => Point::new(along, ra.y + ra.h * 0.5),
+            Axis::Column => Point::new(ra.x + ra.w * 0.5, along),
+        },
+        a,
+    ))
+}
+
+/// `at` moved [`DRAG`] along `axis`.
+fn dragged_to(axis: Axis, at: Point) -> Point {
+    match axis {
+        Axis::Row => Point::new(at.x + DRAG, at.y),
+        Axis::Column => Point::new(at.x, at.y + DRAG),
+    }
+}
+
+/// **Every row of this section a hand on the panel reaches**, demonstrated on
+/// a running [`Panel`] rather than listed here — see the header.
+///
+/// Two passes. The first presses every boundary the arrangement has and drags
+/// it, and reads the region beside it back either side: that is *Move a
+/// boundary*, and it is in the answer only if a boundary actually moved. The
+/// second presses, drags and releases at every point of a [`STEP`] grid over
+/// the whole console and compares [`shape`] against what it was — nothing on
+/// this panel folds, unfolds or solos from a press, and anything that starts
+/// to is a control nobody accounted for, which panics naming where it was
+/// rather than guessing which of the section's rows it lands on.
+fn reached_by_the_pointer() -> BTreeSet<&'static str> {
+    let mut reached = BTreeSet::new();
+
+    let mut p = panel();
+    p.solve();
+    let boundaries: Vec<(NodeId, usize)> = p.layout().boundaries().collect();
+    assert!(
+        boundaries.len() >= 5,
+        "only {} boundaries in the arrangement — a sweep with nothing to drag would demonstrate \
+         nothing and every assertion below would pass on an empty answer",
+        boundaries.len()
+    );
+    for (split, index) in boundaries {
+        let mut p = panel();
+        let Some((axis, at, beside)) = on_the_boundary(&mut p, split, index) else {
+            continue;
+        };
+        let was = axis.extent(p.layout().rect(beside));
+        if !matches!(p.press(at), Pressed::Grabbed { .. }) {
+            continue;
+        }
+        let dragged = matches!(
+            p.moved(dragged_to(axis, at)),
+            Some(Dragged::Boundary { .. })
+        );
+        p.released();
+        p.solve();
+        let now = axis.extent(p.layout().rect(beside));
+        if dragged && (now - was).abs() >= MOVED {
+            reached.insert("Move a boundary");
+        }
+    }
+
+    let mut p = panel();
+    let before = shape(&mut p);
+    let viewport = p.layout().viewport();
+    let mut grabs = 0usize;
+    let mut y = viewport.y;
+    while y < viewport.y + viewport.h {
+        let mut x = viewport.x;
+        while x < viewport.x + viewport.w {
+            let at = Point::new(x, y);
+            let grabbed = matches!(p.press(at), Pressed::Grabbed { .. });
+            // Both ways, because a control that acts on the move rather than
+            // on the press does not say which axis it is watching.
+            p.moved(dragged_to(Axis::Row, at));
+            p.moved(dragged_to(Axis::Column, at));
+            p.released();
+            let now = shape(&mut p);
+            assert_eq!(
+                now, before,
+                "a press at ({x}, {y}) folded, unfolded or soloed something, and no control in \
+                 this crate is supposed to: the pointer's route into `{SECTION}` is \
+                 `Panel::press`, `moved` and `released`, and none of the three changes what is \
+                 folded. Say which row of that section this new control lands on, add it to \
+                 `reached_by_the_pointer`, and flip that row's panel badge"
+            );
+            // A drag moved a boundary, so the arrangement the next press lands
+            // on is not the one this pass started from.
+            if grabbed {
+                grabs += 1;
+                p = panel();
+            }
+            x += STEP;
+        }
+        y += STEP;
+    }
+    // **The floor that says the grid found the console rather than missed
+    // it.** A sweep whose points all landed outside the viewport, or whose
+    // step had grown past a divider's grab width, would compare `shape`
+    // against itself and report every row unreached — which passes one
+    // direction and fails nothing. Every boundary above is a run of points a
+    // press takes hold at, so a grid that covers the panel grabs many more
+    // than there are boundaries.
+    assert!(
+        grabs >= 5,
+        "the sweep pressed the whole viewport and took hold of a boundary {grabs} times — a \
+         grid this coarse is not pressing the console"
+    );
+
+    reached
+}
+
+/// The floor under both directions below, and the same one `panel_column.rs`
+/// carries: a scan that matched nothing satisfies every loop by iterating over
+/// nothing at all.
+#[test]
+fn the_sweep_finds_the_section_and_the_panel() {
+    let badges = panel_badges();
+    assert_eq!(
+        badges.len(),
+        rows().len(),
+        "{PAGE} has {} rows under `{SECTION}` and {} panel badges — is a badge still an `rt` \
+         span reading `panel <b>…</b>`?",
+        rows().len(),
+        badges.len()
+    );
+    assert!(
+        badges.len() >= 6,
+        "only {} rows with a panel badge under `{SECTION}` in {PAGE}",
+        badges.len()
+    );
+    assert!(
+        !reached_by_the_pointer().is_empty(),
+        "the sweep reached nothing at all — every divider on this panel drags, so a sweep that \
+         demonstrates none of them has stopped pressing the panel rather than found it inert"
+    );
+}
+
+/// **The page claiming a control that does not exist.**
+///
+/// A row this section marks built in the panel column that no gesture on a
+/// running panel performs — ADR-0213's failure mode from the side where the
+/// page moved first, which for this section is the likelier of the two,
+/// because four of its six rows name a home on a console that draws the
+/// furniture and hit-tests none of it.
+#[test]
+fn every_arrangement_row_marked_built_is_reached_by_the_pointer() {
+    let reached = reached_by_the_pointer();
+    for (title, class, home) in panel_badges() {
+        if class != "has" {
+            continue;
+        }
+        assert!(
+            reached.contains(title.as_str()),
+            "{PAGE} marks `{title}` built in the panel column and no gesture on a running \
+             `Panel` performs it — the page claims a control an operator cannot find. Either \
+             the control went and the badge is `plan` again, or it was never on the panel"
+        );
+        assert_ne!(
+            home, NOWHERE,
+            "{PAGE} marks `{title}` built in the panel column and names no home for it — a \
+             `has` badge says an operator reaches the operation, so it has to say where the \
+             control is"
+        );
+    }
+}
+
+/// **A control reaching past the page.**
+///
+/// The other direction, and it fails apart from the test above because it is
+/// the other failure: that one says the specification promises a player a
+/// control nothing draws, and this one says a hand on the panel already
+/// performs something the page still calls designed.
+#[test]
+fn every_arrangement_operation_the_pointer_reaches_is_marked_built() {
+    let badges = panel_badges();
+    for row in reached_by_the_pointer() {
+        let (_, class, _) = badges
+            .iter()
+            .find(|(title, _, _)| title == row)
+            .unwrap_or_else(|| {
+                panic!(
+                    "a gesture on a running `Panel` performs `{row}` and {PAGE} has no such row \
+                     under `{SECTION}` — the page is the specification, so add the row there \
+                     first"
+                )
+            });
+        assert_eq!(
+            class, "has",
+            "a hand on the panel performs `{row}`, which {PAGE} marks `{class}` in the panel \
+             column — an operation an operator reaches and a page that says no program a player \
+             runs does (ADR-0213). Flip the badge, or say here why the gesture is not reachable"
+        );
+    }
 }

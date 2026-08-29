@@ -578,9 +578,10 @@ lists were written before anybody knew what that floor was made of. **The estima
 
 **The milestone's progress meter is the panel column of [every operation](manual/operations.html)**,
 where a `has` badge means an operator running the instrument reaches that operation
-([ADR-0213](adr/0213-the-interface-milestones-meter-is-the-panel-column-and-has-means-an-operator-reaches-it.md)). It reads **0 of 46**, against 21 of 50 for the keyboard, 8 for MIDI and 6 for
-MCP, and it reads zero with five operations already emitted by console controls — which is the first
-item below rather than a caveat about the meter.
+([ADR-0213](adr/0213-the-interface-milestones-meter-is-the-panel-column-and-has-means-an-operator-reaches-it.md)). **No figure is written here either**, for the reason the section
+below gives: the sentence that carried this one went stale three times in three days, twice by
+somebody transcribing it and once by a commit that moved it. The first command below is the meter,
+and it has been off zero since 2026-08-29.
 
 **No count is written down in this section**, for the reason the vocabulary's is not written down
 either. Three commands are the whole of the instrumentation:
@@ -1318,7 +1319,25 @@ than work, and every one of them was found by building the thing next to it.
 
   **Two things the answering found.** The mock's `load → C` named a deck nothing else on the panel
   named — deck A carries the selection ring — so the pill is `load → A` now, and
-  `karakuri-console`'s `view` quotes the old letter in prose. And **the `.path` row cannot carry a
+  `karakuri-console`'s `view` quotes the old letter in prose.
+- **The four panel badges left open on 2026-08-29 are settled, and only one of them was `has`.**
+  *Move a boundary* is: a press on a gap takes the boundary in hand and the program wires press,
+  move and release. The other three are not, and the reason is the same for all of them — **the
+  control is painted and never hit-tested.** A bay head's grip, a pane edge and the `solo` pill are
+  drawn; `input::claim` names five controls and none of them is one of these, so the only route to
+  `Fold`, `Solo` and the rest is a **key**. The claim that a pointer press reached `Op::Fold` was
+  wrong: `Readout::enclosing` has exactly one caller and it is `Key::Character("g")`.
+
+  **Two things that survey found and neither is small.** The Outputs dot **is** hit-tested and
+  dispatched, and its row's badge stays `plan` on purpose: the dot folds the program view away and
+  back, and *Choose where the frame goes* names choosing across a switchable list of sinks, so one
+  entry of that list is not the list. The badge was flipped, the test that holds this column honest
+  refused it, and the page carries the distinction now — which is the meter working rather than the
+  meter being wrong. And **the `key` column of that whole section reads `gap`** — *cannot reach it
+  at all* — while `cargo run -p karakuri` binds `f`, `g`, `z`, `s`, `u` and `r` to exactly those
+  operations. ADR-0208 read that column off `karakuri-cli`'s keys; ADR-0214 moved the program out of
+  the CLI and **nothing has re-decided what the key column measures**. *What the gaps say* still
+  asserts arranging the console is reachable from a pointer and nothing else. And **the `.path` row cannot carry a
   tooltip at all**: it sets `overflow: hidden` and a tip is an absolutely-positioned child, so it is
   clipped — which is rule 03's *anything compact says three things on hover* broken by a
   declaration rather than by an omission. *Whether a folder scope reads Sets or artifacts* is what the scope row is waiting on — a

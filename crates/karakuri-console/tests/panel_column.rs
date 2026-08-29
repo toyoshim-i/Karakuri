@@ -74,11 +74,20 @@
 //!   **So this file checks the necessary half and not the sufficient one.**
 //!   A control written here and never wired there would pass, and the badge
 //!   would be a lie the page tells on its own authority.
-//! - **Only the panel column, and only through `Operation`.** The four rows of
-//!   *Arranging the console* whose panel badge names a pointer home reach the
-//!   operator through `panel::Op`, not through `Operation`, so no scan for
-//!   `Operation::` can see them and this file says nothing about their badges.
-//!   `vocabulary.rs` is where that type meets this page.
+//! - **Only the panel column, and only through `Operation`.** The six rows of
+//!   *Arranging the console* reach the operator through `panel::Op` and
+//!   through a drag that is no operation at all, not through `Operation`, so
+//!   no scan for `Operation::` can see them and this file says nothing about
+//!   their badges. `vocabulary.rs` is where that type meets this page, and it
+//!   asks a running `Panel` what a hand reaches rather than reading source.
+//!
+//!   **It is an exemption in the code and not only a sentence here**, which is
+//!   [`ELSEWHERE`]: the second assertion below reads every `has` badge in the
+//!   column and demands an emission for it, so the day *Move a boundary* was
+//!   marked built this file failed saying the page claimed a control that does
+//!   not exist — for a drag that no control will ever emit, because the
+//!   vocabulary carries it as `Undecided`. The sentence was true of the first
+//!   assertion and false of the second.
 
 use std::collections::BTreeSet;
 use std::fs;
@@ -99,6 +108,26 @@ const SRC: &str = "crates/karakuri-console/src";
 /// them gives: sections are `<h2>` and a heading somebody adds for looks is
 /// neither.
 const ROW: &str = r#"<div class="op-head">"#;
+
+/// **The one section of the page whose panel badges are not this file's**, and
+/// the heading is what identifies it because a section is an `<h2>` here as it
+/// is everywhere else on the page.
+///
+/// *Arranging the console* is the console's own shape, and every route into it
+/// is [`karakuri_console::panel::Op`] or a gesture on
+/// `karakuri_console::panel::Panel` — never a `karakuri_operation::Operation`,
+/// which is what this file scans for. So a `has` badge in that section is a
+/// claim this file cannot judge and **would judge wrongly**: *Move a boundary*
+/// is a drag rather than an operation, the vocabulary carries it as
+/// `Undecided`, and nothing in [`SRC`] will ever construct it. That was the
+/// header's last bullet said as prose; this is it said as code, because the
+/// bullet was true of the first assertion below and not of the second, which
+/// went on demanding an `Operation` for every badge in the column.
+///
+/// **Those badges are checked, and `tests/vocabulary.rs` is where.** It reads
+/// this section and asks a running `Panel` what a hand on it reaches, both
+/// ways round — the same pair as here, against the type the console performs.
+const ELSEWHERE: &str = "<h2>Arranging the console</h2>";
 
 /// The badge text of a route that names nowhere. A `plan` badge is allowed to
 /// be this — three of them are, and ADR-0213 says which — but a `has` badge
@@ -218,6 +247,40 @@ fn emissions() -> Vec<Operation> {
     found
 }
 
+/// **The titles of the rows in [`ELSEWHERE`]**, read off the page rather than
+/// listed here, so that a row added to that section is exempt the day it lands
+/// and a section renamed out from under this file panics instead of quietly
+/// exempting nothing.
+fn elsewhere() -> BTreeSet<String> {
+    let html = page();
+    let start = html.find(ELSEWHERE).unwrap_or_else(|| {
+        panic!(
+            "`{ELSEWHERE}` is gone from {PAGE} — the section whose panel badges are checked \
+                by `tests/vocabulary.rs` rather than here"
+        )
+    });
+    let rest = &html[start + ELSEWHERE.len()..];
+    let end = rest.find("<h2").unwrap_or(rest.len());
+    let mut found = BTreeSet::new();
+    for part in rest[..end].split(ROW).skip(1) {
+        let Some(open) = part.find("<h3>") else {
+            continue;
+        };
+        let rest = &part[open + "<h3>".len()..];
+        let Some(close) = rest.find("</h3>") else {
+            continue;
+        };
+        found.insert(rest[..close].to_owned());
+    }
+    assert!(
+        found.len() >= 6,
+        "only {} rows found under `{ELSEWHERE}` in {PAGE} — an exemption that matches nothing \
+         is one this file would not notice it had stopped granting",
+        found.len()
+    );
+    found
+}
+
 /// **Every row's title and its panel badge**, in page order: the badge's class
 /// — `has`, `plan` or `gap` — and the text it names the control's home with.
 ///
@@ -328,9 +391,15 @@ fn every_operation_a_console_control_emits_has_a_panel_route_marked_built() {
 fn every_panel_route_the_page_marks_built_is_emitted_by_a_console_control() {
     let emitted: BTreeSet<&str> = emissions().iter().map(|op| op.title()).collect();
     let routes = panel_routes();
+    let elsewhere = elsewhere();
     let claimed: Vec<&(String, String, String)> = routes
         .iter()
         .filter(|(_, class, _)| class == "has")
+        // The console's own shape is reached through `panel::Op` and through a
+        // drag that is no operation at all, so a scan for `Operation::` can
+        // only report a built badge there as a control that does not exist.
+        // See [`ELSEWHERE`], and `tests/vocabulary.rs` for what does check it.
+        .filter(|(title, _, _)| !elsewhere.contains(title))
         .collect();
     assert!(
         claimed.len() >= 5,
