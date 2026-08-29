@@ -455,9 +455,17 @@ fn gpu_binaries_still_take_a_device() {
                 found |= fs::read_to_string(&path).expect("read").contains(DOOR);
             }
         }
+        // A floor of one, and it was two until ADR-0214's move: the guard is
+        // against reading *nothing* — a renamed directory, or an extension
+        // filter that stopped matching — and `karakuri-cli/src` legitimately
+        // holds one file now. It is not the claim. The claim is `found`
+        // below, which needs the door read out of a real file, so an emptied
+        // or moved directory fails there too and says something useful when
+        // it does. Raising this back would mean asserting a crate's shape
+        // from a test about GPU markers, which is not this file's business.
         assert!(
-            checked >= 2,
-            "{} holds {checked} source files",
+            checked >= 1,
+            "{} holds no Rust source at all — has the path moved?",
             dir.display()
         );
         assert!(
