@@ -76,6 +76,7 @@
             </span>
             <span class="pill lav" data-tip="MIDI learn. Off. Click, then point at any control and move a knob on your surface, and the two are mapped. Every control that has a tooltip can be learned, so nothing is unreachable by accident.">learn</span>
             <span class="pill" data-tip="The map in use, and it is a file. Which knob is which belongs to the hardware in the room, so a map is saved and recalled per controller and never travels in a session. Click to save, load, or start a new one.">map &middot; nanoKONTROL2 &#9662;</span>
+            <span class="pill" data-tip="The arrangement in use, and it is a file. Every fold, every boundary you have dragged, the solo and both sets of remembered sizes, filed under a name you pick &mdash; kept beside your Sets under arrangements/ rather than beside the program, so it travels with the library it was arranged around. Click to save, load, or start a new one. Starting a new one is the reset, and it is the one arrangement here with no file behind it: the one that came with the program, which nothing you save can shadow. The window is not part of it &mdash; a console arranged on a laptop comes back at the size you are looking at now. r starts a new one from the keyboard.">arr &middot; night &#9662;</span>
             <span class="sep"></span>
             <span data-tip="Frame time against the budget. 12.4 ms of 16.6 &mdash; there is headroom. A candidate that cannot hold this is rolled back on its own.">
               <span class="val">58</span><span style="color:var(--c-faint)"> fps &middot; </span><span class="val">12.4</span><span style="color:var(--c-faint)">/16.6 ms</span>
@@ -1117,6 +1118,62 @@
           of it for the instrument; the one in a deck head is beats, there is
           one per deck, and it is where a scrub goes. The unit is what tells
           them apart, so neither is ever drawn without it.
+        </p>
+      </div>
+
+      <div class="note">
+        <h3>The arrangement is a file, and the reset is one of them</h3>
+        <p>
+          <strong>The pill is the map pill's shape, and that is the argument for
+          the row rather than a resemblance noticed afterwards</strong>: a named
+          file with <em>save</em>, <em>load</em> and <em>start a new one</em>
+          under a single control is exactly the family this is &mdash; and
+          <em>a new one</em> is the reset. The default arrangement is not a
+          fourth thing beside the three. It is the one you could not have saved,
+          because it reaches code rather than a file; so it has no name, and
+          nothing you file can take its place.
+        </p>
+        <p>
+          <strong>What it saves is what the rest of this panel promises to
+          keep</strong>: every fold, every boundary you have dragged, the solo,
+          and the sizes a folded bay and a window dragged too small are both
+          holding for you. <strong>What it does not save is the window.</strong>
+          An arrangement carries the viewport it was written at and comes back
+          at the one in front of you, which is what lets a console arranged on a
+          laptop open on a projector without a margin round it.
+        </p>
+        <p>
+          <strong>The name is typed and never given</strong>, and that decides
+          the shape of the control rather than being a preference for typing. A
+          stamp chosen for you files arrangements under handles nobody can ask
+          for again, and a numbered slot moves the day you delete the slot above
+          it. So <em>load</em> is a list &mdash; the names already filed, which a
+          hand picks without typing anything &mdash; and <em>save</em> is the one
+          item on this panel that asks for letters. Once a name is in use,
+          saving again means that name: saving over it is what saving it again
+          <em>is</em>. <strong>The field has the keyboard while it is up</strong>
+          &mdash; every key is a letter of the name, including the ones that are
+          panel keys the rest of the time. Return finishes it and esc backs out
+          with nothing saved, which is the one place on this panel where esc
+          does not quit.
+        </p>
+        <p>
+          <strong>A name is letters, digits, <code>-</code> and <code>_</code></strong>,
+          because it is one path component and it names a file under
+          <code>arrangements/</code>. Anything else is refused when you finish
+          typing it, naming the character that stopped it &mdash; and it is
+          refused <em>there</em> rather than at the key, which is deliberate: the
+          field takes what you type, and the rule about what may become a file
+          lives where the file is written. A name with a space in it can be
+          typed and cannot be saved, and the panel says which character it was
+          rather than quietly dropping it.
+        </p>
+        <p>
+          <strong>Two more refusals, and they are refusals rather than
+          guesses.</strong> A name nothing is filed under is said back to you and
+          the console does not move; an arrangement that disagrees with itself is
+          refused whole rather than repaired into something you did not save.
+          Both are read where the bytes are, not here.
         </p>
       </div>
 

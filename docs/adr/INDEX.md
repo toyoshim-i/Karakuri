@@ -250,6 +250,7 @@ number; new records continue from the end.
 | [ADR-0222](0222-a-sequencer-lane-is-a-fifth-route-and-not-a-binding.md) | A sequencer lane is a fifth route and not a binding | 2026-08-29 | accepted |
 | [ADR-0223](0223-a-wildcard-write-is-refused-where-the-nodes-it-lands-on-disagree.md) | A wildcard write is refused where the nodes it lands on disagree | 2026-08-30 | accepted |
 | [ADR-0224](0224-out-and-exposure-are-two-levels-that-multiply-in-different-places.md) | `out` and `exposure` are two levels that multiply in different places | 2026-08-30 | accepted |
+| [ADR-0225](0225-a-menu-is-a-gesture-in-hand-rather-than-a-rectangle-on-the-panel.md) | A menu is a gesture in hand rather than a rectangle on the panel | 2026-08-30 | accepted |
 
 ## Retired numbers
 

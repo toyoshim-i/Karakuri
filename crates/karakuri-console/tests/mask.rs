@@ -40,7 +40,7 @@
 
 mod common;
 
-use common::{drawn_once, rect_of, PLAUSIBLE};
+use common::{drawn_once, rect_of, showing, PLAUSIBLE};
 use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::{Op, Panel, GRAB};
 use karakuri_console::room::size;
@@ -378,7 +378,7 @@ fn a_press_off_the_mini_asks_for_nothing_and_is_not_claimed() {
             "{what} asked the mask to change"
         );
         assert_eq!(
-            claim(&mut panel, &ctx, &strips, point(probe)),
+            claim(&mut panel, &ctx, &showing(&strips), point(probe)),
             Claim::Egui,
             "{what} is being claimed as a control the panel acts on"
         );
@@ -399,7 +399,7 @@ fn a_press_off_the_mini_asks_for_nothing_and_is_not_claimed() {
             "{what} asked the mask to change"
         );
         assert_eq!(
-            claim(&mut panel, &ctx, &strips, point(probe)),
+            claim(&mut panel, &ctx, &showing(&strips), point(probe)),
             Claim::Panel,
             "{what} stopped being a control, so this is asserting nothing about the mask"
         );
@@ -411,7 +411,7 @@ fn a_press_off_the_mini_asks_for_nothing_and_is_not_claimed() {
     let on = at.mask.center();
     assert!(bay.mask(point(on)).is_some(), "the mini asked for nothing");
     assert_eq!(
-        claim(&mut panel, &ctx, &strips, point(on)),
+        claim(&mut panel, &ctx, &showing(&strips), point(on)),
         Claim::Panel,
         "the mini is not the panel's, so it is drawn where it cannot be clicked"
     );
@@ -468,7 +468,7 @@ fn a_folded_mixer_bay_has_no_mini_to_press() {
             "a folded mixer bay still laid its strips out (enclosing: {enclosing})"
         );
         assert_eq!(
-            claim(&mut panel, &ctx, &strips, point(where_it_was)),
+            claim(&mut panel, &ctx, &showing(&strips), point(where_it_was)),
             Claim::Egui,
             "where the mini used to be is still claimed with the bay folded away \
              (enclosing: {enclosing})"
@@ -555,7 +555,7 @@ fn no_mask_mini_is_inside_a_boundarys_grab() {
                  control is dead there, and `input`'s rule 2 is what would have to change"
             );
             assert_eq!(
-                claim(&mut panel, &ctx, &strips, point(probe)),
+                claim(&mut panel, &ctx, &showing(&strips), point(probe)),
                 Claim::Panel,
                 "the mask mini of strip {slot} is not the panel's at {probe:?}"
             );

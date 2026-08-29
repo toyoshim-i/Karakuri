@@ -27,7 +27,7 @@
 
 mod common;
 
-use common::{drawn_once, id_of, near, rect_of, solved, PLAUSIBLE, SMALLEST};
+use common::{drawn_once, id_of, near, rect_of, showing, solved, PLAUSIBLE, SMALLEST};
 use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::Panel;
 use karakuri_console::room::{size, Room};
@@ -502,7 +502,7 @@ fn nothing_in_the_library_is_a_control() {
     ];
     let mut asked = 0;
     for p in points {
-        let claimed = claim(&mut panel, &ctx, &strips, Point::new(p.x, p.y));
+        let claimed = claim(&mut panel, &ctx, &showing(&strips), Point::new(p.x, p.y));
         assert_eq!(
             claimed,
             Claim::Egui,

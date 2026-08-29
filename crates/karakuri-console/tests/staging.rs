@@ -36,7 +36,7 @@
 
 mod common;
 
-use common::{drawn_once, rect_of, PLAUSIBLE, SMALLEST};
+use common::{drawn_once, rect_of, showing, PLAUSIBLE, SMALLEST};
 use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::Panel;
 use karakuri_console::room::Room;
@@ -238,7 +238,7 @@ fn nothing_in_the_staging_lane_is_a_control() {
     let mut asked = 0;
     for p in points {
         assert_eq!(
-            claim(&mut panel, &ctx, &strips, Point::new(p.x, p.y)),
+            claim(&mut panel, &ctx, &showing(&strips), Point::new(p.x, p.y)),
             Claim::Egui,
             "the console took the pointer at {p:?}, which is inside the Staging bay"
         );
@@ -259,7 +259,7 @@ fn nothing_in_the_staging_lane_is_a_control() {
         claim(
             &mut panel,
             &ctx,
-            &strips,
+            &showing(&strips),
             Point::new(region.center().x, above)
         ),
         Claim::Panel,

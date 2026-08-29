@@ -24,7 +24,7 @@
 
 mod common;
 
-use common::{drawn_once, near, rect_of, PLAUSIBLE};
+use common::{drawn_once, near, rect_of, showing, PLAUSIBLE};
 use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::{Dragged, Grab, InHand, Knob, Panel, Released, GRAB};
 use karakuri_console::repaint::{Change, Repaint};
@@ -448,10 +448,13 @@ fn a_drag_in_hand_keeps_its_claim_while_the_pointer_leaves_the_strip() {
         // Before anything is in hand, the middle of the picture is egui's.
         let away = rect_of(panel.layout(), "program-view");
         let away = Point::new(away.x + away.w * 0.5, away.y + away.h * 0.5);
-        assert_eq!(claim(&mut panel, &ctx, &strips, away), Claim::Egui);
+        assert_eq!(
+            claim(&mut panel, &ctx, &showing(&strips), away),
+            Claim::Egui
+        );
         // The knob is the panel's, by rule 3.
         assert_eq!(
-            claim(&mut panel, &ctx, &strips, point(held)),
+            claim(&mut panel, &ctx, &showing(&strips), point(held)),
             Claim::Panel,
             "the knob is not claimed, so a press on it would go to egui"
         );
@@ -467,7 +470,7 @@ fn a_drag_in_hand_keeps_its_claim_while_the_pointer_leaves_the_strip() {
     ] {
         panel.moved(wandered);
         assert_eq!(
-            claim(&mut panel, &ctx, &strips, wandered),
+            claim(&mut panel, &ctx, &showing(&strips), wandered),
             Claim::Panel,
             "the fader lost its claim at {wandered:?}"
         );
@@ -475,9 +478,15 @@ fn a_drag_in_hand_keeps_its_claim_while_the_pointer_leaves_the_strip() {
 
     // The release is decided before it is performed, and afterwards the
     // pointer where it is standing is egui's again.
-    assert_eq!(claim(&mut panel, &ctx, &strips, away), Claim::Panel);
+    assert_eq!(
+        claim(&mut panel, &ctx, &showing(&strips), away),
+        Claim::Panel
+    );
     assert!(panel.released().is_some());
-    assert_eq!(claim(&mut panel, &ctx, &strips, away), Claim::Egui);
+    assert_eq!(
+        claim(&mut panel, &ctx, &showing(&strips), away),
+        Claim::Egui
+    );
 }
 
 /// **A fader drag draws no resize cursor**, wherever the pointer has got to.
@@ -591,7 +600,7 @@ fn no_knob_is_inside_a_boundarys_grab() {
                      control is dead there, and `input`'s rule 2 is what would have to change"
                 );
                 assert_eq!(
-                    claim(&mut panel, &ctx, &strips, point(probe)),
+                    claim(&mut panel, &ctx, &showing(&strips), point(probe)),
                     Claim::Panel,
                     "{what} of strip {slot} is not the panel's at {probe:?}"
                 );

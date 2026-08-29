@@ -36,23 +36,59 @@
 //!    stop while the pointer runs on across three bays is the ordinary case,
 //!    not the odd one, and a claim re-decided from the pointer each event
 //!    would hand the middle of that gesture to `egui`.
-//! 2. Otherwise, if the pointer is within [`GRAB`] of a boundary, it is the
+//! 2. **An open menu keeps the pointer until it is shut** — every point of
+//!    the console, not only the menu's own card.
+//!
+//!    **This is rule 1 again rather than a second exception to rule 4**, and
+//!    it was added with the arrangement pill because that is the first control
+//!    here whose gesture outlives the press that started it. A menu that is
+//!    down is a hand mid-choice exactly as a boundary in hand is a hand
+//!    mid-drag, and the next press is part of that gesture whichever way it
+//!    ends: on a row it picks, anywhere else it dismisses. Neither is `egui`'s
+//!    and neither is a boundary's.
+//!
+//!    **It has to come before the boundary's first refusal, and that is the
+//!    whole reason it is a rule and not a clause of rule 4.** The menu hangs
+//!    out of the transport row and down over the bays, so it crosses the
+//!    boundary under that row and whatever pane divider is beneath it — and
+//!    under rule 4 those rows would be dead, silently, in the middle of a list
+//!    an operator is reading. The clearance arithmetic that keeps the *pill*
+//!    clickable cannot be done for a card that is deliberately drawn across
+//!    the panel; the honest answer is that the card is modal while it is
+//!    there, and the price is that a boundary cannot be dragged with a menu
+//!    open. Pressing it shuts the menu, and the second press drags.
+//!
+//!    See [`crate::view::Arrangement::open`], which is the whole of the
+//!    condition, and `tests/arrangement_pill.rs`, which asserts both halves —
+//!    that a boundary under the open card goes to the panel, and that it goes
+//!    back to being an ordinary boundary the moment the menu is shut.
+//! 3. Otherwise, if the pointer is within [`GRAB`] of a boundary, it is the
 //!    panel's and `egui` does not see the event.
-//! 3. **Otherwise, if the pointer is on a control the console draws, it is the
+//! 4. **Otherwise, if the pointer is on a control the console draws, it is the
 //!    panel's** — because the console paints and `egui` owns no widget
 //!    anywhere in it, so a press routed to `egui` there reaches nothing at
 //!    all. The panel's controls are painted shapes, and the only thing that
 //!    knows a press landed on one is this rule.
 //!
-//!    **There are five of them now**: the Outputs row's sink
+//!    **There are six of them now**: the Outputs row's sink
 //!    ([`crate::view::outputs`]), a mixer strip's fader knob
 //!    ([`crate::view::Mixer::grab`]), its blend chip
 //!    ([`crate::view::Mixer::blend`]), its tally chip
-//!    ([`crate::view::Mixer::tally`]) and its mask mini
-//!    ([`crate::view::Mixer::mask`]). The rule did not change to hold the
+//!    ([`crate::view::Mixer::tally`]), its mask mini
+//!    ([`crate::view::Mixer::mask`]) and the transport row's arrangement pill
+//!    ([`crate::view::arrangement`]). The rule did not change to hold the
 //!    second, the third, the fourth or the fifth, which is what it was written
 //!    for — and each is asked exactly the way the first is: the derivation
 //!    that draws it, asked whether the point is on it, with nothing stored.
+//!
+//!    **The sixth is the first control in the transport row**, which was four
+//!    readouts and nothing a press acted on until it landed
+//!    ([`crate::view::transport`]). It clears every boundary by more than any
+//!    of the other five: the row is 48 and a `.pill` is 16.5, centred, so
+//!    there is (48 - 16.5) / 2 = **15.75** of row above it and 15.75 below,
+//!    against a [`GRAB`] of 6 — `tests/arrangement_pill.rs`, which is
+//!    `tests/outputs.rs`'s arithmetic over this control and fails the same
+//!    three ways.
 //!
 //!    **The fourth is the first control with a state that can be pending**,
 //!    and it is still only an affordance: it names a destination and refuses
@@ -72,11 +108,11 @@
 //!    must not move the value. Claiming a press in order to throw it away
 //!    would put the rule and the act out of step, and `egui` owns nothing
 //!    there either, so the two answers are the same nothing.
-//! 4. Otherwise it goes to
+//! 5. Otherwise it goes to
 //!    [`egui_winit::State::on_window_event`](https://docs.rs/egui-winit) and
 //!    `egui` decides.
 //!
-//! Rule 2 before rule 3 is *first refusal* meant literally: a control under a
+//! Rule 3 before rule 4 is *first refusal* meant literally: a control under a
 //! boundary's grab would be dead, and it is the test above that keeps the
 //! order from ever mattering. **The mixer's knobs are measured the same way**
 //! and in the same file's spirit — `tests/fader.rs` asserts that no knob in
@@ -121,6 +157,15 @@
 //! beside it**, which is the whole of ADR-0203 and is why choosing a shape
 //! does not straighten a diagonal front.
 //!
+//! **So is the arrangement pill**, one row up and over a control with a menu
+//! under it: [`crate::view::ArrangementPill::ask`] answers *what does a press
+//! on it ask for* off the same laid-out pill this rule hit-tests — the menu
+//! down or up, the reset, a save under the name in use, or a restore of the
+//! name that was picked. It is the one of the six whose answer is sometimes
+//! not an operation at all, and that is the affordance and the vocabulary
+//! staying apart rather than an exception: *open the menu* is not something a
+//! MIDI map or an MCP call could ever want to say.
+//!
 //! **Four questions, one derivation.** The mixer bay is laid out once per
 //! event and asked for every control it has — a knob, a blend chip, a tally
 //! chip and a mask mini are four questions about one laid-out strip, and a
@@ -152,7 +197,7 @@
 use karakuri_layout::{Hit, Point};
 
 use crate::panel::{Panel, GRAB};
-use crate::view::{mixer, outputs, Strip};
+use crate::view::{arrangement, mixer, outputs, View};
 
 /// Who a pointer event belongs to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -172,7 +217,7 @@ pub enum Claim {
 /// test.
 ///
 /// **Takes the `egui` context to ask where the console's controls are.** Rule
-/// 3 is about a painted chip whose width is the width of the name in it, so
+/// 4 is about a painted chip whose width is the width of the name in it, so
 /// answering it means laying that name out — which is `egui`'s to do and
 /// nobody else's, since it is `egui` that will paint the same run. It is a
 /// cached galley lookup per event, and before the first frame there are no
@@ -194,43 +239,65 @@ pub enum Claim {
 /// answers `None`, and the bay is `None` before any chip is hit-tested.
 /// `tests/tally.rs` asserts it both ways round.
 ///
-/// **And it takes the strips, for the same reason one level further out.** A
-/// fader's knob sits on the fill's moving edge, so *where the control is*
-/// depends on what the deck said this frame — and this crate has no deck
+/// **And it takes the whole [`View`], for the same reason one level further
+/// out.** A fader's knob sits on the fill's moving edge and the arrangement
+/// pill is as wide as the name in it, so *where a control is* depends on what
+/// the deck and the store said this frame — and this crate has neither
 /// (ADR-0156), so the values arrive the way they arrive everywhere else here:
-/// handed in by whoever owns it, as [`crate::view::View::mixer`] is. An empty
-/// slice is a console with no deck behind it, which has no strips and so no
-/// knobs, and it is what every test in this crate that is not about the mixer
+/// handed in by whoever owns them.
+///
+/// **The view rather than the four fields out of it**, which is a change from
+/// when this took the strips alone. It is not convenience: rule 4 hit-tests
+/// exactly what [`View::draw`] painted, and a caller that passed the strips
+/// from one frame and the arrangement from another could put the two out of
+/// step with nothing failing to compile. One argument is one frame's answer.
+/// A [`View::new`] nobody has written to is a console with no deck and no
+/// store behind it — no strips, no knobs, the default arrangement and a shut
+/// menu — and it is what every test in this crate that is not about a control
 /// passes.
-pub fn claim(panel: &mut Panel, ctx: &egui::Context, strips: &[Strip], p: Point) -> Claim {
+pub fn claim(panel: &mut Panel, ctx: &egui::Context, view: &View, p: Point) -> Claim {
     // Rule 1, and it comes first: a gesture in progress is not re-decided from
     // where the pointer happens to be now.
     if panel.dragging() {
         return Claim::Panel;
     }
     panel.solve();
-    // Rule 2 before rule 3: the boundary's first refusal is what the ordering
+    // Rule 2: a menu that is down is a hand mid-choice, and every point of the
+    // console is part of that gesture until it is shut. Before the boundary,
+    // because the card is drawn across boundaries on purpose.
+    if view.arrangement.open() {
+        return Claim::Panel;
+    }
+    // Rule 3 before rule 4: the boundary's first refusal is what the ordering
     // is, and the control clearing every grab is what stops it costing
     // anything. See the module documentation and `tests/outputs.rs`.
     match panel.layout().hit(p, GRAB) {
         Hit::Divider { .. } => Claim::Panel,
-        // Rule 3, over all five of the console's controls. Each is asked the
+        // Rule 4, over all six of the console's controls. Each is asked the
         // same way — the derivation that draws it, asked whether the point is
         // on it — and no answer is stored.
         Hit::View(_) | Hit::Nothing => {
             let on_sink = outputs(ctx, panel.layout()).is_some_and(|row| row.hit(p));
+            // The pill is the only one of the six that is not in a bay, and
+            // the only one asked with the menu already known to be shut: rule
+            // 2 has answered for the open case above, so this is the capsule
+            // alone.
+            let on_pill = || {
+                arrangement(ctx, panel.layout(), view.transport, &view.arrangement)
+                    .is_some_and(|pill| pill.hit(p))
+            };
             // **The bay is derived once for all of its controls**, since a
             // knob, a blend chip, a tally chip and a mask mini are four
             // questions about one laid-out strip.
             let on_strip = || {
-                mixer(ctx, panel.layout(), strips).is_some_and(|bay| {
+                mixer(ctx, panel.layout(), &view.mixer).is_some_and(|bay| {
                     bay.grab(p).is_some()
                         || bay.blend(p).is_some()
                         || bay.tally(p).is_some()
                         || bay.mask(p).is_some()
                 })
             };
-            match on_sink || on_strip() {
+            match on_sink || on_pill() || on_strip() {
                 true => Claim::Panel,
                 false => Claim::Egui,
             }
