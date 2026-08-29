@@ -18,17 +18,23 @@
 //! here is what lets the same engine code be deterministic.
 
 mod mcp;
-mod meta;
 mod midi;
 mod mix;
-mod setfile;
 mod watch;
 
-// **The program is not this binary's**, and these seven modules are the first
-// of it to say so: they moved to `karakuri-environment` under ADR-0214 and
+// **The program is not this binary's**, and these nine modules are how much of
+// it has said so: they moved to `karakuri-environment` under ADR-0214 and
 // ADR-0215, and they are reached here by name so that every call site below
 // reads exactly as it did. This binary is a surface over them.
-use karakuri_environment::{audio, compile, history, render, scratch, session, tempo_source};
+use karakuri_environment::{
+    audio, compile, history, meta, render, scratch, session, setfile, tempo_source,
+};
+// **Brought into scope rather than reached through their modules**, because
+// both were written here and every call site below is the one it already was.
+// `Names` is a Set file's per-layer node names and `put_meta` writes a card to
+// a store, so both crossed with the modules whose shape they are part of.
+use karakuri_environment::meta::put_meta;
+use karakuri_environment::setfile::Names;
 
 use std::fmt::Write as _;
 use std::path::PathBuf;
@@ -2073,63 +2079,6 @@ struct Material {
     names: Names,
 }
 
-/// A name for every node of a slot, in the shape the procedures themselves are
-/// passed in.
-///
-/// **Per layer rather than one list in node order**, because the node order is
-/// the engine's — `slot_of` and `nodes_of` decide it — and a caller that
-/// reproduced it here would be a second place for a fact this project has
-/// already been bitten by twice.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Names {
-    pub l1s: Vec<Option<String>>,
-    pub l2s: Vec<Option<String>>,
-    /// **A list, like the renderers'.** A slot holds as many cameras as its
-    /// files declare, and the built-in orbit is a node beside them — one
-    /// nobody can name from the command line, since a name is written beside
-    /// a path and the built-in has none. It is called `orbit`; see
-    /// `karakuri_engine::set::BUILTIN_CAMERA`.
-    pub l3s: Vec<Option<String>>,
-    pub l4s: Vec<Option<String>>,
-    pub fields: Vec<Option<String>>,
-}
-
-impl Names {
-    /// Every name that was actually written, which is the only thing worth
-    /// checking for a collision: a derived one is disambiguated where it is
-    /// derived, in `Set::build_many`.
-    fn written(&self) -> impl Iterator<Item = &String> {
-        self.l1s
-            .iter()
-            .flatten()
-            .chain(self.l2s.iter().flatten())
-            .chain(self.l3s.iter().flatten())
-            .chain(self.l4s.iter().flatten())
-            .chain(self.fields.iter().flatten())
-    }
-
-    /// **Unique within a slot**, which is the scope a name resolves in: a Set is
-    /// what holds the nodes, so two slots may each have a `near` and neither is
-    /// ambiguous.
-    ///
-    /// Refused rather than disambiguated. A derived name is disambiguated
-    /// where it is derived — that is what `-2` is for — so a collision reaching
-    /// here is two *written* names, and picking one for the author would leave
-    /// a `--param` pointing at whichever the tie-break preferred.
-    fn check_unique(&self) -> Result<(), String> {
-        let mut seen: Vec<&str> = Vec::new();
-        for name in self.written() {
-            if seen.contains(&name.as_str()) {
-                return Err(format!(
-                    "two nodes are both called `{name}` — a name addresses one node in a slot"
-                ));
-            }
-            seen.push(name);
-        }
-        Ok(())
-    }
-}
-
 /// Where one of a slot's files ended up: the layer its own `kind` declaration
 /// puts it on, and which node of that layer it is, beside the name and path it
 /// was spelled with.
@@ -2180,7 +2129,7 @@ struct Placed {
     /// themselves are read once and never again.
     source: std::sync::Arc<str>,
     /// **This node's metadata card**, built from the `Checked` the compile
-    /// produced — see [`crate::meta::card`].
+    /// produced — see [`meta::card`].
     ///
     /// It rides here for the reason `source` does, and it is the same reason
     /// twice: this is the one compile the run will do of these bytes, and the
@@ -2250,37 +2199,6 @@ impl Placed {
         put_meta(store, &hash, &self.meta);
         Ok(hash)
     }
-}
-
-/// **Write an artifact's metadata card, and never let it stop a save.**
-///
-/// The one place either put path says this, so that the judgement — the card is
-/// derived and the artifact is not — is made once and the sentence is one
-/// sentence. See [`Placed::put`], which is the other caller's other half.
-///
-/// The hash is passed rather than recomputed: the caller has just put the bytes
-/// under it, and deriving it again here would be a second answer to which
-/// artifact this card is for.
-///
-/// **It hands back what it said, and both callers drop it.** The policy — a
-/// card that will not write is reported and does not fail the save — was
-/// asserted in prose and nowhere else, because a sentence that is only printed
-/// is a sentence no test can hold. Returning it costs one `Option` and buys
-/// `live_save_tests::a_card_that_will_not_write_is_said_and_does_not_fail_the_save`,
-/// which reads it back. `None` is a card on disk.
-fn put_meta(
-    store: &karakuri_store::store::Store,
-    hash: &karakuri_store::hash::Hash,
-    card: &[karakuri_store::ndjson::Line],
-) -> Option<String> {
-    let e = store.write_meta(hash, card).err()?;
-    let said = format!(
-        "  the metadata for {}: {e} — the artifact is stored and the library will \
-         regenerate its card from the source on the next compile",
-        hash.short(12)
-    );
-    eprintln!("{said}");
-    Some(said)
 }
 
 /// **Sort one slot's compiled procedures by the `kind` each declares**, keeping
@@ -3038,7 +2956,7 @@ fn open_store(args: &Args) -> karakuri_store::store::Store {
 /// early return by hand.
 ///
 /// **The same summary the MCP tool renders**, from
-/// [`crate::setfile::summarise`]: one derivation, two renderings. What a node
+/// [`setfile::summarise`]: one derivation, two renderings. What a node
 /// is called here is what `read_set` calls it, because the answer comes from
 /// one function — an operator reading a line here and a model reading a block
 /// there are looking at one library and must be told one thing about it.

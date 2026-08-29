@@ -23,18 +23,6 @@ karakuri-operation = { version = "0.1.0", path = "../karakuri-operation" }
 karakuri-operation-record = { version = "0.1.0", path = "../karakuri-operation-record" }
 karakuri-signal = { version = "0.1.0", path = "../karakuri-signal" }
 karakuri-store = { version = "0.1.0", path = "../karakuri-store" }
-# **Local dates, for `setfile::written_at`.** The one thing needed of it is
-# "what day is it where the operator is", so that the time beside a Set is the
-# one the person would say out loud. `chrono` rather than `time`: `time`'s
-# local-offset lookup is soundness-gated and returns nothing from a
-# multi-threaded process on Unix, and this one always has an audio thread, a
-# build worker and (with `--mcp`) a thread per connection running. It would have
-# fallen back to UTC every time, which is the one thing the answer must not do.
-#
-# The edit history wanted this for the same reason and took the dependency with
-# it to `karakuri-environment`; `png` and `serde` left with `render.rs` and
-# `tempo_source.rs` and are gone from here.
-chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 # The MCP wire is read and written at run time, not only in tests.
 serde_json.workspace = true
 pollster = "1.0.1"
@@ -42,6 +30,6 @@ wgpu = "30.0.1"
 winit = "0.30.13"
 
 [dev-dependencies]
-# A Set file is a directory of artifacts and a file; the round trip is only
-# worth checking against a real one.
+# The watcher, the MCP server and the run itself open a store on a disk, and
+# what they do to one is only worth checking against a real one.
 tempfile = "3"

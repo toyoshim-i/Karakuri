@@ -1635,7 +1635,7 @@ fn save_set(deck: u8, id: Option<&str>, state: &State) -> Result<mpsc::Receiver<
 ///
 /// **This is the reader `<hash>.meta.ndjson` did not have.** Every path that
 /// stores an artifact from a compile writes a card beside it — see
-/// [`crate::meta::card`] — and until this, `Store::read_meta` had no caller
+/// [`karakuri_environment::meta::card`] — and until this, `Store::read_meta` had no caller
 /// outside its own tests. A figure with a producer and no consumer is how the
 /// last wrong number in this program got published, so the card gets its reader
 /// in the same milestone that gave it a writer.
@@ -1694,10 +1694,10 @@ fn read_set(id: &str, state: &State) -> Result<String, String> {
              and this store holds only the ones written into it"
         )
     })?;
-    // **The file's own order**, which is the order [`crate::setfile::save`]
+    // **The file's own order**, which is the order [`karakuri_environment::setfile::save`]
     // wrote the nodes in, and the order a hand-written file chose. Sorting by
     // layer would impose a reading nobody wrote, for the reason
-    // [`crate::meta::card`] keeps a procedure's parameters in declaration order.
+    // [`karakuri_environment::meta::card`] keeps a procedure's parameters in declaration order.
     let nodes: Vec<(Layer, u32, Option<String>, Hash)> = lines
         .iter()
         .filter_map(|line| match line.record() {
@@ -1773,7 +1773,7 @@ const LISTED: usize = 20;
 /// thousand lines. The per-node cards this *does* read are only the ones a
 /// name needs: a node the file named costs nothing to name here.
 ///
-/// **The summary comes from [`crate::setfile::summarise`]**, which `--list-sets`
+/// **The summary comes from [`karakuri_environment::setfile::summarise`]**, which `--list-sets`
 /// renders too. One derivation, two renderings — an operator's line and this —
 /// so the two surfaces cannot come to disagree about what a store holds or
 /// about what a node in it is called.
@@ -1790,10 +1790,10 @@ fn list_sets(
     let holds = holds.map(str::to_ascii_lowercase);
     // The vocabulary's layer into the record's, which is the third spelling of
     // this list and the one a Set file is written in — see [`layer_of`].
-    let layer = layer.map(|layer| crate::setfile::layer_of(kind_of(layer)));
+    let layer = layer.map(|layer| karakuri_environment::setfile::layer_of(kind_of(layer)));
     let opened = |e: StoreError| format!("the store at `{}`: {e}", state.store.display());
     let store = Store::open(&state.store).map_err(opened)?;
-    let mut sets = crate::setfile::summarise(&store).map_err(opened)?;
+    let mut sets = karakuri_environment::setfile::summarise(&store).map_err(opened)?;
     let held = sets.len();
     // **An empty store is an answer and not a failure**, and it is a different
     // answer from a filter that matched nothing: one sends a reader to
@@ -1863,8 +1863,8 @@ fn list_sets(
 }
 
 /// One Set as a line of a listing.
-fn set_line(set: &crate::setfile::SetSummary) -> String {
-    let written = crate::setfile::written_at(set.written);
+fn set_line(set: &karakuri_environment::setfile::SetSummary) -> String {
+    let written = karakuri_environment::setfile::written_at(set.written);
     // **A file in `sets/` that will not read is listed and named.** Dropping it
     // would answer "what have I kept" with something missing, and rendering it
     // as a set of no nodes would say it holds nothing.
@@ -1965,7 +1965,7 @@ fn element_storage_block(store: &Store, id: &str) -> String {
              own card and stands on its own.\n"
         )
     };
-    let loaded = match crate::setfile::load(store, id) {
+    let loaded = match karakuri_environment::setfile::load(store, id) {
         Ok(loaded) => loaded,
         Err(why) => return unavailable(&why),
     };
@@ -2087,7 +2087,7 @@ fn element_storage_block(store: &Store, id: &str) -> String {
 
 /// One node of a Set: its address in the Set, its artifact, and its card.
 ///
-/// **What it is called is [`crate::setfile::node_called`]'s answer**, and this
+/// **What it is called is [`karakuri_environment::setfile::node_called`]'s answer**, and this
 /// is the function that used to decide it. `list_sets` names the same node in a
 /// listing and a model has to find, when it reads the Set, the node the listing
 /// told it about — so the three candidates are weighed in one place and read
@@ -2114,7 +2114,8 @@ fn node_block(store: &Store, layer: Layer, index: u32, name: Option<&str>, hash:
     match store.read_meta(hash) {
         Ok(card) => {
             let (declared, body) = rendered_card(&card);
-            let called = crate::setfile::node_called(name, declared.as_deref(), hash);
+            let called =
+                karakuri_environment::setfile::node_called(name, declared.as_deref(), hash);
             // **What did not win, where something had to lose.** A Set's own
             // name for a node hides the name the procedure gives itself, and a
             // model choosing between saved material wants both: the one this
@@ -2159,13 +2160,13 @@ fn node_block(store: &Store, layer: Layer, index: u32, name: Option<&str>, hash:
             };
             // No card, so there is no declared name to weigh: the set's own
             // name if it has one, and the short hash otherwise.
-            let called = crate::setfile::node_called(name, None, hash);
+            let called = karakuri_environment::setfile::node_called(name, None, hash);
             format!("{}\n  {standing}.\n", head(&called))
         }
         // A card that is there and will not read is the one case that *is* a
         // damaged store, and it says so in different words for that reason.
         Err(e) => {
-            let called = crate::setfile::node_called(name, None, hash);
+            let called = karakuri_environment::setfile::node_called(name, None, hash);
             format!("{}\n  its card could not be read: {e}\n", head(&called))
         }
     }
@@ -2176,7 +2177,7 @@ fn node_block(store: &Store, layer: Layer, index: u32, name: Option<&str>, hash:
 ///
 /// **Only the four a card can carry today.** `origin`, `parent`, `perf`, `tag`
 /// and `thumbnail` are specified and nothing writes one — see
-/// [`crate::meta::card`], which says why each is absent rather than empty — so
+/// [`karakuri_environment::meta::card`], which says why each is absent rather than empty — so
 /// they fall through the catch-all, which is also what makes this reader survive
 /// meeting a card written by a build that has more of them.
 fn rendered_card(card: &[Line]) -> (Option<String>, String) {
@@ -2222,7 +2223,7 @@ fn rendered_card(card: &[Line]) -> (Option<String>, String) {
     }
     // Said rather than left to silence: a block with no `param` line reads as a
     // rendering that dropped them. Every other absence here is a whole record
-    // the card deliberately does not write — see [`crate::meta::card`] — and
+    // the card deliberately does not write — see [`karakuri_environment::meta::card`] — and
     // reads correctly as nothing, but "there is nothing to turn on this one" is
     // an answer to the question that was asked.
     if params == 0 {
@@ -2233,7 +2234,7 @@ fn rendered_card(card: &[Line]) -> (Option<String>, String) {
 
 /// A record [`Layer`] under the name this protocol already spells it with.
 ///
-/// **Found through [`crate::setfile::layer_of`] rather than matched again.**
+/// **Found through [`karakuri_environment::setfile::layer_of`] rather than matched again.**
 /// The mapping between a record's `Layer` and the compiler's `Kind` exists once,
 /// is total, and is the one `--load-set` reads a Set through; a second match
 /// here would be a second answer to which layer a stored node is on, and the
@@ -2245,7 +2246,7 @@ fn layer_spelled(layer: Layer) -> &'static str {
     LAYERS
         .iter()
         .copied()
-        .find(|kind| crate::setfile::layer_of(*kind) == layer)
+        .find(|kind| karakuri_environment::setfile::layer_of(*kind) == layer)
         .map_or("unknown", layer_name)
 }
 
@@ -3617,7 +3618,7 @@ proc probe_knobs {
             let checked =
                 karakuri_environment::compile::check(source).expect("the fixture compiles");
             store
-                .write_meta(&hash, &crate::meta::card(&hash, &checked))
+                .write_meta(&hash, &karakuri_environment::meta::card(&hash, &checked))
                 .expect("card");
         }
         hash
@@ -3988,7 +3989,7 @@ proc probe_knobs {
     /// **A stored artifact, its card, and one Set naming it** — the fixture the
     /// card tests share.
     ///
-    /// It puts the source and writes the card through [`crate::meta::card`]
+    /// It puts the source and writes the card through [`karakuri_environment::meta::card`]
     /// rather than by hand, because what these tests are about is that the
     /// numbers a model reads are the numbers the *source* declared: a card
     /// assembled in the test would only prove this module can render a record
@@ -4000,7 +4001,7 @@ proc probe_knobs {
             let checked =
                 karakuri_environment::compile::check(source).expect("the fixture compiles");
             store
-                .write_meta(&hash, &crate::meta::card(&hash, &checked))
+                .write_meta(&hash, &karakuri_environment::meta::card(&hash, &checked))
                 .expect("card");
         }
         set_naming(server, id, hash);

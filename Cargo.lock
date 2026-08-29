@@ -1387,7 +1387,6 @@ dependencies = [
 name = "karakuri-cli"
 version = "0.1.0"
 dependencies = [
- "chrono",
  "karakuri-audio",
  "karakuri-engine",
  "karakuri-environment",

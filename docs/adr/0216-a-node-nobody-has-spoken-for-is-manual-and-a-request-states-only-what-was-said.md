@@ -107,7 +107,8 @@ prose.
 - **The console's `man / sug / auto` chip has a value to draw**, which is what ADR-0211 named as
   blocked. What is still missing is a writer, and **it is a narrower gap than *not yet wired***:
   `Record::Authority` is deliberately excluded from Set-file state in two places —
-  `karakuri-cli`'s `setfile.rs` and `karakuri-store`'s `project.rs`, both saying that *"a Set file
+  `karakuri-environment`'s `setfile.rs` (`karakuri-cli`'s when this was written) and
+  `karakuri-store`'s `project.rs`, both saying that *"a Set file
   obeying one would hand the node over on every load"*. So the startup path will **never** seed this
   the way `--load-set` seeds `layering`, `live`, `camera` and `salts`. The writer, when it comes, is
   a live-session one, and `Request::authorities` is empty in every run until it exists. The field

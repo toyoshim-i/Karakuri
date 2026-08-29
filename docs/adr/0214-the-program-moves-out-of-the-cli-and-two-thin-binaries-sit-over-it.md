@@ -216,6 +216,12 @@ arrived looking like something else.
   the CLI and MCP already use, and the mock's third format is never invented. That record is not
   superseded — its rule, that a bay's first pass draws the values that exist, is untouched — but the
   fact it turned on stops being true.
+
+  *(This happened on 2026-08-29: `setfile.rs` moved to `karakuri-environment` in the second slice,
+  and `written_at` is callable. One thing this paragraph did not foresee: `karakuri-console/src/`
+  cannot be the caller, because depending on this package would put a device into a crate whose
+  `src/` has none by design. The host formats the date and hands it in, which is what `view` does
+  with every other derived value, so the conclusion holds and the caller is not who it sounds like.)*
 - **The example's two transcriptions are deleted rather than moved.** `STORE` asks for
   `DEFAULT_STORE`, and the residency decode calls `mix::parse_residency`. Both carry a comment saying
   this is what they are waiting for, which is how they will be found.

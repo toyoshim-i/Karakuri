@@ -658,14 +658,22 @@ reference nothing through `crate::` at all — `audio`, `compile`, `history`, `r
 `session`, `tempo_source` — then `meta` → `setfile` → `watch`, then `mcp`, then `mix` and `midi`,
 which are held back only by the shared refusal sentence.
 
-**The seven have landed and the package exists**, with its charter in
+**Nine have landed and the package exists**, with its charter in
 [`karakuri-environment`](../crates/karakuri-environment)'s `lib.rs` — the test, why its second clause
 is load-bearing, and the rule that follows from two binaries sitting over it: **no module here may
 know which surface it is under.** The move needed no shim and nothing had to be pulled across, which
-is the measurement above holding: exactly one item had to widen (`history::declared_kind`, whose own
-comment already said it is shared with `mcp` on purpose), and `png` and `serde` left `karakuri-cli`
-with the files that used them. **Six modules are left**, and `main.rs` keeps all of its non-test
-lines for now.
+is the measurement above holding: the first slice widened exactly one item
+(`history::declared_kind`, whose own comment already said it is shared with `mcp` on purpose), and
+`png` and `serde` left `karakuri-cli` with the files that used them; the second took `meta` and
+`setfile` and with them the first two items out of `main.rs` — `put_meta`, which writes to a disk,
+and `Names`, which is a Set file's shape — and `chrono` left too. **Four modules are left**: `watch`,
+`mcp`, `mix` and `midi`.
+
+**The seam is larger than the sixteen items measured above, and the difference is invisible to a
+compiler.** That count was taken on code lines. The second slice found four more dependencies
+carried by **intra-doc links** — `crate::Placed`, `Placed::hash`, `Placed::put` and `bundled_set` —
+every one of which would have compiled after the move and rotted in silence. Measure both when
+planning the rest.
 
 **The ~10–14 week estimate does not carry this, which is the second time.** *What the range assumes*
 names the four undrawn bays, three decisions and the manual's missing deck head, and not a program to
@@ -915,8 +923,14 @@ re-taken once that boundary is drawn.
      seventh omission is the odd one and is
      [ADR-0200](adr/0200-a-bays-first-pass-draws-the-values-that-exist-and-omits-the-rest.md): the
      **time** beside each name has a value (`SetEntry::written`) and no spelling — the one in this
-     workspace is `karakuri-cli`'s `setfile::written_at`, in a package with no library target — so
-     the column waits rather than getting a third format. The example lists `.karakuri` once at
+     workspace was `karakuri-cli`'s `setfile::written_at`, in a package with no library target — so
+     the column waited rather than getting a third format. **`setfile` moved to
+     [`karakuri-environment`](../crates/karakuri-environment) on 2026-08-29 and the spelling is
+     reachable now**, which is ADR-0214's boundary paying back the first of the five things it cost.
+     What the column still waits on is the program that hosts the panel: `karakuri-console/src/`
+     may not depend on `karakuri-environment` — that would put a device in a crate whose `src/` has
+     none — so the date is formatted by the host and handed in, the way every other derived value in
+     `view` is. The example lists `.karakuri` once at
      startup, which is why a Set saved while the window is up does not appear until the next run.
    - **Staging — blocked on machinery, and there is not even an empty case.** Candidates waiting,
      *"whether they came from you or from an agent"*. Nothing in this workspace produces one: there
