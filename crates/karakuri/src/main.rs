@@ -56,10 +56,22 @@
 //! kept because nothing else measures these numbers and two of them are load
 //! bearing — `karakuri_console::budget::PANEL_PASS` names this file as what
 //! holds its 1.26 ms honest, and both schedulability conditions are asserted
-//! against that number. **Whether a measurement harness belongs inside the
-//! program a player launches is a decision this move did not take.** Half of
-//! what it collects is not a harness at all: the per-frame timing is what the
-//! transport row draws as `frame_ms` and `fps`.
+//! against that number.
+//!
+//! **That it ships is decided, and the reason is written a few lines below in
+//! [`WRITTEN_ALLOCS`]'s own documentation**: the last number nobody was
+//! checking went from 184 to 456 to 525 and stayed wrong for two commits,
+//! *"because nothing was checking it"*. A build with this compiled out is a
+//! build where that happens again, and
+//! [ADR-0164](../../../docs/adr/0164-the-panel-is-budgeted-rather-than-forbidden-to-allocate.md)
+//! chose to **budget** the panel rather than forbid it to allocate — a budget
+//! is a guarantee only while something counts, which is
+//! [P-0026](../../../docs/principles/0026-a-guarantee-is-structural-or-it-is-a-convention-that-says-so.md).
+//! See
+//! [ADR-0217](../../../docs/adr/0217-the-counting-allocator-ships-because-a-written-number-nothing-checks-goes-stale.md),
+//! which also records what a cargo feature and a test target each lost on.
+//! Half of what `Costs` collects is not a harness at all: the per-frame timing
+//! is what the transport row draws as `frame_ms` and `fps`.
 //!
 //! **It is deliberately not the start of a bay.** Every body is empty except
 //! the picture and the preview row, and both are empty of everything this file

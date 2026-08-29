@@ -612,6 +612,17 @@ on is written region by region under *The remaining bays, surveyed* below and on
 third is *Composite a deck's renderers*, which routes to the same home the manual does not have. A
 `grep` caught what a survey written region by region against the manual had read past twice.
 
+**The panel's own measuring instrument ships, and that is decided rather than inherited**
+([ADR-0217](adr/0217-the-counting-allocator-ships-because-a-written-number-nothing-checks-goes-stale.md)). `crates/karakuri` installs a counting `#[global_allocator]` over the
+whole process so the reading can be held against `WRITTEN_ALLOCS`, and the argument is that file's
+own history rather than a preference: the previous number went 184 → 456 → 525 as the mixer bay and
+the parked deck landed and **stayed wrong for two commits, "because nothing was checking it"**. A
+cargo feature lost on [P-0012](principles/0012-a-measurement-carries-how-it-was-taken.md) — a number
+taken in a configuration nobody ships is about a different program — and a test target lost because
+the declared figures are medians of a running instrument with a deck under load, not of a fixture.
+What it costs a player is a thread-local increment per allocation, and **that cost is stated rather
+than estimated**: the claim that it is negligible is not made.
+
 **The manual has caught up, and writing it found more than it closed** ([console.html](manual/console.html),
 2026-08-29). Three homes were reported missing and **one of the three was already drawn**: the
 crossfader is `.xfade`'s first row, which `karakuri-console`'s own arithmetic already counts as 61
