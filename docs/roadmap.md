@@ -686,6 +686,26 @@ inherent one — resolved for nobody and failed nothing. They became hard errors
 was in a library. That is a second thing the package boundary buys, beside the five ADR-0214
 counted.
 
+**Three small things the move left visible rather than fixed**, each written down because a
+consequence recorded nowhere is one the next person meets rather than reads. **`layer_named` exists
+twice in one library now** — `setfile.rs`'s, which matches exactly, and `mcp.rs`'s private one, which
+folds case so a model may write `l1`. They were already two functions with one name inside one
+binary; the move makes that visible without making it newly wrong, and merging them is a redesign
+rather than a boundary move because the case-folding is a real difference
+([P-0031](principles/0031-a-name-means-one-thing-across-the-system.md) is the question to answer).
+**A test in `main.rs` now checks two `setfile` functions** — `every_kind_survives_the_round_trip_a_saved_node_makes`
+holds `layer_named(kind_name(k)) == Some(k)` and both ends moved; it still guards what it guarded,
+and its home is one crate over. And **`examples/panel.rs` still transcribes `262144`**, which is
+[the console example's own reference workload](../crates/karakuri-console/examples/panel.rs) rather
+than the language default that moved to `karakuri-ir` — the honest fix is for it to read
+`l1.capacity` off the `Checked` it already holds, following the declaration rather than a constant.
+
+**What the whole-workspace run caught that four rounds of `--skip gpu::` could not**: the convention
+guard `gpu_binaries_still_take_a_device` asserts a floor on how many source files
+`crates/karakuri-cli/src` holds, and that directory now holds one. **It is not a GPU test**, so it
+was filtered out of nothing and simply absent from every gate an agent ran. The claim it exists to
+make was never in trouble. This is what [contributing.md](contributing.md) §5's boundary run is for.
+
 **The ~10–14 week estimate does not carry this, which is the second time.** *What the range assumes*
 names the four undrawn bays, three decisions and the manual's missing deck head, and not a program to
 draw any of them in — exactly as the original ~8–10 was taken against a list that assumed a panel, a
