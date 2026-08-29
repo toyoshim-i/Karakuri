@@ -4911,12 +4911,16 @@ proc signed_defaults {
         assert_eq!(
             map.get("drift").copied(),
             Some(-0.35),
-            "the map a uniform is packed from has stopped agreeing with              `karakuri_ir::Param::default_scalar`: a fold of this file's own read `-0.35`              as an absence, so the run loads a default the `param_decl` beside it does not              state"
+            "the map a uniform is packed from has stopped agreeing with \
+             `karakuri_ir::Param::default_scalar`: a fold of this file's own read `-0.35` \
+             as an absence, so the run loads a default the `param_decl` beside it does not \
+             state"
         );
         assert_eq!(
             map.get("plain").copied(),
             Some(0.25),
-            "the map a uniform is packed from has stopped agreeing with              `karakuri_ir::Param::default_scalar` about an ordinary positive default"
+            "the map a uniform is packed from has stopped agreeing with \
+             `karakuri_ir::Param::default_scalar` about an ordinary positive default"
         );
     }
 
