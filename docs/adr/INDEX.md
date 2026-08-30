@@ -253,6 +253,7 @@ number; new records continue from the end.
 | [ADR-0225](0225-a-menu-is-a-gesture-in-hand-rather-than-a-rectangle-on-the-panel.md) | A menu is a gesture in hand rather than a rectangle on the panel | 2026-08-30 | accepted |
 | [ADR-0226](0226-m5-closes-when-the-manual-is-implemented-and-the-meter-is-progress-rather-than-completion.md) | M5 closes when the manual is implemented, and the meter is progress rather than completion | 2026-08-30 | accepted |
 | [ADR-0227](0227-a-pattern-and-a-master-chain-setting-are-library-data-in-two-tiers.md) | A pattern and a master-chain setting are library data, in two tiers, on the arrangement's shape | 2026-08-30 | accepted |
+| [ADR-0228](0228-a-library-load-re-points-the-slots-source-and-never-installs-a-set.md) | A library load re-points the slot's source and never installs a Set | 2026-08-30 | accepted |
 
 ## Retired numbers
 
