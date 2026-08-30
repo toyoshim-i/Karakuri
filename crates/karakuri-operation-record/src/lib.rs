@@ -52,29 +52,41 @@
 //! added to the vocabulary does not compile here until somebody has said what
 //! it writes. The three answers are the three groups the survey found:
 //!
-//! - [`Written::Records`] — it writes these, in this order. Twelve operations,
-//!   seven of which need no reading at all.
+//! - [`Written::Records`] — it writes these, in this order. Thirteen
+//!   operations, seven of which need no reading at all.
 //! - [`Written::Silent`] — it writes none, and that is settled. Twenty-seven,
 //!   for [`Silent`]'s four different reasons.
-//! - [`Written::Owed`] — it writes one and this build cannot make it. Eleven,
+//! - [`Written::Owed`] — it writes one and this build cannot make it. Ten,
 //!   for [`Owed`]'s three different reasons.
 //!
 //! **`Owed` is not a refusal and not an error.** It is a gap this crate
 //! declares about itself, in the shape `karakuri_operation::Undecided` is: a
 //! caller that meets one has met a question nobody has answered, and printing
-//! it is more use than a silent no-op. Four of the eleven are the vocabulary's
+//! it is more use than a silent no-op. Four of the ten are the vocabulary's
 //! own `Undecided` rows.
 //!
 //! # What this crate deliberately cannot do
 //!
 //! **No engine.** Quantising a beat onto the grid is
-//! `karakuri_engine::transition::quantise`, clamping an anchor tempo is
-//! `Transport::engaged`, and neither is reachable from here — which is right,
-//! because a crate that pulled `wgpu` in would be unreachable from every
-//! surface again. Anything an operation's record needs that is arithmetic
-//! rather than a value has to arrive inside [`Current`], and the seven
-//! operations whose record needs the grid are [`Owed::NotSettled`] until
-//! somebody decides who computes it.
+//! `karakuri_engine::transition::quantise`, engaging a sync mode is
+//! `karakuri_engine::transport::Transport::engaged`, and neither is reachable
+//! from here — which is right, because a crate that pulled `wgpu` in would be
+//! unreachable from every surface again. Anything an operation's record needs
+//! that is arithmetic rather than a value has to arrive inside [`Current`], and
+//! the six operations whose record needs the grid's position or the beat
+//! tracker are [`Owed::NotSettled`] until somebody decides who computes it.
+//!
+//! **`Operation::SetSync` was the seventh and is now a reading**, which is what
+//! that sentence looks like when it is paid. `Transport::engaged` decides what
+//! engaging a mode means — the anchor is the session tempo and the scrub is
+//! cleared — and the only part of it that is arithmetic is a clamp into
+//! `karakuri_signal::oscillator::BPM_RANGE` that **cannot fire**: an
+//! `Oscillator`'s tempo is written in exactly two places and both clamp into
+//! that same range, so the tempo a session can report is already inside it and
+//! the clamp is the identity on every one of them. What arrives inside
+//! [`Current`] is therefore the tempo itself, unclamped and uncomputed, and the
+//! agreement with the engine's policy is held by a test rather than by a
+//! dependency — see [`Current::tempo`].
 //!
 //! **No clamps.** `karakuri-cli` clamps a gain before it asks, not after, and
 //! that is where a clamp belongs: `Operation::SetGain`'s `gain` is open on
@@ -165,11 +177,44 @@ pub struct Transport {
 /// names exactly one deck, so a map from deck to transport would be a
 /// container built to be indexed once.
 /// [`Current::mask`] is the mask of that same deck, on the same terms.
+/// [`Current::tempo`] is the one reading here that belongs to no deck at all.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Current {
     pub look: Option<Look>,
     pub transport: Option<Transport>,
     pub mask: Option<Mask>,
+    /// **The tempo the room is going at**, in BPM, which is what
+    /// [`Operation::SetSync`] anchors a slot to.
+    ///
+    /// Engaging a mode anchors the slot at the session tempo so that
+    /// **engaging sync never moves the picture**: the material is at 1x at that
+    /// instant and stays there until the room's tempo does.
+    /// `karakuri_engine::transport::Transport::engaged` is where that is
+    /// decided, in its own words *"so that a caller building a record of the
+    /// change and a caller applying one agree by construction"*, and this is
+    /// the one value it takes.
+    ///
+    /// **A tempo an oscillator reported, and not a number somebody had.**
+    /// `Transport::engaged` clamps the anchor into
+    /// `karakuri_signal::oscillator::BPM_RANGE`; a
+    /// `karakuri_signal::oscillator::Oscillator` writes its tempo in exactly
+    /// two places — construction and a correction — and both clamp into that
+    /// same range, so the clamp is the identity on every tempo a session can
+    /// report and the record carries the tempo verbatim. That is why nothing
+    /// here clamps: a second clamp would be a second opinion about a range the
+    /// oscillator already holds, which is this crate's rule about `SetGain` one
+    /// control along.
+    ///
+    /// **It is a convention, and this is where it says so**
+    /// ([P-0026](../../../docs/principles/0026-a-guarantee-is-structural-or-it-is-a-convention-that-says-so.md)).
+    /// The structural half is the reading: `karakuri_environment::mix`'s
+    /// `current_tempo` takes the oscillator rather than an `f32`, so a caller
+    /// cannot hand in a tempo the range has never held without writing one
+    /// down. The half that is not structural — that the anchor is this tempo
+    /// and the scrub is zero — is held against `Transport::engaged` itself by
+    /// `mix`'s `a_sync_mode_writes_exactly_what_the_engine_would_engage`, in
+    /// the one crate that can see both.
+    pub tempo: Option<f32>,
 }
 
 /// Which reading an [`Owed::NotRead`] wanted, so a caller can say what it did
@@ -182,6 +227,9 @@ pub enum Reading {
     Transport,
     /// [`Current::mask`], for the deck the operation names.
     Mask,
+    /// [`Current::tempo`] — the session's, and so the only one of the four
+    /// that names no deck.
+    Tempo,
 }
 
 /// **Why an operation writes no record**, and there are four different
@@ -242,15 +290,21 @@ pub enum Owed {
     /// here that is not already decided there.
     Undecided,
     /// **Its record is not a function of values alone, and who supplies the
-    /// rest is undecided.** Seven operations, and they divide cleanly:
+    /// rest is undecided.** Six operations, and they divide cleanly:
     /// scheduling one (a fade, a crossfade, a wipe, a renderer selection)
     /// needs the grid's position quantised onto a musical instant, plus the
     /// quantum and the length that `Operation::SetTransition` sets and no
-    /// record carries; moving the grid (a tap, an octave shift) needs the beat
-    /// tracker rather than a value, and may be refused by it; and setting a
-    /// sync mode needs a session tempo and the engine's anchor clamp, so
-    /// whether the record carries what was asked or what was clamped is a
-    /// decision about the bytes on disk.
+    /// record carries; and moving the grid (a tap, an octave shift) needs the
+    /// beat tracker rather than a value, and may be refused by it.
+    ///
+    /// **Setting a sync mode was the seventh and is not any more.** It was
+    /// held here because the anchor goes through the engine's clamp, so
+    /// whether the record carried what was asked for or what was clamped
+    /// looked like a decision about the bytes on disk. It is not one: the two
+    /// are the same number for every tempo an oscillator can report, and
+    /// what the record carries was decided at `Transport::engaged` with the
+    /// reason written at it. What was actually missing was a reading, and
+    /// [`Current::tempo`] is it.
     NotSettled,
 }
 
@@ -265,6 +319,7 @@ impl Owed {
                 "the transport of the deck it names was not read"
             }
             Owed::NotRead(Reading::Mask) => "the mask of the deck it names was not read",
+            Owed::NotRead(Reading::Tempo) => "the session tempo its anchor comes from was not read",
             Owed::Undecided => "what it acts on is an open question in the vocabulary itself",
             Owed::NotSettled => "the record it writes is not a function of values alone, and who supplies the rest is undecided",
         }
@@ -370,8 +425,8 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
 
         // ----- What it writes, given a reading ----------------------------
         //
-        // Three, and each one names exactly what it reads. The look pair is
-        // ADR-0192's whole argument made executable.
+        // Four readings, and each operation names exactly which of them it
+        // reads. The look pair is ADR-0192's whole argument made executable.
         Operation::SetTonemap { tonemap } => match current.look {
             Some(look) => one(Record::Look {
                 op: tonemap.name().to_string(),
@@ -429,15 +484,45 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
             }),
             None => Written::Owed(Owed::NotRead(Reading::Transport)),
         },
+        // **Absolute, and none of it comes from where the slot was.** Engaging
+        // a mode anchors the slot at the session tempo and clears the scrub,
+        // which is `karakuri_engine::transport::Transport::engaged`'s policy —
+        // *"the record carries the anchor and the scrub explicitly, and this is
+        // the one place that decides what they are when an operator engages a
+        // mode by hand"* — and so the sibling arm above is the one this reads
+        // *unlike*: a scrub adds to what the slot holds, and a mode replaces
+        // all three. Reading the running transport here and keeping its scrub
+        // would put a slot back on a position a song ago the moment it was
+        // brought to the grid.
+        //
+        // **The anchor is the tempo, with no clamp and no arithmetic.** The
+        // clamp `Transport::engaged` applies cannot fire on a tempo an
+        // oscillator reported; [`Current::tempo`] carries the argument and the
+        // test that holds it.
+        //
+        // **Nothing here reads a clock**, which is what makes this record
+        // replayable at all
+        // ([P-0002](../../../docs/principles/0002-simulation-time-comes-from-a-record-never-from-a-clock.md)):
+        // the anchor is written down at the instant the operator asked, and
+        // `Transport::set` puts it back without recomputing it from the machine
+        // the replay is running on.
+        Operation::SetSync { deck, sync } => match current.tempo {
+            Some(bpm) => one(Record::Transport {
+                slot: *deck,
+                sync: sync.name().to_string(),
+                anchor_bpm: bpm,
+                scrub_beats: 0.0,
+            }),
+            None => Written::Owed(Owed::NotRead(Reading::Tempo)),
+        },
 
-        // ----- Owed: the grid, the tracker, and the anchor clamp -----------
+        // ----- Owed: the grid and the tracker ------------------------------
         Operation::FadeDeck { .. }
         | Operation::Crossfade { .. }
         | Operation::Wipe { .. }
         | Operation::SelectRenderer { .. }
         | Operation::TapBeat
-        | Operation::ScaleGrid { .. }
-        | Operation::SetSync { .. } => Written::Owed(Owed::NotSettled),
+        | Operation::ScaleGrid { .. } => Written::Owed(Owed::NotSettled),
 
         // ----- Owed: the vocabulary's own open questions -------------------
         Operation::MoveBoundary { .. }
@@ -858,6 +943,71 @@ mod tests {
             "a scrub wrote somewhere other than where the slot was plus what was asked \
              for — an absolute record built from a relative operation has to read the \
              scrub it is moving from"
+        );
+    }
+
+    /// **Engaging a mode is the sibling of a scrub and reads nothing of the
+    /// slot**, which is what this asserts by giving it a slot to read.
+    ///
+    /// `ScrubDeck` above adds to the position the deck holds; `SetSync`
+    /// replaces the whole transport, because that is what
+    /// `karakuri_engine::transport::Transport::engaged` decides engaging a
+    /// mode *means* — anchor at the session tempo, scrub cleared, *"a slot
+    /// brought back to the grid should be on the grid, not on wherever it was
+    /// scrubbed to a song ago"*. So a reading of a slot that is at -1.5 beats
+    /// against an anchor of 128 must not leak into a record written at 126.
+    #[test]
+    fn engaging_a_mode_anchors_at_the_session_tempo_and_clears_the_scrub() {
+        let current = Current {
+            tempo: Some(126.0),
+            // Deliberately present, deliberately different, and deliberately
+            // ignored.
+            transport: Some(Transport {
+                sync: Sync::Free,
+                anchor_bpm: 128.0,
+                scrub_beats: -1.5,
+            }),
+            ..Current::default()
+        };
+        let written = written(
+            &Operation::SetSync {
+                deck: 2,
+                sync: Sync::Beat,
+            },
+            &current,
+        );
+        assert_eq!(
+            records(written),
+            vec![Record::Transport {
+                slot: 2,
+                sync: "beat".to_string(),
+                anchor_bpm: 126.0,
+                scrub_beats: 0.0,
+            }],
+            "engaging a mode wrote something other than the session tempo as the anchor \
+             with the scrub cleared — either the tempo was not what the slot was anchored \
+             to, or the position it was scrubbed to survived being brought to the grid"
+        );
+    }
+
+    /// **The tempo is a reading and not a default**, on
+    /// [`a_reading_that_was_not_taken_is_owed_rather_than_guessed`]'s terms
+    /// exactly: a conversion that anchored at 120 because that is a common
+    /// tempo would put a slot on a grid the room was never on, silently, and
+    /// a replay would reproduce it faithfully.
+    #[test]
+    fn a_sync_mode_with_no_tempo_read_is_owed_rather_than_anchored_at_a_guess() {
+        assert_eq!(
+            written(
+                &Operation::SetSync {
+                    deck: 0,
+                    sync: Sync::Tempo
+                },
+                &Current::default()
+            ),
+            Written::Owed(Owed::NotRead(Reading::Tempo)),
+            "a sync mode with no session tempo read came back with a record, which means \
+             the tempo it anchored at was invented"
         );
     }
 

@@ -112,10 +112,18 @@
 //! all need the grid quantised onto a musical instant, plus the quantum and the
 //! length that `Operation::SetTransition` sets and no record carries.
 //! `look_record` builds the launch look, which is a complete look rather than
-//! an ask. `transport_record` is `cycle_sync`'s, for the anchor clamp the
-//! vocabulary has no way to apply. `canvas_record` names a record no operation
-//! writes. Each of them goes the day its operation's conversion is settled —
-//! see ADR-0194.
+//! an ask. `canvas_record` names a record no operation writes. Each of them
+//! goes the day its operation's conversion is settled — see ADR-0194.
+//!
+//! **`transport_record` is the one that has already gone, and it did not get
+//! deleted.** It was `cycle_sync`'s, for an anchor clamp the vocabulary was
+//! thought to have no way to apply; `Operation::SetSync` now converts, so `y`
+//! routes through `Live::operate` like every other settled key and this
+//! function has no gesture behind it. What it is now is the **engine's side of
+//! that record** — a `Transport` as the `Record::Transport` that carries it —
+//! which is exactly what [`current_tempo`]'s test needs to hold the conversion
+//! against `Transport::engaged`. A derivation kept as the thing a second
+//! derivation is checked against is not a second derivation.
 //!
 //! ## Opacity, which used to be deliberately not here
 //!
@@ -136,6 +144,7 @@ use karakuri_engine::set::Authority;
 use karakuri_engine::transition::Control;
 use karakuri_engine::transport::{Sync, Transport};
 use karakuri_engine::Look;
+use karakuri_signal::oscillator::Oscillator;
 use karakuri_store::record::Record;
 
 /// What one mix record says, decoded into what the engine takes.
@@ -322,6 +331,30 @@ pub fn current_transport(transport: &Transport) -> karakuri_operation_record::Tr
         anchor_bpm: transport.anchor_bpm(),
         scrub_beats: transport.scrub_beats(),
     }
+}
+
+/// **The tempo the room is going at, as the reading the conversion needs.**
+///
+/// `Operation::SetSync` anchors a slot at the session tempo, because engaging
+/// a mode must not move the picture: the material is at 1x at that instant and
+/// stays there until the room's tempo does. `karakuri-operation-record` cannot
+/// reach the oscillator any more than it can reach the engine, so the tempo is
+/// handed in, and this is the fourth of these.
+///
+/// **It takes the oscillator rather than an `f32`, and that is the whole of
+/// the function.** `Transport::engaged` clamps the anchor into
+/// [`karakuri_signal::oscillator::BPM_RANGE`] and the conversion does not
+/// clamp at all; the two agree because an `Oscillator`'s tempo is already
+/// inside that range — `Oscillator::new` and `Oscillator::correct` are its
+/// only writers and both clamp — so a caller cannot reach a value where the
+/// clamp would fire without first writing down a tempo no session ever
+/// reported. Asking for the grid rather than a number is what makes that
+/// structural instead of a hope
+/// ([P-0026](../../../docs/principles/0026-a-guarantee-is-structural-or-it-is-a-convention-that-says-so.md)),
+/// and what is left over is held by
+/// [`tests::a_sync_mode_writes_exactly_what_the_engine_would_engage`].
+pub fn current_tempo(grid: &Oscillator) -> f32 {
+    grid.bpm()
 }
 
 /// **The mask a slot is wearing, as the reading the conversion needs.**
@@ -1183,6 +1216,76 @@ mod tests {
                 "{} did not survive its own wire name",
                 sync.name()
             );
+        }
+    }
+
+    /// **The conversion writes exactly the transport the engine would engage**,
+    /// which is the one thing `karakuri-operation-record` cannot check about
+    /// itself.
+    ///
+    /// `Transport::engaged` is where engaging a mode is *decided* — the anchor
+    /// is the session tempo, the scrub is cleared — and it says so in order
+    /// that *"a caller building a record of the change and a caller applying
+    /// one agree by construction"*. The record-builder is `written`, and it
+    /// **cannot call it**: `karakuri-operation-record` depends on
+    /// `karakuri-operation` and `karakuri-store` and on nothing else, by
+    /// charter (ADR-0180, ADR-0194), so an engine under it would be a
+    /// serialiser and a `wgpu` every surface pays for. The agreement is
+    /// therefore a convention, and this is the place that enforces it
+    /// (P-0026) — the only crate in the workspace that can see the policy and
+    /// the conversion at once, which is the argument
+    /// [`the_vocabularys_copy_of_a_list_spells_it_the_way_the_store_reads_it`]
+    /// makes about the name lists, one field along.
+    ///
+    /// **The tempos are the ones a session can actually reach**, taken off an
+    /// oscillator rather than written here, and both of its writers are
+    /// exercised: `Oscillator::new` for the launch tempo and
+    /// `Oscillator::correct` for a tracked one. The out-of-range and NaN asks
+    /// are in the list because they are what the clamp exists for — an
+    /// oscillator swallows them, so `current_tempo` never reports one, and if
+    /// it ever did this is what would notice that the record and the engine
+    /// had come apart on it.
+    #[test]
+    fn a_sync_mode_writes_exactly_what_the_engine_would_engage() {
+        let mut corrected = Oscillator::new(120.0);
+        // A wild estimate, which `Oscillator::correct` says is a thing that
+        // happens: it lands on the top of the range.
+        corrected.correct(9_999.0, 0.0);
+        let mut slow = Oscillator::new(f32::NAN);
+        slow.correct(-4.0, 0.0);
+        let grids = [
+            Oscillator::new(120.0),
+            Oscillator::new(126.5),
+            Oscillator::new(0.0),
+            Oscillator::new(f32::NAN),
+            Oscillator::new(f32::INFINITY),
+            Oscillator::new(4_000.0),
+            corrected,
+            slow,
+        ];
+        for grid in grids {
+            let tempo = current_tempo(&grid);
+            for mode in Sync::ALL {
+                let record = from_operation_reading(
+                    karakuri_operation::Operation::SetSync {
+                        deck: 2,
+                        sync: sync(mode),
+                    },
+                    karakuri_operation_record::Current {
+                        tempo: Some(tempo),
+                        ..karakuri_operation_record::Current::default()
+                    },
+                );
+                assert_eq!(
+                    record,
+                    transport_record(2, &Transport::engaged(mode, tempo)),
+                    "the record `written` writes for `{}` at {tempo} bpm is not the \
+                     transport `Transport::engaged` would engage — the conversion and the \
+                     engine's policy have drifted, and a replay would put the slot \
+                     somewhere the operator's press did not",
+                    mode.name()
+                );
+            }
         }
     }
 

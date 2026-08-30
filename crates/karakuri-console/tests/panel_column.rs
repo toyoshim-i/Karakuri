@@ -138,42 +138,50 @@ const NOWHERE: &str = "&mdash;";
 
 /// **The rows a control on this panel emits and an operator still cannot
 /// reach**, which is the one gap between *emitted* and ADR-0213's *reached*
-/// that this file has ever had to carry.
+/// that this file has ever had to carry. **It is empty**, and the entry it
+/// held is what the mechanism was built for.
 ///
-/// # Why the two came apart, having been the same thing until now
+/// # What the one entry was, and how it left
 ///
-/// Every other emission on this list ends in a record and a movement:
-/// `written` converts it, `crates/karakuri` applies it, and the deck is
-/// somewhere else afterwards. **`SetSync` converts to `Owed(NotSettled)`**, and
-/// that is not a gap in this crate or in that binary — it is
-/// `karakuri-operation-record` saying that *what* its record carries is
-/// undecided: setting a sync mode needs the session tempo and the engine's
-/// anchor clamp, so whether the record carries the anchor that was asked for
-/// or the one that was clamped is *"a decision about the bytes on disk"*, and
+/// Every emission on this list ends in a record and a movement: `written`
+/// converts it, `crates/karakuri` applies it, and the deck is somewhere else
+/// afterwards. *Set a deck's sync mode* did not, for one release: `SetSync`
+/// converted to `Owed(NotSettled)`, which was `karakuri-operation-record`
+/// saying that *what* its record carried was undecided — the anchor goes
+/// through the engine's clamp, so whether the record carried what was asked
+/// for or what was clamped read as *"a decision about the bytes on disk"*, and
 /// [ADR-0218](../../../docs/adr/0218-re-anchoring-is-set-sync-naming-the-mode-the-deck-is-in-and-a-cycle-cannot-say-it.md)
-/// leaves it open by name. So the deck head's sync chip and its anchor are
-/// reachable *affordances* over an unwritable record: a press is claimed, the
-/// operation is emitted, the window prints the question, and the deck does not
-/// move.
+/// left it open by name. So the deck head's sync chip and its anchor were
+/// reachable *affordances* over an unwritable record: a press was claimed, the
+/// operation was emitted, the window printed the question, and the deck did
+/// not move.
 ///
-/// **`has` would be a lie in exactly the way ADR-0213 was written to
+/// **There were never two answers.** The clamp holds the anchor inside the
+/// range every tempo in the system is held in, and a session's tempo is
+/// already inside it, so the anchor asked for and the anchor clamped are the
+/// same number. What was missing was a reading, `Current::tempo` is it, and
+/// the conversion writes `Record::Transport` from the policy
+/// `karakuri_engine::transport::Transport::engaged` had already fixed.
+///
+/// **`has` would have been a lie in exactly the way ADR-0213 was written to
 /// prevent** — *"the row is claimed the day a person who launched the
 /// instrument can perform that operation from the panel in front of them"* —
-/// and drawing no control would be a worse one, because the panel is the only
-/// surface that can offer re-anchoring at all. So the badge stays `plan` and
-/// the exemption is written here with its reason, which is what the first
-/// assertion's own failure message invites: *"Flip the badge, or say here why
-/// the control is not reachable"*.
+/// and drawing no control would have been a worse one, because the panel is
+/// the only surface that can offer re-anchoring at all. So the badge stayed
+/// `plan` while that was true and the exemption was written here with its
+/// reason, which is what the first assertion's own failure message invites:
+/// *"Flip the badge, or say here why the control is not reachable"*.
 ///
-/// # It is written to delete itself
+/// # It was written to delete itself, and it did
 ///
-/// A list here is a second copy of something ([P-0045]), so this one is held
+/// A list here is a second copy of something ([P-0045]), so it was held
 /// against both of its halves by
 /// [`the_unreachable_exemption_is_still_the_state_of_the_page`]: the operation
-/// must still be emitted, and its badge must still **not** be `has`. The day
-/// somebody settles the record, the badge flips, that test fails, and the line
-/// below is what it tells them to remove. It cannot go stale in silence in
-/// either direction.
+/// had to still be emitted, and its badge had to still **not** be `has`. The
+/// day the record was settled the badge flipped, that test failed, and it
+/// named the line to remove. That is the whole of what happened here, and it
+/// is why the array stays: the mechanism cost one line to keep and it is what
+/// the next control to reach past the page will be caught by.
 ///
 /// **Not derived from `karakuri-operation-record`**, which is where the answer
 /// lives, because this package deliberately holds no dependency on it —
@@ -181,7 +189,7 @@ const NOWHERE: &str = "&mdash;";
 /// exemption would undo the closing of ADR-0156 that manifest records.
 ///
 /// [P-0045]: ../../../docs/principles/0045-generate-the-vocabulary-prose-drifts-from-code.md
-const UNREACHABLE: [&str; 1] = ["Set a deck's sync mode"];
+const UNREACHABLE: [&str; 0] = [];
 
 fn workspace() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -251,8 +259,8 @@ fn sample(variant: &str) -> Operation {
         // controls in that row — the chip that cycles and the anchor that
         // re-asks for the mode the deck is in (ADR-0218) — and one operation
         // is one row however many controls name it, which is what
-        // `dedup_by_key` below is for. `SetSync` is also the one entry in
-        // [`UNREACHABLE`]; see there for why its badge is not `has`.
+        // `dedup_by_key` below is for. `SetSync` was also the one entry
+        // [`UNREACHABLE`] ever held; see there for why it is not one now.
         "SetSync" => Operation::SetSync {
             deck: 0,
             sync: karakuri_operation::Sync::Beat,

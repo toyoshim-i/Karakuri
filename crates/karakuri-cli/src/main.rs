@@ -49,7 +49,7 @@ use karakuri_engine::binding::{Curve, CONTROL_PREFIX, CURVES, DEFAULT_BPM, NOISE
 use karakuri_engine::deck::MAX_SLOTS;
 use karakuri_engine::frame;
 use karakuri_engine::swap::Event;
-use karakuri_engine::transport::{Sync, Transport};
+use karakuri_engine::transport::Sync;
 use karakuri_engine::{
     Binding, Blend, Deck, Gpu, HotSwap, Look, MaskKind, ParamWrite, Present, Residency, Set,
     Signals, TonemapOp, DEFAULT_BUDGET_MS,
@@ -5071,29 +5071,36 @@ impl Live {
     /// [`Live::operate`], because every operation a map line can produce is one
     /// `karakuri_operation_record::written` converts. **A keyboard is not that
     /// shape**, and this is the survey rather than an intention: of the
-    /// thirty-nine keys below, fifteen name an operation whose record converts,
-    /// nine name one whose record is owed, twelve name one that writes no
+    /// thirty-nine keys below, sixteen name an operation whose record converts,
+    /// eight name one whose record is owed, twelve name one that writes no
     /// record at all, and three name nothing in the vocabulary.
     ///
     /// - **Its record converts, so it goes through [`Live::operate`].**
     ///   `space` and `w` (`SetResidency`), `[`, `]` and `\` (`SetGain`),
     ///   `;` and `'` (`SetOpacity`), `m` (`SetBlendMode`), `v` (`SetPreview`),
     ///   `t` (`SetTonemap`), `-`, `=` and the backquote (`SetExposure`), `u`
-    ///   and `i` (`ScrubDeck`). A key and a mapped pad reach the deck by **one
+    ///   and `i` (`ScrubDeck`), `y` (`SetSync`). A key and a mapped pad reach
+    ///   the deck by **one
     ///   derivation**, which is the whole of why the two surfaces cannot drift.
     ///   Which way to step is still the keyboard's — a cycle and a nudge are
     ///   translations a surface makes, never operations
     ///   (`docs/principles/0074-…`).
     /// - **Its record is owed, so it keeps its present path** — each with the
     ///   reason written at the function it ends in: `f`, `g`, `x` and `c`
-    ///   ([`Live::fade_slot`]), `r` ([`Live::cycle_renderer`]), `y`
-    ///   ([`Live::cycle_sync`]), `b` ([`Live::tap`]), `,` and `.`
-    ///   ([`Live::shift_octave`]). All seven operations answer
-    ///   `Owed::NotSettled`, and the day one is settled its function is what
-    ///   goes — the promise `run_surface`'s `TapBeat` arm already carries.
-    ///   Routing one through `operate` today would print the gap where the
-    ///   gesture used to happen, which is the one thing a change of route may
-    ///   not do.
+    ///   ([`Live::fade_slot`]), `r` ([`Live::cycle_renderer`]), `b`
+    ///   ([`Live::tap`]), `,` and `.` ([`Live::shift_octave`]). All six
+    ///   operations answer `Owed::NotSettled`, and the day one is settled its
+    ///   function is what goes — the promise `run_surface`'s `TapBeat` arm
+    ///   already carries. Routing one through `operate` today would print the
+    ///   gap where the gesture used to happen, which is the one thing a change
+    ///   of route may not do.
+    ///
+    ///   **`y` was the seventh and this is what the promise looks like kept.**
+    ///   `Operation::SetSync` was owed for the engine's anchor clamp; the
+    ///   clamp turned out to be the identity on every tempo an oscillator can
+    ///   report, the conversion took a session tempo as a reading, and
+    ///   [`Live::cycle_sync`] moved to `operate` with its record-building
+    ///   deleted rather than kept in step.
     /// - **It writes no record, and this surface is what has to perform it.**
     ///   `0`–`3` (`SelectDeck`), `z`, `n` and `j` (`SetTransition`), `a`
     ///   (`SizeWindow`), `k` (`SaveSet`), `o` and `p` (`SetLatencyOffset`),
@@ -5596,13 +5603,19 @@ impl Live {
     /// press without skipping would make the key refuse to do anything at all
     /// on material that only allows one mode.
     ///
-    /// **Its record is written here rather than through [`Live::operate`].**
-    /// [`Operation::SetSync`] is `Owed::NotSettled`, and for a reason of its
-    /// own: `Transport::engaged` clamps the anchor against the session tempo,
-    /// so whether the record carries the tempo that was asked for or the one
-    /// the engine settled on is a decision about the bytes on disk that nobody
-    /// has taken. The clamp is below, and it is the engine's — `written` has no
-    /// engine by charter.
+    /// **Its record goes through [`Live::operate`] like every other settled
+    /// key's**, and it used to be built here. What kept it out was
+    /// `Owed::NotSettled` on [`Operation::SetSync`]: `Transport::engaged`
+    /// clamps the anchor against the session tempo, so whether the record
+    /// carried the tempo that was asked for or the one the engine settled on
+    /// read as a decision about the bytes on disk. The two are the same number
+    /// — the clamp holds the anchor inside
+    /// `karakuri_signal::oscillator::BPM_RANGE` and an oscillator's tempo is
+    /// already inside it — so what was missing was never a decision but a
+    /// reading, and `Current::tempo` is it. A cycle is still this surface's
+    /// own: `Sync::ALL`, the skipping and the refusals are translations a
+    /// keyboard makes, and what comes out of them is a destination
+    /// (P-0074).
     fn cycle_sync(&mut self) {
         let slot = self.focus;
         let current = self.deck.transport(slot).sync();
@@ -5639,9 +5652,14 @@ impl Live {
             eprintln!("  skipped {reason}");
         }
 
-        let bpm = self.deck.signals().oscillator().bpm();
-        let engaged = Transport::engaged(next, bpm);
-        self.record(mix::transport_record(slot, &engaged));
+        // Read before the operation rather than after it, because `operate`
+        // is about to anchor the slot at exactly this and the line below says
+        // what the press did.
+        let bpm = mix::current_tempo(self.deck.signals().oscillator());
+        self.operate(&Operation::SetSync {
+            deck: slot as u8,
+            sync: mix::sync(next),
+        });
         eprintln!(
             "slot {slot} sync {} at {bpm:.1} bpm{}",
             next.name(),
@@ -6313,10 +6331,20 @@ impl Live {
             }
             _ => None,
         };
+        // **The session tempo, for the one operation anchored to it.**
+        // Engaging a mode anchors the slot at the tempo the room is going at,
+        // and this reading is what `written` builds `Record::Transport` from —
+        // `mix::current_tempo` takes the oscillator rather than a number, so
+        // nothing here can hand in a tempo the session never ran at.
+        let tempo = match operation {
+            Operation::SetSync { .. } => Some(mix::current_tempo(self.deck.signals().oscillator())),
+            _ => None,
+        };
         let current = Current {
             look: Some(mix::current_look(&self.look)),
             transport,
             mask,
+            tempo,
         };
         match karakuri_operation_record::written(operation, &current) {
             Written::Records(records) => {
@@ -9897,11 +9925,6 @@ mod live_save_tests {
             "the route itself: this is where `written`'s records are written",
         ),
         (
-            "cycle_sync",
-            "`SetSync` — the engine clamps the anchor against the session tempo, and \
-             whether the record carries what was asked or what was clamped is undecided",
-        ),
-        (
             "wipe",
             "`Wipe` — a mask no operation names at all, and a move quantised onto the grid",
         ),
@@ -9938,9 +9961,11 @@ mod live_save_tests {
     ///
     /// The route `karakuri-midi` took is *operation → `written` → record*, and
     /// the reason it could take it whole is that every operation a map line
-    /// produces converts. A key handler cannot: seven of its operations owe a
+    /// produces converts. A key handler cannot: six of its operations owe a
     /// record nobody can write yet, and routing one of those through `operate`
-    /// would print the gap where the gesture used to be. So the ones that keep
+    /// would print the gap where the gesture used to be. It was seven, and
+    /// `SetSync` is the one that has left — a row deleted here rather than
+    /// kept, which is what the last loop below is for. So the ones that keep
     /// their own path are named here rather than left to be noticed, and this
     /// is what stops the list growing by accident — a record built beside the
     /// conversion is exactly the drift `karakuri-operation-record` exists to
@@ -9970,8 +9995,12 @@ mod live_save_tests {
         }
         // A floor rather than a count, and a low one: what is guarded against
         // is the scan going quiet, which would let every direct write through.
+        // **Four, where it was five.** `cycle_sync` was the fifth and its
+        // record now comes out of `operate`, so a floor of five would fail as
+        // a dead scan on the day a row was correctly deleted — which is the
+        // one failure a guard against a dead scan must not invent.
         assert!(
-            reached.len() >= 5,
+            reached.len() >= 4,
             "only {} method(s) reading as record writers — the scan is not seeing \
              `Live`'s bodies: {reached:?}",
             reached.len()
@@ -9991,9 +10020,11 @@ mod live_save_tests {
     /// **The keys that keep their own path are exactly the ones whose record
     /// is not settled**, and this is what will say so the day one changes.
     ///
-    /// `f g`, `x`, `c`, `r`, `y`, `b` and `, .` build their records where they
+    /// `f g`, `x`, `c`, `r`, `b` and `, .` build their records where they
     /// stand because `written` answers `Owed::NotSettled` for the operation
-    /// each of them names. That is a statement about
+    /// each of them names. **`y` is the one that has already gone**, and it
+    /// went the way this test names: `SetSync` stopped being owed, so the key
+    /// moved through [`Live::operate`] and its line here came out. That is a statement about
     /// `karakuri-operation-record` rather than about this file, so it is
     /// checked against that crate: the day somebody settles one of these
     /// conversions, this fails and names the key that is now due to move
@@ -10011,13 +10042,6 @@ mod live_save_tests {
                 Operation::SelectRenderer {
                     deck: 0,
                     renderer: 1,
-                },
-            ),
-            (
-                "y",
-                Operation::SetSync {
-                    deck: 0,
-                    sync: karakuri_operation::Sync::Beat,
                 },
             ),
             ("b", Operation::TapBeat),
