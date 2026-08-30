@@ -208,8 +208,8 @@ use karakuri_console::panel::{
 use karakuri_console::repaint::{Change, Repaint};
 use karakuri_console::room::Room;
 use karakuri_console::view::{
-    self, arrangement as arrangement_pill, mixer as mixer_bay, outputs, picture_rect,
-    preview_rects, Ask, Kind, Picture, View, DECKS, DECK_LETTERS,
+    self, arrangement as arrangement_pill, look as look_row, mixer as mixer_bay, outputs,
+    picture_rect, preview_rects, Ask, Kind, Picture, View, DECKS, DECK_LETTERS,
 };
 use karakuri_engine::governor::{Report, SLOWEST_PRIME_ONE_IN};
 // The engine's own `Published`, and its node kinds under the word the address
@@ -1383,11 +1383,11 @@ impl Readout {
                     did = Acted::Emitted(operation);
                 }
             }
-            // **A press the panel claimed is on one of the five controls or
+            // **A press the panel claimed is on one of the eight controls or
             // on the panel itself**, and the controls are asked first for the
             // reason `claim` asked them last: rule 2 has already had its
             // refusal, so a press that got here and is on a control is that
-            // control's. All five are the same calls `claim` made — asked
+            // control's. All eight are the same calls `claim` made — asked
             // again, not copied.
             //
             // **The bay is derived once and asked four times**, exactly as
@@ -1420,6 +1420,24 @@ impl Readout {
                 if let Some(ask) = asked {
                     did = self.arranged(ask);
                     return (claim, did);
+                }
+                // **The two look controls, derived once for both** — the
+                // exposure track's place is measured from the tone map
+                // capsule's, so they are two questions about one laid-out
+                // group, exactly as the mixer's four are about one strip.
+                // Neither can overlap the pill: this group starts one
+                // `.transport` gap after it.
+                let look = look_row(
+                    ctx,
+                    self.panel.layout(),
+                    self.view.transport,
+                    &self.view.arrangement,
+                    self.view.look,
+                );
+                let tone = look.as_ref().and_then(|row| row.tonemap(at));
+                let exposure = look.as_ref().and_then(|row| row.exposure(at));
+                if let Some(operation) = tone.or(exposure) {
+                    return (claim, Acted::Emitted(Some(operation)));
                 }
                 let sink = outputs(ctx, self.panel.layout()).filter(|row| row.hit(at));
                 let bay = mixer_bay(ctx, self.panel.layout(), &self.view.mixer);
@@ -2058,16 +2076,22 @@ fn sources_from<I: IntoIterator<Item = String>>(args: I) -> Result<Sources, Stri
 /// `tick` is what a performance is.
 const STEPS_A_FRAME: u8 = 1;
 
-/// **The look every sink is drawn under**, and it is exactly what
-/// [`Present::new`] uploads before anybody calls `set_tonemap`.
+/// **The look this window opens under**, and it is where [`Engine::look`]
+/// starts rather than what every frame is drawn under.
 ///
 /// [`compose`] writes the tone-map uniform on every frame from the
-/// [`Committed`] the closure hands back, so a harness that has no operator on
-/// a key still has to say what the look is. Saying *what `Present` already
-/// defaults to* is the honest answer here: this file has no session, no `look`
-/// record and no key that changes it, so a different value would be this
-/// program inventing an aesthetic the rest of the workspace does not run
-/// under.
+/// [`Committed`] the closure hands back, so a harness with nothing to say
+/// about the look still has to say something. **This file now has something to
+/// say**: the transport row's two look controls move [`Engine::look`] through
+/// a record, so what a frame is committed under is that field and this is only
+/// its first value.
+///
+/// **Aces, and it is still not this program inventing an aesthetic.** ADR-0037
+/// picked the default *by looking* and left the trade open — *"ACES works on
+/// stage … AgX is kind to material"* — and recorded that the choice is only
+/// about what happens when nobody chooses, *"and can be changed on the
+/// night"*. Until this pass nobody could change it here; now a press can, and
+/// the constant is what the night starts at.
 const LOOK: Look = Look {
     op: TonemapOp::Aces,
     exposure: 1.0,
@@ -2399,6 +2423,29 @@ struct Engine {
     /// `karakuri_console::view::picture_rect`, and
     /// `the_picture_is_the_canvass_shape_and_carries_no_bars` under `mod gpu`.
     preview: Presented,
+    /// **The look every sink is drawn under this frame**, and the one piece of
+    /// engine state this program *moves*.
+    ///
+    /// It was [`LOOK`] handed straight to `compose` every frame, with the
+    /// reason written at that constant: this file had no session, no `look`
+    /// record and no key that changed it. It has a control now — the transport
+    /// row's tone map capsule and its exposure track — so a press becomes
+    /// `Operation::SetTonemap` or `SetExposure`, which become one
+    /// `Record::Look`, which [`apply`] writes here; the next frame hands this
+    /// to `compose` and the present pass uploads it. That is P-0028 on this
+    /// value exactly: the control ends in the record every other surface's
+    /// does, and nothing calls `Present::set_tonemap` behind its back.
+    ///
+    /// **It lives here rather than beside the panel** because it is what the
+    /// *engine* is drawing under: `view::Look` is the console's reading of it,
+    /// written per frame from this the way a strip is written from the deck,
+    /// and a second copy that the console owned would be the reading and the
+    /// state as one thing (ADR-0156).
+    ///
+    /// `white_point` is carried and never asked for: no surface has a control
+    /// for it, so it is read back into every record and written out again
+    /// unchanged ([ADR-0192](../../../docs/adr/0192-an-operation-asks-for-what-a-surface-can-say-and-the-record-stays-whole.md)).
+    look: Look,
     /// How many registrations have been freed, **over both textures**. The
     /// atlas leak this exists to prevent is invisible from outside: a resize
     /// that registers without freeing leaves a bind group per drag frame and
@@ -2467,6 +2514,10 @@ impl Engine {
             // audition and a device message that says `deck preview` four
             // times over says nothing.
             preview: Presented::new(gpu, renderer, "deck A preview", preview, scale),
+            // What a window that nobody has touched is drawn under — see
+            // [`LOOK`], which is now a starting point rather than the whole of
+            // it.
+            look: LOOK,
             freed: 0,
         }
     }
@@ -3439,6 +3490,22 @@ fn blend_mode(blend: Blend) -> BlendMode {
     }
 }
 
+/// **The engine's look, as the console reads it** — [`blend_mode`]'s function
+/// one row up, on the value every sink is drawn under.
+///
+/// Two fields of three: `white_point` is Reinhard's parameter, it is on no
+/// surface, and a console field for it would be a reading no control names —
+/// see `karakuri_console::view::Look`. The operator goes through
+/// [`mix::tonemap`], which is the match that makes the engine's list and the
+/// vocabulary's agree and stops compiling the day a fifth operator lands on
+/// one side only.
+fn look(look: &Look) -> view::Look {
+    view::Look {
+        tonemap: mix::tonemap(look.op),
+        exposure: look.exposure,
+    }
+}
+
 /// **What this window says when a control's operation wrote no record**, and
 /// the two ways that happens are not the same thing — so they are not the
 /// same sentence.
@@ -3509,7 +3576,17 @@ fn unwritten(operation: &Operation, written: &Written) -> Option<String> {
 /// The line it returns is the loop closing, printed so that it can be read
 /// rather than inferred: the operation, the record, and **what the deck says
 /// afterwards** — which is where the next frame's strip comes from.
-fn apply(record: &Record, deck: &mut Deck) -> Option<String> {
+///
+/// # It takes the look as well as the deck, and that is not a second target
+///
+/// `Record::Look` is the one record here that does not name a slot: the look
+/// is what *every* sink is drawn under, so it is `Engine::look` rather than
+/// anything on the deck ([`Engine::look`], and `karakuri_engine::frame::Look`
+/// for why the master out is deliberately not in it). Handing both in is what
+/// keeps this one function the only place a record becomes a movement — a
+/// second `apply_look` beside it would be the second route into the engine
+/// that P-0028 exists to refuse.
+fn apply(record: &Record, deck: &mut Deck, look: &mut Look) -> Option<String> {
     // **A slot the deck has not got is refused rather than indexed.**
     // `Deck::set_gain` indexes its slots, a panic reachable from an event
     // handler aborts this process rather than unwinding (see the module
@@ -3621,6 +3698,44 @@ fn apply(record: &Record, deck: &mut Deck) -> Option<String> {
                 deck.mask(slot).position()
             ))
         }
+        // **The whole look, because the record is a state and not an ask.**
+        // `Record::Look` carries the operator, the exposure and the white
+        // point together for its own stated reason — a stream that set a level
+        // without naming the operator would describe a look nobody can
+        // reconstruct — and each of the two controls asks for one of the three
+        // (ADR-0192). The other two arrive here already filled in from the
+        // reading [`reading`] took, so this writes what it is given and picks
+        // nothing out of it, exactly as the mask arm does.
+        //
+        // **The operator comes back off the wire name, refused rather than
+        // defaulted**, as the blend's, the residency's and the shape's do.
+        // Nothing in this file can produce a name the engine has not got: the
+        // capsule only ever emits one of `Tonemap`'s four and the record is
+        // written from `Tonemap::name`, which is the same lower-case spelling
+        // `mix::op_wire_name` parses.
+        //
+        // **No `set_tonemap` call.** `compose` uploads the tone-map uniform
+        // every frame from the `Committed` the closure hands back, so writing
+        // the field *is* the write — and a `Present::set_tonemap` here would be
+        // a second writer, with the last one each frame winning.
+        Record::Look {
+            ref op,
+            exposure,
+            white_point,
+        } => {
+            let op = mix::parse_op(op)?;
+            *look = Look {
+                op,
+                exposure,
+                white_point,
+            };
+            Some(format!(
+                "  look: -> Record::Look {{ op: {op_name}, exposure: {exposure:.3}, \
+                 white_point: {white_point:.3} }} -> every sink is drawn under {op_name} at \
+                 exposure {exposure:.3}",
+                op_name = mix::op_wire_name(op)
+            ))
+        }
         _ => None,
     }
 }
@@ -3634,12 +3749,18 @@ fn apply(record: &Record, deck: &mut Deck) -> Option<String> {
 /// (ADR-0156, ADR-0194).
 ///
 /// **`Current::default()` is *I read nothing*, and it is still the answer for
-/// four of this panel's five controls**: a gain, an opacity, a blend mode and
+/// four of this panel's seven controls**: a gain, an opacity, a blend mode and
 /// a residency each carry everything their record carries, so handing a
-/// reading in would be this file inventing a value. The mask mini is the one
-/// that needs one, and it needs it for the deck the operation *names* rather
-/// than for the deck the pointer is over — which is `Reading::Mask`'s own
-/// wording and the reason this takes the operation and not a slot.
+/// reading in would be this file inventing a value. The mask mini is one of
+/// the three that need one, and it needs it for the deck the operation *names*
+/// rather than for the deck the pointer is over — which is `Reading::Mask`'s
+/// own wording and the reason this takes the operation and not a slot.
+///
+/// **The two look controls are the other two**, and they read one thing
+/// between them: the look that is running. Each names a third of
+/// `Record::Look` and the other two thirds come from here — which is
+/// [`Reading::Look`]'s own wording and the reason the reading is taken for the
+/// operation rather than per control.
 ///
 /// **The softness is read back**, where `karakuri-cli`'s `mix::current_mask`
 /// substitutes its own `MASK_SOFTNESS`: that program writes wipes and has a
@@ -3651,7 +3772,25 @@ fn apply(record: &Record, deck: &mut Deck) -> Option<String> {
 /// A slot the deck has not got answers `None`, and [`written`] then says the
 /// reading was owed rather than indexing something that is not there — the
 /// guard [`apply`] has, at the other end of the same press.
-fn reading(operation: &Operation, deck: &Deck) -> Current {
+fn reading(operation: &Operation, deck: &Deck, look: &Look) -> Current {
+    let look = match *operation {
+        // **Two thirds of the record, for whichever third was asked for.**
+        // `SetTonemap` carries an operator and `SetExposure` a level, and
+        // `Record::Look` needs all three — so the running look is handed in
+        // and `written` takes the two the press did not name. That is
+        // ADR-0192's argument executable in this file: the operation carries
+        // what a surface can say and the translator completes the record.
+        // `white_point` is on no surface at all, so it survives every press by
+        // arriving here and going straight back out.
+        Operation::SetTonemap { .. } | Operation::SetExposure { .. } => {
+            Some(karakuri_operation_record::Look {
+                tonemap: mix::tonemap(look.op),
+                exposure: look.exposure,
+                white_point: look.white_point,
+            })
+        }
+        _ => None,
+    };
     let mask = match *operation {
         Operation::SetMaskShape { deck: slot, .. } => {
             let slot = usize::from(slot);
@@ -3668,6 +3807,7 @@ fn reading(operation: &Operation, deck: &Deck) -> Current {
         _ => None,
     };
     Current {
+        look,
         mask,
         ..Current::default()
     }
@@ -3985,7 +4125,10 @@ impl App {
                     // the fifth and its record is written whole out of two
                     // halves (ADR-0201), so its half is read here rather than
                     // assumed. See [`reading`].
-                    let written = written(operation, &reading(operation, &gfx.engine.deck));
+                    let written = written(
+                        operation,
+                        &reading(operation, &gfx.engine.deck, &gfx.engine.look),
+                    );
                     // **A press that wrote no record says so**, and says
                     // which of the two kinds of nothing it was, before
                     // anything is applied.
@@ -3998,7 +4141,9 @@ impl App {
                     // not one record (P-0028, ADR-0194).
                     if let Written::Records(records) = &written {
                         for record in records {
-                            if let Some(line) = apply(record, &mut gfx.engine.deck) {
+                            if let Some(line) =
+                                apply(record, &mut gfx.engine.deck, &mut gfx.engine.look)
+                            {
                                 println!("{line}");
                             }
                         }
@@ -4568,6 +4713,12 @@ impl ApplicationHandler for App {
                 let live = live(&self.readout.view);
                 self.readout.view.transport =
                     transport(&gfx.engine.deck, &self.costs, gfx.budget_ms, live);
+                // **And what the two look controls at the end of that row
+                // read**, beside the frame they are about. It is the look this
+                // frame is committed under, so the capsule names the operator
+                // the picture went through rather than one a press asked for
+                // and nothing has applied yet.
+                self.readout.view.look = Some(look(&gfx.engine.look));
                 // **And what the mixer strips read**, beside the frame they
                 // are about for the same reason. One strip per slot, so two —
                 // see `mixer`.
@@ -4686,6 +4837,7 @@ impl ApplicationHandler for App {
                         present,
                         picture,
                         preview,
+                        look,
                         ..
                     } = engine;
                     let textures_delta = &mut output.textures_delta;
@@ -4712,11 +4864,13 @@ impl ApplicationHandler for App {
                                 println!("a sink stopped taking frames: {why}");
                             }
                         },
-                        // No clock and no record anywhere: see
-                        // `STEPS_A_FRAME` and `LOOK`.
+                        // **No clock and no record for the steps** — see
+                        // `STEPS_A_FRAME`. The look is not in that sentence
+                        // any more: it is `Engine::look`, and a record is
+                        // exactly how it got there.
                         |_| Committed {
                             steps: STEPS_A_FRAME,
-                            look: LOOK,
+                            look: *look,
                         },
                         // -- the panel, into the frame's encoder ------
                         |encoder| {
@@ -7592,7 +7746,7 @@ mod gpu {
 
         // The record, and the deck.
         let record = super::tests::only_record(&operation);
-        assert!(apply(&record, &mut engine.deck).is_some());
+        assert!(apply(&record, &mut engine.deck, &mut engine.look).is_some());
         assert_eq!(
             engine.deck.gain(0),
             0.0,
@@ -7828,7 +7982,7 @@ mod gpu {
                 level: "allocated".to_owned(),
             }
         );
-        assert!(apply(&record, &mut engine.deck).is_some());
+        assert!(apply(&record, &mut engine.deck, &mut engine.look).is_some());
         assert_eq!(
             engine.deck.requested_residency(ASKED_TO_PRIME),
             Residency::Allocated,
@@ -7892,7 +8046,7 @@ mod gpu {
             slot: ASKED_TO_PRIME as u8,
             level: "priming".to_owned(),
         };
-        assert!(apply(&again, &mut engine.deck).is_some());
+        assert!(apply(&again, &mut engine.deck, &mut engine.look).is_some());
         assert_eq!(
             engine.deck.requested_residency(ASKED_TO_PRIME),
             Residency::Priming,
@@ -8011,7 +8165,7 @@ mod gpu {
         // The record, out of the operation and the reading the harness takes
         // off the deck — written **whole**, which is the half the operation
         // does not name (ADR-0201).
-        let written = written(&operation, &reading(&operation, &engine.deck));
+        let written = written(&operation, &reading(&operation, &engine.deck, &engine.look));
         let Written::Records(records) = &written else {
             panic!("a press on the mask mini wrote no record: {written:?}")
         };
@@ -8028,7 +8182,7 @@ mod gpu {
         );
 
         // And the deck.
-        assert!(apply(&records[0], &mut engine.deck).is_some());
+        assert!(apply(&records[0], &mut engine.deck, &mut engine.look).is_some());
         let mask = engine.deck.mask(ON_AIR);
         assert_eq!(
             mask.kind(),
@@ -8064,6 +8218,185 @@ mod gpu {
                 angle: ANGLE,
             }),
             "the second press did not wrap round to `none` at the angle the deck still holds"
+        );
+    }
+
+    /// **The whole loop, closed on the look: a press on the tone map capsule
+    /// chooses the next operator and keeps the level, and a press on the
+    /// exposure track sets the level and keeps the operator.**
+    ///
+    /// `tests/look.rs` asserts everything up to the operation with no engine
+    /// anywhere, which is the point of that file. This is the other end, and
+    /// it needs a device because [`Engine`] does — and because the value being
+    /// moved is [`Engine::look`], which is what every sink is drawn under.
+    ///
+    /// **What separates this from the plausible wrong answer is the third of
+    /// the record neither press names.** `Record::Look` is an operator, a
+    /// level and a white point; each control asks for one of the first two and
+    /// [`reading`] supplies the rest (ADR-0192). A build that filled the
+    /// missing thirds from a default would cycle the tone map and silently
+    /// reset the exposure — and would rewrite `white_point`, which is on no
+    /// surface at all and would therefore change with nothing saying so. So
+    /// the look this starts from has **none of the three at its default**.
+    ///
+    /// **The middle step is the one worth the device**, as in the mask's test:
+    /// between the press and the record the look must not have moved, or the
+    /// console would be applying what it is only supposed to ask for.
+    #[test]
+    fn a_press_on_the_look_controls_moves_the_look_every_sink_is_drawn_under() {
+        const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
+        const W: u32 = 1440;
+        const H: u32 = 900;
+        /// **Not `LOOK`'s three**, so a press that dropped a third of the
+        /// record and filled it from a default is visible in every one of
+        /// them.
+        const STARTS_AT: Look = Look {
+            op: TonemapOp::Reinhard,
+            exposure: 0.5,
+            white_point: 3.5,
+        };
+
+        let gpu = Gpu::headless().expect("no GPU");
+        let mut renderer =
+            egui_wgpu::Renderer::new(&gpu.device, FORMAT, egui_wgpu::RendererOptions::default());
+        let mut panel = Panel::new(W as f32, H as f32);
+        panel.solve();
+        let mut engine = Engine::new(
+            &gpu,
+            &mut renderer,
+            &Sources::default(),
+            panel.layout(),
+            1.0,
+        );
+        engine.look = STARTS_AT;
+
+        // What the console reads this frame, off the look the engine holds.
+        let ctx = super::tests::drawn_once();
+        let mut view = View::new(karakuri_console::room::Room::Day);
+        // The mock's own transport, which is what `tests/transport.rs` and
+        // the console's own tests read: the group is measured from the
+        // arrangement pill and the pill from the bar, so a row is needed to
+        // have either.
+        view.transport = Some(view::Transport {
+            bpm: 128.0,
+            beats: 144.0,
+            beats_per_bar: karakuri_signal::oscillator::BEATS_PER_BAR,
+            fps: Some(58.0),
+            frame_ms: 12.4,
+            budget_ms: Some(16.6),
+        });
+        view.look = Some(look(&engine.look));
+        assert_eq!(
+            view.look,
+            Some(view::Look {
+                tonemap: karakuri_operation::Tonemap::Reinhard,
+                exposure: 0.5,
+            }),
+            "the console is not reading the look the engine is drawing under"
+        );
+
+        let row = look_row(
+            &ctx,
+            panel.layout(),
+            view.transport,
+            &view.arrangement,
+            view.look,
+        )
+        .expect("the transport row draws the look controls");
+
+        // ---- the capsule: the next operator, at the level that is running --
+        let capsule = row.tone.center();
+        let operation = row
+            .tonemap(Point::new(capsule.x, capsule.y))
+            .expect("a press on the tone map capsule");
+        assert_eq!(
+            operation,
+            Operation::SetTonemap {
+                tonemap: karakuri_operation::Tonemap::Aces,
+            },
+            "the press did not ask for the operator after `reinhard`"
+        );
+        // **Nothing has been told anything yet.**
+        assert_eq!(
+            engine.look, STARTS_AT,
+            "the look moved before the record did"
+        );
+
+        let chosen = written(&operation, &reading(&operation, &engine.deck, &engine.look));
+        let Written::Records(records) = &chosen else {
+            panic!("a press on the tone map capsule wrote no record: {chosen:?}")
+        };
+        assert_eq!(
+            records.as_slice(),
+            [Record::Look {
+                op: "aces".to_owned(),
+                exposure: 0.5,
+                white_point: 3.5,
+            }],
+            "the record is not the whole look with only the operator changed"
+        );
+        assert!(apply(&records[0], &mut engine.deck, &mut engine.look).is_some());
+        assert_eq!(
+            engine.look,
+            Look {
+                op: TonemapOp::Aces,
+                ..STARTS_AT
+            },
+            "cycling the tone map did not leave the level and the white point alone"
+        );
+
+        // ---- the track: the level under the press, at the operator running -
+        let row = look_row(
+            &ctx,
+            panel.layout(),
+            view.transport,
+            &view.arrangement,
+            Some(look(&engine.look)),
+        )
+        .expect("the group is still drawn");
+        let middle = row.grip.center();
+        let operation = row
+            .exposure(Point::new(middle.x, middle.y))
+            .expect("a press on the exposure track");
+        assert_eq!(
+            operation,
+            Operation::SetExposure { exposure: 1.0 },
+            "a press at the middle of the track did not ask for unity"
+        );
+
+        let levelled = written(&operation, &reading(&operation, &engine.deck, &engine.look));
+        let Written::Records(records) = &levelled else {
+            panic!("a press on the exposure track wrote no record: {levelled:?}")
+        };
+        assert_eq!(
+            records.as_slice(),
+            [Record::Look {
+                op: "aces".to_owned(),
+                exposure: 1.0,
+                white_point: 3.5,
+            }],
+            "the record is not the whole look with only the level changed — the operator the \
+             press cannot name, or the white point no surface can, was rewritten"
+        );
+        assert!(apply(&records[0], &mut engine.deck, &mut engine.look).is_some());
+        assert_eq!(
+            engine.look,
+            Look {
+                op: TonemapOp::Aces,
+                exposure: 1.0,
+                white_point: 3.5,
+            },
+            "the level did not land, or it took the operator or the white point with it"
+        );
+
+        // And the console follows, because it is read off the engine rather
+        // than remembered.
+        assert_eq!(
+            look(&engine.look),
+            view::Look {
+                tonemap: karakuri_operation::Tonemap::Aces,
+                exposure: 1.0,
+            }
         );
     }
 

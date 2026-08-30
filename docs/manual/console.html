@@ -77,6 +77,12 @@
             <span class="pill lav" data-tip="MIDI learn. Off. Click, then point at any control and move a knob on your surface, and the two are mapped. Every control that has a tooltip can be learned, so nothing is unreachable by accident.">learn</span>
             <span class="pill" data-tip="The map in use, and it is a file. Which knob is which belongs to the hardware in the room, so a map is saved and recalled per controller and never travels in a session. Click to save, load, or start a new one.">map &middot; nanoKONTROL2 &#9662;</span>
             <span class="pill" data-tip="The arrangement in use, and it is a file. Every fold, every boundary you have dragged, the solo and both sets of remembered sizes, filed under a name you pick &mdash; kept beside your Sets under arrangements/ rather than beside the program, so it travels with the library it was arranged around. Click to save, load, or start a new one. Starting a new one is the reset, and it is the one arrangement here with no file behind it: the one that came with the program, which nothing you save can shadow. The window is not part of it &mdash; a console arranged on a laptop comes back at the size you are looking at now. r starts a new one from the keyboard.">arr &middot; night &#9662;</span>
+            <span class="pill" data-tip="The tone map: the transfer from unbounded linear HDR to something a display can show, and it is one of four &mdash; clamp, reinhard, aces, agx. Click and it moves to the next of them, wrapping. What the press asks for is the operator it arrived at and never a step, so a map or a model can ask for the one it wants without having to know which one is running. The capsule is drawn to the widest of the four whatever word is in it, so it does not move under the name it carries and the exposure beside it does not move either. &#8853; MIDI: unassigned &mdash; a note could name one of the four, and no map target names one yet.">tone &middot; aces</span>
+            <span style="display:flex;align-items:center;gap:5px" data-tip="Exposure: the level going into that transfer, at the far end of the master chain, and not the Master bay's out. Twelve stops of track, a sixty-fourth to sixty-four, with 1.00 at the middle &mdash; logarithmic, because a stop is a ratio and equal distances along this track are equal ratios. Click anywhere on it to set it outright: the track is 48 pixels for 48 quarter-stops, so one pixel is one press of an exposure key and pointing at it reaches exactly what stepping it reaches. The figure is what carries a change too small for 48 pixels to draw. The track never moves under the value it sets &mdash; the number is after it, where only the spacer takes up the width. &#8853; MIDI: cc &rarr; exposure, which is the same absolute value from a fader.">
+              <span style="color:var(--c-faint)">exp</span>
+              <span class="fader" style="width:48px"><b style="width:50%"></b></span>
+              <span class="val">1.00</span>
+            </span>
             <span class="sep"></span>
             <span data-tip="Frame time against the budget. 12.4 ms of 16.6 &mdash; there is headroom. A candidate that cannot hold this is rolled back on its own.">
               <span class="val">58</span><span style="color:var(--c-faint)"> fps &middot; </span><span class="val">12.4</span><span style="color:var(--c-faint)">/16.6 ms</span>
@@ -449,7 +455,7 @@
                   </div>
                 </div>
                 <div class="seq-foot">
-                  <span>a lane is a binding &middot; label mutes</span>
+                  <span>a lane is a fifth route &middot; label mutes</span>
                   <span class="sep"></span><span class="pill">+ lane</span>
                 </div>
               </div>
@@ -1178,6 +1184,80 @@
       </div>
 
       <div class="note">
+        <h3>The look is two controls, and they sit where a frame leaves</h3>
+        <p>
+          <strong>They are two because they are two asks, not because they are
+          two things.</strong> One record carries the operator, the exposure and
+          the white point together, since a stream that set a level without
+          naming the operator it applies to would describe a look nobody can
+          reconstruct. An <em>ask</em> is a different matter: a control change
+          that turns exposure alone has no operator to offer, so the tone map
+          and the level are asked for separately and whoever writes the record
+          fills in the rest from the look that is running. Two asks is two
+          controls, and one of them is a choice from a closed list while the
+          other is a number.
+        </p>
+        <p>
+          <strong>They sit at the end of the left half because that is where a
+          frame leaves.</strong> Everything else in this row is already
+          grouped and each group has a reason: the tempo, its label, the beat
+          grid and the bar are one clock; the four beside them all need an
+          audio input; <em>learn</em>, the map and the arrangement are what this
+          console is <em>set up</em> as. A look is none of the three &mdash; it
+          needs no input, it is no file, and it is played rather than arranged
+          &mdash; so it is a fourth group and it goes last, against the spacer.
+          The tone map is the one transfer the whole pipeline ends in, applied
+          immediately before the single encode at the output, so the row reads
+          in the order the frame does: what the music is doing, what this
+          console is set up as, the last thing done to the picture, and then
+          &mdash; across the spacer &mdash; what that picture cost.
+        </p>
+        <p>
+          <strong>The tone map cycles and names where it arrived.</strong> One
+          press moves it to the next of the four and wraps; what leaves the
+          panel is <em>aces</em>, not <em>next</em>, because a surface that can
+          only step has no way to arrive and two surfaces stepping the same
+          control disagree about where they are. The cycle is this control's,
+          the four names are everybody's, and a pad or a model is offered the
+          four rather than the step. <strong>A menu would fit here and it is
+          still the wrong shape</strong>: a card is a gesture that outlives the
+          press and takes every pointer event until it is shut, which is a
+          price worth paying for a list of files somebody named and not for
+          four words that never change. The capsule is drawn to the widest of
+          the four whatever is in it, so the control does not move under the
+          name it carries.
+        </p>
+        <p>
+          <strong>Exposure is twelve stops of track and you click where you
+          want it.</strong> A sixty-fourth to sixty-four, logarithmic, with
+          1.00 exactly at the middle: a stop is a ratio, so an additive step is
+          enormous at 0.1 and invisible at 8.0, and a linear track is that same
+          mistake drawn in space &mdash; unity would sit a pixel and a half
+          from the left-hand end. The track is <strong>48 pixels for 48
+          quarter-stops</strong>, which is one pixel a press, so pointing at
+          this control reaches exactly the values stepping it reaches and
+          neither surface can ask for something the other cannot.
+          <strong>A press sets it outright rather than taking it in
+          hand</strong>, which is the one thing here that reads oddly beside
+          the mixer, where a press off a knob deliberately does nothing: a
+          fader has a handle and a value that must not jump under it
+          mid-gesture, and this has neither. There is no knob drawn, for the
+          same reason &mdash; a handle nothing can drag is a lie about what the
+          control does.
+        </p>
+        <p>
+          <strong>The figure carries what 48 pixels cannot draw</strong>, and it
+          is after the track rather than before it. It is the one part of this
+          group whose width moves with its value, so putting it last leaves the
+          track where it was: a control that walked away from the pointer as you
+          set it would be worse the more precisely you were trying to use it.
+          The number is written the way the Master bay's <code>out</code> is
+          written, because the two are the same kind of reading &mdash; and the
+          note below is where they stop being the same number.
+        </p>
+      </div>
+
+      <div class="note">
         <h3>Master, and the two levels that are not one level</h3>
         <p>
           <strong>The bay's <code>out</code> and the tone mapper's
@@ -1210,7 +1290,12 @@
           operation names the master out, so there is no record, no key, no
           MIDI target and nothing for a map to learn. The tone mapper's
           exposure keeps all of those and keeps them in the transport, where
-          the operator it belongs to is.
+          the operator it belongs to is &mdash; the two controls at the end of
+          that row, drawn and described above. So the two levels are told apart
+          on this page by where each is <em>reached</em> as well as by where it
+          is applied: <code>out</code> is a fader in this bay that nothing can
+          move, and <code>exposure</code> is a track in the transport that a
+          press sets outright.
         </p>
       </div>
 
@@ -1219,10 +1304,34 @@
         <p>
           One row per lane. The row keeps its width and the cells divide it, so
           eight steps are landscape cells and sixteen are portrait ones. Each
-          lane sits under the mixer strip it drives. <strong>A lane is a
-          binding</strong> &mdash; a source, a target, a curve and a range, a
-          record that already exists &mdash; so a lane drives a Set parameter as
-          readily as a deck fader.
+          lane sits under the mixer strip it drives.
+        </p>
+        <p>
+          <strong>A lane is a fifth route into the vocabulary, and not a
+          binding.</strong> It emits operations on the beat, the way the pointer,
+          the keys, a map and a model do &mdash; which is the same sentence
+          <em>One vocabulary, four ways in</em> below already made about the
+          sequencer, and this note used to contradict it. <strong>A binding
+          cannot be what a lane is, on two counts.</strong> Its target is a
+          parameter inside a Set, and three of the four lanes drawn here are deck
+          faders, which are no Set's. And <strong>a binding does not yield to a
+          hand</strong>: it is a projection recomputed every frame, so a lane
+          built that way would rewrite the fader you were holding sixty times a
+          second &mdash; a display that moves when you push it rather than a
+          control. Every hand-driven setter on a deck cancels what was moving it;
+          nothing in the binding path has anywhere to put that cancel. As a route
+          it needs neither: a lane and a hand meet at the same call every other
+          pair of surfaces already meets at.
+        </p>
+        <p>
+          <strong>The step grid is the beat clock subdivided and not a fourth
+          clock</strong> &mdash; a step is a pure function of the beat, so
+          correcting the tempo changes the rate from now on without moving a beat
+          that has already happened. Two things are worth knowing rather than
+          discovering: a step onset is seen at the next frame, which is right for
+          a sequencer that writes values and would not be for one that fires
+          events; and an eighth at 128 BPM is faster than the band the beat
+          clock's rule was written for.
         </p>
       </div>
 

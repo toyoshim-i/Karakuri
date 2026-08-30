@@ -193,6 +193,13 @@ fn sample(variant: &str) -> Operation {
         "RestoreArrangement" => Operation::RestoreArrangement {
             name: String::new(),
         },
+        // The two the transport row's look controls emit. They are one row of
+        // *Mixing and output* each, so unlike the pair above they are **not**
+        // in [`ELSEWHERE`] and both directions below judge them.
+        "SetTonemap" => Operation::SetTonemap {
+            tonemap: karakuri_operation::Tonemap::Aces,
+        },
+        "SetExposure" => Operation::SetExposure { exposure: 1.0 },
         other => panic!(
             "`{SRC}` constructs `Operation::{other}` and this file has no value for it — a \
              control started emitting an operation nobody accounted for. Add an arm here, and \
