@@ -413,6 +413,15 @@ pub mod size {
     /// [`PREVIEW_RADIUS`] is.
     pub const STRIP_RADIUS: f32 = 9.0;
 
+    /// `.strip.focus`'s `box-shadow: inset 0 0 0 2px var(--c-lav)`: the ring
+    /// round the selected deck's strip. **Inset**, so it is drawn inside the
+    /// strip's own box and takes no width from the gap beside it — which is
+    /// what lets a selection move between two strips 4 apart without either of
+    /// them appearing to grow. Twice [`HAIRLINE`] and deliberately so: the
+    /// mock's other focus is a *dashed* outline at the same 2, and the two
+    /// have to be told apart by their line and not by their weight.
+    pub const STRIP_FOCUS_RING: f32 = 2.0;
+
     /// `.strip`'s `padding: 7px 4px`.
     pub const STRIP_PAD_X: f32 = 4.0;
     pub const STRIP_PAD_Y: f32 = 7.0;
@@ -581,6 +590,12 @@ pub mod size {
     /// is the 22.5 the library's minimum of 132 is written from in `lib.rs`,
     /// so a row is this tall in both places or in neither.
     pub const LIB_ROW_H: f32 = BASE * LINE + LIB_ROW_PAD_Y * 2.0;
+
+    /// `.lib-row`'s `border-radius: 7px`, which nothing in this bay draws
+    /// until a row is under the cursor: the wash behind that one row is the
+    /// only fill a row ever has, and a square-cornered fill inside a card
+    /// rounded at [`BAY_RADIUS`] is the one shape the mock never draws.
+    pub const LIB_ROW_RADIUS: f32 = 7.0;
 
     /// `.lib-foot`'s `padding: 5px 10px`, around the count at
     /// [`LIB_FOOT_SIZE`].

@@ -31,7 +31,7 @@ use common::{drawn_once, id_of, near, rect_of, showing, solved, PLAUSIBLE, SMALL
 use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::Panel;
 use karakuri_console::room::{size, Room};
-use karakuri_console::view::{library, LibraryBay, View};
+use karakuri_console::view::{library, LibraryBay, View, DECK_LETTERS};
 use karakuri_layout::{Point, Rect};
 
 /// **The mock's own library, as names**: five Sets, in the order it draws
@@ -600,4 +600,166 @@ fn the_names_are_the_harnesss_and_are_stored_nowhere() {
         view.library, two,
         "the frame rewrote the listing it was given"
     );
+}
+
+// ---------------------------------------------------------------------------
+// The load route: a cursor, a letter, and no pointer
+// ---------------------------------------------------------------------------
+
+/// Every filled rectangle painted at one of the bay's own row boxes, as the
+/// row index it landed on.
+///
+/// The cursor's mark is a wash and nothing else — `.lib-row.cursor` sets a
+/// `background` and a `color`, and no rule, caret or chevron — so a row that
+/// is not under it paints no rectangle of its own at all. That is what makes
+/// counting them the whole assertion: one washed row, and it is the cursor's.
+fn washed(shapes: &[egui::Shape], bay: &LibraryBay) -> Vec<usize> {
+    (0..bay.rows)
+        .filter(|index| {
+            let row = bay.row(*index);
+            shapes.iter().any(|shape| match shape {
+                egui::Shape::Rect(at) => {
+                    near(at.rect.min.x, row.min.x)
+                        && near(at.rect.min.y, row.min.y)
+                        && near(at.rect.width(), row.width())
+                        && near(at.rect.height(), row.height())
+                }
+                _ => false,
+            })
+        })
+        .collect()
+}
+
+/// A view over the mock's library, at a solved console.
+fn showing_mock() -> (View, Panel) {
+    let mut view = View::new(Room::Day);
+    view.library = mock();
+    (view, console(PLAUSIBLE))
+}
+
+/// **The cursor is one row and the row is the one it is on**, asserted by
+/// drawing the bay and finding the wash.
+///
+/// The mock puts `.lib-row.cursor` on the first row and this console starts
+/// there, so the untouched case is the mock's own picture. What the walk then
+/// proves is that the mark follows the pointer rather than being painted at a
+/// fixed row — the failure a first-row default hides completely.
+#[test]
+fn the_cursor_is_one_row_and_it_is_the_row_it_is_on() {
+    let (mut view, mut panel) = showing_mock();
+    let bay = bay(&panel);
+    let list = bay.list;
+    assert!(
+        bay.rows >= 3,
+        "the bay listed {} rows at the plausible console, which is too few to walk",
+        bay.rows
+    );
+
+    let drawn = shapes_inside(&mut view, &mut panel, list);
+    assert_eq!(
+        washed(&drawn, &bay),
+        vec![0],
+        "a fresh console draws the cursor somewhere other than the first row, or on more than \
+         one of them"
+    );
+
+    assert!(view.walk(2, bay.rows), "the cursor did not move two rows");
+    let drawn = shapes_inside(&mut view, &mut panel, list);
+    assert_eq!(
+        washed(&drawn, &bay),
+        vec![2],
+        "the cursor moved and the wash stayed where it was"
+    );
+
+    assert!(view.walk(-2, bay.rows), "the cursor did not move back");
+    let drawn = shapes_inside(&mut view, &mut panel, list);
+    assert_eq!(washed(&drawn, &bay), vec![0], "the walk back drew nothing");
+}
+
+/// **The cursor is held inside the rows the bay drew, and it does not wrap.**
+///
+/// This bay has no scroll position, so the Sets an operator can reach are the
+/// ones the foot counts as listed — a cursor past them would sit on a row
+/// nobody can see, under a pill saying a press will load it. And a walk that
+/// wrapped would jump the length of the list on one press of a key somebody is
+/// leaning on.
+#[test]
+fn the_cursor_stays_inside_the_rows_that_are_listed() {
+    let mut view = View::new(Room::Day);
+    view.library = mock();
+
+    // A bay with room for two of the five.
+    assert!(!view.walk(-1, 2), "the cursor walked above the first row");
+    assert_eq!(view.cursor_row(), 0);
+    assert!(view.walk(1, 2));
+    assert_eq!(view.cursor_row(), 1);
+    assert!(
+        !view.walk(1, 2),
+        "the cursor left the two rows the bay listed"
+    );
+    assert_eq!(view.cursor_row(), 1, "and it wrapped instead of stopping");
+
+    // A bay with room for all five, and a step past the end of the store.
+    assert!(view.walk(99, 5));
+    assert_eq!(view.cursor_row(), 4, "a long step left the listing");
+    assert!(!view.walk(1, 5));
+
+    // And no listing at all is no cursor to move: a console with no store
+    // behind it, which is every other test in this crate.
+    let mut empty = View::new(Room::Day);
+    assert!(!empty.walk(1, 3), "a console with no store moved a cursor");
+    assert_eq!(empty.cursor_row(), 0);
+}
+
+/// **The foot's pill says where a press would land, and the letter follows the
+/// deck selection.**
+///
+/// `console.html`: *"The letter on the pill is the whole warning … What the
+/// control owes instead is to say where it lands before the press."* So this
+/// asserts the words rather than a rectangle, and asserts them again after the
+/// selection moves — a pill that read `load → A` whatever was selected would
+/// pass the first half and be a lie for the other three decks.
+#[test]
+fn the_foot_says_which_deck_a_press_would_land_on() {
+    let (mut view, mut panel) = showing_mock();
+    let bay = bay(&panel);
+    // Four strips, so all four decks can be selected. What a strip *reads* is
+    // not this bay's business — only that there is one.
+    view.mixer = std::iter::repeat_with(strip).take(4).collect();
+
+    for deck in 0..4u8 {
+        assert!(
+            view.select(deck) || deck == 0,
+            "deck {deck} could not be selected with four strips"
+        );
+        let want = format!("load \u{2192} {}", DECK_LETTERS[usize::from(deck)]);
+        let drawn = shapes_inside(&mut view, &mut panel, bay.foot);
+        assert!(
+            drawn.iter().any(|shape| matches!(
+                shape,
+                egui::Shape::Text(at) if at.galley.text() == want
+            )),
+            "the selection is deck {deck} and the foot does not read `{want}`: {drawn:#?}"
+        );
+    }
+}
+
+/// **A strip, as far as this bay cares**: something for a deck to be selected
+/// on. Every reading in it is beside the point here — `mixer.rs` is where a
+/// strip's values are asserted — and what matters is that there are as many of
+/// them as there are decks to name.
+fn strip() -> karakuri_console::view::Strip {
+    karakuri_console::view::Strip {
+        name: String::new(),
+        tally: karakuri_console::view::Tally::Allocated,
+        requested: karakuri_console::view::Tally::Allocated,
+        gain: 0.0,
+        gain_to: None,
+        opacity: 0.0,
+        opacity_to: None,
+        blend: karakuri_operation::BlendMode::Over,
+        mask: karakuri_console::view::Mask::None,
+        mask_angle: 0.0,
+        level: None,
+    }
 }

@@ -169,6 +169,12 @@ a slot: *"deliberately not reachable from a key or a surface"*
 (`crates/karakuri-engine/src/deck.rs`). Not one of the seven names that gap. Finish all seven and
 the library still cannot load.
 
+*(Closed the same day this record was written, and the closing is the argument rather than a
+correction to it. The route was never `install`: a live run changes its material by handing it to
+the worker and letting the budget watchdog watch it, so what was missing was a way to re-point a
+slot's source — `watch::Aim`, and `l` on the operations page. The seven `Adds` still do not name
+it, which is the point this section makes.)*
+
 ### b. The meter closes it at some figure
 
 Sharper than (a), because the meter is derived, is already the thing to run before believing a

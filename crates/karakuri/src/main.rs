@@ -689,9 +689,11 @@ impl Costs {
     /// The reading. Median and worst rather than a mean for the per-frame
     /// figures: a frame path is judged by its tail.
     /// `capacity` and `material` are the run's, handed in rather than read off
-    /// a constant: this program takes its `.kir` pair from the command line, so
-    /// what the engine half of this reading was taken over is only known at run
-    /// time. See [`Engine::capacity`] and [`Sources::material`].
+    /// a constant: this program takes its `.kir` pair from the command line and
+    /// a load can move a slot off it, so what the engine half of this reading
+    /// was taken over is only known at run time — and is every slot's name in
+    /// slot order rather than one. See [`Engine::capacity`],
+    /// [`Sources::material`] and [`Gfx::material`].
     fn say(&mut self, capacity: u32, material: &str) {
         if self.said {
             return;
@@ -1529,7 +1531,22 @@ impl Readout {
                     | (None, None, None, None, Some(operation)) => {
                         did = Acted::Emitted(Some(operation))
                     }
-                    (None, None, None, None, None) => self.press(at),
+                    // **The strip itself, asked last.** A strip's rectangle
+                    // contains all four of the questions above, so this is
+                    // what is left over — a press on the name, on the number,
+                    // on the ground between the rows — and it means *address
+                    // the keys to this deck*. It is the only control in this
+                    // bay that is not drawn as one, which is
+                    // `console.html`'s *"a press anywhere on a strip that no
+                    // knob under the pointer claimed"*: the whole column is
+                    // the affordance, and a sixth capsule would be a control
+                    // over a pointer.
+                    (None, None, None, None, None) => {
+                        match bay.as_ref().and_then(|bay| bay.select(at)) {
+                            Some(operation) => did = Acted::Emitted(Some(operation)),
+                            None => self.press(at),
+                        }
+                    }
                 }
             }
             (Pointer::Up, Claim::Panel) => self.released(),
@@ -2095,8 +2112,13 @@ impl Sources {
     /// its *nodes* and its *published controls* and has no name of its own,
     /// which is right — a Set is built from a list of `.kir` files, and only
     /// whoever passed that list knows what to call the result. **This is that
-    /// list**, derived from the two paths rather than typed again, so a strip
-    /// cannot go on saying `drift_shell` after somebody loads something else.
+    /// list**, derived from the two paths rather than typed again.
+    ///
+    /// **It is what every slot *opens* on and not what one is playing**, which
+    /// is [`Gfx::material`]'s distinction: this program builds both slots from
+    /// the one pair, and a load moves one of them to a Set the library names.
+    /// So this answers once, at startup, and the per-slot name is kept and
+    /// rewritten there.
     fn material(&self) -> String {
         let stem = |path: &std::path::Path| {
             path.file_stem()
@@ -2537,6 +2559,28 @@ struct Engine {
     /// is the whole engine's tally rather than either texture's, which is why
     /// it lives here and is handed to [`Presented::fit`].
     freed: usize,
+    /// **One sender per slot, in slot order**: how a load reaches that slot's
+    /// build worker.
+    ///
+    /// This is the whole of what putting a library Set on a running deck took,
+    /// and what it is *not* is the point of it. `Deck::install` is the one
+    /// function that puts a built Set in a slot and says of itself that it is
+    /// *"deliberately not reachable from a key or a surface: a live run
+    /// changes its material by editing a file and letting the worker build it,
+    /// which is what the budget watchdog is attached to."* So nothing here
+    /// builds a Set: [`loading`] writes the library Set's procedures into the
+    /// scratch and sends an aim, and the same worker that watches for a save
+    /// picks it up. The swap lands at a frame boundary, is judged against the
+    /// budget for thirty frames, and rolls back on its own if it costs too
+    /// much — none of which had to be written for the library, because a load
+    /// is now literally an edit this program made.
+    ///
+    /// **In slot order, so the index is the deck letter**: `aimed[0]` is deck
+    /// A's, and it is the same index `Deck::events`, the strips and the
+    /// preview cells are all in. Kept beside the deck rather than inside it
+    /// for the reason the whole of [`Engine`] is on this side: the channel is
+    /// `karakuri-environment`'s and the engine takes no environment.
+    aimed: Vec<std::sync::mpsc::Sender<watch::Aim>>,
 }
 
 /// **One slot, with a worker watching its own two files behind it** — which is
@@ -2594,8 +2638,20 @@ struct Engine {
 /// `Sender` is live or was dropped at construction, and a swap has always
 /// landed at a frame boundary (ADR-0005). What is new on a *frame* is a
 /// build's install, which is the mechanism this deck was already built on.
-fn watched(gpu: &Gpu, sources: &Sources, live: Set, slot: usize, salt: u32) -> HotSwap {
-    HotSwap::new(
+fn watched(
+    gpu: &Gpu,
+    sources: &Sources,
+    live: Set,
+    slot: usize,
+    salt: u32,
+) -> (HotSwap, std::sync::mpsc::Sender<watch::Aim>) {
+    // **The other end of `Watch::aimed_by`**, kept by [`Engine`] so that a
+    // load can say *look at these files instead*. It is made here rather than
+    // by the caller because the watcher it belongs to is made here, and a
+    // sender paired with the wrong slot's watcher would load a deck the
+    // operator did not name.
+    let (aim, aimed) = std::sync::mpsc::channel();
+    let swap = HotSwap::new(
         &gpu.device,
         &gpu.queue,
         live,
@@ -2607,27 +2663,31 @@ fn watched(gpu: &Gpu, sources: &Sources, live: Set, slot: usize, salt: u32) -> H
         // at all — `HotSwap::fixed` judged against infinity, so no candidate
         // could ever be thrown out for cost.
         DEFAULT_BUDGET_MS,
-        Box::new(watch::Watch::new(
-            slot,
-            // **Bare, so every node is called what its procedure declares**,
-            // which is `Set::build`'s own: *"A pair names nothing, so both
-            // nodes are called what their procedures are."* A name here
-            // belongs to the *use* and this program has no syntax for one.
-            karakuri_environment::compile::Named::bare(&sources.l1),
-            vec![karakuri_environment::compile::Named::bare(&sources.l4)],
-            Layering::Overdraw,
-            None,
-            None,
-            salt,
-            Vec::new(),
-            karakuri_engine::camera::Orbit::default(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-        )),
-    )
+        Box::new(
+            watch::Watch::new(
+                slot,
+                // **Bare, so every node is called what its procedure declares**,
+                // which is `Set::build`'s own: *"A pair names nothing, so both
+                // nodes are called what their procedures are."* A name here
+                // belongs to the *use* and this program has no syntax for one.
+                karakuri_environment::compile::Named::bare(&sources.l1),
+                vec![karakuri_environment::compile::Named::bare(&sources.l4)],
+                Layering::Overdraw,
+                None,
+                None,
+                salt,
+                Vec::new(),
+                karakuri_engine::camera::Orbit::default(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+            )
+            .aimed_by(aimed),
+        ),
+    );
+    (swap, aim)
 }
 
 impl Engine {
@@ -2672,21 +2732,16 @@ impl Engine {
         // `try_recv` either way, and everything a rebuild costs — the file
         // read, the four validation stages, the compile and `Set::build` — is
         // on the worker thread this spawns (P-0001).
-        let mut deck = Deck::new(
-            &gpu.device,
-            vec![
-                watched(gpu, sources, built(SEED_SALT), ON_AIR, SEED_SALT),
-                watched(
-                    gpu,
-                    sources,
-                    built(WARM_SEED_SALT),
-                    ASKED_TO_PRIME,
-                    WARM_SEED_SALT,
-                ),
-            ],
-            CANVAS.0,
-            CANVAS.1,
+        let (on_air, aim_on_air) = watched(gpu, sources, built(SEED_SALT), ON_AIR, SEED_SALT);
+        let (warm, aim_warm) = watched(
+            gpu,
+            sources,
+            built(WARM_SEED_SALT),
+            ASKED_TO_PRIME,
+            WARM_SEED_SALT,
         );
+        let aimed = vec![aim_on_air, aim_warm];
+        let mut deck = Deck::new(&gpu.device, vec![on_air, warm], CANVAS.0, CANVAS.1);
         // **The meters are on, and that is a decision rather than a default.**
         // Five of the six things a mixer strip shows are settings the deck was
         // told; the meter is the only one that is a *measurement*, so with it
@@ -2716,6 +2771,7 @@ impl Engine {
             // it.
             look: LOOK,
             freed: 0,
+            aimed,
         }
     }
 
@@ -3020,6 +3076,159 @@ fn library(root: &std::path::Path) -> Vec<String> {
             Vec::new()
         }
     }
+}
+
+/// **Put a library Set on a running deck**, which is the whole of what
+/// `Operation::LoadSet` needed and is a re-point rather than an install.
+///
+/// # It writes files and sends a description, and it builds nothing
+///
+/// `Deck::install` is the one function that puts a built Set in a slot, and it
+/// is *"deliberately not reachable from a key or a surface: a live run changes
+/// its material by editing a file and letting the worker build it, which is
+/// what the budget watchdog is attached to."* So this does what an operator
+/// with an editor does, in one press: it reads the Set out of the store,
+/// writes every procedure in it into the scratch, and tells that slot's
+/// watcher to look there instead. **Everything after this line is the path a
+/// save already takes** — the worker compiles off the render thread, the swap
+/// lands at a frame boundary, and the governor judges it for thirty frames
+/// against the budget and rolls it back on its own if it costs too much. The
+/// library gets all of that for nothing, and no second route into a slot is
+/// opened.
+///
+/// **Nothing here is on the frame path.** A store read, a `setfile::load` that
+/// checks every procedure, and up to a handful of small writes — on the press,
+/// which is where this file already reads a directory (`arrangement`), and
+/// never on a frame (P-0072). The compile is the worker's.
+///
+/// # The scratch name carries the slot, and that is not decoration
+///
+/// `scratch::place` writes `<store>/scratch/<name>.kir` and overwrites what is
+/// there, so two decks loading two Sets whose procedures happen to share a
+/// name would be one file: the second load would move the first deck as well,
+/// on its watcher's next poll, and nothing would say why. The name is
+/// therefore `A0-drift.kir` — the deck letter, the node's place in the Set,
+/// and the procedure's own name — which is unique per slot **and** per node,
+/// stays readable in an editor, and says which deck an open file belongs to.
+/// `--load-set` does not need this because it fills one slot before the run
+/// starts.
+///
+/// # What the aim states, and why all of it
+///
+/// [`watch::Aim`] is `Watch::new`'s argument list less the slot, and every
+/// field here is read off the Set file rather than left at this program's
+/// startup value — which is the failure each of `Watch`'s own fields is
+/// documented against, and which would not show on the load at all. A
+/// layering, a fold or a camera left behind is a slot that loads correctly and
+/// then comes back as a different picture on the first later save.
+///
+/// The authorities are the one exception and are empty: `Record::Authority` is
+/// deliberately not Set-file state, so a Set carries no grants and a load
+/// starts a slot with none — which is what `--load-set` gives one.
+///
+/// The `Err` is a sentence for the operator. Every way this fails leaves the
+/// deck exactly as it was: a store that will not open, a Set that is not
+/// there, a procedure in it that no longer checks, a scratch that will not be
+/// written, or a worker that has gone.
+fn loading(
+    root: &std::path::Path,
+    slot: usize,
+    salt: u32,
+    aim: &std::sync::mpsc::Sender<watch::Aim>,
+    id: &str,
+) -> Result<String, String> {
+    let store = Store::open(root).map_err(|e| format!("{}: {e}", root.display()))?;
+    let loaded = karakuri_environment::setfile::load(&store, id)?;
+    // Said rather than swallowed: a note is the reader telling the operator
+    // what it did with a file it could only partly honour, and a load that
+    // quietly ignored one is a picture nobody can account for.
+    for note in &loaded.notes {
+        println!("  load: {note}");
+    }
+
+    let letter = deck_letter(slot as u8);
+    let mut named = Vec::with_capacity(loaded.srcs.len());
+    for (at, ((checked, src), name)) in loaded.nodes().zip(loaded.node_names()).enumerate() {
+        let path = karakuri_environment::scratch::place(
+            root,
+            &format!("{letter}{at}-{}", checked.name),
+            src,
+        )?;
+        // **The Set file's node name and not the procedure's**, which is
+        // `--load-set`'s own pairing: an `edge` in the file resolves against
+        // the name the file wrote, and a rebuild that called the node whatever
+        // its procedure declares would break the slot on its first save.
+        named.push(karakuri_environment::compile::Named { name, path });
+    }
+    let mut named = named.into_iter();
+    let head = named
+        .next()
+        .ok_or_else(|| format!("`{id}` names no procedure at all"))?;
+
+    // **The file's salts, and a derived one where it recorded none** — the
+    // rule `karakuri-cli`'s `salts_for` follows, restated here because that
+    // program has no library target. The seed is the file's first salt where
+    // it has one and this slot's own where it has not, so a Set that recorded
+    // its colours comes back with them and one that did not is salted like the
+    // slot it landed in.
+    let seed_salt = loaded.salts.first().copied().flatten().unwrap_or(salt);
+    let salts: Vec<u32> = (0..loaded.l1s.len())
+        .map(|at| {
+            loaded
+                .salts
+                .get(at)
+                .copied()
+                .flatten()
+                .unwrap_or_else(|| karakuri_engine::set::derived_salt(seed_salt, at))
+        })
+        .collect();
+
+    let nodes = loaded.srcs.len();
+    aim.send(watch::Aim {
+        head,
+        rest: named.collect(),
+        layering: loaded.layering,
+        live: loaded.live,
+        // **The first geometry's recorded capacity over all of them**, which
+        // is what `--load-set` folds into `--capacity` and is `Watch`'s own
+        // shape: one `Option<u32>` for the slot, because a rebuild recompiles
+        // the files and each geometry's own declaration is the default. A Set
+        // that recorded two different capacities loses the second, which is a
+        // limit this program shares with the command line rather than one it
+        // invented.
+        capacity: loaded.capacities.first().copied().flatten(),
+        seed_salt,
+        salts,
+        // A Set holds a built-in camera whatever its files declare, so
+        // `Orbit::default()` where the file recorded none is the camera it
+        // would have been built with rather than a value invented here.
+        camera: loaded.camera.unwrap_or_default(),
+        overrides: loaded.params,
+        // Nothing in a Set file publishes a control — `setfile` writes none
+        // and reads none — so this is empty for the same reason this program's
+        // startup watchers pass an empty list: there is no `--publish` here to
+        // fold in either (ADR-0216).
+        published: Vec::new(),
+        bindings: loaded.bindings,
+        edges: loaded.edges,
+        authorities: Vec::new(),
+    })
+    .map_err(|_| {
+        format!(
+            "deck {letter}'s build worker is gone, so `{id}` cannot be built; \
+             what is on that deck keeps running"
+        )
+    })?;
+    Ok(format!(
+        "  load: deck {letter} <- `{id}` ({nodes} node{}) -> written into {}/{} and its watcher \
+         re-pointed; the worker builds it and the budget judges it",
+        match nodes {
+            1 => "",
+            _ => "s",
+        },
+        root.display(),
+        karakuri_environment::scratch::DIR,
+    ))
 }
 
 /// **Every arrangement the store holds, by name**, for the pill's menu to
@@ -3338,11 +3547,11 @@ fn destination(deck: &Deck, slot: usize, control: Control) -> Option<f32> {
         .map(|t| t.to())
 }
 
-fn mixer(deck: &Deck, name: &str, out: &mut Vec<view::Strip>) {
+fn mixer(deck: &Deck, names: &[String], out: &mut Vec<view::Strip>) {
     out.truncate(deck.slot_count());
     while out.len() < deck.slot_count() {
         out.push(view::Strip {
-            name: name.to_owned(),
+            name: String::new(),
             tally: view::Tally::Allocated,
             requested: view::Tally::Allocated,
             gain: 0.0,
@@ -3356,6 +3565,14 @@ fn mixer(deck: &Deck, name: &str, out: &mut Vec<view::Strip>) {
         });
     }
     for (slot, strip) in out.iter_mut().enumerate() {
+        // **One name per slot, because a load moves one slot.** It was one
+        // name for the whole deck while both slots ran the same pair and
+        // nothing could change either of them; a library Set loaded into deck
+        // B would then have left both strips reading the pair this program was
+        // launched with, which is a readout that is wrong and says nothing
+        // (P-0027). Empty for a slot nobody named, which draws no name at all
+        // rather than somebody else's.
+        let name = names.get(slot).map_or("", String::as_str);
         if strip.name != name {
             strip.name.clear();
             strip.name.push_str(name);
@@ -3658,9 +3875,13 @@ fn node_of(set: &Set, control: &Published) -> Option<(Layer, u32)> {
 ///
 /// **What a re-read for the rest of it waits on is a writer**, and it is the
 /// same writer the authority chip waits on.
-fn inspector(deck: &Deck, material: &str, out: &mut Vec<view::Pane>) {
+fn inspector(deck: &Deck, names: &[String], out: &mut Vec<view::Pane>) {
     out.clear();
     for slot in 0..deck.slot_count().min(view::PANES) {
+        // The strip's name for the same slot, and for [`mixer`]'s reason: a
+        // pane head reads `deck A · drift_night`, and after a load that is the
+        // Set the operator chose rather than the pair the run opened with.
+        let material = names.get(slot).map_or("", String::as_str);
         let set = deck.slot(slot).set();
         let transport = deck.transport(slot);
         let composite = set.layering() == Layering::Composite;
@@ -3947,6 +4168,117 @@ fn unwritten(operation: &Operation, written: &Written) -> Option<String> {
             "  emitted: {operation:?} -> no record, and that is a gap rather than a \
              decision: {}. nothing moved, and nothing here decides it",
             owed.why()
+        )),
+    }
+}
+
+/// **A press on a strip or a deck key, applied to the console's own pointer**,
+/// and what to say about it. `None` for every operation that is not it.
+///
+/// `Operation::SelectDeck` *"writes no record, and is the reason every other
+/// variant names its deck instead of meaning the selected one"*, so there is
+/// nothing on the deck for [`apply`] to move and the surface that emits it is
+/// what performs it (ADR-0198). This is that performance, and it is one line
+/// beside [`arrangement`]'s for the same reason: the alternative is a second
+/// route into the view.
+///
+/// **A deck the mixer has no strip for is refused**, and `View::select` is
+/// where that rule lives — the ring would be drawn nowhere and the library's
+/// pill would name a deck a load could not reach. It is said here rather than
+/// swallowed, because a key that does nothing and a key that is not bound are
+/// the same experience.
+fn pointed(view: &mut View, operation: &Operation) -> Option<String> {
+    let Operation::SelectDeck { deck } = *operation else {
+        return None;
+    };
+    let letter = deck_letter(deck);
+    if usize::from(deck) >= view.mixer.len() {
+        return Some(format!(
+            "  select: deck {letter} refused — this deck has {} slot{}, and a selection with no \
+             strip under it is a ring drawn nowhere and a `load` pill naming a deck the press \
+             could not reach",
+            view.mixer.len(),
+            match view.mixer.len() {
+                1 => "",
+                _ => "s",
+            }
+        ));
+    }
+    view.select(deck);
+    Some(format!(
+        "  select: deck {letter} -> SelectDeck {{ deck: {deck} }} -> no record, and that is \
+         settled: it is a surface's own pointer. The keys are addressed here, and the library's \
+         foot reads `load -> {letter}`"
+    ))
+}
+
+/// **Which salt a slot's material is seeded from**, for a load to restate when
+/// the Set file recorded none.
+///
+/// The two the run was built with, and no third: a Set loaded into a slot is
+/// new *material* and not a new simulation, so a rebuild that derived its own
+/// seed would repaint every element in the slot for a reason nobody asked for
+/// — which is `Watch::salts`' own argument, met from the loading side.
+fn slot_salt(slot: usize) -> u32 {
+    match slot {
+        ON_AIR => SEED_SALT,
+        _ => WARM_SEED_SALT,
+    }
+}
+
+/// **A load, performed** — [`loading`] reached from an operation, and `None`
+/// for every operation that is not one.
+///
+/// `Operation::LoadSet` writes no record either, so this is [`pointed`]'s
+/// shape one bay along: the surface that names it performs it. What it does
+/// **not** do is touch the deck, which is the whole design — see [`loading`]
+/// and [`Engine::aimed`].
+///
+/// Every failure is a sentence and none of them moves anything: a slot the
+/// deck has not got, a store that will not open, a Set that is not there, a
+/// procedure that no longer checks, or a worker that has gone.
+fn played(gfx: &mut Gfx, operation: &Operation) -> Option<String> {
+    let Operation::LoadSet { deck, set } = operation else {
+        return None;
+    };
+    let slot = usize::from(*deck);
+    let letter = deck_letter(*deck);
+    let Some(aim) = gfx.engine.aimed.get(slot) else {
+        return Some(format!(
+            "  load: deck {letter} refused — this deck has {} slot{}, and `{set}` has nowhere to \
+             land",
+            gfx.engine.aimed.len(),
+            match gfx.engine.aimed.len() {
+                1 => "",
+                _ => "s",
+            }
+        ));
+    };
+    match loading(std::path::Path::new(STORE), slot, slot_salt(slot), aim, set) {
+        Ok(line) => {
+            // **What that slot is now playing**, written on the press that
+            // changed it. A `Set` has no name of its own, so the strip and the
+            // pane head read whatever whoever built it says — and after a load
+            // that is the id the operator picked out of the library, which is
+            // the same word the row they pressed on carries.
+            //
+            // **Written on the aim rather than on the swap**, which is a
+            // choice and not an oversight: the build may still be refused or
+            // rolled back for cost, and a name that waited for the verdict
+            // would leave the strip naming material that is no longer in the
+            // file. The staging lane is what says which of the three happened,
+            // on the deck it happened to, and it is the surface built for
+            // exactly that disagreement — a strip name that hedged would be a
+            // second, quieter answer to the question that lane is about.
+            if let Some(name) = gfx.material.get_mut(slot) {
+                name.clear();
+                name.push_str(set);
+            }
+            Some(line)
+        }
+        Err(e) => Some(format!(
+            "  load: `{set}` did not reach deck {letter}: {e} — nothing moved, and what is on \
+             that deck is still running"
         )),
     }
 }
@@ -4514,10 +4846,21 @@ struct Gfx {
     /// **What a frame has to fit in on this window**, read from the display
     /// once when the window opened — see [`budget_ms`].
     budget_ms: Option<f32>,
-    /// **What the mixer strip calls what this deck is playing**, worked out
-    /// once from the two `.kir` paths — see [`material`]. Kept rather than
-    /// recomputed because a name is a string and the frame path is budgeted.
-    material: String,
+    /// **What the mixer strip calls what each slot is playing**, in slot
+    /// order — see [`Sources::material`]. Kept rather than recomputed because
+    /// a name is a string and the frame path is budgeted.
+    ///
+    /// **One per slot rather than one for the deck**, and the difference only
+    /// began to matter when a load did. Both slots open on the pair this
+    /// program was launched with, so one name was every slot's name and could
+    /// not become wrong; `l` moves one slot's material and leaves the other
+    /// where it was, and a single name would then have both strips reading the
+    /// launch pair with the picture showing something else. That is a readout
+    /// that is wrong and silent, which is the one thing P-0027 refuses.
+    ///
+    /// Rewritten where the slot is: [`played`], on the press, which is also
+    /// where the store is read. Nothing on the frame path touches it.
+    material: Vec<String>,
 }
 
 struct App {
@@ -4645,6 +4988,21 @@ impl App {
                         &mut readout.view.arrangement,
                         operation,
                     ) {
+                        println!("{line}");
+                    }
+                    // **The two the console performs itself**, and they are
+                    // here for the same reason the arrangement is: both write
+                    // no record, so `written` below answers `Silent` for them
+                    // and there is nothing for `apply` to do. One moves a
+                    // pointer this crate does not hold, the other re-points a
+                    // slot's source and lets the worker do the rest — neither
+                    // is the mix. Each answers `None` for every other
+                    // operation, which is what keeps this two lines rather
+                    // than two more routes into the engine.
+                    if let Some(line) = pointed(&mut readout.view, operation) {
+                        println!("{line}");
+                    }
+                    if let Some(line) = played(gfx, operation) {
                         println!("{line}");
                     }
                     // **The reading is taken off the deck, and for four of the
@@ -4840,7 +5198,12 @@ impl ApplicationHandler for App {
         // **The strips before the legend**, because the legend says how many
         // there are and the answer is the deck's rather than a guess. It is
         // written again on every frame; this is the first one.
-        let material = self.sources.material();
+        // **Every slot opens on the same pair**, because that is what this
+        // program builds them from — one name repeated rather than one name
+        // shared, so that a load can move one of them without moving the
+        // other's readout. See [`Gfx::material`].
+        let material: Vec<String> =
+            std::iter::repeat_n(self.sources.material(), engine.deck.slot_count()).collect();
         mixer(&engine.deck, &material, &mut self.readout.view.mixer);
         // **The library before the legend too**, and once for the run: the
         // legend says how many Sets the bay lists, and `library` says why
@@ -4901,7 +5264,12 @@ impl ApplicationHandler for App {
         // returning it until the reading is printed.
         if self.costs.due().is_some_and(|due| due <= now) {
             if let Some(gfx) = self.gfx.as_ref() {
-                let (capacity, material) = (gfx.engine.capacity, gfx.material.clone());
+                // **The reading names the workload it was taken over**, and
+                // that is the whole deck's rather than one slot's — so the
+                // slots' names are joined in slot order, and a run where a
+                // load has moved one of them says so instead of naming the
+                // pair the window opened with.
+                let (capacity, material) = (gfx.engine.capacity, gfx.material.join(" / "));
                 self.costs.say(capacity, &material);
             }
         }
@@ -5137,6 +5505,101 @@ impl ApplicationHandler for App {
                     Key::Character("u") => Op::Unsolo,
                     Key::Character("r") => Op::Reset,
                     Key::Character("p") => Op::Report,
+                    // **The deck selection, which is the command line's own
+                    // four keys.** They are the one place the two keyboards
+                    // agree on a letter's meaning besides `esc`, and they
+                    // agree because a deck is a slot number: nothing had to be
+                    // translated for the panel to mean what the shell already
+                    // meant. `SelectDeck` writes no record, so the surface
+                    // performs it — [`pointed`], reached through the same
+                    // `performed` every control's operation goes through, so
+                    // there is one path and not a second one for the pointer.
+                    Key::Character("0")
+                    | Key::Character("1")
+                    | Key::Character("2")
+                    | Key::Character("3") => {
+                        let Key::Character(digit) = key.logical_key.as_ref() else {
+                            unreachable!("the arm this is in")
+                        };
+                        let deck = digit.as_bytes()[0] - b'0';
+                        let acted = Acted::Emitted(Some(Operation::SelectDeck { deck }));
+                        let repaint =
+                            App::performed(gfx, &mut self.readout, &acted, Repaint::Never);
+                        App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
+                        return;
+                    }
+                    // **The library cursor**, and it is the one key here that
+                    // names no operation at all. `docs/manual/console.html`
+                    // argues that where the deck selection has a row: the
+                    // selection is what every deck-addressed operation's
+                    // keyboard translator fills its `deck` in from, and this
+                    // is read by one operation that carries the Set id in its
+                    // own payload — so three of the four surfaces would have
+                    // nothing to reach and a row would be the first rule
+                    // written down as a permanent gap.
+                    //
+                    // **Held inside the rows the bay drew**, which is why the
+                    // listing is asked rather than the store: this bay has no
+                    // scroll position, so the reachable Sets are the listed
+                    // ones and the foot already says how many are not. The
+                    // solve is a flag test on a layout nothing dirtied
+                    // (ADR-0183) and is here because a key may arrive between
+                    // a resize and the frame that answers it.
+                    Key::Named(NamedKey::ArrowUp) | Key::Named(NamedKey::ArrowDown) => {
+                        let step = match key.logical_key.as_ref() {
+                            Key::Named(NamedKey::ArrowUp) => -1,
+                            _ => 1,
+                        };
+                        self.readout.panel.solve();
+                        let listed = karakuri_console::view::library(
+                            self.readout.panel.layout(),
+                            &self.readout.view.library,
+                        )
+                        .map_or(0, |bay| bay.rows);
+                        let moved = self.readout.view.walk(step, listed);
+                        App::wants(
+                            gfx,
+                            &mut self.egui_due,
+                            &mut self.costs,
+                            Change::Pointed(moved).repaint(),
+                        );
+                        return;
+                    }
+                    // **The load, and the two operands are already on screen.**
+                    // The cursor says which Set and the selection says which
+                    // deck, which is `console.html`'s *"a cursor and a key
+                    // with no pointer anywhere in it"*. What the press does is
+                    // re-point the slot's source — [`loading`] — so the worker
+                    // builds it and the watchdog judges it exactly as it does
+                    // an edit, and nothing here reaches `Deck::install`.
+                    Key::Character("l") => {
+                        let deck = self.readout.view.selection();
+                        let at = self.readout.view.cursor_row();
+                        let acted = match self.readout.view.library.get(at) {
+                            Some(set) => Acted::Emitted(Some(Operation::LoadSet {
+                                deck,
+                                set: set.clone(),
+                            })),
+                            // Not a refusal of the load: there is no Set under
+                            // the cursor because there is no listing, which is
+                            // a store this run could not read or one that
+                            // holds nothing. The bay says so by drawing no
+                            // rows; this says so in words, because a key that
+                            // did nothing and a key that is not bound are the
+                            // same experience.
+                            None => {
+                                println!(
+                                    "  load: the library lists nothing, so there is no Set under \
+                                     the cursor"
+                                );
+                                Acted::Nothing
+                            }
+                        };
+                        let repaint =
+                            App::performed(gfx, &mut self.readout, &acted, Repaint::Never);
+                        App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
+                        return;
+                    }
                     Key::Character("n") => {
                         // **The key that changes the screen without touching
                         // the pointer and without touching the model.** The
@@ -5807,6 +6270,158 @@ mod tests {
             listed,
             vec!["morph01".to_owned(), "night01".to_owned()],
             "the bay lists {listed:?}"
+        );
+
+        std::fs::remove_dir_all(&root).expect("clean up");
+    }
+
+    /// **A load writes the Set's procedures where the slot's watcher is
+    /// looking and aims it there, and it touches no deck at all.**
+    ///
+    /// This is the whole of what `Operation::LoadSet` needed, and what it is
+    /// *not* is the claim: `Deck::install` is the one function that puts a
+    /// built Set in a slot and is documented as deliberately unreachable from
+    /// a key or a surface, because *"a live run changes its material by
+    /// editing a file and letting the worker build it, which is what the
+    /// budget watchdog is attached to"*. So this asserts files and an aim.
+    /// A load that built a Set here would be a picture nothing measured, on a
+    /// deck with no previous Set parked to roll back to.
+    ///
+    /// **Three things beyond *it happened*, and each is a wrong load that
+    /// looks right.** The scratch name carries the deck letter and the node's
+    /// place, because `scratch::place` overwrites by name and two decks
+    /// loading Sets whose procedures share one would silently become one file
+    /// — the second load moving the first deck on its watcher's next poll.
+    /// The aim restates the layering, the fold, the capacity and the salts the
+    /// *file* recorded rather than the ones the slot was running at, because
+    /// that is the failure every `Watch` field is documented against and it
+    /// does not show on the load: it shows on the first save afterwards. And
+    /// the node names are the file's, because an `edge` resolves against them.
+    ///
+    /// A CPU test: a store is a directory, and nothing here takes a device.
+    #[test]
+    fn a_load_writes_the_sets_procedures_into_the_scratch_and_aims_the_slot_there() {
+        use karakuri_environment::setfile;
+        use karakuri_store::Hash;
+
+        let root = std::env::temp_dir().join(format!(
+            "karakuri-load-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        let store = Store::open(&root).expect("a store to load from");
+
+        // Two real procedures, so the load goes through the checker the way a
+        // Set out of the library does. `lattice_shell` is chosen for its name:
+        // it is what the scratch file has to be called after.
+        let examples = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples");
+        let sources: Vec<(karakuri_store::Layer, String)> = [
+            (karakuri_store::Layer::L1, "lattice_shell.kir"),
+            (karakuri_store::Layer::L4, "soft_points.kir"),
+        ]
+        .into_iter()
+        .map(|(layer, file)| {
+            let src = std::fs::read_to_string(examples.join(file)).expect("an example");
+            (layer, src)
+        })
+        .collect();
+        let nodes: Vec<setfile::Node> = sources
+            .iter()
+            .map(|(layer, src)| setfile::Node {
+                hash: {
+                    let hash = Hash::of(src.as_bytes());
+                    store.put_artifact(src.as_bytes()).expect("store a source");
+                    hash
+                },
+                layer: match layer {
+                    karakuri_store::Layer::L1 => karakuri_ir::Kind::L1,
+                    _ => karakuri_ir::Kind::L4,
+                },
+                index: 0,
+                // A name the file wrote, which is what a rebuild has to call
+                // the node — not the procedure's own.
+                name: Some(match layer {
+                    karakuri_store::Layer::L1 => "grid".to_owned(),
+                    _ => "draw".to_owned(),
+                }),
+            })
+            .collect();
+        // Values no default here produces, so an aim that kept the slot's own
+        // cannot pass by accident.
+        let seeds = [0x0bad_cafeu32];
+        setfile::save(
+            &store,
+            "night01",
+            setfile::Saving {
+                nodes: &nodes,
+                capacities: &[2048],
+                params: &[],
+                bindings: &[],
+                edges: &[],
+                camera: &karakuri_engine::camera::Orbit::default(),
+                layering: Layering::Composite,
+                live: Some(0),
+                seeds: &seeds,
+            },
+        )
+        .expect("write the Set file");
+
+        // Deck B, so the letter in the scratch name is not the first one and a
+        // hard-coded `A` fails here.
+        let (tx, rx) = std::sync::mpsc::channel();
+        let line = loading(&root, ASKED_TO_PRIME, WARM_SEED_SALT, &tx, "night01")
+            .unwrap_or_else(|e| panic!("the load failed: {e}"));
+        assert!(
+            line.contains("deck B"),
+            "the line does not say where: {line}"
+        );
+
+        let aim = rx.try_recv().expect("the slot was aimed at something");
+        assert_eq!(aim.rest.len(), 1, "the renderer did not travel with it");
+        assert_eq!(
+            aim.head.name.as_deref(),
+            Some("grid"),
+            "the head is not called what the file called it, so an edge would not resolve"
+        );
+        for (named, (_, src)) in std::iter::once(&aim.head)
+            .chain(aim.rest.iter())
+            .zip(&sources)
+        {
+            let name = named
+                .path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .expect("a file name");
+            assert!(
+                name.starts_with("B0-") || name.starts_with("B1-"),
+                "`{name}` carries neither the deck nor the node, so two decks would share it"
+            );
+            assert_eq!(
+                std::fs::read_to_string(&named.path).expect("the scratch file"),
+                *src,
+                "the watcher is pointed at a file that is not the Set's source"
+            );
+        }
+
+        assert_eq!(aim.layering, Layering::Composite, "the file's layering");
+        assert_eq!(aim.live, Some(0), "the file's fold");
+        assert_eq!(aim.capacity, Some(2048), "the file's capacity");
+        assert_eq!(aim.seed_salt, seeds[0], "the file's seed");
+        assert_eq!(aim.salts, vec![seeds[0]], "the file's salts");
+        assert!(
+            aim.authorities.is_empty(),
+            "a Set file carries no grant, so a load must hand none over"
+        );
+
+        // And a Set that is not there is a sentence with nothing sent: the
+        // deck goes on playing what it was.
+        let e = loading(&root, ON_AIR, SEED_SALT, &tx, "nothing01")
+            .expect_err("a Set that is not in the store");
+        assert!(e.contains("nothing01"), "the refusal does not name it: {e}");
+        assert!(
+            rx.try_recv().is_err(),
+            "a load that failed aimed the slot anyway"
         );
 
         std::fs::remove_dir_all(&root).expect("clean up");
@@ -7161,8 +7776,13 @@ mod key_column {
     //! well defined, because
     //! [ADR-0214](../../../docs/adr/0214-the-program-moves-out-of-the-cli-and-two-thin-binaries-sit-over-it.md)
     //! gave this workspace a second keyboard: `karakuri-cli` binds thirty-nine
-    //! keys and this program binds nine, **eight letters mean different things
-    //! on the two**, and a badge saying `key f g` did not say whose.
+    //! keys and this program binds sixteen, **eight letters mean different
+    //! things on the two**, and a badge saying `key f g` did not say whose.
+    //! (Nine when ADR-0220 was written; the library's load route added seven —
+    //! the four that select a deck, the two that walk the library cursor, and
+    //! `l`. The four are also the one place beyond `esc` where the two
+    //! keyboards **agree**, because a deck is a slot number and there was
+    //! nothing to translate.)
     //!
     //! The page now says whose, in its legend: **the key column is the
     //! instrument's keyboard**, which is this file's `match` on
@@ -7305,6 +7925,8 @@ mod key_column {
         ("Enter", "return"),
         ("Backspace", "backspace"),
         ("Space", "space"),
+        ("ArrowUp", "up"),
+        ("ArrowDown", "down"),
     ];
 
     /// **Every key this program binds, and the rows of [`PAGE`] it reaches.**
@@ -7339,6 +7961,25 @@ mod key_column {
         ("u", &["Solo a region"]),
         ("z", &["Bring back what is folded"]),
         ("esc", &["Quit"]),
+        // **The deck selection**, and the four that agree with the command
+        // line: `0`–`3` mean `SelectDeck` on both keyboards, because a deck is
+        // a slot number and there was nothing to translate.
+        ("0", &["Select a deck"]),
+        ("1", &["Select a deck"]),
+        ("2", &["Select a deck"]),
+        ("3", &["Select a deck"]),
+        // The load, whose two operands are the library cursor and the
+        // selection above. Free on both keyboards when it was chosen.
+        ("l", &["Load material into a deck"]),
+        // **The library cursor, and it reaches no row on purpose.** Nothing in
+        // the vocabulary moves it: `docs/manual/console.html` decides that
+        // where the deck selection has a row of its own, and the argument is
+        // that three of the four surfaces would have nothing to reach — a map
+        // cannot name a Set, a model names one outright in `LoadSet`, and the
+        // panel's route is the drag. A row would be the first rule written
+        // down as a permanent gap.
+        ("up", &[]),
+        ("down", &[]),
         // **The three keys that are only live while the arrangement pill is
         // asking for a name, and they reach no row on purpose.**
         //
@@ -7362,7 +8003,7 @@ mod key_column {
     /// The keys that reach no row, so that one which starts reaching one stops
     /// being an exception, and a new exception is written down rather than
     /// discovered. The reasons are at the entries in [`KEYS`].
-    const NO_ROW: &[&str] = &["n", "p", "return", "backspace", "space"];
+    const NO_ROW: &[&str] = &["n", "p", "up", "down", "return", "backspace", "space"];
 
     fn workspace() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -7655,7 +8296,9 @@ mod gpu {
         view::rearrange(&mut panel, CANVAS);
         let sources = Sources::default();
         let engine = Engine::new(&gpu, &mut renderer, &sources, panel.layout(), 1.0);
-        let material = sources.material();
+        // One name per slot, which is what `Gfx::material` is: both slots
+        // open on the same pair, and a load is what makes them differ.
+        let material = vec![sources.material(); engine.deck.slot_count()];
         let mut panes = Vec::new();
         inspector(&engine.deck, &material, &mut panes);
 
@@ -7663,7 +8306,7 @@ mod gpu {
         assert_eq!(panes.len(), view::PANES);
         let pane = &panes[0];
         assert_eq!(pane.deck, 0);
-        assert_eq!(pane.material, material);
+        assert_eq!(pane.material, material[0]);
         // `Set::build` takes an L1 and an L4 and no merge, so the Set
         // overdraws — `Set::layering` read rather than assumed.
         assert!(
@@ -8550,7 +9193,7 @@ mod gpu {
         );
 
         // The strips, written the way the frame writes them.
-        let material = Sources::default().material();
+        let material = vec![Sources::default().material(); engine.deck.slot_count()];
         let mut strips = Vec::new();
         mixer(&engine.deck, &material, &mut strips);
         assert_eq!(strips.len(), engine.deck.slot_count());
@@ -8651,7 +9294,7 @@ mod gpu {
             panel.layout(),
             1.0,
         );
-        let material = Sources::default().material();
+        let material = vec![Sources::default().material(); engine.deck.slot_count()];
 
         // **Before the pass**, which is the state this file was in for its
         // whole life: a deck out of `Deck::new` is Live on every slot, the two
@@ -8760,7 +9403,7 @@ mod gpu {
             panel.layout(),
             1.0,
         );
-        let material = Sources::default().material();
+        let material = vec![Sources::default().material(); engine.deck.slot_count()];
 
         // The state, produced by the governor and not written here.
         let governed = engine.ask_to_prime(&gpu);
@@ -8944,7 +9587,7 @@ mod gpu {
             panel.layout(),
             1.0,
         );
-        let material = Sources::default().material();
+        let material = vec![Sources::default().material(); engine.deck.slot_count()];
 
         // A wipe in progress on the deck that is on air: a straight front,
         // running at an angle, part of the way across.

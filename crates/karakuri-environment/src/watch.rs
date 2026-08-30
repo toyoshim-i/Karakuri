@@ -46,6 +46,7 @@
 
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::PathBuf;
+use std::sync::mpsc::Receiver;
 use std::time::Duration;
 
 use karakuri_engine::{Binding, Request, Source};
@@ -81,6 +82,52 @@ pub struct Built {
     /// hold two geometries, a chain and a camera, all of which are procedures
     /// somebody may have just edited.
     pub nodes: Vec<(&'static str, u32, karakuri_store::hash::Hash)>,
+}
+
+/// **What one slot is pointed at**, handed to a running [`Watch`] over
+/// [`Watch::aimed_by`]'s channel.
+///
+/// # It is every field of the slot's identity, and that is the point
+///
+/// It is [`Watch::new`]'s argument list less the slot, and each field carries
+/// its argument's reason — read them there, because they are the same fields
+/// and a second copy of thirteen arguments would be thirteen places to get one
+/// of them wrong. **Anything left out comes back as the outgoing slot's**, and
+/// the symptoms are the ones those fields are documented against: a fold that
+/// silently un-selects, a camera that reverts to `Orbit::default()`, salts
+/// that repaint every element. Worse, none of them shows on the *load* — the
+/// aim states them, so the load is right and the first later save is what goes
+/// wrong.
+///
+/// **The slot is not here.** A watcher that could be re-pointed at a different
+/// slot would rebuild somebody else's deck, and the one thing enforcing *this
+/// watcher rebuilds this slot* is that it cannot see another one's files.
+///
+/// # Where the values come from
+///
+/// A Set file, read by [`crate::setfile::load`], which answers with every one
+/// of these except the authorities: `Record::Authority` is deliberately not
+/// Set-file state — an authority is an arrangement made during a performance,
+/// and a Set file carrying one would hand the node over wherever it was next
+/// loaded. So a load starts a slot with the grants a `--load-set` starts one
+/// with, which is none, and the field is here rather than assumed so the
+/// sender is the one saying it.
+pub struct Aim {
+    /// The file the slot is now spelled with — see [`Watch::head`].
+    pub head: crate::compile::Named,
+    /// The rest of them, in chain order — see [`Watch::rest`].
+    pub rest: Vec<crate::compile::Named>,
+    pub layering: karakuri_engine::set::Layering,
+    pub live: Option<u32>,
+    pub capacity: Option<u32>,
+    pub seed_salt: u32,
+    pub salts: Vec<u32>,
+    pub camera: karakuri_engine::camera::Orbit,
+    pub overrides: Vec<karakuri_engine::ParamWrite>,
+    pub published: Vec<karakuri_engine::set::Published>,
+    pub bindings: Vec<Binding>,
+    pub edges: Vec<karakuri_engine::set::Edge>,
+    pub authorities: Vec<karakuri_engine::swap::AuthorityAt>,
 }
 
 pub struct Watch {
@@ -250,6 +297,16 @@ pub struct Watch {
     stamps: Vec<Option<u64>>,
     /// A change has been seen but not yet acted on — see "Debouncing" above.
     settling: bool,
+    /// **Where a re-point arrives**, and `None` for a watcher nobody can
+    /// re-point — every offscreen path, and every slot `karakuri-cli` builds.
+    ///
+    /// A channel rather than a shared cell for the reason this module polls
+    /// rather than taking `notify`: the worker is a poll loop already, so
+    /// there is nothing to wake and nothing to lock. It is also what makes a
+    /// re-point *safe* to offer at all — the render thread hands over a
+    /// description and touches nothing this watcher owns, so a load costs the
+    /// frame it happens on a `send` and no more.
+    aimed: Option<Receiver<Aim>>,
     /// Where every version that compiled is kept, so an edit can be undone.
     /// `None` when no store root was given, which is the offscreen paths.
     ///
@@ -287,6 +344,7 @@ impl Watch {
         let mut watch = Watch {
             builds: 0,
             stored: None,
+            aimed: None,
             snapshots: None,
             slot,
             head,
@@ -345,11 +403,58 @@ impl Watch {
         self.snapshots = Some(snapshots);
         self
     }
+
+    /// **Let whoever holds the other end of `rx` point this watcher at
+    /// different material**, which is how a Set reaches a *running* deck.
+    ///
+    /// # It is a re-point and deliberately not an install
+    ///
+    /// `karakuri_engine::deck::Deck::install` is the one function that puts a
+    /// built Set in a slot, and it says of itself that it is *"deliberately
+    /// not reachable from a key or a surface: a live run changes its material
+    /// by editing a file and letting the worker build it, which is what the
+    /// budget watchdog is attached to."* A surface that built a Set and handed
+    /// it over would be putting material on air that **nothing measured**, in
+    /// a slot with no previous Set parked to roll back to — the two things
+    /// `HotSwap` exists to guarantee.
+    ///
+    /// So a load says *look at these files instead* and lets go. Everything
+    /// after that is the path an edit already takes: compiled on this thread,
+    /// offered on the same channel, swapped at a frame boundary (P-0005),
+    /// judged for `JUDGE_FRAMES` against the budget, and rolled back on its
+    /// own if it costs too much — with the deck resuming the Set it was
+    /// playing at the `t` it was parked at. **The library gets the watchdog
+    /// for nothing**, and no second route into a slot is opened.
+    ///
+    /// # What the sender owes
+    ///
+    /// Files. This watcher reads paths and never a store
+    /// ([`Source::poll`]), so a Set whose sources are content-addressed blobs
+    /// has to be written out where the watcher can read it before the aim is
+    /// sent — which is [`crate::scratch::place`], and is exactly what
+    /// `--load-set` does at startup for the same watcher.
+    pub fn aimed_by(mut self, rx: Receiver<Aim>) -> Watch {
+        self.aimed = Some(rx);
+        self
+    }
 }
 
 impl Source for Watch {
     fn poll(&mut self) -> Option<Request> {
         std::thread::sleep(INTERVAL);
+
+        // **A re-point is acted on the poll it is seen, and a save is not.**
+        // The debounce below exists because an editor writing in place leaves
+        // a file truncated for a moment, so a change is trusted only once the
+        // bytes have stopped moving. An aim has no such moment: whoever sent
+        // it wrote the whole of every file before it went on the channel, and
+        // waiting a second interval would only make a load slower than a save
+        // for no reason at all. So this returns a build straight away, and the
+        // stamps it re-seeds are what stop the new files from being seen as an
+        // edit on the next poll.
+        if self.repointed() {
+            return self.rebuild();
+        }
 
         let stamps = self.stamp();
         if stamps != self.stamps {
@@ -361,7 +466,90 @@ impl Source for Watch {
             return None;
         }
         self.settling = false;
+        self.rebuild()
+    }
+}
 
+impl Watch {
+    /// **Take the newest aim off the channel, if one is waiting**, and answer
+    /// whether this watcher is now pointed somewhere else.
+    ///
+    /// **The newest and not the next**: the channel is drained to its end and
+    /// only the last aim is taken. Two loads pressed inside one poll interval
+    /// are one load as far as the picture is concerned — building the first of
+    /// them would put a Set on screen that the operator has already replaced,
+    /// and it would cost a compile to do it. That is the debounce's own
+    /// reasoning with the roles swapped: there, a run of writes is one edit;
+    /// here, a run of presses is one destination.
+    ///
+    /// `None` on the channel is a watcher nobody can re-point, which is every
+    /// offscreen path and `karakuri-cli`'s own slots; a *closed* channel is a
+    /// host that has gone, and reads exactly like nothing waiting.
+    fn repointed(&mut self) -> bool {
+        let Some(rx) = &self.aimed else {
+            return false;
+        };
+        let mut aim = None;
+        while let Ok(next) = rx.try_recv() {
+            aim = Some(next);
+        }
+        let Some(aim) = aim else {
+            return false;
+        };
+        let Aim {
+            head,
+            rest,
+            layering,
+            live,
+            capacity,
+            seed_salt,
+            salts,
+            camera,
+            overrides,
+            published,
+            bindings,
+            edges,
+            authorities,
+        } = aim;
+        // **Every field `Watch::new` takes, and the compiler is what says so:
+        // the destructuring above has no `..`.** A re-point that left one of
+        // them behind is the failure each of those fields is documented
+        // against — a slot that comes back at the wrong capacity, in the wrong
+        // fold, under a camera the file never named — and it would show up on
+        // the *first save after the load* rather than on the load, which is
+        // the hardest version of it to find. The slot itself is the one thing
+        // an aim cannot carry: a watcher that changed slots would rebuild
+        // somebody else's deck.
+        self.head = head;
+        self.rest = rest;
+        self.layering = layering;
+        self.live = live;
+        self.capacity = capacity;
+        self.seed_salt = seed_salt;
+        self.salts = salts;
+        self.camera = camera;
+        self.overrides = overrides;
+        self.published = published;
+        self.bindings = bindings;
+        self.edges = edges;
+        self.authorities = authorities;
+        // Seeded from the new files, exactly as `Watch::new` seeds from the
+        // ones it was constructed with: the build below is this material's
+        // first, so the next poll must not see it as a second one.
+        self.stamps = self.stamp();
+        self.settling = false;
+        true
+    }
+
+    /// **Compile what this watcher is pointed at and ask for it**, or `None`
+    /// where the files would not read, would not check, or would not assemble.
+    ///
+    /// Split out of [`Source::poll`] when a re-point became the second way in:
+    /// a save reaches it through the debounce and an aim reaches it at once,
+    /// and everything after that decision is the same work. Two copies of it
+    /// would be two answers to *what does a rebuild restate*, which is the
+    /// question every field on this struct is documented against.
+    fn rebuild(&mut self) -> Option<Request> {
         let slot = self.slot;
         eprintln!("slot {slot}: recompiling:");
         // Every file, not only the one that changed: the composition check
@@ -1166,6 +1354,113 @@ mod tests {
     /// A missing file is stable rather than a change every interval, so
     /// deleting one does not put the watcher into a recompile loop against a
     /// path that is not there.
+    /// **A re-point builds the material it was aimed at, on the poll it
+    /// arrives, and the new files are not then seen as an edit.**
+    ///
+    /// This is how a Set reaches a *running* deck, and the whole reason it is
+    /// a re-point rather than an install: `Deck::install` is documented as
+    /// deliberately unreachable from a key or a surface, because *"a live run
+    /// changes its material by editing a file and letting the worker build
+    /// it, which is what the budget watchdog is attached to"*. So the failure
+    /// this catches is a load that goes nowhere — an aim taken and no request
+    /// made — and the deck goes on playing what it was with nothing said.
+    ///
+    /// **The second half is the debounce not eating it.** A save is acted on
+    /// the poll *after* the one that saw it, because an editor writing in
+    /// place leaves a file truncated for a moment. An aim has no such moment,
+    /// and a re-point that went through the debounce would then be seen a
+    /// second time as a change and built twice — so the poll after the build
+    /// has to be quiet.
+    #[test]
+    fn an_aim_points_the_slot_at_what_it_names_and_is_not_debounced() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let copy = |file: &str| {
+            let path = tmp.path().join(file);
+            std::fs::copy(root.join("examples").join(file), &path).expect("copy an example");
+            path
+        };
+        // Two stacks that share their renderer, so what changes between them
+        // is the geometry and the label says which one is running.
+        let was = copy("drift_shell.kir");
+        let now = copy("lattice_shell.kir");
+        let renderer = copy("soft_points.kir");
+
+        let (aim, aimed) = std::sync::mpsc::channel();
+        let mut watch = Watch::new(
+            0,
+            crate::compile::Named::bare(was),
+            vec![crate::compile::Named::bare(renderer.clone())],
+            karakuri_engine::set::Layering::Overdraw,
+            None,
+            None,
+            7,
+            vec![7],
+            karakuri_engine::camera::Orbit::default(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        )
+        .aimed_by(aimed);
+
+        // Nothing has changed and nothing was aimed, so nothing is requested —
+        // the floor under everything below, because a watcher that requested a
+        // build every poll would pass the assertion after it by accident.
+        assert!(
+            watch.poll().is_none(),
+            "a watcher nobody touched asked for a build"
+        );
+
+        // **A salt and a capacity no derivation here produces**, so that a
+        // re-point which kept the outgoing slot's values cannot pass: the
+        // symptom of that is invisible on the load and arrives at the first
+        // later save.
+        aim.send(Aim {
+            head: crate::compile::Named::bare(now),
+            rest: vec![crate::compile::Named::bare(renderer)],
+            layering: karakuri_engine::set::Layering::Composite,
+            live: Some(0),
+            capacity: Some(2048),
+            seed_salt: 0x0bad_cafe,
+            salts: vec![0x0bad_cafe],
+            camera: karakuri_engine::camera::Orbit::default(),
+            overrides: Vec::new(),
+            published: Vec::new(),
+            bindings: Vec::new(),
+            edges: Vec::new(),
+            authorities: Vec::new(),
+        })
+        .expect("the watcher is still here");
+
+        let request = watch
+            .poll()
+            .expect("the aim is built on the poll it arrives");
+        assert!(
+            request.label.contains("lattice"),
+            "the slot was aimed at `lattice_shell.kir` and built `{}`",
+            request.label
+        );
+        assert_eq!(
+            request.salts,
+            vec![Some(0x0bad_cafe)],
+            "the build kept the salts the slot was running at instead of the ones it was aimed \
+             with"
+        );
+        assert_eq!(request.layering, karakuri_engine::set::Layering::Composite);
+        assert_eq!(request.live, Some(0));
+        assert_eq!(
+            request.l1s[0].1, 2048,
+            "the build kept the capacity the slot was running at"
+        );
+
+        assert!(
+            watch.poll().is_none(),
+            "the files it was aimed at were then seen as an edit, so the load built twice"
+        );
+    }
+
     #[test]
     fn a_missing_file_is_stable() {
         let tmp = tempfile::tempdir().expect("temp dir");

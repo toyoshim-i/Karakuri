@@ -5058,6 +5058,50 @@ impl<'a> Mixer<'a> {
             })
     }
 
+    /// **Which deck a press at `p` selects**, or `None` where no strip is
+    /// under it.
+    ///
+    /// # The strip is the control, and it is the last question this bay asks
+    ///
+    /// A strip's rectangle contains the trim, the fader, the two chips and the
+    /// mask mini, so this would answer for a press on any of them if it were
+    /// asked first. It is asked **last**: whoever routes a press tries the
+    /// four questions that name something inside the column, and this is what
+    /// is left over — a press on the strip's name, on its number, on the
+    /// ground between its rows. That is the affordance `console.html` states
+    /// — *"a press anywhere on a strip that no knob under the pointer
+    /// claimed"* — and it is why the bay needs no sixth control drawn to carry
+    /// it.
+    ///
+    /// [`Operation::SelectDeck`] writes no record and is the console's own
+    /// pointer, so whoever emits it performs it: there is nothing on the deck
+    /// for it to move. What it moves is [`View::selection`], which the ring
+    /// above and the Library bay's pill both read.
+    pub fn select(&self, p: karakuri_layout::Point) -> Option<Operation> {
+        let p = Pos2::new(p.x, p.y);
+        self.boxes.iter().enumerate().find_map(|(index, at)| {
+            at.filter(|at| at.rect.contains(p))
+                .map(|_| Operation::SelectDeck { deck: index as u8 })
+        })
+    }
+
+    /// **Where the deck selection's ring goes**, and `None` for a selection
+    /// this bay has no strip for.
+    ///
+    /// The one box in this bay that is the strip's *whole* rectangle rather
+    /// than something inside it, because what the selection addresses is the
+    /// deck and not any one of the six readings in the column. Answered from
+    /// the same `boxes` every other rectangle here comes off, so the ring is
+    /// painted round the strip a press on that track would select
+    /// ([`crate::input::claim`]) and never round a neighbour.
+    pub fn selected(&self, deck: u8) -> Option<Rect> {
+        self.boxes
+            .get(usize::from(deck))
+            .copied()
+            .flatten()
+            .map(|at| at.rect)
+    }
+
     /// Every strip and its box, in slot order.
     pub fn placed(&self) -> impl Iterator<Item = (&'a Strip, StripBox)> {
         let boxes = self.boxes;
@@ -5112,13 +5156,14 @@ impl<'a> Mixer<'a> {
 ///   control over machinery the console cannot reach — nothing here holds what
 ///   is armed, and `go` would fire nothing. It is 61 of the bay's 316 and it
 ///   stays empty.
-/// - **`.strip.focus` and `.wfocus`, which are the two focuses**: the deck
-///   selection, which persists and is what a key press is addressed to, and
-///   keyboard focus, which is transient. The mock draws them differently on
-///   purpose — a solid lavender ring and a dashed sun outline — because
-///   *"drawing them the same erases which of the two a reader is looking at"*.
-///   **Neither exists in this console**: nothing here selects a deck and
-///   nothing takes keyboard focus, so a ring would be drawn around a state
+/// - **`.wfocus`, which is the second of the mock's two focuses**: keyboard
+///   focus, transient, wherever tab lands. The mock draws it as a dashed sun
+///   outline and the deck selection as a solid lavender ring, on purpose,
+///   because *"drawing them the same erases which of the two a reader is
+///   looking at"*. **The selection exists here now** and is drawn —
+///   [`View::selection`], and [`mixer_into`] for the ring — which is the
+///   sentence ADR-0219 recorded as owed. Keyboard focus does not: nothing in
+///   this console takes it, so a dashed outline would be drawn around a state
 ///   that is not kept.
 /// - **Every tooltip.** Four of this bay's controls carry one, and a tooltip
 ///   needs `egui` to own a widget — the sentence [`outputs`] writes about a
@@ -5611,9 +5656,29 @@ fn name_job(name: &str, width: f32, colour: Color32) -> LayoutJob {
 /// **The Mixer bay's strips, painted.**
 ///
 /// Where everything goes is [`mixer`]'s, so this paints and derives nothing.
-fn mixer_into(ui: &Ui, pal: &Palette, mixer: &Mixer, phase: Phase) {
+fn mixer_into(ui: &Ui, pal: &Palette, mixer: &Mixer, phase: Phase, selection: u8) {
     for (strip, at) in mixer.placed() {
         strip_into(ui, pal, strip, at, phase);
+    }
+    // `.strip.focus` — `box-shadow: inset 0 0 0 2px var(--c-lav)`, the deck
+    // selection, drawn **after every strip** because an inset shadow is over a
+    // strip's contents and not under them. It is a solid ring where the mock's
+    // keyboard focus is a dashed outline, which is `console.html`'s *Two
+    // focuses, and they do not look alike*: drawn the same way, a reader could
+    // not tell which of the two they were looking at. Nothing draws the dashed
+    // one — this console takes no keyboard focus.
+    //
+    // `None` where the selection names a slot this bay is not drawing, which
+    // [`View::select`] refuses at the source and this answers again because a
+    // rectangle is what it has: a bay one frame behind a deck that lost a slot
+    // would otherwise ring a track no strip is in.
+    if let Some(rect) = mixer.selected(selection) {
+        ui.painter().with_clip_rect(rect).rect_stroke(
+            rect,
+            CornerRadius::same(size::STRIP_RADIUS as u8),
+            Stroke::new(size::STRIP_FOCUS_RING, pal.lav),
+            StrokeKind::Inside,
+        );
     }
 }
 
@@ -6379,6 +6444,16 @@ fn master_into(ui: &Ui, pal: &Palette, row: &MasterRow) {
 /// the source.
 const LIBRARY_TITLE: &str = "Library";
 
+/// **What the foot's pill says before the deck's letter**, which is the mock's
+/// own `load &rarr; A` with the arrow as the character `egui`'s default face
+/// draws it as.
+///
+/// The letter is not here: it is [`View::selection`], appended at the one
+/// place both marks are read. A word and an arrow written once, so the pill
+/// and any test that asks what it reads are the same string — [`DECK_LETTERS`]
+/// on a bay instead of on a preview cell.
+const LOAD_PILL: &str = "load \u{2192} ";
+
 /// **The Library bay, laid out**: where the rows go, how many of them there is
 /// room for, and where the count under them goes.
 ///
@@ -6438,39 +6513,31 @@ const LIBRARY_TITLE: &str = "Library";
 ///   and hands it in, the way every other derived value in this module
 ///   arrives. Writing a second spelling here would be the kind of second
 ///   answer this repository deletes rather than adds.
-/// - **`.lib-row.cursor`, and the `load → A` pill in the foot.** These two are
-///   the load route, and `console.html`'s *How a Set reaches a deck* has since
-///   settled the question they used to be blocked on: *"what was missing was
-///   never the operation but the route"*, and the route is the arrangement —
-///   the cursor says which Set, the deck selection says which deck, so **a
-///   load is *"a cursor and a key with no pointer anywhere in it"***. That is
-///   why the pill is not a control here and would not become one: it is a
-///   readout that says where a press lands *before* the press, and a drag from
-///   a row onto a strip is named there as *"a second route to the same
-///   command, and never the first"*. `tests/library.rs` is where that is held.
+/// # What is in the mock's bay and is here, which is the load route
 ///
-///   **What is missing is three things, and none of them is a drawing.** The
-///   cursor is a selection this console does not keep — the same sentence
-///   [`mixer`] writes about the deck selection, which ADR-0219 records as
-///   living *"in the specification and not in `karakuri-console`'s code"*. The
-///   pill's letter *is* that selection, so drawing one without it is inventing
-///   a value, which is ADR-0177's row of zeroes a bullet above. And the press
-///   has no key: `console.html` says outright *"The key is owed and this page
-///   does not choose the letter"*, `docs/manual/operations.html` has `—` in
-///   that row's key column, and a letter chosen from here would be the
-///   specification written backwards (ADR-0198).
+/// **`.lib-row.cursor` and the `load → A` pill in the foot.** These two are
+/// the whole of the route, and `console.html`'s *How a Set reaches a deck* is
+/// what settles their shape: *"what was missing was never the operation but
+/// the route"*, and the route is the arrangement — the cursor says which Set,
+/// the deck selection says which deck, so **a load is *"a cursor and a key
+/// with no pointer anywhere in it"***. So the cursor is drawn and moved by
+/// keys, the pill is a **readout** that says where a press lands *before* the
+/// press, and neither answers a pointer: `tests/library.rs` holds that, and a
+/// drag from a row onto a strip is named on that page as *"a second route to
+/// the same command, and never the first"*.
 ///
-///   **Under all three, the operation has nothing to do.**
-///   `Operation::LoadSet` is `Written::Silent(Silent::NoRecord)`, so a surface
-///   that emitted it would have to perform it itself (ADR-0198) — and nothing
-///   in this workspace loads a Set into a *running* deck, which is the row's
-///   own sentence on the operations page and why it is marked `launch`.
-///   `Deck::install` is the one function that puts a Set in a slot, and its
-///   documentation is that it is *"deliberately not reachable from a key or a
-///   surface"*; `--set` and `--load-set` are launch flags.
+/// **The pill's letter is [`View::selection`]**, which this console now keeps
+/// — ADR-0219 recorded it as living *"in the specification and not in
+/// `karakuri-console`'s code"*, and that is the sentence this bay's letter
+/// waited on. It is refused past the strips the mixer is drawing, so the
+/// letter never names a deck the press would be turned down on.
 ///
-///   **None of it blocks the listing**: what is missing is a way to play from
-///   this bay, not a way to draw it.
+/// **The key is `l`**, chosen by `docs/manual/operations.html` because which
+/// keys exist is that page's to say (ADR-0198, ADR-0220) — this module reads
+/// the choice and does not make it, and nothing here presses anything: the
+/// press is the host's, and what it re-points is the slot's *source*, so the
+/// worker builds the Set and the watchdog judges it exactly as it does an
+/// edit.
 ///
 /// # The foot's number is the mock's own, read the mock's way
 ///
@@ -6518,6 +6585,29 @@ impl LibraryBay {
     /// What the foot reads: `n of m`, the mock's own `5 of 27`.
     pub fn count(&self) -> String {
         format!("{} of {}", self.rows, self.total)
+    }
+
+    /// **The foot's pill, `width` wide, at the far end of the foot.**
+    ///
+    /// `.lib-foot` is a flex row of the count, a `.sep { flex: 1 }` and the
+    /// pill, so the count is one [`size::LIB_FOOT_PAD_X`] in from the left and
+    /// the pill is one in from the right with the whole of the leftover
+    /// between them. Nothing else in the row has a width, so the spacer's
+    /// share is the only arithmetic and it is a subtraction.
+    ///
+    /// **Taken as an argument rather than derived**, because a capsule is as
+    /// wide as the words in it and this derivation asks `egui` for nothing —
+    /// [`library`]'s own rule. The caller measures the galley it is about to
+    /// paint and hands the number in, so the box the pill is drawn in and the
+    /// box a test asks about are one statement.
+    pub fn pill(&self, width: f32) -> Rect {
+        Rect::from_min_size(
+            Pos2::new(
+                self.foot.max.x - size::LIB_FOOT_PAD_X - width,
+                self.foot.center().y - size::PILL_H * 0.5,
+            ),
+            egui::vec2(width, size::PILL_H),
+        )
     }
 }
 
@@ -6621,18 +6711,42 @@ fn library_box(region: Rect, total: usize) -> Option<LibraryBay> {
 /// `.strip-name` both do, so there is no ellipsis to draw. The clip is
 /// `.lib-list`'s box, which is the same `with_clip_rect` the picture, a
 /// preview cell and a tally are each drawn inside.
-fn library_into(ui: &Ui, pal: &Palette, bay: &LibraryBay, sets: &[String]) {
+fn library_into(
+    ui: &Ui,
+    pal: &Palette,
+    bay: &LibraryBay,
+    sets: &[String],
+    cursor: usize,
+    load: &str,
+) {
     let painter = ui.painter().with_clip_rect(bay.list);
     for (index, name) in sets.iter().take(bay.rows).enumerate() {
         let row = bay.row(index);
-        let galley = painter.layout_job(span_at(name, size::BASE, pal.dim));
+        // `.lib-row.cursor` — `background: color-mix(in srgb, var(--c-lav)
+        // 13%, transparent)` and `color: var(--c-text)`, where every other row
+        // is `var(--c-dim)` over the bare card. **The wash is the whole of the
+        // mark**: the mock puts no rule, no caret and no chevron on the row,
+        // so a row that is not under the cursor is drawn exactly as it was
+        // before this line existed.
+        let ink = match index == cursor {
+            true => {
+                painter.rect_filled(
+                    row,
+                    CornerRadius::same(size::LIB_ROW_RADIUS as u8),
+                    tint(pal.lav, 13),
+                );
+                pal.text
+            }
+            false => pal.dim,
+        };
+        let galley = painter.layout_job(span_at(name, size::BASE, ink));
         painter.galley(
             Pos2::new(
                 row.min.x + size::LIB_ROW_PAD_X,
                 row.center().y - galley.size().y * 0.5,
             ),
             galley,
-            pal.dim,
+            ink,
         );
     }
 
@@ -6653,6 +6767,34 @@ fn library_into(ui: &Ui, pal: &Palette, bay: &LibraryBay, sets: &[String]) {
         ),
         galley,
         pal.faint,
+    );
+
+    // **`.pill.lav`, and it is the one pill on this panel with no border**:
+    // `border-color: transparent; color: var(--c-lav); background:
+    // color-mix(in srgb, var(--c-lav) 15%, transparent)`. Every other capsule
+    // here is [`pill_at`]'s hairline round `--c-dim`, and the difference is
+    // the point — this one is a *readout of where a press lands*, so it is
+    // drawn in the colour the selection ring on the strip is drawn in and a
+    // reader can follow the letter to the deck.
+    let galley = painter.layout_no_wrap(
+        load.to_owned(),
+        FontId::new(size::BASE, FontFamily::Proportional),
+        pal.lav,
+    );
+    let pill = bay.pill(galley.size().x + size::PILL_PAD_X * 2.0);
+    painter.rect_filled(
+        pill,
+        // `border-radius: 999px` on a box this short is a capsule.
+        CornerRadius::same((size::PILL_H * 0.5) as u8),
+        tint(pal.lav, 15),
+    );
+    painter.galley(
+        Pos2::new(
+            pill.min.x + size::PILL_PAD_X,
+            pill.center().y - galley.size().y * 0.5,
+        ),
+        galley,
+        pal.lav,
     );
 }
 
@@ -7166,9 +7308,16 @@ pub struct Pane {
     ///
     /// **The pane is pointed rather than choosing**, and that is the mock's
     /// `showing … ▾` not being drawn: the chooser is a control and this pass
-    /// adds none, so whoever fills this says which deck each pane shows. The
-    /// console keeps no selection to choose *with* — the same sentence
-    /// [`mixer`] writes about `.lib-row.cursor` and the deck selection.
+    /// adds none, so whoever fills this says which deck each pane shows.
+    ///
+    /// **And it is not [`View::selection`]**, which this console does now
+    /// keep. That is *the* deck — one value, what a key press is addressed to,
+    /// drawn as one ring — and there are two panes: a chooser here picks a
+    /// deck to *look at* while the keys stay where they were, which is the
+    /// whole of why the mock draws a caret in each pane head and a ring on one
+    /// strip. So this waits on a per-pane pointer nothing keeps, and reading
+    /// the deck selection into it would fold two facts into one and make the
+    /// second pane a copy of the first.
     pub deck: usize,
     /// **What that deck is playing**, which is the same name the deck's mixer
     /// strip carries and comes from the same place — see [`Strip::name`], and
@@ -7302,15 +7451,19 @@ pub struct Param {
 /// **Two are controls and are still not here.**
 ///
 /// - **`showing … ▾`**, the chooser in the pane head. Which deck a pane shows
-///   is a selection this console does not keep — the same sentence [`mixer`]
-///   writes about the mock's `.lib-row.cursor` — so the pane is *pointed* by
-///   whoever fills [`Pane::deck`] and the caret is not drawn. The word
-///   `showing` and the deck it names are a readout and are.
+///   is a **per-pane** pointer this console does not keep, and it is not the
+///   deck selection: that one is what a key press is addressed to and there is
+///   one of it, where there is a caret in every pane head — see
+///   [`Pane::deck`]. So the pane is *pointed* by whoever fills that field and
+///   the caret is not drawn. The word `showing` and the deck it names are a
+///   readout and are.
 /// - **`keep`**, the pill beside it: *"Keep deck A as a Set, exactly as it is
 ///   on screen … It goes into the library under a name."* That is a write into
-///   the store, which is the Library bay's `load → A` from the other end and
-///   the same still-open question — *how a Set gets between the library and a
-///   deck*.
+///   the store, which is the Library bay's `load → A` from the other end —
+///   and it is the end that is still open. A load re-points a slot's source
+///   and lets the worker build it; a keep has to read a *running* Set back out
+///   and name it, which is `Set::published`'s side of the seam and a different
+///   question entirely.
 ///
 /// **A third was `composite`, and it is a readout rather than an omission** —
 /// [`Pane::composite`]: layering is a build decision in the engine, so a press
@@ -8569,6 +8722,48 @@ pub struct View {
     /// which is every test in this crate and is a console with no clock behind
     /// it — a panel drawn at the origin of every animation on it.
     pub phase: Phase,
+    /// **Which deck the keys are addressed to**, and the first thing in this
+    /// struct that is neither a reading handed in nor a rectangle derived from
+    /// one: it is a **pointer the console owns**.
+    ///
+    /// [`Operation::SelectDeck`] *"writes no record, and is the reason every
+    /// other variant names its deck instead of meaning the selected one"* —
+    /// so nothing downstream can be the model of record for it, and a host
+    /// that kept a copy would be keeping the console's state on its behalf.
+    /// [ADR-0219](../../../docs/adr/0219-the-crossfader-spans-the-selection-and-the-one-after-it.md)
+    /// recorded it as living *"in the specification and not in
+    /// `karakuri-console`'s code"*; this is where that stops being true.
+    ///
+    /// **Private, with [`View::select`] the only way in**, which is
+    /// [`View::arrangement`]'s rule: what a *pointer* is at is not something
+    /// the program can be told, because the console is what refuses a deck
+    /// there is no strip for. Zero until somebody says otherwise — deck A,
+    /// which is the strip the mock rings and the deck the mock's `load → A`
+    /// names.
+    ///
+    /// Read by [`mixer_into`] for the ring and by [`library`] for the letter
+    /// on the load pill; `console.html`'s crossfader spans it and the one
+    /// after it, and nothing draws that yet.
+    selection: u8,
+    /// **Which Set in the Library bay a load would take**, the mock's
+    /// `.lib-row.cursor`, and the second of this console's two pointers.
+    ///
+    /// **It has no operation at all**, where the selection above has a row of
+    /// its own, and `console.html`'s *How a Set reaches a deck* is where that
+    /// asymmetry is argued: the selection is what every deck-addressed
+    /// operation's keyboard translator fills its `deck` in from, and this is
+    /// read by exactly one operation — which carries the Set id in its own
+    /// payload. A map cannot name a Set, a model names one outright, and the
+    /// panel's route is the drag, so three of the four surfaces would have
+    /// nothing to reach.
+    ///
+    /// **An index into [`View::library`] and not a name**, because a name this
+    /// console kept would be a second copy of a listing it is handed per
+    /// frame — and a copy that goes on naming a Set the store no longer holds.
+    /// [`View::walk`] is what keeps it inside the listing, and it is asked at
+    /// the move rather than at the draw: a cursor clamped while painting would
+    /// move on a frame nobody pressed anything on.
+    cursor_row: usize,
     placed: Vec<Placed>,
 }
 
@@ -8608,9 +8803,98 @@ impl View {
             inspector: Vec::with_capacity(PANES),
             canvas: MOCK_CANVAS,
             phase: Phase::ZERO,
+            // Deck A and the first row, which is where the mock draws both
+            // marks. Neither is a reading of anything, so neither has a
+            // *nothing* to be: a console with no deck draws no strips and so
+            // no ring, and one with no store draws no rows and so no cursor.
+            selection: 0,
+            cursor_row: 0,
             // Every region the console has, so the frame path never grows it.
             placed: Vec::with_capacity(REGIONS.len()),
         }
+    }
+
+    /// **Which deck the keys are addressed to** — see [`View::selection`] the
+    /// field, which is where the argument is.
+    pub fn selection(&self) -> u8 {
+        self.selection
+    }
+
+    /// **Address the keys to `deck`**, and answer whether that moved anything.
+    ///
+    /// **A deck the mixer has no strip for is refused**, and that is the whole
+    /// of the rule: the selection is drawn as a ring round a strip and read as
+    /// a letter on the library's load pill, so a selection past the deck's
+    /// slots would be a ring nowhere and a letter naming a deck the press
+    /// would be turned down on. [`View::mixer`] is *"one per slot the deck
+    /// has"*, so its length is the deck's own count arriving the way every
+    /// other reading does — and a console with no deck behind it has no strip
+    /// to select, which is every test in this crate.
+    ///
+    /// **It refuses rather than clamping.** A press on `3` at a two-slot deck
+    /// means *deck D* and there is no deck D; clamping would answer *deck B*,
+    /// which is a different deck than the one asked for and would move the mix
+    /// under a hand that asked for nothing of the sort.
+    ///
+    /// The `bool` is [`Arrangement::typed`]'s: a caller repaints on a move and
+    /// not on a press, so a press that changed nothing costs no frame
+    /// (P-0072).
+    pub fn select(&mut self, deck: u8) -> bool {
+        if usize::from(deck) >= self.mixer.len() {
+            return false;
+        }
+        let moved = self.selection != deck;
+        self.selection = deck;
+        moved
+    }
+
+    /// **Which row of the Library bay the cursor is on** — see
+    /// [`View::cursor_row`] the field.
+    ///
+    /// Answered against the listing rather than read back bare: a store that
+    /// shrank between two frames leaves an index past its end, and the row a
+    /// load would take is then the last one there is. Zero on an empty
+    /// listing, which is a bay with no row to draw at all.
+    pub fn cursor_row(&self) -> usize {
+        self.cursor_row.min(self.library.len().saturating_sub(1))
+    }
+
+    /// **Move the library cursor by `step` rows**, and answer whether it
+    /// moved.
+    ///
+    /// `listed` is how many rows the bay is drawing — [`LibraryBay::rows`],
+    /// off the same [`library`] call the paint and [`crate::input::claim`]
+    /// make, so there is no second derivation of *how long is this list*.
+    ///
+    /// **The cursor is held inside the rows that are drawn, not inside the
+    /// store.** This bay has no scroll position and inventing one would be a
+    /// control (`view::library`); what it does instead is list what fits and
+    /// say `n of m`. So the reachable Sets are the listed ones, and a cursor
+    /// allowed past them would sit on a row nobody can see, under a pill that
+    /// says a press will load it. The foot already says how many are out of
+    /// reach.
+    ///
+    /// **Clamped at both ends rather than wrapping.** A listing is a walk and
+    /// not a cycle: wrapping from the last row to the first would jump the
+    /// length of the list on one press, which is the one move a key held down
+    /// must not make.
+    ///
+    /// Relative because that is what a key can say. Nothing here is an
+    /// operation ([`View::cursor_row`] the field), so there is no absolute
+    /// spelling owed to a map or a model.
+    ///
+    /// The `bool` is [`View::select`]'s, for the same reason: a press that
+    /// changed nothing costs no frame.
+    pub fn walk(&mut self, step: i32, listed: usize) -> bool {
+        let reachable = listed.min(self.library.len());
+        if reachable == 0 {
+            return false;
+        }
+        let last = (reachable - 1) as i64;
+        let to = (self.cursor_row as i64 + step as i64).clamp(0, last) as usize;
+        let moved = to != self.cursor_row;
+        self.cursor_row = to;
+        moved
     }
 
     /// **Every live region that is declaring this frame**, each with what one
@@ -8826,6 +9110,16 @@ impl View {
         let out = self.master_out;
         let strips = self.mixer.as_slice();
         let sets = self.library.as_slice();
+        // **The two pointers, read once for the frame** beside the readings
+        // they are drawn against — `draw` takes `&mut self` and the arms below
+        // borrow these slices, so a pointer read inside an arm would be a
+        // second borrow of the thing it points into.
+        let selection = self.selection;
+        let cursor_row = self.cursor_row();
+        // **The load pill's words, built here rather than in the paint**: it
+        // is a readout of `selection` and the bay is what draws it, so the one
+        // place the letter is chosen is the one place the ring's slot is read.
+        let load = format!("{LOAD_PILL}{}", DECK_LETTERS[usize::from(selection)]);
         let waiting = self.staging.as_slice();
         let panes = self.inspector.as_slice();
         let phase = self.phase;
@@ -8887,7 +9181,7 @@ impl View {
                         card(ui, &pal, rect);
                         bay_head(ui, &pal, rect, MIXER_TITLE, &[], false);
                         if let Some(bay) = mixer(ui.ctx(), panel.layout(), strips) {
-                            mixer_into(ui, &pal, &bay, phase);
+                            mixer_into(ui, &pal, &bay, phase, selection);
                         }
                     }
                     // **The third bay with something in its body, and it is
@@ -8918,7 +9212,7 @@ impl View {
                         card(ui, &pal, rect);
                         bay_head(ui, &pal, rect, LIBRARY_TITLE, &[], true);
                         if let Some(bay) = library(panel.layout(), sets) {
-                            library_into(ui, &pal, &bay, sets);
+                            library_into(ui, &pal, &bay, sets, cursor_row, &load);
                         }
                     }
                     // **The fourth bay with something in its body**, and it is

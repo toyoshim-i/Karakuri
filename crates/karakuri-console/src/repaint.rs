@@ -163,6 +163,24 @@ pub enum Change<'a> {
     /// change nothing, and a variant that answered *draw* regardless would
     /// pay a frame for every key an operator leant on.
     Naming(bool),
+    /// **A console pointer moved** — the library cursor, or the deck
+    /// selection — with `moved` saying whether it actually did.
+    ///
+    /// **Its own variant for [`Change::Naming`]'s reason**, one control along:
+    /// a pointer is the console's own state, so nothing in the arrangement
+    /// moves and no [`Outcome`] says so, and a decision asked only of
+    /// [`crate::panel`] would leave the cursor and the selection ring where
+    /// they were drawn until something else happened.
+    ///
+    /// **And it is not [`Change::Emitted`]**, which the deck selection *does*
+    /// also raise, because these two are not the same question. That arm is
+    /// *a control translated a gesture into an operation* and answers `Now`
+    /// for every operation there is; this one is *a key moved a pointer*, and
+    /// the library cursor is a pointer no operation names at all — a walk past
+    /// the end of a listing is a press that reached the console and changed
+    /// nothing, and a variant that drew regardless would pay a frame for every
+    /// press of a key an operator is leaning on.
+    Pointed(bool),
     /// The room was toggled.
     ///
     /// **Its own variant because no outcome says so.** The room is the view's
@@ -422,6 +440,13 @@ impl Change<'_> {
             // where the buffer did not change — the key reached the console
             // and the console draws exactly what it drew.
             Change::Naming(moved) => match moved {
+                true => Repaint::Now,
+                false => Repaint::Never,
+            },
+
+            // A pointer moved, or a key asked it to and it was already at the
+            // end of what it can point at. See the variant.
+            Change::Pointed(moved) => match moved {
                 true => Repaint::Now,
                 false => Repaint::Never,
             },

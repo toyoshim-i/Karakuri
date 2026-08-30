@@ -488,12 +488,22 @@ fn shapes_inside(view: &mut View, panel: &mut Panel, rect: egui::Rect) -> Vec<eg
 
 /// How many `.strip` wells were painted inside `rect`: a filled rectangle a
 /// strip's own size.
+///
+/// **Filled and unstroked, which the prose above always said and the filter
+/// did not.** The deck selection's ring is `.strip.focus`'s `box-shadow:
+/// inset 0 0 0 2px` and is drawn at exactly the strip's rectangle, so a scan
+/// that took any rect of that size counted the selected strip twice and read
+/// a one-slot deck as two. This is the reach corrected and not the claim: one
+/// well per strip is still the whole assertion.
 fn wells(shapes: &[egui::Shape], width: f32) -> usize {
     shapes
         .iter()
         .filter(|shape| match shape {
             egui::Shape::Rect(at) => {
-                near(at.rect.height(), size::STRIP_H) && near(at.rect.width(), width)
+                near(at.rect.height(), size::STRIP_H)
+                    && near(at.rect.width(), width)
+                    && at.fill != egui::Color32::TRANSPARENT
+                    && at.stroke.width == 0.0
             }
             _ => false,
         })
@@ -1174,4 +1184,142 @@ fn the_values_are_the_harnesss_and_are_stored_nowhere() {
     assert_eq!(view.mixer, one);
     view.mixer.clear();
     assert!(view.mixer.is_empty());
+}
+
+// ---------------------------------------------------------------------------
+// The deck selection
+// ---------------------------------------------------------------------------
+
+/// Which strips carry the selection's ring: a rectangle at a strip's own box,
+/// stroked at `.strip.focus`'s width and filled with nothing.
+///
+/// The strip's well is the same rectangle and is a *fill*, so the two are told
+/// apart by the stroke rather than by the box — which is the same distinction
+/// `wells` above was corrected to make, from the other side.
+fn ringed(shapes: &[egui::Shape], at: &Mixer) -> Vec<usize> {
+    (0..at.count())
+        .filter(|index| {
+            let rect = at.strip(*index).rect;
+            shapes.iter().any(|shape| match shape {
+                egui::Shape::Rect(r) => {
+                    near(r.stroke.width, size::STRIP_FOCUS_RING)
+                        && near(r.rect.width(), rect.width())
+                        && near(r.rect.min.x, rect.min.x)
+                }
+                _ => false,
+            })
+        })
+        .collect()
+}
+
+/// **The selection is a ring round exactly one strip, and it is the strip it
+/// names.**
+///
+/// `console.html`'s *Two focuses, and they do not look alike*: the deck
+/// selection is a solid ring and keyboard focus is a dashed one, and nothing
+/// here takes keyboard focus — so one ring, solid, and never two.
+///
+/// It is asserted by drawing, because *the ring is round this strip* is a
+/// claim about the paint pass: `Mixer::selected` answering the right rectangle
+/// and `View::draw` painting it round another would pass an assertion about
+/// the derivation alone.
+#[test]
+fn the_selection_is_one_ring_and_it_is_round_the_strip_it_names() {
+    let (mut panel, _ctx) = console(PLAUSIBLE);
+    let region = rect_of(panel.layout(), "mixer");
+    let row = strips_row(region);
+
+    // The strips twice: once for the view to draw from and once for the
+    // derivation to be asked about, so the boxes this test names are not a
+    // borrow of the thing it is about to move the selection on.
+    let strips: Vec<Strip> = std::iter::repeat_with(mock).take(DECKS).collect();
+    let mut view = View::new(Room::Day);
+    view.mixer = strips.clone();
+    let ctx = drawn_once();
+    let at = bay(&panel, &ctx, &strips);
+
+    for deck in 0..DECKS {
+        assert!(
+            view.select(deck as u8) || deck == 0,
+            "deck {deck} could not be selected with {DECKS} strips"
+        );
+        let drawn = shapes_inside(&mut view, &mut panel, row);
+        assert_eq!(
+            ringed(&drawn, &at),
+            vec![deck],
+            "the selection is deck {deck} and the ring is somewhere else, or there is more than \
+             one of it"
+        );
+    }
+}
+
+/// **A deck the bay has no strip for cannot be selected**, which is what keeps
+/// the library's `load → A` honest: a letter naming a deck the press would be
+/// refused on is worse than no letter at all.
+///
+/// It refuses rather than clamping: `3` on a two-slot deck means *deck D*, and
+/// answering *deck B* would move the mix under a hand that asked for nothing
+/// of the sort.
+#[test]
+fn a_deck_with_no_strip_cannot_be_selected() {
+    let mut view = View::new(Room::Day);
+    assert!(
+        !view.select(0),
+        "a console with no deck behind it selected one"
+    );
+
+    view.mixer = std::iter::repeat_with(mock).take(2).collect();
+    assert!(!view.select(1) || view.selection() == 1);
+    assert_eq!(view.selection(), 1);
+    for deck in 2..DECKS as u8 {
+        assert!(
+            !view.select(deck),
+            "deck {deck} was selected on a two-slot deck"
+        );
+        assert_eq!(
+            view.selection(),
+            1,
+            "the refused press moved the selection anyway"
+        );
+    }
+}
+
+/// **A press on a strip selects that deck, and a press on one of its controls
+/// does not.**
+///
+/// The strip's rectangle contains the trim, the fader, the two chips and the
+/// mask mini, so this is the ordering stated as an assertion rather than left
+/// to whoever routes a press: `select` is asked *after* the four that name
+/// something inside the column, and what it answers for is what is left over.
+/// The name at the top of the strip is that leftover in the mock's own layout.
+#[test]
+fn a_press_on_a_strip_selects_that_deck() {
+    let (panel, ctx) = console(PLAUSIBLE);
+    let strips = mock_strips();
+    let at = bay(&panel, &ctx, &strips);
+
+    for index in 0..at.count() {
+        let box_ = at.strip(index);
+        assert_eq!(
+            at.select(point(box_.name.center())),
+            Some(karakuri_operation::Operation::SelectDeck { deck: index as u8 }),
+            "a press on deck {index}'s name did not select it"
+        );
+        // And every one of the four questions asked before it answers `None`
+        // there, which is what makes the ordering safe rather than lucky.
+        let p = point(box_.name.center());
+        assert_eq!(at.grab(p), None);
+        assert_eq!(at.blend(p), None);
+        assert_eq!(at.tally(p), None);
+        assert_eq!(at.mask(p), None);
+    }
+
+    // Outside every strip there is no deck to select. The row's own left edge
+    // is `.mixer-strips`' padding, which belongs to the bay and not to a
+    // strip.
+    let outside = egui::pos2(
+        at.strip(0).rect.min.x - size::STRIPS_PAD * 0.5,
+        at.strip(0).rect.center().y,
+    );
+    assert_eq!(at.select(point(outside)), None);
 }
