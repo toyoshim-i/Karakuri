@@ -4869,7 +4869,9 @@ fn apply(record: &Record, deck: &mut Deck, look: &mut Look) -> Option<String> {
             let shape = MaskKind::from_name(kind)?;
             deck.set_mask(slot, Mask::new(shape, angle, position, softness));
             Some(format!(
-                "  mask: deck {} -> SetMaskShape {{ deck: {slot}, kind: {kind},                  angle: {angle:.3} }} -> Record::Mask -> deck.mask({slot}) = {} at {:.3} rad,                  front at {:.3}",
+                "  mask: deck {} -> SetMaskShape {{ deck: {slot}, kind: {kind}, \
+                 angle: {angle:.3} }} -> Record::Mask -> deck.mask({slot}) = {} \
+                 at {:.3} rad, front at {:.3}",
                 deck_letter(slot as u8),
                 deck.mask(slot).kind().name(),
                 deck.mask(slot).angle(),
