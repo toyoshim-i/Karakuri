@@ -1,0 +1,66 @@
+// A camera that stands inside the material and looks down it.
+//
+// `examples/beat_jump.kir` is the other L3 here and is the opposite kind of
+// camera: it cuts, at random, on the grid. This one never cuts. It sits on the
+// z axis, faces the far end of the tube, and drifts in a slow ellipse the width
+// of a hand — which is what makes a tunnel feel flown through rather than
+// looked at.
+//
+//     --set warp_tunnel.kir,tunnel_eye.kir,speed_lines.kir
+//
+// **A camera is a node, so its parameters are addressed as one:**
+//
+//     --param L3:0:back=2.0
+//
+// **`fov_y` is written and the parameter that feeds it is called `lens`.** A
+// stage output is reserved in the layer that writes it, so `param fov_y` is
+// refused on an L3 exactly as `param color` is on an L4 — the collision is with
+// the lowering's name for the output. Every other output an L3 has is left
+// alone here, which means `up`, `near` and `far` keep the built-in orbit's
+// values rather than being restated.
+//
+// **No state, so it is seekable.** `eye` is a function of `t` and the params
+// and nothing else, so scrubbing the transport puts the camera exactly where it
+// would have been. A damped follow would want state, which an L3 is allowed to
+// hold and this compiler does not implement yet.
+
+proc tunnel_eye {
+  kind L3
+
+  // Where on the axis the camera stands. `warp_tunnel`'s default tube runs from
+  // -8 to +8, so 7 is just inside the near end and material passes the eye
+  // before it wraps. Push it past the end of the tube and the same Set becomes
+  // an outside shot of a receding pipe, which is the second look this one
+  // camera has in it.
+  param back   : float [-4.0, 20.0] = 7.0
+
+  // How far ahead the camera looks. Only the direction matters — `target` is a
+  // point rather than a direction because pointing at a thing is what a camera
+  // is usually asked to do, and a tunnel is the case where the thing is simply
+  // "further along".
+  param reach  : float [1.0, 30.0] = 10.0
+
+  // Radius of the drift, and how fast it goes round. Deliberately small: the
+  // wall of the default tube is 1.6 out, and a camera that wanders more than
+  // about half of that ends up outside the material looking back in. The two
+  // are separate faders because they are separate gestures — one is how much
+  // the shot moves, the other is how nervous it is.
+  param wander : float [0.0, 2.0] = 0.35
+  param sway   : float [0.0, 2.0] = 0.4
+
+  // Vertical field of view in radians. Wide is the point: 1.2 is about 69
+  // degrees, which exaggerates the rush down the tube the way a short lens
+  // does. The built-in orbit's 60 degrees is at 1.047, so the bottom of this
+  // range is a longer lens than the default and the top is a fisheye.
+  param lens   : float [0.6, 2.0] = 1.2
+
+  camera {
+    let a = t * sway;
+
+    // The two axes are turned at different rates so the path is a slow open
+    // figure rather than a circle the eye can learn.
+    eye    = vec3(cos(a) * wander, sin(a * 1.37) * wander, back);
+    target = vec3(0.0, 0.0, back - reach);
+    fov_y  = lens;
+  }
+}

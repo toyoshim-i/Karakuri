@@ -1,0 +1,118 @@
+// Sparse material that stands still and rearranges itself on the beat.
+//
+// Everything else here is continuous: a cloud that flows, a sheet that swells, a
+// tunnel that rushes. This one does nothing at all between beats and then jumps.
+// It is the fixture in a mix that gives the eye something to count against, and
+// it is the one geometry in the library meant to be run at a few thousand
+// elements rather than a few hundred thousand — the whole look depends on being
+// able to see individual dots.
+//
+//     --set step_grid.kir,hard_dots.kir
+//
+// **The declared capacity stops at 65536, and that is a statement rather than a
+// timidity.** A `capacity` range is what an artifact says it can be turned to,
+// and this one cannot be turned to the reference quarter of a million: the dots
+// are large by this library's standards because there are so few of them, and at
+// 262144 the same renderer is fill-bound past the frame budget while the picture
+// has become one solid block with no dot in it. A Set asking for more is refused
+// where it is built, with the range in the message, which is a better answer
+// than a slot that loads and rolls back.
+//
+// **Every element is on a lattice cell**, chosen by hashing its `seed` together
+// with the beat number. So the arrangement is arbitrary but *quantised*: dots
+// line up in columns and rows however they are shuffled, which is what makes a
+// hard cut read as a new arrangement of one thing rather than as noise.
+//
+// **`settle` is the fader that decides what kind of material this is.** At 0 the
+// change is instantaneous — one frame in the old arrangement, the next in the
+// new. At 1 the element glides for the whole interval and arrives exactly as the
+// next one starts, which turns the same file into something continuous. The two
+// ends are two different instruments and everything between them is a swing.
+//
+// **Closed form**, and unusually strictly so: the position at any instant is a
+// function of `seed` and the grid alone, with no accumulation of any kind. The
+// arrangement at bar 32 is the same arrangement whether you played there or
+// scrubbed there.
+
+proc step_grid {
+  kind     L1
+  topology points
+  capacity [256, 65536] = 2048
+
+  // Half the width of the cube the lattice fills.
+  param scale  : float [0.5, 4.0] = 2.8
+
+  // How many cells across. The dots snap to `grid` positions per axis, so 2 is
+  // a cube's corners and 24 is fine enough that the quantisation stops showing.
+  // It is a float because every `param` is; it is floored before use.
+  param grid   : float [2.0, 24.0] = 12.0
+
+  // How far an element sits from the middle of its cell, as a fraction of the
+  // cell. At 0 the lattice is exact — and exact means two elements that draw
+  // the same cell are at the *same point*, which at any real capacity stacks
+  // hundreds of additive sprites into one white square. The offset is a fixed
+  // property of the element rather than a per-beat roll, so a dot keeps its own
+  // place in its cell across every rearrangement, and the field stays legible
+  // at the default 2048 elements and survives the top of its declared range.
+  param jitter : float [0.0, 1.0] = 0.45
+
+  // Beats between rearrangements. 1 is on the beat, 4 is on the bar, 0.25 is
+  // sixteenths — the lower bound is where a rearrangement stops being an event
+  // and starts being a texture.
+  param every  : float [0.25, 4.0] = 1.0
+
+  // What fraction of the interval an element spends travelling. 0 is a hard
+  // cut. It never reaches a value that would still be moving when the next
+  // change arrives, because the phase below is clamped — arriving late would
+  // mean the picture never sits still, which is the one thing this file is for.
+  param settle : float [0.0, 1.0] = 0.0
+
+  // Size range handed to the renderer. A few large dots among many small ones
+  // is what keeps a lattice from reading as graph paper, and re-rolling the
+  // sizes on every change is what keeps the same dot from being the loud one
+  // all night.
+  param grain  : float [0.0, 4.0] = 1.2
+
+  emit position, size
+
+  element {
+    // Beats since the Set started, floored to zero: `beats` is monotone and
+    // starts at 0, and the guard costs one instruction against a negative that
+    // would otherwise be cast to a very large `uint` below.
+    let bt = max(beats, 0.0) / every;
+    let k  = floor(bt);
+
+    // How far into this interval, stretched by `settle` and clamped. The floor
+    // under `settle` is what keeps a 0 fader from dividing by zero, and it is
+    // small enough that 0 on the desk is a cut in every practical sense.
+    let ph = clamp((bt - k) / max(settle, 0.002), 0.0, 1.0);
+    let e  = smoothstep(0.0, 1.0, ph);
+
+    // One salt per element per interval. The multiply is what keeps two
+    // elements one apart from drawing the same cell one beat apart — `hash1`
+    // and `hash3` are good, but a raw sum makes `seed + k` a diagonal.
+    let now  = seed * 2654435761u + uint(k) * 40503u;
+    let then = seed * 2654435761u + uint(max(k - 1.0, 0.0)) * 40503u;
+
+    // `hash3` gives a point in the unit cube; flooring onto `g` and dividing
+    // back is what puts it on a lattice.
+    let g  = vec3(floor(grid));
+    let ca = floor(hash3(now) * g) / g;
+    let cb = floor(hash3(then) * g) / g;
+
+    // The middle of a cell, plus this element's own permanent place within it.
+    // `hash3(seed)` never changes, so the offset is the element's and not the
+    // interval's — which is exactly why two elements sharing a cell stay two.
+    let off = (vec3(0.5) + (hash3(seed + 811u) - vec3(0.5)) * vec3(jitter)) / g;
+
+    let pa = ((ca + off) * 2.0 - 1.0) * scale;
+    let pb = ((cb + off) * 2.0 - 1.0) * scale;
+
+    position = mix(pb, pa, vec3(e));
+
+    // `size` travels with the element as an ordinary attribute. Nothing derives
+    // it — there is no rule for it, unlike `age` and `velocity` — so a renderer
+    // that consumes it can only be paired with a generator that emits it.
+    size = 0.35 + mix(hash1(then + 17u), hash1(now + 17u), e) * grain;
+  }
+}

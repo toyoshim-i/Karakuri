@@ -1,0 +1,101 @@
+// A surface rather than a cloud: one sheet of water, lit from the side.
+//
+// Everything else in this library is a volume — a shell, a fountain, a tunnel —
+// and reads as light because every sprite adds to every sprite behind it. This
+// one is a **height field**: `capacity` points laid out on a square grid in x
+// and z, lifted in y by a sum of travelling waves. It has a top and a bottom, a
+// horizon, and a lit side and a shadowed one, which is a picture nothing else
+// here makes.
+//
+//     --set tide_sheet.kir,sheet_shade.kir
+//
+// **It is the first procedure here that emits `normal`.** That is the whole
+// reason the shading works: a renderer cannot recover a surface direction from
+// a point cloud — there is no notion of a neighbour in this language — so the
+// generator, which knows the analytic form of its own surface, hands the
+// direction over as an attribute. The derivatives below are the wave function
+// differentiated by hand, not a finite difference: sines and cosines are the
+// only reason this file can afford a normal at all, and are why the height is
+// three trig terms rather than an `fbm`.
+//
+// **Closed form**, so it primes instantly and can be scrubbed: `position` is
+// written outright from `seed` and `t` and never read back.
+//
+// **The grid comes from `capacity`**, so one file covers its whole declared
+// range — 512 by 512 at the default, 256 by 256 at 65536. A capacity that is
+// not a perfect square leaves the last few hundred elements on one extra row
+// past the far edge, which is visible and honest rather than hidden;
+// `examples/lattice_shell.kir` makes the same trade in three dimensions.
+
+proc tide_sheet {
+  kind     L1
+  topology points
+  capacity [4096, 1048576] = 262144
+
+  // Half the width of the sheet in world units. The built-in orbit sits 8 out
+  // at height 2, so the default of 4.0 puts the far edge just inside the frame
+  // and keeps the near edge from filling it — the 1 to 4 the specification's
+  // viewing conditions ask for. Ride it up and the sheet runs past the frame
+  // edges, which is a different and perfectly good look: a floor rather than a
+  // pool.
+  param extent : float [1.0, 6.0] = 4.0
+
+  // Height of the long swell — the fold that gives the sheet its silhouette. At
+  // 0 it is gone and only the ripple below is left, which is a flat sea rather
+  // than a flat sheet; take `chop` to 0 as well and the plane is dead level and
+  // evenly lit, which is worth seeing once because it is what proves the shading
+  // comes from the normal and not from the height.
+  param swell  : float [0.0, 1.5] = 0.55
+
+  // Height of the fine cross-ripple riding on the swell. Small on purpose: it
+  // costs the surface its smoothness, and past about 0.3 the normals turn over
+  // faster than the point spacing can show, so the sheet reads as glitter
+  // instead of water. The upper bound is where that transition is, not where
+  // the arithmetic stops working.
+  param chop   : float [0.0, 0.8] = 0.20
+
+  // Spatial frequency of that ripple. Turning it up is the cheapest way to
+  // change what the material *is* — 1.0 is a slow ocean, 5.0 is beaten metal.
+  param ripple : float [0.5, 6.0] = 2.2
+
+  // How fast the whole system travels. 0 freezes it into a still relief, which
+  // is a legitimate place to leave the fader and the reason the range reaches
+  // zero.
+  param speed  : float [0.0, 2.0] = 0.5
+
+  emit position, normal
+
+  element {
+    // `capacity` is a uniform, not a compile-time constant, so this is read
+    // fresh every frame and the layout follows a Set that changes it.
+    let side = uint(sqrt(float(capacity)));
+    let n    = float(side);
+
+    let i = seed % side;
+    let j = seed / side;
+
+    let x = ((float(i) / n) * 2.0 - 1.0) * extent;
+    let z = ((float(j) / n) * 2.0 - 1.0) * extent;
+
+    // Three phases, kept as named values because the derivatives below need
+    // exactly the same ones — a swell whose height and whose slope disagreed
+    // would be lit as a shape it is not.
+    let a = x * 0.9 + t * speed;
+    let b = z * 0.7 - t * speed * 0.6;
+    let c = (x + z) * ripple - t * speed * 2.1;
+
+    let h = swell * sin(a) * cos(b) + chop * sin(c);
+
+    // dh/dx and dh/dz, differentiated by hand. The inner factors — 0.9, 0.7,
+    // `ripple` — are the chain rule and have to match the phases above.
+    let dx = swell * 0.9 * cos(a) * cos(b) + chop * ripple * cos(c);
+    let dz = swell * -0.7 * sin(a) * sin(b) + chop * ripple * cos(c);
+
+    position = vec3(x, h, z);
+
+    // The surface normal of `y = h(x, z)`. Up is +y, so the two slopes enter
+    // negated and the vector is normalized because the renderer takes a dot
+    // product with it and expects unit length.
+    normal = normalize(vec3(-dx, 1.0, -dz));
+  }
+}

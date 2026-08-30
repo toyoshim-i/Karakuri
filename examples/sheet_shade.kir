@@ -1,0 +1,106 @@
+// The renderer that makes a lit solid out of a point cloud.
+//
+// Every other per-element renderer here decides a fragment's brightness from
+// the material itself — a hue off `seed`, a length off `velocity`, a fade off
+// `age`. This one takes it from a **light**: a direction the operator turns,
+// dotted with the `normal` the geometry emitted. Turn `key` and the picture
+// moves without a single element moving, which is what separates a shaded
+// surface from a glowing one.
+//
+//     --set tide_sheet.kir,sheet_shade.kir
+//
+// **`blend weighted`, not `additive`, and here the choice is forced.** Under
+// additive every sprite adds to the ones behind it, so a sheet folded over
+// itself is brightest exactly where it overlaps and the fold disappears. Under
+// weighted, alpha is *opacity*: the near face hides the far face and the sheet
+// has a front. `examples/glass_shell.kir` makes the same argument for a shell.
+//
+// **It pairs with any geometry that emits `normal`** — the attribute has no
+// derivation rule, so a Set that pairs this with a generator emitting only
+// `position` is refused where it is built rather than drawn flat. That refusal
+// is the honest one: there is no direction to shade from, and inventing one
+// would be inventing the picture.
+//
+// **`point_size` is divided by clip-space w.** A constant pixel size makes the
+// far half of a receding sheet thin out into separate dots while the near half
+// overlaps into paste; dividing by w keeps roughly one sprite's worth of cover
+// per surface patch at every depth, which is what makes the plane read as
+// continuous. The clip position is bound to a `let` first because a stage
+// output cannot be read back.
+
+proc sheet_shade {
+  kind  L4
+  blend weighted
+
+  consumes position, normal
+
+  // Sprite size at one unit of depth, before the perspective division below.
+  // The default is set for the 512-by-512 grid `tide_sheet` lays out at its own
+  // default capacity, where it is just enough to close the surface: a quarter of
+  // a million sprites is a fill-rate cost before it is anything else, and this
+  // is the number that decides it. A Set at a lower capacity wants this higher
+  // or the surface comes apart into dots.
+  param point_scale : float [0.5, 40.0] = 3.0
+
+  // Where the key light is, in radians around the sheet. This is the fader to
+  // ride: a whole revolution takes the picture from front-lit and flat, through
+  // raking and maximally three-dimensional, to back-lit and nearly black.
+  param key      : float [0.0, 6.2831853] = 2.2
+
+  // How much light a face turned away from the key still gets. 0 is a hard
+  // terminator with half the sheet at true black; the default keeps the
+  // shadowed troughs readable. Above about 0.5 the shading washes out and the
+  // surface flattens, which is why the range stops at 1.0 rather than higher —
+  // past that there would be nothing left to flatten.
+  param ambient  : float [0.0, 1.0] = 0.18
+
+  // Base hue, and how far the hue swings between trough and crest. The swing
+  // is what gives the eye a second reading of the height beside the shading,
+  // and at 0 the sheet is one colour and only the light describes it.
+  param hue      : float [0.0, 1.0] = 0.52
+  param swing    : float [0.0, 0.5] = 0.12
+
+  param exposure : float [0.0, 8.0] = 1.2
+
+  // Opacity, not brightness — the two are separate controls under `weighted`
+  // where additive fuses them. At 0.15 the sheet is glass and the far face
+  // shows through the near one; at 1.0 it is paint.
+  param opacity  : float [0.0, 1.0] = 0.9
+
+  vertex {
+    let cp = camera * vec4(position, 1.0);
+
+    clip = cp;
+
+    // `cp.w` is view-space depth under this projection. The floor of 0.5 keeps
+    // an element that drifts up to the eye from claiming the whole frame, and
+    // the ceiling of 24 keeps one sprite from costing a whole pass of fill —
+    // this renderer is fill-bound at the reference workload, and the default
+    // below is chosen against that rather than against how solid the sheet
+    // could be made to look.
+    point_size = clamp(point_scale * 4.0 / max(cp.w, 0.5), 1.0, 24.0);
+  }
+
+  fragment {
+    // A disc with a soft rim rather than a soft body: the middle is fully
+    // covered, so overlapping sprites tile into a surface instead of a haze.
+    let d = length(point_coord * 2.0 - 1.0);
+    let a = 1.0 - smoothstep(0.55, 1.0, d);
+
+    // The key light. It sits above the horizon by a fixed amount so that a
+    // sweep of `key` never puts it exactly edge-on to a flat sheet, which would
+    // black the whole frame at one point on the fader.
+    let l   = normalize(vec3(cos(key), 0.55, sin(key)));
+    let lam = max(dot(normal, l), 0.0);
+    let sh  = ambient + (1.0 - ambient) * lam;
+
+    // Height read off `position.y` directly. The renderer knows the wave only
+    // as a number between roughly -1 and 1, which is all a hue ramp needs.
+    let h = hue + swing * clamp(position.y * 0.8, -1.0, 1.0);
+    let c = hsv_to_rgb(vec3(h, 0.62, 1.0)) * sh * exposure;
+
+    // Alpha is opacity here and belongs in [0, 1]. Writing more than 1.0 is
+    // not a brighter surface, it is the same surface with a clamp applied.
+    color = vec4(c, a * opacity);
+  }
+}
