@@ -1,0 +1,3 @@
+{"t":"set","id":"beat_cloud","v":1}
+{"t":"part","layer":"L1","path":"beat_shell.kir"}
+{"t":"part","layer":"L4","path":"soft_points.kir"}

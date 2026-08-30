@@ -216,6 +216,76 @@ pub enum Record {
         #[serde(rename = "proc")]
         proc_hash: Hash,
     },
+    /// **A node of an *authoring* Set file** (`.kset`): everything
+    /// [`Record::Slot`] says about a node, with the **relative path** of its
+    /// `.kir` where the content address goes.
+    ///
+    /// **A `t` of its own rather than a `slot` carrying a path instead of a
+    /// `proc`**, which is the shape anybody reaching for "the same record with
+    /// one field swapped" arrives at.
+    /// `docs/principles/0031-a-name-means-one-thing-across-the-system.md` rules
+    /// out precisely that — *"reusing a tag for a differently shaped record in
+    /// a different file"* — and the bill for ignoring it is paid by every
+    /// reader that dispatches on `t` alone: a decoder meeting `slot` would have
+    /// to know which file it came out of before it knew whether `proc` was
+    /// there, and the one that forgot to ask would build a Set with a node
+    /// missing rather than refuse a file. Two tags, and a decoder dispatching
+    /// on `t` never meets a `slot` without an address.
+    ///
+    /// **So a `.kbset` holding one of these is a file disagreeing with its own
+    /// extension**, which is a sentence the store can say because it is the
+    /// whole of what that extension asserts — everything in a `.kbset` is
+    /// already resolved, and `<store>/sets/` holds `.kbset` and only `.kbset`
+    /// because a swap that can partially fail is not a swap
+    /// (`docs/adr/0231-a-sets-two-forms-take-two-extensions-and-the-store-holds-only-the-resolved-one.md`,
+    /// `docs/principles/0005-a-swap-happens-on-a-frame-boundary-and-an-over-budget-set-rolls-back-on-its-own.md`).
+    ///
+    /// **This is therefore the one variant that can only appear in a file the
+    /// store will not hold**, and it is refused for a reason none of its
+    /// neighbours are refused for. A `gain` is the deck's, a `param_decl` is an
+    /// artifact's; a `part` is this Set's own — it says what a `slot` says
+    /// about the same node — and what is wrong with it in `sets/` is only that
+    /// it has not been resolved yet. Hence a question of its own,
+    /// [`Record::is_authoring`], and a sentence of its own from
+    /// `StoreError::PartInSet`: an operator who wrote one is told which form
+    /// their file is, not that it carries time.
+    ///
+    /// **Resolution is a read, a hash and a store put — never a compile.** A
+    /// `slot`'s `proc` is the content address of the `.kir` source, so turning
+    /// one of these into one is: read the file, hash the bytes, `put_artifact`,
+    /// emit a `slot` naming that address. `karakuri_environment::setfile`'s
+    /// `resolve` is where that happens, which is before the file reaches a
+    /// store rather than during a load.
+    Part {
+        /// The node's layer, exactly as [`Record::Slot`] carries it.
+        layer: Layer,
+        /// Which node of that layer, on [`Record::Slot`]'s terms and by the
+        /// same reading: absent is 0 and 0 is not written.
+        #[serde(default, skip_serializing_if = "is_zero")]
+        index: u32,
+        /// What this Set calls the node — [`Record::Slot`]'s field, unchanged,
+        /// because a name belongs to the *use* and the use is the same one.
+        /// It survives resolution: the `slot` written in its place carries it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        name: Option<String>,
+        /// **The `.kir`'s path, relative to the authoring file's own
+        /// directory.**
+        ///
+        /// A `String` and not a `PathBuf` because it is a wire field: what is
+        /// kept here is what the file said, byte for byte, and a path repaired
+        /// on the way in is the one thing that must not happen — the reader
+        /// that quietly fixed it would be the reader that opened something
+        /// nobody named.
+        ///
+        /// **Whether it is a path this machine may open is not this
+        /// vocabulary's question**, on the terms every other check here is left
+        /// to the place that has what it needs: the answer depends on where the
+        /// file itself is, which a record does not know. It is `setfile`'s
+        /// wall, it refuses rather than repairs, and it names what it refused —
+        /// an absolute path, a `..` that escapes, and a symlink pointing out
+        /// are three spellings of one escape.
+        path: String,
+    },
     /// Overrides the `.kir` default. Outside the range the artifact declares,
     /// the Set is rejected at build time.
     Capacity {
@@ -1099,6 +1169,20 @@ enum Vocabulary {
     Session,
     /// What an *artifact* declares, in its `<hash>.meta.ndjson`.
     Metadata,
+    /// What a Set is *before it is resolved*: the authoring form, `.kset`,
+    /// which names its `.kir` files by relative path and lives beside them.
+    ///
+    /// **A vocabulary of its own and not a corner of [`Vocabulary::Set`]**,
+    /// though what it says is a Set's own state and nothing else's. The
+    /// question every reader here asks is *which file may this line be in*, and
+    /// the answer for a [`Record::Part`] is one file the store may never hold:
+    /// `<store>/sets/` is `.kbset` and only `.kbset`, because reading a
+    /// `.kbset` resolves nothing against the filesystem and that is what makes
+    /// a swap unable to half-fail. Classified `Set`, it would be written into a
+    /// store by the one function that exists to stop that
+    /// (`Store::write_set`), and the file would then be a `.kbset` naming a
+    /// neighbour it may no longer have.
+    Authoring,
     /// A `t` this build does not know. **Not a vocabulary but the absence of
     /// one**, and it is a case of its own because every reader treats it as a
     /// line to carry rather than a line to place: passing it over is the
@@ -1108,10 +1192,14 @@ enum Vocabulary {
 }
 
 impl Record {
-    /// Whether this record belongs in a Set file. **Twenty-one say no, for three
-    /// different reasons, and keeping them apart is the point of the name** —
-    /// it is `is_set_state` rather than `is_state` because most of what it
-    /// refuses is state.
+    /// Whether this record belongs in a Set file. **Twenty-three say no, for
+    /// four different reasons, and keeping them apart is the point of the
+    /// name** — it is `is_set_state` rather than `is_state` because most of
+    /// what it refuses is state. (It read "twenty-one" until [`Record::Part`]
+    /// arrived and the variants were counted: eighteen, plus the four metadata
+    /// records, plus this one. A prose count is not checked by anything, which
+    /// the group comment above [`Record::Gain`] confesses to about its own two.
+    /// The *classification* cannot drift the same way — see [`Vocabulary`].)
     ///
     /// - [`Record::Tick`], [`Record::Audio`] and [`Record::Tempo`] are not
     ///   state at all: they are what a *frame* saw or decided. A Set file
@@ -1159,8 +1247,19 @@ impl Record {
     ///   not any Set's, which is why they are a third reason rather than a
     ///   longer second one.
     ///
-    /// **Three reasons for one answer, and `Record::Save` still does not add a
-    /// fourth.** The question here is *may this line go in a Set file*, and it
+    /// - [`Record::Part`] is a **fourth reason and the only one that is not
+    ///   about what the record says**. It is this Set's own state, in the
+    ///   vocabulary of the *authoring* form: a node named by relative path
+    ///   rather than by content address. Nothing is wrong with what it says —
+    ///   it says what a [`Record::Slot`] says — and everything is wrong with
+    ///   where it is, because `<store>/sets/` holds `.kbset` and only `.kbset`
+    ///   so that a swap has nothing left to resolve. Refused through
+    ///   [`Record::is_authoring`], for the reason a `param_decl` is refused
+    ///   through [`Record::is_metadata`]: a third sentence is owed, and it is
+    ///   about which of a Set's two forms the file is.
+    ///
+    /// **Four reasons for one answer, and `Record::Save` still does not add
+    /// another.** The question here is *may this line go in a Set file*, and it
     /// has one answer per record however many reasons stand behind a no.
     /// Whether a record **reaches outside the stream** is a different question
     /// about the same vocabulary, and `Record::Save` is so far the only record
@@ -1168,8 +1267,8 @@ impl Record {
     /// jobs. It lives in `docs/ir-spec.md` under "Records with an effect
     /// outside the stream", where a replay reads it.
     ///
-    /// A session stream carries the eighteen of the first two groups and none of
-    /// the third. That is the difference between the two files, stated from
+    /// A session stream carries the eighteen of the first two groups and none
+    /// of the third or the fourth. That is the difference between the two files, stated from
     /// this side, and it is what [`Record::is_metadata`] is a separate function
     /// for: `Store::write_set` refuses a `param_decl` through *that* question so
     /// that the sentence it prints is about declarations. `!is_set_state()`
@@ -1232,6 +1331,11 @@ impl Record {
             | Record::Seed { .. }
             | Record::Edge { .. }
             | Record::Src { .. } => Vocabulary::Set,
+            // **The one record that is a Set's own state and still not a Set
+            // file's**, because the file it belongs to is the one a store may
+            // not contain. See [`Vocabulary::Authoring`] and
+            // [`Record::is_authoring`].
+            Record::Part { .. } => Vocabulary::Authoring,
             Record::Tick { .. } | Record::Audio { .. } | Record::Tempo { .. } => Vocabulary::Frame,
             Record::Gain { .. }
             | Record::Opacity { .. }
@@ -1288,6 +1392,28 @@ impl Record {
     /// specification describes and nothing writes.
     pub fn is_metadata(&self) -> bool {
         matches!(self.vocabulary(), Vocabulary::Metadata)
+    }
+
+    /// **Whether this record belongs to the authoring form of a Set file**
+    /// (`.kset`) rather than to the resolved one. One says yes:
+    /// [`Record::Part`].
+    ///
+    /// **A third question for a third sentence**, which is the reason there
+    /// were two — [`Record::is_metadata`] exists so that a rejected
+    /// `param_decl` is told it is a declaration rather than told it carries
+    /// time, and a `part` needs the same courtesy for a reason further from
+    /// either: it is neither a declaration nor time nor the deck's. It is this
+    /// Set's own state, written in the form that names its parts by path, and
+    /// what is wrong with it inside a store is only that nothing has resolved
+    /// it yet. `StoreError::PartInSet` says that, and says which of the two
+    /// forms the file is — where `TickInSet`'s sentence would send an operator
+    /// looking for a `tick` they did not write.
+    ///
+    /// Read off [`Vocabulary`] like the other two, so the three cannot
+    /// disagree about one record and a new variant with no arm does not
+    /// compile.
+    pub fn is_authoring(&self) -> bool {
+        matches!(self.vocabulary(), Vocabulary::Authoring)
     }
 }
 
@@ -1540,6 +1666,79 @@ mod tests {
             "the record did not come back as the bytes it went in as"
         );
         rec
+    }
+
+    /// **A `part` round-trips through the line the spec prints**, bytes and
+    /// all, and answers all three questions the way the authoring form needs.
+    ///
+    /// `round_trip_verbatim` for [`Record::Select`]'s reason and one more: an
+    /// `index` or a `name` acquiring a serde default here would put a field
+    /// into every authoring file anybody hand-writes, and the whole of what a
+    /// `.kset` is for is being a file a person writes by hand.
+    ///
+    /// The three assertions are the classification, and they are what keeps
+    /// this record out of a store: it is not Set state (so `Store::write_set`
+    /// refuses it), it is not an artifact's metadata (so it is refused by the
+    /// question that says *which* form the file is, not by the one that says
+    /// it declares something), and it *is* the authoring form's.
+    #[test]
+    fn a_part_round_trips_through_the_line_the_spec_prints() {
+        let line = r#"{"t":"part","layer":"L1","path":"drift_shell.kir"}"#;
+        let rec = round_trip_verbatim(line);
+        assert_eq!(
+            rec,
+            Record::Part {
+                layer: Layer::L1,
+                index: 0,
+                name: None,
+                path: "drift_shell.kir".to_string(),
+            }
+        );
+        assert!(!rec.is_set_state());
+        assert!(!rec.is_metadata());
+        assert!(rec.is_authoring());
+
+        // And the addressed spelling, which is the same record about the
+        // second renderer of a stack with a name this Set gave it.
+        let named =
+            r#"{"t":"part","layer":"L4","index":1,"name":"veil","path":"parts/soft_points.kir"}"#;
+        assert_eq!(
+            round_trip_verbatim(named),
+            Record::Part {
+                layer: Layer::L4,
+                index: 1,
+                name: Some("veil".to_string()),
+                path: "parts/soft_points.kir".to_string(),
+            }
+        );
+    }
+
+    /// **`slot` and `part` are two tags and not one tag with two shapes**,
+    /// which is what P-0031 asks of a name and what a decoder dispatching on
+    /// `t` alone depends on.
+    ///
+    /// The failure this defends against is silent: give a `slot` an optional
+    /// `path` instead, and the authoring line above parses as a `slot` with no
+    /// `proc` — a node with no procedure, in a file that says it is resolved.
+    /// Here it cannot parse at all, which is the whole difference.
+    #[test]
+    fn a_part_is_not_a_slot_with_a_path_where_the_address_goes() {
+        let part = r#"{"t":"part","layer":"L1","path":"drift_shell.kir"}"#;
+        let slot = r#"{"t":"slot","layer":"L1","proc":"sha256:00"}"#;
+        assert!(matches!(
+            serde_json::from_str::<Record>(part).expect("a part parses"),
+            Record::Part { .. }
+        ));
+        assert!(
+            serde_json::from_str::<Record>(r#"{"t":"slot","layer":"L1","path":"drift_shell.kir"}"#)
+                .is_err(),
+            "a `slot` carrying a path instead of an address is not a record this vocabulary has"
+        );
+        assert!(
+            serde_json::from_str::<Record>(slot).is_err(),
+            "and the address a `slot` does carry is a hash, so this fixture is a bad one \
+             rather than a second shape"
+        );
     }
 
     /// **`procedure` names a node, and `index` is what says which.**

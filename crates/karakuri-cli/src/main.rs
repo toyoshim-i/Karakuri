@@ -537,14 +537,21 @@ options:
                         and flags — the whole chain, names and edges included.
                         A flag given beside it wins. Anything the file could not
                         carry is printed rather than dropped in silence
-  --bundle ID           write the Set filed under ID to standard output with
+  --bundle ID|FILE      write the Set filed under ID to standard output with
                         every source it names inlined as `src` records, and
                         stop. That file loads on a machine whose store has
                         never held the material, so it is what you send
                         somebody: `--bundle night01 > night01.kbset`. An
                         artifact this store does not hold refuses the whole
                         bundle naming it, rather than producing a file that
-                        looks self-contained and is not
+                        looks self-contained and is not.
+                        Given a FILE ending in .kset instead — an authoring
+                        Set file, which names its .kir files by relative path
+                        and lives beside them — every part is read, hashed and
+                        put in the store, and the bundle is written from that:
+                        `--bundle night01.kset > night01.kbset`. A part that
+                        reaches outside the .kset's own directory is refused
+                        by name, absolute paths, `..` and symlinks alike
   --unbundle FILE       read a bundled Set file, put its inlined sources in the
                         store, write its Set file, and stop. Every source must
                         hash to the address its `slot` names or the file is
@@ -883,8 +890,17 @@ enum ParseOutcome {
     /// It carries the store path because that is the whole of what a listing
     /// needs, and `--store` may be given on either side of this flag.
     ListSets(PathBuf),
-    /// `--bundle ID`: write the Set filed under `ID` to standard output with
+    /// `--bundle ID` — or `--bundle FILE.kset`: write the Set filed under `ID`,
+    /// or the one the authoring file at `FILE` names, to standard output with
     /// every source it names inlined, and stop.
+    ///
+    /// **One flag and two moments rather than two flags**, which is ADR-0229
+    /// part 4: packaging is *"one operation, two moments"*, and
+    /// `docs/manual/operations.html`'s *Send a Set to somebody, and take one
+    /// in* is the row both are a moment of. The field is still `id` because the
+    /// parse cannot tell which it is without touching a disk and does not try;
+    /// [`bundled_set`] decides on the extension, which is what ADR-0231 made
+    /// the extension for.
     ///
     /// [`ParseOutcome::ListSets`]'s variant for [`ParseOutcome::ListSets`]'s
     /// reason, and the reason is the whole of why it is here: bundling reads a
@@ -2566,16 +2582,42 @@ fn listed_sets_at(root: &std::path::Path) -> Result<String, String> {
 /// that only reads must not leave a store behind to report that a Set is
 /// missing from it. Here it is an error rather than an answer, because a bundle
 /// of a Set that does not exist is not a bundle.
-fn bundled_set(root: &std::path::Path, id: &str) -> Result<String, String> {
-    if !root.exists() {
-        return Err(format!(
-            "no store at `{}`, so there is no set `{id}` to bundle — check `--store`",
-            root.display()
-        ));
-    }
-    let store = karakuri_store::store::Store::open(root)
-        .map_err(|e| format!("store `{}`: {e}", root.display()))?;
-    Ok(setfile::bundle(&store, id)?
+///
+/// **Or an authoring file, and that is one flag rather than two.** ADR-0229
+/// part 4 settles that packaging is *"one operation, two moments"* — loading an
+/// authoring file *is* packaging it, and packaging for distribution is the same
+/// resolution done ahead of time — so `--bundle` grew the other moment instead
+/// of a second flag beside it, and `docs/manual/operations.html` keeps the one
+/// row it always had. **Which of the two is decided by the extension**, on
+/// exactly the terms ADR-0231 made it load-bearing for: a value ending in
+/// `.kset` is a path to an authoring file, and anything else is an id in the
+/// store. Nothing else could decide it — an id and a relative path are both
+/// bare words — and this is the same sentence the store already reads a name
+/// with.
+///
+/// **The authoring half opens a store that is not there, where the id half
+/// refuses to.** Resolving is a *write*: each part is read from disk, hashed
+/// and put in the store as an artifact, so the store has to exist by the time
+/// the first one lands, and establishing the layout under a root an operator
+/// named is what every other writing path here does — see [`unbundled_file`].
+/// The id half is still a pure read and still leaves nothing behind.
+fn bundled_set(root: &std::path::Path, named: &str) -> Result<String, String> {
+    let lines = if named.ends_with(setfile::AUTHORING_SUFFIX) {
+        let store = karakuri_store::store::Store::open(root)
+            .map_err(|e| format!("store `{}`: {e}", root.display()))?;
+        setfile::bundle_authored(&store, std::path::Path::new(named))?
+    } else {
+        if !root.exists() {
+            return Err(format!(
+                "no store at `{}`, so there is no set `{named}` to bundle — check `--store`",
+                root.display()
+            ));
+        }
+        let store = karakuri_store::store::Store::open(root)
+            .map_err(|e| format!("store `{}`: {e}", root.display()))?;
+        setfile::bundle(&store, named)?
+    };
+    Ok(lines
         .iter()
         .map(|line| format!("{}\n", line.as_str()))
         .collect())
@@ -7123,6 +7165,73 @@ mod tests {
             !missing.exists(),
             "a listing created the store it was asked to read"
         );
+    }
+
+    /// **`--bundle` takes a `.kset` in and packages it**, which is the other
+    /// moment of the one operation this flag already was.
+    ///
+    /// What is being checked here is the *route* and not the resolution — that
+    /// is `karakuri-environment`'s, tested there — so this asserts the two
+    /// things only this file decides: that a value ending in `.kset` is read as
+    /// a path to an authoring file rather than looked up as an id, and that
+    /// what comes back is a bundle, sources and all, on the standard output a
+    /// shell can redirect.
+    ///
+    /// **And that the store it writes into is established**, unlike the id
+    /// half: resolving is a write, so a `--store` an operator named has to
+    /// exist by the time the first artifact lands.
+    #[test]
+    fn bundle_takes_an_authoring_file_in_and_packages_it() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let l1 = "proc ring { kind L1 }\n";
+        let l4 = "proc points { kind L4 }\n";
+        std::fs::write(dir.path().join("l1.kir"), l1).expect("write");
+        std::fs::write(dir.path().join("l4.kir"), l4).expect("write");
+        let kset = dir.path().join("night.kset");
+        std::fs::write(
+            &kset,
+            "{\"t\":\"set\",\"id\":\"night\",\"v\":1}\n\
+             {\"t\":\"part\",\"layer\":\"L1\",\"path\":\"l1.kir\"}\n\
+             {\"t\":\"part\",\"layer\":\"L4\",\"path\":\"l4.kir\"}\n",
+        )
+        .expect("write");
+
+        let root = dir.path().join("store");
+        let said = bundled_set(&root, kset.to_str().expect("utf-8")).expect("the packaging");
+
+        assert!(
+            !said.contains("\"t\":\"part\""),
+            "a bundle carries no part: {said}"
+        );
+        assert_eq!(
+            said.matches("\"t\":\"slot\"").count(),
+            2,
+            "each part became a slot naming an address: {said}"
+        );
+        for source in [l1, l4] {
+            let hash = karakuri_store::hash::Hash::of(source.as_bytes());
+            assert!(
+                said.contains(&hash.to_string()),
+                "the slot names the address of the bytes on disk: {said}"
+            );
+            assert!(
+                karakuri_store::store::Store::open(&root)
+                    .expect("store")
+                    .get_artifact(&hash)
+                    .is_ok(),
+                "the store this wrote into holds the part: {said}"
+            );
+        }
+        assert!(
+            said.contains("\"t\":\"src\""),
+            "the sources are inlined, which is what makes it a bundle: {said}"
+        );
+
+        // **And an id is still an id.** The extension is the whole of what
+        // tells the two apart, so a value without one is looked up in the store
+        // and says so when it is not there.
+        let refused = bundled_set(&root, "night").expect_err("no set is filed under that id");
+        assert!(refused.contains("night"), "{refused}");
     }
 
     // -- edges -----------------------------------------------------------

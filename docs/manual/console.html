@@ -101,8 +101,8 @@
               <div class="scopes">
                 <span class="scope sel" data-tip="Favourites. Selected. It is this library filtered rather than a fifth place a Set can be &mdash; the star is kept beside the Sets, in the store, so this scope is a question asked of `my sets` and never a collection of its own. Click to show it; click another scope to leave it. &#8853; MIDI: unassigned &mdash; there is no operation for a map to name yet.">favourites</span>
                 <span class="scope">my sets</span>
-                <span class="scope" data-tip="What ships with the program rather than what you wrote, and it is read-only: nothing is kept here, and what you keep goes to the store with the rest of your Sets. Where these files are is told to the program when it starts rather than compiled into it &mdash; a program has no reliable way to ask where it is &mdash; so an installed copy is pointed at what the packaging put beside it, and `--presets DIR` says it by hand. Told nothing and finding nothing, the scope is empty and the program says so at startup rather than pretending. &#8853; MIDI: unassigned &mdash; there is no operation for a map to name yet.">presets</span>
-                <span class="scope" data-tip="A folder, and what it lists is Sets. A Set file and a bundle are one file &mdash; the same `.kbset`, differing only in whether the sources are appended inside it &mdash; so this scope draws one kind of row, not two. A `.kir` is not one of them: it is a single node's source addressed by its content, and nothing takes one. A row here is taken into the store and then loaded, which is one press because taking it in is what gives it a name. &#8853; MIDI: unassigned &mdash; a map line names a state from a closed list and a directory is not one.">folder</span>
+                <span class="scope" data-tip="What ships with the program rather than what you wrote, and it is read-only: nothing is written here, and a Set you load out of it is packaged into the store with the rest of your Sets &mdash; which is how a preset becomes one of yours. Where these files are is told to the program when it starts rather than compiled into it &mdash; a program has no reliable way to ask where it is &mdash; so an installed copy is pointed at what the packaging put beside it, and `--presets DIR` says it by hand. Told nothing and finding nothing, the scope is empty and the program says so at startup rather than pretending. &#8853; MIDI: unassigned &mdash; there is no operation for a map to name yet.">presets</span>
+                <span class="scope" data-tip="A folder, and what it lists is Sets. A Set file and a bundle are one file &mdash; the same `.kbset`, differing only in whether the sources are appended inside it &mdash; so this scope draws one kind of row, not two. A `.kset` is listed here as well and is still one row: it names its parts by relative path rather than by content, so taking it in resolves them first. A `.kir` is not one of them: it is a single node's source addressed by its content, and nothing takes one. A row here is taken into the store and then loaded, which is one press because taking it in is what gives it a name. &#8853; MIDI: unassigned &mdash; a map line names a state from a closed list and a directory is not one.">folder</span>
                 <span class="scope" data-tip="Add a scope. A library is asked questions rather than read end to end, so what you browse gets both wider and narrower with use.">+</span>
               </div>
               <div class="path">~/sets/tour&#8209;2026/night&#8209;b &nbsp;&#8250;&nbsp; opening</div>
@@ -1575,10 +1575,11 @@
           three candidates: a directory of <code>.kir</code> files, a directory
           of Set files, and a bundle. <strong>Two of the three are one thing and
           the third is out.</strong> A Set file and a bundle are the same file
-          &mdash; one record per line, and a bundle is that file with the
-          sources it names appended inside it &mdash; so the scope draws one
-          kind of row rather than two. A <code>.kir</code> is not one of them:
-          it is a single node's source, addressed by its content, carrying no
+          &mdash; both a <code>.kbset</code>, one record per line, and a bundle
+          is that file with the sources it names appended inside it &mdash; so
+          the scope draws one kind of row rather than two. A <code>.kir</code>
+          is not one of them: it is a single node's source, addressed by its
+          content, carrying no
           layer, no slot, no parameters and no name a person chose. Nothing in
           the vocabulary takes one. <em>Load material into a deck</em> and
           <em>read what one Set holds</em> both name a Set the library already
@@ -1596,13 +1597,19 @@
           being called a bad file. That is one row, one operation and one
           refusal sentence for both spellings, which is why the difference
           between them never has to appear in the scope list: it is a property
-          of a file, not a kind of collection.
+          of a file, not a kind of collection. <strong>A fourth candidate
+          arrived after this was settled, and it lands on the same side</strong>
+          &mdash; a Set file that names its parts by relative path rather than
+          by their content is a Set file, is one row, and is taken in by the
+          same operation. What it adds is a resolution, and that is
+          <em>A Set has two forms, and loading one is packaging it</em> below.
         </p>
         <p>
-          <strong>Two limits, and they are the whole price of browsing outside
-          the store.</strong> A name you already own is refused rather than
-          overwritten, because an id that arrived inside somebody else's file is
-          not the instruction that an id you typed is &mdash; so a folder row
+          <strong>Two limits, and they are what a row from a folder costs
+          whichever of the two forms it is in.</strong> A name you already own
+          is refused rather than overwritten, because an id that arrived inside
+          somebody else's file is not the instruction that an id you typed is
+          &mdash; so a folder row
           can meet a Set of yours and ask for a rename. And a folder row is not
           a row you play from directly: the Set is in the library before it is
           on a deck. That is one press rather than two because taking it in is
@@ -1733,6 +1740,79 @@
           preset library and so is not there either, and that is refused loudly
           &mdash; naming the flag, and saying the two paths may be given instead
           &mdash; rather than opening a window onto nothing.
+        </p>
+      </div>
+
+      <div class="note">
+        <h3>A Set has two forms, and loading one is packaging it</h3>
+        <p>
+          <strong>A Set file names its parts in one of two ways, and which of
+          them you are looking at changes what a load does.</strong> A
+          <code>.kset</code> names them by relative path and lives beside them,
+          which is the only way a directory of parts can be told which of them
+          go together &mdash; nothing in a part says what it belongs with, and
+          nothing in one may. A <code>.kbset</code> names them by the content of
+          the parts themselves, and it is what this store holds and what
+          travels. They are not two formats so much as one file and that same
+          file resolved.
+        </p>
+        <p>
+          <strong>So loading a <code>.kset</code> <em>is</em> packaging
+          it.</strong> The parts it names are read off the disk beside it, filed
+          in the store under the address of their own bytes, and the Set is
+          written into your library as a <code>.kbset</code>. That is the same
+          work <em>send a Set to somebody</em> does, which is why taking one in
+          is not a second row on <a href="operations.html">the operations
+          page</a>: it is one operation performed at two moments, ahead of time
+          when you are sending and at the press when you are not. What a load
+          owes on top of it is a refusal &mdash; a part named from outside the
+          file's own directory is not read, and the path is said out loud,
+          because a Set somebody handed you is not a way of asking this machine
+          for its files.
+        </p>
+        <p>
+          <strong>The store holds the resolved form and only that one, and the
+          reason is the swap.</strong> A Set lands on a frame boundary, and one
+          that cannot hold the frame rolls back on its own onto what was playing
+          &mdash; which works only because there is nothing left to work out at
+          the moment it lands. Let the other form into the store and a load
+          walks the disk while the deck is changing over: a neighbour missing,
+          or moved, or changed since the file was written, and the failure
+          arrives after the exchange has begun, in the one place this instrument
+          is built to be unable to fail. So the reading and the hashing happen
+          when you take the file in, in front of you, with nothing on air.
+          <strong>The extension is what makes that checkable by reading a
+          name</strong>, rather than by opening every file the library lists and
+          hoping nobody copies another one in afterwards.
+        </p>
+        <p>
+          <strong>Which is why opening a preset leaves one of your own
+          behind.</strong> What ships is a directory of parts and the
+          <code>.kset</code> files that say which of them go together, so
+          loading a preset is a packaging step, and a packaging step writes into
+          the store: <em>my sets</em> gains a row you did not make. That is how
+          <em>making it yours</em> works &mdash; it is the same copy-on-load a
+          run that can be edited already performs on its material &mdash; and it
+          is what keeps the shipped library the read-only thing this page
+          promises, because nothing is ever written where the presets are.
+          <strong>It is said here so that nobody meets it as a surprise</strong>:
+          the first symptom, otherwise, is a library filling up with everything
+          you have ever tried.
+        </p>
+        <p>
+          <strong>The two names differ by one letter in the middle, which is the
+          hardest place there is to see one.</strong> Sorted by name,
+          <code>night-b.kset</code> and <code>night-b.kbset</code> sit against
+          each other and are the same word in a hurry, and this page is not
+          going to pretend you will tell them apart at a glance. What it claims
+          is narrower: a store cannot contain a <code>.kset</code> at all, so
+          the two are in one directory only in an authoring tree of your own,
+          and wherever mistaking one for the other would cost something the
+          program refuses rather than your eye deciding. The <code>b</code> is
+          what has been done to the file &mdash; it has been <em>bound</em>
+          &mdash; so the pair reads as one word with a mark on it, which is what
+          they are. The cost is real, and it is paid in <code>ls</code> rather
+          than on the panel.
         </p>
       </div>
 

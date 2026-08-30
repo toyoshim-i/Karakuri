@@ -565,6 +565,89 @@ fn write_set_rejects_an_artifacts_metadata() {
     }
 }
 
+/// **An authoring file's `part` is refused from a Set file**, in a third
+/// sentence of its own, and nothing is written.
+///
+/// This is the check that makes `.kbset` mean something. Everything in
+/// `sets/` is already resolved — that is what lets a swap happen on a frame
+/// boundary with nothing left to look up — and a `part` names its `.kir` by a
+/// relative path, so a Set file carrying one would resolve the filesystem at
+/// the moment of the exchange, against a directory that may be somebody else's
+/// machine's. See ADR-0231.
+///
+/// **The gate is `Record::is_authoring`, not `!is_set_state`**, which is what
+/// the third error variant pins: a `part` falls through the older check too,
+/// and the sentence that check says is about time. An operator who wrote an
+/// authoring file into a store wants to be told which of the two forms they
+/// have, not sent looking for a `tick` they did not write.
+#[test]
+fn write_set_rejects_an_authoring_files_part() {
+    let dir = tempdir().unwrap();
+    let store = Store::open(dir.path()).unwrap();
+
+    let lines = vec![
+        Line::new(Record::Set {
+            id: "authored".into(),
+            v: 1,
+        }),
+        Line::new(Record::Part {
+            layer: Layer::L1,
+            index: 0,
+            name: None,
+            path: "drift_shell.kir".into(),
+        }),
+    ];
+    match store.write_set("authored", &lines) {
+        Err(StoreError::PartInSet { index }) => assert_eq!(index, 1),
+        other => panic!("a `part` record in a Set file was accepted: {other:?}"),
+    }
+    assert!(!dir.path().join("sets").join("authored.kbset").exists());
+
+    // And the sentence names both forms, because which one the file is is the
+    // whole of what the operator has to know.
+    let said = store.write_set("authored", &lines).unwrap_err().to_string();
+    assert!(said.contains(".kset"), "{said}");
+    assert!(said.contains(".kbset"), "{said}");
+}
+
+/// **A `part` is dropped by the projection rather than passed through it.**
+///
+/// A session stream has no writer that puts one in, so meeting one means a
+/// hand-assembled stream — and passing it through would fail a whole save at
+/// `write_set` on a line that belongs to another file. Dropped, on the terms
+/// every other foreign record here is dropped, and *not* folded onto the
+/// `slot` at the same address: a fold that kept whichever came last would
+/// resolve half the time to an unresolved path claiming to be an address.
+#[test]
+fn a_part_is_dropped_by_the_projection() {
+    let hash = Hash::of(b"proc p { kind L1 }");
+    let session = vec![
+        Line::new(Record::Set {
+            id: "s".into(),
+            v: 1,
+        }),
+        Line::new(Record::Slot {
+            layer: Layer::L1,
+            index: 0,
+            name: None,
+            proc_hash: hash,
+        }),
+        Line::new(Record::Part {
+            layer: Layer::L1,
+            index: 0,
+            name: None,
+            path: "drift_shell.kir".into(),
+        }),
+    ];
+    let folded = project::project(&session);
+    assert_eq!(folded.len(), 2, "the part is gone: {folded:?}");
+    assert!(
+        matches!(folded[1].record(), Record::Slot { proc_hash, .. } if *proc_hash == hash),
+        "and the slot at the same address kept its address: {:?}",
+        folded[1].record()
+    );
+}
+
 /// **Both halves of the metadata decoder's forward-compatibility rule**, on a
 /// file the store did not write.
 ///

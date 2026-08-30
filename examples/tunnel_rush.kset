@@ -1,0 +1,4 @@
+{"t":"set","id":"tunnel_rush","v":1}
+{"t":"part","layer":"L1","path":"warp_tunnel.kir"}
+{"t":"part","layer":"L3","path":"tunnel_eye.kir"}
+{"t":"part","layer":"L4","path":"speed_lines.kir"}

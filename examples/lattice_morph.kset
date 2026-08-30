@@ -1,0 +1,6 @@
+{"t":"set","id":"lattice_morph","v":1}
+{"t":"part","layer":"L1","path":"lattice_shell.kir"}
+{"t":"part","layer":"L1","index":1,"path":"sphere_shell.kir"}
+{"t":"part","layer":"L2","path":"morph.kir"}
+{"t":"part","layer":"L4","path":"soft_points.kir"}
+{"t":"edge","node":"morph","slot":"far","to":"sphere_shell"}

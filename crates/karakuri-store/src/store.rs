@@ -84,6 +84,30 @@ pub enum StoreError {
          (offending record at index {index})"
     )]
     MetaInSet { index: usize },
+    /// **A `part` record, which is the authoring form's way of naming a node**
+    /// — by relative path, resolved against the Set file's own directory — in a
+    /// file that is about to be written under `sets/` as a `.kbset`.
+    ///
+    /// A third sentence for a third reason, on [`StoreError::MetaInSet`]'s
+    /// terms: the check is `Record::is_authoring`, and running it under either
+    /// of the other two messages would tell an operator their authoring file
+    /// carries time, or declares an artifact. It does neither. It says exactly
+    /// what a `slot` says and has not been resolved yet, and the fix is to
+    /// resolve it — `karakuri_environment::setfile`'s `resolve`, or
+    /// `karakuri-cli --bundle FILE.kset`.
+    ///
+    /// **What this makes structural is the extension's promise.** `.kbset`
+    /// asserts that reading the file resolves nothing against the filesystem
+    /// around it, which is what lets a swap be a swap
+    /// (`docs/adr/0231-…`); a `part` written into `sets/` would be a file
+    /// disagreeing with its own name, and the disagreement would surface on a
+    /// frame boundary rather than here.
+    #[error(
+        "set files cannot contain a part record — a `part` names its `.kir` by relative path \
+         and belongs to the authoring form (`.kset`), where `sets/` holds the resolved form \
+         (`.kbset`) and only that; resolve it first (offending record at index {index})"
+    )]
+    PartInSet { index: usize },
 }
 
 /// A content-addressed store of `.kir` artifacts, plus the Set files and
@@ -258,9 +282,25 @@ impl Store {
     /// names a tick. **Two questions and one classification**: both are read
     /// off the same exhaustive match, so a record cannot be metadata to one of
     /// them and Set state to the other.
+    ///
+    /// **And rejects a `part`, which is where the two forms of a Set file are
+    /// held apart.** `sets/<id>.kbset` asserts that everything in it is already
+    /// resolved; a `part` names its `.kir` by a relative path and is the
+    /// authoring form's record, so this is the wall between a `.kset` and a
+    /// store. Three questions now, one classification, and a third sentence
+    /// because a third thing is owed — see
+    /// [`Record::is_authoring`](crate::record::Record::is_authoring) and
+    /// [`StoreError::PartInSet`].
     pub fn write_set(&self, id: &str, lines: &[Line]) -> Result<(), StoreError> {
         if let Some(index) = lines.iter().position(|l| l.record().is_metadata()) {
             return Err(StoreError::MetaInSet { index });
+        }
+        // Before the `is_set_state` scan below, which would also refuse it —
+        // and would name a tick while doing so. Asked first for the reason
+        // `is_metadata` is asked first: the earlier question owns the more
+        // specific sentence.
+        if let Some(index) = lines.iter().position(|l| l.record().is_authoring()) {
+            return Err(StoreError::PartInSet { index });
         }
         if let Some(index) = lines.iter().position(|l| !l.record().is_set_state()) {
             return Err(StoreError::TickInSet { index });

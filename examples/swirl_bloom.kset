@@ -1,0 +1,5 @@
+{"t":"set","id":"swirl_bloom","v":1}
+{"t":"part","layer":"L1","path":"drift_shell.kir"}
+{"t":"part","layer":"L2","path":"swirl_warp.kir"}
+{"t":"part","layer":"L2","index":1,"path":"late_bloom.kir"}
+{"t":"part","layer":"L4","path":"soft_points.kir"}

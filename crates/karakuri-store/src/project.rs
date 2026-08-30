@@ -56,7 +56,7 @@ enum Key {
 }
 
 /// The fold key for a record, or `None` for one that does not belong in a Set
-/// file. **Four kinds of `None`, and the second is the one that is easy to get
+/// file. **Five kinds of `None`, and the second is the one that is easy to get
 /// wrong.**
 ///
 /// The first is a record that carries no state at all: `Record::Tick`, which
@@ -90,6 +90,11 @@ enum Key {
 /// this Set's state nor the deck's nor a fact about a file this one writes. A
 /// session stream is a performance and nothing here puts one in one, so meeting
 /// one means a hand-edited stream — see the arm, and `Record::is_metadata`.
+///
+/// The fifth is `Part`, and it is the only one of the five with something to
+/// fold: it is a node of this very Set, named by relative path rather than by
+/// content address. What it is not is a line the *resolved* form may carry, and
+/// the resolved form is what this function produces — see the arm.
 ///
 /// **This count is prose and nothing checks it**, which is how it went on
 /// saying three after the fourth arm was written below — the same drift
@@ -206,6 +211,25 @@ fn key_for(record: &Record, ordinal: usize) -> Option<Key> {
         | Record::ParamDecl { .. }
         | Record::CapacityDecl { .. }
         | Record::Emit { .. } => None,
+        // **A fifth reason, and it is the only one that is about the file this
+        // function *writes* rather than about the record.** A `part` is a node
+        // of a Set — the same node a `slot` is, named by relative path instead
+        // of by content address — so unlike everything above it there is
+        // something here to fold and an address to fold it onto. It is dropped
+        // all the same, because what this projection produces is the resolved
+        // form: `Store::write_set` refuses a `part` by name, so passing one
+        // through would fail a whole save on a line that belongs to a `.kset`.
+        //
+        // **Nor is it folded onto `Key::Slot`**, which is the tempting
+        // alternative and would be the worst of the three: a session holding a
+        // `part` and a `slot` at one address would then resolve to whichever
+        // came last, and half of the time that is an unresolved path claiming
+        // to be an address. A session stream has no writer that puts one here
+        // — resolution happens before a Set reaches a store — so meeting one
+        // means a hand-assembled stream, and the answer is the one every
+        // vocabulary error gets here: drop it, and let the reader that has the
+        // authoring file's own directory in hand be the one that resolves it.
+        Record::Part { .. } => None,
         Record::Unknown => Some(Key::Passthrough(ordinal)),
     }
 }
