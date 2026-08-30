@@ -1454,15 +1454,11 @@ than work, and every one of them was found by building the thing next to it.
 - **~~Where `Operation` becomes `Record`~~ — taken.** It is
   [`karakuri-operation-record`](../crates/karakuri-operation-record), a crate depending on the two
   leaves that may not depend on each other, and the reading it needs is a **value handed in**
-  rather than a trait — because part of what a record needs (the quantum, the length of a fade, the
-  wipe shape) is `SetTransition`'s, and that operation writes no record at all
+  rather than a trait
   ([ADR-0194](adr/0194-where-an-operation-becomes-a-record-is-a-crate-that-depends-on-both.md)).
   **Twelve conversions are built** — seven that need no reading, and the look pair,
   `ScrubDeck` and the mask pair, whose readings are settled. `karakuri-cli` is wired to it and is
-  the second customer.
-  *"No key arm moved"* was written here and read as *nothing moved*: what did not move was the
-  `match` in `Live::key`, and the handlers behind fifteen of its keys had already moved with this
-  commit. The key handler's survey is
+  the second customer. The key handler's survey is
   [ADR-0198](adr/0198-a-gesture-converts-in-the-parts-that-are-decided.md), under item 3 above.
 
   **What the survey found, and each of these is a question rather than work.**
@@ -1476,14 +1472,10 @@ than work, and every one of them was found by building the thing next to it.
   - **Five operations name a deck and their record has no slot.** `WriteParam`, `AttachSignal`,
     `WireInput` and `SetProperty` map onto `Record::Param`, `Record::Bind`, `Record::Edge`,
     `Record::Capacity`, `Record::Seed` and `Record::Camera` — every one a **Set file's**, with
-    nowhere to put the deck — and `SetCompositing` is the same shape against `Record::Merge`. A
-    model can rewrite a procedure and cannot turn a knob *into the session stream*, and that is a
-    gap in the session vocabulary rather than a conversion waiting to be written.
+    nowhere to put the deck — and `SetCompositing` is the same shape against `Record::Merge`. That
+    is a gap in the session vocabulary rather than a conversion waiting to be written.
   - **One control is not one record.** `Crossfade` is four and `Wipe` is **six**, which is what
-    `karakuri-cli` already does for them — and since
-    [ADR-0198](adr/0198-a-gesture-converts-in-the-parts-that-are-decided.md) it does the *decided*
-    ones through `Live::operate`: the silencing, the blend and the put-on-air are ordinary
-    operations whatever the gesture around them owes. **The mask joined them and cost the gesture a
+    `karakuri-cli` already does for them. **The mask joined them and cost the gesture a
     record**: it is two operations now, a shape and a position
     ([ADR-0201](adr/0201-the-mask-is-two-rows-because-a-control-change-can-only-set.md)), each of
     which writes `Record::Mask` whole — so a wipe writes two where it wrote one, which is what
@@ -1496,18 +1488,11 @@ than work, and every one of them was found by building the thing next to it.
     routes through it yet.
   - **The hand-written conversion in the console's harness is deleted, and it was deleted rather
     than moved** — which is ADR-0185's promise, kept. That harness is `crates/karakuri` now, and it
-    asks `karakuri-operation-record`. Its four mixer controls emit `SetGain`, `SetOpacity`,
-    `SetBlendMode` and `SetResidency`, every one of which writes its record from the operation
-    alone, so it hands in `Current::default()` — *I read nothing* — and still needs no
-    engine to convert; the Outputs dot never reaches the conversion at all, because it asks the
-    panel for an arrangement `Op` that the panel performs. **What it gained is the other two
-    answers**: a press that writes no record and a press that owes one nobody has decided how to
-    write now print two different sentences rather than nothing at all, which is what `Silent` and
-    `Owed` are for. `apply` stays, because turning a record into a *deck movement* is the harness's
-    job and is not what ADR-0185 promised to delete. *(`karakuri-store` stayed in the console's
-    dev-dependencies with it at the time, where ADR-0185 had expected it to leave; it left with the
-    other seven when the example became `crates/karakuri`, and the console's only dev-dependency
-    now is `serde_json`.)*
+    asks `karakuri-operation-record`. **What it gained is the other two answers**: a press that
+    writes no record and a press that owes one nobody has decided how to write now print two
+    different sentences rather than nothing at all, which is what `Silent` and `Owed` are for.
+    `apply` stays, because turning a record into a *deck movement* is the harness's job and is not
+    what ADR-0185 promised to delete.
 - **What a MIDI map learns from a control whose affordance is a cycle — answered, and only the
   learn flow is left.** The affordance is taken: the chip cycles, which is what P-0074 permits by
   name, and the earlier claim that the mock and the principle disagree was a misreading
@@ -1559,58 +1544,37 @@ than work, and every one of them was found by building the thing next to it.
   still nothing to decide about locking the panel, and `karakuri-cli`'s `w` already reads the same
   half of the pair.
 - **~~`SetMask` does not exist~~ — taken, and it is two rows rather than one.** *Set a deck's mask
-  shape* and *Set a deck's mask position*, because a single row carrying both would be a press and
-  `karakuri-midi`'s grammar refuses a control change on a press — so no control change could ever
-  reach a mask position
+  shape* and *Set a deck's mask position*
   ([ADR-0201](adr/0201-the-mask-is-two-rows-because-a-control-change-can-only-set.md)). `softness`
   stays out for `white_point`'s reason: one constant, no control, no row. **What it left undone was
   named where the work is, and the panel's half is done**: the mask mini is a control
   ([ADR-0203](adr/0203-the-mask-chip-carries-the-angle-it-does-not-control.md)), which leaves the
   map's two targets. **One of the two is taken** — `cc -> mask-position N` is a line now, and
   the same record's other half turned out not to be work at all but a decision nobody has taken
-  ([ADR-0202](adr/0202-the-map-reaches-the-masks-front-and-the-shape-has-no-spelling.md)): the
-  grammar has no bare number, so a shape target could not carry the angle the row was given.
-  **That decision is taken now** — the row keeps `MIDI —` and the page carries why, rather than the
-  grammar growing a float or the operation losing its angle
+  ([ADR-0202](adr/0202-the-map-reaches-the-masks-front-and-the-shape-has-no-spelling.md)).
+  **That decision is taken now** — the row keeps `MIDI —` and the page carries why
   ([ADR-0209](adr/0209-the-masks-shape-keeps-its-empty-midi-badge-until-a-control-shows-an-angle.md));
   a surface that shows an angle is what would reopen it. The rule the split makes expressible is
   [P-0078](principles/0078-the-operator-wins-and-an-automatic-writer-yields-to-a-hand.md), which
   also says where it stops holding — a `Record::Mask` is a state and not an ask, so the stream
   cannot carry which half was asked for.
 - **~~What a status line is, on a console with no terminal~~ — taken, and it was two questions
-  rather than one.** `karakuri-cli`'s `s`, `h` and `?` name nothing in the vocabulary, because the
-  status line and the bindings text have **no row on
-  [the operations page](manual/operations.html)** — the specification for which keys exist. They
-  were deliberately not added from the implementation: *"a row invented from the implementation is
-  a specification written backwards, and the page is written ahead of the interface on purpose"*,
-  and *"what a status line **is** on a console with no terminal is a question for the page"* rather
-  than one a key handler may answer
-  ([ADR-0198](adr/0198-a-gesture-converts-in-the-parts-that-are-decided.md), §4). Until the page
-  has an answer, three of the thirty-nine keys stay outside the vocabulary and the console has
-  nothing to draw a status line from.
-
-  **The answer is that neither gets a row, and that the three keys are two different questions**
-  ([ADR-0205](adr/0205-a-question-whose-reply-the-vocabulary-cannot-say-gets-no-row.md)).
-  **`h`/`?` prints a static string that has already been printed twice unprompted** — `--help`
-  prints it and so does the run, before the first frame — so `h` only reprints it after it has
-  scrolled away, which is a terminal's problem rather than an operation. On a console there is
-  nothing to print at all: the mock draws no key hints anywhere, and its tooltip contract carries
-  *"the control's **MIDI assignment**"* and not its key. **The consequence is noted rather than
-  fixed and it is larger than the key**: the console as drawn gives an operator **no way to learn a
-  key binding**, which is rule 01's keyboard surface with no teaching path — hooked to the deferred
-  *a keyboard is mapped and learned the same way a control surface is* below, beside the tooltip
-  mechanism that entry already names as what both learn paths wait on. **`s` is a question in
-  `Report`'s exact sense** — it calls the same function the 500 ms timer calls, prints exactly what
-  the timer prints and changes nothing — and it gets no row because a row would make the panel owe
-  an answer it cannot give.
+  rather than one.** Neither the status line nor the bindings text gets a row on
+  [the operations page](manual/operations.html), and `karakuri-cli`'s `s`, `h` and `?` stay outside
+  the vocabulary
+  ([ADR-0205](adr/0205-a-question-whose-reply-the-vocabulary-cannot-say-gets-no-row.md), answering
+  [ADR-0198](adr/0198-a-gesture-converts-in-the-parts-that-are-decided.md) §4).
+  **The consequence is noted rather than fixed and it is larger than the key**: the console as drawn
+  gives an operator **no way to learn a key binding**, which is rule 01's keyboard surface with no
+  teaching path — hooked to the deferred *a keyboard is mapped and learned the same way a control
+  surface is* below, beside the tooltip mechanism that entry already names as what both learn paths
+  wait on.
 
   **What that owed answer turned out to be is the deliverable, and it is five console gaps the
-  status line's existence has been concealing.** Each is checked against the source rather than read
-  off the line's format string:
+  status line's existence has been concealing.**
 
   1. **A slot's simulation clock** (`t0.0s`, per slot, from `Set::time`). Nothing in `view::Strip`
-     carries a per-deck time — `name`, `tally`, `requested`, `gain`, `gain_to`, `opacity`,
-     `opacity_to`, `blend`, `mask` — and neither does the mock's strip.
+     carries a per-deck time, and neither does the mock's strip.
   2. **An armed transition's destination** (`g>` / `o>` / `w>`), and **this one is not a gap but a
      rule already broken**:
      [P-0075](principles/0075-a-pending-transition-shows-where-it-is-where-it-is-going-and-that-it-has-not-arrived.md)
@@ -1623,24 +1587,20 @@ than work, and every one of them was found by building the thing next to it.
      draws two numbers without the field whose own comment says it *"explains the two numbers beside
      it"* — a mean and a peak over the texels that were not counted.
   4. **The tempo source** — its name, its peers, the anchors it rejected, and its liveness, which is
-     three states and not two (`?`, `stop`, running) beside `GONE`. `view::Transport` is `bpm`,
-     `beats`, `beats_per_bar`, `fps`, `frame_ms`, `budget_ms`, and the mock's transport row has no
-     field for any of it. **The `audio-in` pill is not this**: a tempo source is a separate program,
-     of which the in-process beat tracker is one kind, and the pill names an input and says nothing
+     three states and not two (`?`, `stop`, running) beside `GONE`. `view::Transport` has no field
+     for any of it. **The `audio-in` pill is not this**: a tempo source is a separate program, of
+     which the in-process beat tracker is one kind, and the pill names an input and says nothing
      about peers or liveness.
-  5. **Sync mode, anchor and offset** (`T{anchor}`, `B{anchor}±offset`). The page routes *Set a
-     deck's sync mode* and *Scrub a deck a quarter beat* to `panel deck head`, and **there was no
-     deck head anywhere in the mock** when this was written, whose heads were `bay-head`,
-     `half-head`, `node-head` and `seq-head`. **It is three operations rather than two**, which the
-     board found and this survey had not: *Composite a deck's renderers* routes to the same home,
-     and is the one of the three with no key either. **This one is closed on the manual's side**:
-     the deck head was written on 2026-08-29, under each `.half-head` in the inspector, and the
-     Inspector draws it. What is left of it is three presses. The other four of the five name no
-     home at all and are where they were. *(The `±offset` here is the **scrub**, and it is spelled that
-     way on the wire since 2026-08-29: `Record::Transport`'s field went from `offset_beats` to
-     `scrub_beats`, and a stream carrying the old name fails its line rather than reading a zero
-     scrub. It already had the name and was not using it — its control is *Scrub* and its operation
-     is `ScrubDeck` — and the latency offset keeps the word, being the flag-facing one.)*
+  5. **Sync mode, anchor and offset** (`T{anchor}`, `B{anchor}±offset`). **It is three operations
+     rather than two**, which the board found and this survey had not: *Composite a deck's
+     renderers* routes to the same home, and is the one of the three with no key either. **This one
+     is closed on the manual's side**: the deck head was written on 2026-08-29, under each
+     `.half-head` in the inspector, and the Inspector draws it. What is left of it is three presses.
+     The other four of the five name no home at all and are where they were. *(The `±offset` here is
+     the **scrub**, and it is spelled that way on the wire since 2026-08-29: `Record::Transport`'s
+     field went from `offset_beats` to `scrub_beats`, and a stream carrying the old name fails its
+     line rather than reading a zero scrub. The latency offset keeps the word, being the
+     flag-facing one.)*
 
   **A sixth was found beside them and is a routing question rather than a gap**: the page routes
   *Tone map* and *Exposure* to `panel transport`, and the mock's transport row draws neither.
@@ -1726,17 +1686,7 @@ than work, and every one of them was found by building the thing next to it.
   surveyed**, and none of the three ever blocked the listing —
   [ADR-0200](adr/0200-a-bays-first-pass-draws-the-values-that-exist-and-omits-the-rest.md).)*
 - ~~**What authority is set on: a layer, a node, or a slot.**~~ **Taken: per node of a Set** —
-  [ADR-0211](adr/0211-authority-is-set-per-node-and-the-record-is-the-sessions.md). Three
-  documents gave it three addresses and none was a synonym for the others: the four properties at
-  the top of this file said *"Authority is a per-layer setting"*, rule 06 of
-  [the seven rules](manual/index.html) says *"Each node of a Set is manual, suggesting, or
-  automatic, and you set that node by node"*, and
-  [the console page](manual/console.html) draws `man / sug / auto` on a node head addressed
-  `L1:0`. **Per layer lost because the address does not exist** — no operation names a layer of a
-  live Set, and the only `Layer` in a payload is `ListSets`'s search filter — and **per deck slot
-  lost to rule 06's own sentence**, *"There is no switch that hands the whole instrument to an
-  agent, because the useful arrangement is almost always partial"*, which a flag on a `deck: u8`
-  is at deck granularity.
+  [ADR-0211](adr/0211-authority-is-set-per-node-and-the-record-is-the-sessions.md).
   [P-0031](principles/0031-a-name-means-one-thing-across-the-system.md) is what made this a defect
   rather than a difference of wording, and the guarding it needed is
   [What the three words mean, and where](#what-the-three-words-mean-and-where), below, which
@@ -1749,10 +1699,9 @@ than work, and every one of them was found by building the thing next to it.
   restates **nine** things and not the five this sentence used to name — `layering`, `live`, `salts`,
   `camera`, `params`, `published`, `bindings`, `names` and `edges`, counted rather than transcribed.
   **The symptom this bullet described was the wrong way round**: a node nobody has spoken for is
-  `Manual`, because rule 06's *"there is no switch that hands the whole instrument to an agent"*
-  makes any other default that switch thrown for every node by nobody — so dropping the restatement
-  destroys a **grant** rather than taking one back, and the node an operator gave to an agent is
-  silently theirs again. Both directions are the same defect and both are asserted.
+  `Manual`, so dropping the restatement destroys a **grant** rather than taking one back, and the
+  node an operator gave to an agent is silently theirs again. Both directions are the same defect
+  and both are asserted.
   **What is still owed is a writer, and it is narrower than it sounds**: `Record::Authority` is
   deliberately excluded from Set-file state in both `setfile.rs` and `karakuri-store`'s
   `project.rs` — *"a Set file obeying one would hand the node over on every load"* — so the startup
@@ -1760,40 +1709,22 @@ than work, and every one of them was found by building the thing next to it.
   writer has to be a live-session one. The chip can read; nothing can yet make it change, and the
   manual's row says so. **What an agent is one *of* is a separate question and is still open** — see the
   control plane above.
-- ~~**Is the Master bay's `out` the same thing as `exposure`?**~~ **Taken on 2026-08-30, and it is c** — [ADR-0224](adr/0224-out-and-exposure-are-two-levels-that-multiply-in-different-places.md). `karakuri-engine`'s `Look` already
-  carries `exposure: f32`, *"the level going into that transfer"* — a scalar gain on the composited
-  frame **in linear HDR, before the one tonemap**. [The console page](manual/console.html)'s Master
-  bay draws `out 1.00` under a footnote reading *"runs in linear HDR, before the one tonemap"*, which
-  is the same sentence, and [every operation](manual/operations.html) routes **Exposure** to `panel
-  transport` — so **the page promises two homes for what may be one value**. This file's own claim
-  that *there is no master out level anywhere in `karakuri-engine`* was found by searching for the
-  word `master`, which appeared in that crate **zero times** when the question was filed. It does
-  not now: `deck.rs`, `mix.rs`, `present.rs` and `composite.wgsl` all carry it, which is what taking
-  this decision bought and is why the Master bay's entry in the survey no longer reads as it did.
-
-  **a.** One value: `out` *is* `exposure`, its panel route moves to the master out, and the bay's
-  first row can be drawn today with nothing added to the engine.
-  **b.** Two values, and the engine grows a second scalar.
-  **c.** Two values that multiply in **different places** — `out` at the master chain's entry,
-  `exposure` at the tonemap's input, with the L5 master effects between them.
-
-  [P-0051](principles/0051-an-existing-field-is-not-a-fact-about-the-design.md) cuts both ways here:
-  `exposure` existing does not prove `out` is not a second thing, but **b** has to justify a second
-  field arithmetically indistinguishable from the first. **Recommended: c**, on what the bay draws
-  beneath the row — `feedback`, `bloom` and `rgb shift` are master effects, which go *between* the
-  chain's entry and the tonemap, so folding the two into one multiplication would have to be undone
-  the day L5 lands. **The cost of c is honest and should decide it**: until L5 exists there is
-  nothing between them, so the second scalar is indistinguishable from the first in every frame the
-  program can draw. **a costs nothing today and costs the separation later.** Whoever takes this
-  should say which cost they prefer rather than which name.
+- ~~**Is the Master bay's `out` the same thing as `exposure`?**~~ **Taken on 2026-08-30, and it is c** — [ADR-0224](adr/0224-out-and-exposure-are-two-levels-that-multiply-in-different-places.md):
+  two values that multiply in **different places**, `out` at the master chain's entry and `exposure`
+  at the tonemap's input, with the L5 master effects between them.
+  [P-0051](principles/0051-an-existing-field-is-not-a-fact-about-the-design.md) cut both ways here —
+  `exposure` existing did not prove `out` is not a second thing, and a second value still had to
+  justify a field arithmetically indistinguishable from the first. This file's own claim that
+  *there is no master out level anywhere in `karakuri-engine`* does not hold now: `deck.rs`,
+  `mix.rs`, `present.rs` and `composite.wgsl` all carry it, which is what taking this decision
+  bought and is why the Master bay's entry in the survey no longer reads as it did.
 
   **The cost was the argument and was taken deliberately, and it is now measured rather than
   predicted**: with the chain empty, a master out of 0.5 and an exposure of 0.5 produce
   **byte-identical** pictures, and a test says so. **The engine half has landed** — `Deck::set_out`,
   one scalar on the mix uniform and one multiply at the end of `composite.wgsl`, which is where the
   mix writes the composited frame and therefore the chain's entry; `exposure` stays where the present
-  pass reads that frame. It is deliberately **not** on `Look`, which is documented as exactly
-  `set_tonemap`'s arguments — a chain-entry level there would contradict the decision it records.
+  pass reads that frame. It is deliberately **not** on `Look`.
   **What is left is a route**: no operation, no `Record`, no key, no MIDI target and no flag reaches
   the value, so only a test writes it, and a flag is refused by
   [ADR-0046](adr/0046-a-flag-writes-into-the-record-it-does-not-invent-one.md) until a record exists to
@@ -1802,50 +1733,25 @@ than work, and every one of them was found by building the thing next to it.
   **And the test asserting the two are indistinguishable is deleted the day a master effect lands
   between them** — it is a measurement of an empty chain, not a property of the design.
 
-- ~~**A wildcard write crosses authority, and nothing says what an authority may refuse.**~~ **Taken on 2026-08-30, and it is a** — [ADR-0223](adr/0223-a-wildcard-write-is-refused-where-the-nodes-it-lands-on-disagree.md).
-  `Operation::WriteParam` carries `ParamAt { node: Option<NodeAt> }`, and when `node` is `None` the
-  write moves **every node that declares the key** — which is what a wildcard control is, and what
-  [ir-spec.md](ir-spec.md) states as the default: *one control per key, not one per declaration*. The
-  default published interface is entirely wildcards and `crates/karakuri` has no `--publish` flag, so
-  **every control the panel will ever draw is one**. Authority is per node
-  ([ADR-0211](adr/0211-authority-is-set-per-node-and-the-record-is-the-sessions.md)). **So granting an
-  agent one renderer grants it, through a bare-name control, a renderer the operator kept** — which
-  is rule 06's *"there is no switch that hands the whole instrument to an agent"* at the width of a
-  key.
+- ~~**A wildcard write crosses authority, and nothing says what an authority may refuse.**~~ **Taken on 2026-08-30, and it is a** — [ADR-0223](adr/0223-a-wildcard-write-is-refused-where-the-nodes-it-lands-on-disagree.md):
+  a bare-name write is refused unless every node it lands on is under one authority, and the refusal
+  names the ones that disagreed. **Its cost is real and is the argument for the alternative**: a
+  partial grant makes a published control unusable until the operator grants the rest or narrows the
+  interface.
 
-  **a.** Refuse a wildcard write unless every node it lands on has the same authority, naming the
-  ones that disagreed.
-  **b.** Land it only on the nodes whose authority allows it, silently partial.
-  **c.** Require the published interface to name nodes — add `--publish` to the panel and stop
-  defaulting to wildcards.
-
-  **b** is exactly what
-  [P-0027](principles/0027-a-silently-wrong-image-loses-to-a-loud-failure.md) rules out: a control
-  that moves three of four renderers and looks like it moved all of them. **c** loses to ir-spec's
-  own design — *one control per key* is what makes a published interface small enough to learn — and
-  would make the default useless on the material the wildcard exists for.
-  **Recommended: a**, with the refusal one sentence in one place, which is
-  [P-0061](principles/0061-a-refusal-a-person-can-reach-from-two-surfaces-is-one-sentence.md)'s.
-  **Its cost is real and is the argument for b**: a partial grant makes a published control unusable
-  until the operator grants the rest or narrows the interface.
-
-  **It needed no asker, which is why it could land at all.** The survey found that nothing in this
-  workspace distinguishes an agent's write from the operator's — and the reason is sharper than *not
-  yet*: **no agent write of a parameter exists.** MCP publishes six tools and not one moves a value,
-  and `Operation::WriteParam` is constructed nowhere and executed nowhere. What the refusal turns on
-  is uniformity of the **landing** rather than the identity of the hand, and a control spanning two
-  arrangements is incoherent whoever holds it. The sentence lives in `Set::write_param`, the one
-  entry point a `--param`, a published control and a `param` record all come through, and it names
-  every node the write lands on with what each is under.
+  **It needed no asker, which is why it could land at all** — **no agent write of a parameter
+  exists.** MCP publishes six tools and not one moves a value, and `Operation::WriteParam` is
+  constructed nowhere and executed nowhere. The sentence lives in `Set::write_param`, the one entry
+  point a `--param`, a published control and a `param` record all come through, and it names every
+  node the write lands on with what each is under.
   **What is left is the asker** — whether an *addressed* write by an agent onto a node the operator
   kept is refused is undecided, and cannot be decided until something writes a param on an agent's
   behalf. **Nothing meets the refusal in a run today**, because `swap::Request::authorities` is empty
   in every one: nothing calls `set_authority` outside tests, so every node of every Set is `Manual`.
   **One thing the ADR names as owed was closed in the same commit**: `Set::set_published` answered a
   refusal with `false`, the same answer as *nothing publishes that name*, which lost the sentence on
-  the one route the question was about — a published control is a wildcard unless the author named a
-  node. It carries the `Result` now. It had no non-test caller, so what that cost was ten `.expect`
-  lines in two test files.
+  the one route the question was about. It carries the `Result` now, and what that cost was ten
+  `.expect` lines in two test files.
 
   **Both of these were found by drawing a bay rather than by reading for faults**, which is this
   milestone's pattern — the Library's questions, the Staging lane's premise, the Inspector's ordinals
@@ -2356,19 +2262,10 @@ Recorded here because they are decisions, and the manual states behaviour rather
 - ~~**A step sequencer is a signal source, not an effect.**~~ **Overturned on 2026-08-29, and both
   halves of it were false** ([ADR-0222](adr/0222-a-sequencer-lane-is-a-fifth-route-and-not-a-binding.md)). It said a sequencer is *one more name on
   `karakuri-signal`'s bus* and that *a lane is a binding, so a lane drives a Set parameter as
-  readily as a deck fader*. The bus holds one field — an oscillator — and its own header says every
-  value on it is a pure function of `t` and `bpm` and that nothing seeded lives there, so **a
-  pattern, which is authored state, cannot be on it**; and it is keyed by name alone, so two lanes
-  from one sequence would read the same value in the same frame. A `Binding`'s target is a `param`
-  of a procedure inside a Set, and **three of the mock's four lanes are deck faders**, which are
-  `Record::Opacity` in the session vocabulary with no binding path anywhere in the engine.
-  **A lane is a fifth route into the vocabulary**, which is what
+  readily as a deck fader*. **A lane is a fifth route into the vocabulary**, which is what
   [the console page's own rules](manual/console.html) had been saying all along and what
   [P-0078](principles/0078-the-operator-wins-and-an-automatic-writer-yields-to-a-hand.md) already
-  treats a lane and a binding as. The deciding argument is that principle: **a binding does not
-  cancel** — `cancel` appears in `deck.rs` at every hand-driven setter and **not once in
-  `binding.rs`** — so a lane built as one would be held against the hand every frame, which is the
-  control P-0078 rules out by name. What it still produces is no pixels, which was the part that was
+  treats a lane and a binding as. What it still produces is no pixels, which was the part that was
   right.
 - **A MIDI control is bound to a deck and a position in its published interface**, never to a
   Set's parameter by name. Name-binding makes the mapping a cost paid again on every swap,
