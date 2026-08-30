@@ -70,17 +70,18 @@
 //!    all. The panel's controls are painted shapes, and the only thing that
 //!    knows a press landed on one is this rule.
 //!
-//!    **There are twelve of them now**: the Outputs row's sink
+//!    **There are thirteen of them now**: the Outputs row's sink
 //!    ([`crate::view::outputs`]), a mixer strip's fader knob
 //!    ([`crate::view::Mixer::grab`]), its blend chip
 //!    ([`crate::view::Mixer::blend`]), its tally chip
 //!    ([`crate::view::Mixer::tally`]), its mask mini
 //!    ([`crate::view::Mixer::mask`]), the transport row's arrangement pill
 //!    ([`crate::view::arrangement`]), at the end of that row the tone map's
-//!    capsule and the exposure track ([`crate::view::look`]), and in an
+//!    capsule and the exposure track ([`crate::view::look`]), in an
 //!    inspector pane's deck head the sync chip, the anchor and the scrub's two
-//!    arrows ([`crate::view::deck_head`]). The rule did not change to hold any
-//!    of the eleven that came after the first, which is what it was written
+//!    arrows ([`crate::view::deck_head`]), and the Master bay's out
+//!    ([`crate::view::MasterRow::grab`]). The rule did not change to hold any
+//!    of the twelve that came after the first, which is what it was written
 //!    for — and each is asked exactly the way the first is: the derivation
 //!    that draws it, asked whether the point is on it, with nothing stored.
 //!
@@ -103,7 +104,7 @@
 //!    `.mini`'s padding argument met with a band. That is 16.5 in a row of 48
 //!    and therefore **15.75** as well. `tests/look.rs` measures both and fails
 //!    the same three ways `tests/arrangement_pill.rs` does; that two of the
-//!    twelve agree is a fact about two capsules being one height, not a number
+//!    thirteen agree is a fact about two capsules being one height, not a number
 //!    either of them inherited.
 //!
 //!    **The ninth to the twelfth are the first controls that are not in a row
@@ -127,6 +128,23 @@
 //!    is.** It is the tightest in this bay, and the two would go together if
 //!    the grab were widened past 8.97. `tests/deck_head.rs` measures all four
 //!    controls against every boundary and fails the same three ways
+//!    `tests/arrangement_pill.rs` does.
+//!
+//!    **The thirteenth is the Master bay's out**, and it is measured the same
+//!    way off its own rectangle. The knob is 11 tall on a row of 16.5 that
+//!    starts [`crate::room::size::HEAD_H`] plus
+//!    [`crate::room::size::MASTER_PAD_TOP`] below the bay's top edge, so what
+//!    holds it off the boundary **above** is a sum and not a centring:
+//!    27 + 8 + 2.75 = **37.75**, which is the second largest on the console
+//!    after the deck head's 59.5 and for the same reason — a control several
+//!    rows into a bay. Down the sides it is `.master-body`'s padding that
+//!    holds it, and the knob overhangs its track by half its own width: 10 of
+//!    padding plus the `out` label and [`crate::room::size::MASTER_GAP`] on
+//!    the left, 10 plus the figure and the same gap on the right, less 4.5 of
+//!    overhang either way. The binding number is the one **below**, which is
+//!    whatever is left of the bay under the row — the bay is `flex: 1` in its
+//!    column, so it is measured rather than computed. `tests/master.rs`
+//!    measures all four against every boundary and fails the same three ways
 //!    `tests/arrangement_pill.rs` does.
 //!
 //!    **Three of the four are claimed and the fourth is a mode away from
@@ -204,6 +222,14 @@
 //! beside it**, which is the whole of ADR-0203 and is why choosing a shape
 //! does not straighten a diagonal front.
 //!
+//! **So is the Master bay's out**, and it is [`crate::view::Mixer::grab`]'s
+//! arrangement rather than the look's: [`crate::view::MasterRow::grab`]
+//! answers *is this a control* here and *what is in hand, and where along it*
+//! to the caller, off one derivation and one level. A press on its **track**
+//! is not claimed, for the reason a strip's is not — the mock draws a handle
+//! on this fader and draws none on the exposure track, and a handle that
+//! jumped to the pointer would be a lie about what a handle is.
+//!
 //! **So are the two look controls**, at the far end of the same row:
 //! [`crate::view::LookRow::tonemap`] answers `SetTonemap` naming the operator
 //! after the one that is running, which is the blend chip's affordance over a
@@ -265,7 +291,7 @@
 use karakuri_layout::{Hit, Point};
 
 use crate::panel::{Panel, GRAB};
-use crate::view::{arrangement, deck_head, inspector, look, mixer, outputs, View};
+use crate::view::{arrangement, deck_head, inspector, look, master, mixer, outputs, View};
 
 /// Who a pointer event belongs to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -349,12 +375,12 @@ pub fn claim(panel: &mut Panel, ctx: &egui::Context, view: &View, p: Point) -> C
     // anything. See the module documentation and `tests/outputs.rs`.
     match panel.layout().hit(p, GRAB) {
         Hit::Divider { .. } => Claim::Panel,
-        // Rule 4, over all twelve of the console's controls. Each is asked the
+        // Rule 4, over all thirteen of the console's controls. Each is asked the
         // same way — the derivation that draws it, asked whether the point is
         // on it — and no answer is stored.
         Hit::View(_) | Hit::Nothing => {
             let on_sink = outputs(ctx, panel.layout()).is_some_and(|row| row.hit(p));
-            // The pill is the only one of the twelve that is not in a bay, and
+            // The pill is the only one of the thirteen that is not in a bay, and
             // the only one asked with the menu already known to be shut: rule
             // 2 has answered for the open case above, so this is the capsule
             // alone.
@@ -392,6 +418,13 @@ pub fn claim(panel: &mut Panel, ctx: &egui::Context, view: &View, p: Point) -> C
             // anchor's, so they are three questions about one laid-out pane. A
             // console with no deck behind it has no panes and pays nothing —
             // [`View::inspector`] is empty, and this iterates over nothing.
+            // **The Master bay's one control**, and the bay is derived for it
+            // exactly as the mixer's is for its four — one question about one
+            // laid-out row here, because there is one thing in this bay a hand
+            // can move. A console with no level behind it has no row at all
+            // and pays nothing.
+            let on_master =
+                || master(ctx, panel.layout(), view.master_out).is_some_and(|row| row.owns(p));
             let on_deck_head = || {
                 view.inspector.iter().enumerate().any(|(index, pane)| {
                     inspector(panel.layout(), index, pane)
@@ -399,7 +432,7 @@ pub fn claim(panel: &mut Panel, ctx: &egui::Context, view: &View, p: Point) -> C
                         .is_some_and(|head| head.owns(p))
                 })
             };
-            match on_sink || on_pill() || on_look() || on_strip() || on_deck_head() {
+            match on_sink || on_pill() || on_look() || on_strip() || on_master() || on_deck_head() {
                 true => Claim::Panel,
                 false => Claim::Egui,
             }

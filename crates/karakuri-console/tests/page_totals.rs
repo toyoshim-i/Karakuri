@@ -152,8 +152,19 @@ fn count(word: &str) -> usize {
         ("ten", 10),
         ("eleven", 11),
         ("twelve", 12),
+        ("thirteen", 13),
+        ("fourteen", 14),
+        ("fifteen", 15),
+        ("sixteen", 16),
         ("twenty", 20),
         ("thirty-two", 32),
+        ("thirty-seven", 37),
+        ("thirty-eight", 38),
+        ("thirty-nine", 39),
+        ("forty", 40),
+        ("fifty-four", 54),
+        ("fifty-five", 55),
+        ("fifty-six", 56),
     ]
     .into_iter()
     .collect();
@@ -321,6 +332,53 @@ fn the_arranging_essay_counts_the_columns_it_names() {
         "the essay says {by_panel} of `{SECTION}`'s rows are built in the panel column and {} of \
          its panel badges read `has`",
         built_in(section, "panel")
+    );
+}
+
+/// **And the three sentences in the essays that count a column.**
+///
+/// These were the ones that got away. The lede's three figures were checked
+/// from the day this file landed, and the same afternoon two more went stale
+/// unnoticed — *"Six panel routes are marked built"* where fourteen were, and
+/// *"Forty-five more are designed"* where thirty-eight were. **A guard that
+/// covers three of five self-counting sentences leaves the drift alive**, so
+/// it covers all of them.
+#[test]
+fn the_essays_count_the_columns_they_name() {
+    let page = page();
+    let flat = flat(&page);
+
+    let built_routes = figure_before(&flat, " panel routes are marked built");
+    assert_eq!(
+        built_routes,
+        built_in(&page, "panel"),
+        "{PAGE} says {built_routes} panel routes are marked built and {} panel badges read `has`",
+        built_in(&page, "panel")
+    );
+
+    let designed = figure_before(&flat, " more are designed and out of reach");
+    let planned = page.matches("class=\"rt plan\">panel ").count();
+    assert_eq!(
+        designed, planned,
+        "{PAGE} says {designed} panel routes are designed and out of reach and {planned} panel \
+         badges read `plan`"
+    );
+
+    let gaps = from(&flat, "MIDI is the narrowest by a wide margin");
+    let reached_by_midi = figure(gaps, "It reaches ", " of these ");
+    assert_eq!(
+        reached_by_midi,
+        built_in(&page, "MIDI"),
+        "{PAGE} says MIDI reaches {reached_by_midi} operations and {} MIDI badges read `has`",
+        built_in(&page, "MIDI")
+    );
+
+    let of_these = figure(gaps, " of these ", " operations, and it cannot express");
+    assert_eq!(
+        of_these,
+        rows(&page),
+        "{PAGE} says there are {of_these} operations and it has {} rows",
+        rows(&page)
     );
 }
 

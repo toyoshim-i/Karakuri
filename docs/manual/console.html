@@ -402,7 +402,7 @@
               <div class="master-body">
                 <div class="master-row">
                   <span style="color:var(--c-faint)">out</span>
-                  <span class="fader" style="flex:1" data-tip="The master out, at 1.00: one level on the composited frame, at this chain's entry &mdash; above feedback, bloom and rgb shift, and upstream of everything they do. It is not the tone mapper's exposure, which is a second level at the far end of the same chain: two numbers that multiply in different places. With the chain empty they are indistinguishable, and the day an effect lands between them they stop being. &#8853; MIDI: unassigned &mdash; no operation names the master out yet, so there is nothing for a map to reach."><b style="width:100%"></b><s style="left:94%"></s></span>
+                  <span class="fader" style="flex:1" data-tip="The master out, at 1.00: one level on the composited frame, at this chain's entry &mdash; above feedback, bloom and rgb shift, and upstream of everything they do. It is not the tone mapper's exposure, which is a second level at the far end of the same chain: two numbers that multiply in different places. With the chain empty they are indistinguishable, and the day an effect lands between them they stop being. Take the knob and drag it; a press on the track off the knob does nothing, which is every fader in the mixer's rule and is here for the same reason &mdash; a level that jumped to where you clicked would be a change to the programme nobody asked for, made on stage. The top of the drag is 1.00 exactly, so a level above unity is reach this control has not got and the trim one bay up has the same gap. &#8853; MIDI: unassigned &mdash; an operation names the master out now, so a map target is a line nobody has written rather than nothing to write it against."><b style="width:100%"></b><s style="left:94%"></s></span>
                   <span class="val">1.00</span>
                 </div>
                 <div class="chain">
@@ -1307,17 +1307,26 @@
           chain, not the arithmetic.
         </p>
         <p>
-          <strong>Nothing can move this fader yet</strong>, and the row says so
-          the way every other unreachable control on this panel does: no
-          operation names the master out, so there is no record, no key, no
-          MIDI target and nothing for a map to learn. The tone mapper's
-          exposure keeps all of those and keeps them in the transport, where
-          the operator it belongs to is &mdash; the two controls at the end of
-          that row, drawn and described above. So the two levels are told apart
-          on this page by where each is <em>reached</em> as well as by where it
-          is applied: <code>out</code> is a fader in this bay that nothing can
-          move, and <code>exposure</code> is a track in the transport that a
-          press sets outright.
+          <strong>A hand moves this fader now, and it is the only route it
+          has.</strong> The drag is one operation &mdash; <em>Master out</em>,
+          which the operations page names &mdash; and it ends in a record like
+          every other control on this panel, so the level a hand asks for and
+          the level a stream would replay are one value. What it still has no
+          route from is a key, a map and a model: no letter is bound to it, no
+          map target names it, and the operations page carries all three as
+          gaps rather than as designs waiting on a control.
+        </p>
+        <p>
+          <strong>The two levels are told apart on this page by how each is
+          reached as well as by where it is applied</strong>, and the gestures
+          are opposite on purpose. <code>out</code> is a fader with a handle:
+          you take the knob and it keeps whatever offset you took it at, so the
+          level cannot jump under the hand mid-move. <code>exposure</code> is a
+          track with no handle at all and a press sets it outright, because
+          there is nothing to be mid-way through. Neither can be moving on its
+          own when you reach it &mdash; a scheduled move is per deck, and both
+          of these are the deck's own output &mdash; so neither has a fade to
+          cancel and neither draws a mark for one.
         </p>
       </div>
 
@@ -1805,8 +1814,9 @@
   <footer>
     A layout, not a specification &mdash; it is what the implementation is
     checked against. The mechanisms behind the mixer, the inspector, the library
-    and the outputs are built; the master chain, the sequencer, the staging lane,
-    authority and the panel itself are not.
+    and the outputs are built, and so is the Master bay's out; the three effects
+    of the master chain, the sequencer, the staging lane, authority and the
+    panel itself are not.
     <a href="index.html">The seven rules</a> are what all of this obeys.
   </footer>
 

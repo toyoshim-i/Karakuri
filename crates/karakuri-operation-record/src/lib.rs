@@ -52,8 +52,8 @@
 //! added to the vocabulary does not compile here until somebody has said what
 //! it writes. The three answers are the three groups the survey found:
 //!
-//! - [`Written::Records`] — it writes these, in this order. Thirteen
-//!   operations, seven of which need no reading at all.
+//! - [`Written::Records`] — it writes these, in this order. Fourteen
+//!   operations, eight of which need no reading at all.
 //! - [`Written::Silent`] — it writes none, and that is settled. Twenty-seven,
 //!   for [`Silent`]'s four different reasons.
 //! - [`Written::Owed`] — it writes one and this build cannot make it. Ten,
@@ -362,11 +362,11 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
     match operation {
         // ----- What it writes, with no reading at all ----------------------
         //
-        // Seven, and every one of them is a control whose record carries
+        // Eight, and every one of them is a control whose record carries
         // exactly what the operation carries. Six are the arms
         // `karakuri-cli`'s `mix::gain_record` and its neighbours were, moved to
         // where a console can reach them; the seventh, an authority, never had
-        // one anywhere.
+        // one anywhere, and nor did the eighth.
         Operation::SetGain { deck, gain } => one(Record::Gain {
             slot: *deck,
             value: *gain,
@@ -391,6 +391,20 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
             level: residency.name().to_string(),
         }),
         Operation::SetPreview { showing } => one(Record::Preview { slot: *showing }),
+        // **One value across, and it is the arm that says the master out is
+        // not per slot.** Every reading in [`Current`] is a completion — the
+        // two thirds of a look a press did not name, the half of a mask, the
+        // position a scrub adds to — and there is nothing here to complete:
+        // `Record::MasterOut` is one number and the operation carries it.
+        // That is what puts this beside the faders rather than beside the
+        // exposure, which is the control it is otherwise nearest
+        // ([ADR-0224](../../../docs/adr/0224-out-and-exposure-are-two-levels-that-multiply-in-different-places.md)).
+        //
+        // **And no clamp**, which is this crate's rule at `SetGain` one arm
+        // up: the level is floored at zero and open above 1.0, the engine's
+        // `clamp_gain` is where that is decided, and a second opinion here
+        // would be a range written down twice.
+        Operation::SetMasterOut { out } => one(Record::MasterOut { value: *out }),
         // **A node address and a word, and nothing else** — which is what puts
         // this in the group that needs no reading, beside the faders rather
         // than beside the mask. `Record::Authority` is written whole by the
@@ -790,6 +804,49 @@ mod tests {
             Written::Owed(Owed::NotRead(Reading::Transport)),
             "a scrub with no transport read came back with a record — which means the \
              scrub it moved from was invented"
+        );
+    }
+
+    /// **The master out is a function of the operation and nothing else**, and
+    /// this is the property that keeps it out of the group above.
+    ///
+    /// It is the arm most likely to be written as a completion by whoever adds
+    /// the second thing to the master chain: it sits between the look pair and
+    /// the mask pair in every list, and both of those are records written
+    /// whole out of an operation that names a part of one. `Record::MasterOut`
+    /// carries one number and the operation carries it, so a reading here
+    /// would be a value nobody asked about — and a `Current::default()` that
+    /// answered `Owed` would make the console's only route to this level a
+    /// question printed instead of a level moved.
+    ///
+    /// **And nothing is clamped**, which is this crate's rule at `SetGain`:
+    /// `Deck::set_out` floors at zero and is deliberately open above 1.0
+    /// because the mix is HDR, so a level of 3.0 arrives on disk as 3.0 and
+    /// the engine is the one place that range is decided.
+    #[test]
+    fn a_master_out_is_written_from_the_operation_alone() {
+        assert_eq!(
+            records(written(
+                &Operation::SetMasterOut { out: 0.25 },
+                &Current::default()
+            )),
+            vec![Record::MasterOut { value: 0.25 }],
+            "the master out asked for a reading, or wrote something other than the level it \
+             was handed — it names no deck and completes no record, so `Current::default()` \
+             is everything it needs"
+        );
+        // The look that is running is beside the point rather than absent, so
+        // a conversion that had started reading one would be caught writing a
+        // different record here as well as the same one above.
+        let current = Current {
+            look: Some(look()),
+            ..Current::default()
+        };
+        assert_eq!(
+            records(written(&Operation::SetMasterOut { out: 3.0 }, &current)),
+            vec![Record::MasterOut { value: 3.0 }],
+            "a master out of 3.0 was clamped, or the look that is running reached the record \
+             — the level is open above 1.0 and the engine is where that is decided"
         );
     }
 

@@ -93,8 +93,11 @@ fn knobs(at: StripBox, strip: &Strip) -> (egui::Rect, egui::Rect) {
 /// (`.vfader b`).
 fn travel(at: StripBox, knob: Knob) -> f32 {
     match knob {
-        Knob::Trim => at.trim.width(),
-        Knob::Fader => at.fader.height() - size::VFADER_INSET * 2.0,
+        Knob::Trim { .. } => at.trim.width(),
+        Knob::Fader { .. } => at.fader.height() - size::VFADER_INSET * 2.0,
+        // The Master bay's, which is no strip's and has a file of its own:
+        // `tests/master.rs` measures that track off the bay it is in.
+        Knob::Out => panic!("the master out is not one of a strip's two faders"),
     }
 }
 
@@ -160,9 +163,9 @@ fn the_knob_is_grabbed_and_the_track_is_not() {
         let deck = slot as u8;
 
         let took = bay.grab(point(trim.center())).expect("the trim's knob");
-        assert_eq!((took.deck(), took.knob()), (deck, Knob::Trim));
+        assert_eq!(took.knob(), Knob::Trim { deck });
         let took = bay.grab(point(fader.center())).expect("the fader's knob");
-        assert_eq!((took.deck(), took.knob()), (deck, Knob::Fader));
+        assert_eq!(took.knob(), Knob::Fader { deck });
 
         // Both ends of both tracks, and the strip's own furniture. Every one
         // of these is inside the bay and none of them is a knob.
@@ -263,7 +266,7 @@ fn the_grab_keeps_its_offset_so_the_value_does_not_jump() {
     let strip = &strips[0];
     let at = bay.strip(0);
     let (_, fader) = knobs(at, strip);
-    let span = travel(at, Knob::Fader);
+    let span = travel(at, Knob::Fader { deck: 0 });
 
     // Three pixels below the knob's centre, and still on the knob — a knob is
     // `VFADER_KNOB_H` tall, so this is inside it and is where a hand lands.
@@ -398,8 +401,7 @@ fn a_drag_emits_the_right_operation_for_the_right_deck() {
         assert_eq!(
             panel.released(),
             Some(Released::Let {
-                deck,
-                knob: Knob::Trim
+                knob: Knob::Trim { deck }
             })
         );
 
@@ -415,8 +417,7 @@ fn a_drag_emits_the_right_operation_for_the_right_deck() {
         assert_eq!(
             panel.released(),
             Some(Released::Let {
-                deck,
-                knob: Knob::Fader
+                knob: Knob::Fader { deck }
             })
         );
     }
@@ -717,7 +718,7 @@ fn the_value_the_strip_draws_comes_back_from_the_deck() {
     );
     assert!(near(
         now.strip(0).fader_at(moved[0].opacity).fill.height(),
-        travel(at, Knob::Fader) * 0.05
+        travel(at, Knob::Fader { deck: 0 }) * 0.05
     ));
 }
 

@@ -438,6 +438,20 @@ pub enum Kind {
     /// See [`library`] for what is drawn here, for where the values come from,
     /// and for the six things in the mock's bay that are **not** drawn.
     Library,
+    /// **The Master bay**, which is a bay in every other respect: the same
+    /// card and the same [`bay_head`], carrying [`MASTER_TITLE`], no pill and
+    /// the grip the mock draws in this head.
+    ///
+    /// A kind of its own for [`Kind::Mixer`]'s reason: [`View::draw`] has to
+    /// know **which** bay the out row goes in, and the alternative is
+    /// comparing a name on the frame path, which puts a string where the table
+    /// already says what a region is.
+    ///
+    /// See [`master`] for what is drawn here, for where the level comes from,
+    /// and for why the three effects the mock draws under the row are **not**
+    /// drawn: they exist nowhere in this workspace, and a chain over machinery
+    /// that is not there is the scaffolding this module refuses.
+    Master,
     /// One subdivision of a bay, which has no head of its own because the bay
     /// around it has one. The inspector's two panes.
     Pane,
@@ -601,11 +615,7 @@ pub const REGIONS: &[Region] = &[
     },
     Region {
         name: "master",
-        kind: Kind::Bay {
-            title: "Master",
-            pills: &[],
-            grip: true,
-        },
+        kind: Kind::Master,
     },
     Region {
         name: "sequencer",
@@ -4859,8 +4869,8 @@ impl<'a> Mixer<'a> {
                 // `MAX_SLOTS` of them — `DECKS`, which is 4 — so the index is
                 // a `u8` with room to spare. See `Knob::operation`.
                 let deck = index as u8;
-                grabbed(at.trim_at(strip.gain), deck, Knob::Trim, p)
-                    .or_else(|| grabbed(at.fader_at(strip.opacity), deck, Knob::Fader, p))
+                grabbed(at.trim_at(strip.gain), Knob::Trim { deck }, p)
+                    .or_else(|| grabbed(at.fader_at(strip.opacity), Knob::Fader { deck }, p))
             })
     }
 
@@ -5441,7 +5451,7 @@ fn reach(now: Fader, to: Fader, rolled: f32) -> Reach {
 /// length the value rides; and where the knob's centre is now, which is the
 /// fill's moving edge. **The offset is the pointer less that centre**, so a
 /// press keeps whatever it grabbed at and the value does not jump.
-fn grabbed(fader: Fader, deck: u8, knob: Knob, p: Pos2) -> Option<Grab> {
+fn grabbed(fader: Fader, knob: Knob, p: Pos2) -> Option<Grab> {
     if !fader.knob.contains(p) {
         return None;
     }
@@ -5451,7 +5461,7 @@ fn grabbed(fader: Fader, deck: u8, knob: Knob, p: Pos2) -> Option<Grab> {
         Axis::Row => (fader.fill.min.x, fader.fill.max.x, p.x),
         Axis::Column => (fader.fill.max.y, fader.fill.min.y, p.y),
     };
-    Grab::new(deck, knob, fader.axis, zero, fader.travel, coord - edge)
+    Grab::new(knob, fader.axis, zero, fader.travel, coord - edge)
 }
 
 /// **The next blend mode round the cycle**, wrapping from the last back to the
@@ -6080,6 +6090,291 @@ fn gradient(
 fn tint(colour: Color32, percent: u8) -> Color32 {
     let alpha = ((percent as u32 * 255 + 50) / 100) as u8;
     Color32::from_rgba_unmultiplied(colour.r(), colour.g(), colour.b(), alpha)
+}
+
+// ---------------------------------------------------------------------------
+// The Master bay
+// ---------------------------------------------------------------------------
+
+/// **The word at the head of the Master bay**, in the source's own
+/// capitalisation for [`Kind::Bay`]'s reason: the mock upper-cases in CSS, and
+/// that is done at paint time so the word a reader searches for is the word in
+/// the source.
+const MASTER_TITLE: &str = "Master";
+
+/// `.master-row`'s first item: the `out` before the track, which is the bay's
+/// own word for the level and not the engine's — `Deck::out` is what it moves.
+const MASTER_LABEL: &str = "out";
+
+/// **The out row, laid out**: the word, the fader and the figure.
+///
+/// # One derivation, for [`Outputs`]' reason
+///
+/// [`View::draw`] paints exactly these rectangles and [`crate::input::claim`]
+/// hit-tests exactly this knob. Two copies of the arithmetic is a knob painted
+/// where a hand cannot take hold of it.
+///
+/// # It is the bay's whole body, and the rest of the bay is not built
+///
+/// `docs/manual/console.html` draws three effects under this row — feedback,
+/// bloom and rgb shift — and the word `master` appears nowhere in
+/// `karakuri-engine` except at the level this row moves
+/// ([ADR-0224](../../../docs/adr/0224-out-and-exposure-are-two-levels-that-multiply-in-different-places.md)).
+/// There is no chain, so there is nothing to draw a chain from: a row of
+/// effects over machinery that does not exist is the scaffolding this module's
+/// documentation refuses, and the bay's card shows through under this row
+/// exactly as it does in every other empty body.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MasterRow {
+    /// The faint `out` at the head of the row.
+    pub label: Rect,
+    /// **The fader**: `.fader`'s 5px well lying down, what the level fills of
+    /// it, and the knob centred on the fill's moving edge.
+    pub fader: Fader,
+    /// **`1.00`, at the far end of the row and in a box that does not move.**
+    ///
+    /// As wide as the widest reading this control can ask for rather than as
+    /// wide as the one it is showing, which is [`LookRow::tone`]'s rule met by
+    /// a figure instead of by a word: the track between the label and this box
+    /// is what is left over, so a figure that changed width as it was dragged
+    /// would take the track — and the knob on it — with it.
+    pub value: Rect,
+    /// **The value these rectangles were measured from**, carried for
+    /// [`LookRow::values`]' reason: whoever measured the type and whoever
+    /// paints it are one statement.
+    pub out: f32,
+}
+
+impl MasterRow {
+    /// **What a press at `p` takes hold of**, or `None` where there is nothing
+    /// under it that a hand can move.
+    ///
+    /// # It is the knob, and the track is deliberately not a target
+    ///
+    /// [`Mixer::grab`]'s rule, and this control is the one on the panel it is
+    /// most obviously right for: a master out at 0.3 whose track was clicked
+    /// would put the whole programme at 1.0, on stage, because a hand landed
+    /// three pixels off a knob.
+    ///
+    /// **It is not [`LookRow::exposure`]'s rule, and the two do not disagree.**
+    /// That control has no handle drawn and no gesture to be mid-way through,
+    /// so a press is the whole of it. This one has a handle — the mock draws
+    /// the `.fader s` here and deliberately draws none on the exposure track —
+    /// and a handle that jumped to the pointer would be a lie about what a
+    /// handle is.
+    ///
+    /// # One derivation, asked twice
+    ///
+    /// [`crate::input::claim`] asks this and so does the caller that acts on
+    /// the press, exactly as [`Mixer::grab`] is. **The value is part of the
+    /// geometry**: the knob sits on the fill's moving edge, so where it is
+    /// depends on what the deck said this frame, and this is the same reading
+    /// the row was laid out from.
+    pub fn grab(&self, p: karakuri_layout::Point) -> Option<Grab> {
+        grabbed(self.fader, Knob::Out, Pos2::new(p.x, p.y))
+    }
+
+    /// **Whether `p` is on the one thing here a hand can move**, which is what
+    /// [`crate::input::claim`] asks — the knob, and not the track under it.
+    pub fn owns(&self, p: karakuri_layout::Point) -> bool {
+        self.grab(p).is_some()
+    }
+}
+
+/// **The Master bay's out row, derived**: the word, the fader and the figure.
+///
+/// # Where it sits
+///
+/// `docs/manual/console.html`'s `.master-body` is a column inside the bay,
+/// under the head, inset by [`size::MASTER_PAD_X`] either side and
+/// [`size::MASTER_PAD_TOP`] from the head; `.master-row` is a flex row of
+/// three items, [`size::MASTER_GAP`] apart, with the fader taking what is left
+/// between the label and the figure. That is the mock term for term, and the
+/// arrangement's own minimum for this bay in `lib.rs` is written from the same
+/// numbers — *"bay head 27, `.master-body` padding 8 + 10, the out row
+/// 16.5"*.
+///
+/// # The figure's box is fixed and the track is what flexes
+///
+/// The mock gives the fader `flex: 1` and puts the figure after it, so the
+/// track's far end is wherever the figure begins. A figure sized to what it
+/// says would therefore move the track *while the track is being dragged*,
+/// which is [`look`]'s own argument about the exposure's number met here by a
+/// control that has a handle: there the figure could simply go last, here it
+/// is between the track and the bay's edge. So the box is as wide as the
+/// widest reading this control can ask for.
+///
+/// **The widest is measured and not assumed**: all ten `d.dd` strings are laid
+/// out and the widest of them wins, because whether `0.00` is wider than
+/// `1.11` is a fact about whatever font the room is drawn in and not one to
+/// take on trust ([P-0055](../../../docs/principles/0055-this-machine-is-not-the-reference.md)).
+/// Ten cached layouts of four characters, on a pointer event and on a frame.
+///
+/// **A reading outside `[0, 1]` is the one case it does not cover**, and it is
+/// stated rather than guarded: `Deck::set_out` is open above 1.0 and this drag
+/// tops out at exactly 1.00, so nothing can put a fifth character in the box
+/// today. If something does, the figure is right-aligned and grows back over
+/// the track's end rather than out past the bay's padding — which keeps the
+/// row inside the card, and is the reason it is right-aligned rather than the
+/// reason the box is this wide.
+///
+/// # None where there is nothing to draw
+///
+/// `None` for a console with no engine behind it — which is every test in this
+/// crate that does not hand a level in — and `None` for a bay with no room for
+/// the row, which is [`strips_row`]'s rule one bay up: folded away, soloed
+/// away, or a window too small.
+///
+/// # What it costs to ask
+///
+/// **Eleven galley lookups**: the `out` label, and the ten `d.dd` strings the
+/// widest is taken over. The ten are what buys a track that does not move
+/// under a hand, and they are ten *cached* layouts of four characters. **The
+/// reading itself is not among them**, which is the whole of why the box does
+/// not move: nothing in this derivation lays out the level. Paid on a pointer
+/// event and on a frame, and a console with no level behind it pays none of
+/// it: the `out?` is the first line.
+///
+/// `layout` must be solved: [`Layout::rect`] refuses to answer from a dirty
+/// one.
+pub fn master(
+    ctx: &egui::Context,
+    layout: &karakuri_layout::Layout,
+    out: Option<f32>,
+) -> Option<MasterRow> {
+    let out = out?;
+    // Fonts are not valid until `egui` has run a pass, exactly as in `mixer`,
+    // `outputs` and `transport`.
+    if ctx.cumulative_pass_nr() == 0 {
+        return None;
+    }
+    let region = to_egui(layout.rect(layout.find("master")?));
+    let width = |text: &str| {
+        ctx.fonts_mut(|f| {
+            f.layout_no_wrap(
+                text.to_owned(),
+                FontId::new(size::BASE, FontFamily::Proportional),
+                Color32::PLACEHOLDER,
+            )
+            .size()
+            .x
+        })
+    };
+    let row = Rect::from_min_size(
+        Pos2::new(
+            region.min.x + size::MASTER_PAD_X,
+            region.min.y + size::HEAD_H + size::MASTER_PAD_TOP,
+        ),
+        egui::vec2(
+            region.width() - size::MASTER_PAD_X * 2.0,
+            size::MASTER_ROW_H,
+        ),
+    );
+    if row.width() <= 0.0 || !region.contains_rect(row) {
+        return None;
+    }
+
+    // **The widest `d.dd` there is**, which is every reading this control can
+    // ask for and is measured rather than assumed: whether `0.00` is wider
+    // than `1.11` is a fact about a font, so all ten are laid out and the
+    // widest wins. Nothing here reads the level, which is the point — see the
+    // paragraph above.
+    let widest = (0..10)
+        .map(|d| width(&format!("{d}.{d}{d}")))
+        .fold(0.0, f32::max);
+
+    let label = Rect::from_min_size(row.min, egui::vec2(width(MASTER_LABEL), row.height()));
+    let value = Rect::from_min_size(
+        Pos2::new(row.max.x - widest, row.min.y),
+        egui::vec2(widest, row.height()),
+    );
+    let mid = row.center().y;
+    let track = Rect::from_min_max(
+        Pos2::new(label.max.x + size::MASTER_GAP, mid - size::FADER_H * 0.5),
+        Pos2::new(value.min.x - size::MASTER_GAP, mid + size::FADER_H * 0.5),
+    );
+    // **A track with no length is no control**, which is `Grab::new`'s own
+    // refusal one crate layer down and `strip_box`'s rule one bay up: a bay
+    // narrow enough that the word and the figure meet has nothing left to
+    // draw a fader in, and half a fader is worse than none.
+    if track.width() <= 0.0 {
+        return None;
+    }
+
+    Some(MasterRow {
+        label,
+        // `.fader b` fills its 5px track edge to edge, so there is no inset —
+        // the trim's arrangement, and not `.vfader`'s.
+        fader: fader(
+            track,
+            Axis::Row,
+            out,
+            0.0,
+            egui::vec2(size::FADER_KNOB_W, size::FADER_KNOB_H),
+        ),
+        value,
+        out,
+    })
+}
+
+/// **The level, as the mock's `.val` writes it** — `1.00`, two places, and the
+/// same string the transport row's exposure is written with. The two are the
+/// same kind of reading and deliberately read the same way; where they stop
+/// being the same *number* is ADR-0224.
+fn master_text(out: f32) -> String {
+    format!("{out:.2}")
+}
+
+/// **The out row, painted.**
+///
+/// Where everything goes is [`master`]'s, so this paints and derives nothing.
+/// Term for term from `style.css`:
+///
+/// - the `out` before the track — `style="color:var(--c-faint)"` in the
+///   markup, which is `pal.faint`, and it is `.trim .lbl`'s job one bay up.
+/// - `.fader`, `.fader b` and `.fader s` — [`fader_into`], which is the one
+///   place a knob, a well and a fill are drawn and is what the mixer's own
+///   trim is painted with. **Not live and never reaching**: the pink glow is a
+///   slot on air and this level belongs to no slot, and a scheduled move is
+///   per slot too — `Deck::set_out` takes no `cancel` because nothing can be
+///   moving it (ADR-0224).
+/// - the figure — `.val`, `pal.text`, *a value*.
+fn master_into(ui: &Ui, pal: &Palette, row: &MasterRow) {
+    let painter = ui.painter();
+    let centred = |rect: Rect, galley: std::sync::Arc<egui::Galley>, colour: Color32| {
+        painter.galley(
+            Pos2::new(rect.min.x, rect.center().y - galley.size().y * 0.5),
+            galley,
+            colour,
+        );
+    };
+    centred(
+        row.label,
+        painter.layout_no_wrap(
+            MASTER_LABEL.to_owned(),
+            FontId::new(size::BASE, FontFamily::Proportional),
+            pal.faint,
+        ),
+        pal.faint,
+    );
+    fader_into(painter, pal, row.fader, false, None);
+    // **Right-aligned in a box that does not move**, so the figure ends at the
+    // bay's padding whatever it says — which is what makes the box's width the
+    // widest reading rather than this one's.
+    let words = master_text(row.out);
+    let galley = painter.layout_no_wrap(
+        words,
+        FontId::new(size::BASE, FontFamily::Proportional),
+        pal.text,
+    );
+    painter.galley(
+        Pos2::new(
+            row.value.max.x - galley.size().x,
+            row.value.center().y - galley.size().y * 0.5,
+        ),
+        galley,
+        pal.text,
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -7777,6 +8072,26 @@ pub struct View {
     /// other is a state the type should be able to say. See [`Look`] and
     /// [`look`].
     pub look: Option<Look>,
+    /// **What the Master bay's out row reads this frame**, or `None` for a
+    /// console with no engine behind it — which is every test in this crate
+    /// that does not hand one in, and what the bay draws then is its card and
+    /// its head.
+    ///
+    /// **The same seam as [`View::look`]**, one bay away and one level along
+    /// the same chain: this is `karakuri_engine::deck::Deck::out`, which is
+    /// applied where the mix *writes* the composited frame, and the look is
+    /// applied where the present pass *reads* it. `src/` has no engine
+    /// (ADR-0156), so whoever owns one reads it and writes this per frame
+    /// beside the frame it was drawn under.
+    ///
+    /// **A bare level rather than a struct**, where the look is three values
+    /// in one: there is one number in the master chain that anything can read
+    /// or move. The chain's own effects are drawn on the console page and
+    /// exist nowhere, so a field with room for them would be room for readings
+    /// nobody can take — see [`master`], and
+    /// [ADR-0224](../../../docs/adr/0224-out-and-exposure-are-two-levels-that-multiply-in-different-places.md)
+    /// for what is deliberately left undone.
+    pub master_out: Option<f32>,
     /// **What each mixer strip reads this frame**, one per slot the deck has,
     /// in slot order — and **empty** for a console with no deck behind it,
     /// which is every test in this crate and what the bay draws then is
@@ -7884,6 +8199,9 @@ impl View {
             // No engine behind the console, so there is no look to draw — the
             // transport's own answer, one group along.
             look: None,
+            // And no level at the other end of the same chain, for the same
+            // reason: the Master bay draws its head and nothing under it.
+            master_out: None,
             // As many strips as a deck can ever have, so the frame path never
             // grows it — the same reason `placed` is built with a capacity.
             mixer: Vec::with_capacity(DECKS),
@@ -8112,6 +8430,7 @@ impl View {
         let values = self.transport;
         let arr = &self.arrangement;
         let look_at = self.look;
+        let out = self.master_out;
         let strips = self.mixer.as_slice();
         let sets = self.library.as_slice();
         let panes = self.inspector.as_slice();
@@ -8175,6 +8494,23 @@ impl View {
                         bay_head(ui, &pal, rect, MIXER_TITLE, &[], false);
                         if let Some(bay) = mixer(ui.ctx(), panel.layout(), strips) {
                             mixer_into(ui, &pal, &bay, phase);
+                        }
+                    }
+                    // **The third bay with something in its body, and it is
+                    // one row of the three the mock draws there.** The card
+                    // and the head are every other bay's; under the row the
+                    // card shows through, because the chain the mock draws is
+                    // three effects that exist nowhere in this workspace and a
+                    // control over machinery that is not there is the
+                    // scaffolding this module refuses. Where the row goes is
+                    // `master`'s answer and not this pass's: the same call
+                    // `input::claim` makes, so the knob that is painted is the
+                    // knob a hand takes hold of.
+                    Kind::Master => {
+                        card(ui, &pal, rect);
+                        bay_head(ui, &pal, rect, MASTER_TITLE, &[], true);
+                        if let Some(row) = master(ui.ctx(), panel.layout(), out) {
+                            master_into(ui, &pal, &row);
                         }
                     }
                     // The other bay with something in its body, and it is a

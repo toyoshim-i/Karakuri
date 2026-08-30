@@ -169,36 +169,71 @@ struct Fading {
     said: Option<f32>,
 }
 
-/// **Which of a strip's two faders a hand has hold of**, named after the
-/// operation each of them is a translator for.
+/// **Which fader a hand has hold of**, named after the operation each of them
+/// is a translator for.
 ///
-/// They are two controls and not one, because `karakuri-engine`'s `mix.rs`
-/// says they are two things: *opacity at zero silences under every blend mode,
-/// and gain at zero does not silence `over`*. See [`crate::view::Strip::gain`].
+/// The strip's two are two controls and not one, because `karakuri-engine`'s
+/// `mix.rs` says they are two things: *opacity at zero silences under every
+/// blend mode, and gain at zero does not silence `over`*. See
+/// [`crate::view::Strip::gain`].
+///
+/// # The deck is carried here, and [`Knob::Out`] is why
+///
+/// It was an argument beside this — `operation(deck, value)` — and a `deck`
+/// beside a knob that has none would be a slot number invented to satisfy a
+/// signature. The master out is one level on the whole fold rather than on a
+/// member of it (`karakuri_engine::deck::Deck::set_out`, *"Not per slot"*), so
+/// **which deck** is part of what a knob *is* rather than something every
+/// knob has. A variant that carries it and one that does not is the compiler
+/// holding that, where an `Option<u8>` would leave `Trim` free to be `None`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Knob {
     /// The trim — the mock's `.trim .fader`, lying down —
     /// [`Operation::SetGain`].
-    Trim,
+    Trim {
+        /// Which deck's, which is the manual's word for what the code calls a
+        /// slot — the vocabulary's own choice, recorded in ADR-0180: *"The
+        /// manual's deck is the code's slot … the vocabulary takes the
+        /// manual's word, since the manual is its specification."*
+        deck: u8,
+    },
     /// The fader — `.vfader`, standing up — [`Operation::SetOpacity`].
-    Fader,
+    Fader {
+        /// Which deck's, on [`Knob::Trim`]'s terms.
+        deck: u8,
+    },
+    /// **The master out** — the Master bay's `.fader`, lying down, and the one
+    /// knob on this panel that names no deck: it is the level the composited
+    /// frame leaves the mix at, at the entry to the master chain
+    /// ([`Operation::SetMasterOut`], and
+    /// `docs/adr/0224-out-and-exposure-are-two-levels-that-multiply-in-different-places.md`
+    /// for why it is not the tone mapper's exposure).
+    Out,
 }
 
 impl Knob {
     /// **The operation this knob asks for at `value`**, and the whole of the
     /// translation a fader performs.
-    ///
-    /// `deck` is the manual's word for what the code calls a slot, which is
-    /// the vocabulary's own choice and is recorded in ADR-0180: *"The manual's
-    /// deck is the code's slot … the vocabulary takes the manual's word, since
-    /// the manual is its specification."*
-    pub fn operation(self, deck: u8, value: f32) -> Operation {
+    pub fn operation(self, value: f32) -> Operation {
         match self {
-            Knob::Trim => Operation::SetGain { deck, gain: value },
-            Knob::Fader => Operation::SetOpacity {
+            Knob::Trim { deck } => Operation::SetGain { deck, gain: value },
+            Knob::Fader { deck } => Operation::SetOpacity {
                 deck,
                 opacity: value,
             },
+            Knob::Out => Operation::SetMasterOut { out: value },
+        }
+    }
+
+    /// **Which deck this knob is on**, or `None` for the one that is on none.
+    ///
+    /// For a caller with a sentence to print. Nothing routes through it: the
+    /// deck is inside the operation already, which is [`Dragged::Fader`]'s
+    /// rule about one value and not two.
+    pub fn deck(self) -> Option<u8> {
+        match self {
+            Knob::Trim { deck } | Knob::Fader { deck } => Some(deck),
+            Knob::Out => None,
         }
     }
 }
@@ -225,7 +260,6 @@ impl Knob {
 /// module re-deriving a strip's geometry — is the toolkit inside the model.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Grab {
-    deck: u8,
     knob: Knob,
     axis: Axis,
     /// The track's **zero** end along the axis: the left of a row, and the
@@ -244,17 +278,9 @@ impl Grab {
     /// A fader taken hold of. `travel` is the length of track the knob's
     /// centre moves along, and a track with none is refused: a control with
     /// nowhere to go is not one a hand has hold of.
-    pub fn new(
-        deck: u8,
-        knob: Knob,
-        axis: Axis,
-        zero: f32,
-        travel: f32,
-        offset: f32,
-    ) -> Option<Grab> {
+    pub fn new(knob: Knob, axis: Axis, zero: f32, travel: f32, offset: f32) -> Option<Grab> {
         match travel > 0.0 {
             true => Some(Grab {
-                deck,
                 knob,
                 axis,
                 zero,
@@ -265,12 +291,7 @@ impl Grab {
         }
     }
 
-    /// Which deck's control this is.
-    pub fn deck(self) -> u8 {
-        self.deck
-    }
-
-    /// Which of the two.
+    /// Which control this is, and which deck's where it is a deck's.
     pub fn knob(self) -> Knob {
         self.knob
     }
@@ -532,7 +553,8 @@ pub enum Released {
     /// The boundary is no longer there — an operation during the drag folded
     /// one of the pair away.
     Gone { split: NodeId, index: usize },
-    /// **A fader was let go**, and which one.
+    /// **A fader was let go**, and which one — the deck inside the [`Knob`]
+    /// where it is a deck's.
     ///
     /// **There is no value here, and that is the decision rather than an
     /// omission.** Where a boundary comes to rest is read back out of the
@@ -541,7 +563,7 @@ pub enum Released {
     /// A value reported here would be this crate answering a question about
     /// somebody else's state, which is the second copy the whole module is
     /// written to refuse.
-    Let { deck: u8, knob: Knob },
+    Let { knob: Knob },
 }
 
 /// Whether a node is drawing, and if not, why not.
@@ -901,7 +923,7 @@ impl Panel {
             return None;
         }
         fading.said = Some(value);
-        Some(Dragged::Fader(grab.knob.operation(grab.deck, value)))
+        Some(Dragged::Fader(grab.knob.operation(value)))
     }
 
     /// The pointer went up. `None` where nothing was in hand.
@@ -926,7 +948,6 @@ impl Panel {
             // No solve: a fader drag never touched the layout, so there is
             // nothing owed and nothing to read back out of it.
             Drag::Fader(fading) => Some(Released::Let {
-                deck: fading.grab.deck,
                 knob: fading.grab.knob,
             }),
         }

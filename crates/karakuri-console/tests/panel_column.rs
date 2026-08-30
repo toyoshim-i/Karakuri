@@ -255,6 +255,12 @@ fn sample(variant: &str) -> Operation {
             tonemap: karakuri_operation::Tonemap::Aces,
         },
         "SetExposure" => Operation::SetExposure { exposure: 1.0 },
+        // The Master bay's one control, and the one emission in this list
+        // that names no deck: the master out is a level on the whole fold
+        // rather than on a member of it, which is why `Knob::Out` carries no
+        // slot for `Knob::Trim`'s and `Knob::Fader`'s to be filled in from
+        // (ADR-0224).
+        "SetMasterOut" => Operation::SetMasterOut { out: 1.0 },
         // The two the Inspector's deck head emits. `SetSync` comes from two
         // controls in that row — the chip that cycles and the anchor that
         // re-asks for the mode the deck is in (ADR-0218) — and one operation

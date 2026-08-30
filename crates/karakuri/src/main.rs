@@ -209,8 +209,8 @@ use karakuri_console::repaint::{Change, Repaint};
 use karakuri_console::room::Room;
 use karakuri_console::view::{
     self, arrangement as arrangement_pill, deck_head as deck_head_row, inspector as inspector_pane,
-    look as look_row, mixer as mixer_bay, outputs, picture_rect, preview_rects, Ask, Kind, Picture,
-    View, DECKS, DECK_LETTERS,
+    look as look_row, master as master_row, mixer as mixer_bay, outputs, picture_rect,
+    preview_rects, Ask, Kind, Picture, View, DECKS, DECK_LETTERS,
 };
 use karakuri_engine::governor::{Report, SLOWEST_PRIME_ONE_IN};
 // The engine's own `Published`, and its node kinds under the word the address
@@ -1226,9 +1226,9 @@ impl Readout {
             // **No value in the line, because there is none to print.** Where
             // a fader came to rest is the deck's, and the last thing the drag
             // asked for was printed when it was asked for.
-            Some(Released::Let { deck, knob }) => println!(
-                "release: deck {} lets go of the {}",
-                deck_letter(deck),
+            Some(Released::Let { knob }) => println!(
+                "release: {} lets go of the {}",
+                knob_where(knob),
                 knob_word(knob)
             ),
             None => {}
@@ -1471,7 +1471,16 @@ impl Readout {
                 }
                 let sink = outputs(ctx, self.panel.layout()).filter(|row| row.hit(at));
                 let bay = mixer_bay(ctx, self.panel.layout(), &self.view.mixer);
-                let knob = bay.as_ref().and_then(|bay| bay.grab(at));
+                // **The Master bay's out is a `Grab` like a strip's**, so it
+                // joins the knob rather than taking an arm of its own: what
+                // this file does with either is take it in hand, and which
+                // fader it was is inside the `Knob`. The two bays cannot
+                // overlap, so the order is arbitrary — the mixer is asked
+                // first because it has four questions to this one's one.
+                let knob = bay.as_ref().and_then(|bay| bay.grab(at)).or_else(|| {
+                    master_row(ctx, self.panel.layout(), self.view.master_out)
+                        .and_then(|row| row.grab(at))
+                });
                 let chip = bay.as_ref().and_then(|bay| bay.blend(at));
                 let tally = bay.as_ref().and_then(|bay| bay.tally(at));
                 let mask = bay.as_ref().and_then(|bay| bay.mask(at));
@@ -1484,10 +1493,10 @@ impl Readout {
                     // answers `None` for it rather than jumping the mix.
                     (None, Some(grab), ..) => {
                         println!(
-                            "press ({:.0}, {:.0}): deck {} — the {} is in hand",
+                            "press ({:.0}, {:.0}): {} — the {} is in hand",
                             at.x,
                             at.y,
-                            deck_letter(grab.deck()),
+                            knob_where(grab.knob()),
                             knob_word(grab.knob())
                         );
                         self.panel.grab(at, grab);
@@ -1832,6 +1841,14 @@ impl Readout {
                             _ => "s",
                         }
                     ),
+                    // A bay with one row in it, and the row is one control:
+                    // the level the composited frame leaves the mix at. The
+                    // three effects the mock draws under it exist nowhere, so
+                    // there is nothing else in the bay to report.
+                    Kind::Master => match self.view.master_out {
+                        Some(out) => format!("bay, out {out:.2}"),
+                        None => "bay, no engine behind it".to_owned(),
+                    },
                 },
                 None => match layout.axis(node.id) {
                     Some(Axis::Row) => "split, left to right".to_owned(),
@@ -1929,11 +1946,27 @@ fn deck_letter(deck: u8) -> &'static str {
         .unwrap_or("(no such deck)")
 }
 
-/// Which of a strip's two faders, in the mixer bay's own words.
+/// Which fader, in the bay's own word for it.
 fn knob_word(knob: Knob) -> &'static str {
     match knob {
-        Knob::Trim => "trim",
-        Knob::Fader => "fader",
+        Knob::Trim { .. } => "trim",
+        Knob::Fader { .. } => "fader",
+        Knob::Out => "out",
+    }
+}
+
+/// **Whose fader it is**, for a line a reader has to place: a deck by its
+/// letter, and the master out by the bay it is in.
+///
+/// The master out names no deck — it is one level on the whole fold
+/// ([ADR-0224](../../docs/adr/0224-out-and-exposure-are-two-levels-that-multiply-in-different-places.md))
+/// — so a line that said *deck A* over it would be naming a slot nothing in
+/// the gesture ever touched. `Knob::deck` is what answers, and this is the
+/// only caller: everything that *acts* takes the deck out of the operation.
+fn knob_where(knob: Knob) -> String {
+    match knob.deck() {
+        Some(deck) => format!("deck {}", deck_letter(deck)),
+        None => "master".to_owned(),
     }
 }
 
@@ -3816,6 +3849,33 @@ fn apply(record: &Record, deck: &mut Deck, look: &mut Look) -> Option<String> {
                 op_name = mix::op_wire_name(op)
             ))
         }
+        // **One level on the whole fold, and the one arm here that names no
+        // slot at all.** `Record::MasterOut` carries a number and nothing
+        // else, so unlike the look and the mask there is no other half of it
+        // to fill in from what is running — which is why the reading below
+        // has no arm for this control (ADR-0224).
+        //
+        // **The engine clamps and this does not.** `Deck::set_out` floors at
+        // zero and is deliberately open above 1.0, through the same
+        // `clamp_gain` the per-slot gain goes through, because the mix is HDR
+        // and this level is applied to values a tone mapper has not seen —
+        // [P-0064](../../docs/principles/0064-the-pipeline-is-linear-hdr-and-srgb-is-encoded-once-at-final-output.md).
+        // A clamp here would be a second opinion about a range the setter
+        // already holds, which is the rule the whole conversion is written
+        // under.
+        //
+        // **No `cancel` to worry about**, where the gain and the fader each
+        // stop whatever was moving them: a `Control` is per slot and this is
+        // not, so nothing in the engine can be moving it and there is nothing
+        // for a hand to win against.
+        Record::MasterOut { value } => {
+            deck.set_out(value);
+            Some(format!(
+                "  master: out -> SetMasterOut {{ out: {value:.3} }} -> Record::MasterOut -> \
+                 deck.out() = {:.3}, at the entry to the master chain",
+                deck.out()
+            ))
+        }
         // **The whole of one slot's clock, because the record is a state and
         // not an ask.** `Record::Transport` carries the sync mode, the anchor
         // and the scrub together for a stated reason — a scrub position
@@ -4930,6 +4990,12 @@ impl ApplicationHandler for App {
                 // the picture went through rather than one a press asked for
                 // and nothing has applied yet.
                 self.readout.view.look = Some(look(&gfx.engine.look));
+                // **And what the Master bay's out row reads**, which is the
+                // other end of the same chain: this level is applied where the
+                // mix wrote the frame and the look's is applied where the
+                // present pass read it, so the two are read off two different
+                // objects and written here in the same breath (ADR-0224).
+                self.readout.view.master_out = Some(gfx.engine.deck.out());
                 // **And what the mixer strips read**, beside the frame they
                 // are about for the same reason. One strip per slot, so two —
                 // see `mixer`.
