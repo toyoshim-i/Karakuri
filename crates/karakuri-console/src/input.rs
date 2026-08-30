@@ -70,7 +70,12 @@
 //!    all. The panel's controls are painted shapes, and the only thing that
 //!    knows a press landed on one is this rule.
 //!
-//!    **There are thirteen of them now**: the Outputs row's sink
+//!    **How many of them there are is [`CONTROLS`]**, and that is a number
+//!    this crate exports rather than one this paragraph keeps: a surface
+//!    describing itself to an operator has to say what a pointer reaches, and
+//!    a sentence saying it is where the count goes stale. What they are is
+//!    still written here, because a name is not a number and there is nowhere
+//!    else the thirteen sit together: the Outputs row's sink
 //!    ([`crate::view::outputs`]), a mixer strip's fader knob
 //!    ([`crate::view::Mixer::grab`]), its blend chip
 //!    ([`crate::view::Mixer::blend`]), its tally chip
@@ -293,6 +298,44 @@ use karakuri_layout::{Hit, Point};
 use crate::panel::{Panel, GRAB};
 use crate::view::{arrangement, deck_head, inspector, look, master, mixer, outputs, View};
 
+/// **What each of rule 4's derivations answers for**, one entry per probe in
+/// [`claim`] and in that order: the Outputs sink, the arrangement pill, the
+/// look group's two, a strip's four, the Master bay's one, and a deck head's
+/// four.
+///
+/// **It is a table and not a sentence because [`claim`] asks its probes out of
+/// an array of exactly this length.** A derivation added to rule 4 without an
+/// entry here does not compile, so [`CONTROLS`] is a sum over the probes that
+/// are actually asked rather than a count somebody has to remember to raise.
+///
+/// **What it cannot see is a control added inside a derivation already here**:
+/// a fifth chip on a strip is one more thing a press reaches, and `on_strip`
+/// would go on answering for four. That one is caught where every other fact
+/// about a control is — the clearance test the rule above says each one owes,
+/// `tests/mask.rs` being the most recent of them — and this entry is what has
+/// to be raised beside it.
+const CLAIMS: [usize; 6] = [1, 1, 2, 4, 1, 4];
+
+/// **How many controls rule 4 hit-tests**, summed over [`CLAIMS`].
+///
+/// Exported because the answer to *what can the pointer press here* is this
+/// crate's and nobody else's: `egui` owns no widget anywhere on the console,
+/// so a caller has no other way to ask. `karakuri/src/main.rs` prints it in
+/// its legend, where the sentence it replaced said the panel had three
+/// controls and went on saying it while ten more landed.
+pub const CONTROLS: usize = summed(&CLAIMS);
+
+/// [`CLAIMS`] added up in a `const`, which `Iterator::sum` is not.
+const fn summed(claims: &[usize]) -> usize {
+    let mut total = 0;
+    let mut at = 0;
+    while at < claims.len() {
+        total += claims[at];
+        at += 1;
+    }
+    total
+}
+
 /// Who a pointer event belongs to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Claim {
@@ -375,11 +418,11 @@ pub fn claim(panel: &mut Panel, ctx: &egui::Context, view: &View, p: Point) -> C
     // anything. See the module documentation and `tests/outputs.rs`.
     match panel.layout().hit(p, GRAB) {
         Hit::Divider { .. } => Claim::Panel,
-        // Rule 4, over all thirteen of the console's controls. Each is asked the
-        // same way — the derivation that draws it, asked whether the point is
-        // on it — and no answer is stored.
+        // Rule 4, over all [`CONTROLS`] of the console's controls. Each is
+        // asked the same way — the derivation that draws it, asked whether the
+        // point is on it — and no answer is stored.
         Hit::View(_) | Hit::Nothing => {
-            let on_sink = outputs(ctx, panel.layout()).is_some_and(|row| row.hit(p));
+            let on_sink = || outputs(ctx, panel.layout()).is_some_and(|row| row.hit(p));
             // The pill is the only one of the thirteen that is not in a bay, and
             // the only one asked with the menu already known to be shut: rule
             // 2 has answered for the open case above, so this is the capsule
@@ -432,7 +475,21 @@ pub fn claim(panel: &mut Panel, ctx: &egui::Context, view: &View, p: Point) -> C
                         .is_some_and(|head| head.owns(p))
                 })
             };
-            match on_sink || on_pill() || on_look() || on_strip() || on_master() || on_deck_head() {
+            // **One probe per derivation, cheapest answer first**, and the
+            // array is [`CLAIMS`]' length: a control reached through a
+            // derivation that list does not have fails to compile here, which
+            // is the whole of why [`CONTROLS`] cannot fall behind the rule.
+            // `any` short-circuits exactly as the chain of `||` it replaced
+            // did, so a press on the sink still costs one galley lookup.
+            let probes: [&dyn Fn() -> bool; CLAIMS.len()] = [
+                &on_sink,
+                &on_pill,
+                &on_look,
+                &on_strip,
+                &on_master,
+                &on_deck_head,
+            ];
+            match probes.iter().any(|probe| probe()) {
                 true => Claim::Panel,
                 false => Claim::Egui,
             }
