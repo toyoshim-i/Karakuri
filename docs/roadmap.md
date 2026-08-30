@@ -317,23 +317,28 @@ magnitude a decision gets made on rather than as a quantity two of them can be s
 The number is restated whenever the code under it changes shape, because a figure taken on a shape
 that no longer exists reads as current forever.
 
-**P-0072's inputs are built and its policy is not: there is still no scheduler.** One region
-declares — the mixer bay, through `View::declares` — and it declares **both** numbers now. The
+**P-0072's inputs are built and its policy is not: there is still no scheduler.** Two regions
+declare, through `View::declares`, and each declares **both** numbers. The mixer bay's
 staleness is the roll's 30 Hz while a request the engine has not granted is outstanding or a fade
 has not run
 ([ADR-0190](adr/0190-the-parked-tally-rolls-because-two-lamps-do-not-fit-in-fifty-three-pixels.md),
 [ADR-0206](adr/0206-a-fader-marks-where-it-is-going-and-keeps-reaching-for-it.md)), and nothing at
 all while the bay that draws it is folded away
 ([ADR-0193](adr/0193-a-region-that-is-not-laid-out-declares-nothing-rather-than-being-dropped-later.md)).
+The transport row's is the beat's `view::BEAT_STALENESS`, about forty a second, declared for as
+long as the grid is drawn and **without asking whether anything is pending**, which is P-0077's
+forced clause
+([ADR-0212](adr/0212-the-beat-is-a-light-that-travels-and-it-declares-for-itself.md)).
 The cost is `budget::PANEL_PASS`, **1.26 ms** measured over five runs on 2026-08-28 and written down
 rather than sampled, one constant every region declares because immediate mode cannot redraw one
 region of a panel
 ([ADR-0210](adr/0210-a-declared-cost-is-one-panel-pass-written-down-and-held-against-the-run.md)).
 **Both schedulability conditions are asserted** in
-`crates/karakuri-console/tests/schedulable.rs`: `Σ (cost / staleness)` reads 0.0378 against 1.0, and
-`max(cost)` 1.26 ms against 4.17 ms. What is left is the arbitration, and what is owed with it is a
-**panel's share of the frame budget** — nothing writes one down, so the conditions are asserted
-against the whole frame and hold in their most permissive form.
+`crates/karakuri-console/tests/schedulable.rs`, which is where the two figures live rather than
+here: with two terms `Σ (cost / staleness)` is 0.0889 against 1.0, and `max(cost)` is still one
+whole pass because both regions declare one. What is left is the arbitration, and what is owed with
+it is a **panel's share of the frame budget** — nothing writes one down, so the conditions are
+asserted against the whole frame and hold in their most permissive form.
 
 **Half of *making the picture a sink in fact* is built, and it is the half that had to come
 first.** `frame::compose` no longer gates the frame on a sink: it takes a slice of them, asks each
@@ -427,6 +432,16 @@ signature, and a transcribed 4 would go on saying four the day that changes. **W
 light that travels those dots** rather than one of them lighting at a time, and the mock's own
 picture is a frame of that travel
 ([ADR-0212](adr/0212-the-beat-is-a-light-that-travels-and-it-declares-for-itself.md)).
+
+**And the row is no longer four readouts and nothing to press**: the **arrangement pill** is drawn
+in it — `save`, `load` as the list of names already filed, and `start a new one`, which is the
+reset — and it is the first control here whose gesture outlives the press that opened it
+([ADR-0225](adr/0225-a-menu-is-a-gesture-in-hand-rather-than-a-rectangle-on-the-panel.md)). It is
+also the first surface that takes letters: `crates/karakuri-console` reads no key events, so the
+program fills the buffer a character at a time, and the wall on what may be typed is where the file
+is written rather than where it is typed. What it cost is a fourth clause in the pointer rule —
+while the menu is down every point of the console is the panel's, ahead of a boundary's first
+refusal, because the card is drawn out of a 48-tall row and across the bays under it.
 
 **The Mixer bay is drawn**, from the deck's own state — a strip per slot with its name, its
 residency, its gain trim, its opacity fader, its meter and its blend and mask marks
@@ -767,7 +782,13 @@ guard that recomputes the tree's implied minimum caught the console's claimed sm
 having been 9.5 px short from the moment that row was specified. The transport row's `fixed(48.0)` is **at risk and was not settled**: with the
 offset pill added the mock's row is about 898px of a 966px inner width at the console's 1010px
 minimum, so it wraps there and the 48 stops being the height of its contents — but the built console
-draws six of that row's ten items, so it has slack the mock does not. This wants ADR-0190's
+draws fewer of that row's items than the mock holds, so it has slack the mock does not. **How many
+fewer is not written here and is not written in the source either**: `view.rs` deleted its own *six
+of the mock's ten* on the third time a figure about that page went stale, and what the mock holds is
+`docs/manual/console.html`'s `.transport` block, which is a count somebody takes rather than
+remembers. The arrangement pill has since been added to both sides — the mock's `.transport` gained
+it and the console draws it — so both halves of that comparison moved on 2026-08-30, which is the
+fourth time a number nobody was recounting went out from under this sentence. This wants ADR-0190's
 treatment, which is to measure through `egui`'s own text layout rather than to argue from the
 stylesheet.
 
@@ -969,8 +990,10 @@ re-taken once that boundary is drawn.
    ([ADR-0210](adr/0210-a-declared-cost-is-one-panel-pass-written-down-and-held-against-the-run.md)):
    `budget::PANEL_PASS` is the cost — 1.26 ms, written down rather than sampled, because a measured
    schedule reorders itself with the machine's noise (ADR-0164) — and
-   `crates/karakuri-console/tests/schedulable.rs` reads `Σ (cost / staleness)` at 0.0378 against 1.0
-   and `max(cost)` at 1.26 ms against 4.17 ms. Nothing is over budget (19.6–26.3% of a second over
+   `crates/karakuri-console/tests/schedulable.rs` reads `Σ (cost / staleness)` at 0.0889 against 1.0
+   — 0.0510 for the transport's beat and 0.0378 for the mixer's, the first time that sum has had two
+   terms — and `max(cost)` at 1.26 ms against 4.17 ms, which is still one number because both regions
+   are the same pass. Nothing is over budget (19.6–26.3% of a second over
    ten runs on 2026-08-28, with headroom).
 
    **What is left is the policy rather than the inputs**, which is the sentence this item used to
@@ -1143,20 +1166,35 @@ re-taken once that boundary is drawn.
    column is now enforced both ways round and by badge text as well as by title, which is the first
    of the four route columns to become checkable at all — the vocabulary's own manual test says
    those *"become checkable one surface at a time as they migrate"*.
-4. **The remaining bays, surveyed — and the survey is the order.** One of the five is built and the
-   other four are each waiting on something. What each is standing on is
+4. **The remaining bays, surveyed — and the survey is the order.** Three of the five draw something
+   now — the Library as a listing, the Staging lane as its empty state, the Inspector in full — and
+   the other two draw nothing but their heads. **The two are not the same kind of item as the three
+   that closed**: each is waiting on machinery rather than on drawing, which is why the range below
+   is not simply reduced by the bays that landed. What each is standing on is
    [console.html](manual/console.html); what decides which comes next is whether the values behind
    it exist anywhere in this workspace.
 
    - **Library — built, as a listing.** `Store::list_sets` is the one answer to *what does this
      library hold*, so the bay draws a row per Set and a foot reading `n of m` — how many are
      listed against how many there are, which is the mock's own `5 of 27`. **Six of the mock's
-     controls stay undrawn and each is waiting on something different**: a *favourite* is a fact
-     nothing here keeps; the *scope* row is four collections of which one exists, and what a folder
-     scope reads is `console.html`'s own still-open question; the *filters* have an operation
-     (`Operation::ListSets { holds, layer }`) and no index to answer it; and `load → C` is *how a
-     Set gets from the library to a deck*, the manual's largest named gap. **That gap blocks playing
-     from this bay and not drawing it** — a readout says what is there, and this one can. The
+     controls stay undrawn and each is waiting on something different, and three of the six had a
+     decision named here as their blocker where the page has since taken it**: a *favourite* has a
+     home — kept beside the Sets, in the library — and is still a fact nothing in this workspace
+     writes, so the star has no value to read; the *scope* row is four collections of which one
+     exists, and **a folder scope is settled** — a folder row reads Sets, and is a *take* then a
+     load — so what it waits on is an operation that can ask a directory for a listing, `ListSets {
+     holds, layer }` having nowhere to put one; the *filters* have that same operation and no index
+     to answer it; and the foot's pill — `load → A` on the page and in `view` alike since the deck
+     it names was resolved, where this entry said `load → C` — is *how a Set gets from the library
+     to a deck*. **That last one is blocked on machinery rather than on a control, which a `plan`
+     badge cannot say**: the pill is a readout of where a press would land and would not become a
+     control, the cursor and the deck selection it reads are a selection this crate does not keep,
+     the key is the page's to choose, and under all three `Operation::LoadSet` is `Silent(NoRecord)`
+     — so a surface naming it has to perform it, and nothing in this workspace loads a Set into a
+     *running* deck. `Deck::install` is the one function that puts a Set in a slot and its own
+     documentation is that it is *"deliberately not reachable from a key or a surface"*; `--set` and
+     `--load-set` are launch flags, which is why the row is marked `launch`. **None of that blocks
+     the listing** — a readout says what is there, and this one can. The
      seventh omission is the odd one and is
      [ADR-0200](adr/0200-a-bays-first-pass-draws-the-values-that-exist-and-omits-the-rest.md): the
      **time** beside each name has a value (`SetEntry::written`) and no spelling — the one in this
@@ -1273,9 +1311,27 @@ re-taken once that boundary is drawn.
     **a wildcard write crosses authority.** `Operation::WriteParam` carries `ParamAt { node:
     Option<NodeAt> }`, so one write moves every node that declares the key — which means granting an
     agent one renderer grants it, through a bare-name control, a renderer the operator kept. That is
-    **rule 06's refused switch at the width of a key**, and it is a hole in
+    **rule 06's refused switch at the width of a key**, and it was a hole in
     [ADR-0211](adr/0211-authority-is-set-per-node-and-the-record-is-the-sessions.md)'s model rather
-    than in the page. Nothing in the vocabulary says what an authority may refuse.
+    than in the page.
+
+    **That hole is closed, and what the bay is now waiting on is not it**
+    ([ADR-0223](adr/0223-a-wildcard-write-is-refused-where-the-nodes-it-lands-on-disagree.md)): a
+    wildcard write is **refused where the nodes it lands on disagree**, naming the ones that
+    disagreed, and the sentence lives in `Set::write_param` — the one entry point a `--param`, a
+    published control and a `param` record all come through, which is P-0061. `Set::write_param`
+    returns a `Result` for it, and so does `Set::set_published`, which had been answering a refusal
+    with the same `false` it answers *nothing publishes that name* with. **What replaced it is two
+    narrower things, and neither is the Inspector's drawing.** The refusal cannot be met in a run
+    today — `swap::Request::authorities` is empty in every one, because nothing calls
+    `set_authority` outside tests, so every node of every Set is `Manual`; **the row can read and
+    nothing can make it change, and what is missing is a writer** rather than the engine field
+    ([ADR-0216](adr/0216-a-node-nobody-has-spoken-for-is-manual-and-a-request-states-only-what-was-said.md)
+    landed that, and `Record::Authority` is deliberately excluded from Set-file state, so the writer
+    has to be a live-session one). And **the asker is undecided**: whether an *addressed* write by
+    an agent onto a node the operator kept is refused cannot be decided until something writes a
+    param on an agent's behalf, and nothing does — `Operation::WriteParam` is constructed nowhere
+    and executed nowhere in this workspace.
 
 
     **And the guard caught a nine-and-a-half pixel lie.** `tests/arrangement.rs` recomputes the
@@ -1310,12 +1366,27 @@ re-taken once that boundary is drawn.
      and this crate keeps none — the Library's answer, *list what fits and say how many*, is a
      listing's answer and not a node tree's. And the `showing` header, `keep` and `2 up` are
      controls, the last of them the arena gap `view::outputs` already names as drawn five times.
-   - **Master — blocked on machinery, and the bay is two things neither of which exists.** There is
-     **no master out level anywhere in `karakuri-engine`**: `Deck::gain` and `Deck::opacity` are per
-     slot and the Mixer bay draws both. And a master effect is `console.html`'s own *"giving L5 a
+   - **Master — still blocked on machinery, and the blocker moved on 2026-08-30.** This entry read
+     *"the bay is two things neither of which exists"* and said **there is no master out level
+     anywhere in `karakuri-engine`**. **The first of the two exists now**
+     ([ADR-0224](adr/0224-out-and-exposure-are-two-levels-that-multiply-in-different-places.md)):
+     `out` and `exposure` are two levels that multiply in different places, and the engine half
+     landed — `Deck::set_out`, one scalar on the mix uniform and one multiply at the end of
+     `composite.wgsl`, which is where the mix writes the composited frame and therefore the master
+     chain's entry. It is deliberately **not** on `Look`, which is documented as exactly
+     `set_tonemap`'s arguments. `Deck::gain` and `Deck::opacity` stay per slot and the Mixer bay
+     goes on drawing both; the master out is the whole fold and is a third thing.
+     **What the row waits on now is a route, not a value**: no operation, no `Record`, no key, no
+     MIDI target and no flag reaches it, so only a test writes it, and a flag is refused by
+     [ADR-0046](adr/0046-a-flag-writes-into-the-record-it-does-not-invent-one.md) until a record
+     exists to write into. `docs/manual/operations.html` gains a *Master out* row when there is an
+     operation to name.
+     **The second of the two is unchanged**: a master effect is `console.html`'s own *"giving L5 a
      writable form"*, which is not built — the callout on that page is the argument for it, not a
-     record that it happened. What is left of the bay is its footnote, *runs in linear HDR, before
-     the one tonemap*, which is true and is a sentence rather than a readout.
+     record that it happened. Until it is, the two levels are arithmetically indistinguishable in
+     every frame this program can draw, which the record took as a deliberate cost and a test
+     measures. The bay's footnote, *runs in linear HDR, before the one tonemap*, is still true and
+     still a sentence rather than a readout.
    - **Sequencer — surveyed on 2026-08-29, and what it can draw today is nothing beyond its head.**
      Lanes, steps, a ruler and a playhead, and **nothing in this workspace holds a pattern**, so
      every part of it reads a value nothing holds — the one region where
@@ -1548,9 +1619,20 @@ than work, and every one of them was found by building the thing next to it.
   met by the arrangement rather than by a second control, and drag is a second route naming the deck
   by the strip you drop on. A destination chosen in the library's own foot lost: it would be a third
   selection on a panel that already explains two. `Operation::LoadSet { deck, set }` already exists
-  and already has a row, so nothing was invented — **what is owed is a key for it**, and MIDI is
-  empty for a reason rather than for want of a letter: every `Target` in `karakuri-midi` carries a
-  slot, a range or a value from a closed list, and **none carries a string**.
+  and already has a row, so nothing was invented — and MIDI is empty for a reason rather than for
+  want of a letter: every `Target` in `karakuri-midi` carries a slot, a range or a value from a
+  closed list, and **none carries a string**.
+
+  **What is owed is more than the key, which this bullet read wrong until 2026-08-30.** The letter
+  is the page's to choose (ADR-0198), and under it are three things that are not drawings: the
+  cursor and the deck selection the pill reads are a selection `karakuri-console` does not keep —
+  ADR-0219 records that selection as living *"in the specification and not in this crate's code"* —
+  and `Operation::LoadSet` is `Silent(NoRecord)`, so whichever surface names it has to **perform**
+  it, and nothing in this workspace loads a Set into a running deck. `Deck::install` is the one
+  function that puts a Set in a slot and is documented as *"deliberately not reachable from a key or
+  a surface"*; it is the replay's path, and `--set` and `--load-set` are launch flags, which is why
+  the row is marked `launch`. **A `plan` badge does not distinguish a drawing that is owed from a
+  machine that is missing**, and this row wears the first one's badge while being the second.
 
   **A folder scope reads Sets.** A Set file and a bundle are one file — `ir-spec.md`'s Set format
   with `src` runs appended — so the scope draws one kind of row; a `.kir` is one node's source with
@@ -1573,8 +1655,9 @@ than work, and every one of them was found by building the thing next to it.
   *Move a boundary* is: a press on a gap takes the boundary in hand and the program wires press,
   move and release. The other three are not, and the reason is the same for all of them — **the
   control is painted and never hit-tested.** A bay head's grip, a pane edge and the `solo` pill are
-  drawn; `input::claim` names five controls and none of them is one of these, so the only route to
-  `Fold`, `Solo` and the rest is a **key**. The claim that a pointer press reached `Op::Fold` was
+  drawn; `input::claim` names six controls — five when this was written, and the arrangement pill
+  since — and none of them is one of these, so the only route to `Fold`, `Solo` and *bring back what
+  is folded* is still a **key**. The claim that a pointer press reached `Op::Fold` was
   wrong: `Readout::enclosing` has exactly one caller and it is `Key::Character("g")`.
 
   **Two things that survey found and neither is small.** The Outputs dot **is** hit-tested and
@@ -1599,15 +1682,16 @@ than work, and every one of them was found by building the thing next to it.
   checks the MIDI column at all.** And **the `.path` row cannot carry a
   tooltip at all**: it sets `overflow: hidden` and a tip is an absolutely-positioned child, so it is
   clipped — which is rule 03's *anything compact says three things on hover* broken by a
-  declaration rather than by an omission. *Whether a folder scope reads Sets or artifacts* is what the scope row is waiting on — a
-  directory of `.kir` files, a directory of Set files and a bundle are three different things, and
-  the chip is a control over whichever it turns out to be. *How a Set gets from the library to a
-  deck* is the `load → C` pill, and the manual already says what should decide it: the
-  keyboard-only constraint, with dragging added afterwards as a second route to the same command.
-  Neither blocked the listing
-  ([ADR-0200](adr/0200-a-bays-first-pass-draws-the-values-that-exist-and-omits-the-rest.md)); both
-  block everything after it. A third is smaller and is not on that page: **nothing keeps a
-  favourite**, so the star has no value to read and the `favourites` scope has no membership.
+  declaration rather than by an omission.
+
+  *(This bullet closed with three library questions restated as open — whether a folder scope reads
+  Sets or artifacts, how a Set gets from the library to a deck, and the favourite — and all three
+  had been answered on the page the same day, in the bullet above. The paragraph is deleted rather
+  than corrected, because it was a second copy of an answer this file already carries: a folder
+  scope reads Sets, a Set reaches a deck by the deck selection, and a favourite is kept beside the
+  Sets. What each of the three still waits on is in the Library entry under **The remaining bays,
+  surveyed**, and none of the three ever blocked the listing —
+  [ADR-0200](adr/0200-a-bays-first-pass-draws-the-values-that-exist-and-omits-the-rest.md).)*
 - ~~**What authority is set on: a layer, a node, or a slot.**~~ **Taken: per node of a Set** —
   [ADR-0211](adr/0211-authority-is-set-per-node-and-the-record-is-the-sessions.md). Three
   documents gave it three addresses and none was a synonym for the others: the four properties at
@@ -1650,7 +1734,9 @@ than work, and every one of them was found by building the thing next to it.
   is the same sentence, and [every operation](manual/operations.html) routes **Exposure** to `panel
   transport` — so **the page promises two homes for what may be one value**. This file's own claim
   that *there is no master out level anywhere in `karakuri-engine`* was found by searching for the
-  word `master`, and that word appears in that crate **zero times**.
+  word `master`, which appeared in that crate **zero times** when the question was filed. It does
+  not now: `deck.rs`, `mix.rs`, `present.rs` and `composite.wgsl` all carry it, which is what taking
+  this decision bought and is why the Master bay's entry in the survey no longer reads as it did.
 
   **a.** One value: `out` *is* `exposure`, its panel route moves to the master out, and the bay's
   first row can be drawn today with nothing added to the engine.
@@ -1677,7 +1763,7 @@ than work, and every one of them was found by building the thing next to it.
   `set_tonemap`'s arguments — a chain-entry level there would contradict the decision it records.
   **What is left is a route**: no operation, no `Record`, no key, no MIDI target and no flag reaches
   the value, so only a test writes it, and a flag is refused by
-  [ADR-0046](adr/0046-a-flag-writes-into-a-record-it-does-not-invent.md) until a record exists to
+  [ADR-0046](adr/0046-a-flag-writes-into-the-record-it-does-not-invent-one.md) until a record exists to
   write into. `docs/manual/operations.html` gains a *Master out* row when there is an operation to
   name; the Exposure row does **not** move, which is the routing this decision did not change.
   **And the test asserting the two are indistinguishable is deleted the day a master effect lands
@@ -2195,8 +2281,11 @@ where several of them came from — moving a boundary, folding a bay or a pane, 
 solo, and resetting the arrangement, and since
 [ADR-0221](adr/0221-an-arrangement-is-named-by-the-operator-and-kept-in-a-fourth-place.md) saving
 an arrangement and putting a saved one back. Every one of the first six has a route now, which it
-did not on 2026-08-28; the two ADR-0221 added have none yet, and are the next piece of work under
-*Where this goes next*.
+did not on 2026-08-28, and **the two ADR-0221 added have one since 2026-08-30**: the transport
+row's arrangement pill reaches `save`, `load` and `start a new one`, the last of which is the reset
+([ADR-0225](adr/0225-a-menu-is-a-gesture-in-hand-rather-than-a-rectangle-on-the-panel.md)). The
+three rows moved `plan` to `has` with it, which is what the first command under *The meter is one
+column* now reads.
 
 **The figure this sentence used to carry went stale four times, the same way every time.** It read
 50 of 208 while the page said 51; then 49 of 212 while the page said 50 of 216; then 51 while five
@@ -2428,7 +2517,8 @@ below is blocked on anything else.
 #### What this milestone has delivered, and why the list below stopped counting it
 
 **The list below is the second half of the work, and reading it as the milestone is what makes
-the progress invisible.** Not one of its seven items is finished. Meanwhile
+the progress invisible.** Not one of its seven items was finished when that was written, and one is
+now — *an arrangement is saved and restored*, whose control landed on 2026-08-30. Meanwhile
 `karakuri-layout` and `karakuri-console` were written from nothing — the first commit in either
 is 2026-08-24 — the operation vocabulary and its record crate landed beside them, and the records
 and principles behind them landed with them, from
@@ -2480,7 +2570,15 @@ those seven items was made of. This is what it turned out to be.
   rather than split
   ([ADR-0211](adr/0211-authority-is-set-per-node-and-the-record-is-the-sessions.md)); it writes
   `Record::Authority`, the second session record to name a node, and **the engine field a per-node
-  flag needs to survive a rebuild is owed and not written**.
+  flag needs to survive a rebuild is written** — `swap::Request::authorities`, restated on every
+  rebuild, with a node nobody has spoken for `Manual` so that dropping the restatement destroys a
+  grant rather than taking one back
+  ([ADR-0216](adr/0216-a-node-nobody-has-spoken-for-is-manual-and-a-request-states-only-what-was-said.md)).
+  **What is owed is a writer**: nothing calls `set_authority` outside tests, so every node of every
+  Set is manual and the chip can read while nothing can make it change.
+  A wildcard write over nodes that disagree is refused rather than landed partially
+  ([ADR-0223](adr/0223-a-wildcard-write-is-refused-where-the-nodes-it-lands-on-disagree.md)), which
+  is why `Set::write_param` and `Set::set_published` both carry a `Result` now.
   `karakuri-operation-record/` is where an operation becomes a record, a crate that depends on
   both ([ADR-0194](adr/0194-where-an-operation-becomes-a-record-is-a-crate-that-depends-on-both.md)).
   **The MIDI map is migrated and `Action` is deleted**
@@ -2690,8 +2788,8 @@ it.
   press: three `plan` badges on the board under `deck head`, none of which is waiting on a page
   question any more. **Gated inside M5, on nothing but the work.**
 - **An arrangement is saved and restored, and resetting is the special case of restoring the
-  default.** The panel's own state — every fold, every boundary, what is soloed — lives only in a
-  running process today, and the one operation that changes it wholesale is `Reset`. That is the
+  default.** ~~The panel's own state — every fold, every boundary, what is soloed — lives only in a
+  running process today, and the one operation that changes it wholesale is `Reset`.~~ That is the
   wrong way round: an operator who has spent a set arranging the console wants that arrangement
   back tomorrow, and *the default* is one arrangement among the ones they could name. So `Reset`
   belongs to a family rather than standing alone, and the family is what decides its prose — the
@@ -2731,7 +2829,16 @@ it.
     written. A listing operation is not owed — the panel reads `list_arrangements` the way the
     Library bay reads `list_sets`.
 
-  **What is left is the control, and it is the next piece of work** — see *Where this goes next*.
+  **And the control has landed, on 2026-08-30**
+  ([ADR-0225](adr/0225-a-menu-is-a-gesture-in-hand-rather-than-a-rectangle-on-the-panel.md)): the
+  transport row's **arrangement pill**, with `save`, `load` as the list of names already filed, and
+  `start a new one`, which is the reset — the map pill's shape, which is the argument for the row
+  rather than a resemblance. **It is the first control here that takes letters**, so the wall on
+  what may be typed had to be written where the file is written rather than where it is typed
+  (`checked_name`, P-0076), a path `Store::write_arrangement` says outright it does not check and
+  that until now no caller could reach. **And it is the first whose gesture outlives the press**,
+  which cost the pointer rule a fourth clause and a stated price: a boundary cannot be dragged with
+  a menu open, because the card is drawn out of a 48-tall row and across the bays under it.
   The store side is nine tests through a real file, and the panel side is `Panel::restore` rather
   than a ninth `Op`, because `Op` is `Copy + Eq` and names a `NodeId` or nothing while a whole
   `Layout` is a payload only a third party holding a store can produce. **No key is bound and the
@@ -2752,8 +2859,9 @@ it.
   a `String`: both tests went through `serde_json` in memory and neither had ever seen a file,
   which is why ADR-0221's set is nine rather than two — a defect that filed the arrangement in the
   wrong directory entirely passed both the round-trip and the solo test, because they write and
-  read through the same wrong path.)* **Partly done, and the least gated of the seven — what is
-  left is one control on the transport row.**
+  read through the same wrong path.)* **Done as far as this milestone's own list reaches**: the
+  record, the place, the two operations and the control all exist, and what is left of the family
+  is a key, which is decided as *not one* rather than pending.
 
   The mock has the shape one level over: the Library's scope row already lists **presets** beside
   favourites and a folder, and says the scope list is itself extensible.
@@ -2767,7 +2875,7 @@ solved and round-tripping arrangement and a migrated MIDI map in five days, with
 [what this milestone has delivered](#what-this-milestone-has-delivered-and-why-the-list-below-stopped-counting-it)
 behind it. The list was.
 
-**What the range assumes, and two of its assumptions have since been met.** That the four undrawn
+**What the range assumes, and three of its assumptions have since been met.** That the four undrawn
 regions — `staging`, `inspector`, `master`, `sequencer` — are the bulk of what is left, and that
 they cost roughly what the five drawn ones did. **The inspector is drawn and the staging lane draws
 its empty state**, so what is left of that assumption is `master` and `sequencer`, both of which
@@ -2775,8 +2883,10 @@ are blocked on machinery rather than on drawing — which is a different kind of
 that closed, and is the reason the range is not simply reduced by two bays. That three decisions get taken rather than deferred: **who owns the pointer** (which the
 parameter surfaces and every tooltip in the console wait on), **what a thumbnail is of** (M4's, and
 judged here), and **the arena's insert and remove** (which the node editor and the inspector's `2
-up` both want, and whose remove half moves every `NodeId`). That the manual gains the deck head it
-does not have, before the panel does. And that the vocabulary keeps converging — `panel::Op` and
+up` both want, and whose remove half moves every `NodeId`) — **all three are still open.** That the
+manual gains a deck head, before the panel does: **it has one**, written on 2026-08-29 under each
+`.half-head` in the inspector, and the Inspector draws it, so that assumption is met and the three
+operations routed there are waiting on nothing but the press. And that the vocabulary keeps converging — `panel::Op` and
 the CLI's match arms onto `karakuri-operation`, one at a time.
 
 **What is not in the range.** The five operations still named `Undecided`, if any of them turns out
