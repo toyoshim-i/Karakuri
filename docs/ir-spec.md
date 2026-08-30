@@ -46,10 +46,28 @@ kind L4        // rendering
 kind Field     // a signed distance at a point
 ```
 
-All five are built. `L5` is **not** among them and should not be: a `kind` says what a
-procedure *lowers to*, and an L5 has no code to lower since the compositing is fixed — so
-there is no `kind L5` file, and `crate::node::Merge` is the node. See
-[L5](#l5--built).
+All five are built. `L5` is **not** among them, and the reason is a **condition rather than a
+principle**: a `kind` says what a procedure *lowers to*, and **the compositing is fixed** —
+`crates/karakuri-engine/src/shaders/composite.wgsl` — so the one L5 that exists has no code to
+lower, a `kind L5` file would have nothing to contain, and `crate::node::Merge` is the node.
+`kind L5` is refused where it is written, with `unknown kind` naming the five this compiler
+builds. See [L5](#l5--built).
+
+**What would end that condition is writing the compositing down, and nothing has written
+it.** [manual/console.html](manual/console.html)'s *The mixer is an L5, and so is a master
+effect* is the proposal: the node's signature is the one
+`crates/karakuri-engine/src/node/merge.rs` states, `[Texture] -> Texture`, and *"a master
+effect is that signature with one input; the mixer is the same with several. One kind, not
+two"* — so admitting frame effects is **giving L5 a writable form**, and a written form is
+code to lower. The day one is written this paragraph's condition fails and `L5` is a kind on
+the same terms as the other five, with the built-in mix keeping its place beside them —
+which is **L3's arrangement rather than a new one**: `L3` is a kind, camera procedures are
+written in this language, and the built-in orbit has no procedure to reference and is
+described by a `camera` record instead. What survives that day is the sentence about the
+**built-in** — a node with no code to lower needs no `kind` and is described by a record —
+and not the sentence about the layer. **None of it exists**: no `.kir` may declare an L5,
+`karakuri-engine` folds one fixed shader, and the sentence above is the state rather than a
+preference about what the state should be.
 
 **A note on the word, because it is used in two senses here.** A bare **layer** in this
 specification is a **kind** — the `layer` field on a record names one, and so does every
@@ -1183,7 +1201,8 @@ have, and would give it a ceiling that says nothing about what evaluating it cos
 The number that has to fit under a ceiling is the caller's with this multiplied into it.
 
 **Why `Field` is a `kind` and has no node.** A `kind` says what a procedure *lowers to*, and
-an L5 has no `kind` because it has no code to lower.
+an L5 has no `kind` because the compositing is fixed and the built-in has no code to lower —
+[kind](#kind) is where that condition is stated and where what would end it is named.
 A field is the mirror: it has only code to lower. So it has a file and no node, needs no
 buffer and no pass, and takes no position in the chain — which is also why it introduces no
 new syntactic category. There is no user-defined function here; there is one more kind, one
@@ -3082,6 +3101,20 @@ nothing for a `kind L5` file to contain. What "under the node model it becomes o
 is `crate::node::Merge`, and that is what exists: `crate::mix` holds the shader, the uniform
 and the per-input controls, `Deck` mixes on it with a surface wired to every input, and a Set
 folds its renderers with it and no surface at all.
+
+**And that is a statement about the fixed compositing rather than about the layer**, which is
+where [kind](#kind) leaves it and where the console page picks it up. *The mixer is an L5, and
+so is a master effect* reads this node's own signature, `[Texture] -> Texture`, as one kind
+with a built-in instance: **a master effect is that signature with one input**, the mixer is
+it with several, and admitting frame effects is *giving L5 a writable form* rather than
+extending the algebra — with fan-in already answered by `uses` plus `edge`, and the deck count
+ceasing to be a system constant, since how many inputs an L5 folds would become a property of
+the procedure. **Nothing of that is built**, and this section is not a plan for it: what would
+change here the day it is written is that `L5` joins the five above, `crate::node::Merge`
+stays exactly where the built-in orbit camera stays, and the `merge` record keeps describing
+it for the reason the `camera` record describes that. **Feedback is the one effect that does
+not follow**: reading the previous frame is a cycle, and `docs/roadmap.md` carries what it
+turns on — which cut of the frame is read, and what holding that cut costs.
 
 A Set says which it wants with `karakuri_engine::set::Layering`, reached from the command
 line as `--merge <slot>`, **and a Set file records it** — the `merge` record, see [Set file

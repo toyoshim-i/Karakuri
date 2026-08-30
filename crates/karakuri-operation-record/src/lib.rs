@@ -54,16 +54,18 @@
 //!
 //! - [`Written::Records`] — it writes these, in this order. Fourteen
 //!   operations, eight of which need no reading at all.
-//! - [`Written::Silent`] — it writes none, and that is settled. Twenty-seven,
+//! - [`Written::Silent`] — it writes none, and that is settled. Thirty-one,
 //!   for [`Silent`]'s four different reasons.
-//! - [`Written::Owed`] — it writes one and this build cannot make it. Ten,
-//!   for [`Owed`]'s three different reasons.
+//! - [`Written::Owed`] — it writes one and this build cannot make it.
+//!   Eighteen, for [`Owed`]'s three different reasons.
 //!
 //! **`Owed` is not a refusal and not an error.** It is a gap this crate
 //! declares about itself, in the shape `karakuri_operation::Undecided` is: a
 //! caller that meets one has met a question nobody has answered, and printing
-//! it is more use than a silent no-op. Four of the ten are the vocabulary's
-//! own `Undecided` rows.
+//! it is more use than a silent no-op. Twelve of the eighteen are the
+//! vocabulary's own `Undecided` rows, and eight of those twelve are the master
+//! chain's three effects and the sequencer's five — two bays the manual
+//! specifies and nothing holds.
 //!
 //! # What this crate deliberately cannot do
 //!
@@ -285,9 +287,16 @@ pub enum Owed {
     /// caller's to fix, and the only one of the three that is.
     NotRead(Reading),
     /// **The vocabulary itself says what this acts on is open** —
-    /// `karakuri_operation::Undecided`, at four variants, each with its
+    /// `karakuri_operation::Undecided`, at twelve variants, each with its
     /// question written at its own definition. Nothing can be written down
     /// here that is not already decided there.
+    ///
+    /// **Eight of the twelve arrived together and are two whole bays**: the
+    /// master chain's three effects and the sequencer's five, specified on
+    /// the manual's page before anything holds a chain or a pattern. They are
+    /// the largest thing this answer has ever been asked about at once, and
+    /// they are the reason the arm below says which of them will owe a record
+    /// and which nobody can yet say owes one.
     Undecided,
     /// **Its record is not a function of values alone, and who supplies the
     /// rest is undecided.** Six operations, and they divide cleanly:
@@ -539,10 +548,52 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
         | Operation::ScaleGrid { .. } => Written::Owed(Owed::NotSettled),
 
         // ----- Owed: the vocabulary's own open questions -------------------
+        //
+        // **Every operation whose payload is `karakuri_operation::Undecided`
+        // is here, and `Operation::MoveBoundary` is why that is a rule rather
+        // than a coincidence.** A divider position is as plainly a surface's
+        // own state as the four folds it sits beside on the page, and it is
+        // still *here* instead of in `Silent::Surface`: while the vocabulary
+        // says what an operation acts on is an open question, what it writes
+        // cannot be answered either, and this is the arm that says so out
+        // loud.
         Operation::MoveBoundary { .. }
         | Operation::WalkHistory { .. }
         | Operation::WatchFiles { .. }
-        | Operation::RouteFrame { .. } => Written::Owed(Owed::Undecided),
+        | Operation::RouteFrame { .. }
+        // **The master chain's three effects will owe a record**, which is
+        // why calling them silent would be wrong rather than merely early:
+        // ADR-0227 keeps a chain's *levels while it is being played* in the
+        // session stream — *"the same way a Set's gain does"* — and
+        // `Record::MasterOut` says of itself that *"there is nothing else
+        // about the master chain a stream can say yet … it grows the day an
+        // effect lands in the chain."* Nothing can be written here because no
+        // effect and no parameter of one exists to name, and that record
+        // declines to invent them for the same reason this arm declines to:
+        // *"a record kept for a thing that does not exist would be inventing
+        // its contents."*
+        | Operation::SetFeedback { .. }
+        | Operation::SetBloom { .. }
+        | Operation::SetRgbShift { .. }
+        // **The sequencer's five are open one place further out**, and land
+        // here for a different reason. ADR-0227 refuses the session stream a
+        // *pattern* — a lane is a fifth route (ADR-0222), so what a pattern
+        // does already lands as `Record::Opacity` and its kin, sixteen a bar,
+        // and a pattern record beside them would be *"the cause written down
+        // next to every one of its consequences."* That is an argument about
+        // a pattern's contents rather than about what editing one writes, and
+        // neither `Silent` arm can carry the difference today: `Surface` would
+        // call a pattern the console's own state, where ADR-0227 makes it
+        // library data under the store on a Set's and an arrangement's terms;
+        // and `NoRecord` would call the stream's silence a settled gap, where
+        // nothing about these has been settled at all. So they wait on a
+        // pattern here, which is exactly the sentence `Owed::Undecided`
+        // prints.
+        | Operation::SetStep { .. }
+        | Operation::SetLaneMute { .. }
+        | Operation::PointLane { .. }
+        | Operation::SetPatternGrid { .. }
+        | Operation::SelectPattern { .. } => Written::Owed(Owed::Undecided),
 
         // ----- Silent: a surface's own state -------------------------------
         Operation::SelectDeck { .. }

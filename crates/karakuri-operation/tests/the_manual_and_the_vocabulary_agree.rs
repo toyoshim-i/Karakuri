@@ -43,8 +43,8 @@
 //! other three columns are still nobody's.
 //!
 //! **Not the payloads.** Nothing here can tell whether a variant carries the
-//! right fields; that is what the prose at each variant is for, and five of
-//! them carry `Undecided` and say so.
+//! right fields; that is what the prose at each variant is for, and thirteen
+//! of them carry `Undecided` and say so.
 //!
 //! The shape is `crates/karakuri-engine/tests/gpu_tests_are_under_mod_gpu.rs`:
 //! scan the checked-in source, assert in both directions, and carry floors so
@@ -142,10 +142,13 @@ fn the_manual_and_the_vocabulary_name_the_same_operations() {
     // took one for its authority (ADR-0211), 52 since the staging lane
     // took one to keep a candidate and one to put a version back, and 54
     // since the arrangement gained a save and a put-back beside the reset
-    // (ADR-0221); it is meant to move with the page, never to be lowered to
+    // (ADR-0221), and 62 since two whole bays were specified at once — the
+    // master chain's three effects and the sequencer's five, the first rows on
+    // the page waiting on neither a control nor a surface (ADR-0222,
+    // ADR-0227); it is meant to move with the page, never to be lowered to
     // fit a smaller scan.
     assert!(
-        rows.len() >= 54,
+        rows.len() >= 62,
         "only {} operations found in {PAGE} — is a row still `{ROW}` followed by an `<h3>`?",
         rows.len()
     );
