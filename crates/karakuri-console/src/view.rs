@@ -39,93 +39,74 @@
 //! [ADR-0170](../../../docs/adr/0170-a-deck-preview-cell-is-drawn-whether-or-not-a-deck-is-behind-it.md)
 //! for the alternative that lost and for what would reopen it.
 //!
-//! # The Staging lane is the one bay whose rows have no producer, so it draws none
+//! # The Staging lane draws a row per deck slot with a verdict outstanding
 //!
 //! [ADR-0200](../../../docs/adr/0200-a-bays-first-pass-draws-the-values-that-exist-and-omits-the-rest.md)
 //! draws every part of the mock that has a value behind it and omits the
-//! rest. Applied to the Staging bay it omits the entire body, and the reason
-//! is neither a missing spelling nor a missing control — it is that **nothing
-//! in this workspace can put a row there.**
+//! rest. Applied to this bay it draws **three** of the seven things a
+//! candidate row could carry — the deck, what the build calls itself, and
+//! whether it is on screen — and omits the other four outright.
 //!
-//! **What a row would be.** `console.html` specifies four things: the node
-//! (`L4:0`), what the procedure calls itself, whether it is *on screen* —
-//! landed, rolled back for costing too much, or refused by the checker — and
-//! when it arrived. So the lane is a list of **nodes whose newest version has
-//! not been settled**: `karakuri_operation::Operation`'s `KeepCandidate` and
-//! `RestoreProcedure` both address a node and not a version, because a node
-//! has at most one unsettled version.
-//!
-//! **That set is empty here structurally, and not merely for now.** The
-//! program this panel is drawn by builds both its deck slots with
-//! `karakuri_engine::HotSwap::fixed` — no watcher, no MCP, no build `Source`
-//! of any kind — and `fixed` keeps a `Receiver` whose `Sender` was dropped at
-//! construction. So `install_if_ready` finds a disconnected channel and
-//! installs nothing, `trial` is never `Some` and the watchdog returns on its
-//! first line, and **not one `swap::Event` of any variant is emitted in any
-//! run of this program.** A candidate row would be
+//! **This section used to say the lane draws nothing, and the reason it gave
+//! was true of the program rather than of the workspace.** Both halves of the
+//! producer were already public and already wired elsewhere:
+//! `karakuri_engine::deck::Deck::slot` hands out the `HotSwap` a verdict comes
+//! out of, and `karakuri-cli` builds its slots with `HotSwap::new` over a
+//! `karakuri_environment::watch::Watch`. What was true is narrower: the
+//! program this panel is drawn by built both its deck slots with
+//! `HotSwap::fixed`, whose `Receiver`'s `Sender` is dropped at construction —
+//! so no `swap::Event` of any variant was emitted in any run of it, and a row
+//! would have been
 //! [ADR-0191](../../../docs/adr/0191-the-panels-parked-deck-is-parked-by-the-governor-or-it-is-a-drawing-of-one.md)'s
-//! parked chip: a drawing of a state the engine never entered.
+//! parked chip. That was host wiring and it is now wired: `crates/karakuri`
+//! watches its own `.kir` pair per slot, and a save is a build, a swap and a
+//! verdict.
 //!
-//! **And the row's address is not on the wire even once a producer is.** A
+//! **What a row is, and why it is the deck rather than the node.** A
 //! `swap::Event` carries an `id` and a `label` and no node, because a
-//! `karakuri_engine::Request` restates *every* node of the slot — so a
-//! verdict is over a build. Which node of that build changed is derivable:
-//! `karakuri_environment::watch::Built` carries `(layer, index, hash)` for the
-//! whole stack on every build, and consecutive builds differ where the hashes
-//! do. Nothing derives it. `karakuri_environment::history::Snapshots::record`
-//! computes exactly that discrimination on the worker thread — it returns the
-//! path it wrote, or `None` for a source that did not change — and the
-//! watcher drops the answer. The per-node `proc` name never crosses the
-//! channel at all; only the `label`, which is every node's name joined.
+//! `karakuri_engine::Request` restates *every* node of the slot — so a verdict
+//! is over a build. Which node of that build changed is derivable and nothing
+//! derives it: `karakuri_environment::watch::Built` carries
+//! `(layer, index, hash)` for the whole stack on every build, and consecutive
+//! builds differ where the hashes do.
+//! `karakuri_environment::history::Snapshots::record` computes exactly that
+//! discrimination on the worker thread — it returns the path it wrote, or
+//! `None` for a source that did not change — and the watcher drops the answer.
+//! The per-node `proc` name never crosses the channel at all; only the
+//! `label`, which is every node's name joined. So the address a row carries is
+//! the one the verdict has, which is the slot.
 //!
-//! **The rest of the mock's lane, each omission with what it waits on.**
+//! **The four omissions, each with what it waits on**, are written out at
+//! [`staging`]: the node above, the coloured dot and the `you` in
+//! `you, 14:41` (`origin` has no producer anywhere), the `14:41` itself (three
+//! spellings exist and none is chosen — the same decision the Library's time
+//! column waits on), and the head's `2 waiting` (a bay head's pills are its
+//! controls, and the rows are the count). The mock's third `.cand` —
+//! *a rejected candidate costs nothing* — is a note to whoever is reading the
+//! mock and not a thing the lane draws, and empty this lane draws *"no row, no
+//! placeholder, and no standing sentence"*, which is still every frame of
+//! every run until somebody saves a file.
 //!
-//! - **The coloured dot, and the `you` in `you, 14:41`** — who wrote it.
-//!   `origin` — the prompt, the model, the seed — is specified in
-//!   `docs/ir-spec.md` and produced by nothing, so a hand in an editor and a
-//!   model over MCP are the same save down the same path. The dot goes with
-//!   it, because the colour *is* the producer.
-//! - **`14:41`** — when it arrived. It waits on what the Library bay's `.dim`
-//!   column waits on and is refused for its reason: the value would exist and
-//!   a *spelling* does not. `karakuri_environment::history`'s is
-//!   `%H%M%S-%3f`, which is half a filename;
-//!   `karakuri_environment::setfile::written_at` is local to the second; the
-//!   mock's `14:41` is a third. **The reason this column waited has changed**:
-//!   it was that the one spelling sat in a package with no library target, and
-//!   ADR-0214 moved it, so what is left is three spellings and no decision
-//!   about which is the one.
-//! - **The head's `2 waiting`** — a count. It is not a queue depth: a
-//!   finished build is installed at a frame boundary rather than held for a
-//!   verdict, so the number would be *unsettled nodes* and waits on the rows.
-//!   One thing does wait and it is not this one: `install_if_ready` declines
-//!   to install while a candidate is on trial, so a build that finishes
-//!   inside a judging window sits in the channel until the verdict is in, and
-//!   a build superseded there is retired without ever having been drawn.
-//!   Nothing exposes either number, and no row is counted by either.
-//! - **The mock's third `.cand`,** *a rejected candidate costs nothing*. The
-//!   page says what that is: a note to whoever is reading the mock, and not a
-//!   thing the lane draws. Empty, this lane draws *"no row, no placeholder,
-//!   and no standing sentence"*.
-//!
-//! So the bay is its card and its head, which is the shapes the Sequencer bay
-//! draws — the lane's twin in this console's furniture, a title with no pill
-//! and no grip over nothing; `tests/staging.rs` counts the two against each
-//! other. **What the lane is for is still the row the mock does not draw** —
-//! after
+//! **Neither of the lane's two operations is built**, and it is the node that
+//! blocks them rather than the record: `karakuri_operation::Operation` spells
+//! *Keep a candidate* and *Put a node's previous version back* `{ deck, node }`
+//! apiece, and the node is what nothing here can name. Their record questions
+//! are settled — `Written::Silent(Silent::Surface)` and
+//! `Written::Silent(Silent::OnLanding)`. What the lane says without them is
+//! still the thing nothing else in this instrument says: after
 //! `swap::Event::RolledBack` the watchdog puts the previous *Set* back on
-//! screen and does not put the previous *file* back, while the watcher
-//! re-reads every file of the slot on every rebuild, so the picture is the
-//! old version and the disk is the over-budget one — and that row waits on
-//! the same producer every other row here does.
+//! screen and does not put the previous *file* back, so the picture is the old
+//! version and the disk is the over-budget one.
 //!
 //! **The height is what this leaves wrong, and it is not this module's to
 //! fix.** `lib.rs` pins the lane at `fixed(125.0)` with a minimum of `66.0` —
-//! the mock's three `.cand` rows, and one — and empty is not only this lane's
-//! ordinary state but the only state this program can reach, so those pixels
-//! are held open over nothing at the expense of the Library, which is the bay
-//! in that column that absorbs. A content-height lane needs `arrangement()`
-//! to take an argument, or `karakuri-layout` to grow a setter for a view's
-//! size, and it has neither. The numbers stay where they are.
+//! the mock's three `.cand` rows, and one — and empty is still this lane's
+//! ordinary state, so those pixels are held open over nothing at the expense
+//! of the Library, which is the bay in that column that absorbs. A
+//! content-height lane needs `arrangement()` to take an argument, or
+//! `karakuri-layout` to grow a setter for a view's size, and it has neither.
+//! The numbers stay where they are, and what they buy is that a lane which
+//! fills up has the room the mock gave it.
 //!
 //! # The Program bay's body arranges itself, and that is one derivation
 //!
@@ -452,6 +433,20 @@ pub enum Kind {
     /// drawn: they exist nowhere in this workspace, and a chain over machinery
     /// that is not there is the scaffolding this module refuses.
     Master,
+    /// **The Staging lane**, which is a bay in every other respect: the same
+    /// card and the same [`bay_head`], carrying [`STAGING_TITLE`], no pill and
+    /// no grip — the mock gives this head a count and the console draws no
+    /// readout in a bay head.
+    ///
+    /// A kind of its own for [`Kind::Mixer`]'s reason: [`View::draw`] has to
+    /// know **which** bay the candidate rows go in, and the alternative is
+    /// comparing a name on the frame path, which puts a string where the table
+    /// already says what a region is.
+    ///
+    /// See [`staging`] for what is drawn here, for where the rows come from,
+    /// and for the six things in the mock's lane and the page's row that are
+    /// **not** drawn.
+    Staging,
     /// One subdivision of a bay, which has no head of its own because the bay
     /// around it has one. The inspector's two panes.
     Pane,
@@ -563,15 +558,12 @@ pub const REGIONS: &[Region] = &[
     },
     Region {
         name: "staging",
-        // **No pill, and the mock's head has one**: `2 waiting` is a count of
-        // rows, and this lane has no row and no producer for one. The module
-        // documentation is where that is argued, omission by omission, and
-        // `tests/staging.rs` is what holds the bay to a card and a head.
-        kind: Kind::Bay {
-            title: "Staging",
-            pills: &[],
-            grip: false,
-        },
+        // A kind of its own since the lane got rows, exactly as the Library
+        // is: `View::draw` has to know which bay a candidate goes in. **The
+        // mock's `2 waiting` is still not drawn** — a bay head's pills are its
+        // controls, and the module documentation is where that is argued,
+        // omission by omission.
+        kind: Kind::Staging,
     },
     Region {
         name: "program",
@@ -6665,6 +6657,375 @@ fn library_into(ui: &Ui, pal: &Palette, bay: &LibraryBay, sets: &[String]) {
 }
 
 // ---------------------------------------------------------------------------
+// The Staging lane
+// ---------------------------------------------------------------------------
+
+/// **The word at the head of the Staging lane**, in the source's own
+/// capitalisation for [`Kind::Bay`]'s reason: the mock upper-cases in CSS, and
+/// that is done at paint time so the word a reader searches for is the word in
+/// the source.
+const STAGING_TITLE: &str = "Staging";
+
+/// **Where a candidate stands, in the three words `console.html` uses for
+/// it** — *"whether it is on screen: landed, rolled back for costing too much,
+/// or refused by the checker"*.
+///
+/// # One variant per `swap::Event` a verdict is outstanding on, and no fourth
+///
+/// `karakuri_engine::swap::Event` has five variants and this has three. The
+/// two that are not here are the two that leave nothing outstanding:
+/// `Accepted` is the watchdog saying the version held the budget, at which
+/// point the file and the picture agree and the row leaves the lane; and
+/// `WorkerLost` is about the *worker* rather than about a version — nothing
+/// will be built again, and no candidate changed state when it happened.
+///
+/// **`Refused` is a build that failed and not a source the checker turned
+/// down**, and the difference is worth stating because the page's own sentence
+/// reads the other way. A `.kir` that does not check never reaches the engine
+/// at all: `karakuri_environment::watch::Watch::poll` prints the diagnostics
+/// on the worker thread and returns `None`, so no `Request` is made, no
+/// `Event` is emitted, and **this lane cannot draw it** — which is a real gap,
+/// because a source the checker refused is exactly a file that disagrees with
+/// the picture. What `Event::Rejected` carries is a `SetError`: the files
+/// checked, and the *Set* they were assembled into would not build.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Stage {
+    /// `Event::Swapped` — the build is the live Set and is on screen. The
+    /// watchdog has not reported on it yet, which is
+    /// `karakuri_engine::swap::HotSwap::on_trial` and is **not** a fourth
+    /// word here: the page's row says whether a candidate is on screen, and a
+    /// version being judged is on screen. See [`staging`] for the one state
+    /// where a row stays on this word — a parked slot, whose trial is frozen
+    /// until it is drawn again.
+    Landed,
+    /// `Event::RolledBack` — **the row this lane most needs to draw.** The
+    /// watchdog threw the version out for cost and put the previous Set back
+    /// at the `t` it was parked at; it did not put the previous *file* back.
+    /// So the picture is the old version, the source on disk is the
+    /// over-budget one, and the next rebuild of anything in that slot swaps it
+    /// in again.
+    RolledBack,
+    /// `Event::Rejected` — the build failed and **nothing changed**: the
+    /// running Set is still running, with its `t` and its live count
+    /// untouched, and the disk holds material that does not assemble.
+    Refused,
+}
+
+impl Stage {
+    /// **The word drawn at the far end of the row**, which is
+    /// `console.html`'s and the mock's own: the deck head's `landed` pill
+    /// names the same three answers in the same words — *"the other answers
+    /// are rolled back for cost, and failed to build"*.
+    pub fn word(self) -> &'static str {
+        match self {
+            Stage::Landed => "landed",
+            Stage::RolledBack => "rolled back",
+            Stage::Refused => "refused",
+        }
+    }
+}
+
+/// **One candidate**, which is one deck slot whose newest build has a verdict
+/// outstanding or whose file no longer agrees with its picture.
+///
+/// # What is here is what a `swap::Event` carries, and that is the whole rule
+///
+/// An event carries an `id` and a `label` and nothing else about *what* was
+/// built, because a `karakuri_engine::Request` restates every node of a slot —
+/// so a verdict is over a build rather than over a node. The label is what the
+/// build calls itself (every node's `proc` name, joined), and the slot is
+/// which `HotSwap` the verdict came out of. Those two and the verdict are the
+/// three fields here; see [`staging`] for the four things the mock's and the
+/// page's row have that are not.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Candidate {
+    /// **Which deck slot the verdict is about**, drawn as
+    /// [`DECK_LETTERS`]' letter.
+    ///
+    /// **It is not the node the page's row addresses**, and it is not a
+    /// stand-in for one: the node is finer than anything on the wire (see
+    /// [`staging`]) and this is the address the verdict actually has. It is
+    /// drawn because without it the lane cannot be read: the program this
+    /// panel is drawn by plays one pair of files in both its slots, so one
+    /// save produces two builds whose labels are the same string — and *put a
+    /// node's previous version back* is an act on one slot.
+    pub deck: usize,
+    /// **What the build calls itself** — `Request::label`, which is every
+    /// node's own `proc` name joined with ` + `, and the harness's word rather
+    /// than this crate's for [`Strip::name`]'s reason.
+    ///
+    /// Clipped rather than elided where it does not fit, which is the mock's
+    /// own answer: `.cand` sets no `text-overflow` where `.strip-name` and
+    /// `.path` both do. An empty string draws no name at all.
+    pub name: String,
+    /// Whether it is on screen — [`Stage`].
+    pub stage: Stage,
+}
+
+/// **The Staging lane, laid out**: where the candidate rows go and how many of
+/// them there is room for.
+///
+/// # What is drawn, and it is three of the seven things a row could be
+///
+/// `console.html` specifies a row as four things — the node, what the
+/// procedure calls itself, whether it is on screen, and when it arrived — and
+/// the mock draws a fifth with no value behind it. This draws **the deck, the
+/// name and the verdict**, and [ADR-0200](../../../docs/adr/0200-a-bays-first-pass-draws-the-values-that-exist-and-omits-the-rest.md)
+/// is why the rest is omitted outright rather than drawn hollow.
+///
+/// - **The node — `L4:0`, the address the inspector writes on a node head.**
+///   `swap::Event` carries an `id` and a `label` and no node at all, because a
+///   `Request` restates every node of the slot and a verdict is therefore over
+///   a *build*. Which node of that build changed **is** derivable and nothing
+///   derives it: `karakuri_environment::watch::Built` carries
+///   `(layer, index, hash)` for the whole stack on every build, and
+///   consecutive builds differ where the hashes do. The one place in this
+///   workspace that computes that discrimination is
+///   `karakuri_environment::history::Snapshots::record`, which answers it on
+///   the worker thread — the path it wrote, or `None` for a source that did
+///   not change — and the watcher drops the answer. The per-node `proc` name
+///   never crosses the channel at all; only the `label`, which is every node's
+///   name joined. **Until something diffs consecutive builds, a node address
+///   here would be invented.**
+/// - **The coloured dot, and the `you` in `you, 14:41`** — who wrote it.
+///   `origin` — the prompt, the model, the seed — is specified in
+///   `docs/ir-spec.md` and produced by nothing (*"`origin` and `tag` have no
+///   producer"*), so a hand in an editor and a model over MCP are the same
+///   save down the same path. The dot goes with it, because the colour *is*
+///   the producer.
+/// - **`14:41`** — when it arrived. It waits on what the Library bay's `.dim`
+///   column waits on and is refused for its reason: the value would exist and
+///   a *spelling* does not. `karakuri_environment::history`'s is `%H%M%S-%3f`,
+///   which is half a filename; `karakuri_environment::setfile::written_at` is
+///   local to the second; the mock's `14:41` is a third. A fourth written here
+///   would be the second answer this repository deletes rather than adds, and
+///   it would be the *same* decision the Library is waiting on, taken twice.
+/// - **The head's `2 waiting`.** [`Kind::Bay`]'s pills are static words and
+///   are the mock's *controls* only — every readout in a bay head is undrawn
+///   for that reason, `previews 2 of 4` included. And the number would say
+///   what the rows already say: this lane has no truncation to report, where
+///   the Library's foot has (`n of m`), so a count over the rows would be one
+///   readout of two values against another of the same one.
+/// - **The mock's third `.cand`,** *a rejected candidate costs nothing*. The
+///   page says what that is: a note to whoever is reading the mock, and not a
+///   thing the lane draws.
+/// - **`Keep a candidate` and `Put a node's previous version back`.** Both are
+///   controls and this pass adds none, and both are blocked under that on the
+///   derivation the first bullet is about: `karakuri_operation::Operation`
+///   spells each of them `{ deck, node }`, and the node is the thing nothing
+///   here can name. Their record questions are settled and are not what is
+///   missing — `KeepCandidate` is `Written::Silent(Silent::Surface)` and
+///   `RestoreProcedure` is `Written::Silent(Silent::OnLanding)`.
+///
+/// # A row is a deck slot, and it leaves when nothing is outstanding
+///
+/// The rows are the caller's ([`View::staging`]), read off
+/// `karakuri_engine::deck::Deck`'s per-slot events: a slot gets a row when its
+/// newest event is `Swapped`, `Rejected` or `RolledBack`, and loses it on
+/// `Accepted` — the watchdog saying the version held the budget, which is the
+/// one outcome that leaves the file and the picture agreeing.
+///
+/// **What that stands in for is the operator's own verdict, and it is not the
+/// same judgement.** *Keeping* is taste and the watchdog's verdict is cost;
+/// the page is explicit that the two are different questions. With no control
+/// to keep with, a row that waited for one would never leave the lane, and a
+/// lane that never empties is not the lane the page describes — *"empty is
+/// this lane's ordinary state"*. So the cost verdict clears the row, and the
+/// day a `Keep` control lands it is what clears it instead.
+///
+/// **A parked slot's row stays on `landed`, and that is a reading rather than
+/// a stall.** `HotSwap::begin_frame_parked` freezes a trial — a slot that is
+/// not being drawn is not paying for the frames it would be judged on — so a
+/// build that lands in a parked slot has a verdict outstanding for as long as
+/// the slot stays off air, and the row says exactly that.
+///
+/// # Where it goes
+///
+/// `layout` must be solved: [`Layout::rect`] refuses to answer from a dirty
+/// one. Like [`library`] and unlike [`master`] this asks `egui` for nothing:
+/// every box in the row is the row's own width or a text box measured at paint
+/// time, so no rectangle here is the width of the type in it.
+///
+/// `None` where there is no candidate and `None` where there is no room for
+/// one: a console with no engine behind it is every test in this crate, and
+/// what the bay draws then is its card and its head and nothing at all —
+/// *"no row, no placeholder, and no standing sentence"*.
+pub fn staging(layout: &karakuri_layout::Layout, candidates: &[Candidate]) -> Option<StagingBay> {
+    // **Nothing outstanding on any slot, which is this lane's ordinary
+    // state** — and the state every run starts in. Drawing an empty list
+    // would be the standing sentence the page refuses.
+    if candidates.is_empty() {
+        return None;
+    }
+    staging_box(
+        to_egui(layout.rect(layout.find("staging")?)),
+        candidates.len(),
+    )
+}
+
+/// **The Staging lane, laid out** — see [`staging`] for what is drawn in it
+/// and for the six things in the mock's lane and the page's row that are not.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct StagingBay {
+    /// `.stage-list`'s content box: the region under the bay head, inside
+    /// [`size::STAGE_LIST_PAD_TOP`], [`size::STAGE_LIST_PAD_X`] and
+    /// [`size::STAGE_LIST_PAD_BOTTOM`], where the rows are laid from the top
+    /// with [`size::STAGE_GAP`] between them.
+    pub list: Rect,
+    /// **How many rows are drawn**, which is how many fit in [`list`](Self::list) —
+    /// never more than [`total`](Self::total), and never zero, because a lane
+    /// with no room for one row draws no list at all.
+    pub rows: usize,
+    /// **How many candidates the caller handed over.** Carried and not drawn:
+    /// there is no foot in this bay to say `n of m` in, and the head's count
+    /// is not drawn either ([`staging`]). It is here because a lane that had
+    /// room for fewer rows than there are candidates is a fact a test should
+    /// be able to ask about without counting shapes.
+    pub total: usize,
+}
+
+impl StagingBay {
+    /// The `index`th row's rectangle, counting from the top of the list.
+    ///
+    /// Derived rather than stored for [`LibraryBay::row`]'s reason — the rows
+    /// are a stride and a count, and a `Vec` of them would be an allocation a
+    /// frame does not need — with the one difference that this stride carries
+    /// a gap: `.stage-list` is a column flex with `gap: 5px` where `.lib-list`
+    /// states none.
+    pub fn row(&self, index: usize) -> Rect {
+        Rect::from_min_size(
+            Pos2::new(
+                self.list.min.x,
+                self.list.min.y + (size::CAND_H + size::STAGE_GAP) * index as f32,
+            ),
+            egui::vec2(self.list.width(), size::CAND_H),
+        )
+    }
+}
+
+/// The arithmetic of the lane, away from the layout it reads.
+///
+/// Term for term from `style.css`:
+///
+/// - `.stage-list { padding: 6px 9px 8px; display: flex; flex-direction:
+///   column; gap: 5px }` — what is left under the bay head, inset by those
+///   three numbers, with the rows stacked from the top of it.
+/// - `.cand { padding: 4px 7px }` — [`size::CAND_H`] each, with
+///   [`size::STAGE_GAP`] between one and the next and none above the first or
+///   under the last.
+///
+/// # How many rows fit, and the gap is one fewer than the rows
+///
+/// `n` rows occupy `n * CAND_H + (n - 1) * STAGE_GAP`, so the count is
+/// `floor((h + gap) / (row + gap))` — the standard trick of lending the last
+/// row a gap it does not have. At the height the arrangement pins this bay to
+/// it is three: 125 less the head's 27 and the list's 6 and 8 is **84**, and
+/// `(84 + 5) / 29.5` is 3.01. Three is the mock's own lane, which is why the
+/// arrangement's 125 was written from three rows and two gaps — so the number
+/// of rows this bay has room for and the number its height was derived from
+/// are one derivation or neither. At the bay's declared minimum of 66 it is
+/// one: 66 less 27, 6 and 8 is 25, and `(25 + 5) / 29.5` is 1.01.
+///
+/// **The half-pixel of slack in both is the arrangement's rounding and not a
+/// coincidence**: 27 + 14 + 3 × 24.5 + 2 × 5 is 124.5 and the bay is pinned at
+/// 125, and 27 + 14 + 24.5 is 65.5 against a minimum of 66. Half a pixel is
+/// less than the gap, so neither number buys a row it was not written for.
+///
+/// `None` where the region cannot hold one row, which is [`picture_rect`]'s
+/// rule stated on a list.
+fn staging_box(region: Rect, total: usize) -> Option<StagingBay> {
+    let list = Rect::from_min_max(
+        Pos2::new(
+            region.min.x + size::STAGE_LIST_PAD_X,
+            region.min.y + size::HEAD_H + size::STAGE_LIST_PAD_TOP,
+        ),
+        Pos2::new(
+            region.max.x - size::STAGE_LIST_PAD_X,
+            region.max.y - size::STAGE_LIST_PAD_BOTTOM,
+        ),
+    );
+    // **Narrower than its own padding is no list**, which is
+    // [`library_box`]'s refusal across the same axis.
+    if list.width() <= 0.0 {
+        return None;
+    }
+    let fits = ((list.height() + size::STAGE_GAP) / (size::CAND_H + size::STAGE_GAP))
+        .floor()
+        .max(0.0) as usize;
+    let rows = fits.min(total);
+    (rows > 0).then_some(StagingBay { list, rows, total })
+}
+
+/// **The Staging lane's candidate rows, painted.**
+///
+/// Where everything goes is [`staging`]'s, so this paints and derives nothing.
+///
+/// Term for term from `style.css`:
+///
+/// - `.cand` — `background: var(--c-well)` at `border-radius: 8px`, which is
+///   the one row in this console that has a well behind it, and
+///   `color: var(--c-dim)` for the type in it.
+/// - the deck's letter — `pal.faint`, in the place the mock puts its
+///   `.dot`: the row's first item, [`size::CAND_GAP`] before the name. It is
+///   the letter [`DECK_LETTERS`] gives and the same word the preview cells
+///   carry, which the manual calls *"the only thing naming a deck"*.
+/// - `.cand .who` — `pal.faint` at [`size::CAND_WHO_SIZE`], hard against the
+///   far end of the row's padding box, which is what `.sep`'s `flex: 1` does
+///   to it in the mock. The mock puts the producer there and this puts the
+///   verdict, for the reason [`staging`] gives: the producer has no value
+///   behind it and the verdict is the whole of what the row is for.
+///
+/// **A name too long for the track is clipped rather than elided**, which is
+/// the mock's own answer — `.cand` sets no `text-overflow` — and the clip is
+/// the list's box, the same `with_clip_rect` the Library's rows are drawn
+/// inside. The verdict is painted after the name and inside the same clip, so
+/// a name that runs the width of the row is drawn under it rather than over
+/// it: the verdict is the one thing in the row that must stay readable.
+fn staging_into(ui: &Ui, pal: &Palette, bay: &StagingBay, candidates: &[Candidate]) {
+    let painter = ui.painter().with_clip_rect(bay.list);
+    for (index, candidate) in candidates.iter().take(bay.rows).enumerate() {
+        let row = bay.row(index);
+        painter.rect_filled(row, size::CAND_RADIUS, pal.well);
+
+        let letter = DECK_LETTERS.get(candidate.deck).copied().unwrap_or("?");
+        let deck = painter.layout_job(span_at(letter, size::BASE, pal.faint));
+        let after = deck.size().x;
+        painter.galley(
+            Pos2::new(
+                row.min.x + size::CAND_PAD_X,
+                row.center().y - deck.size().y * 0.5,
+            ),
+            deck,
+            pal.faint,
+        );
+
+        let name = painter.layout_job(span_at(&candidate.name, size::BASE, pal.dim));
+        painter.galley(
+            Pos2::new(
+                row.min.x + size::CAND_PAD_X + after + size::CAND_GAP,
+                row.center().y - name.size().y * 0.5,
+            ),
+            name,
+            pal.dim,
+        );
+
+        let word = painter.layout_job(span_at(
+            candidate.stage.word(),
+            size::CAND_WHO_SIZE,
+            pal.faint,
+        ));
+        painter.galley(
+            Pos2::new(
+                row.max.x - size::CAND_PAD_X - word.size().x,
+                row.center().y - word.size().y * 0.5,
+            ),
+            word,
+            pal.faint,
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
 // The Inspector
 // ---------------------------------------------------------------------------
 
@@ -8130,6 +8491,29 @@ pub struct View {
     /// for the star and the time the mock draws beside it, and for why neither
     /// is here.
     pub library: Vec<String>,
+    /// **What the Staging lane lists this frame**: one candidate per deck slot
+    /// whose newest build has a verdict outstanding or whose file no longer
+    /// agrees with its picture — and **empty** for a console with no engine
+    /// behind it, which is every test in this crate that does not hand one in
+    /// and what the bay draws then is its card and its head.
+    ///
+    /// **The same seam as [`View::mixer`]**, and empty rather than
+    /// `Option<Vec<_>>` for the same reason: an empty lane is already the
+    /// whole of *nothing waiting*, and a run in which nobody has rewritten a
+    /// procedure and a run with no producer at all are one bay — one with no
+    /// row to draw. **Empty is this lane's ordinary state**, which is what
+    /// makes it different from every other bay here: a library with nothing in
+    /// it is a library nobody has filled.
+    ///
+    /// **Written when an event arrives rather than per frame**, by whoever
+    /// drains `karakuri_engine::deck::Deck::events` — which is a `Vec` the
+    /// engine only appends to when a build lands, is refused or is judged, and
+    /// which a caller that never drains grows for the rest of the run. So a
+    /// frame on which nothing was swapped touches nothing here, and the name a
+    /// row carries is rewritten only when the row's own build changes. See
+    /// [`Candidate`] and [`staging`], which is also where the four things the
+    /// mock's row has and this does not are named.
+    pub staging: Vec<Candidate>,
     /// **What each Inspector pane is showing this frame**, one per pane the
     /// console has room to point at something — and **empty** for a console
     /// with no deck behind it, which is every test in this crate and what the
@@ -8145,16 +8529,19 @@ pub struct View {
     /// shows is whoever fills this saying so — and pane *i* draws
     /// `inspector[i]`, in [`PANE_NAMES`]' order.
     ///
-    /// **Read once rather than per frame**, which is
+    /// **Written when a Set lands rather than per frame**, which is
     /// `karakuri_engine::set::Set::published`'s own instruction — *"Allocates,
     /// so not the frame path. A console reads this when a Set lands, not per
-    /// frame."* — and is [`View::library`]'s rule for a second reason: what is
-    /// in here does not move. Nothing in this workspace writes a published
-    /// value, binds a signal in the panel binary, or grants an authority
-    /// (ADR-0216), so a Set that has landed reads the same on every frame
-    /// after it. **The field is rewritable per frame like every other one**;
-    /// what a re-read waits on is a writer, and it is the same writer the
-    /// `man / sug / auto` chip waits on. See [`Pane`] and [`inspector`].
+    /// frame."* — and is [`View::staging`]'s rule read one bay along: the two
+    /// are written on the same frames and off the same drain, because a
+    /// candidate row and a pane's rows are two readings of one event. Between
+    /// landings what is in here does not move: nothing in this workspace
+    /// writes a published value, binds a signal in the panel binary, or grants
+    /// an authority (ADR-0216), so a Set that has landed reads the same on
+    /// every frame after it until the next one does. **The field is rewritable
+    /// per frame like every other one**; what the `man / sug / auto` chip
+    /// still waits on is a writer for the authority, which is a different gap.
+    /// See [`Pane`] and [`inspector`].
     pub inspector: Vec<Pane>,
     /// **The shape of what is being rendered**, which is what the Program bay
     /// arranges its body for — [`program_bay`], and [`picture_rect`] for why
@@ -8210,6 +8597,12 @@ impl View {
             // is not a number this crate has, and the list is written once
             // rather than per frame.
             library: Vec::new(),
+            // Nothing outstanding on any slot, which is a console with no
+            // engine behind it and is also every ordinary frame of one that
+            // has. Room for as many rows as a deck can ever have slots, so
+            // the caller's write never grows it — `mixer`'s reason, one bay
+            // up.
+            staging: Vec::with_capacity(DECKS),
             // As many panes as the inspector has, so the frame path never
             // grows it — the same reason `mixer` is built with a capacity.
             inspector: Vec::with_capacity(PANES),
@@ -8433,6 +8826,7 @@ impl View {
         let out = self.master_out;
         let strips = self.mixer.as_slice();
         let sets = self.library.as_slice();
+        let waiting = self.staging.as_slice();
         let panes = self.inspector.as_slice();
         let phase = self.phase;
         let frame = egui::Frame::NONE.fill(pal.ground);
@@ -8525,6 +8919,22 @@ impl View {
                         bay_head(ui, &pal, rect, LIBRARY_TITLE, &[], true);
                         if let Some(bay) = library(panel.layout(), sets) {
                             library_into(ui, &pal, &bay, sets);
+                        }
+                    }
+                    // **The fourth bay with something in its body**, and it is
+                    // a bay in every other respect: the same card and the same
+                    // head, and then a row per deck slot with a verdict
+                    // outstanding. With no engine behind the console there are
+                    // none and the body is as empty as every other one in this
+                    // pass — `staging`'s answer, not this pass's, so that
+                    // *nothing waiting means nothing at all* is decided in one
+                    // place. The head takes no pill: the mock's `2 waiting` is
+                    // a readout, and a bay head's pills are its controls.
+                    Kind::Staging => {
+                        card(ui, &pal, rect);
+                        bay_head(ui, &pal, rect, STAGING_TITLE, &[], false);
+                        if let Some(bay) = staging(panel.layout(), waiting) {
+                            staging_into(ui, &pal, &bay, waiting);
                         }
                     }
                     // A pane draws nothing of its own. It has no card — it is
