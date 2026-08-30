@@ -260,13 +260,22 @@ fn left_pane() -> Spec {
         BAY_DIVIDER,
         vec![
             // Minimum: the bay head (6 + 15 + 6 = 27), the scope row
-            // (7 + 16.5 + 7 = 31), and a list of three rows (3 + 3 of
-            // `.lib-list` padding, plus 3 x 22.5) = 74. A library shorter
-            // than one scope row and three results is not a library you can
-            // ask a question of, which is what *What each region is standing
-            // on* says it is for. The mock states no such minimum: this is
-            // chosen.
-            Spec::view("library").flex(1.0).min(132.0),
+            // (7 + 16.5 + 7 + 1 = 31.5), a list of three rows (3 + 3 of
+            // `.lib-list` padding, plus 3 x 22.5 = 73.5) and the foot
+            // (5 + 15 + 5 + 1 = 26) = 158. A library shorter than one scope
+            // row and three results is not a library you can ask a question
+            // of, which is what *What each region is standing on* says it is
+            // for. The mock states no such minimum: this is chosen.
+            //
+            // **It was 132, and the two terms it was short are the two the
+            // bay grew.** The sum was written when neither the scope row nor
+            // the foot was drawn: it counted the row it could not yet draw,
+            // a pixel light and with its rule left out, and did not count the
+            // foot at all. At 132 the bay this file describes has room for
+            // one result rather than three, which is the sentence above
+            // quietly ceasing to be true — so the terms are the boxes
+            // `room::size` states and the number is their sum.
+            Spec::view("library").flex(1.0).min(158.0),
             // 27 of bay head, 6 + 8 of `.stage-list` padding, three `.cand`
             // rows at 4 + 16.5 + 4, and two 5px gaps — the mock's own staging
             // lane, two candidates and the note under them, at its natural

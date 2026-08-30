@@ -31,7 +31,7 @@ use common::{drawn_once, id_of, near, rect_of, showing, solved, PLAUSIBLE, SMALL
 use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::Panel;
 use karakuri_console::room::{size, Room};
-use karakuri_console::view::{library, LibraryBay, View, DECK_LETTERS};
+use karakuri_console::view::{library, LibraryBay, Scope, View, DECK_LETTERS};
 use karakuri_layout::{Point, Rect};
 
 /// **The mock's own library, as names**: five Sets, in the order it draws
@@ -54,6 +54,14 @@ fn mock() -> Vec<String> {
     .collect()
 }
 
+/// **The scopes a host with a store hands in**: the four the mock draws.
+///
+/// Every call here passes these rather than none, because a console handed no
+/// scopes is a console nobody has told what libraries there are — which is
+/// what `View::new` starts at, and what the two tests that draw a frame are
+/// about.
+const SCOPES: &[Scope] = &Scope::ALL;
+
 /// A panel at a viewport, solved — the pair every test here starts from.
 fn console(viewport: Rect) -> Panel {
     let mut panel = Panel::new(viewport.w, viewport.h);
@@ -63,7 +71,7 @@ fn console(viewport: Rect) -> Panel {
 
 /// The bay, laid out with the mock's names.
 fn bay(panel: &Panel) -> LibraryBay {
-    library(panel.layout(), &mock()).expect("the library bay lists its rows")
+    library(panel.layout(), SCOPES, &mock()).expect("the library bay lists its rows")
 }
 
 /// `egui`'s rectangle, from `karakuri_layout`'s.
@@ -79,8 +87,9 @@ fn to_egui(r: Rect) -> egui::Rect {
 /// and every number here is read off `style.css` rather than off the panel.
 ///
 /// `.lib-foot { padding: 5px 10px; font-size: 10px; border-top: 1px }` is a
-/// 26-tall row along the bottom; `.lib-list { padding: 3px }` is what is left
-/// between the bay head and it; and `.lib-row { padding: 3px 7px }` around
+/// 26-tall row along the bottom; `.scopes { padding: 7px 9px; border-bottom:
+/// 1px }` is a 31.5-tall row under the bay head; `.lib-list { padding: 3px }` is
+/// what is left between the two; and `.lib-row { padding: 3px 7px }` around
 /// type at the console's 11px and `line-height: 1.5` is 22.5 each, stacked
 /// with no gap because `.lib-list` states none.
 #[test]
@@ -119,6 +128,12 @@ fn the_rows_and_the_foot_are_the_bays_own_geometry() {
         near(size::LIB_FOOT_SIZE, 10.0),
         "`.lib-foot` is `font-size: 10px`"
     );
+    assert!(
+        near(size::SCOPES_PAD_X, 9.0) && near(size::SCOPES_PAD_Y, 7.0),
+        "`.scopes` is `padding: 7px 9px`"
+    );
+    assert!(near(size::SCOPES_GAP, 4.0), "`.scopes` is `gap: 4px`");
+    assert!(near(size::SCOPE_PAD_X, 8.0), "`.scope` is `padding: 0 8px`");
     // And the two boxes those numbers add up to, which is where every relation
     // below is stated in: a row is 3 + 16.5 + 3 and the foot is 5 + 15 + 5 and
     // its one-pixel rule.
@@ -131,6 +146,19 @@ fn the_rows_and_the_foot_are_the_bays_own_geometry() {
         near(size::LIB_FOOT_H, 26.0),
         "the `.lib-foot` is {} tall and the mock's is 5 + 10 * 1.5 + 5 + 1",
         size::LIB_FOOT_H
+    );
+    // And the third box, which is the one this bay grew: a chip is type at
+    // `BASE` with no border of its own, and the row is that inside `.scopes`'
+    // padding with its own rule under it.
+    assert!(
+        near(size::SCOPE_H, 16.5),
+        "a `.scope` is {} tall and the mock's is 11 * 1.5, with no border to count",
+        size::SCOPE_H
+    );
+    assert!(
+        near(size::SCOPES_H, 31.5),
+        "the `.scopes` row is {} tall and the mock's is 7 + 16.5 + 7 + 1",
+        size::SCOPES_H
     );
 
     // The foot: along the bottom edge of the bay, its own height, the bay's
@@ -147,16 +175,26 @@ fn the_rows_and_the_foot_are_the_bays_own_geometry() {
         bay.foot
     );
 
-    // The list: under the bay head, inside `.lib-list`'s padding on all four
+    // The scope row: under the bay head, its own height, the bay's full width.
+    let scopes = bay.scopes.expect("the bay was handed four scopes");
+    assert!(
+        near(scopes.min.y, region.min.y + size::HEAD_H) && near(scopes.height(), size::SCOPES_H),
+        "the scope row is {scopes:?} and the head below {} leaves {}",
+        region.min.y,
+        region.min.y + size::HEAD_H
+    );
+    assert!(
+        near(scopes.min.x, region.min.x) && near(scopes.max.x, region.max.x),
+        "the scope row does not span the bay: {scopes:?} in {region:?}"
+    );
+
+    // The list: under the scope row, inside `.lib-list`'s padding on all four
     // sides, and up to the foot.
     assert!(
-        near(
-            bay.list.min.y,
-            region.min.y + size::HEAD_H + size::LIB_LIST_PAD
-        ),
-        "the list starts at {} and the head and the padding leave {}",
+        near(bay.list.min.y, scopes.max.y + size::LIB_LIST_PAD),
+        "the list starts at {} and the scope row ends at {}",
         bay.list.min.y,
-        region.min.y + size::HEAD_H + size::LIB_LIST_PAD
+        scopes.max.y
     );
     assert!(
         near(bay.list.min.x, region.min.x + size::LIB_LIST_PAD)
@@ -220,7 +258,7 @@ fn the_rows_tile_the_list_and_stay_inside_it() {
     // chose. Asked of a store with more in it than the bay can hold, because
     // with five names the bay stops at five for the other reason.
     let many: Vec<String> = (0..200).map(|n| format!("set_{n:03}")).collect();
-    let full = library(panel.layout(), &many).expect("the bay lists its rows");
+    let full = library(panel.layout(), SCOPES, &many).expect("the bay lists its rows");
     assert!(full.rows < full.total, "200 names all fitted");
     let over = full.row(full.rows);
     assert!(
@@ -244,7 +282,7 @@ fn the_foot_says_how_many_are_listed_of_how_many_there_are() {
 
     // A window with room for all five.
     let tall = console(PLAUSIBLE);
-    let bay = library(tall.layout(), &names).expect("the bay lists its rows");
+    let bay = library(tall.layout(), SCOPES, &names).expect("the bay lists its rows");
     assert_eq!(bay.total, names.len(), "the total is not the store's");
     assert_eq!(
         bay.rows,
@@ -258,7 +296,7 @@ fn the_foot_says_how_many_are_listed_of_how_many_there_are() {
     // And a store with more in it than the bay can show: the total follows the
     // store and the count stops at what fits.
     let many: Vec<String> = (0..200).map(|n| format!("set_{n:03}")).collect();
-    let bay = library(tall.layout(), &many).expect("the bay lists its rows");
+    let bay = library(tall.layout(), SCOPES, &many).expect("the bay lists its rows");
     assert_eq!(bay.total, 200, "the total is not the store's");
     assert!(
         bay.rows < 200,
@@ -270,9 +308,13 @@ fn the_foot_says_how_many_are_listed_of_how_many_there_are() {
     // The narrowest window the arrangement is claimed to work at fits fewer,
     // and the number is the library region's own height read the same way.
     let small = console(SMALLEST);
-    let bay = library(small.layout(), &many).expect("the bay lists its rows");
+    let bay = library(small.layout(), SCOPES, &many).expect("the bay lists its rows");
     let region = to_egui(rect_of(small.layout(), "library"));
-    let room = region.height() - size::HEAD_H - size::LIB_LIST_PAD * 2.0 - size::LIB_FOOT_H;
+    let room = region.height()
+        - size::HEAD_H
+        - size::SCOPES_H
+        - size::LIB_LIST_PAD * 2.0
+        - size::LIB_FOOT_H;
     assert_eq!(
         bay.rows,
         (room / size::LIB_ROW_H).floor() as usize,
@@ -367,13 +409,42 @@ fn a_console_with_no_store_lists_nothing() {
     );
 }
 
-/// **No names, no listing**, asked of the derivation rather than of the paint
-/// pass — the same rule `mixer` follows, stated where a caller can reach it.
+/// **Nothing said about any library, no bay**, asked of the derivation rather
+/// than of the paint pass — the same rule `mixer` follows, stated where a
+/// caller can reach it.
+///
+/// **And the two ways of saying nothing are not one way.** A console handed no
+/// scopes and no rows has been told nothing at all, and the bay is its card
+/// and its head. A console handed the four chips and no rows has been asked a
+/// question whose answer is *nothing*, and the chips are drawn over an empty
+/// list — which is `console.html`'s *"An empty tier is a library nobody has
+/// filled rather than something gone wrong"* and is the whole of what the
+/// scope row bought.
 #[test]
-fn no_names_is_no_listing() {
+fn nothing_said_about_any_library_is_no_listing() {
     let panel = console(PLAUSIBLE);
-    assert_eq!(library(panel.layout(), &[]), None);
-    assert!(library(panel.layout(), &mock()).is_some());
+    assert_eq!(library(panel.layout(), &[], &[]), None);
+    assert!(library(panel.layout(), &[], &mock()).is_some());
+    assert!(library(panel.layout(), SCOPES, &mock()).is_some());
+
+    let empty = library(panel.layout(), SCOPES, &[]).expect(
+        "a scope with nothing in it is a question that has been answered, and the chips \
+         saying which question it was are still drawn",
+    );
+    assert_eq!(empty.rows, 0, "a listing of nothing drew rows");
+    assert_eq!(empty.count(), "0 of 0");
+    assert!(
+        empty.scopes.is_some(),
+        "the scope row went away with the listing under it"
+    );
+
+    // And a console handed no scopes draws no scope row, whatever it lists:
+    // the row is the chips it was given and never a band of empty card.
+    assert_eq!(
+        library(panel.layout(), &[], &mock()).and_then(|bay| bay.scopes),
+        None,
+        "a console nobody told what libraries there are drew a scope row"
+    );
 }
 
 /// **The bay is drawn where the bay can hold it, and nowhere else** —
@@ -382,38 +453,38 @@ fn no_names_is_no_listing() {
 fn a_folded_or_soloed_or_short_bay_lists_nothing() {
     let names = mock();
     let mut layout = solved(PLAUSIBLE);
-    assert!(library(&layout, &names).is_some());
+    assert!(library(&layout, SCOPES, &names).is_some());
 
     layout.collapse(id_of(&layout, "library"));
     layout.solve();
     assert_eq!(
-        library(&layout, &names),
+        library(&layout, SCOPES, &names),
         None,
         "the library is folded away and its rows are still being drawn"
     );
 
     layout.expand(id_of(&layout, "library"));
     layout.solve();
-    assert!(library(&layout, &names).is_some());
+    assert!(library(&layout, SCOPES, &names).is_some());
 
     // A solo somewhere else takes the bay off the panel with it.
     layout.solo(id_of(&layout, "mixer"));
     layout.solve();
-    assert_eq!(library(&layout, &names), None);
+    assert_eq!(library(&layout, SCOPES, &names), None);
     layout.unsolo();
     layout.solve();
-    assert!(library(&layout, &names).is_some());
+    assert!(library(&layout, SCOPES, &names).is_some());
 
     // **And a bay with no room for the foot and one row lists nothing**, which
     // is the same answer and not a special case.
     //
     // It takes a window under the arrangement's own minimum to reach: the
-    // library declares a minimum of 132 and the solve honours it, so at every
+    // library declares a minimum of 158 and the solve honours it, so at every
     // window this console is claimed to work at there is room for three rows.
     // Below 632 the solve stops honouring minima and scales everything down
     // together (`common::SMALLEST` says so), and that is where a bay too short
     // for a row exists at all.
-    let chrome = size::HEAD_H + size::LIB_FOOT_H + size::LIB_LIST_PAD * 2.0;
+    let chrome = size::HEAD_H + size::SCOPES_H + size::LIB_FOOT_H + size::LIB_LIST_PAD * 2.0;
     let short = solved(Rect {
         h: 160.0,
         ..SMALLEST
@@ -424,7 +495,7 @@ fn a_folded_or_soloed_or_short_bay_lists_nothing() {
         to_egui(rect_of(&short, "library")).height()
     );
     assert_eq!(
-        library(&short, &names),
+        library(&short, SCOPES, &names),
         None,
         "a bay with no room for one row listed some"
     );
@@ -432,7 +503,7 @@ fn a_folded_or_soloed_or_short_bay_lists_nothing() {
     // Twenty pixels of window taller is one row, which is what says the answer
     // above is the room and not the window.
     let barely = solved(Rect {
-        h: 180.0,
+        h: 250.0,
         ..SMALLEST
     });
     let region = to_egui(rect_of(&barely, "library"));
@@ -443,7 +514,7 @@ fn a_folded_or_soloed_or_short_bay_lists_nothing() {
         region.height()
     );
     assert_eq!(
-        library(&barely, &names).map(|bay| bay.rows),
+        library(&barely, SCOPES, &names).map(|bay| bay.rows),
         Some(1),
         "a bay with room for exactly one row listed something else"
     );
@@ -462,7 +533,7 @@ fn a_folded_or_soloed_or_short_bay_lists_nothing() {
         to_egui(rect_of(&sliver, "library")).width()
     );
     assert_eq!(
-        library(&sliver, &names),
+        library(&sliver, SCOPES, &names),
         None,
         "a bay with no room for the list's own padding listed some"
     );
@@ -585,9 +656,18 @@ fn the_names_are_the_harnesss_and_are_stored_nowhere() {
     let panel = console(PLAUSIBLE);
     let one = vec!["morph01".to_owned()];
     let two = vec!["morph01".to_owned(), "night01".to_owned()];
-    assert_eq!(library(panel.layout(), &one).map(|b| b.total), Some(1));
-    assert_eq!(library(panel.layout(), &two).map(|b| b.total), Some(2));
-    assert_eq!(library(panel.layout(), &one).map(|b| b.total), Some(1));
+    assert_eq!(
+        library(panel.layout(), SCOPES, &one).map(|b| b.total),
+        Some(1)
+    );
+    assert_eq!(
+        library(panel.layout(), SCOPES, &two).map(|b| b.total),
+        Some(2)
+    );
+    assert_eq!(
+        library(panel.layout(), SCOPES, &one).map(|b| b.total),
+        Some(1)
+    );
 
     // And what a `View` holds is what it was handed, unchanged by drawing it.
     let mut view = View::new(Room::Day);
@@ -599,6 +679,201 @@ fn the_names_are_the_harnesss_and_are_stored_nowhere() {
     assert_eq!(
         view.library, two,
         "the frame rewrote the listing it was given"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// The scope row: four questions, one of them marked
+// ---------------------------------------------------------------------------
+
+/// Every shape the scope row painted, which is **not** `shapes_inside`.
+///
+/// The four chips are 246 wide laid end to end and the mock's own left pane is
+/// 218, so the last of them hangs out of the bay and is clipped — one row and
+/// not a wrap, which is `view::scopes_into`'s rule and `REND_ROW_H`'s before
+/// it. A shape wholly inside the row would therefore be three chips and the
+/// fourth would look undrawn, which is the one thing these tests must not
+/// conclude. So a shape counts where it sits **in** the row down the column
+/// and reaches it across: the bay's card is the shape that rules out, since it
+/// is the height of the whole bay.
+fn shapes_across(view: &mut View, panel: &mut Panel, row: egui::Rect) -> Vec<egui::Shape> {
+    shapes_inside(view, panel, egui::Rect::EVERYTHING)
+        .into_iter()
+        .filter(|shape| {
+            let bounds = shape.visual_bounding_rect();
+            bounds.is_finite()
+                && bounds.min.y >= row.min.y - 1.0
+                && bounds.max.y <= row.max.y + 1.0
+                && bounds.intersects(row)
+        })
+        .collect()
+}
+
+/// Every word the scope row painted, left to right.
+fn chips(view: &mut View, panel: &mut Panel, bay: &LibraryBay) -> Vec<String> {
+    let row = bay.scopes.expect("the bay was handed scopes");
+    let mut found: Vec<(f32, String)> = shapes_across(view, panel, row)
+        .iter()
+        .filter_map(|shape| match shape {
+            egui::Shape::Text(at) => Some((at.pos.x, at.galley.text().to_owned())),
+            _ => None,
+        })
+        .collect();
+    found.sort_by(|a, b| a.0.total_cmp(&b.0));
+    found.into_iter().map(|(_, text)| text).collect()
+}
+
+/// The word inside the one washed chip, or `None` where nothing is washed —
+/// and it panics where more than one is, which is the half of the claim a
+/// `Vec` of them would let pass.
+fn marked(view: &mut View, panel: &mut Panel, bay: &LibraryBay) -> Option<String> {
+    let row = bay.scopes.expect("the bay was handed scopes");
+    let shapes = shapes_across(view, panel, row);
+    let washes: Vec<egui::Rect> = shapes
+        .iter()
+        .filter_map(|shape| match shape {
+            egui::Shape::Rect(at) => Some(at.rect),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        washes.len() <= 1,
+        "{} chips are washed, and `.scope.sel` is one of them",
+        washes.len()
+    );
+    let wash = washes.first()?;
+    shapes.iter().find_map(|shape| match shape {
+        egui::Shape::Text(at) if wash.contains(at.pos) => Some(at.galley.text().to_owned()),
+        _ => None,
+    })
+}
+
+/// **The scope row draws the chips it was handed, in the order it was handed
+/// them** — which is the mock's own row: `favourites`, `my sets`, `presets`,
+/// `folder`.
+///
+/// The `+` the mock draws after them is not one of them, and that is asserted
+/// rather than left to a reader counting four: it is the arena's own gap drawn
+/// a fifth time, and a chip for it would be a control over adding a region.
+#[test]
+fn the_scope_row_draws_the_chips_it_was_handed_in_the_order_it_was_handed_them() {
+    let (mut view, mut panel) = showing_mock();
+    let bay = bay(&panel);
+    assert_eq!(
+        chips(&mut view, &mut panel, &bay),
+        vec!["favourites", "my sets", "presets", "folder"],
+        "the scope row is not the mock's four chips in the mock's order"
+    );
+}
+
+/// **One chip is marked and it is the one the scope pointer is on**, asserted
+/// by drawing the bay and finding the wash.
+///
+/// The mark follows the pointer rather than being painted at a fixed chip,
+/// which is the failure a first-chip default hides completely — so the pointer
+/// is stepped the whole way round and the wash is read off the frame each
+/// time.
+#[test]
+fn the_marked_chip_is_the_scope_the_pointer_is_on() {
+    let (mut view, mut panel) = showing_mock();
+    let bay = bay(&panel);
+
+    // A host that opens on `my sets`, which is what a program with a store
+    // does: the mock marks `favourites` and that is the scope nothing here can
+    // answer.
+    assert!(view.select_scope(Scope::MySets));
+    assert_eq!(view.scope(), Some(Scope::MySets));
+    assert_eq!(
+        marked(&mut view, &mut panel, &bay).as_deref(),
+        Some("my sets")
+    );
+
+    for scope in [
+        Scope::Presets,
+        Scope::Folder,
+        Scope::Favourites,
+        Scope::MySets,
+    ] {
+        assert!(view.step_scope(), "the scope did not step");
+        assert_eq!(view.scope(), Some(scope));
+        assert_eq!(
+            marked(&mut view, &mut panel, &bay).as_deref(),
+            Some(scope.name()),
+            "the scope stepped to `{}` and the wash stayed where it was",
+            scope.name()
+        );
+    }
+}
+
+/// **A step goes to the next scope and wraps**, which is what
+/// `docs/manual/operations.html` says the key does — and it takes the library
+/// cursor back to the top, because the listing under it is about to be a
+/// different listing.
+#[test]
+fn stepping_the_scope_wraps_and_takes_the_cursor_back_to_the_top() {
+    let mut view = View::new(Room::Day);
+
+    // A console nobody has told what libraries there are has nothing to step,
+    // and says so rather than wrapping onto a chip that is not drawn.
+    assert!(!view.step_scope(), "a console with no scopes stepped one");
+    assert_eq!(view.scope(), None);
+
+    view.scopes = Scope::ALL.to_vec();
+    view.library = mock();
+    assert_eq!(view.scope(), Some(Scope::Favourites), "the first chip");
+
+    assert!(view.walk(2, 5), "the cursor did not move");
+    assert_eq!(view.cursor_row(), 2);
+    assert!(view.step_scope());
+    assert_eq!(view.scope(), Some(Scope::MySets));
+    assert_eq!(
+        view.cursor_row(),
+        0,
+        "the scope changed and the cursor is still pointing into the listing it left"
+    );
+
+    assert!(view.step_scope());
+    assert!(view.step_scope());
+    assert_eq!(view.scope(), Some(Scope::Folder), "the last chip");
+    assert!(view.step_scope());
+    assert_eq!(
+        view.scope(),
+        Some(Scope::Favourites),
+        "the step off the last chip did not wrap round to the first"
+    );
+
+    // One chip is a cycle of one, and stepping it changes nothing at all: a
+    // press that moved nothing costs no frame.
+    let mut one = View::new(Room::Day);
+    one.scopes = vec![Scope::MySets];
+    assert!(!one.step_scope());
+    assert_eq!(one.scope(), Some(Scope::MySets));
+}
+
+/// **A scope this console was not handed is refused rather than marked**,
+/// which is `View::select` s rule one control along: a mark on a chip nobody
+/// drew is a mark drawn nowhere, over a listing with no question above it.
+#[test]
+fn a_scope_that_is_not_on_the_row_is_refused() {
+    let mut view = View::new(Room::Day);
+    view.scopes = vec![Scope::MySets, Scope::Presets];
+    assert_eq!(view.scope(), Some(Scope::MySets));
+
+    assert!(
+        !view.select_scope(Scope::Folder),
+        "a scope with no chip on this console was marked"
+    );
+    assert_eq!(
+        view.scope(),
+        Some(Scope::MySets),
+        "the refusal moved the mark anyway"
+    );
+
+    assert!(view.select_scope(Scope::Presets));
+    assert_eq!(view.scope(), Some(Scope::Presets));
+    assert!(
+        !view.select_scope(Scope::Presets),
+        "marking the scope that is already marked moved something"
     );
 }
 
@@ -634,6 +909,10 @@ fn washed(shapes: &[egui::Shape], bay: &LibraryBay) -> Vec<usize> {
 fn showing_mock() -> (View, Panel) {
     let mut view = View::new(Room::Day);
     view.library = mock();
+    // **The chips as well as the rows**, because they are the same bay: a
+    // console handed a listing and no scopes draws its list one scope row
+    // higher up, and every rectangle asserted below would be off by that row.
+    view.scopes = Scope::ALL.to_vec();
     (view, console(PLAUSIBLE))
 }
 

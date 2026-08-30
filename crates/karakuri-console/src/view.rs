@@ -6454,36 +6454,121 @@ const LIBRARY_TITLE: &str = "Library";
 /// on a bay instead of on a preview cell.
 const LOAD_PILL: &str = "load \u{2192} ";
 
+/// **One chip in the Library bay's scope row**, and it names *which library is
+/// being read* rather than a place a Set can be.
+///
+/// `docs/manual/operations.html`'s *Choose which scope the library shows* is
+/// the whole of the argument, and its sharpest sentence is what makes this one
+/// type rather than four: **the four chips are four questions rather than four
+/// acts** — *favourites* is *"this library filtered rather than a fifth place a
+/// Set can be"*, so choosing it and choosing *my sets* differ in the question
+/// asked and not in what is asked.
+///
+/// # Four here, and [`Operation::SelectScope`] still carries `Undecided`
+///
+/// The two are not in disagreement. That payload is open because the scopes are
+/// *"the one thing about the library that is not closed: it grows when a
+/// directory is added"*, and a **vocabulary** that named a member of a growable
+/// list would go short the moment an operator points the bay at a directory.
+/// This type is not that: it is the row of chips **this panel draws**, which is
+/// the mock's four and no more, and it is handed to [`library`] as a slice for
+/// exactly that reason — the bay draws the scopes it is given, so a fifth is a
+/// value crossing the seam and not a signature.
+///
+/// # Two of the four are drawn and answer nothing, for two different reasons
+///
+/// - [`Scope::Favourites`] — **a favourite is a fact nothing in this workspace
+///   keeps.** `console.html`'s *What keeps a favourite, and where it does not
+///   travel* settles where the value would live and gives this nothing to read:
+///   *"Nothing in the vocabulary names a favourite, so there is nothing yet for
+///   a key, a map or a model to reach."* Nothing here writes one, and a store
+///   invented for it would be the specification written backwards.
+/// - [`Scope::Folder`] — **it waits on an operation.** *A folder scope reads
+///   Sets, and a bundle is not a third thing*: *"no operation in the vocabulary
+///   can ask a folder for its listing"*, because `Operation::ListSets` carries
+///   what a Set holds and has nowhere to put a directory. So the chip waits on
+///   a row of the page and not on a decision.
+///
+/// Both are **drawn** all the same, which is not the placeholder ADR-0200
+/// refuses: a chip is the question, the question is real, and what is missing
+/// is the answer. What must not happen is either of them going quiet — the
+/// host is what says so out loud, in the words at its own key.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Scope {
+    /// `my sets`, starred. A filter over the listing below and never a
+    /// collection of its own.
+    Favourites,
+    /// What this store holds, which is `karakuri_store::Store::list_sets` and
+    /// is the one of the four that has always been drawn.
+    MySets,
+    /// What ships with the program: the `.kset` files in the presets root,
+    /// which is a directory the program is **told** (ADR-0230) rather than one
+    /// it works out. Read-only — a row here is taken into the store and then
+    /// loaded, which is why opening one leaves a row in [`Scope::MySets`].
+    Presets,
+    /// A directory somebody names during the run.
+    Folder,
+}
+
+impl Scope {
+    /// **The four the mock draws, in its own order**, which is the order a
+    /// step through them goes in.
+    ///
+    /// A `+` is drawn after them there and is not here: it is the arena's own
+    /// gap drawn a fifth time, which [`outputs`] already names, and adding a
+    /// scope is what [`Scope::Folder`] is waiting on anyway.
+    pub const ALL: [Scope; 4] = [
+        Scope::Favourites,
+        Scope::MySets,
+        Scope::Presets,
+        Scope::Folder,
+    ];
+
+    /// The chip's word, `style.css`'s own — lower case, because `.scope` sets
+    /// no `text-transform` where a bay head does.
+    pub fn name(self) -> &'static str {
+        match self {
+            Scope::Favourites => "favourites",
+            Scope::MySets => "my sets",
+            Scope::Presets => "presets",
+            Scope::Folder => "folder",
+        }
+    }
+}
+
 /// **The Library bay, laid out**: where the rows go, how many of them there is
 /// room for, and where the count under them goes.
 ///
-/// # What the bay is standing on, and it is a listing rather than a walk
+/// # What the bay is standing on: a scope, and the listing that scope answers
 ///
 /// The manual: *"A scope and a walk, not one flat list: favourites, my sets,
-/// app presets, a folder."* **One of those four exists** — `my sets`, which is
+/// app presets, a folder."* **The scopes are drawn now, and two of the four
+/// are answered** — `my sets`, which is
 /// [`karakuri_store::Store::list_sets`](../../../crates/karakuri-store/src/store.rs)
-/// and is a directory of Set files. So this draws that list and no scope
-/// chooser above it, for the reason [`outputs`] draws one sink of four: a
-/// control over machinery that does not exist is the scaffolding this module's
-/// documentation refuses.
+/// and is a directory of Set files, and `presets`, which is the `.kset` files
+/// in the root the program was told about (ADR-0230). The other two are drawn
+/// and answer nothing, for two different reasons written out at [`Scope`] —
+/// and neither is the placeholder ADR-0200 refuses, because a chip **is** the
+/// question and the question is real. What is still refused is the
+/// scaffolding: nothing in this bay answers a pointer, which is what a press
+/// on a chip would be.
+///
+/// **Both halves are handed in.** The scopes are a slice and the rows are a
+/// slice, and which rows go with which scope is the host's answer rather than
+/// this bay's: a listing is a directory read, a frame path does not do those
+/// (P-0072), and this crate could not do it anyway (ADR-0156). So the bay
+/// draws the row of questions it was given and the answer to the one that is
+/// marked.
 ///
 /// # What is in the mock's bay and is deliberately not here
 ///
-/// - **The `.scopes` row** — `favourites`, `my sets`, `presets`, `folder` and
-///   a `+`. Every chip is a control and three of the four name a collection
-///   nothing in this workspace can produce. **What a folder scope reads is no
-///   longer the open question it was**: `console.html`'s *A folder scope reads
-///   Sets, and a bundle is not a third thing* settles that a folder row is a
-///   **take** — a Set file and a bundle are one file, and a `.kir` is a part
-///   rather than something a library lists. What it leaves is named there as
-///   owed rather than drawn from: *"no operation in the vocabulary can ask a
-///   folder for its listing"*, because `Operation::ListSets` carries what a
-///   Set holds and has nowhere to put a directory. So the chip waits on an
-///   operation and not on a decision. The `+` is the arena's own gap drawn a
-///   fifth time, which [`outputs`] already names.
+/// - **The `+` at the end of the scope row.** Adding a scope is the arena's
+///   own gap drawn a fifth time, which [`outputs`] already names, and what it
+///   would add is a folder — which is the chip already drawn and already
+///   waiting on an operation to ask a directory for its listing.
 /// - **The `.path` row**, `~/sets/tour-2026/night-b › opening`. It is the
-///   walk *inside* a folder scope, so it says nothing until that scope is
-///   decided.
+///   walk *inside* a folder scope, so it says nothing until that scope can be
+///   asked for a listing at all.
 /// - **The `.lib-filters` fields**, `holds…` and `layer…`. Two text controls,
 ///   and the vocabulary has the operation they would emit —
 ///   `Operation::ListSets { holds, layer }` — but nothing in the store answers
@@ -6549,16 +6634,35 @@ const LOAD_PILL: &str = "load \u{2192} ";
 /// crate and inventing one would be a control.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LibraryBay {
-    /// `.lib-list`'s content box: the region under the bay head and above the
-    /// foot, inside [`size::LIB_LIST_PAD`], where the rows are laid from the
-    /// top with no gap between them.
+    /// `.scopes`: the row of chips between the bay head and the list, one
+    /// [`size::SCOPES_H`] tall and the full width of the bay, with its own
+    /// rule along the bottom of it.
+    ///
+    /// **`None` where the console was handed no scopes at all**, which is a
+    /// console nobody has told what libraries there are — every test in this
+    /// crate that does not say otherwise. The list then starts directly under
+    /// the head, which is where it started before this row was drawn: a band
+    /// of empty card with a rule under it would be a scope row with no
+    /// questions in it.
+    pub scopes: Option<Rect>,
+    /// `.lib-list`'s content box: the region under the bay head and the scope
+    /// row and above the foot, inside [`size::LIB_LIST_PAD`], where the rows
+    /// are laid from the top with no gap between them.
     pub list: Rect,
     /// **How many rows are drawn**, which is how many fit in [`list`](Self::list) —
-    /// never more than [`total`](Self::total), and never zero, because a bay
-    /// with no room for one row is no bay at all.
+    /// never more than [`total`](Self::total).
+    ///
+    /// **Zero is a state now, and it is the one the scope row bought.** A
+    /// scope that holds nothing is a question that has been asked and
+    /// answered — *favourites* with nothing starred, a presets root nobody
+    /// filled — so the chips are drawn, the list is empty and the foot reads
+    /// `0 of 0`. That is not the row of zeroes ADR-0177 is about: that one is
+    /// a reading nobody took, and this is the answer to a question the chip
+    /// above it is asking. A bay with no *room* for a row is still no bay at
+    /// all — see `library_box`.
     pub rows: usize,
-    /// **How many Sets the store holds**, which is what the harness handed
-    /// over. The second half of the foot's `n of m`.
+    /// **How many Sets the selected scope holds**, which is what the harness
+    /// handed over. The second half of the foot's `n of m`.
     pub total: usize,
     /// `.lib-foot`, along the bottom edge of the bay, with its rule on top.
     pub foot: Rect,
@@ -6619,19 +6723,41 @@ impl LibraryBay {
 /// nothing: every box in the bay is the full width of the list, so no
 /// rectangle here is the width of the type in it.
 ///
-/// `None` where there is nothing to list, and `None` where there is no room to
-/// list it: a console with no store behind it is every test in this crate and
-/// the whole of `cargo test -p karakuri-console`, and what the bay draws then
-/// is the card and its head and nothing else — this is [`mixer`]'s rule, one
-/// column along, and [`View::picture`]'s before that.
-pub fn library(layout: &karakuri_layout::Layout, sets: &[String]) -> Option<LibraryBay> {
-    // **No store behind the console, so there is nothing to list.** Drawing an
-    // empty list with `0 of 0` under it would be a reading of a library nobody
-    // opened, which is the row of zeroes ADR-0177 is about.
-    if sets.is_empty() {
+/// `None` where there is nothing to draw at all, and `None` where there is no
+/// room to draw it: a console with **no scopes and no rows** has had nothing
+/// said to it about any library, which is every test in this crate that does
+/// not say otherwise and the whole of `cargo test -p karakuri-console`, and
+/// what the bay draws then is the card and its head and nothing else — this is
+/// [`mixer`]'s rule, one column along, and [`View::picture`]'s before that.
+///
+/// **A scope with nothing in it is not that**, and the difference is the whole
+/// of what the chips bought: handed scopes and no rows, the bay draws the row
+/// of questions and answers the marked one with `0 of 0`, because a question
+/// that has been asked is owed an answer even where the answer is *nothing*.
+/// `console.html`: *"An empty tier is a library nobody has filled rather than
+/// something gone wrong."*
+///
+/// `scopes` is the row of chips, in the order they are drawn; `sets` is the
+/// listing of whichever of them is marked. **Which one that is does not reach
+/// here**, because no rectangle in this bay depends on it: it is a pointer,
+/// and a pointer goes to the paint beside the library cursor — see
+/// `library_into` and [`View::scope`].
+pub fn library(
+    layout: &karakuri_layout::Layout,
+    scopes: &[Scope],
+    sets: &[String],
+) -> Option<LibraryBay> {
+    // **Nothing said about any library, so there is nothing to draw.** Not the
+    // same as a scope that holds nothing — see this function's own doc, and
+    // ADR-0177 for the row of zeroes this is still refusing.
+    if scopes.is_empty() && sets.is_empty() {
         return None;
     }
-    library_box(to_egui(layout.rect(layout.find("library")?)), sets.len())
+    library_box(
+        to_egui(layout.rect(layout.find("library")?)),
+        !scopes.is_empty(),
+        sets.len(),
+    )
 }
 
 /// The arithmetic of the bay, away from the layout it reads.
@@ -6641,8 +6767,11 @@ pub fn library(layout: &karakuri_layout::Layout, sets: &[String]) -> Option<Libr
 /// - `.lib-foot { padding: 5px 10px; font-size: 10px; border-top: 1px solid
 ///   var(--c-hair) }` — a [`size::LIB_FOOT_H`] row along the bottom of the
 ///   bay, its rule the top pixel of it.
+/// - `.scopes { display: flex; gap: 4px; padding: 7px 9px }` — a
+///   [`size::SCOPES_H`] row under the bay head, its own rule the bottom pixel
+///   of it, and drawn only where there are scopes to put in it.
 /// - `.lib-list { display: flex; flex-direction: column; padding: 3px }` —
-///   what is left between the bay head and that row, inset by
+///   what is left between the scope row and the foot, inset by
 ///   [`size::LIB_LIST_PAD`] on all four sides.
 /// - `.lib-row { padding: 3px 7px }` — [`size::LIB_ROW_H`] each, stacked from
 ///   the top of the list with no gap, because `.lib-list` states none.
@@ -6660,17 +6789,32 @@ pub fn library(layout: &karakuri_layout::Layout, sets: &[String]) -> Option<Libr
 /// something from nothing.
 ///
 /// `None` where the region cannot hold the foot and one row, which is
-/// [`picture_rect`]'s rule stated on a listing.
-fn library_box(region: Rect, total: usize) -> Option<LibraryBay> {
+/// [`picture_rect`]'s rule stated on a listing. **It is room and not content**:
+/// a scope that lists nothing still wants room for a row, because the bay it is
+/// drawn in is the bay the next scope's rows land in and a question drawn over
+/// somewhere there is no room to answer it is worse than no question.
+fn library_box(region: Rect, chips: bool, total: usize) -> Option<LibraryBay> {
     let foot = Rect::from_min_max(
         Pos2::new(region.min.x, region.max.y - size::LIB_FOOT_H),
         region.max,
     );
+    let under_head = region.min.y + size::HEAD_H;
+    // **The scope row is the head's business and not the list's**, which is
+    // why it is taken off the top before the list is measured: the mock draws
+    // it between the bay head's rule and `.lib-list`, and `.lib-list`'s own
+    // padding is inside whatever is left.
+    let scopes = chips.then(|| {
+        Rect::from_min_max(
+            Pos2::new(region.min.x, under_head),
+            Pos2::new(region.max.x, under_head + size::SCOPES_H),
+        )
+    });
+    let top = match scopes {
+        Some(scopes) => scopes.max.y,
+        None => under_head,
+    };
     let list = Rect::from_min_max(
-        Pos2::new(
-            region.min.x + size::LIB_LIST_PAD,
-            region.min.y + size::HEAD_H + size::LIB_LIST_PAD,
-        ),
+        Pos2::new(region.min.x + size::LIB_LIST_PAD, top + size::LIB_LIST_PAD),
         Pos2::new(
             region.max.x - size::LIB_LIST_PAD,
             foot.min.y - size::LIB_LIST_PAD,
@@ -6679,13 +6823,14 @@ fn library_box(region: Rect, total: usize) -> Option<LibraryBay> {
     // **Narrower than its own padding is no list**, which is
     // [`picture_rect`]'s rule stated across the axis. There is no matching
     // check down it: a bay too short for the foot is already a bay too short
-    // for a row, and `rows` below is what answers that.
+    // for a row, and `fits` below is what answers that.
     if list.width() <= 0.0 {
         return None;
     }
     let fits = (list.height() / size::LIB_ROW_H).floor().max(0.0) as usize;
     let rows = fits.min(total);
-    (rows > 0).then_some(LibraryBay {
+    (fits > 0).then_some(LibraryBay {
+        scopes,
         list,
         rows,
         total,
@@ -6795,6 +6940,102 @@ fn library_into(
         ),
         galley,
         pal.lav,
+    );
+}
+
+/// **The scope row, painted**: the chips left to right, the marked one washed,
+/// and the rule under the row.
+///
+/// Where the row goes is [`library`]'s; this is [`rend_row_into`]'s shape one
+/// bay along, and deliberately so — the two are the same drawing. A chip is as
+/// wide as the word in it, so the widths are measured here at paint time
+/// rather than derived: no rectangle a caller can ask about depends on them,
+/// because **nothing in this row is a control** and there is nothing to hit
+/// test. `tests/library.rs` is where that is held.
+///
+/// Term for term from `style.css`:
+///
+/// - `.scopes { gap: 4px; padding: 7px 9px; border-bottom: 1px solid
+///   var(--c-hair) }` — the chips from the left of the row, one
+///   [`size::SCOPES_GAP`] apart, over a rule the row's bottom pixel.
+/// - `.scope { padding: 0 8px; border-radius: 999px; color: var(--c-faint) }`
+///   — a word at [`size::BASE`] in a capsule with no border at all.
+/// - `.scope.sel { color: var(--c-lav); background: color-mix(in srgb,
+///   var(--c-lav) 15%, transparent) }` — **the same wash and the same colour
+///   the load pill is drawn in**, and that is the mock's own doing rather than
+///   a shortcut here: both say *this is where a press lands*, one about a deck
+///   and one about a library.
+///
+/// **One row and not a wrap, and at the mock's own width that costs the fourth
+/// chip its right-hand half.** `.scopes` carries a wrapping flex, and this
+/// console draws one row of it and clips — which is [`rend_row_into`]'s answer
+/// to the same declaration and a Set name's answer to a row too narrow for it.
+/// The four words laid end to end are 246 wide at [`size::BASE`] and the
+/// mock's left pane is 218, so `folder` starts inside the bay and finishes
+/// outside it: it is drawn, it is marked when it is marked, and what brings
+/// the rest of it in is widening the pane, which that boundary allows and no
+/// maximum stops.
+///
+/// **The alternative is a row whose height is a measurement**, and it is a
+/// real one rather than a thing not got to: the mock's own bay wraps to two
+/// lines at 218, so a browser draws this row 52 tall where [`size::SCOPES_H`]
+/// is 31.5. What it would cost is a bay whose furniture moves when a word
+/// changes length — the list one row shorter at one width and not at another —
+/// and a height the arrangement's own minimum could not be written from. So
+/// the clip is chosen, and it is chosen the same way the same question was
+/// answered one bay along.
+fn scopes_into(ui: &Ui, pal: &Palette, row: Rect, scopes: &[Scope], scope: usize) {
+    let painter = ui.painter().with_clip_rect(row);
+    let mut x = row.min.x + size::SCOPES_PAD_X;
+    for (at, name) in scopes.iter().map(|scope| scope.name()).enumerate() {
+        let marked = at == scope;
+        let ink = match marked {
+            true => pal.lav,
+            false => pal.faint,
+        };
+        let galley = painter.layout_no_wrap(
+            name.to_owned(),
+            FontId::new(size::BASE, FontFamily::Proportional),
+            ink,
+        );
+        let w = galley.size().x + size::SCOPE_PAD_X * 2.0;
+        let chip = Rect::from_min_size(
+            // **One padding down from the top of the row**, which is where
+            // `.scopes` puts it — and not the row's middle, which is half a
+            // pixel lower because the rule at the bottom is inside the row.
+            Pos2::new(x, row.min.y + size::SCOPES_PAD_Y),
+            egui::vec2(w, size::SCOPE_H),
+        );
+        // **The wash is the whole of the mark**, exactly as it is on the row
+        // under the library cursor: `.scope` sets no border, no rule and no
+        // dot, so a chip that is not marked draws nothing but its word.
+        if marked {
+            painter.rect_filled(
+                chip,
+                // `border-radius: 999px` on a box this short is a capsule.
+                CornerRadius::same((size::SCOPE_H * 0.5) as u8),
+                tint(pal.lav, 15),
+            );
+        }
+        painter.galley(
+            Pos2::new(
+                chip.min.x + size::SCOPE_PAD_X,
+                chip.center().y - galley.size().y * 0.5,
+            ),
+            galley,
+            ink,
+        );
+        x += w + size::SCOPES_GAP;
+    }
+
+    // `border-bottom: 1px solid var(--c-hair)` — the row's own bottom pixel,
+    // and the same hairline the bay head above it and the foot below it are
+    // both drawn with. It is inside the row rather than under it, which is
+    // what keeps the list's top where [`library_box`] put it.
+    let rule = row.max.y - size::HAIRLINE * 0.5;
+    painter.line_segment(
+        [Pos2::new(row.min.x, rule), Pos2::new(row.max.x, rule)],
+        Stroke::new(size::HAIRLINE, pal.hair),
     );
 }
 
@@ -8643,7 +8884,30 @@ pub struct View {
     /// A name and nothing else, because a name is what exists: see [`library`]
     /// for the star and the time the mock draws beside it, and for why neither
     /// is here.
+    ///
+    /// **It is the listing of whichever scope is marked**, and not of the
+    /// store: the bay lists `my sets` where that chip is marked and the
+    /// presets root's `.kset` files where that one is, and both are a
+    /// directory read the host does on the press that changed the scope. See
+    /// [`View::scopes`] and [`Scope`].
     pub library: Vec<String>,
+    /// **Which libraries this console has to offer**, in the order the chips
+    /// are drawn — and **empty** for a console nobody has told, which is every
+    /// test in this crate that does not say otherwise and what the bay then
+    /// draws is no scope row at all.
+    ///
+    /// **The same seam as [`View::library`]**, one row up in the same bay:
+    /// what a scope can be asked is a store, a told directory and a directory
+    /// somebody names during the run, and this crate has none of the three
+    /// (ADR-0156). So the host says which there are and answers the marked one
+    /// into [`View::library`].
+    ///
+    /// **Empty rather than [`Scope::ALL`] by default**, which is [`View::mixer`]'s
+    /// rule and not a shortage: a console that has been told nothing has no
+    /// libraries rather than four it cannot answer, and a default here would
+    /// be this crate asserting that a presets root and a folder exist on a
+    /// machine it cannot look at.
+    pub scopes: Vec<Scope>,
     /// **What the Staging lane lists this frame**: one candidate per deck slot
     /// whose newest build has a verdict outstanding or whose file no longer
     /// agrees with its picture — and **empty** for a console with no engine
@@ -8764,6 +9028,28 @@ pub struct View {
     /// the move rather than at the draw: a cursor clamped while painting would
     /// move on a frame nobody pressed anything on.
     cursor_row: usize,
+    /// **Which scope the bay is listing**, as a position in [`View::scopes`],
+    /// and the third of this console's pointers.
+    ///
+    /// **A pointer and not a reading**, which is [`View::selection`]'s
+    /// argument arriving at a second control:
+    /// [`Operation::SelectScope`] is `Silent(Surface)` — *"it changes which
+    /// library the bay is reading and nothing about what any deck is
+    /// playing"* — so nothing downstream can be the model of record for it,
+    /// and a host that kept a copy would be keeping the console's state on its
+    /// behalf. The host reads it to know which listing to answer with.
+    ///
+    /// **A position and not a [`Scope`]**, for [`View::cursor_row`]'s reason
+    /// one row up: what is drawn is the row of chips this console was handed,
+    /// so what a pointer into it can be is a place in that row — and a scope
+    /// held here that the host stopped offering would be a mark drawn on no
+    /// chip at all.
+    ///
+    /// Zero until somebody says otherwise, which is the first chip of whatever
+    /// row arrives. The mock marks *favourites* and this console starts
+    /// wherever the host puts it: see [`View::select_scope`], which is how a
+    /// program that opens on `my sets` says so.
+    scope: usize,
     placed: Vec<Placed>,
 }
 
@@ -8792,6 +9078,11 @@ impl View {
             // is not a number this crate has, and the list is written once
             // rather than per frame.
             library: Vec::new(),
+            // And nothing said about what libraries there are, which is the
+            // same console from the other side: no chips, and so no scope
+            // row. Room for the four the mock draws, so a host that says so
+            // at startup does not grow it — `mixer`'s reason, one row up.
+            scopes: Vec::with_capacity(Scope::ALL.len()),
             // Nothing outstanding on any slot, which is a console with no
             // engine behind it and is also every ordinary frame of one that
             // has. Room for as many rows as a deck can ever have slots, so
@@ -8809,6 +9100,9 @@ impl View {
             // no ring, and one with no store draws no rows and so no cursor.
             selection: 0,
             cursor_row: 0,
+            // The first chip of a row that has none in it yet. Not a reading
+            // of anything either, for the two above's reason.
+            scope: 0,
             // Every region the console has, so the frame path never grows it.
             placed: Vec::with_capacity(REGIONS.len()),
         }
@@ -8895,6 +9189,99 @@ impl View {
         let moved = to != self.cursor_row;
         self.cursor_row = to;
         moved
+    }
+
+    /// **Which library the bay is listing**, or `None` for a console nobody
+    /// has told what libraries there are.
+    ///
+    /// Answered against [`View::scopes`] rather than read back bare, which is
+    /// [`View::cursor_row`]'s rule: a host that offered four chips and then
+    /// three leaves a position past the end, and the scope that is marked is
+    /// then the last one there is.
+    ///
+    /// **This is what the host answers with.** It says which listing belongs
+    /// in [`View::library`] and what a load off a row means — a row of
+    /// [`Scope::MySets`] is a Set the store already holds and a row of
+    /// [`Scope::Presets`] is a file that has to be taken in first
+    /// (`console.html`'s *A Set has two forms, and loading one is packaging
+    /// it*).
+    pub fn scope(&self) -> Option<Scope> {
+        self.scopes.get(self.marked()).copied()
+    }
+
+    /// Which chip is marked, as a position — clamped to the row that is drawn,
+    /// and zero for a row with nothing in it. The paint's half of
+    /// [`View::scope`].
+    fn marked(&self) -> usize {
+        self.scope.min(self.scopes.len().saturating_sub(1))
+    }
+
+    /// **Mark `scope`, and answer whether that moved anything.**
+    ///
+    /// **A scope this console was not handed is refused**, which is
+    /// [`View::select`]'s rule and the same reasoning: the mark is drawn on a
+    /// chip, so a scope with no chip is a mark drawn nowhere and a listing
+    /// nobody can see the question for. It refuses rather than clamping, for
+    /// that method's reason too — a scope that is not on the row is not the
+    /// scope next to it.
+    ///
+    /// The one caller is a host that opens on a scope other than the first
+    /// chip, which every host with a store does: the mock marks *favourites*
+    /// and the answerable library is *my sets*.
+    ///
+    /// The `bool` is [`View::select`]'s: a caller repaints on a move and not
+    /// on a press.
+    pub fn select_scope(&mut self, scope: Scope) -> bool {
+        let Some(at) = self.scopes.iter().position(|drawn| *drawn == scope) else {
+            return false;
+        };
+        let moved = self.marked() != at;
+        self.scope = at;
+        if moved {
+            // **The cursor goes back to the top of a listing it has never
+            // seen.** It is a position in [`View::library`] and that field is
+            // about to be rewritten by whoever answers the new scope, so a
+            // cursor left where it was would point at the fifteenth row of a
+            // list of three — which [`View::cursor_row`] would then clamp to
+            // *the last row*, a Set nobody chose sitting under a pill that
+            // says a press will load it.
+            self.cursor_row = 0;
+        }
+        moved
+    }
+
+    /// **Mark the next scope along, wrapping**, and answer whether that moved
+    /// anything.
+    ///
+    /// **The stepping is here and not in the vocabulary**, which is
+    /// [`Operation::SelectScope`]'s own instruction: *"The key steps and this
+    /// does not … that is the translator's arithmetic rather than this
+    /// operation's payload"*
+    /// ([P-0074](../../../docs/principles/0074-an-operation-says-what-it-wants-never-which-way-to-move.md)).
+    /// A bare press cannot type a name and here it does not have to: the
+    /// scopes are a short row of chips in front of you, so stepping says
+    /// *which* by showing you.
+    ///
+    /// **And it wraps where [`View::walk`] clamps**, which is not an
+    /// inconsistency: a listing is a walk and wrapping it would jump the
+    /// length of a list on one press, where the scopes are a *cycle* of four
+    /// chips a step apart — `docs/manual/operations.html` says so at the row
+    /// (*"it steps to the next scope and wraps"*), and a step that stopped at
+    /// the last chip would need a second key to come back.
+    ///
+    /// Nothing to step where there are no chips or one, and that is `false`
+    /// rather than a wrap onto itself: a press that changed nothing costs no
+    /// frame.
+    pub fn step_scope(&mut self) -> bool {
+        if self.scopes.len() < 2 {
+            return false;
+        }
+        let to = (self.marked() + 1) % self.scopes.len();
+        self.scope = to;
+        // The listing is about to be a different listing — see
+        // [`View::select_scope`], where this is argued.
+        self.cursor_row = 0;
+        true
     }
 
     /// **Every live region that is declaring this frame**, each with what one
@@ -9110,12 +9497,17 @@ impl View {
         let out = self.master_out;
         let strips = self.mixer.as_slice();
         let sets = self.library.as_slice();
+        let scopes = self.scopes.as_slice();
         // **The two pointers, read once for the frame** beside the readings
         // they are drawn against — `draw` takes `&mut self` and the arms below
         // borrow these slices, so a pointer read inside an arm would be a
         // second borrow of the thing it points into.
         let selection = self.selection;
         let cursor_row = self.cursor_row();
+        // **The third of them**, and it is read the same way and for the same
+        // reason: which chip is marked is a position in the row this frame is
+        // drawing, and a scope past its end is the last chip there is.
+        let scope = self.marked();
         // **The load pill's words, built here rather than in the paint**: it
         // is a readout of `selection` and the bay is what draws it, so the one
         // place the letter is chosen is the one place the ring's slot is read.
@@ -9203,15 +9595,26 @@ impl View {
                     }
                     // The other bay with something in its body, and it is a
                     // bay in every other respect: the same card and the same
-                    // head, and then as many rows as the bay has room for.
-                    // With no store behind the console there are none and the
-                    // body is as empty as every other one in this pass —
-                    // `library`'s answer, not this pass's, so that *no store
-                    // means nothing at all* is decided in one place.
+                    // head, then the row of chips saying which library is
+                    // being read, and then as many rows of that library as the
+                    // bay has room for. Told nothing about any library there
+                    // is neither, and the body is as empty as every other one
+                    // in this pass — `library`'s answer, not this pass's, so
+                    // that *nothing said means nothing at all* is decided in
+                    // one place.
                     Kind::Library => {
                         card(ui, &pal, rect);
                         bay_head(ui, &pal, rect, LIBRARY_TITLE, &[], true);
-                        if let Some(bay) = library(panel.layout(), sets) {
+                        if let Some(bay) = library(panel.layout(), scopes, sets) {
+                            // **The chips before the rows**, and painted from
+                            // the draw rather than from inside the listing's
+                            // own paint: the scope row belongs to the bay's
+                            // head — it says which library is being read,
+                            // where everything under it is what that library
+                            // holds.
+                            if let Some(row) = bay.scopes {
+                                scopes_into(ui, &pal, row, scopes, scope);
+                            }
                             library_into(ui, &pal, &bay, sets, cursor_row, &load);
                         }
                     }
