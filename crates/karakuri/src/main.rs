@@ -208,14 +208,16 @@ use karakuri_console::panel::{
 use karakuri_console::repaint::{Change, Repaint};
 use karakuri_console::room::Room;
 use karakuri_console::view::{
-    self, arrangement as arrangement_pill, look as look_row, mixer as mixer_bay, outputs,
-    picture_rect, preview_rects, Ask, Kind, Picture, View, DECKS, DECK_LETTERS,
+    self, arrangement as arrangement_pill, deck_head as deck_head_row, inspector as inspector_pane,
+    look as look_row, mixer as mixer_bay, outputs, picture_rect, preview_rects, Ask, Kind, Picture,
+    View, DECKS, DECK_LETTERS,
 };
 use karakuri_engine::governor::{Report, SLOWEST_PRIME_ONE_IN};
 // The engine's own `Published`, and its node kinds under the word the address
 // uses for them: `Kind` is already the console's *region* kind on this side,
 // and one word cannot be two things in one file.
 use karakuri_engine::set::{Layering, Published};
+use karakuri_engine::transport::Sync as EngineSync;
 use karakuri_engine::{
     compose, Blend, Committed, Control, Deck, Gpu, HotSwap, Look, Mask, MaskKind, Present,
     Residency, Set, Sink, Skip, TonemapOp,
@@ -1383,11 +1385,11 @@ impl Readout {
                     did = Acted::Emitted(operation);
                 }
             }
-            // **A press the panel claimed is on one of the eight controls or
-            // on the panel itself**, and the controls are asked first for the
-            // reason `claim` asked them last: rule 2 has already had its
+            // **A press the panel claimed is on one of the twelve controls
+            // or on the panel itself**, and the controls are asked first for
+            // the reason `claim` asked them last: rule 2 has already had its
             // refusal, so a press that got here and is on a control is that
-            // control's. All eight are the same calls `claim` made — asked
+            // control's. All twelve are the same calls `claim` made — asked
             // again, not copied.
             //
             // **The bay is derived once and asked four times**, exactly as
@@ -1397,12 +1399,12 @@ impl Readout {
             (Pointer::Down, Claim::Panel) => {
                 self.panel.solve();
                 // **The arrangement pill first, and it is the only one of the
-                // six whose order matters.** Its menu is drawn *over* the
+                // twelve whose order matters.** Its menu is drawn *over* the
                 // bays, so while it is down a press inside the card belongs to
                 // the card and not to whatever it happens to be covering — and
                 // a press anywhere else is the dismissal, which is why the
                 // `None` below is `Ask::Shut` rather than a press that fell
-                // through. Shut, this is one capsule among six that never
+                // through. Shut, this is one capsule among twelve that never
                 // overlap and the order is arbitrary.
                 let pill = arrangement_pill(
                     ctx,
@@ -1437,6 +1439,34 @@ impl Readout {
                 let tone = look.as_ref().and_then(|row| row.tonemap(at));
                 let exposure = look.as_ref().and_then(|row| row.exposure(at));
                 if let Some(operation) = tone.or(exposure) {
+                    return (claim, Acted::Emitted(Some(operation)));
+                }
+                // **The deck head's three, one pane at a time.** Each pane is
+                // derived once and asked for all three, exactly as the mixer
+                // bay is asked for its four: the anchor's place is measured
+                // from the mode chip's and the arrows' from the anchor's, so
+                // they are three questions about one laid-out pane. Nothing
+                // else on the panel overlaps a pane — the Inspector's card is
+                // its own bay — so the order against the mixer below is
+                // arbitrary.
+                //
+                // **The three are asked in the order they sit in the row**,
+                // and no two of them can answer for one point:
+                // `DeckHead::owns` is the union of exactly these three, and
+                // `tests/deck_head.rs` asserts a press is one of them or none.
+                let deck_head = self
+                    .view
+                    .inspector
+                    .iter()
+                    .enumerate()
+                    .find_map(|(index, pane)| {
+                        let at_pane = inspector_pane(self.panel.layout(), index, pane)?;
+                        let head = deck_head_row(ctx, &at_pane, pane)?;
+                        head.sync(at)
+                            .or_else(|| head.reanchor(at))
+                            .or_else(|| head.scrub(at))
+                    });
+                if let Some(operation) = deck_head {
                     return (claim, Acted::Emitted(Some(operation)));
                 }
                 let sink = outputs(ctx, self.panel.layout()).filter(|row| row.hit(at));
@@ -3298,15 +3328,22 @@ fn node_of(set: &Set, control: &Published) -> Option<(Layer, u32)> {
 ///
 /// `Set::published` is documented *"Allocates, so not the frame path. A
 /// console reads this when a Set lands, not per frame."* This program's two
-/// slots are `HotSwap::fixed`, so no Set ever lands after the first, and every
-/// value above is constant for the run: nothing writes a param, nothing binds
-/// one, nothing grants an authority, and the transport has no caller outside
-/// its own tests (ADR-0218).
+/// slots are `HotSwap::fixed`, so no Set ever lands after the first, and
+/// almost every value above is constant for the run: nothing writes a param,
+/// nothing binds one, and nothing grants an authority.
 ///
-/// **What a re-read waits on is therefore a writer**, and it is the same
-/// writer the authority chip waits on. The field is rewritable per frame like
-/// every other one on the `View`; the day something moves a published value,
-/// this is called where [`mixer`] is.
+/// **The transport is the one that moves now, and it is why this is called a
+/// second time.** It had no caller outside its own tests when this was written
+/// (ADR-0218); the deck head's scrub is that caller, so a press that writes a
+/// `Record::Transport` re-reads the panes in [`Readout::performed`] — on the
+/// press, which is where a directory read already happens, and never on a
+/// frame. Re-reading the whole pane rather than writing the two numbers back
+/// is deliberate: a second writer into `View::inspector` is a second answer to
+/// *what is this pane showing*, and the reading that draws the anchor has to
+/// be the reading the deck holds.
+///
+/// **What a re-read for the rest of it waits on is a writer**, and it is the
+/// same writer the authority chip waits on.
 fn inspector(deck: &Deck, material: &str, out: &mut Vec<view::Pane>) {
     out.clear();
     for slot in 0..deck.slot_count().min(view::PANES) {
@@ -3428,6 +3465,21 @@ fn inspector(deck: &Deck, material: &str, out: &mut Vec<view::Pane>) {
             deck: slot,
             material: material.to_owned(),
             sync: mix::sync(transport.sync()),
+            // **What the sync chip's cycle skips over, asked of the engine
+            // three times.** `Deck::sync_allowed` is *"what a surface greys a
+            // control out on, and it answers before anything is pressed"* —
+            // whether the Set in this slot is closed form and whether it reads
+            // `beats`, put through `Transport::allows`. The console is handed
+            // the three answers rather than the two properties, because what
+            // may be asked for is not a surface's to work out (P-0076) and a
+            // third copy of that rule in a crate with no material in it is a
+            // rule that can start disagreeing.
+            //
+            // **`EngineSync::ALL` is in `SYNCS`' order**, which is what makes
+            // this array line up with the field it fills;
+            // `the_two_crates_walk_the_sync_modes_in_one_order` is what says
+            // so rather than this comment.
+            allows: EngineSync::ALL.map(|mode| deck.sync_allowed(slot, mode).is_ok()),
             anchor_bpm: transport.anchor_bpm(),
             scrub_beats: transport.scrub_beats(),
             composite,
@@ -3528,15 +3580,35 @@ fn look(look: &Look) -> view::Look {
 /// the record *and* what the deck holds afterwards, and printing both would
 /// say one press twice.
 ///
-/// **Nothing this program draws can reach either arm today**, and that is why
-/// it is written rather than a reason to leave it out. Its five mixer
-/// controls emit `SetGain`, `SetOpacity`, `SetBlendMode`, `SetResidency` and
-/// `SetMaskShape`, and all five write a record — four from the operation
-/// alone and the mask's from that plus the reading [`reading`] takes; the
-/// Outputs dot never arrives here at all, because it asks the panel for an
-/// arrangement [`Op`] and the panel performs it ([`Acted::Operated`]). The day
-/// a control on this panel emits an operation nobody can write a record for,
-/// this window says what became of the press rather than swallowing it.
+/// **The `Owed` arm has a caller now, and it is the deck head's sync chip.**
+/// This paragraph used to say nothing on this panel could reach either arm,
+/// and that it was written for the day one did. That day is the day the deck
+/// head landed: `Operation::SetSync` converts to `Owed(NotSettled)`, because
+/// what its record carries — the anchor that was asked for, or the one
+/// `Transport::engaged` clamped — is a decision about the bytes on disk that
+/// nobody has taken (ADR-0218 leaves it open by name). So the chip and the
+/// anchor beside it are **reachable affordances over an unwritable record**:
+/// the press is claimed, the operation is emitted, this sentence is printed
+/// with the question in it, and the deck does not move.
+///
+/// **That is the honest state and not a bug to route around.** A surface owns
+/// the affordance and never the authority
+/// ([P-0076](../../../docs/principles/0076-a-surface-owns-the-affordance-never-the-authority.md)),
+/// and this file writing a `Record::Transport` for a `SetSync` — computing the
+/// anchor itself, the way `karakuri-cli`'s `y` does — would be a window
+/// binary taking a decision about a file format
+/// ([P-0027](../../../docs/principles/0027-a-silently-wrong-image-loses-to-a-loud-failure.md)
+/// is what makes the printed line the right answer instead). **It is also why
+/// that row's panel badge stays `plan`:** ADR-0213's `has` is *an operator
+/// reaches the operation*, and an operator who presses this reaches the
+/// emission and not the move.
+///
+/// The other eight controls do write records. Five are the mixer's —
+/// `SetGain`, `SetOpacity`, `SetBlendMode`, `SetResidency` and
+/// `SetMaskShape` — two are the look's, and the eighth is the deck head's
+/// scrub, whose `Record::Transport` is settled and applied. The Outputs dot
+/// never arrives here at all, because it asks the panel for an arrangement
+/// [`Op`] and the panel performs it ([`Acted::Operated`]).
 ///
 /// **The mask is also the one that can reach [`Written::Owed`] by accident**,
 /// and that is worth having rather than designing away: a reading that did not
@@ -3736,6 +3808,49 @@ fn apply(record: &Record, deck: &mut Deck, look: &mut Look) -> Option<String> {
                 op_name = mix::op_wire_name(op)
             ))
         }
+        // **The whole of one slot's clock, because the record is a state and
+        // not an ask.** `Record::Transport` carries the sync mode, the anchor
+        // and the scrub together for a stated reason — a scrub position
+        // without the mode and the anchor beside it *"would replay a slot onto
+        // a grid it was never on"* — and `Deck::set_transport` is what it
+        // decodes to. The mode and the anchor arrive here unchanged, from the
+        // reading [`reading`] took a moment earlier; only the scrub has moved.
+        //
+        // **The mode comes back off the wire name, refused rather than
+        // defaulted**, as the blend's, the residency's, the shape's and the
+        // operator's do. Nothing in this file can produce a name the engine
+        // has not got: the scrub only ever writes back the mode it just read
+        // off the same deck, and the record is written from `Sync::name`.
+        //
+        // **`set_transport` refuses, and the refusal is dropped here on
+        // purpose.** It refuses a mode this slot's material cannot honour, and
+        // a scrub cannot present one — it names the mode the slot is already
+        // in, which the slot is in because the engine allowed it. What it
+        // guards against is the case the engine names at `sync_allowed`: a
+        // swap that puts accumulating material into a slot that is beat-synced
+        // makes the mode it is *already in* unavailable, *"and whatever wires
+        // swapping to this owes it"*. This program's slots are
+        // `HotSwap::fixed`, so no swap happens; the day one does, the deck
+        // saying no is the answer that should be printed rather than this
+        // arm's line.
+        Record::Transport {
+            slot,
+            ref sync,
+            anchor_bpm,
+            scrub_beats,
+        } => {
+            let slot = held(slot)?;
+            let mode = EngineSync::from_name(sync)?;
+            deck.set_transport(slot, mode, anchor_bpm, scrub_beats)
+                .ok()?;
+            Some(format!(
+                "  scrub: deck {} -> ScrubDeck {{ deck: {slot} }} -> Record::Transport {{ \
+                 sync: {sync}, anchor_bpm: {anchor_bpm:.1}, scrub_beats: {scrub_beats:+.2} }} \
+                 -> deck.transport({slot}).scrub_beats() = {:+.2} beats",
+                deck_letter(slot as u8),
+                deck.transport(slot).scrub_beats()
+            ))
+        }
         _ => None,
     }
 }
@@ -3749,18 +3864,22 @@ fn apply(record: &Record, deck: &mut Deck, look: &mut Look) -> Option<String> {
 /// (ADR-0156, ADR-0194).
 ///
 /// **`Current::default()` is *I read nothing*, and it is still the answer for
-/// four of this panel's seven controls**: a gain, an opacity, a blend mode and
-/// a residency each carry everything their record carries, so handing a
+/// five of this panel's ten emitting controls**: a gain, an opacity, a blend
+/// mode, a residency and the sync chip's own `SetSync` each carry everything
+/// their record carries or owe one nothing here can supply, so handing a
 /// reading in would be this file inventing a value. The mask mini is one of
-/// the three that need one, and it needs it for the deck the operation *names*
+/// the four that need one, and it needs it for the deck the operation *names*
 /// rather than for the deck the pointer is over — which is `Reading::Mask`'s
 /// own wording and the reason this takes the operation and not a slot.
 ///
-/// **The two look controls are the other two**, and they read one thing
-/// between them: the look that is running. Each names a third of
+/// **The two look controls are two of the other three**, and they read one
+/// thing between them: the look that is running. Each names a third of
 /// `Record::Look` and the other two thirds come from here — which is
 /// [`Reading::Look`]'s own wording and the reason the reading is taken for the
 /// operation rather than per control.
+///
+/// **The scrub's two arrows are the fourth**, and the reading they take is the
+/// one thing on this list that is not a completion: see the arm.
 ///
 /// **The softness is read back**, where `karakuri-cli`'s `mix::current_mask`
 /// substitutes its own `MASK_SOFTNESS`: that program writes wipes and has a
@@ -3791,6 +3910,36 @@ fn reading(operation: &Operation, deck: &Deck, look: &Look) -> Current {
         }
         _ => None,
     };
+    // **The scrub is the third reading, and it is the only one that is
+    // relative.** `Record::Transport` is absolute — a sync mode, an anchor and
+    // a scrub position — and `ScrubDeck` names an amount, so the record is
+    // where the slot already is plus what was asked for. The reading is
+    // therefore not a completion of a record the way the look's and the mask's
+    // are: it is the left-hand side of an addition, and without it the
+    // conversion answers `Owed(NotRead(Transport))` rather than starting a
+    // deck's scrub from zero.
+    //
+    // **All three fields, because the record is written whole.** A scrub that
+    // wrote a position without the mode and the anchor beside it *"would
+    // replay a slot onto a grid it was never on"* —
+    // `karakuri_operation_record::Transport` says so at its own definition —
+    // and the two it does not touch survive the press by arriving here and
+    // going straight back out, which is the white point's arrangement one
+    // reading up.
+    let transport = match *operation {
+        Operation::ScrubDeck { deck: slot, .. } => {
+            let slot = usize::from(slot);
+            (slot < deck.slot_count()).then(|| {
+                let transport = deck.transport(slot);
+                karakuri_operation_record::Transport {
+                    sync: mix::sync(transport.sync()),
+                    anchor_bpm: transport.anchor_bpm(),
+                    scrub_beats: transport.scrub_beats(),
+                }
+            })
+        }
+        _ => None,
+    };
     let mask = match *operation {
         Operation::SetMaskShape { deck: slot, .. } => {
             let slot = usize::from(slot);
@@ -3806,10 +3955,19 @@ fn reading(operation: &Operation, deck: &Deck, look: &Look) -> Current {
         }
         _ => None,
     };
+    // **Every field named, and no `..Current::default()` behind them.** Every
+    // reading the type carries is answered here, so a fill would be dead — and
+    // the day it grows one more, this stops compiling and somebody has to say
+    // whether this window can take it, rather than a `None` arriving silently.
+    //
+    // **The count that used to be in this sentence is gone rather than
+    // corrected.** It said four where there are three and named a fifth that
+    // would be a fourth, which is a figure nothing checks going stale in the
+    // one comment whose whole argument is that the compiler does the checking.
     Current {
         look,
         mask,
-        ..Current::default()
+        transport,
     }
 }
 
@@ -4146,6 +4304,28 @@ impl App {
                             {
                                 println!("{line}");
                             }
+                        }
+                        // **A scrub moves a value an Inspector pane is
+                        // drawing, and the panes are read once for the run.**
+                        // `Set::published` allocates and says it is not for
+                        // the frame path, so [`inspector`] is called at
+                        // startup and the anchor's `B128 +0.25` would go on
+                        // reading the scrub the deck had when the window
+                        // opened — a picture of a value that has moved, which
+                        // is exactly what P-0027 is about. It is re-read here,
+                        // on the press that moved it: a press is where this
+                        // file already reads a directory, and it is not a
+                        // frame.
+                        //
+                        // **Off the record rather than off the operation**,
+                        // because what matters is that the deck's transport
+                        // changed — the day a second operation writes one, it
+                        // is caught by the same line.
+                        if records
+                            .iter()
+                            .any(|record| matches!(record, Record::Transport { .. }))
+                        {
+                            inspector(&gfx.engine.deck, &gfx.material, &mut readout.view.inspector);
                         }
                     }
                 }
@@ -5061,10 +5241,17 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    /// The two answers that are not a record. They are named only here,
-    /// because nothing in the running window can reach either arm today —
-    /// [`unwritten`] takes the `Written` it is given, and this is where the
-    /// two are handed to it.
+    /// **How far one press of the deck head's scrub goes, and the order its
+    /// sync chip walks the modes in** — read from the control that has them
+    /// rather than written again here: the arrow and the record it becomes
+    /// are one number, and `Pane::allows` lines up with `SYNCS` or the cycle
+    /// skips the wrong mode.
+    use karakuri_console::view::{SCRUB_BEATS, SYNCS};
+    /// The two answers that are not a record. `Silent` is named only here,
+    /// because nothing in the running window reaches that arm; `Owed` has a
+    /// caller now — the deck head's sync chip emits an operation whose record
+    /// is not settled, which is [`unwritten`]'s whole reason and is asserted
+    /// below.
     use karakuri_operation_record::{Owed, Silent};
 
     /// **The library is what the store holds, and a store that is not there is
@@ -6094,6 +6281,121 @@ mod tests {
             None,
             "an operation that wrote a record was also announced as writing none"
         );
+    }
+
+    /// **The deck head's two operations, as far as this program can take them
+    /// without a device** — and they go different distances, which is the
+    /// point.
+    ///
+    /// A scrub becomes a record and the record decodes; a sync mode does not,
+    /// and this window says so out loud. Both halves are asserted here because
+    /// the second is what `tests/panel_column.rs`'s one exemption rests on:
+    /// the sync chip's badge stays `plan` because an operator who presses it
+    /// reaches the emission and not the move, and the day that stops being
+    /// true it stops being true **here**.
+    #[test]
+    fn the_deck_heads_two_operations_go_different_distances() {
+        // **The scrub is relative, so the record is where the slot is plus
+        // what was asked for.** The reading is handed in by hand here for
+        // `reading`'s reason at the mask: there is no deck in this test
+        // binary, and what is being checked is the arithmetic rather than the
+        // read.
+        let current = Current {
+            transport: Some(karakuri_operation_record::Transport {
+                sync: karakuri_operation::Sync::Beat,
+                anchor_bpm: 128.0,
+                scrub_beats: -1.5,
+            }),
+            ..Current::default()
+        };
+        // **The amount is the console's own constant**, not a figure written
+        // again here: the arrow that emits it and the record that carries it
+        // are one number or the panel and the deck disagree about how far a
+        // press goes.
+        let scrub = Operation::ScrubDeck {
+            deck: 1,
+            beats: SCRUB_BEATS,
+        };
+        assert_eq!(
+            written(&scrub, &current),
+            Written::Records(vec![Record::Transport {
+                slot: 1,
+                sync: "beat".to_owned(),
+                anchor_bpm: 128.0,
+                scrub_beats: -1.25,
+            }]),
+            "a press of the deck head's forward arrow, from -1.50, did not come out at -1.25 — \
+             so the record is not the offset the deck holds plus the amount the arrow asks for"
+        );
+        // **And the reading is what makes it one**: without it the conversion
+        // says so rather than starting the deck's scrub from zero, which is
+        // why `reading` has an arm for this operation at all.
+        assert_eq!(
+            written(&scrub, &Current::default()),
+            Written::Owed(Owed::NotRead(karakuri_operation_record::Reading::Transport)),
+            "a scrub with no transport read came back with a record, which means it invented \
+             the position it moved from"
+        );
+        // **The mode goes out as a wire name and the engine reads its own name
+        // back**, which is what `apply` does with it and is the blend chip's
+        // assertion one control along.
+        for sync in SYNCS {
+            assert_eq!(
+                EngineSync::from_name(sync.name()).map(mix::sync),
+                Some(sync),
+                "the engine does not know the vocabulary's `{}`",
+                sync.name()
+            );
+        }
+
+        // **A sync mode owes a record and no reading closes it.** The anchor
+        // clamp is the engine's and what the record carries is undecided
+        // (ADR-0218), so this is `NotSettled` rather than `NotRead` and
+        // handing in every reading this file can take does not change it.
+        let set = Operation::SetSync {
+            deck: 1,
+            sync: karakuri_operation::Sync::Beat,
+        };
+        for reading in [Current::default(), current] {
+            assert_eq!(
+                written(&set, &reading),
+                Written::Owed(Owed::NotSettled),
+                "`SetSync` is not owed any more — if the record has been settled, this test is \
+                 what says the deck head's sync chip now moves a deck, and the exemption in \
+                 `karakuri-console`'s `tests/panel_column.rs` is what to delete"
+            );
+        }
+        let said = unwritten(&set, &written(&set, &Current::default())).expect(
+            "the sync chip's operation owes a record and this window said nothing at all — a \
+             press that reads, in silence, exactly like a press that did not work",
+        );
+        assert!(
+            said.contains("SetSync") && said.contains(Owed::NotSettled.why()),
+            "the window said `{said}`, which does not name both the operation and the question \
+             it is waiting on"
+        );
+    }
+
+    /// **The two crates walk the sync modes in one order**, which is what
+    /// makes `view::Pane::allows` line up with the field it fills.
+    ///
+    /// [`inspector`] builds that array by mapping `EngineSync::ALL` and the
+    /// console reads it by indexing [`SYNCS`], so the two orders are one order
+    /// or the panel skips the wrong mode — silently, and only on material that
+    /// refuses something. Two arrays cannot be made one by a comment.
+    #[test]
+    fn the_two_crates_walk_the_sync_modes_in_one_order() {
+        assert_eq!(EngineSync::ALL.len(), SYNCS.len());
+        for (index, mode) in EngineSync::ALL.into_iter().enumerate() {
+            assert_eq!(
+                mix::sync(mode),
+                SYNCS[index],
+                "`EngineSync::ALL[{index}]` is `{}` and the console's `SYNCS[{index}]` is \
+                 `{}` — the deck head's cycle would skip the wrong mode",
+                mode.name(),
+                SYNCS[index].name()
+            );
+        }
     }
 
     /// [`tally`] the other way round, for the assertion above alone — the

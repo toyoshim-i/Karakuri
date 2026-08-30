@@ -70,18 +70,19 @@
 //!    all. The panel's controls are painted shapes, and the only thing that
 //!    knows a press landed on one is this rule.
 //!
-//!    **There are eight of them now**: the Outputs row's sink
+//!    **There are twelve of them now**: the Outputs row's sink
 //!    ([`crate::view::outputs`]), a mixer strip's fader knob
 //!    ([`crate::view::Mixer::grab`]), its blend chip
 //!    ([`crate::view::Mixer::blend`]), its tally chip
 //!    ([`crate::view::Mixer::tally`]), its mask mini
 //!    ([`crate::view::Mixer::mask`]), the transport row's arrangement pill
-//!    ([`crate::view::arrangement`]) and, at the end of that row, the tone
-//!    map's capsule and the exposure track ([`crate::view::look`]). The rule
-//!    did not change to hold any of the seven that came after the first, which
-//!    is what it was written for — and each is asked exactly the way the first
-//!    is: the derivation that draws it, asked whether the point is on it, with
-//!    nothing stored.
+//!    ([`crate::view::arrangement`]), at the end of that row the tone map's
+//!    capsule and the exposure track ([`crate::view::look`]), and in an
+//!    inspector pane's deck head the sync chip, the anchor and the scrub's two
+//!    arrows ([`crate::view::deck_head`]). The rule did not change to hold any
+//!    of the eleven that came after the first, which is what it was written
+//!    for — and each is asked exactly the way the first is: the derivation
+//!    that draws it, asked whether the point is on it, with nothing stored.
 //!
 //!    **The sixth was the first control in the transport row**, which was four
 //!    readouts and nothing a press acted on until it landed
@@ -102,8 +103,39 @@
 //!    `.mini`'s padding argument met with a band. That is 16.5 in a row of 48
 //!    and therefore **15.75** as well. `tests/look.rs` measures both and fails
 //!    the same three ways `tests/arrangement_pill.rs` does; that two of the
-//!    eight agree is a fact about two capsules being one height, not a number
+//!    twelve agree is a fact about two capsules being one height, not a number
 //!    either of them inherited.
+//!
+//!    **The ninth to the twelfth are the first controls that are not in a row
+//!    of their own**, and they are measured off their own rectangles like
+//!    everything else here. A deck head is the second row *inside* an
+//!    inspector pane, so the nearest boundary is not the one under the row it
+//!    sits in — it is the **pane divider down the side of the pane**, and what
+//!    holds the chips off it is `.deck-head`'s own padding
+//!    ([`crate::view::size::DECK_HEAD_PAD_X`]): the leftmost chip starts
+//!    **10** in from the pane's edge, and the fold ends 10 in from the other,
+//!    against a [`GRAB`] of 6.
+//!
+//!    **Down the row the clearance is the largest on the console**, and it is
+//!    a sum rather than a centring: the bay head is painted over the top of
+//!    the region and the pane's own `.half-head` is under it, so there is
+//!    27 + 27.5 + 5 = **59.5** of pane above the chips and more below. The
+//!    mask mini's 74.50 was the previous largest and it is the same shape of
+//!    number — a control several rows into a bay.
+//!
+//!    **10 is not the tightest on the console; the blend chip's 8.97 still
+//!    is.** It is the tightest in this bay, and the two would go together if
+//!    the grab were widened past 8.97. `tests/deck_head.rs` measures all four
+//!    controls against every boundary and fails the same three ways
+//!    `tests/arrangement_pill.rs` does.
+//!
+//!    **Three of the four are claimed and the fourth is a mode away from
+//!    being**, which is this rule's *a control claims what it acts on and no
+//!    more* met by a state rather than by a rectangle: a scrub arrow is inert
+//!    on a deck that is not beat-synced, so it is drawn, it keeps its shape,
+//!    and [`crate::view::DeckHead::owns`] does not claim it. The `composite`
+//!    chip beside them is never claimed at all — layering is a build decision
+//!    and there is no operation for the press to name.
 //!
 //!    **The fourth is the first control with a state that can be pending**,
 //!    and it is still only an affordance: it names a destination and refuses
@@ -182,11 +214,22 @@
 //! on a track, and the reason is written at the method: a fader has a knob and
 //! a value that must not jump under a hand mid-gesture, and this has neither.
 //!
+//! **So are the deck head's three**, two bays down and reached the same way:
+//! [`crate::view::DeckHead::sync`] answers `SetSync` naming the mode the
+//! cycle arrived at — with a mode this deck's material cannot honour **skipped
+//! rather than offered**, which is the blend chip's affordance over a list one
+//! reading has narrowed; [`crate::view::DeckHead::reanchor`] answers `SetSync`
+//! naming the mode the deck is **already in**, which is the one thing the chip
+//! beside it structurally cannot say and is the whole of ADR-0218; and
+//! [`crate::view::DeckHead::scrub`] answers `ScrubDeck` by an amount, which is
+//! the one control on this panel that does not name a destination — because
+//! the vocabulary has none for it to name.
+//!
 //! **So is the arrangement pill**, one row up and over a control with a menu
 //! under it: [`crate::view::ArrangementPill::ask`] answers *what does a press
 //! on it ask for* off the same laid-out pill this rule hit-tests — the menu
 //! down or up, the reset, a save under the name in use, or a restore of the
-//! name that was picked. It is the one of the six whose answer is sometimes
+//! name that was picked. It is the one of the twelve whose answer is sometimes
 //! not an operation at all, and that is the affordance and the vocabulary
 //! staying apart rather than an exception: *open the menu* is not something a
 //! MIDI map or an MCP call could ever want to say.
@@ -222,7 +265,7 @@
 use karakuri_layout::{Hit, Point};
 
 use crate::panel::{Panel, GRAB};
-use crate::view::{arrangement, look, mixer, outputs, View};
+use crate::view::{arrangement, deck_head, inspector, look, mixer, outputs, View};
 
 /// Who a pointer event belongs to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -262,7 +305,15 @@ pub enum Claim {
 /// [`mixer`] that answers so rather than a check here: a folded mixer — or one
 /// inside a folded pane — has no room for its row of strips, `strips_row`
 /// answers `None`, and the bay is `None` before any chip is hit-tested.
-/// `tests/tally.rs` asserts it both ways round.
+/// `tests/tally.rs` asserts it both ways round. [`inspector`] is the same
+/// answer one bay along, and [`deck_head`] adds a second: a pane too narrow to
+/// hold its own chips draws none, so there is nothing there to press.
+///
+/// **What the deck head adds is three galley lookups per pane**, for the
+/// mode's word, the anchor's numbers and the fold's — the same arrangement the
+/// mixer's are in, and paid on a pointer event rather than on a frame. The
+/// scrub's two arrows add none of their own: they are marks rather than words,
+/// which is what the mask mini already saves one bay up.
 ///
 /// **And it takes the whole [`View`], for the same reason one level further
 /// out.** A fader's knob sits on the fill's moving edge and the arrangement
@@ -298,12 +349,12 @@ pub fn claim(panel: &mut Panel, ctx: &egui::Context, view: &View, p: Point) -> C
     // anything. See the module documentation and `tests/outputs.rs`.
     match panel.layout().hit(p, GRAB) {
         Hit::Divider { .. } => Claim::Panel,
-        // Rule 4, over all eight of the console's controls. Each is asked the
+        // Rule 4, over all twelve of the console's controls. Each is asked the
         // same way — the derivation that draws it, asked whether the point is
         // on it — and no answer is stored.
         Hit::View(_) | Hit::Nothing => {
             let on_sink = outputs(ctx, panel.layout()).is_some_and(|row| row.hit(p));
-            // The pill is the only one of the six that is not in a bay, and
+            // The pill is the only one of the twelve that is not in a bay, and
             // the only one asked with the menu already known to be shut: rule
             // 2 has answered for the open case above, so this is the capsule
             // alone.
@@ -335,7 +386,20 @@ pub fn claim(panel: &mut Panel, ctx: &egui::Context, view: &View, p: Point) -> C
                 )
                 .is_some_and(|row| row.owns(p))
             };
-            match on_sink || on_pill() || on_look() || on_strip() {
+            // **The deck head's three, one pane at a time**, and each pane is
+            // derived once for all of them exactly as a strip is: the anchor's
+            // place is measured from the mode chip's and the arrows' from the
+            // anchor's, so they are three questions about one laid-out pane. A
+            // console with no deck behind it has no panes and pays nothing —
+            // [`View::inspector`] is empty, and this iterates over nothing.
+            let on_deck_head = || {
+                view.inspector.iter().enumerate().any(|(index, pane)| {
+                    inspector(panel.layout(), index, pane)
+                        .and_then(|at| deck_head(ctx, &at, pane))
+                        .is_some_and(|head| head.owns(p))
+                })
+            };
+            match on_sink || on_pill() || on_look() || on_strip() || on_deck_head() {
                 true => Claim::Panel,
                 false => Claim::Egui,
             }

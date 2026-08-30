@@ -609,6 +609,25 @@ pub mod size {
     /// the chip that says what its clock is locked to.
     pub const ANCHOR_SIZE: f32 = 9.0;
 
+    /// `.scrub`'s `gap: 3px`, between the two arrows a quarter beat a press
+    /// goes through.
+    pub const SCRUB_GAP: f32 = 3.0;
+
+    /// `.scrub i`'s `font-size: 9px`: one of the two arrows a quarter beat a
+    /// press goes through, at the same type size as the anchor beside it.
+    pub const SCRUB_SIZE: f32 = 9.0;
+
+    /// `.scrub i`'s `padding: 0 4px`, around one arrow — tighter than a
+    /// [`MINI_PAD_X`] because what is inside it is a mark and not a word.
+    pub const SCRUB_PAD_X: f32 = 4.0;
+
+    /// One arrow's box: [`SCRUB_SIZE`] at [`LINE`] inside its
+    /// `border: 1px solid var(--c-line)` — **15.5**, which is [`MINI_H`]'s own
+    /// number at the same type size, and is why the two arrows sit in the deck
+    /// head without making [`DECK_HEAD_H`] any taller than the chip beside
+    /// them.
+    pub const SCRUB_H: f32 = SCRUB_SIZE * LINE + HAIRLINE * 2.0;
+
     /// `.node-head`'s `padding: 5px 10px` and its `gap: 7px`: a node's
     /// address, its name and who is allowed to move it.
     pub const NODE_HEAD_PAD_X: f32 = 10.0;

@@ -170,6 +170,9 @@ fn a_full_console_stages_nothing() {
             deck: 0,
             material: "drift_night".to_owned(),
             sync: karakuri_operation::Sync::Free,
+            // Nothing refused, which is what a pane handed in to fill the
+            // console says about material this file is not asking after.
+            allows: [true; karakuri_console::view::SYNCS.len()],
             anchor_bpm: 128.0,
             scrub_beats: 0.0,
             composite: false,
