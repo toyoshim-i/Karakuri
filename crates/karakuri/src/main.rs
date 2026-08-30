@@ -228,7 +228,7 @@ use karakuri_console::room::Room;
 use karakuri_console::view::{
     self, arrangement as arrangement_pill, deck_head as deck_head_row, inspector as inspector_pane,
     look as look_row, master as master_row, mixer as mixer_bay, outputs, picture_rect,
-    preview_rects, Ask, Kind, Picture, View, DECKS, DECK_LETTERS,
+    preview_rects, Ask, Kind, Picture, Scope, View, DECKS, DECK_LETTERS,
 };
 // **How many slots a deck can hold**, which is how many this one has — see
 // [`SLOTS`]. Not re-exported at the crate root, and asked of the module that
@@ -247,7 +247,7 @@ use karakuri_engine::{
 use karakuri_environment::{mix, watch};
 use karakuri_ir::Kind as Layer;
 use karakuri_layout::{Axis, Hit, Layout, NodeId, Point};
-use karakuri_operation::{BlendMode, Operation};
+use karakuri_operation::{BlendMode, Operation, Undecided};
 use karakuri_operation_record::{written, Current, Written};
 use karakuri_store::record::Record;
 use karakuri_store::store::Store;
@@ -1050,8 +1050,10 @@ impl Costs {
                  live picture, four preview cells with deck A auditioning in one and three \
                  off, the mixer bay with a strip in every one of its four tracks, the \
                  transport, the outputs row and deck B's parked \
-                 tally rolling once a second — over Library, Staging, Inspector, Master and \
-                 Sequencer, which are a head and nothing else. That is NOT the workspace's \
+                 tally rolling once a second — over the Library bay's scope row and however \
+                 many rows the scope marked in it lists, over the Master bay's out row, and \
+                 over Staging, Inspector and Sequencer, which are a head and nothing else. \
+                 That is NOT the workspace's \
                  reference workload. The \
                  engine half is one Set of `{}` — {} elements at {}x{}, one step a frame — the \
                  deck's other three slots are allocated, one of them parked, and an \
@@ -1774,13 +1776,29 @@ impl Readout {
         // *"the ones that ship with the program"* would be right until the day
         // it was not, which is the whole of what the paragraph above is about.
         match presets {
-            Some(presets) => println!(
-                "presets: {} — {}. that directory is the app-preset tier: what ships \
+            Some(presets) => {
+                // **Counted once and read off the listing the bay is drawn
+                // from**, rather than described: a sentence about what a
+                // preset directory probably holds is the kind of line this
+                // legend was found lying five ways with.
+                let held = presets_listing(Some(presets)).len();
+                println!(
+                    "presets: {} — {}. that directory is the app-preset tier: what ships \
                  with the program, written by nobody, and what a run with no paths on \
-                 the command line opens on.",
-                presets.dir.display(),
-                presets.found.how()
-            ),
+                 the command line opens on. the Library bay's `presets` scope lists the \
+                 {} `.kset` file{} in it — the parts beside them are what those files \
+                 name rather than rows of their own — and `l` on one takes it into the \
+                 store and then loads it, which is why opening a preset leaves a row \
+                 under `my sets`.",
+                    presets.dir.display(),
+                    presets.found.how(),
+                    held,
+                    match held {
+                        1 => "",
+                        _ => "s",
+                    }
+                )
+            }
             // Said once, out loud, and it is this program's only occasion to
             // say it: a run that needed the library for a default pair was
             // refused before a window opened, so reaching here means the pair
@@ -1985,13 +2003,27 @@ impl Readout {
                             deck_letter(ON_AIR as u8)
                         )
                     }
-                    // A bay like the other five, and then a row per Set
-                    // the store holds — as many as the bay has room for, and
-                    // the foot says so. `n of m`, exactly as the bay draws it.
+                    // A bay like the other five: a row of chips saying which
+                    // library is being read, and then a row per Set that one
+                    // holds — as many as the bay has room for, and the foot
+                    // says so. `n of m`, exactly as the bay draws it, and the
+                    // scope is the view's own mark rather than a word written
+                    // here.
                     Kind::Library => {
-                        match karakuri_console::view::library(layout, &self.view.library) {
-                            Some(bay) => format!("bay, {} listed", bay.count()),
-                            None => "bay, no store behind it".to_owned(),
+                        match karakuri_console::view::library(
+                            layout,
+                            &self.view.scopes,
+                            &self.view.library,
+                        ) {
+                            Some(bay) => format!(
+                                "bay, {}, {} listed",
+                                match self.view.scope() {
+                                    Some(scope) => scope.name(),
+                                    None => "no scopes",
+                                },
+                                bay.count()
+                            ),
+                            None => "bay, nothing said about any library".to_owned(),
                         }
                     }
                     // A bay like the other six, and then a strip per slot:
@@ -2112,6 +2144,10 @@ const KEYS: &[(&str, &str)] = &[
     (
         "3",
         "select deck D — bound whatever the deck has, and this deck has a slot for it",
+    ),
+    (
+        "e",
+        "the library's scope: the next chip along, and it wraps",
     ),
     ("up", "the library cursor, up a row"),
     ("down", "and down, as far as the rows the bay drew"),
@@ -3511,6 +3547,268 @@ fn library(root: &std::path::Path) -> Vec<String> {
             Vec::new()
         }
     }
+}
+
+/// **One row of the `presets` scope**: the word the bay draws and the file
+/// behind it.
+///
+/// Two fields because the bay lists **names** and a load needs a **path**:
+/// what crosses into the console is a `String` per row (`view::View::library`),
+/// and what this program has to be able to find again on the press is the file
+/// that row came off.
+struct Preset {
+    /// What the row reads, which is the file's own name without its
+    /// extension. **Not read out of the file**: a listing that opened
+    /// twenty-one files to draw twenty-one rows would be a directory read
+    /// doing a file read's work, and the id a take-in files the Set under is
+    /// the one *inside* the file anyway — read there, on the press, by
+    /// [`taking_in`].
+    id: String,
+    path: std::path::PathBuf,
+}
+
+/// **Every Set the preset library offers**, which is the `.kset` files in the
+/// root this run resolved.
+///
+/// # One call, and the reading is not this program's
+///
+/// The listing is `karakuri_environment::places`', beside the resolution that
+/// answers *where* the presets are: what a `.kset` is and which directory
+/// holds them is that module's business, and a second program wanting the same
+/// list must not read the same directory a second way. So this is the one
+/// place in this program that knows a preset library can be listed at all, and
+/// it knows nothing about how — the shape of a row, the order they come in,
+/// and what a name the layout does not claim does are all answered there.
+///
+/// # What it lists, and why not the `.kir` files beside them
+///
+/// `console.html`'s *A folder scope reads Sets, and a bundle is not a third
+/// thing* settles it: *"A directory of `.kir` files is a directory of parts,
+/// and a library lists what you can put on a deck."* A `.kir` is one node's
+/// source addressed by its content and nothing in the vocabulary takes one, so
+/// the parts are not rows — they are what the rows *name*.
+///
+/// **A root with nothing in it is a library nobody has filled**, and it is not
+/// a failure: the scope lists nothing and the sentence about it is
+/// [`why_nothing`]'s. A directory that will not open is said out loud, for
+/// [`library`]'s reason one scope along — a scope empty because a directory
+/// could not be read looks exactly like one that is empty.
+fn presets_listing(presets: Option<&karakuri_environment::places::Presets>) -> Vec<Preset> {
+    let Some(presets) = presets else {
+        return Vec::new();
+    };
+    match presets.list_sets() {
+        Ok(sets) => sets
+            .into_iter()
+            .map(|set| Preset {
+                id: set.id,
+                path: set.file,
+            })
+            .collect(),
+        // **Said out loud and then empty**, which is the same shape the store
+        // side takes one scope along: a root that will not open looks exactly
+        // like a root nobody has filled, and the difference has to be spoken
+        // or it is not there. The sentence is `places`' own — it names the
+        // path and how that path was arrived at — so an operator who typed
+        // `--presets` reads something different from one whose checkout moved.
+        Err(why) => {
+            println!("presets: {why}");
+            Vec::new()
+        }
+    }
+}
+
+/// **Why the scope that is marked lists nothing**, in the words that say which
+/// kind of nothing it is — and among these four chips there are two kinds.
+///
+/// Two of them are empty as *data*: a store nobody has saved into and a preset
+/// root nobody has filled are libraries with nothing in them, which
+/// `console.html` says outright — *"An empty tier is a library nobody has
+/// filled rather than something gone wrong."* Fill either and the rows appear
+/// with nothing else changing.
+///
+/// **The other two are empty as *machinery*, and they are not the same
+/// machinery**, which is why this says which:
+///
+/// - **A favourite is a fact nothing in this workspace keeps.** No field on a
+///   Set listing, no record that carries one, no operation that names one —
+///   `console.html`'s *What keeps a favourite, and where it does not travel*
+///   decides where the value would live and leaves nothing to read. Nothing
+///   here writes one: a store invented for it would be the specification
+///   written backwards, which that page says in as many words.
+/// - **A folder waits on an operation.** *"No operation in the vocabulary can
+///   ask a folder for its listing"* — `Operation::ListSets` carries what a Set
+///   holds and which layer it uses, and has nowhere at all to put a directory.
+///   So the chip is drawn and the asking is owed by that row of
+///   `docs/manual/operations.html` rather than by this file.
+///
+/// It is said out loud on the step and again on a press, because a scope that
+/// went quiet and a scope that is empty are the same experience — which is the
+/// rule every other refusal in this file is written to.
+fn why_nothing(scope: Scope) -> &'static str {
+    match scope {
+        Scope::Favourites => {
+            "nothing in this workspace keeps a favourite — no field on a Set listing, no \
+             record, no operation — so this scope is empty because there is nowhere for a \
+             star to be rather than because nothing is starred"
+        }
+        Scope::MySets => {
+            "this store holds no Sets yet, which is a library nobody has filled: `k` keeps \
+             what a deck is playing, and loading a preset leaves one here too"
+        }
+        Scope::Presets => {
+            "this run found no preset library, or the one it found holds no `.kset` file — \
+             `--presets DIR` is what names one, and a directory of `.kir` parts is not a \
+             library"
+        }
+        Scope::Folder => {
+            "no operation in the vocabulary can ask a directory for its listing — \
+             `ListSets` carries what a Set holds and has nowhere to put a folder — so this \
+             chip is drawn and the asking is owed by the operations page rather than by \
+             this program"
+        }
+    }
+}
+
+/// **The rows the Library bay lists for the scope that is marked**, written
+/// into the view, and the sentence to print about it.
+///
+/// # One function, and it is what a scope *is* on this program's side
+///
+/// The console draws a row of chips and marks one of them; **which listing
+/// belongs under that mark is this side's answer**, because every one of the
+/// four is something outside this process — a store, a told directory, a
+/// filter over the first, a directory somebody names during the run — and
+/// `karakuri-console` takes none of them (ADR-0156). So the seam is a `Vec` of
+/// names, and this is the one place it is filled.
+///
+/// **On the press that changed the scope and at startup, never on a frame.** A
+/// listing is a directory read (P-0072), which is the same rule [`library`]
+/// states one scope down and the reason this is not called from the frame
+/// handler.
+///
+/// Two of the four answer with rows and two answer with nothing —
+/// [`why_nothing`] is where that is argued, and it is one function so that a
+/// scope which stops being empty stops being empty in one place.
+fn listing(
+    view: &mut View,
+    store: &std::path::Path,
+    presets: Option<&karakuri_environment::places::Presets>,
+) -> String {
+    let Some(scope) = view.scope() else {
+        return String::from(
+            "  library: this console was handed no scopes, so there is no library to list",
+        );
+    };
+    view.library = match scope {
+        Scope::MySets => library(store),
+        Scope::Presets => presets_listing(presets)
+            .into_iter()
+            .map(|preset| preset.id)
+            .collect(),
+        // **Drawn and answered with nothing**, and the two are not the same
+        // nothing — see [`why_nothing`], which is where each of them says
+        // which it is.
+        Scope::Favourites | Scope::Folder => Vec::new(),
+    };
+    match view.library.len() {
+        0 => format!(
+            "  library: `{}` lists nothing — {}",
+            scope.name(),
+            why_nothing(scope)
+        ),
+        listed => format!(
+            "  library: `{}` lists {listed} Set{}",
+            scope.name(),
+            match listed {
+                1 => "",
+                _ => "s",
+            }
+        ),
+    }
+}
+
+/// **A preset row, taken into this store**, and the id it landed under.
+///
+/// # Taking it in is not a second operation, and it is what gives it a name
+///
+/// `docs/manual/operations.html`'s *Send a Set to somebody, and take one in*:
+/// packaging is *"one operation at two moments — ahead of time when you are
+/// sending, and at the press when you are not"*, so opening a preset **is**
+/// that row performed at the second of them. `console.html` reaches it from
+/// the other side: *"loading a preset is a packaging step, and a packaging step
+/// writes into the store: `my sets` gains a row you did not make."* That is
+/// what this does, and it is why a preset row is one press rather than two —
+/// the take-in is what gives the Set the id the load needs.
+///
+/// # It is `karakuri-cli`'s own route and not a second one
+///
+/// `taken_in_file` resolves a `.kset` with `setfile::bundle_authored` — which
+/// is `setfile::resolve` behind its wall, and then the inlining — and hands the
+/// result to `setfile::unbundle`. **Resolved *and* inlined rather than resolved
+/// alone**, for that function's stated reason: `unbundle` writes a metadata
+/// card for each source the lines carry, and handing it resolved lines with
+/// nothing inlined would file the Set and leave every artifact cardless. Two
+/// routes into one store that reach two different stores is the disagreement a
+/// second spelling always is.
+///
+/// **The wall is `resolve`'s and not this file's**: a part named from outside
+/// the file's own directory is refused, by path, because *"a Set somebody
+/// handed you is not a way of asking this machine for its files"* (ADR-0229).
+/// Nothing here loosens it and nothing here repeats it.
+///
+/// # An id this store already holds is refused, and the refusal is not written
+/// # here
+///
+/// `setfile::unbundle` asks what the store holds before it writes a byte and
+/// refuses an id that is taken — *"the id came from the file rather than from
+/// you"* — and that sentence is the one the operator gets. A second check here
+/// would be a second answer to *may this be overwritten*, and the two would
+/// disagree the day one of them moved. What this adds is which of the two acts
+/// failed: nothing was taken in, so nothing was loaded, and the deck is exactly
+/// as it was.
+///
+/// # The id is the file's own
+///
+/// Read off the `set` record in the resolved lines rather than taken from the
+/// row's word, because that is the id `unbundle` files it under and the id
+/// `my sets` will list. They are the same word in `examples/`, and a preset
+/// whose file says otherwise would otherwise be loaded by a name the store does
+/// not hold.
+fn taking_in(
+    root: &std::path::Path,
+    presets: Option<&karakuri_environment::places::Presets>,
+    row: &str,
+) -> Result<(String, String), String> {
+    // **Asked again rather than kept**, which is [`listing`]'s shape: the rows
+    // crossed into the console as words, and the file behind a word is found
+    // by asking the library again on the press. A second copy of the listing
+    // held on this side is a copy that goes on naming a file that has moved.
+    let found = presets_listing(presets)
+        .into_iter()
+        .find(|preset| preset.id == row)
+        .ok_or_else(|| {
+            format!(
+                "the preset library has no `{row}{}` in it any more",
+                karakuri_environment::setfile::AUTHORING_SUFFIX
+            )
+        })?;
+    let store = Store::open(root).map_err(|e| format!("store `{}`: {e}", root.display()))?;
+    let lines = karakuri_environment::setfile::bundle_authored(&store, &found.path)?;
+    let id = lines
+        .iter()
+        .find_map(|line| match line.record() {
+            Record::Set { id, .. } => Some(id.clone()),
+            _ => None,
+        })
+        .ok_or_else(|| {
+            format!(
+                "`{}` carries no `set` record, so it names no id to file itself under",
+                found.path.display()
+            )
+        })?;
+    let said = karakuri_environment::setfile::unbundle(&store, &lines)?;
+    Ok((id, said))
 }
 
 /// **Put a library Set on a running deck**, which is the whole of what
@@ -5685,7 +5983,27 @@ impl ApplicationHandler for App {
         // **The library before the legend too**, and once for the run: the
         // legend says how many Sets the bay lists, and `library` says why
         // where it is none.
-        self.readout.view.library = library(&self.store);
+        //
+        // **The scopes first, because a listing belongs to one of them.** The
+        // console draws the chips it is handed and this program is what can
+        // answer them — a store, a told directory, and two that answer nothing
+        // yet (`why_nothing`). All four are drawn: a chip is the question, and
+        // three of the four questions are ones this program can be asked.
+        self.readout.view.scopes = Scope::ALL.to_vec();
+        // **And it opens on `my sets`, where the mock marks `favourites`.**
+        // The mark says which question is being asked, so the one to open on
+        // is the one with an answer — and `favourites` is *"this library
+        // filtered"* over a fact nothing keeps, which is the one of the four
+        // that could not answer even in principle today. The console refuses a
+        // scope it was not handed, so this is asserted rather than assumed.
+        assert!(
+            self.readout.view.select_scope(Scope::MySets),
+            "the console was handed the four scopes and would not mark `my sets`"
+        );
+        println!(
+            "{}",
+            listing(&mut self.readout.view, &self.store, self.presets.as_ref())
+        );
         // **And the arrangement pill's menu, once for the run**, for
         // `library`'s reason and for one more: this is a directory read, and
         // the only thing that can add a name to it is a save this program
@@ -6038,6 +6356,7 @@ impl ApplicationHandler for App {
                         self.readout.panel.solve();
                         let listed = karakuri_console::view::library(
                             self.readout.panel.layout(),
+                            &self.readout.view.scopes,
                             &self.readout.view.library,
                         )
                         .map_or(0, |bay| bay.rows);
@@ -6057,25 +6376,112 @@ impl ApplicationHandler for App {
                     // re-point the slot's source — [`loading`] — so the worker
                     // builds it and the watchdog judges it exactly as it does
                     // an edit, and nothing here reaches `Deck::install`.
+                    // **The scope, and the key steps where the operation
+                    // names.** `Operation::SelectScope`'s payload is
+                    // `Undecided` — *"what identifies one member of a growable
+                    // list is spelled nowhere"* — and its own doc says where
+                    // the stepping goes: *"The key steps and this does not …
+                    // that is the translator's arithmetic rather than this
+                    // operation's payload"* (P-0074). So the surface moves its
+                    // own pointer, exactly as the four deck keys do, and the
+                    // operation is emitted through the same route so that the
+                    // press is recorded as `Silent(Surface)` rather than as
+                    // nothing at all.
+                    //
+                    // **The listing is re-read here**, on the press that
+                    // changed the scope: a scope *is* a listing on this side
+                    // (`listing`), and a directory read is not a thing to do
+                    // on a frame (P-0072).
+                    Key::Character("e") => {
+                        if self.readout.view.step_scope() {
+                            println!(
+                                "{}",
+                                listing(&mut self.readout.view, &self.store, self.presets.as_ref())
+                            );
+                        }
+                        // **Emitted whether or not the mark moved**, which is
+                        // the deck keys' rule: what a press asked for is what
+                        // is emitted, and `unwritten` is what says the press
+                        // wrote no record and that it is settled.
+                        //
+                        // **And nothing performs it in `performed`**, where
+                        // `SelectDeck` has `pointed` — because this payload
+                        // cannot say which scope was chosen and a performer
+                        // reading `Undecided` would have to guess. The step
+                        // above *is* the performance, and it is the surface's
+                        // own pointer either way.
+                        let acted =
+                            Acted::Emitted(Some(Operation::SelectScope { scope: Undecided }));
+                        let repaint =
+                            App::performed(gfx, &mut self.readout, &acted, Repaint::Never);
+                        App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
+                        return;
+                    }
                     Key::Character("l") => {
                         let deck = self.readout.view.selection();
                         let at = self.readout.view.cursor_row();
-                        let acted = match self.readout.view.library.get(at) {
-                            Some(set) => Acted::Emitted(Some(Operation::LoadSet {
-                                deck,
-                                set: set.clone(),
-                            })),
+                        let row = self.readout.view.library.get(at).cloned();
+                        let acted = match (self.readout.view.scope(), row) {
+                            // **A preset row is taken in and then loaded**,
+                            // which is one press because taking it in is what
+                            // gives the Set the id the load needs — ADR-0229's
+                            // *one operation, two moments*, performed at the
+                            // second of them. What lands in the store is a
+                            // Set of the operator's, so `my sets` gains a row
+                            // they did not make: `console.html` says that out
+                            // loud so that nobody meets it as a surprise.
+                            (Some(Scope::Presets), Some(row)) => {
+                                match taking_in(&self.store, self.presets.as_ref(), &row) {
+                                    Ok((id, said)) => {
+                                        println!("  take in: {said}");
+                                        Acted::Emitted(Some(Operation::LoadSet { deck, set: id }))
+                                    }
+                                    // **Which of the two acts failed is the
+                                    // whole of what this sentence adds.**
+                                    // Nothing was taken in, so nothing was
+                                    // loaded — where a load that fails says so
+                                    // in `played`'s own words, with the deck
+                                    // it did not reach. The refusal itself is
+                                    // `setfile::unbundle`'s, including the one
+                                    // for an id this store already holds.
+                                    Err(e) => {
+                                        println!(
+                                            "  take in: `{row}` was not taken into the store: \
+                                             {e}\n  take in: so nothing was loaded, and what is \
+                                             on deck {} is still running — a Set already here is \
+                                             listed under `my sets`, which is where it is loaded \
+                                             from",
+                                            deck_letter(deck)
+                                        );
+                                        Acted::Nothing
+                                    }
+                                }
+                            }
+                            // A row of `my sets`, which is a Set this store
+                            // already holds and is the route ADR-0228 built.
+                            (_, Some(set)) => {
+                                Acted::Emitted(Some(Operation::LoadSet { deck, set }))
+                            }
                             // Not a refusal of the load: there is no Set under
-                            // the cursor because there is no listing, which is
-                            // a store this run could not read or one that
-                            // holds nothing. The bay says so by drawing no
-                            // rows; this says so in words, because a key that
-                            // did nothing and a key that is not bound are the
-                            // same experience.
-                            None => {
+                            // the cursor because this scope lists nothing. The
+                            // bay says so by drawing no rows; this says so in
+                            // words, and it says **which** nothing it is —
+                            // `favourites` and `folder` are drawn and answer
+                            // nothing for two different reasons, and a key
+                            // that did nothing and a key that is not bound are
+                            // the same experience.
+                            (scope, None) => {
                                 println!(
-                                    "  load: the library lists nothing, so there is no Set under \
-                                     the cursor"
+                                    "  load: `{}` lists nothing, so there is no Set under the \
+                                     cursor — {}",
+                                    match scope {
+                                        Some(scope) => scope.name(),
+                                        None => "the library",
+                                    },
+                                    match scope {
+                                        Some(scope) => why_nothing(scope),
+                                        None => "this console was handed no scopes at all",
+                                    }
                                 );
                                 Acted::Nothing
                             }
@@ -6755,6 +7161,251 @@ mod tests {
             listed,
             vec!["morph01".to_owned(), "night01".to_owned()],
             "the bay lists {listed:?}"
+        );
+
+        std::fs::remove_dir_all(&root).expect("clean up");
+    }
+
+    /// A temporary directory of this test's own, named after the test that
+    /// wants it — the shape every other CPU test in this file uses.
+    fn scratch_dir(what: &str) -> std::path::PathBuf {
+        let root = std::env::temp_dir().join(format!(
+            "karakuri-{what}-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        // Whatever a previous run left behind, so the claims are about what
+        // this run put there.
+        let _ = std::fs::remove_dir_all(&root);
+        root
+    }
+
+    /// `examples/`, as a preset library this run was told about.
+    fn shipped_presets() -> karakuri_environment::places::Presets {
+        karakuri_environment::places::Presets {
+            dir: std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples"),
+            found: karakuri_environment::places::Found::Given,
+        }
+    }
+
+    /// **The `presets` scope lists the Set files and not the parts beside
+    /// them**, which is `console.html`'s *"a directory of `.kir` files is a
+    /// directory of parts, and a library lists what you can put on a deck"*.
+    ///
+    /// It is asserted against `examples/`, which is the directory this program
+    /// actually opens on: thirty-one parts and twenty-one Set files in one
+    /// place is exactly the mixture the rule is about, and a listing that took
+    /// the parts would draw fifty-two rows of which thirty-one name nothing
+    /// this vocabulary can load.
+    ///
+    /// A CPU test: a preset library is a directory.
+    #[test]
+    fn the_presets_scope_lists_the_kset_files_and_not_the_parts_beside_them() {
+        let presets = shipped_presets();
+        let listed = presets_listing(Some(&presets));
+        assert!(
+            listed.len() >= 20,
+            "`examples/` holds twenty-one `.kset` files and the listing found {}",
+            listed.len()
+        );
+        for preset in &listed {
+            assert!(
+                preset.path.extension().and_then(|e| e.to_str()) == Some("kset"),
+                "`{}` is listed and is not a Set file",
+                preset.path.display()
+            );
+            assert!(
+                !preset.id.ends_with(".kset") && !preset.id.is_empty(),
+                "the row reads `{}`, which is a file name rather than a name",
+                preset.id
+            );
+        }
+        assert!(
+            listed.iter().any(|preset| preset.id == "beat_cloud"),
+            "`beat_cloud.kset` is in `examples/` and the listing does not have it"
+        );
+        assert!(
+            !listed
+                .iter()
+                .any(|preset| preset.id.contains("drift_shell")),
+            "`drift_shell.kir` is a part and the listing took it for a row"
+        );
+
+        // **Sorted, because a directory read is not.** Two runs that drew the
+        // rows in two orders would be a bay nobody can point at.
+        let mut sorted = listed.iter().map(|p| p.id.clone()).collect::<Vec<_>>();
+        sorted.sort();
+        assert_eq!(
+            listed.iter().map(|p| p.id.clone()).collect::<Vec<_>>(),
+            sorted,
+            "the listing is not in name order"
+        );
+
+        // And no preset library at all is no rows, which is a state rather
+        // than a failure.
+        assert!(presets_listing(None).is_empty());
+    }
+
+    /// **Loading a preset takes it into the store, so `my sets` gains a row
+    /// nobody made** — `console.html`'s *"which is why opening a preset leaves
+    /// one of your own behind"*.
+    ///
+    /// The whole of the press is asserted here except the aim, which is
+    /// [`loading`]'s and has its own test below: what a preset row adds is the
+    /// packaging in front of it, and the claim is that after it the id is one
+    /// the store holds and one `my sets` lists — which is what makes the load
+    /// after it the same route a `my sets` row takes rather than a second one.
+    ///
+    /// A CPU test: a store is a directory, and resolving a `.kset` is a read,
+    /// a hash and a store put.
+    #[test]
+    fn loading_a_preset_takes_it_in_and_leaves_it_under_my_sets() {
+        let root = scratch_dir("preset-take-in");
+        let presets = shipped_presets();
+        Store::open(&root).expect("a store to take a preset into");
+
+        assert!(
+            library(&root).is_empty(),
+            "a fresh store lists something under `my sets`"
+        );
+        let (id, said) = taking_in(&root, Some(&presets), "beat_cloud")
+            .unwrap_or_else(|e| panic!("`beat_cloud` was not taken in: {e}"));
+        assert_eq!(
+            id, "beat_cloud",
+            "the id is the file's own `set` record and not the row's word"
+        );
+        assert!(
+            said.contains("took `beat_cloud` in"),
+            "the report the operator reads is `{said}`"
+        );
+        assert_eq!(
+            library(&root),
+            vec!["beat_cloud".to_owned()],
+            "the preset was taken in and `my sets` does not list it"
+        );
+
+        // **And the parts are in the store**, which is what makes the load
+        // after this a load of material the store holds: `setfile::load` is
+        // what the aim is built from and it reads them by address.
+        karakuri_environment::setfile::load(&Store::open(&root).expect("the store"), "beat_cloud")
+            .expect("the Set that was just taken in cannot be read back");
+
+        std::fs::remove_dir_all(&root).expect("clean up");
+    }
+
+    /// **An id this store already holds is refused rather than overwritten,
+    /// and the operator is told which of the two acts failed.**
+    ///
+    /// The refusal is `setfile::unbundle`'s and is not written twice —
+    /// *"an id already taken is refused rather than overwritten"* — so what is
+    /// asserted here is that the press goes through it: a second press on the
+    /// same preset row leaves the store exactly as the first one left it, and
+    /// the sentence names the id rather than the file.
+    ///
+    /// A CPU test, for the test above's reason.
+    #[test]
+    fn a_preset_whose_id_this_store_holds_is_refused_rather_than_overwritten() {
+        let root = scratch_dir("preset-refused");
+        let presets = shipped_presets();
+        Store::open(&root).expect("a store to take a preset into");
+
+        taking_in(&root, Some(&presets), "beat_cloud").expect("the first take-in");
+        let held = library(&root);
+
+        let refused = taking_in(&root, Some(&presets), "beat_cloud")
+            .expect_err("the same preset was taken in twice");
+        assert!(
+            refused.contains("already in this store") && refused.contains("beat_cloud"),
+            "the refusal an operator reads is `{refused}`"
+        );
+        assert_eq!(
+            library(&root),
+            held,
+            "a refused take-in changed what the store holds"
+        );
+
+        // And a row that is not in the preset library at all is refused
+        // saying so, which is the other way a press finds nothing: the listing
+        // is asked again on the press, so a file that has moved is met here
+        // rather than inside the packaging.
+        let gone = taking_in(&root, Some(&presets), "no_such_preset")
+            .expect_err("a preset that is not there was taken in");
+        assert!(
+            gone.contains("no_such_preset"),
+            "the refusal an operator reads is `{gone}`"
+        );
+
+        std::fs::remove_dir_all(&root).expect("clean up");
+    }
+
+    /// **A scope is a listing on this side, and stepping to one answers it** —
+    /// two of the four with rows, and two with nothing and a sentence saying
+    /// which kind of nothing it is.
+    ///
+    /// The two that answer nothing are the whole point of the test: they are
+    /// empty for two *different* reasons — a favourite is a fact nothing in
+    /// this workspace keeps, and a folder waits on an operation that can ask a
+    /// directory for its listing — and a program that said the same thing
+    /// about both would be hiding one of them.
+    ///
+    /// A CPU test: a `View` takes no device.
+    #[test]
+    fn every_scope_is_answered_and_the_two_that_answer_nothing_say_which_nothing() {
+        let root = scratch_dir("scope-listing");
+        let presets = shipped_presets();
+        let store = Store::open(&root).expect("a store to list");
+        store.write_set("night01", &[]).expect("a Set to list");
+
+        let mut view = View::new(Room::Day);
+        view.scopes = Scope::ALL.to_vec();
+        assert!(view.select_scope(Scope::MySets));
+
+        let said = listing(&mut view, &root, Some(&presets));
+        assert_eq!(view.library, vec!["night01".to_owned()]);
+        assert!(said.contains("my sets") && said.contains('1'), "{said}");
+
+        assert!(view.step_scope(), "the scope did not step");
+        assert_eq!(view.scope(), Some(Scope::Presets));
+        let said = listing(&mut view, &root, Some(&presets));
+        assert!(
+            view.library.iter().any(|id| id == "beat_cloud"),
+            "the `presets` scope lists {:?}",
+            view.library
+        );
+        assert!(said.contains("presets"), "{said}");
+
+        // The two that are drawn and answer nothing, and the sentences they
+        // answer with are not one sentence.
+        for scope in [Scope::Favourites, Scope::Folder] {
+            assert!(view.select_scope(scope));
+            let said = listing(&mut view, &root, Some(&presets));
+            assert!(
+                view.library.is_empty(),
+                "`{}` listed {:?}, and nothing in this workspace can produce it",
+                scope.name(),
+                view.library
+            );
+            assert!(
+                said.contains(scope.name()) && said.contains(why_nothing(scope)),
+                "`{}` lists nothing and says `{said}`",
+                scope.name()
+            );
+        }
+        assert_ne!(
+            why_nothing(Scope::Favourites),
+            why_nothing(Scope::Folder),
+            "the two scopes that answer nothing are empty for two different reasons and this \
+             program gives one sentence for both"
+        );
+        assert!(
+            why_nothing(Scope::Favourites).contains("favourite"),
+            "the `favourites` sentence does not say what is missing: {}",
+            why_nothing(Scope::Favourites)
+        );
+        assert!(
+            why_nothing(Scope::Folder).contains("operation"),
+            "the `folder` sentence does not say what it is waiting on: {}",
+            why_nothing(Scope::Folder)
         );
 
         std::fs::remove_dir_all(&root).expect("clean up");
@@ -8643,7 +9294,24 @@ mod key_column {
         ("3", &["Select a deck"]),
         // The load, whose two operands are the library cursor and the
         // selection above. Free on both keyboards when it was chosen.
+        //
+        // **One key, and a preset row reaches a second row through it.**
+        // Taking a Set in is not a row of its own — ADR-0229's *one
+        // operation, two moments* — so a press on a `presets` row performs
+        // *Send a Set to somebody, and take one in* at the moment of the
+        // press and then this. That row's key badge names no key: what an
+        // operator reaches from the keyboard is a **load**, and the taking-in
+        // is what the load does on the way, which is exactly the distinction
+        // ADR-0213 draws between reaching an operation and something
+        // happening.
         ("l", &["Load material into a deck"]),
+        // **The scope, and it is the one key here whose row the page marks
+        // `plan` in every other column.** The chips are drawn by
+        // `karakuri-console` and pressed by nobody: `SelectScope` is emitted
+        // from this file's `match` and never from a control, so the panel
+        // column stays `plan` and this key is what makes the key column
+        // `has`.
+        ("e", &["Choose which scope the library shows"]),
         // **The library cursor, and it reaches no row on purpose.** Nothing in
         // the vocabulary moves it: `docs/manual/console.html` decides that
         // where the deck selection has a row of its own, and the argument is

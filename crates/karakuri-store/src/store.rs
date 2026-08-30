@@ -177,9 +177,14 @@ impl Store {
     /// **This is not a new check.** The suffix was always stripped to find an
     /// id, so an id could never exist without it; what changed is that the
     /// check now means something. The authoring form's own spelling is
-    /// `.kset`, and there is deliberately no constant for it here: nothing in
-    /// this workspace reads one yet, and a name nothing reads is a claim about
-    /// a design rather than part of one. See
+    /// `.kset`, and it is deliberately not a constant *here*: it is
+    /// `karakuri_environment::setfile::AUTHORING_SUFFIX`, beside the resolver
+    /// that is the only thing which reads one. This crate never opens a `.kset`
+    /// and could not — a store that held one would be the thing the suffix
+    /// above exists to make impossible — so a name for it here would be this
+    /// module describing a file it has no business with. (Until the resolver
+    /// landed there was no constant anywhere, and this comment said so; a name
+    /// nothing reads is a claim about a design rather than part of one.) See
     /// `docs/adr/0231-a-sets-two-forms-take-two-extensions-and-the-store-holds-only-the-resolved-one.md`.
     pub const SET_FILE_SUFFIX: &str = ".kbset";
 

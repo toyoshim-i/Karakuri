@@ -571,13 +571,46 @@ pub mod size {
     /// the arrangement reserves are one number or neither.
     pub const MASTER_ROW_H: f32 = BASE * LINE;
 
+    // -- the library's scopes -----------------------------------------------
+
+    /// `.scopes`'s `padding: 7px 9px` and its `gap: 4px`: the row of chips
+    /// between the bay head and the list, which says *which library is being
+    /// listed* rather than what is in it.
+    pub const SCOPES_PAD_X: f32 = 9.0;
+    pub const SCOPES_PAD_Y: f32 = 7.0;
+    pub const SCOPES_GAP: f32 = 4.0;
+
+    /// `.scope`'s `padding: 0 8px`, around one scope's word at [`BASE`]. The
+    /// same padding a [`PILL_PAD_X`] is and a different chip: a `.pill` is a
+    /// control in a bay head and this is one of a row of questions under one.
+    pub const SCOPE_PAD_X: f32 = 8.0;
+
+    /// One chip's box: [`BASE`] at [`LINE`], with **no border to count** —
+    /// `.scope` draws none where the `.rend` chips in the inspector each draw
+    /// one, so this is [`PILL_H`]'s number and not [`REND_H`]'s. **16.5**.
+    pub const SCOPE_H: f32 = BASE * LINE;
+
+    /// The scope row's box: one chip inside [`SCOPES_PAD_Y`], plus the one
+    /// pixel of the rule under it — [`HAIRLINE`], which is `.scopes`'s own
+    /// border-bottom and the same pixel every other rule in the mock is drawn
+    /// at. **31.5**, which is what `lib.rs`'s minimum for this bay counts now:
+    /// that sum said 31 while this row was undrawn — the rule left out and
+    /// what was left rounded up — and it is written from this constant's own
+    /// terms now, as [`LIB_FOOT_H`] is.
+    ///
+    /// **One row and not a wrap**, which is [`REND_ROW_H`]'s rule one bay
+    /// along: `.scopes` carries a wrapping flex and this console draws the
+    /// chips that fit in one row of it.
+    pub const SCOPES_H: f32 = SCOPES_PAD_Y * 2.0 + SCOPE_H + HAIRLINE;
+
     // -- the library's list -------------------------------------------------
 
     /// `.lib-list`'s `padding: 3px`: the ring of card the rows sit inside,
-    /// under the bay head. The library's minimum of 132 in `lib.rs` is written
-    /// from the same 3 — *"a list of three rows (3 + 3 of `.lib-list` padding,
-    /// plus 3 x 22.5)"* — so the padding a rectangle is inset by here and the
-    /// minimum the bay declares are one number or neither.
+    /// under the bay head and the scope row. The library's minimum of 158 in
+    /// `lib.rs` is written from the same 3 — *"a list of three rows (3 + 3 of
+    /// `.lib-list` padding, plus 3 x 22.5)"* — so the padding a rectangle is
+    /// inset by here and the minimum the bay declares are one number or
+    /// neither.
     pub const LIB_LIST_PAD: f32 = 3.0;
 
     /// `.lib-row`'s `padding: 3px 7px`, around a Set's name at [`BASE`]. The
@@ -587,7 +620,7 @@ pub mod size {
     pub const LIB_ROW_PAD_Y: f32 = 3.0;
 
     /// A row's box: [`BASE`] at [`LINE`] inside that padding — **22.5**, which
-    /// is the 22.5 the library's minimum of 132 is written from in `lib.rs`,
+    /// is the 22.5 the library's minimum of 158 is written from in `lib.rs`,
     /// so a row is this tall in both places or in neither.
     pub const LIB_ROW_H: f32 = BASE * LINE + LIB_ROW_PAD_Y * 2.0;
 
@@ -609,10 +642,9 @@ pub mod size {
     /// The foot's box: [`LIB_FOOT_SIZE`] at [`LINE`] inside that padding, plus
     /// the one pixel of the rule above it — [`HAIRLINE`], which is
     /// `.lib-foot`'s own border-top and the same pixel every other rule in the
-    /// mock is drawn at. **26**, and unlike the bay head's 27 no minimum in
-    /// `lib.rs` is written from it: the library's minimum was written before
-    /// this row was drawn and counts the scope row this console does not draw
-    /// instead, which is 31 against this 26 and so is the larger of the two.
+    /// mock is drawn at. **26**, and the library's minimum of 158 in `lib.rs`
+    /// is written from it — as it is from [`SCOPES_H`], and as it was from
+    /// neither while this row and that one were undrawn.
     pub const LIB_FOOT_H: f32 = LIB_FOOT_PAD_Y * 2.0 + LIB_FOOT_SIZE * LINE + HAIRLINE;
 
     // -- the staging lane's candidates --------------------------------------
