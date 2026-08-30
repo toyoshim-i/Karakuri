@@ -54,6 +54,8 @@ serde_json.workspace = true
 # dev-dependencies *so that nothing in `src/` can reach for one*; with the
 # harness in another package there is no entry in this manifest that could be
 # reached for at all. `src/` takes no device, and now neither does anything else
-# here. `docs/contributing.md` §3's *"Three crates take a device, not one"* is
-# stale as a result: the third was this crate "and only through its example",
-# and it is not this crate any more.
+# here. `docs/contributing.md` §3's *"Three crates take a device, not one"* had
+# to move with that and has: the third used to be this crate "and only through
+# its example", and it is `karakuri` now. This sentence stayed behind saying the
+# document was stale for two days after it stopped being — which is the same
+# drift one step down, a note about a fix outliving the fix.
