@@ -89,9 +89,14 @@
 //! # The engine here is the shortest path from two files to texels
 //!
 //! Two slots, built from one `.kir` pair the way `karakuri-cli` builds them,
-//! and **no more than that**: no audio, no MIDI, no MCP, no watcher, no replay
-//! and no session. The pair is [`Sources`], and it is the whole of what this
-//! program takes from the command line. Two things beyond the engine are here.
+//! and **no more than that**: no audio, no MIDI, no MCP, no replay and no
+//! session. The pair is [`Sources`], and it is the whole of what this program
+//! takes from the command line. Three things beyond the engine are here.
+//! **Each slot watches that pair**, which is [`watched`] and is one
+//! `HotSwap::new` over a `karakuri_environment::watch::Watch` — the same
+//! wiring `karakuri-cli` does for `--watch`, and the whole of what puts a row
+//! in the Staging lane: without it no `swap::Event` of any variant is emitted
+//! in this program, and the lane could reach no state but empty.
 //! **The store is opened to be read** — once, at
 //! startup, so the Library bay has names to list ([`library`]) — and **once
 //! to be written**, which is the arrangement family and the one thing in this
@@ -111,10 +116,15 @@
 //! and no record stream drives time.
 //!
 //! **What is missing is named rather than left to be noticed.** Audio, MIDI,
-//! MCP, the watcher and replay are all `karakuri-environment`'s and all
-//! reachable from here; none of them is wired up in this first version,
-//! because a slice that added them would be unreviewable. `karakuri-cli` is
-//! still what you play a set with while that is true.
+//! MCP and replay are all `karakuri-environment`'s and all reachable from
+//! here; none of them is wired up, because a slice that added them would be
+//! unreviewable. The watcher was in that list until the Staging lane needed a
+//! producer, and what it took was one function — which is the measure of how
+//! far the rest of them are, rather than an argument for doing them all now.
+//! What this program's watchers still decline is the store either side of
+//! them: nothing is put under a content address and no version is kept, which
+//! is what the lane's two operations wait on ([`watched`]). `karakuri-cli` is
+//! still what you play a set with.
 //!
 //! **There is a governor, and it is the one thing here that is not the
 //! shortest path.** It runs once, at startup, and it is [`Engine::ask_to_prime`]:
@@ -219,10 +229,10 @@ use karakuri_engine::governor::{Report, SLOWEST_PRIME_ONE_IN};
 use karakuri_engine::set::{Layering, Published};
 use karakuri_engine::transport::Sync as EngineSync;
 use karakuri_engine::{
-    compose, Blend, Committed, Control, Deck, Gpu, HotSwap, Look, Mask, MaskKind, Present,
-    Residency, Set, Sink, Skip, TonemapOp,
+    compose, Blend, Committed, Control, Deck, Event, Gpu, HotSwap, Look, Mask, MaskKind, Present,
+    Residency, Set, Sink, Skip, TonemapOp, DEFAULT_BUDGET_MS,
 };
-use karakuri_environment::mix;
+use karakuri_environment::{mix, watch};
 use karakuri_ir::Kind as Layer;
 use karakuri_layout::{Axis, Hit, Layout, NodeId, Point};
 use karakuri_operation::{BlendMode, Operation};
@@ -1849,6 +1859,15 @@ impl Readout {
                         Some(out) => format!("bay, out {out:.2}"),
                         None => "bay, no engine behind it".to_owned(),
                     },
+                    // A bay like the other five, and then a row per deck slot
+                    // with a verdict outstanding. **None at startup, which is
+                    // where this prints**: nothing has been rebuilt yet, and
+                    // empty is this lane's ordinary state — see
+                    // `view::staging`.
+                    Kind::Staging => match self.view.staging.len() {
+                        0 => "bay, nothing waiting".to_owned(),
+                        waiting => format!("bay, {waiting} waiting"),
+                    },
                 },
                 None => match layout.axis(node.id) {
                     Some(Axis::Row) => "split, left to right".to_owned(),
@@ -2444,9 +2463,11 @@ impl Sink for Presented {
 /// and the two textures it lands in.**
 ///
 /// Scaffolding, and it looks it: two slots, no audio, no MIDI, no store, no
-/// arguments. What `karakuri-cli` does around this is a program; what is here
-/// is the shortest path from two `.kir` files to texels, which is the whole of
-/// what the Program bay needs to be shown to be reachable.
+/// arguments — and a watcher on each slot, which is the one thing here that is
+/// not the shortest path to texels and is there because the Staging lane's
+/// rows are verdicts on builds ([`watched`]). What `karakuri-cli` does around
+/// this is a program; what is here is the shortest path from two `.kir` files
+/// to texels — and now back again, which is what a watched slot is.
 ///
 /// **The second slot is not a picture, it is a residency.** [`ON_AIR`] is Live
 /// and is everything on screen; [`ASKED_TO_PRIME`] is asked to warm up and is
@@ -2518,6 +2539,97 @@ struct Engine {
     freed: usize,
 }
 
+/// **One slot, with a worker watching its own two files behind it** — which is
+/// what puts a candidate in the Staging lane and is the whole of what that
+/// took.
+///
+/// # It is `karakuri-cli`'s wiring and deliberately not a second one
+///
+/// That program builds every `--watch` slot as `HotSwap::new` over a
+/// `watch::Watch`, and every argument below is the reading `Set::build` made
+/// at startup restated, because that is what a rebuild is: the *material*
+/// changed and nothing else about the slot did. A request that derived any of
+/// them again would be a slot that comes back as a different Set on the first
+/// save — which is the failure `Watch`'s own fields are each documented
+/// against.
+///
+/// - **`Layering::Overdraw` and no `live`** — `Set::build`'s own, which is
+///   what the two slots were built with: one target, however many renderers.
+/// - **No `capacity`** — so each geometry is rebuilt at the capacity it
+///   declares, which is [`capacity_of`]'s line asked again on the worker.
+///   This program has no `--capacity` to override it (see [`USAGE`]), and
+///   passing the startup reading would pin the slot to a declaration the file
+///   may have just changed.
+/// - **The slot's own salt, and no per-source salts** — `Set::build` passes
+///   `&[]` and says why: *"A pair assigns nothing, so the one source is salted
+///   from the Set's seed and its ordinal — which for source 0 is that seed
+///   unchanged."* So a rebuild is the same simulation of new material rather
+///   than a new one, and the two slots stay the two salts
+///   [`SEED_SALT`] and [`WARM_SEED_SALT`] name.
+/// - **The default camera** — `Request::camera` is an `Orbit` rather than an
+///   `Option` because *"a Set holds a built-in camera whatever its files
+///   declare"*, and this program loads none, so the default is what it is
+///   running.
+/// - **No overrides, no published controls, no bindings, no edges and no
+///   authorities** — this program has no flag for any of the five and grants
+///   nothing (ADR-0216), so each is the empty list the startup build used.
+///
+/// # And no store
+///
+/// `Watch::storing_to` and `Watch::snapshotting_to` are the two things this
+/// does not do. The first puts every build's sources in the store and reports
+/// them as `watch::Built` — which is the channel a node address would have to
+/// be derived from, and nothing derives it (`view::staging`) — and the second
+/// keeps every version that compiled so an edit can be walked back, which is
+/// what *put a node's previous version back* would read. **Both are what the
+/// lane's two controls wait on**, and neither is wiring this pass needs: a row
+/// says what happened to a build, and what happened to a build is on the
+/// `swap::Event` channel.
+///
+/// # What it costs the frame path, which is nothing
+///
+/// A worker thread per slot, polling the two files every hundred milliseconds
+/// and compiling on that thread. The render thread's side is unchanged:
+/// `install_if_ready` polls the same channel with `try_recv` whether the
+/// `Sender` is live or was dropped at construction, and a swap has always
+/// landed at a frame boundary (ADR-0005). What is new on a *frame* is a
+/// build's install, which is the mechanism this deck was already built on.
+fn watched(gpu: &Gpu, sources: &Sources, live: Set, slot: usize, salt: u32) -> HotSwap {
+    HotSwap::new(
+        &gpu.device,
+        &gpu.queue,
+        live,
+        // **The engine's own default rather than a number written here**: a
+        // budget transcribed into this file would be a second answer to *how
+        // long may a frame take* the day the engine's moves (P-0179 on a
+        // number that is not even the mock's). It is 20 ms, which is 60 Hz
+        // with room, and it is what makes a rollback reachable in this program
+        // at all — `HotSwap::fixed` judged against infinity, so no candidate
+        // could ever be thrown out for cost.
+        DEFAULT_BUDGET_MS,
+        Box::new(watch::Watch::new(
+            slot,
+            // **Bare, so every node is called what its procedure declares**,
+            // which is `Set::build`'s own: *"A pair names nothing, so both
+            // nodes are called what their procedures are."* A name here
+            // belongs to the *use* and this program has no syntax for one.
+            karakuri_environment::compile::Named::bare(&sources.l1),
+            vec![karakuri_environment::compile::Named::bare(&sources.l4)],
+            Layering::Overdraw,
+            None,
+            None,
+            salt,
+            Vec::new(),
+            karakuri_engine::camera::Orbit::default(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        )),
+    )
+}
+
 impl Engine {
     /// **Sized from the arrangement rather than from the window**, by the same
     /// two calls the frame aims with — see [`aims`]. The window this opens at
@@ -2544,11 +2656,33 @@ impl Engine {
             Set::build(&gpu.device, &gpu.queue, &l1, &l4, capacity, salt)
                 .expect("the pair builds a Set")
         };
+        // **A watcher per slot, over that slot's own two files**, which is
+        // `karakuri-cli`'s wiring and not a second one — one `HotSwap::new`
+        // over a `watch::Watch`, at the engine's own default budget. The two
+        // slots here are spelled with the *same* pair, and `watch`'s module
+        // documentation says what that means: *"Two slots given the same files
+        // both rebuild, which is right: the same edit reached both of them."*
+        //
+        // **This is the Staging lane's producer**, and it is the whole of what
+        // it took. `HotSwap::fixed` keeps a `Receiver` whose `Sender` was
+        // dropped at construction, so nothing is ever installed and no
+        // `swap::Event` of any variant is emitted — which is why the lane drew
+        // its empty state and could reach no other. Nothing about the frame
+        // path changed: `install_if_ready` polls the same channel with
+        // `try_recv` either way, and everything a rebuild costs — the file
+        // read, the four validation stages, the compile and `Set::build` — is
+        // on the worker thread this spawns (P-0001).
         let mut deck = Deck::new(
             &gpu.device,
             vec![
-                HotSwap::fixed(built(SEED_SALT)),
-                HotSwap::fixed(built(WARM_SEED_SALT)),
+                watched(gpu, sources, built(SEED_SALT), ON_AIR, SEED_SALT),
+                watched(
+                    gpu,
+                    sources,
+                    built(WARM_SEED_SALT),
+                    ASKED_TO_PRIME,
+                    WARM_SEED_SALT,
+                ),
             ],
             CANVAS.0,
             CANVAS.1,
@@ -3263,6 +3397,150 @@ fn mixer(deck: &Deck, name: &str, out: &mut Vec<view::Strip>) {
     }
 }
 
+/// **The Staging lane's rows, off the deck's own verdicts** — one per slot
+/// whose newest build has a verdict outstanding, or whose file no longer
+/// agrees with its picture.
+///
+/// # It drains, because a `HotSwap`'s events are a caller's to take
+///
+/// `HotSwap::events` is documented as the caller's — *"a caller that stops
+/// draining eventually makes this grow"* — and until this program had a
+/// producer there was nothing to drain, so nothing did. `pending_events` is
+/// the other reading and is deliberately **not** what this uses: it is the
+/// read-only view `Deck::begin_frame` takes *inside* a frame, and a surface
+/// that read it without draining would be the caller bug the engine names.
+///
+/// **So the lane's state is kept here rather than re-derived per frame**, and
+/// that is what a drain forces and is also what is wanted: the events are a
+/// stream of verdicts and a row is the newest of them per slot.
+/// `view::View::staging` is written on the frames a build landed on and left
+/// alone on every other, which is the same budget `mixer`'s name is kept to
+/// (ADR-0164) with the frames-that-touch-it much rarer.
+///
+/// # What each verdict does to a row
+///
+/// - **`Swapped`, `Rejected`, `RolledBack`** — the slot has a row, on
+///   `view::Stage`'s three words. Whether the build is on screen is exactly
+///   what separates them.
+/// - **`Accepted`** — the watchdog says the version held the budget, so the
+///   file and the picture agree and the row leaves the lane. It is not the
+///   operator's verdict, which is *keep* and is taste rather than cost; with
+///   no control to keep with, a row that waited for one would never leave.
+///   See `view::staging`, where that substitution is argued.
+/// - **`WorkerLost`** — the build worker panicked and nothing will be built
+///   again this run. **No row changes**, and that is the reading rather than
+///   an omission: every verdict already taken still stands, and a slot whose
+///   candidate was on trial when the worker went keeps a trial the watchdog
+///   will still finish, because the watchdog is on this thread. What is lost
+///   is the *next* build, and the lane has never been where that is said —
+///   the engine prints it.
+///
+/// **A row is not removed when its slot is parked or its material is
+/// replaced.** A candidate that landed in a slot the governor then parks keeps
+/// its verdict outstanding, and that is `HotSwap::begin_frame_parked`'s own
+/// rule read from the surface: a slot that is not drawn is not judged.
+///
+/// # It answers whether the live Set changed, because something else has to
+/// know
+///
+/// `true` when a build was installed or a rollback put the previous Set back,
+/// which is the moment `Set::published` says a console should re-read a slot —
+/// *"A console reads this when a Set lands, not per frame."* [`inspector`] is
+/// what acts on it. A refusal and a verdict in favour both answer `false`:
+/// neither replaced what is playing.
+///
+/// One `String` per row that appears, on the frame a build landed on — which
+/// is the frame that also installed a whole Set built on the worker. A row
+/// whose slot rebuilds again rewrites the same buffer, and a run in which
+/// nothing is saved allocates nothing here at all.
+fn staging(deck: &mut Deck, out: &mut Vec<view::Candidate>) -> bool {
+    let mut landed = false;
+    for slot in 0..deck.slot_count() {
+        for event in deck.events(slot) {
+            // **Whether the *live Set* changed**, which is a different
+            // question from whether a row did and is why this is read here
+            // rather than off the rows: a build that landed replaced what is
+            // playing, and a rollback replaced it back. A refusal changed
+            // nothing and neither did the watchdog's verdict in favour, which
+            // is the candidate staying exactly where it was.
+            landed |= matches!(
+                verdict(&event),
+                Verdict::Waiting(_, view::Stage::Landed | view::Stage::RolledBack)
+            );
+            match verdict(&event) {
+                Verdict::Waiting(label, stage) => settle(out, slot, label, stage),
+                // Nothing is outstanding on this slot any more, so it has no
+                // row. `retain` rather than an index: the rows are as many as
+                // the deck has slots and at most one of them is this one.
+                Verdict::Settled => out.retain(|row| row.deck != slot),
+                Verdict::Nothing => {}
+            }
+        }
+    }
+    landed
+}
+
+/// **What one verdict does to the lane** — the whole of the mapping, in a
+/// function a test can reach without a device.
+///
+/// A `match` and not a lookup, for [`blend_mode`]'s reason: a sixth
+/// `swap::Event` stops the build here rather than being passed over by a
+/// wildcard, and *what it does to the lane* is a question the person adding it
+/// should have to answer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Verdict<'a> {
+    /// The slot has a row, under this name and on this word.
+    Waiting(&'a str, view::Stage),
+    /// The slot has no row: its file and its picture agree.
+    Settled,
+    /// The lane does not change.
+    Nothing,
+}
+
+/// See [`Verdict`] and [`staging`], which is where each arm is argued.
+fn verdict(event: &Event) -> Verdict<'_> {
+    match event {
+        Event::Swapped { label, .. } => Verdict::Waiting(label, view::Stage::Landed),
+        Event::Rejected { label, .. } => Verdict::Waiting(label, view::Stage::Refused),
+        Event::RolledBack { label, .. } => Verdict::Waiting(label, view::Stage::RolledBack),
+        Event::Accepted { .. } => Verdict::Settled,
+        Event::WorkerLost => Verdict::Nothing,
+    }
+}
+
+/// **One slot's row, written where it already is or put in slot order.**
+///
+/// The name is rewritten only when it differs, which is `mixer`'s rule for
+/// `view::Strip::name` and is what keeps a rebuild of the same files off the
+/// frame's allocation budget.
+///
+/// **Slot order, because that is the order the rows are read in** — the lane
+/// draws them top to bottom and the deck letters are `A` through `D`, so a row
+/// that appeared later must not sit above one that appeared first. The insert
+/// is over at most `deck::MAX_SLOTS` entries.
+fn settle(out: &mut Vec<view::Candidate>, deck: usize, label: &str, stage: view::Stage) {
+    match out.iter_mut().find(|row| row.deck == deck) {
+        Some(row) => {
+            if row.name != label {
+                row.name.clear();
+                row.name.push_str(label);
+            }
+            row.stage = stage;
+        }
+        None => {
+            let at = out.partition_point(|row| row.deck < deck);
+            out.insert(
+                at,
+                view::Candidate {
+                    deck,
+                    name: label.to_owned(),
+                    stage,
+                },
+            );
+        }
+    }
+}
+
 /// **The layer half of a node's address, as the mock's `.addr` spells it** —
 /// `L1:0`, `L2:0`, `L4`.
 ///
@@ -3360,9 +3638,12 @@ fn node_of(set: &Set, control: &Published) -> Option<(Layer, u32)> {
 /// # Read once, and that is the engine's instruction rather than a shortcut
 ///
 /// `Set::published` is documented *"Allocates, so not the frame path. A
-/// console reads this when a Set lands, not per frame."* This program's two
-/// slots are `HotSwap::fixed`, so no Set ever lands after the first, and
-/// almost every value above is constant for the run: nothing writes a param,
+/// console reads this when a Set lands, not per frame."* **A Set lands
+/// whenever a `.kir` in a slot is saved**, since both slots are watched, so
+/// this is called at startup and again on the frame a build is installed or a
+/// rollback puts the previous Set back — `staging` is what answers *did one
+/// land*, and it is the only thing in this program that knows. Between those
+/// frames almost every value above is constant: nothing writes a param,
 /// nothing binds one, and nothing grants an authority.
 ///
 /// **The transport is the one that moves now, and it is why this is called a
@@ -3897,10 +4178,11 @@ fn apply(record: &Record, deck: &mut Deck, look: &mut Look) -> Option<String> {
         // guards against is the case the engine names at `sync_allowed`: a
         // swap that puts accumulating material into a slot that is beat-synced
         // makes the mode it is *already in* unavailable, *"and whatever wires
-        // swapping to this owes it"*. This program's slots are
-        // `HotSwap::fixed`, so no swap happens; the day one does, the deck
-        // saying no is the answer that should be printed rather than this
-        // arm's line.
+        // swapping to this owes it"*. **Both slots are watched now, so that
+        // case is reachable**: save an accumulating procedure into a
+        // beat-synced slot and the next scrub is refused. What should be
+        // printed then is the deck's own refusal rather than this arm's line,
+        // and it is what this owes.
         Record::Transport {
             slot,
             ref sync,
@@ -4569,11 +4851,12 @@ impl ApplicationHandler for App {
         // the only thing that can add a name to it is a save this program
         // performs — which re-reads it there. See `arrangements`.
         self.readout.view.arrangement.filed = arrangements(std::path::Path::new(STORE));
-        // **And the Inspector's panes, once for the run.** `Set::published`
-        // says it is not for the frame path and this deck's two slots are
-        // `HotSwap::fixed`, so no Set ever lands after this one — see
-        // `inspector`, which is also where the controls it could not place are
-        // reported.
+        // **And the Inspector's panes, before the first frame.**
+        // `Set::published` says it is not for the frame path but *is* what a
+        // console reads when a Set lands, and both slots are watched — so this
+        // is the first of those readings rather than the only one, and the
+        // frame handler takes the rest. See `inspector`, which is also where
+        // the controls it could not place are reported.
         inspector(&engine.deck, &material, &mut self.readout.view.inspector);
         self.readout.print_legend(budget, &governed);
 
@@ -5005,6 +5288,29 @@ impl ApplicationHandler for App {
                     &mut self.readout.view.mixer,
                 );
 
+                // **And what the Staging lane lists**, off the same deck and
+                // beside the frame the verdicts belong to. It reads the
+                // *previous* frame's, exactly as the transport row above does
+                // and for the same reason: a build is installed and a
+                // watchdog reports at a frame boundary, which is `compose`
+                // below. See `staging`, which is also where the drain is
+                // argued.
+                // **And the Inspector's panes with them, on the frames a
+                // Set actually landed on.** `Set::published` allocates and
+                // says it is not for the frame path — *"A console reads this
+                // when a Set lands, not per frame"* — and this is the first
+                // thing in this program that knows when one did. Before the
+                // slots were watched no Set ever landed after the first, so
+                // this read was a startup step and nothing else; it is still
+                // a startup step and now also a rebuild's.
+                if staging(&mut gfx.engine.deck, &mut self.readout.view.staging) {
+                    inspector(
+                        &gfx.engine.deck,
+                        &gfx.material,
+                        &mut self.readout.view.inspector,
+                    );
+                }
+
                 // **The one clock behind everything that moves on the panel,
                 // written as the number it becomes.** Beside the strips it
                 // animates, and beside them for the same reason the picture
@@ -5352,6 +5658,110 @@ mod tests {
     /// was `Owed::NotSettled` until the conversion took a session tempo, and
     /// [`unwritten`] carries what that was.
     use karakuri_operation_record::{Owed, Silent};
+
+    /// **Every verdict the engine can report says what it does to the lane,
+    /// and a row leaves it only when the file and the picture agree.**
+    ///
+    /// The five `swap::Event` variants are three answers: three that put a
+    /// row on the lane under one of `view::Stage`'s words, one that takes it
+    /// off, and one that is not about a version at all. The one worth the
+    /// test is `Accepted`: it is the **watchdog's** verdict and not the
+    /// operator's, and it is what clears a row because *keep a candidate* has
+    /// no control on this panel — see `view::staging`, where that substitution
+    /// is argued. A run in which `Accepted` did nothing would be a lane that
+    /// fills up and never empties, which is not the lane the manual describes.
+    ///
+    /// **And the rows stay in slot order**, which is the order they are drawn
+    /// in: a candidate that lands on deck B and then one on deck A must not
+    /// leave the lane reading B over A, because the letter is the only thing
+    /// telling two rows of the same material apart.
+    ///
+    /// A CPU test: an `Event` is a value, and nothing here takes a device.
+    #[test]
+    fn every_verdict_says_what_it_does_to_the_lane() {
+        let landed = |label: &str| Event::Swapped {
+            id: 1,
+            label: label.into(),
+        };
+        let refused = |label: &str| Event::Rejected {
+            id: 2,
+            label: label.into(),
+            error: karakuri_engine::set::SetError::NoCapacity("drift_shell".to_owned()),
+        };
+        let rolled = |label: &str| Event::RolledBack {
+            id: 3,
+            label: label.into(),
+            median_ms: 24.0,
+            budget_ms: 20.0,
+        };
+        let accepted = Event::Accepted {
+            id: 4,
+            label: "drift_shell + soft_points".into(),
+            median_ms: 9.0,
+            budget_ms: 20.0,
+        };
+
+        assert_eq!(
+            verdict(&landed("a + b")),
+            Verdict::Waiting("a + b", view::Stage::Landed)
+        );
+        assert_eq!(
+            verdict(&refused("a + b")),
+            Verdict::Waiting("a + b", view::Stage::Refused)
+        );
+        assert_eq!(
+            verdict(&rolled("a + b")),
+            Verdict::Waiting("a + b", view::Stage::RolledBack)
+        );
+        assert_eq!(
+            verdict(&accepted),
+            Verdict::Settled,
+            "an accepted build leaves the file and the picture agreeing, so its row stays \
+             on a lane nothing can clear"
+        );
+        assert_eq!(
+            verdict(&Event::WorkerLost),
+            Verdict::Nothing,
+            "the worker going is not a verdict on any version, and every row already \
+             taken still stands"
+        );
+
+        // And the same three through `settle`, which is what a drain does with
+        // them: one row per slot, in slot order, rewritten in place.
+        let mut lane: Vec<view::Candidate> = Vec::new();
+        settle(&mut lane, 1, "b + b", view::Stage::Landed);
+        settle(&mut lane, 0, "a + a", view::Stage::Landed);
+        assert_eq!(
+            lane.iter().map(|row| row.deck).collect::<Vec<_>>(),
+            vec![0, 1],
+            "the rows are not in the order the letters are drawn in"
+        );
+
+        settle(&mut lane, 0, "a + a", view::Stage::RolledBack);
+        assert_eq!(
+            lane.len(),
+            2,
+            "a second verdict on one slot made a second row"
+        );
+        assert_eq!(lane[0].stage, view::Stage::RolledBack);
+        assert_eq!(
+            lane[0].name, "a + a",
+            "the name was not left as it was found"
+        );
+
+        settle(&mut lane, 0, "c + c", view::Stage::Landed);
+        assert_eq!(
+            lane[0].name, "c + c",
+            "a rebuild of other material kept the old name"
+        );
+
+        lane.retain(|row| row.deck != 0);
+        assert_eq!(
+            lane.iter().map(|row| row.deck).collect::<Vec<_>>(),
+            vec![1],
+            "clearing one slot's row took another slot's with it"
+        );
+    }
 
     /// **The library is what the store holds, and a store that is not there is
     /// listed as nothing rather than created.**

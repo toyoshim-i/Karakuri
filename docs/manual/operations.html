@@ -631,7 +631,12 @@
         &mdash; the procedure change was recorded where the swap landed &mdash;
         which is why the words here are not the engine's <em>accepted</em>,
         <em>rejected</em> and <em>rolled back</em>: those name a build's cost
-        verdict, and the lane is the one place both verdicts are read at once.</p>
+        verdict, and the lane is the one place both verdicts are read at once.
+        <strong>The lane draws its row now and this control is not on it</strong>:
+        the row is addressed by the deck a build landed on, because that is what
+        a swap event carries, and this names a node &mdash; which is a
+        derivation nobody has written. Until it exists, what clears a row is the
+        watchdog saying the version held its budget.</p>
         <div class="rts">
           <span class="rt plan">panel <b>staging</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
@@ -653,7 +658,10 @@
         <em>not this one</em> and cannot say four kilobytes of IR &mdash; the
         surface says the part it can say and whoever performs it reads the file.
         <strong>It does write a record</strong>, at the swap, like every other
-        procedure change.</p>
+        procedure change. <strong>The row it belongs on is drawn and this act is
+        not offered on it</strong>, for the reason above and for one more: the
+        versions it would put back are the store's edit history, and the program
+        that draws this panel keeps none.</p>
         <div class="rts">
           <span class="rt plan">panel <b>staging</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>

@@ -600,6 +600,51 @@ pub mod size {
     /// instead, which is 31 against this 26 and so is the larger of the two.
     pub const LIB_FOOT_H: f32 = LIB_FOOT_PAD_Y * 2.0 + LIB_FOOT_SIZE * LINE + HAIRLINE;
 
+    // -- the staging lane's candidates --------------------------------------
+
+    /// `.stage-list`'s `padding: 6px 9px 8px`: the ring of card the candidate
+    /// rows sit inside, under the bay head. Three numbers and not two — the
+    /// lane is the one list in the mock whose bottom padding is not its top —
+    /// so the list's box is asymmetric down the column and even across it.
+    /// `lib.rs`'s 125 for this bay is written from the same 6 and 8 — *"6 + 8
+    /// of `.stage-list` padding"* — so the padding a rectangle is inset by
+    /// here and the height the arrangement reserves are one derivation or
+    /// neither.
+    pub const STAGE_LIST_PAD_TOP: f32 = 6.0;
+    pub const STAGE_LIST_PAD_X: f32 = 9.0;
+    pub const STAGE_LIST_PAD_BOTTOM: f32 = 8.0;
+
+    /// `.stage-list`'s `gap: 5px`, between one candidate row and the next.
+    /// **The one list in this console that has a gap** — `.lib-list` states
+    /// none and its rows are flush — and it is the same 5 `lib.rs`'s 125 is
+    /// written from (*"two 5px gaps"*).
+    pub const STAGE_GAP: f32 = 5.0;
+
+    /// `.cand`'s `padding: 4px 7px`, around the row's own type at [`BASE`].
+    pub const CAND_PAD_X: f32 = 7.0;
+    pub const CAND_PAD_Y: f32 = 4.0;
+
+    /// A candidate row's box: [`BASE`] at [`LINE`] inside that padding —
+    /// **24.5**, which is the 24.5 `lib.rs`'s 125 and its minimum of 66 are
+    /// both written from (*"three `.cand` rows at 4 + 16.5 + 4"*), so a row is
+    /// this tall in both places or in neither.
+    pub const CAND_H: f32 = BASE * LINE + CAND_PAD_Y * 2.0;
+
+    /// `.cand`'s `border-radius: 8px`, one shade tighter than the bay's
+    /// [`BAY_RADIUS`] because the row is inside it — [`PREVIEW_RADIUS`]'s
+    /// relation to the same bay, one column along.
+    pub const CAND_RADIUS: f32 = 8.0;
+
+    /// `.cand`'s `gap: 6px`, between the deck the candidate landed on and what
+    /// it is called.
+    pub const CAND_GAP: f32 = 6.0;
+
+    /// `.cand .who`'s `font-size: 10px`: the small type at the far end of a
+    /// candidate row. The mock puts the producer there and this console puts
+    /// the verdict — see [`crate::view::staging`], which is where that
+    /// substitution is argued.
+    pub const CAND_WHO_SIZE: f32 = 10.0;
+
     // -- the inspector's panes ----------------------------------------------
 
     /// `.half-head`'s `padding: 5px 10px` and its `gap: 6px`: the row that
