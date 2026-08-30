@@ -169,7 +169,7 @@
 
                   <div class="deck-head">
                     <span class="mini sel" data-tip="Sync: tempo. What this deck's clock is locked to &mdash; free, tempo, beat. Tempo scales the rate the material advances at; beat locks its position to the room's. Click to cycle, and the cycle skips a mode this material cannot honour instead of offering it: beat is skipped here because drift_night accumulates, so it can be run forward and not placed, and beat sync is a position lock. &#8853; MIDI: unassigned &mdash; no map target names a deck's clock.">tempo</span>
-                    <span class="anchor" data-tip="The anchor: 128 BPM, the tempo this deck was engaged at and what its rate is measured against. A readout and not a control. Re-anchoring is asking for the mode the deck is already in, and a chip that cycles has no way to say that.">T<b>128</b></span>
+                    <span class="anchor" data-tip="The anchor: 128 BPM, the tempo this deck was engaged at and what its rate is measured against. Click it to re-anchor &mdash; to call whatever the room is doing now the reference tempo, without the deck's mode changing under you. That is this deck's mode asked for again, which is the one thing the chip on the left cannot say: a cycle starts at the mode after the one you are on, so the state you are in is the state it can never arrive at. &#8853; MIDI: unassigned &mdash; a pad naming a mode re-anchors the day one exists, because naming the mode a deck is already in is all re-anchoring ever was.">T<b>128</b></span>
                     <span class="scrub idle" data-tip="Scrub, a quarter beat a press. Inert on this deck, and it keeps its shape and says why rather than going grey: a scrub is an offset added to the room's position under beat sync, and this deck is on tempo because its material accumulates. Nothing here re-runs a deck's history to place it. &#8853; MIDI: unassigned &mdash; it is the one operation that moves by an amount, and a control change can only set."><i>&#9666;</i><i>&#9656;</i></span>
                     <span class="sep"></span>
                     <span class="mini sel" data-tip="Composite: on. The deck's three renderers are folded into one result rather than overdrawn, which is what makes the chips below a choice of one rather than a list of all of them. Click to overdraw them instead. &#8853; MIDI: unassigned.">composite</span>
@@ -269,7 +269,7 @@
 
                   <div class="deck-head">
                     <span class="mini sel" data-tip="Sync: beat. This deck's position is locked to the room's, which is offered because lattice_veil is closed form and can be evaluated at a moment rather than arrived at. Click to cycle &mdash; free, tempo, beat &mdash; and a mode this material could not honour would be skipped with its reason. &#8853; MIDI: unassigned.">beat</span>
-                    <span class="anchor" data-tip="The anchor and the scrub, which is what beat sync has to show: engaged at 128 BPM, with the deck sitting a quarter beat ahead of the room. That offset is in beats and is this deck's; the offset in the transport is in milliseconds and is the whole instrument's. Signed and unbounded, because a scrub is the one control here meant to go backwards.">B<b>128</b><em>+0.25</em></span>
+                    <span class="anchor" data-tip="The anchor and the scrub, which is what beat sync has to show: engaged at 128 BPM, with the deck sitting a quarter beat ahead of the room. That offset is in beats and is this deck's; the offset in the transport is in milliseconds and is the whole instrument's. Signed and unbounded, because a scrub is the one control here meant to go backwards. Click to re-anchor at the room's tempo now, which also puts the offset back to zero &mdash; a deck brought back onto the grid should be on the grid and not where it was scrubbed to a song ago.">B<b>128</b><em>+0.25</em></span>
                     <span class="scrub" data-tip="Scrub: a quarter beat back or forward a press, into the offset beside it. Live here because the deck is beat-synced, which is the only mode that reads it. &#8853; MIDI: unassigned &mdash; it is the one operation that moves by an amount, and a control change can only set."><i>&#9666;</i><i>&#9656;</i></span>
                     <span class="sep"></span>
                     <span class="mini" data-tip="Composite: off, and on this deck it changes nothing either way &mdash; lattice_veil publishes one renderer, so there is nothing to fold together and nothing to overdraw. Drawn rather than hidden, because a deck that grows a second renderer needs the control already where it was. &#8853; MIDI: unassigned.">composite</span>
@@ -758,13 +758,35 @@
           the first reason and deck B is on beat.
         </p>
         <p>
-          <strong>The anchor is a readout, and the offset beside it is the
-          scrub's own value.</strong> <code>T128</code> is the tempo a deck was
-          engaged at, which is what its rate is measured against;
-          <code>B128 +0.25</code> is that with the deck sitting a quarter beat
-          ahead of the room. A free deck shows neither, because <em>free</em> is
-          the absence of a transport rather than a setting, and a column reading
-          <em>free</em> on every deck would be four words of nothing.
+          <strong>The anchor reads two numbers and asks for one thing, and the
+          offset beside it is the scrub's own value.</strong> <code>T128</code>
+          is the tempo a deck was engaged at, which is what its rate is measured
+          against; <code>B128 +0.25</code> is that with the deck sitting a
+          quarter beat ahead of the room. A free deck shows neither, because
+          <em>free</em> is the absence of a transport rather than a setting, and
+          a column reading <em>free</em> on every deck would be four words of
+          nothing &mdash; so a free deck has no anchor to press either, which
+          costs it nothing, since free is the one mode that never reads an
+          anchor.
+        </p>
+        <p>
+          <strong>Pressing the anchor re-anchors: it asks for the mode this deck
+          is already in.</strong> Engaging a mode takes the room's tempo as the
+          reference the material's rate is measured against, so engaging the one
+          that is already running is how an operator says <em>call this the
+          reference tempo</em> &mdash; the picture does not move, the rate goes
+          back to 1&times;, and the scrub goes back to zero with it. It needs no
+          operation of its own; it is the deck's own mode, named. <strong>What
+          it needs is a control that can name it, and the chip on the left
+          structurally cannot.</strong> A cycle starts at the mode <em>after</em>
+          the one you are on, so the one state it can never arrive at is the one
+          you are in &mdash; and the single case where it does land there is
+          material that accumulates and reads the beat, where <em>free</em> is
+          the only mode left and free reads no anchor. That is a fault of the
+          affordance and not a gap in what can be asked for: every control that
+          names a mode outright gets re-anchoring the day it exists, a pad
+          naming one and a call naming one alike, and only a cycle is shut out
+          of it.
         </p>
         <p>
           <strong>Scrub moves by an amount, which nothing else on this panel

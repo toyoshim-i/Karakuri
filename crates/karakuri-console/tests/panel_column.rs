@@ -136,6 +136,53 @@ const ELSEWHERE: &str = "<h2>Arranging the console</h2>";
 /// from where.
 const NOWHERE: &str = "&mdash;";
 
+/// **The rows a control on this panel emits and an operator still cannot
+/// reach**, which is the one gap between *emitted* and ADR-0213's *reached*
+/// that this file has ever had to carry.
+///
+/// # Why the two came apart, having been the same thing until now
+///
+/// Every other emission on this list ends in a record and a movement:
+/// `written` converts it, `crates/karakuri` applies it, and the deck is
+/// somewhere else afterwards. **`SetSync` converts to `Owed(NotSettled)`**, and
+/// that is not a gap in this crate or in that binary — it is
+/// `karakuri-operation-record` saying that *what* its record carries is
+/// undecided: setting a sync mode needs the session tempo and the engine's
+/// anchor clamp, so whether the record carries the anchor that was asked for
+/// or the one that was clamped is *"a decision about the bytes on disk"*, and
+/// [ADR-0218](../../../docs/adr/0218-re-anchoring-is-set-sync-naming-the-mode-the-deck-is-in-and-a-cycle-cannot-say-it.md)
+/// leaves it open by name. So the deck head's sync chip and its anchor are
+/// reachable *affordances* over an unwritable record: a press is claimed, the
+/// operation is emitted, the window prints the question, and the deck does not
+/// move.
+///
+/// **`has` would be a lie in exactly the way ADR-0213 was written to
+/// prevent** — *"the row is claimed the day a person who launched the
+/// instrument can perform that operation from the panel in front of them"* —
+/// and drawing no control would be a worse one, because the panel is the only
+/// surface that can offer re-anchoring at all. So the badge stays `plan` and
+/// the exemption is written here with its reason, which is what the first
+/// assertion's own failure message invites: *"Flip the badge, or say here why
+/// the control is not reachable"*.
+///
+/// # It is written to delete itself
+///
+/// A list here is a second copy of something ([P-0045]), so this one is held
+/// against both of its halves by
+/// [`the_unreachable_exemption_is_still_the_state_of_the_page`]: the operation
+/// must still be emitted, and its badge must still **not** be `has`. The day
+/// somebody settles the record, the badge flips, that test fails, and the line
+/// below is what it tells them to remove. It cannot go stale in silence in
+/// either direction.
+///
+/// **Not derived from `karakuri-operation-record`**, which is where the answer
+/// lives, because this package deliberately holds no dependency on it —
+/// `Cargo.toml` says so at length, and reaching for one to spell a one-line
+/// exemption would undo the closing of ADR-0156 that manifest records.
+///
+/// [P-0045]: ../../../docs/principles/0045-generate-the-vocabulary-prose-drifts-from-code.md
+const UNREACHABLE: [&str; 1] = ["Set a deck's sync mode"];
+
 fn workspace() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
@@ -200,6 +247,20 @@ fn sample(variant: &str) -> Operation {
             tonemap: karakuri_operation::Tonemap::Aces,
         },
         "SetExposure" => Operation::SetExposure { exposure: 1.0 },
+        // The two the Inspector's deck head emits. `SetSync` comes from two
+        // controls in that row — the chip that cycles and the anchor that
+        // re-asks for the mode the deck is in (ADR-0218) — and one operation
+        // is one row however many controls name it, which is what
+        // `dedup_by_key` below is for. `SetSync` is also the one entry in
+        // [`UNREACHABLE`]; see there for why its badge is not `has`.
+        "SetSync" => Operation::SetSync {
+            deck: 0,
+            sync: karakuri_operation::Sync::Beat,
+        },
+        "ScrubDeck" => Operation::ScrubDeck {
+            deck: 0,
+            beats: 0.25,
+        },
         other => panic!(
             "`{SRC}` constructs `Operation::{other}` and this file has no value for it — a \
              control started emitting an operation nobody accounted for. Add an arm here, and \
@@ -386,12 +447,46 @@ fn every_operation_a_console_control_emits_has_a_panel_route_marked_built() {
                      specification, so add the row there first"
                 )
             });
+        if UNREACHABLE.contains(&title) {
+            continue;
+        }
         assert_eq!(
             row.1, "has",
             "a control in {SRC} emits `{title}`, which {PAGE} marks `{}` in the panel column — \
              a control an operator reaches and a page that says no program a player runs does \
              (ADR-0213). Flip the badge, or say here why the control is not reachable",
             row.1
+        );
+    }
+}
+
+/// **The one exemption, held against the page it exempts.**
+///
+/// [`UNREACHABLE`] is a list written by hand, so it is written to fail rather
+/// than to go stale: an entry nothing emits is an exemption granted to
+/// nobody, and an entry whose badge has become `has` is an exemption that has
+/// stopped being true — which is what happens the day somebody settles
+/// `SetSync`'s record and the row is genuinely reachable. Either way this
+/// says so and names the line to delete.
+#[test]
+fn the_unreachable_exemption_is_still_the_state_of_the_page() {
+    let emitted: BTreeSet<&str> = emissions().iter().map(|op| op.title()).collect();
+    let routes = panel_routes();
+    for title in UNREACHABLE {
+        assert!(
+            emitted.contains(title),
+            "`{title}` is exempted in `UNREACHABLE` and no control in {SRC} emits it — an \
+             exemption granted to nobody. Delete the line"
+        );
+        let (_, class, _) = routes
+            .iter()
+            .find(|(row, _, _)| row == title)
+            .unwrap_or_else(|| panic!("`{title}` is exempted here and {PAGE} has no such row"));
+        assert_ne!(
+            class, "has",
+            "{PAGE} marks `{title}` built in the panel column, and `UNREACHABLE` still says an \
+             operator cannot reach it. If the record it owes has been settled, delete the line \
+             in `UNREACHABLE` — the exemption has done its job"
         );
     }
 }
