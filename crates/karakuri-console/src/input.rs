@@ -70,18 +70,20 @@
 //!    all. The panel's controls are painted shapes, and the only thing that
 //!    knows a press landed on one is this rule.
 //!
-//!    **There are six of them now**: the Outputs row's sink
+//!    **There are eight of them now**: the Outputs row's sink
 //!    ([`crate::view::outputs`]), a mixer strip's fader knob
 //!    ([`crate::view::Mixer::grab`]), its blend chip
 //!    ([`crate::view::Mixer::blend`]), its tally chip
 //!    ([`crate::view::Mixer::tally`]), its mask mini
-//!    ([`crate::view::Mixer::mask`]) and the transport row's arrangement pill
-//!    ([`crate::view::arrangement`]). The rule did not change to hold the
-//!    second, the third, the fourth or the fifth, which is what it was written
-//!    for — and each is asked exactly the way the first is: the derivation
-//!    that draws it, asked whether the point is on it, with nothing stored.
+//!    ([`crate::view::Mixer::mask`]), the transport row's arrangement pill
+//!    ([`crate::view::arrangement`]) and, at the end of that row, the tone
+//!    map's capsule and the exposure track ([`crate::view::look`]). The rule
+//!    did not change to hold any of the seven that came after the first, which
+//!    is what it was written for — and each is asked exactly the way the first
+//!    is: the derivation that draws it, asked whether the point is on it, with
+//!    nothing stored.
 //!
-//!    **The sixth is the first control in the transport row**, which was four
+//!    **The sixth was the first control in the transport row**, which was four
 //!    readouts and nothing a press acted on until it landed
 //!    ([`crate::view::transport`]). It clears every boundary by more than any
 //!    of the other five: the row is 48 and a `.pill` is 16.5, centred, so
@@ -89,6 +91,19 @@
 //!    against a [`GRAB`] of 6 — `tests/arrangement_pill.rs`, which is
 //!    `tests/outputs.rs`'s arithmetic over this control and fails the same
 //!    three ways.
+//!
+//!    **The seventh and the eighth are in that row too, and their clearance is
+//!    measured rather than inherited from it** — which is this file's rule
+//!    about every control, and here it happens to come out at the same number
+//!    twice. The tone map's capsule is a `.pill`, so it is the pill's own
+//!    **15.75**. The exposure control is a 5px track, and a 5px-tall target is
+//!    not something a hand finds — so what a press is tested against is the
+//!    track grown to a line's height, [`crate::view::LookRow::grip`], which is
+//!    `.mini`'s padding argument met with a band. That is 16.5 in a row of 48
+//!    and therefore **15.75** as well. `tests/look.rs` measures both and fails
+//!    the same three ways `tests/arrangement_pill.rs` does; that two of the
+//!    eight agree is a fact about two capsules being one height, not a number
+//!    either of them inherited.
 //!
 //!    **The fourth is the first control with a state that can be pending**,
 //!    and it is still only an affordance: it names a destination and refuses
@@ -157,6 +172,16 @@
 //! beside it**, which is the whole of ADR-0203 and is why choosing a shape
 //! does not straighten a diagonal front.
 //!
+//! **So are the two look controls**, at the far end of the same row:
+//! [`crate::view::LookRow::tonemap`] answers `SetTonemap` naming the operator
+//! after the one that is running, which is the blend chip's affordance over a
+//! closed list of four (ADR-0187); and [`crate::view::LookRow::exposure`]
+//! answers `SetExposure` naming **where along the track the press landed**,
+//! which is the one control on this panel that a press sets outright. That
+//! last is deliberately not [`crate::view::Mixer::grab`]'s rule about a press
+//! on a track, and the reason is written at the method: a fader has a knob and
+//! a value that must not jump under a hand mid-gesture, and this has neither.
+//!
 //! **So is the arrangement pill**, one row up and over a control with a menu
 //! under it: [`crate::view::ArrangementPill::ask`] answers *what does a press
 //! on it ask for* off the same laid-out pill this rule hit-tests — the menu
@@ -197,7 +222,7 @@
 use karakuri_layout::{Hit, Point};
 
 use crate::panel::{Panel, GRAB};
-use crate::view::{arrangement, mixer, outputs, View};
+use crate::view::{arrangement, look, mixer, outputs, View};
 
 /// Who a pointer event belongs to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -273,7 +298,7 @@ pub fn claim(panel: &mut Panel, ctx: &egui::Context, view: &View, p: Point) -> C
     // anything. See the module documentation and `tests/outputs.rs`.
     match panel.layout().hit(p, GRAB) {
         Hit::Divider { .. } => Claim::Panel,
-        // Rule 4, over all six of the console's controls. Each is asked the
+        // Rule 4, over all eight of the console's controls. Each is asked the
         // same way — the derivation that draws it, asked whether the point is
         // on it — and no answer is stored.
         Hit::View(_) | Hit::Nothing => {
@@ -297,7 +322,20 @@ pub fn claim(panel: &mut Panel, ctx: &egui::Context, view: &View, p: Point) -> C
                         || bay.mask(p).is_some()
                 })
             };
-            match on_sink || on_pill() || on_strip() {
+            // The two at the end of the transport row, derived once for
+            // both: the exposure track's place is measured from the tone map's
+            // capsule, so they are two questions about one laid-out group.
+            let on_look = || {
+                look(
+                    ctx,
+                    panel.layout(),
+                    view.transport,
+                    &view.arrangement,
+                    view.look,
+                )
+                .is_some_and(|row| row.owns(p))
+            };
+            match on_sink || on_pill() || on_look() || on_strip() {
                 true => Claim::Panel,
                 false => Claim::Egui,
             }
