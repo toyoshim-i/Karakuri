@@ -593,8 +593,9 @@ program can reach, because `crates/karakuri` builds both deck slots with `HotSwa
 `swap::Event` of any variant is ever emitted — and **Master** and **Sequencer** draw nothing but
 their heads.
 
-**Seven controls answer a pointer** — the Outputs dot, the mixer's two faders, its blend chip, its
-tally chip, its mask mini and the transport row's arrangement pill — and **six operations are
+**Eight controls answer a pointer** — the Outputs dot, the mixer's two faders, its blend chip, its
+tally chip, its mask mini, and the transport row's arrangement pill, tone-map capsule and exposure
+track — and **six operations are
 reached by a key at the panel**: `f` and `g` fold, `z` unfolds, `s` and `u` solo, `r` resets the
 arrangement, `esc` quits. The mixer strip is finished as a set of controls; nothing in it is a
 readout a pointer might have expected to answer.
@@ -622,39 +623,34 @@ before believing any sentence in this file about how much is left.
 
 #### 2. What the next piece of work is
 
-**The transport row's `Tone map` and `Exposure`.** Three reasons, each checkable rather than
-argued:
+**The deck head's *Set a deck's sync mode* and *Scrub a deck a quarter beat*.** Three reasons, and
+the first of them is an instrument this file did not have this morning:
 
-- **They are owed nothing but the control.** `Operation::SetTonemap` and `Operation::SetExposure`
-  exist, `karakuri-cli` performs both through `Live::operate`, `karakuri-operation-record` converts
-  both, and a MIDI map already names `cc -> exposure`. `karakuri-engine`'s `Look` carries the
-  operator and the level, and the CLI reaches them with `t`, `-`, `=` and `` ` ``. **Every route on
-  those two rows is built except the panel's.**
-- **The row that would hold them has just been shown to hold a control.** The transport row was
-  four readouts and nothing a press acted on until the arrangement pill landed; it is now four
-  readouts and one control, with the clearance arithmetic measured and pinned by a test
-  (`crates/karakuri-console/tests/arrangement_pill.rs`) and the pointer rule extended once,
-  deliberately, in `input.rs`.
-- **The one question either could have raised has been taken.**
-  [ADR-0224](adr/0224-out-and-exposure-are-two-levels-that-multiply-in-different-places.md) settled
-  that `exposure` is the tone mapper's own level and is not the Master bay's `out`, so the Exposure
-  row's home in the *transport* is decided rather than inherited.
+- **Something already performs both.** The fourth command below asks, of every operation, whether
+  anything in this workspace constructs it outside the vocabulary and the record crate. `SetSync`
+  and `ScrubDeck` are constructed in three places each. That matters more than it sounds, because
+  **a `plan` badge does not distinguish a drawing that is owed from a machine that is missing** —
+  and fourteen of the rows still wearing one are the second kind.
+- **The home is already drawn.** The deck head is a row of the Inspector's pane and has been since
+  the Inspector landed — `size::DECK_HEAD_H`, the clock and the anchor. What it has no control for
+  is the two things the anchor is *about*.
+- **The design is taken.** [ADR-0218](adr/0218-re-anchoring-is-set-sync-naming-the-mode-the-deck-is-in-and-a-cycle-cannot-say-it.md)
+  settles that re-anchoring is `SetSync` naming the mode the deck is in, and why a cycle
+  structurally cannot ask for it. `ScrubDeck`'s reading is settled in
+  `karakuri-operation-record`, and the beats-and-signed spelling is the deck head's own.
 
-**The other two rows in that group are not this**, and the difference is what makes the pair above
-the work: *Attach a beat source* needs an audio input this program does not open, and *Set the
-free-run tempo* has a record nothing routes through yet.
+**The third row of that group is not this.** *Composite a deck's renderers* has `CLI has` and looks
+like the same work, and the command below puts `SetCompositing` in the list of operations nothing
+constructs. It is the load row's category, not the sync row's.
 
-**The board is a tie now and the tie is real** — the second command below returns `transport` and
-`inspector` at four each, where transport was seven. What decides it is not the count but what each
-group is standing on, and the Inspector's four are not owed only a control: *Write a parameter*
-cannot meet its own refusal until something grants an authority
-([ADR-0223](adr/0223-a-wildcard-write-is-refused-where-the-nodes-it-lands-on-disagree.md)), and the
-two source rows want the compiler and the store on a surface that may reach neither.
+**What the board says and what it means are two questions now.** The second command groups what is
+left by where its control lives; the fourth says which of those are waiting on a machine. Run both
+before picking anything up — the *Load material into a deck* row was taken up as drawing work on
+2026-08-30 and is not.
 
-**Do not start on Master or Sequencer.** Both are blocked on machinery this workspace does not
-hold, and both are argued as such under *The remaining bays, surveyed*. **Master's engine half is
-no longer part of that** — the level and its multiply landed with ADR-0224; what the bay waits on
-is the chain, and a route to the value.
+**Do not start on Master or Sequencer.** Both are blocked on machinery this workspace does not hold.
+**Master's engine half is no longer part of that** — the level and its multiply landed with
+ADR-0224; what the bay waits on is the chain and a route to the value.
 
 #### 3. What each remaining piece is waiting on
 
@@ -710,7 +706,36 @@ grep -o 'rt plan">panel <b>[^<]*' docs/manual/operations.html | sed 's/.*<b>//' 
 
 # the vocabulary — how many operations there are
 grep -c '<h3' docs/manual/operations.html
+
+# drawing or machine — the operations nothing in this workspace constructs
+sed -n '/^operations! {/,/^}$/p' crates/karakuri-operation/src/lib.rs |
+  grep -oE '^    [A-Z][A-Za-z]+( \{[^}]*\})? => "[^"]+"' |
+  sed -E 's/^ *//; s/ *(\{[^}]*\})? *=> "/|/; s/"$//' |
+  while IFS='|' read -r v t; do
+    n=$(grep -rn --include='*.rs' "Operation::$v" crates/ |
+        grep -vE 'crates/karakuri-operation(-record)?/' |
+        sed -E 's#^[^:]*:[0-9]+:##; s#//.*##' |
+        grep -c "Operation::$v")
+    [ "$n" -eq 0 ] && echo "$t"
+  done
 ```
+
+**The fourth is the newest and it answers a question the badges cannot.** A `plan` badge says a
+surface is meant to reach an operation and does not yet; it says nothing about *why*, and the two
+whys are not the same work. An operation nothing constructs is one nobody can route to at all —
+`Operation::LoadSet` writes no record, so whichever surface names it must perform it, and
+`Deck::install` is documented as deliberately unreachable from a key or a surface. That row was
+picked up as drawing work and is not, which is what this command exists to stop.
+
+**Two cuts make it honest and both are the ones `panel_column.rs` already makes**: the record crate
+is excluded because it classifies every operation and would answer *constructed* for all of them,
+and each line is truncated at its first `//` because a doc comment naming an operation is not a call
+site — without that cut `LoadSet` reads as constructed, by the very comment that says it is not.
+
+**Nine of what it returns are expected and are not machinery**: the console's own shape reaches its
+rows through `karakuri_console::panel::Op` rather than through `Operation`, and
+`crates/karakuri-console/tests/vocabulary.rs` is what checks that section, both ways, on a running
+panel.
 
 **The second of the three is the board, and it is the page's rather than this file's.** Every `plan`
 badge names where its control lives, so what is left arrives already grouped by region and already
