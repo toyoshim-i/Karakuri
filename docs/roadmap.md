@@ -633,23 +633,20 @@ legend was found lying five ways about itself, and it is derived now.
 
 #### 2. What the next piece of work is
 
-**The deck head's *Set a deck's sync mode* and *Scrub a deck a quarter beat* are built**, which is
-what this section used to say to do. **The order below was settled in conversation on 2026-08-30**,
-and its first item is not a feature: it is a blocker found while recording
-[ADR-0229](adr/0229-a-set-file-is-authored-beside-its-parts-and-travels-as-a-bundle.md), and it
-stands in front of everything about presets.
+**The preset path is an argument**, which is what this section used to say to do, and it was the
+blocker standing in front of everything about presets rather than a feature —
+[ADR-0230](adr/0230-where-the-programs-data-lives-is-told-rather-than-baked.md).
+`karakuri` takes `--presets DIR` and `--store DIR`, `karakuri_environment::places` owns both roots
+and every refusal, and the two transcriptions of `.karakuri` are one constant, which closes what
+[ADR-0214](adr/0214-the-program-moves-out-of-the-cli-and-two-thin-binaries-sit-over-it.md) named as
+a transcription its move *deletes rather than carries*. **The blocker that comment named was the
+wrong one**: nothing had to divide, because the constant belongs in the package both binaries
+already reach. **And the search's test is not existence** — a cargo build puts an `examples`
+directory of object files beside the binary, so the portable candidate would win every `cargo run`
+in this repository and resolve a presets root with no presets in it. **The order below was settled
+in conversation on 2026-08-30.**
 
-1. **The preset path has to become an argument.** `Sources::default()`
-   (`crates/karakuri/src/main.rs`) resolves `examples/` against `env!("CARGO_MANIFEST_DIR")`, baked
-   at compile time to the build machine's tree, and `karakuri-cli`'s defaults are relative to the
-   working directory — so **a shipped binary finds no presets at all**, for a `.kir` as much as for
-   a Set. The answer is the shape the store already has: `--store DIR`, `karakuri-cli`'s flag with
-   `.karakuri` as its default, and the preset path is its sibling, **defaulted by whatever packaged
-   the program**. It has to be told, because there is no reliable POSIX way for a program to learn
-   its own path. **The console has no flag of any kind to hang it on today** — `sources_from` takes
-   two paths or none — and its `STORE` is a private `const` duplicating `karakuri-cli`'s
-   `DEFAULT_STORE`.
-2. **Then the Set file's two forms** (ADR-0229): an **authoring** form naming its `.kir` by relative
+1. **The Set file's two forms** (ADR-0229): an **authoring** form naming its `.kir` by relative
    path and living beside the parts, and a **bundle** that resolves those and inlines them. The
    Library lists both, and **loading an authoring file bundles it and stores it** — so a load *is*
    packaging, performed at that moment, and distribution packaging is the same resolution done ahead
@@ -662,14 +659,14 @@ stands in front of everything about presets.
    own directory reads any file on the machine and inlines it into a bundle you hand on — and that
    resolver is `--bundle`'s missing half: `bundle` starts from `store.read_set(id)`, so today it can
    only bundle what a store already holds.
-3. **Then the store as a tree, which changes what an id is.** `Store` spells one flat
+2. **Then the store as a tree, which changes what an id is.** `Store` spells one flat
    `sets/<id>.set.ndjson`, `list_sets` reads that directory, and `checked_id`
    (`crates/karakuri-environment/src/mcp.rs`) holds an id to one path component **on purpose**, so
    that it cannot be a path; `checked_name` (`crates/karakuri/src/main.rs`) is the same wall for an
    arrangement name. The Library's head has drawn a breadcrumb two levels deep for as long as it has
    drawn the bay, and ADR-0229 part 6 settles that this is the store's own shape rather than a folder
    scope browsing somebody else's disk. **A decision of its own, not a refactor.**
-4. **Then the remaining bays, on the board's own grouping** — the second of the four commands below,
+3. **Then the remaining bays, on the board's own grouping** — the second of the four commands below,
    which arrives already grouped by where each control lives and already ordered by weight, so there
    is no list here to keep in step. **Run the fourth beside it.** A `plan` badge does not distinguish
    a drawing that is owed from a machine that is missing, and the *Load material into a deck* row was
