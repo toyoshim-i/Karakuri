@@ -356,8 +356,8 @@ pressed it. See the keys below.
 | `--list-sets` | print what the store holds — a line per Set: its id, when it was saved, and how many nodes on each layer — and stop. Nothing is compiled and no window opens |
 | `--save-set ID` | write the material as a Set file and stop — the whole chain, at the capacity and the salt the run would have drawn with |
 | `--load-set ID` | build from one |
-| `--bundle ID` | write that Set to standard output with every source it names inlined — one self-contained file to send somebody. Refused whole, naming the node, if this store is missing one of the artifacts. Nothing is compiled and no window opens |
-| `--unbundle FILE` | take a bundled Set file into this store: its inlined sources become artifacts with a metadata card each, and its Set file is filed under the id the file itself carries. Every inlined source must hash to the address its `slot` names, and an id already taken is refused rather than overwritten |
+| `--package ID\|FILE` | write a self-contained Set to standard output — every source it names inlined, one file to send somebody. An id names a Set this store already holds; a path ending `.kset` names an authoring Set file, whose relative parts are resolved and stored first, which is the packaging step end to end. Refused whole, naming the node, if this store is missing one of the artifacts. Nothing is compiled and no window opens |
+| `--take-in FILE` | take a Set file into this store, in either of its two forms: its sources become artifacts with a metadata card each, and its Set file is filed under the id the file itself carries. A `.kbset` arrives resolved and every inlined source must hash to the address its `slot` names; a `.kset` names its parts by relative path and is resolved first, which refuses a part naming anything outside the file's own directory. An id already taken is refused rather than overwritten |
 | `--record-session ID` | write the timeline as it happens |
 | `--replay ID` | render a session back. Needs `--render` or `--seq` |
 
@@ -664,8 +664,8 @@ A **bundle** is the same file with every source it names inlined after it, as a 
 `src` records per artifact, and it loads in a store that has never seen the material:
 
 ```sh
-karakuri-cli --bundle night01 > night01.kbset     # yours
-karakuri-cli --unbundle night01.kbset             # theirs
+karakuri-cli --package night01 > night01.kbset    # yours
+karakuri-cli --take-in night01.kbset              # theirs
 ```
 
 **It goes to standard output rather than into the store**, because a bundle is a thing

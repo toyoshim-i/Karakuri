@@ -69,7 +69,7 @@
       second copy of it here would be a list that goes stale.
     </p>
     <p>
-      <strong>63 operations, and 53 of the 268 ways in exist.</strong> Eight of
+      <strong>64 operations, and 53 of the 272 ways in exist.</strong> Eight of
       them are the console's own shape &mdash; moving a boundary, folding a bay
       or a pane, bringing one back, solo, and the three that reset, keep and put
       back an arrangement &mdash; and nine of their thirty-two routes exist: the
@@ -80,8 +80,8 @@
       could, and the pill is it. Resetting is the default case of those two and
       is reached from both &mdash; <code>r</code>, and <em>start a new one</em>
       on the same pill.
-      <strong>Nineteen <em>key</em> badges are designed rather than built, and
-      every one of them is a key the command line binds today.</strong> The
+      <strong>Twenty <em>key</em> badges are designed rather than built, and
+      nineteen of them are keys the command line binds today.</strong> The
       column is the instrument's keyboard and the instrument binds sixteen keys,
       so the nineteen are what the command line reaches and the panel does not; the
       letters stay because this page is where a key is specified, and seven of
@@ -91,7 +91,9 @@
       panel to report itself and <code>n</code> changes its colours. Whether the
       instrument takes those letters or the command line gives them up is a
       decision nobody has made, and it is a change to this specification rather
-      than a note on it. <strong>Fifteen <em>panel</em> routes are
+      than a note on it. <strong>The twentieth is <code>e</code>, and no program binds
+      it</strong> &mdash; the library's scope row is specified here before either keyboard has
+      it, which is the order everything else on this page arrived in. <strong>Fifteen <em>panel</em> routes are
       marked built</strong>, and they are the whole of that column: the Mixer
       bay's six &mdash; the strip trim, the strip fader, the strip button, the
       tally chip, the strip mask mini and the strip itself, which is where a
@@ -114,7 +116,7 @@
       across a switchable list of sinks. One entry of that list is not the list,
       so the control performs part of what the row names and the badge would be
       an over-claim.
-      Beyond those fifteen, 45 more are designed and out of reach, most of them in
+      Beyond those fifteen, 46 more are designed and out of reach, most of them in
       bays nothing draws yet, and three the panel cannot reach at all. Where a badge names a
       region, that is where the control lives in
       <a href="console.html">the console</a>; three name none yet, and naming one
@@ -732,6 +734,47 @@
         </div>
       </div>
       <div class="op">
+        <div class="op-head"><h3>Choose which scope the library shows</h3><span class="op-when ">immediate</span></div>
+        <p><strong>One operation, and the scope is what it names</strong> &mdash; not a row for
+        each chip, because the row of chips is not a list this page can finish. A scope is added
+        while the program is running, so a vocabulary carrying one operation per scope would go
+        short the moment an operator points the bay at a directory. <strong>Nor are the four
+        <a href="console.html">the console</a> draws four different acts.</strong>
+        <em>Favourites</em> is that page's own words for <em>this library filtered rather than a
+        fifth place a Set can be</em>, so choosing it and choosing <em>my sets</em> differ in the
+        question asked and not in what is asked. <em>Presets</em> is a second root, and one the
+        program is <em>told</em> &mdash; <code>--presets DIR</code>, or whatever the packaging put
+        beside the binary &mdash; rather than one it works out, so nothing has to be built for it
+        to be shown that is not there at startup. And <em>folder</em> is a root somebody names
+        during the run, which is the only one of the four short of anything at all: what it waits
+        on is an operation that can ask a directory for its listing, and that is <em>List what the
+        store holds</em>'s gap &mdash; that row has nowhere to put a directory &mdash; rather than
+        this row's. <strong>Choosing which library is being read is one act whichever of them is
+        chosen</strong>, and what differs between them is what the listing after it costs.</p>
+        <p><strong>The two empty columns are empty for two different reasons, and neither is want
+        of a control.</strong> A map line carries a slot number, a word from a closed list or a
+        range, and this list is the one thing about the library that is not closed: it grows when
+        a directory is added, and a map belongs to the hardware in the room where the scopes
+        belong to the store &mdash; the same refusal <em>Load material into a deck</em> meets over
+        a Set id. A model has no chip to press and no listing in front of it to point at: what it
+        wants of this row it gets by naming the library in the listing it asks for.
+        <strong>The key is <code>e</code>, and it steps to the next scope and wraps.</strong> A
+        bare press cannot type a name and here it does not have to &mdash; the scopes are a short
+        row of chips in front of you, so stepping says <em>which</em> by showing you, and a list
+        that grows is still reached by stepping through it. The letter is the one letter of
+        <em>scope</em> neither keyboard has spent: <code>s</code> solos at the panel and prints
+        the status at the command line, and <code>c</code>, <code>o</code> and <code>p</code> are
+        the command line's. So the letter is free on both keyboards &mdash; which is what
+        <code>l</code> was chosen for one row up &mdash; and this is the one designed key badge on
+        this page that is not a key the command line already binds.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>library scopes</b></span>
+          <span class="rt plan">key <b>e</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+        </div>
+      </div>
+      <div class="op">
         <div class="op-head"><h3>Read what one Set holds and declares</h3><span class="op-when ">immediate</span></div>
         <p>Every knob with its range and default, the element count, the attributes emitted &mdash; without fetching a source or compiling it.</p>
         <div class="rts">
@@ -743,13 +786,33 @@
       </div>
       <div class="op">
         <div class="op-head"><h3>Send a Set to somebody, and take one in</h3><span class="op-when ">not a run</span></div>
-        <p>Every inlined source must hash to the address its slot names before anything is stored, and an id already taken is refused rather than overwritten.</p>
+        <p>Every inlined source must hash to the address its slot names before anything is stored,
+        and an id already taken is refused rather than overwritten. <strong>The way in takes both
+        spellings</strong>: a <code>.kbset</code> that arrived whole, and a <code>.kset</code> that
+        names its parts by relative path, whose parts are read off the disk beside it and filed
+        under the address of their own bytes before anything reaches the store &mdash; and a part
+        named from outside that file's own directory is refused, out loud, because a Set somebody
+        handed you is not a way of asking this machine for its files.</p>
+        <p><strong>Taking one in is not a second row, and a preset is what shows why.</strong>
+        Packaging is one operation at two moments &mdash; ahead of time when you are sending, and
+        at the press when you are not &mdash; so loading a Set out of <em>presets</em> or out of a
+        <em>folder</em> is this row performed at the second of them, and
+        <a href="console.html">the console</a> reaches the same answer from its own side: a
+        <code>.kset</code> resolved into the store is the work this row does, which is why
+        <em>my sets</em> gains a row you did not make every time you open a preset.
+        <strong>Which is where this row's panel column stands.</strong> The taking-in half has a
+        specified control already and it is not one the library still owes: it is a row under
+        <em>presets</em> or <em>folder</em>, loaded, which is <em>Load material into a deck</em>'s
+        route and is drawn on the console today. What nothing anywhere draws is the sending
+        &mdash; writing one out to hand somebody &mdash; so the badge stays designed and names the
+        bay rather than a control, for the reason the Outputs dot's does: a control that performs
+        half of what a row names would make the badge an over-claim.</p>
         <div class="rts">
           <span class="rt plan">panel <b>library</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt gap">MCP <b>&mdash;</b></span>
-          <span class="rt has">CLI <b>--bundle, --unbundle</b></span>
+          <span class="rt has">CLI <b>--package, --take-in</b></span>
         </div>
       </div>
       <div class="op">
@@ -1004,7 +1067,7 @@
     <h2>What the gaps say</h2>
     <p>
       <strong>MIDI is the narrowest by a wide margin.</strong> It reaches
-      eight of these 63 operations, and it cannot express a node
+      eight of these 64 operations, and it cannot express a node
       address, a parameter name or an id &mdash; nor a bare number, which is
       why it reaches one half of the mask and not the other. A map line carries
       a slot number, a word out of a value list, or a range, and an angle is
@@ -1025,15 +1088,17 @@
       different ways on two surfaces.
     </p>
     <p>
-      <strong>The keyboard's nineteen designed rows are one program's keys waiting
-      for another's.</strong> This column is the instrument's keyboard, and
+      <strong>Nineteen of the keyboard's twenty designed rows are one program's
+      keys waiting for another's.</strong> This column is the instrument's keyboard, and
       nineteen rows on it &mdash; across the transport, the decks, the mixer, the
       library and the window &mdash; are reached by pressing a key today, in
       <code>karakuri-cli</code>, which is not the program the panel is in. That
       is a gap of a kind none of the others here are: nothing is undecided,
       nothing is unspellable, and no control is unbuilt. The keys exist, they
       are specified on this page, and the window a player opens does not read
-      them yet. What it waits on is the work of putting those operations behind
+      them yet. <strong>The twentieth row is not one of them</strong>: <code>e</code> steps the
+      library's scope and neither program binds it, so it is a key waiting on both rather than on
+      one. What it waits on is the work of putting those operations behind
       the panel's own keyboard, and one decision beside it: which of the two
       keyboards keeps the seven letters they both want.
     </p>

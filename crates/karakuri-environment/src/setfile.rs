@@ -1411,7 +1411,7 @@ pub const AUTHORING_SUFFIX: &str = ".kset";
 ///
 /// **Lines back rather than a file written**, on [`bundle`]'s terms: where the
 /// result goes is the caller's, and the two callers want different things —
-/// `--bundle FILE.kset` inlines them and prints, where a load would hand them
+/// `--package FILE.kset` inlines them and prints, where a load would hand them
 /// to [`from_lines`].
 ///
 /// **The wall is this function and not a later one.** ADR-0229: *"the wall is
@@ -1550,8 +1550,8 @@ pub fn bundle_authored(store: &Store, path: &Path) -> Result<Vec<Line>, String> 
     // **The id is the file's own**, for the sentences the inlining owes about a
     // node it cannot carry. A file that names none is named by its own path
     // here — and refused later, by `unbundle`, with the sentence that already
-    // exists for it: an unbundle takes the id from the file rather than from
-    // the command line.
+    // exists for it: taking a Set in takes the id from the file rather than
+    // from the command line.
     let id = lines
         .iter()
         .find_map(|line| match line.record() {
@@ -1688,8 +1688,8 @@ fn part_at(layer: Layer, index: u32, name: Option<&str>, path: &str) -> String {
 /// for.
 ///
 /// **Lines back rather than a file written.** Where a bundle goes is the
-/// caller's, and the caller writes it to standard output; see `bundled_set` in
-/// `karakuri-cli`, which is `--bundle`'s half of this.
+/// caller's, and the caller writes it to standard output; see `packaged_set` in
+/// `karakuri-cli`, which is `--package`'s half of this.
 pub fn bundle(store: &Store, id: &str) -> Result<Vec<Line>, String> {
     let lines = store
         .read_set(id)
@@ -1785,9 +1785,11 @@ impl Slot {
     }
 }
 
-/// **Take a bundle somebody sent you into this store**: its inlined sources as
+/// **Take a Set somebody sent you into this store**: its inlined sources as
 /// artifacts, a metadata card per artifact that compiles, and its Set file
-/// under the id the file itself carries.
+/// under the id the file itself carries. `--take-in`'s half of this; the lines
+/// are a `.kbset`'s as read, or an authoring file's already put through
+/// [`bundle_authored`].
 ///
 /// **Nothing is written until every source has been checked.** A store's whole
 /// guarantee is that a hash names those bytes and no others, so a `src` run
@@ -1839,8 +1841,8 @@ pub fn unbundle(store: &Store, lines: &[Line]) -> Result<String, String> {
     let Some(file_id) = file_id else {
         return Err(
             "this file carries no `set` record, so it names no id to file itself \
-                    under — an unbundle takes the id from the file rather than from the \
-                    command line"
+                    under — taking a Set in takes the id from the file rather than from \
+                    the command line"
                 .to_string(),
         );
     };
@@ -1851,9 +1853,9 @@ pub fn unbundle(store: &Store, lines: &[Line]) -> Result<String, String> {
         .map_err(|e| format!("reading what this store already holds: {e}"))?;
     if held.iter().any(|entry| entry.id == file_id) {
         return Err(format!(
-            "set `{file_id}` is already in this store, and unbundling does not overwrite \
-             one: the id came from the file rather than from you. Nothing was stored. \
-             Edit the `set` record's id, or move the set you have"
+            "set `{file_id}` is already in this store, and taking a Set in does not \
+             overwrite one: the id came from the file rather than from you. Nothing was \
+             stored. Edit the `set` record's id, or move the set you have"
         ));
     }
     // **Every inlined source hashes to the hash its `slot` record names**, or
@@ -1936,7 +1938,7 @@ pub fn unbundle(store: &Store, lines: &[Line]) -> Result<String, String> {
     // form — a way to move an artifact between stores — and this store now
     // holds the artifacts, so what is kept is the ordinary Set file that
     // references them by hash. Keeping the runs would file a second copy of
-    // every source inside the preset directory, where `--bundle` can produce
+    // every source inside the preset directory, where `--package` can produce
     // one again from the artifacts at any time.
     let kept: Vec<Line> = lines
         .iter()
@@ -1948,7 +1950,7 @@ pub fn unbundle(store: &Store, lines: &[Line]) -> Result<String, String> {
         .map_err(|e| format!("writing set `{file_id}`: {e}"))?;
 
     let mut said = format!(
-        "unbundled `{file_id}`: {} node{}, {} source{} stored, {cards} metadata card{} written\n",
+        "took `{file_id}` in: {} node{}, {} source{} stored, {cards} metadata card{} written\n",
         slots.len(),
         plural(slots.len()),
         sources.len(),
@@ -3864,8 +3866,8 @@ proc dissolve {
     // -- Bundling --------------------------------------------------------
 
     /// The text a bundle is written out as, back through the reader — so a
-    /// test round-trips through the *file*, which is what `--bundle >` writes
-    /// and what `--unbundle` reads, rather than through records held in memory
+    /// test round-trips through the *file*, which is what `--package >` writes
+    /// and what `--take-in` reads, rather than through records held in memory
     /// that could not have survived a serialisation.
     fn as_a_file(lines: &[Line]) -> Vec<Line> {
         parsed(
@@ -3888,7 +3890,7 @@ proc dissolve {
     /// **And the cards come with it.** An artifact whose card is missing is an
     /// ordinary store rather than a damaged one, so this is not the difference
     /// between a bundle that works and one that does not — but a bundle that
-    /// dropped them would leave every unbundled library thinner than the one it
+    /// dropped them would leave every library taken in thinner than the one it
     /// came from, silently.
     #[test]
     fn a_bundle_loads_in_a_store_that_has_never_seen_the_artifacts() {
@@ -4238,7 +4240,7 @@ proc dissolve {
     /// An authoring file is only readable beside its neighbours; the resolved
     /// one is readable anywhere its material is, and a bundle carries the
     /// material with it. So this deletes the entire directory the `.kset` and
-    /// its `.kir` files lived in, unbundles into a store that has never held
+    /// its `.kir` files lived in, takes it into a store that has never held
     /// any of it, and loads. Nothing that resolves a path could survive that,
     /// which is what makes it the test of the difference rather than of the
     /// pipeline.

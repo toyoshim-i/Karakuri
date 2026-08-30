@@ -615,15 +615,17 @@ pub enum Property {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SetTransfer {
     /// Write the Set filed under this id with every source it names inlined.
-    /// `--bundle ID`.
+    /// `--package ID` — or `--package FILE.kset`, which resolves an authoring
+    /// file's parts into the store first and packages that.
     Send { id: String },
-    /// Read a bundled Set, store its sources, write its Set file. The id comes
-    /// from the file, and one already taken is refused. `--unbundle FILE`.
+    /// Read a Set file, store its sources, write its Set file. The id comes
+    /// from the file, and one already taken is refused. `--take-in FILE`,
+    /// which takes a `.kbset` as it stands and resolves a `.kset` first.
     ///
     /// A path because a file is what the only existing route takes; whether a
     /// route that has no filesystem — a model handing over the text — takes
     /// bytes instead is open, and is a smaller question than the row's own.
-    Take { bundle: PathBuf },
+    Take { file: PathBuf },
 }
 
 /// Starting and stopping a session recording.
@@ -1273,6 +1275,30 @@ operations! {
     /// Most recent first, narrowed by what a node is called or by which layer
     /// a Set uses, and it says how many it did not show.
     ListSets { holds: Option<String>, layer: Option<Layer> } => "List what the store holds",
+
+    /// **Which library is being read**, and the four chips the console draws
+    /// are four questions rather than four acts — `docs/manual/operations.html`
+    /// argues that at the row, and the console page argues the sharpest part of
+    /// it: *favourites* is *"this library filtered rather than a fifth place a
+    /// Set can be"*, so choosing it and choosing *my sets* differ in the
+    /// question asked and not in what is asked.
+    ///
+    /// **[`Undecided`], and the row itself says why.** The scopes are *"the one
+    /// thing about the library that is not closed: it grows when a directory is
+    /// added"* — so an enum of the four here would assert that the list can be
+    /// finished, which is the claim that row exists to refuse, and it would go
+    /// short the moment an operator points the bay at a directory. What
+    /// identifies one member of a growable list is spelled nowhere: not on that
+    /// page, not on the console page, and not in this workspace. A folder scope
+    /// has a path, *presets* has a root the program was told, and the other two
+    /// have neither.
+    ///
+    /// **The key steps and this does not.** `e` moves to the next scope and
+    /// wraps, and that is the translator's arithmetic rather than this
+    /// operation's payload —
+    /// [P-0074](../../../docs/principles/0074-an-operation-says-what-it-wants-never-which-way-to-move.md).
+    /// Whatever a scope turns out to be named by, this names one.
+    SelectScope { scope: Undecided } => "Choose which scope the library shows",
 
     /// Every knob with its range and default, the element count, the
     /// attributes emitted — without fetching a source or compiling it.

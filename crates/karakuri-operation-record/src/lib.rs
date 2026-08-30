@@ -649,8 +649,21 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
         // one that makes the reading obvious: it moves every fold, every
         // divider and the solo at once, which is `ResetArrangement`'s own
         // sentence with a name in it.
+        //
+        // **Choosing a scope is the same answer arrived at from the other
+        // side.** It changes which library the bay is reading and nothing
+        // about what any deck is playing, so a replay that reconstructed it
+        // would be putting somebody else's browsing on the screen — which is
+        // the arrangement's argument again. And it is settled rather than
+        // owed: `docs/manual/operations.html` says the scopes are *"the one
+        // thing about the library that is not closed"*, so there is no record
+        // shape a stream could hold for it that would not have to grow every
+        // time an operator adds a directory. `Undecided` is on the payload and
+        // not on this answer — what a scope is *named* by is open, and that
+        // nothing in the stream names one is not.
         | Operation::SaveArrangement { .. }
         | Operation::RestoreArrangement { .. }
+        | Operation::SelectScope { .. }
         | Operation::SizeWindow { .. } => Written::Silent(Silent::Surface),
 
         // ----- Silent: it asks rather than changes -------------------------

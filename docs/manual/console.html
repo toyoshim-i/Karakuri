@@ -99,9 +99,9 @@
             <div class="bay" style="flex:1; display:flex; flex-direction:column;">
               <div class="bay-head"><span>Library</span><span class="grip">&#8942;&#8942;</span></div>
               <div class="scopes">
-                <span class="scope sel" data-tip="Favourites. Selected. It is this library filtered rather than a fifth place a Set can be &mdash; the star is kept beside the Sets, in the store, so this scope is a question asked of `my sets` and never a collection of its own. Click to show it; click another scope to leave it. &#8853; MIDI: unassigned &mdash; there is no operation for a map to name yet.">favourites</span>
+                <span class="scope sel" data-tip="Favourites. Selected. It is this library filtered rather than a fifth place a Set can be &mdash; the star is kept beside the Sets, in the store, so this scope is a question asked of `my sets` and never a collection of its own. Click to show it; click another scope to leave it. &#8853; MIDI: unassigned &mdash; the operations page names the choosing now, as `Choose which scope the library shows`, and leaves this column empty on purpose: a map line names a word from a closed list, and this list grows when a directory is added.">favourites</span>
                 <span class="scope">my sets</span>
-                <span class="scope" data-tip="What ships with the program rather than what you wrote, and it is read-only: nothing is written here, and a Set you load out of it is packaged into the store with the rest of your Sets &mdash; which is how a preset becomes one of yours. Where these files are is told to the program when it starts rather than compiled into it &mdash; a program has no reliable way to ask where it is &mdash; so an installed copy is pointed at what the packaging put beside it, and `--presets DIR` says it by hand. Told nothing and finding nothing, the scope is empty and the program says so at startup rather than pretending. &#8853; MIDI: unassigned &mdash; there is no operation for a map to name yet.">presets</span>
+                <span class="scope" data-tip="What ships with the program rather than what you wrote, and it is read-only: nothing is written here, and a Set you load out of it is packaged into the store with the rest of your Sets &mdash; which is how a preset becomes one of yours. Where these files are is told to the program when it starts rather than compiled into it &mdash; a program has no reliable way to ask where it is &mdash; so an installed copy is pointed at what the packaging put beside it, and `--presets DIR` says it by hand. Told nothing and finding nothing, the scope is empty and the program says so at startup rather than pretending. &#8853; MIDI: unassigned &mdash; the operations page names the choosing now, as `Choose which scope the library shows`, and leaves this column empty on purpose: a map line names a word from a closed list, and this list grows when a directory is added.">presets</span>
                 <span class="scope" data-tip="A folder, and what it lists is Sets. A Set file and a bundle are one file &mdash; the same `.kbset`, differing only in whether the sources are appended inside it &mdash; so this scope draws one kind of row, not two. A `.kset` is listed here as well and is still one row: it names its parts by relative path rather than by content, so taking it in resolves them first. A `.kir` is not one of them: it is a single node's source addressed by its content, and nothing takes one. A row here is taken into the store and then loaded, which is one press because taking it in is what gives it a name. &#8853; MIDI: unassigned &mdash; a map line names a state from a closed list and a directory is not one.">folder</span>
                 <span class="scope" data-tip="Add a scope. A library is asked questions rather than read end to end, so what you browse gets both wider and narrower with use.">+</span>
               </div>
@@ -1625,6 +1625,16 @@
           under it are specified here and the operation behind them is named as
           owed rather than written from this drawing, which is the way round
           that keeps a specification a specification.
+        </p>
+        <p>
+          <strong>Choosing between the chips is a different thing, and it is
+          not owed any more.</strong> <a href="operations.html">The operations
+          page</a> carries it as one row &mdash; <em>Choose which scope the
+          library shows</em>, one operation over whichever scopes the list
+          holds, because a list that grows while the program is running cannot
+          have a row each. What is still owed is the asking, and it is owed by
+          <em>folder</em> alone: the other three are answered by things that
+          are there when the program starts.
         </p>
       </div>
 
