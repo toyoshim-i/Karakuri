@@ -537,11 +537,11 @@ options:
                         and flags — the whole chain, names and edges included.
                         A flag given beside it wins. Anything the file could not
                         carry is printed rather than dropped in silence
-  --bundle ID|FILE      write the Set filed under ID to standard output with
+  --package ID|FILE     write the Set filed under ID to standard output with
                         every source it names inlined as `src` records, and
                         stop. That file loads on a machine whose store has
                         never held the material, so it is what you send
-                        somebody: `--bundle night01 > night01.kbset`. An
+                        somebody: `--package night01 > night01.kbset`. An
                         artifact this store does not hold refuses the whole
                         bundle naming it, rather than producing a file that
                         looks self-contained and is not.
@@ -549,14 +549,18 @@ options:
                         Set file, which names its .kir files by relative path
                         and lives beside them — every part is read, hashed and
                         put in the store, and the bundle is written from that:
-                        `--bundle night01.kset > night01.kbset`. A part that
+                        `--package night01.kset > night01.kbset`. A part that
                         reaches outside the .kset's own directory is refused
                         by name, absolute paths, `..` and symlinks alike
-  --unbundle FILE       read a bundled Set file, put its inlined sources in the
-                        store, write its Set file, and stop. Every source must
-                        hash to the address its `slot` names or the file is
-                        refused whole. The id comes from the file, and one
-                        already taken is refused rather than overwritten
+  --take-in FILE        take a Set file into this store, and stop. A .kbset —
+                        what --package writes — has its inlined sources put in
+                        the store and its Set file written, and every source
+                        must hash to the address its `slot` names or the file
+                        is refused whole. A .kset is resolved against its own
+                        directory first, behind the same wall --package puts
+                        it behind, and then taken in the same way. The id
+                        comes from the file either way, and one already taken
+                        is refused rather than overwritten
   --record-session ID   write the timeline to sessions/ID.ndjson as it
                         happens: the Set's records, then a `tick` a frame and
                         every edit between them. The material goes at the head
@@ -890,36 +894,47 @@ enum ParseOutcome {
     /// It carries the store path because that is the whole of what a listing
     /// needs, and `--store` may be given on either side of this flag.
     ListSets(PathBuf),
-    /// `--bundle ID` — or `--bundle FILE.kset`: write the Set filed under `ID`,
-    /// or the one the authoring file at `FILE` names, to standard output with
-    /// every source it names inlined, and stop.
+    /// `--package ID` — or `--package FILE.kset`: write the Set filed under
+    /// `ID`, or the one the authoring file at `FILE` names, to standard output
+    /// with every source it names inlined, and stop.
     ///
     /// **One flag and two moments rather than two flags**, which is ADR-0229
     /// part 4: packaging is *"one operation, two moments"*, and
     /// `docs/manual/operations.html`'s *Send a Set to somebody, and take one
     /// in* is the row both are a moment of. The field is still `id` because the
     /// parse cannot tell which it is without touching a disk and does not try;
-    /// [`bundled_set`] decides on the extension, which is what ADR-0231 made
+    /// [`packaged_set`] decides on the extension, which is what ADR-0231 made
     /// the extension for.
     ///
+    /// **And the flag is named for what it does at both moments.** It writes a
+    /// store as often as it reads one — a `.kset` has every part hashed and put
+    /// — so `--bundle`, which reads as an export and nothing else, named half
+    /// of it. `--package` and [`ParseOutcome::TakeIn`] are the two directions of
+    /// one row (P-0031: a name means one thing, and one thing has one name).
+    ///
     /// [`ParseOutcome::ListSets`]'s variant for [`ParseOutcome::ListSets`]'s
-    /// reason, and the reason is the whole of why it is here: bundling reads a
+    /// reason, and the reason is the whole of why it is here: packaging reads a
     /// file and hashes some bytes, and there is no Set to build, no adapter to
     /// request and no window to open. An `Args` field would have to be checked
     /// above every early return in `main` and would be wrong the day somebody
     /// added one more; a variant with no `Args` in it makes reaching a device
     /// not a thing that can be forgotten.
-    Bundle {
+    Package {
         store: PathBuf,
         id: String,
     },
-    /// `--unbundle FILE`: take a bundled Set file into the store, and stop.
+    /// `--take-in FILE`: take a Set file into the store, and stop — a `.kbset`
+    /// as it stands, a `.kset` resolved against its own directory first.
     ///
-    /// Here for the same reason, and it compiles: each inlined source goes
-    /// through the checker so that a metadata card can be written for it. That
-    /// is the check pass, which takes no device — `Set::validate` runs without
-    /// one and a single procedure certainly does.
-    Unbundle {
+    /// Here for the same reason, and it compiles: each source goes through the
+    /// checker so that a metadata card can be written for it. That is the check
+    /// pass, which takes no device — `Set::validate` runs without one and a
+    /// single procedure certainly does.
+    ///
+    /// **Which of the two forms it is, the extension says**, exactly as
+    /// [`ParseOutcome::Package`]'s does: the parse carries a path and touches no
+    /// disk to classify it, and [`taken_in_file`] decides.
+    TakeIn {
         store: PathBuf,
         file: PathBuf,
     },
@@ -951,14 +966,14 @@ fn parse_args() -> Args {
                 std::process::exit(1);
             }
         },
-        // **To standard output, so a shell can redirect it.** A bundle is a
-        // thing you *send somebody* — a single self-contained file that works
-        // in their store — rather than something the library keeps, so it goes
-        // where `> patch.ndjson` puts it and needs no naming rule of its own in
-        // `sets/`. The store already holds this Set under an id; a second copy
-        // of it there under some derived name would be a second answer to which
-        // file is the Set.
-        Ok(ParseOutcome::Bundle { store, id }) => match bundled_set(&store, &id) {
+        // **To standard output, so a shell can redirect it.** What packaging
+        // produces is a thing you *send somebody* — a single self-contained
+        // file that works in their store — rather than something the library
+        // keeps, so it goes where `> patch.ndjson` puts it and needs no naming
+        // rule of its own in `sets/`. The store already holds this Set under an
+        // id; a second copy of it there under some derived name would be a
+        // second answer to which file is the Set.
+        Ok(ParseOutcome::Package { store, id }) => match packaged_set(&store, &id) {
             Ok(said) => {
                 print!("{said}");
                 std::process::exit(0);
@@ -971,7 +986,7 @@ fn parse_args() -> Args {
         // On stdout for the reason a listing is: it is the answer to the
         // question that was asked. Nothing is compiled to *run* — the checker
         // is reached only to write each artifact's metadata card.
-        Ok(ParseOutcome::Unbundle { store, file }) => match unbundled_file(&store, &file) {
+        Ok(ParseOutcome::TakeIn { store, file }) => match taken_in_file(&store, &file) {
             Ok(said) => {
                 print!("{said}");
                 std::process::exit(0);
@@ -1411,8 +1426,8 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
     // for longer and carries it on `Args` instead.
     let mut size_given = false;
     let mut list_sets = false;
-    let mut bundle: Option<String> = None;
-    let mut unbundle: Option<PathBuf> = None;
+    let mut package: Option<String> = None;
+    let mut take_in: Option<PathBuf> = None;
     let mut positional = Vec::new();
     let mut it = args;
     while let Some(arg) = it.next() {
@@ -1566,8 +1581,8 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
             // Locals rather than `Args` fields, for `--list-sets`'s reason:
             // neither is a run, and both are answered below once the whole
             // command line has been seen, so `--store` may be on either side.
-            "--bundle" => bundle = Some(value_for("--bundle", &mut it)?),
-            "--unbundle" => unbundle = Some(PathBuf::from(value_for("--unbundle", &mut it)?)),
+            "--package" => package = Some(value_for("--package", &mut it)?),
+            "--take-in" => take_in = Some(PathBuf::from(value_for("--take-in", &mut it)?)),
             "--save-set" => args_out.save_set = Some(value_for("--save-set", &mut it)?),
             "--load-set" => args_out.load_set = Some(value_for("--load-set", &mut it)?),
             "--record-session" => {
@@ -1610,14 +1625,14 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
     // a fixed order rather than refused as a pair: each of the three prints and
     // stops, so the only thing a second one could change is which answer is
     // printed, and none of them is a run whatever the other says.
-    if let Some(id) = bundle {
-        return Ok(ParseOutcome::Bundle {
+    if let Some(id) = package {
+        return Ok(ParseOutcome::Package {
             store: args_out.store,
             id,
         });
     }
-    if let Some(file) = unbundle {
-        return Ok(ParseOutcome::Unbundle {
+    if let Some(file) = take_in {
+        return Ok(ParseOutcome::TakeIn {
             store: args_out.store,
             file,
         });
@@ -2570,10 +2585,10 @@ fn listed_sets_at(root: &std::path::Path) -> Result<String, String> {
 
 /// **One Set, with every source it names inlined, as the text to print.**
 ///
-/// **A bundle goes to standard output**, which is what this returning a
+/// **A package goes to standard output**, which is what this returning a
 /// `String` is: it is a file you *send somebody* — one self-contained patch
 /// that loads in a store which has never held the material — so it belongs
-/// where `karakuri-cli --bundle night01 > night01.kbset` puts it. A
+/// where `karakuri-cli --package night01 > night01.kbset` puts it. A
 /// store directory would need a naming rule of its own for it, and a second
 /// copy of a Set sitting beside the Set is a second answer to which of them is
 /// the file.
@@ -2586,9 +2601,12 @@ fn listed_sets_at(root: &std::path::Path) -> Result<String, String> {
 /// **Or an authoring file, and that is one flag rather than two.** ADR-0229
 /// part 4 settles that packaging is *"one operation, two moments"* — loading an
 /// authoring file *is* packaging it, and packaging for distribution is the same
-/// resolution done ahead of time — so `--bundle` grew the other moment instead
+/// resolution done ahead of time — so the flag grew the other moment instead
 /// of a second flag beside it, and `docs/manual/operations.html` keeps the one
-/// row it always had. **Which of the two is decided by the extension**, on
+/// row it always had. And it is called packaging because of exactly that: the
+/// half that takes a `.kset` resolves, stores and writes, so an export is only
+/// one of the two things this flag does — see [`ParseOutcome::Package`].
+/// **Which of the two is decided by the extension**, on
 /// exactly the terms ADR-0231 made it load-bearing for: a value ending in
 /// `.kset` is a path to an authoring file, and anything else is an id in the
 /// store. Nothing else could decide it — an id and a relative path are both
@@ -2599,9 +2617,9 @@ fn listed_sets_at(root: &std::path::Path) -> Result<String, String> {
 /// refuses to.** Resolving is a *write*: each part is read from disk, hashed
 /// and put in the store as an artifact, so the store has to exist by the time
 /// the first one lands, and establishing the layout under a root an operator
-/// named is what every other writing path here does — see [`unbundled_file`].
+/// named is what every other writing path here does — see [`taken_in_file`].
 /// The id half is still a pure read and still leaves nothing behind.
-fn bundled_set(root: &std::path::Path, named: &str) -> Result<String, String> {
+fn packaged_set(root: &std::path::Path, named: &str) -> Result<String, String> {
     let lines = if named.ends_with(setfile::AUTHORING_SUFFIX) {
         let store = karakuri_store::store::Store::open(root)
             .map_err(|e| format!("store `{}`: {e}", root.display()))?;
@@ -2609,7 +2627,7 @@ fn bundled_set(root: &std::path::Path, named: &str) -> Result<String, String> {
     } else {
         if !root.exists() {
             return Err(format!(
-                "no store at `{}`, so there is no set `{named}` to bundle — check `--store`",
+                "no store at `{}`, so there is no set `{named}` to package — check `--store`",
                 root.display()
             ));
         }
@@ -2623,17 +2641,40 @@ fn bundled_set(root: &std::path::Path, named: &str) -> Result<String, String> {
         .collect())
 }
 
-/// **A bundle somebody sent you, into this store**, and the report of what
+/// **A Set file somebody sent you, into this store**, and the report of what
 /// happened.
 ///
-/// The store *is* opened where it is not there, unlike [`bundled_set`]: this is
-/// a write, and establishing the layout under a root an operator named is what
-/// every other writing path here does.
-fn unbundled_file(root: &std::path::Path, file: &std::path::Path) -> Result<String, String> {
-    let lines = karakuri_store::ndjson::read(file)
-        .map_err(|e| format!("reading `{}`: {e}", file.display()))?;
+/// **Both of a Set's forms, and the extension is the whole of what tells them
+/// apart** — [`packaged_set`]'s rule, read from the other end, and ADR-0231's.
+/// A `.kbset` is already resolved and carries its own sources, so it is read and
+/// taken in as it stands. A `.kset` is the authoring form: it names its parts by
+/// relative path, so it goes through `setfile::resolve` first — behind the same
+/// wall, refusing the same escapes, absolute paths, `..` and symlinks alike.
+///
+/// **Resolved *and* inlined rather than resolved alone**, which is
+/// `setfile::bundle_authored`, so that taking a `.kset` in lands the same store
+/// as packaging it and taking the result in. `setfile::unbundle` writes a
+/// metadata card for each source the lines carry; handing it resolved lines with
+/// nothing inlined would file the Set and leave every artifact cardless — one
+/// operation reaching two different stores by two routes, which is the
+/// disagreement a second spelling always is.
+///
+/// The store *is* opened where it is not there, unlike [`packaged_set`]'s id
+/// half: this is a write, and establishing the layout under a root an operator
+/// named is what every other writing path here does.
+fn taken_in_file(root: &std::path::Path, file: &std::path::Path) -> Result<String, String> {
     let store = karakuri_store::store::Store::open(root)
         .map_err(|e| format!("store `{}`: {e}", root.display()))?;
+    let named = file
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default();
+    let lines = if named.ends_with(setfile::AUTHORING_SUFFIX) {
+        setfile::bundle_authored(&store, file)?
+    } else {
+        karakuri_store::ndjson::read(file)
+            .map_err(|e| format!("reading `{}`: {e}", file.display()))?
+    };
     setfile::unbundle(&store, &lines)
 }
 
@@ -6933,8 +6974,8 @@ mod tests {
             Ok(ParseOutcome::Run(args)) => Ok(*args),
             Ok(ParseOutcome::Help) => panic!("expected Args, got --help"),
             Ok(ParseOutcome::ListSets(_)) => panic!("expected Args, got --list-sets"),
-            Ok(ParseOutcome::Bundle { .. }) => panic!("expected Args, got --bundle"),
-            Ok(ParseOutcome::Unbundle { .. }) => panic!("expected Args, got --unbundle"),
+            Ok(ParseOutcome::Package { .. }) => panic!("expected Args, got --package"),
+            Ok(ParseOutcome::TakeIn { .. }) => panic!("expected Args, got --take-in"),
             Err(e) => Err(e),
         }
     }
@@ -6974,38 +7015,38 @@ mod tests {
                      default material and open a window to print a directory"
                 ),
                 Ok(ParseOutcome::Help) => panic!("{spelling:?} came back as --help"),
-                Ok(ParseOutcome::Bundle { .. }) | Ok(ParseOutcome::Unbundle { .. }) => {
-                    panic!("{spelling:?} came back as a bundle")
+                Ok(ParseOutcome::Package { .. }) | Ok(ParseOutcome::TakeIn { .. }) => {
+                    panic!("{spelling:?} came back as a transfer")
                 }
                 Err(e) => panic!("{spelling:?} was refused: {e}"),
             }
         }
     }
 
-    /// **Neither `--bundle` nor `--unbundle` is a run**, and the type says so
+    /// **Neither `--package` nor `--take-in` is a run**, and the type says so
     /// for [`ParseOutcome::ListSets`]'s reason: there is no [`Args`] on either
     /// path, so the compile, the deck, the window and the adapter request are
-    /// unreachable rather than merely skipped. `--unbundle` does reach the
+    /// unreachable rather than merely skipped. `--take-in` does reach the
     /// checker — that is how a metadata card gets written — and the check pass
     /// needs no device.
     ///
     /// **`--store` on either side of each**, because an operator types the
-    /// flags in whatever order they think of them, and a bundle read out of the
-    /// default store when `--store` was given would be a bundle of the wrong
+    /// flags in whatever order they think of them, and a Set packaged out of the
+    /// default store when `--store` was given would be a package of the wrong
     /// library.
     #[test]
-    fn bundle_and_unbundle_print_and_are_never_a_run() {
+    fn package_and_take_in_print_and_are_never_a_run() {
         for spelling in [
-            vec!["--bundle", "night01", "--store", "/tmp/library"],
-            vec!["--store", "/tmp/library", "--bundle", "night01"],
+            vec!["--package", "night01", "--store", "/tmp/library"],
+            vec!["--store", "/tmp/library", "--package", "night01"],
         ] {
             match parse_args_from(spelling.iter().map(|s| s.to_string())) {
-                Ok(ParseOutcome::Bundle { store, id }) => {
+                Ok(ParseOutcome::Package { store, id }) => {
                     assert_eq!(store, PathBuf::from("/tmp/library"), "{spelling:?}");
                     assert_eq!(id, "night01", "{spelling:?}");
                 }
                 Ok(ParseOutcome::Run(_)) => panic!(
-                    "{spelling:?} came back as a run: writing a bundle to stdout would then \
+                    "{spelling:?} came back as a run: writing a package to stdout would then \
                      compile material and open a window to do it"
                 ),
                 other => panic!(
@@ -7015,13 +7056,13 @@ mod tests {
             }
         }
         for spelling in [
-            vec!["--unbundle", "sent.ndjson", "--store", "/tmp/library"],
-            vec!["--store", "/tmp/library", "--unbundle", "sent.ndjson"],
+            vec!["--take-in", "sent.kbset", "--store", "/tmp/library"],
+            vec!["--store", "/tmp/library", "--take-in", "sent.kbset"],
         ] {
             match parse_args_from(spelling.iter().map(|s| s.to_string())) {
-                Ok(ParseOutcome::Unbundle { store, file }) => {
+                Ok(ParseOutcome::TakeIn { store, file }) => {
                     assert_eq!(store, PathBuf::from("/tmp/library"), "{spelling:?}");
-                    assert_eq!(file, PathBuf::from("sent.ndjson"), "{spelling:?}");
+                    assert_eq!(file, PathBuf::from("sent.kbset"), "{spelling:?}");
                 }
                 Ok(ParseOutcome::Run(_)) => panic!(
                     "{spelling:?} came back as a run: taking a file into the store would \
@@ -7042,8 +7083,8 @@ mod tests {
             Ok(ParseOutcome::Run(_)) => "a run".to_string(),
             Ok(ParseOutcome::Help) => "--help".to_string(),
             Ok(ParseOutcome::ListSets(_)) => "--list-sets".to_string(),
-            Ok(ParseOutcome::Bundle { .. }) => "--bundle".to_string(),
-            Ok(ParseOutcome::Unbundle { .. }) => "--unbundle".to_string(),
+            Ok(ParseOutcome::Package { .. }) => "--package".to_string(),
+            Ok(ParseOutcome::TakeIn { .. }) => "--take-in".to_string(),
             Err(e) => format!("a refusal: {e}"),
         }
     }
@@ -7167,8 +7208,9 @@ mod tests {
         );
     }
 
-    /// **`--bundle` takes a `.kset` in and packages it**, which is the other
-    /// moment of the one operation this flag already was.
+    /// **`--package` takes a `.kset` in and packages it**, which is the other
+    /// moment of the one operation this flag already was — and the moment the
+    /// flag is now named for.
     ///
     /// What is being checked here is the *route* and not the resolution — that
     /// is `karakuri-environment`'s, tested there — so this asserts the two
@@ -7181,7 +7223,7 @@ mod tests {
     /// half: resolving is a write, so a `--store` an operator named has to
     /// exist by the time the first artifact lands.
     #[test]
-    fn bundle_takes_an_authoring_file_in_and_packages_it() {
+    fn package_takes_an_authoring_file_in_and_packages_it() {
         let dir = tempfile::tempdir().expect("tempdir");
         let l1 = "proc ring { kind L1 }\n";
         let l4 = "proc points { kind L4 }\n";
@@ -7197,7 +7239,7 @@ mod tests {
         .expect("write");
 
         let root = dir.path().join("store");
-        let said = bundled_set(&root, kset.to_str().expect("utf-8")).expect("the packaging");
+        let said = packaged_set(&root, kset.to_str().expect("utf-8")).expect("the packaging");
 
         assert!(
             !said.contains("\"t\":\"part\""),
@@ -7230,8 +7272,108 @@ mod tests {
         // **And an id is still an id.** The extension is the whole of what
         // tells the two apart, so a value without one is looked up in the store
         // and says so when it is not there.
-        let refused = bundled_set(&root, "night").expect_err("no set is filed under that id");
+        let refused = packaged_set(&root, "night").expect_err("no set is filed under that id");
         assert!(refused.contains("night"), "{refused}");
+    }
+
+    /// **`--take-in` takes both of a Set's forms**, and the extension is what
+    /// says which — the same sentence [`packaged_set`] reads, from the other
+    /// end.
+    ///
+    /// A `.kbset` is already resolved and is taken in as it stands; that is what
+    /// `karakuri-environment`'s own tests cover. What only this file decides is
+    /// the `.kset` half: a value ending in `.kset` is resolved against its own
+    /// directory first and then taken in, so an operator who was sent an
+    /// authoring file beside its parts does not have to package it to themselves
+    /// before they can keep it.
+    ///
+    /// **And it lands the same store as packaging it would**, which is why the
+    /// route is `bundle_authored` and not `resolve` alone: the artifacts are
+    /// there, the Set is filed under the id the file carries, and each source
+    /// has the metadata card a take-in writes.
+    #[test]
+    fn take_in_resolves_an_authoring_file_and_then_takes_it_in() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        // Sources that actually compile, because a take-in runs the checker to
+        // write a metadata card and a source it will not compile is stored
+        // without one.
+        let l1 = r#"
+proc ring {
+  kind     L1
+  topology points
+  capacity [1024, 262144] = 4096
+
+  emit position
+
+  element {
+    position = vec3(cos(t), sin(t), 0.0);
+  }
+}
+"#;
+        let l4 = r#"
+proc points {
+  kind  L4
+  blend additive
+
+  consumes position
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    point_size = 4.0;
+  }
+
+  fragment {
+    color = vec4(1.0, 1.0, 1.0, 1.0);
+  }
+}
+"#;
+        std::fs::write(dir.path().join("l1.kir"), l1).expect("write");
+        std::fs::write(dir.path().join("l4.kir"), l4).expect("write");
+        let kset = dir.path().join("night.kset");
+        std::fs::write(
+            &kset,
+            "{\"t\":\"set\",\"id\":\"night\",\"v\":1}\n\
+             {\"t\":\"part\",\"layer\":\"L1\",\"path\":\"l1.kir\"}\n\
+             {\"t\":\"part\",\"layer\":\"L4\",\"path\":\"l4.kir\"}\n",
+        )
+        .expect("write");
+
+        let root = dir.path().join("store");
+        let said = taken_in_file(&root, &kset).expect("the take-in");
+        assert!(
+            said.contains("`night`") && said.contains("2 sources stored"),
+            "the report does not say what was taken in: {said}"
+        );
+        assert!(
+            said.contains("2 metadata cards written"),
+            "a take-in writes a card per source, whichever form it came in: {said}"
+        );
+
+        let store = karakuri_store::store::Store::open(&root).expect("store");
+        assert!(
+            store
+                .list_sets()
+                .expect("sets")
+                .iter()
+                .any(|e| e.id == "night"),
+            "the set is not filed under the id the file carries"
+        );
+        for source in [l1, l4] {
+            let hash = karakuri_store::hash::Hash::of(source.as_bytes());
+            assert!(
+                store.get_artifact(&hash).is_ok(),
+                "the store does not hold the part the authoring file named"
+            );
+        }
+
+        // **And the id in the file is still somebody else's word.** Taking the
+        // same authoring file in twice is the refusal a `.kbset` gets, for the
+        // same reason: nothing here was typed by the operator.
+        let refused = taken_in_file(&root, &kset).expect_err("the id is taken");
+        assert!(
+            refused.contains("already in this store"),
+            "a second take-in overwrote a Set: {refused}"
+        );
     }
 
     // -- edges -----------------------------------------------------------

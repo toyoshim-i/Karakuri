@@ -94,7 +94,8 @@ pub enum StoreError {
     /// carries time, or declares an artifact. It does neither. It says exactly
     /// what a `slot` says and has not been resolved yet, and the fix is to
     /// resolve it — `karakuri_environment::setfile`'s `resolve`, or
-    /// `karakuri-cli --bundle FILE.kset`.
+    /// `karakuri-cli --package FILE.kset` (or `--take-in FILE.kset`, which
+    /// resolves it the same way and keeps the result).
     ///
     /// **What this makes structural is the extension's promise.** `.kbset`
     /// asserts that reading the file resolves nothing against the filesystem

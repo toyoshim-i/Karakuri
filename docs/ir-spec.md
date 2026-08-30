@@ -1988,12 +1988,12 @@ without either appearing in the file.
   `{"t":"src","hash":"…","line":0,"s":"…"}` records — **one run per artifact**, however
   many `slot` records reference it, because a reader keys `src` by hash; and appended
   after the records that were already there, the file's own order otherwise untouched.
-  **`--bundle ID` writes one**, to standard output, and refuses whole where the store
+  **`--package ID` writes one**, to standard output, and refuses whole where the store
   cannot supply one of the sources: a bundle short of one procedure is a file that looks
   self-contained and is not. The run is the source `split` on `\n` and the reader
   rejoins it the same way, which is exactly invertible — so an artifact that travels
   through a bundle comes back byte for byte and keeps its address, where dropping a
-  trailing newline would not. **`--unbundle FILE` reads one back into a store**, and what
+  trailing newline would not. **`--take-in FILE` reads one back into a store**, and what
   it guarantees is that check: every inlined run must hash to the address its `slot`
   record names, or the file is refused with nothing stored. Without it a `src` run would
   be a way to file arbitrary text under an address the receiving operator recognises,
@@ -2228,10 +2228,11 @@ a swap, where a neighbour that has gone missing or changed would fail after the 
 begun. A swap that can partially fail is not a swap.
 
 **Implemented.** `karakuri-environment`'s `setfile::resolve` is the resolver and its own wall;
-`--bundle FILE.kset` is the route through the command line — the packaging step end to end,
-resolution followed by the same inlining `--bundle ID` does, to standard output. It is the flag
-that already existed rather than a second one beside it, because *Send a Set to somebody, and
-take one in* is the operation both moments belong to. `Store::write_set` refuses a `part` by
+`--package FILE.kset` is the route through the command line — the packaging step end to end,
+resolution followed by the same inlining `--package ID` does, to standard output. `--take-in
+FILE.kset` is the other moment of it: the same resolution, filed into this store rather than
+written out. Both are flags that already existed rather than a third beside them, because *Send a
+Set to somebody, and take one in* is the operation every one of these moments belongs to. `Store::write_set` refuses a `part` by
 name, which is where a `.kset` and a store are held apart, and nothing in `sets/` can be one:
 an id is the file name with `.kbset` stripped off it, so a `.kset` dropped in there has no id
 and can be asked for by nobody.
