@@ -138,11 +138,20 @@
 //!
 //! # Where a payload is not decided
 //!
-//! Four rows name an operation whose payload cannot be written down without a
-//! decision nobody has made — [`Operation::MoveBoundary`],
-//! [`Operation::WalkHistory`], [`Operation::WatchFiles`] and
-//! [`Operation::RouteFrame`] — and one third of a fifth, the camera arm of
-//! [`Property`]. They carry [`Undecided`], which is a marker and not a
+//! Twelve rows name an operation whose payload cannot be written down without
+//! a decision nobody has made, and one third of a thirteenth, the camera arm
+//! of [`Property`]. Four have been here longest —
+//! [`Operation::MoveBoundary`], [`Operation::WalkHistory`],
+//! [`Operation::WatchFiles`] and [`Operation::RouteFrame`] — and **eight
+//! arrived at once, which is two whole bays being specified for the first
+//! time**: the master chain's three effects ([`Operation::SetFeedback`],
+//! [`Operation::SetBloom`], [`Operation::SetRgbShift`]), whose parameters
+//! cannot be named while the chain itself does not exist, and the sequencer's
+//! five ([`Operation::SetStep`], [`Operation::SetLaneMute`],
+//! [`Operation::PointLane`], [`Operation::SetPatternGrid`] and
+//! [`Operation::SelectPattern`]), which wait on a pattern — authored state
+//! nothing in this program holds. They carry [`Undecided`], which is a marker
+//! and not a
 //! placeholder: it says *this operation exists and what it acts on is an open
 //! question*, and it is greppable. Nothing here guesses, because nothing in
 //! this repository draws or declares something that claims an answer exists
@@ -159,8 +168,8 @@ use std::path::PathBuf;
 /// says so.
 ///
 /// **Not a `TODO` and not an empty payload.** An empty payload reads as *this
-/// operation acts on nothing*, which is a claim, and a wrong one for all five
-/// of these. This reads as *what this acts on is open*, which is true, and it
+/// operation acts on nothing*, which is a claim, and a wrong one for every
+/// one of these. This reads as *what this acts on is open*, which is true, and it
 /// is a type — so the day the decision is made, replacing it is a compile
 /// error at every construction site rather than a search.
 ///
@@ -932,6 +941,60 @@ operations! {
     /// holds.
     SetMasterOut { out: f32 } => "Master out",
 
+    /// **The operator moving the feedback effect's parameters.** The chain is
+    /// fixed and that is what decides this row and the two below it: it is
+    /// presets, all of them loaded, in the order the console draws them —
+    /// feedback, then bloom, then rgb shift — between [`Operation::SetMasterOut`]
+    /// above and [`Operation::SetExposure`] below. Nothing here edits the
+    /// chain, switches one effect off or adds an effect somebody wrote; those
+    /// are controls the panel does not draw and decisions nobody has taken.
+    ///
+    /// **[`Undecided`] twice over, which is what makes this the sharpest of
+    /// the three.** No parameter of it can be written down while the chain
+    /// does not exist —
+    /// `docs/adr/0227-a-pattern-and-a-master-chain-setting-are-library-data-in-two-tiers.md`
+    /// declines to name a chain's contents for exactly that reason, *"a record
+    /// kept for a thing that does not exist would be inventing its
+    /// contents"* — and feedback has a second question the other two do not:
+    /// **which cut of the previous frame it reads**. A Set's output, the raw
+    /// frame the mix wrote, or the frame as it stands after some effect in
+    /// this chain are three different things and nothing here can say which,
+    /// and it is not a control that is missing: a cut that is read has to be
+    /// held, so naming one recomposes the pipeline rather than setting a
+    /// value on it.
+    SetFeedback { params: Undecided } => "Feedback",
+
+    /// The frame's bright parts spreading into what is beside them, on
+    /// [`Operation::SetFeedback`]'s terms: a preset, always present, and what
+    /// this names is the operator moving its parameters.
+    ///
+    /// **It runs in linear HDR, before the one tone map**, which is why it is
+    /// on this side of [`Operation::SetTonemap`] rather than the other — what
+    /// it blooms from is unbounded light, where the same effect after the
+    /// transfer would bloom from a displayable approximation of it
+    /// (`docs/principles/0064-the-pipeline-is-linear-hdr-and-srgb-is-encoded-once-at-final-output.md`).
+    /// It reads what it is handed, so the level it blooms from is
+    /// [`Operation::SetMasterOut`]'s and not [`Operation::SetExposure`]'s,
+    /// which is ADR-0224's two multiplications seen from between them.
+    ///
+    /// [`Undecided`] because the chain does not exist and no parameter of it
+    /// is named anywhere — the row above carries the argument.
+    SetBloom { params: Undecided } => "Bloom",
+
+    /// The three channels sampled apart, so an edge fringes. The last of the
+    /// three and on [`Operation::SetFeedback`]'s terms, so it is the one the
+    /// other two are seen through.
+    ///
+    /// **The console drawing a dash here where the other two carry a number
+    /// is an effect nobody has given a value, not a fourth state**: the chain
+    /// is every preset, always, so there is no per-effect switch for a dash to
+    /// be the off position of. Written down because an empty payload here
+    /// would be that reading — *this acts on nothing* — and it is the one the
+    /// manual refuses at this row.
+    ///
+    /// [`Undecided`] for the row above's reason.
+    SetRgbShift { params: Undecided } => "RGB shift",
+
     /// The transfer from unbounded linear HDR to something displayable.
     ///
     /// Names the operator; it does not carry the level going into it, which is
@@ -961,6 +1024,118 @@ operations! {
     /// row on the page**, so it is not here — see the report.
     SetExposure { exposure: f32 } => "Exposure",
 
+    // ----- The sequencer ------------------------------------------------
+    //
+    // **A lane is a fifth route into this vocabulary and not a binding**
+    // (`docs/adr/0222-a-sequencer-lane-is-a-fifth-route-and-not-a-binding.md`),
+    // which is why this section is five rows and not more: a lane emits
+    // operations on the beat the way the pointer, the keys, a map and a model
+    // emit them, so the three lanes the console draws first are deck faders
+    // emitting [`Operation::SetOpacity`] and the fourth writes a Set
+    // parameter, which is [`Operation::WriteParam`]. **A lane needs no new
+    // operation to drive anything.** These five are the other half — what a
+    // hand does to the pattern — and every one of them carries [`Undecided`]
+    // because **nothing in this program holds a pattern**. Where one is kept
+    // is settled (ADR-0227: library data in two tiers, on the arrangement's
+    // shape) and what one *is* is not, so a step, a lane and a target have no
+    // spelling for an operation to carry.
+
+    /// A step of one lane, on or off, heard the next time the playhead reaches
+    /// that step rather than when it was asked for.
+    ///
+    /// **`SetStep` and not `ToggleStep`**, because there are no toggles in
+    /// this vocabulary and the reason is at the top of this file: a toggle is
+    /// an affordance built over two operations by whoever draws it, and a map
+    /// with a button per direction has to be able to say *this step is on* and
+    /// mean it. The manual's heading is the operator's word for the control
+    /// and the title is copied from it verbatim, which is all a title is for.
+    ///
+    /// [`Undecided`], because the payload is which step of which lane of which
+    /// pattern, and this row *"names a step and cannot yet say what it is a
+    /// step of"*. **The grid under it is no new clock** — a step is the beat
+    /// clock subdivided and a pure function of `Oscillator::beats`, so
+    /// correcting the tempo changes the rate from now on without moving a beat
+    /// that has already happened (ADR-0222) — so what is open is the address
+    /// and the state it is set to, and nothing about time.
+    SetStep { step: Undecided } => "Toggle a step",
+
+    /// The pattern is kept and drives nothing, and the control is the lane's
+    /// own label.
+    ///
+    /// **It is not [`Operation::TakeParamBack`], and ADR-0222's consequence
+    /// saying that it already is does not hold.** That operation names a
+    /// `deck` and a [`ParamAt`] — a parameter *inside that deck's Set* —
+    /// where three of the four lanes the console draws are deck faders, which
+    /// are no Set's. It is the same argument that record used to kill the
+    /// binding reading in its own body, *"there is no binding on a deck fader
+    /// anywhere in the engine"*, so it reaches one lane in four and an
+    /// operation that reaches one lane in four is not this row. The mute is a
+    /// lane's, addressed the way a lane is addressed.
+    ///
+    /// [`Undecided`], because what that address is spelled as waits on the
+    /// same pattern the row above waits on. **Not a toggle**, for
+    /// [`Operation::SetStep`]'s reason.
+    SetLaneMute { lane: Undecided } => "Mute a lane",
+
+    /// The foot's `+ lane`, and **the target is the whole of what is being
+    /// added**: a lane with nothing to drive emits nothing, so there is no
+    /// moment at which a lane exists and its target does not.
+    ///
+    /// What a target may *be* is answered by the rest of this vocabulary —
+    /// anything on it a lane can emit — which is why the console draws three
+    /// deck faders and a Set parameter side by side and calls all four lanes.
+    /// **What a target is spelled as is not answered**: a deck fader is a slot
+    /// number and a Set parameter is a [`NodeAt`] and a [`ParamAt`], and
+    /// nothing here spells both. So [`Undecided`], and picking one of the two
+    /// would be an operation that reaches one lane in four — this section's
+    /// own failure, one row up.
+    ///
+    /// The panel draws no control for re-pointing a lane that already exists,
+    /// so this row is where a target is chosen; if it turns out to be two
+    /// operations it will be because a control was drawn for the second.
+    PointLane { target: Undecided } => "Point a lane at what it drives",
+
+    /// The head's three pills — `16`, `1/8`, `2 bars` — and **they are not
+    /// three settings**: sixteen steps of an eighth apiece *is* two bars, so
+    /// any two of the three fix the third, and the panel shows all three
+    /// because an operator reads a pattern in whichever of them they are
+    /// counting in. A length and a subdivision is what this carries either
+    /// way, and which two a hand sets is a decision about the control rather
+    /// than about the operation.
+    ///
+    /// **[`Undecided`] although the manual says what it will carry**, and the
+    /// two do not disagree: a length and a subdivision are a *pattern's*, and
+    /// no pattern has a name for this to be of. This vocabulary names what an
+    /// operation acts on and never implies it — [`Operation::SelectDeck`]'s
+    /// rule, applied where there is not even a selection to imply — and a
+    /// subdivision would additionally be a list this crate has to own, on
+    /// [`Curve`]'s terms, that nothing anywhere holds yet.
+    ///
+    /// **An eighth at 128 BPM is 234 ms**, which is faster than the band
+    /// `docs/principles/0069-the-three-clocks-never-collapse-into-each-other.md`
+    /// writes the beat clock's rule for. ADR-0222 records that caveat rather
+    /// than waving it away, and this is the row a hand would first feel it
+    /// through, because it is the one that chooses the subdivision.
+    SetPatternGrid { grid: Undecided } => "Choose a pattern's steps and what a step is worth",
+
+    /// The bay head's `seq 1 · seq 2 · +`: which pattern the lanes are
+    /// reading. **The `+` is this same choice landing on an empty one** rather
+    /// than a second operation — the arrangement pill is the same shape, and
+    /// it is why [`Operation::ResetArrangement`] is the special case of
+    /// putting a saved one back rather than a control of its own.
+    ///
+    /// [`Undecided`], because a pattern has no identity anywhere: ADR-0227
+    /// settles that one is kept under the store under a name the operator
+    /// typed, and leaves what the file is called and what it holds to the
+    /// record that has something to serialise.
+    ///
+    /// **Keeping a pattern and putting a saved one back are not rows on the
+    /// page**, so they are not variants here either: the console draws no
+    /// control that saves one. They will arrive the way
+    /// [`Operation::SaveArrangement`] and [`Operation::RestoreArrangement`]
+    /// did — specified on the page, drawn on the console, built after that.
+    SelectPattern { pattern: Undecided } => "Choose which pattern the sequencer plays",
+
     // ----- Inside a Set -------------------------------------------------
 
     /// **The sharpest gap**: a model can rewrite a whole procedure and cannot
@@ -972,10 +1147,25 @@ operations! {
     ///
     /// `signal` is a name on the bus (`energy`, `beat`, `band3`, `noise`) and
     /// is a `String` rather than a list, because that bus is open by design:
-    /// `docs/principles/0009-what-a-binding-can-express-is-not-baked-into-the-engine.md`,
-    /// and a step sequencer is planned as one more name on it. The noise
-    /// generator's own parameters, which `--bind` also takes, describe the
-    /// *source* rather than the attachment and are not carried here.
+    /// `docs/principles/0009-what-a-binding-can-express-is-not-baked-into-the-engine.md`.
+    ///
+    /// **A step sequencer is not one more name on that bus, and this
+    /// documentation said it was planned as one.** ADR-0222 surveyed the bay
+    /// before drawing it and found both halves of that plan false: the bus is
+    /// stateless by construction — every value on it is a pure function of the
+    /// local oscillator's `t` and `bpm`, and *"nothing seeded lives here"* —
+    /// where a pattern is authored state; and it is keyed by name alone with
+    /// one `Signals` per session, so two lanes sourced from `seq 1` with
+    /// different targets would sample the same name in the same frame and get
+    /// the same value, which is not a sequencer. **A lane is a fifth route
+    /// into this vocabulary**, emitting operations on the beat the way the
+    /// other four surfaces do, which is what the sequencer's five rows above
+    /// are and why none of them is a binding
+    /// (`docs/adr/0222-a-sequencer-lane-is-a-fifth-route-and-not-a-binding.md`).
+    ///
+    /// The noise generator's own parameters, which `--bind` also takes,
+    /// describe the *source* rather than the attachment and are not carried
+    /// here.
     AttachSignal {
         deck: u8,
         param: ParamAt,
@@ -987,6 +1177,12 @@ operations! {
 
     /// Stop a signal driving a knob without losing the binding. **Nothing does
     /// this today**; it is the second rule's other half.
+    ///
+    /// **And it is not the sequencer's lane mute**, which ADR-0222's
+    /// consequences say it already is: this names a parameter inside one
+    /// deck's Set and three of the four lanes the console draws are deck
+    /// faders, which are no Set's. [`Operation::SetLaneMute`] is that row, and
+    /// carries the argument.
     TakeParamBack { deck: u8, param: ParamAt } => "Take a parameter back",
 
     /// **The one operation addressed by name at both ends**, which is

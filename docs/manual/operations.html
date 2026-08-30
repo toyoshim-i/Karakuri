@@ -69,7 +69,7 @@
       second copy of it here would be a list that goes stale.
     </p>
     <p>
-      <strong>55 operations, and 53 of the 236 ways in exist.</strong> Eight of
+      <strong>63 operations, and 53 of the 268 ways in exist.</strong> Eight of
       them are the console's own shape &mdash; moving a boundary, folding a bay
       or a pane, bringing one back, solo, and the three that reset, keep and put
       back an arrangement &mdash; and nine of their thirty-two routes exist: the
@@ -114,8 +114,8 @@
       across a switchable list of sinks. One entry of that list is not the list,
       so the control performs part of what the row names and the badge would be
       an over-claim.
-      Thirty-seven more are designed and out of reach, most of them in bays nothing
-      draws yet, and three the panel cannot reach at all. Where a badge names a
+      Beyond those fifteen, 45 more are designed and out of reach, most of them in
+      bays nothing draws yet, and three the panel cannot reach at all. Where a badge names a
       region, that is where the control lives in
       <a href="console.html">the console</a>; three name none yet, and naming one
       is a change to this specification rather than a note on it.
@@ -139,6 +139,17 @@
       rather than the first. Its other three columns are empty and that is the
       state rather than an omission &mdash; no key is bound to it, no map target
       names it and no tool publishes it.
+      <strong>Eight rows are new and nothing reaches any of them yet</strong>:
+      the master chain's three effects, and the five things an operator does to
+      a pattern. They are the two bays <a href="console.html">the console</a>
+      draws and this page named no operation for at all, which is the one way a
+      bay can be missing from a count of badges &mdash; a bay with no rows
+      cannot have a <em>designed</em> one, so it read as finished by not being
+      asked. Each names where its control lives and carries nothing in the
+      other three columns, and what they wait on is not the same thing:
+      <em>Feedback</em> waits on which cut of the previous frame it reads, the
+      sequencer's five on a pattern, which nothing in this program holds, and
+      the other two effects on the chain that would run them.
       The counts
       here are read off the code rather than estimated, and they are what the
       Interface milestone is for.
@@ -404,6 +415,72 @@
         </div>
       </div>
       <div class="op">
+        <div class="op-head"><h3>Feedback</h3><span class="op-when ">immediate</span></div>
+        <p><strong>The chain is fixed, and that decides what these three rows are.</strong> The
+        master chain is presets, all of them loaded, in the order
+        <a href="console.html">the console</a> draws them &mdash; feedback, then bloom, then rgb
+        shift, between the <em>Master out</em> above and the <em>Exposure</em> below. Nothing here
+        edits the chain, switches one effect off or adds an effect somebody wrote: those are
+        controls the panel does not draw and decisions nobody has taken. What each of the three
+        names is <strong>the operator moving that effect's parameters</strong> &mdash; the figure
+        the bay draws beside its name &mdash; and a finer surface than that is not this
+        milestone's. Where a chain an operator has set up is <em>kept</em> is settled and is not a
+        row here: it is library data in two tiers, on the same shape as a saved arrangement, with
+        the presets shipping beside the material and the operator's own under the store. What such
+        a file <em>contains</em> cannot be written down while the chain does not exist, which is
+        why no row here lists a parameter.</p>
+        <p><strong>Feedback is the exception, and what it waits on is an answer rather than a
+        control.</strong> Reading the previous frame is a cycle, and <strong>the previous frame is
+        not one thing</strong>: it could be a Set's output, the raw frame the mix wrote before
+        anything downstream touched it, or the frame as it stands after some effect in this chain.
+        So a feedback procedure has to <em>name which cut it reads</em>, and nothing in the
+        vocabulary can say that. <strong>A cut that is read has to be held</strong>, which is a
+        frame-sized target and a copy per frame &mdash; and holding every cut against the chance
+        that something reads one is the cost nobody would pay, so what this points at is the
+        selection <strong>recomposing the pipeline</strong>: a cut nothing reads is not retained,
+        and naming one adds the retention to the graph the way an edge adds a pass. Nothing builds
+        a graph that way today. This row is here because the bay draws the effect, and it is the
+        one row in the group whose badge is empty for a question rather than for want of work.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>master chain</b></span>
+          <span class="rt gap">key <b>&mdash;</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+        </div>
+      </div>
+      <div class="op">
+        <div class="op-head"><h3>Bloom</h3><span class="op-when ">immediate</span></div>
+        <p>The frame's bright parts spreading into what is beside them, on the terms the
+        <em>Feedback</em> row states: a preset, always present, and what this row names is the
+        operator moving its parameters. <strong>It runs in linear HDR, before the one tone
+        map</strong>, and that is the whole reason it sits on this side of the transfer &mdash;
+        what it blooms from is unbounded light, where the same effect after the tone mapper would
+        bloom from a displayable approximation of it. It reads what it is handed, so the level it
+        blooms from is the <em>Master out</em>'s and not the exposure's, which is what makes those
+        two levels two.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>master chain</b></span>
+          <span class="rt gap">key <b>&mdash;</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+        </div>
+      </div>
+      <div class="op">
+        <div class="op-head"><h3>RGB shift</h3><span class="op-when ">immediate</span></div>
+        <p>The three channels sampled apart, so an edge fringes. On the <em>Feedback</em> row's
+        terms again, and it is the last of the three, so it is the one the other two are seen
+        through. <strong>The console draws its figure as a dash where the other two carry a
+        number, and that is an effect nobody has given a value rather than a fourth
+        state</strong>: the chain is every preset, always, so there is no per-effect switch here
+        for a dash to be the off position of.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>master chain</b></span>
+          <span class="rt gap">key <b>&mdash;</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+        </div>
+      </div>
+      <div class="op">
         <div class="op-head"><h3>Tone map</h3><span class="op-when ">immediate</span></div>
         <p>The transfer from unbounded linear HDR to something displayable &mdash; clamp, Reinhard, ACES or AgX. The key cycles the four; a map or a model would name the one it wants.</p>
         <div class="rts">
@@ -423,6 +500,114 @@
           <span class="rt has">MIDI <b>cc &rarr; exposure</b></span>
           <span class="rt gap">MCP <b>&mdash;</b></span>
           <span class="rt has">CLI <b>--exposure</b></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>The sequencer</h2>
+    <p class="lede">What an operator does to a pattern. What a lane does to a deck is already on this page.</p>
+    <div class="opgroup">
+      <div class="op">
+        <div class="op-head"><h3>Toggle a step</h3><span class="op-when ">immediate</span></div>
+        <p><strong>A lane is a fifth route into this page and not a binding</strong>, and that is
+        why this section is as short as it is. A lane emits operations on the beat the way the
+        pointer, the keys, a map and a model emit them &mdash; so the three lanes
+        <a href="console.html">the console</a> draws first are deck faders emitting
+        <em>Opacity</em>, which the mixer already constructs, and the fourth writes a Set
+        parameter, which is <em>Write a parameter</em>. <strong>A lane needs no new operation to
+        drive anything.</strong> What needed naming is the other half, and it is these five rows:
+        what a hand does to the pattern.</p>
+        <p>This one is the cell grid &mdash; a step of one lane is on or it is off, and the change
+        is heard the next time the playhead reaches that step rather than when you asked for it.
+        <strong>What it waits on is a pattern</strong>, which nothing in this program holds; that
+        is why the bay draws nothing below its head. Where a pattern is kept is settled &mdash;
+        library data in two tiers, presets shipping beside the material and the operator's own
+        under the store, on the same shape as a saved arrangement &mdash; and what a pattern
+        <em>is</em> is not, so this row names a step and cannot yet say what it is a step of.
+        <strong>The grid under it is no new clock</strong>: a step is the beat clock subdivided
+        and a pure function of the beat, so correcting the tempo changes the rate from now on
+        without moving a beat that has already happened.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>sequencer lane</b></span>
+          <span class="rt gap">key <b>&mdash;</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+        </div>
+      </div>
+      <div class="op">
+        <div class="op-head"><h3>Mute a lane</h3><span class="op-when ">immediate</span></div>
+        <p>The pattern is kept and drives nothing, and the control is the lane's own label &mdash;
+        so silencing a lane costs the row no width and the pattern nothing. <strong>It is not
+        <em>Take a parameter back</em></strong>, and the resemblance is worth refusing where
+        somebody would otherwise reach for it: that operation stops a signal driving a knob and it
+        names a deck and a parameter <em>inside that deck's Set</em>, where three of the four
+        lanes drawn are deck faders, which are no Set's. It could name the fourth lane and not the
+        other three, and an operation that reaches one lane in four is not this row. So the mute
+        is a lane's, addressed the way a lane is addressed, and what that spelling is waits on the
+        same pattern the row above waits on.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>lane label</b></span>
+          <span class="rt gap">key <b>&mdash;</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+        </div>
+      </div>
+      <div class="op">
+        <div class="op-head"><h3>Point a lane at what it drives</h3><span class="op-when ">immediate</span></div>
+        <p>The foot's <code>+ lane</code>, and <strong>the target is the whole of what is being
+        added</strong>: a lane with nothing to drive emits nothing, so there is no moment at which
+        a lane exists and its target does not. What a target may <em>be</em> is answered by this
+        page rather than by this bay &mdash; anything on it a lane can emit &mdash; which is why
+        the console draws three faders and a Set parameter side by side and calls all four lanes.
+        <strong>What a target is spelled as is not answered</strong>: a deck fader is a slot
+        number and a Set parameter is a node address, and nothing here spells both. The panel
+        draws no control for re-pointing a lane that already exists, so this row is where a target
+        is chosen; if it turns out to be two operations it will be because a control was drawn for
+        the second, which is the order everything else on this page arrived in.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>+ lane</b></span>
+          <span class="rt gap">key <b>&mdash;</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+        </div>
+      </div>
+      <div class="op">
+        <div class="op-head"><h3>Choose a pattern's steps and what a step is worth</h3><span class="op-when ">immediate</span></div>
+        <p>The head's three pills &mdash; <code>16</code>, <code>1/8</code>, <code>2 bars</code>
+        &mdash; and <strong>they are not three settings</strong>. Sixteen steps of an eighth apiece
+        <em>is</em> two bars, so any two of the three fix the third, and the panel shows all three
+        because an operator reads a pattern in whichever of them they are counting in. Which two a
+        hand sets is a decision about the control rather than about the operation: a length and a
+        subdivision is what it carries either way. <strong>An eighth at 128 BPM is 234
+        milliseconds</strong>, which is faster than the band the beat clock's rule was written for
+        &mdash; written here because it is this row's property and not the sequencer's in general,
+        and because a subdivision this row can choose is where it would first be felt.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>sequencer head</b></span>
+          <span class="rt gap">key <b>&mdash;</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+        </div>
+      </div>
+      <div class="op">
+        <div class="op-head"><h3>Choose which pattern the sequencer plays</h3><span class="op-when ">immediate</span></div>
+        <p>The bay head's <code>seq 1 &middot; seq 2 &middot; +</code>: which pattern the lanes
+        are reading. <strong>The <code>+</code> is this same choice landing on an empty one</strong>
+        rather than a second operation &mdash; the arrangement pill's <em>start a new one</em> is
+        the same shape, and it is why <em>Reset the arrangement</em> is the special case of putting
+        a saved one back rather than a control of its own. <strong>Keeping a pattern and putting a
+        saved one back are not rows here</strong>, and that is the state rather than an omission:
+        the console draws no control that saves one, and while where a pattern lives is settled,
+        what its file holds is not. They will arrive the way the arrangement's two did &mdash;
+        specified on this page, drawn on <a href="console.html">the console</a>, built after
+        that.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>bank pills</b></span>
+          <span class="rt gap">key <b>&mdash;</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
         </div>
       </div>
     </div>
@@ -819,7 +1004,7 @@
     <h2>What the gaps say</h2>
     <p>
       <strong>MIDI is the narrowest by a wide margin.</strong> It reaches
-      eight of these fifty-five operations, and it cannot express a node
+      eight of these 63 operations, and it cannot express a node
       address, a parameter name or an id &mdash; nor a bare number, which is
       why it reaches one half of the mask and not the other. A map line carries
       a slot number, a word out of a value list, or a range, and an angle is
@@ -840,9 +1025,9 @@
       different ways on two surfaces.
     </p>
     <p>
-      <strong>The keyboard's twenty designed rows are one program's keys waiting
+      <strong>The keyboard's nineteen designed rows are one program's keys waiting
       for another's.</strong> This column is the instrument's keyboard, and
-      twenty rows on it &mdash; across the transport, the decks, the mixer, the
+      nineteen rows on it &mdash; across the transport, the decks, the mixer, the
       library and the window &mdash; are reached by pressing a key today, in
       <code>karakuri-cli</code>, which is not the program the panel is in. That
       is a gap of a kind none of the others here are: nothing is undecided,
@@ -922,6 +1107,25 @@
       drew it, and the panel reaches all three rows now. It typed the name, which
       is what the other three surfaces still cannot do, so those columns are
       unchanged and empty for the reason above rather than for want of a control.
+    </p>
+    <p>
+      <strong>Two bays are drawn and reach nothing, and their rows are the
+      newest on this page.</strong> The master chain and the sequencer are
+      specified here for the first time, which is the order this repository
+      works in rather than an admission: a control is named on this page, drawn
+      on <a href="console.html">the console</a>, and built after that. What
+      separates these eight from the other unbuilt rows is that
+      <strong>none of them is waiting on a control</strong>. The chain's three
+      effects wait on the chain &mdash; <em>giving L5 a writable form</em> is
+      the console's phrase for what would have to exist, and nothing in the
+      engine folds one. The sequencer's five wait on a pattern, which is
+      authored state nothing in this program holds; where one is kept is
+      settled and what one holds is not. And <strong>feedback is the sharpest
+      of the eight</strong>, because it is not short of work at all: until
+      somebody says which cut of the previous frame it reads, and what holding
+      that cut costs, there is nothing to build, and a row drawn in this
+      specification and absent from the panel is what the milestone this page
+      meters cannot close over.
     </p>
     <p>
       <strong>The command line is the only way into most of what a Set is</strong>
