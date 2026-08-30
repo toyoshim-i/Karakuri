@@ -1736,7 +1736,22 @@ impl Readout {
 
     // -- the legend -----------------------------------------------------
 
-    fn print_legend(&mut self, budget_ms: Option<f32>, governed: &Report) {
+    /// **What this program is, said once at startup — and every line of it
+    /// derived.**
+    ///
+    /// `presets` and `store` are the two directories this run resolved, and
+    /// they are passed in rather than read here for the reason every other
+    /// number in this function is asked of the thing it is about: a legend
+    /// that described the search instead of printing its answer is exactly the
+    /// defect this function was repaired of, one paragraph along. See the
+    /// paragraph below for what that repair cost to find.
+    fn print_legend(
+        &mut self,
+        budget_ms: Option<f32>,
+        governed: &Report,
+        presets: Option<&karakuri_environment::places::Presets>,
+        store: &std::path::Path,
+    ) {
         self.panel.solve();
         let layout = self.panel.layout();
         let viewport = layout.viewport();
@@ -1750,6 +1765,35 @@ impl Readout {
              and it went on saying it while bay after bay drew one — which is what a \
              description kept beside the thing it describes is worth.",
             viewport.w, viewport.h
+        );
+        // **Where this run's data is, and both lines are what the resolution
+        // returned.** Not a sentence about how a presets root is looked for:
+        // the directory is printed, and the phrase beside it is
+        // `places::Found`'s own — so a candidate added, reordered or removed
+        // changes this line without anybody editing it. A legend that said
+        // *"the ones that ship with the program"* would be right until the day
+        // it was not, which is the whole of what the paragraph above is about.
+        match presets {
+            Some(presets) => println!(
+                "presets: {} — {}. that directory is the app-preset tier: what ships \
+                 with the program, written by nobody, and what a run with no paths on \
+                 the command line opens on.",
+                presets.dir.display(),
+                presets.found.how()
+            ),
+            // Said once, out loud, and it is this program's only occasion to
+            // say it: a run that needed the library for a default pair was
+            // refused before a window opened, so reaching here means the pair
+            // was given by hand and nothing is broken — the preset tier is
+            // simply empty.
+            None => println!("{}", karakuri_environment::places::no_preset_library()),
+        }
+        println!(
+            "store: {} — where the Library bay below reads Sets from, where this panel's \
+             arrangements are filed, and what `--store` moves. `karakuri-cli --store` names \
+             the same directory and the default is the same constant, which it now is rather \
+             than looks like: both ask `karakuri_environment::places::STORE`.",
+            store.display()
         );
         // **The cells, and the sentence this replaces was false.** It said C
         // and D had nothing behind them and named the number — *a deck of TWO
@@ -2257,8 +2301,8 @@ const SLOTS: usize = MAX_SLOTS;
 const ON_AIR: usize = 0;
 const ASKED_TO_PRIME: usize = 1;
 
-/// **The `.kir` pair this plays, and the whole of what the command line
-/// takes.**
+/// **The `.kir` pair this plays, and the whole of how an operator names
+/// material.**
 ///
 /// A Set is built from an L1 and an L4 — a geometry and a renderer — and
 /// `Set::build` takes exactly those two. **They are one Set, and the deck has
@@ -2272,9 +2316,29 @@ const ASKED_TO_PRIME: usize = 1;
 /// be a second answer to *how does an operator name material*, which is the
 /// failure this whole move exists to stop paying for
 /// ([P-0031](../../../docs/principles/0031-a-name-means-one-thing-across-the-system.md)).
-/// So this is two positional paths and nothing else: enough to pick what plays,
-/// and no vocabulary to disagree with. The day the two programs share one, it
-/// comes from a package both can reach and this goes.
+/// So **material is two positional paths and nothing else**: enough to pick
+/// what plays, and no vocabulary to disagree with. The day the two programs
+/// share one, it comes from a package both can reach and this goes.
+///
+/// # And the two flags are not a second material vocabulary
+///
+/// [`sources_from`] takes `--presets DIR` and `--store DIR`, which reads at
+/// first like the paragraph above being paid lip service and then broken. It
+/// is not, and the reason is that they answer a **different question**: not
+/// *what plays*, which is the one the sentence above is about and which is
+/// still two paths, but *where this program's data lives* — the directory the
+/// shipped presets were installed into, and the directory the library it lists
+/// is kept in. Neither can name a procedure, neither appears in a Set, and
+/// neither can be given instead of the pair. `--presets` chooses what the pair
+/// **defaults to** when the operator gives no pair at all, which is the whole
+/// of its reach into this type.
+///
+/// P-0031 is about one name meaning one thing, and the failure it names would
+/// be two ways to say *play this file*. Two ways to say *and the files are
+/// over here* is not that failure; refusing to have any way to say it is how
+/// [`Sources::under`]'s predecessor came to bake the build machine's own tree
+/// into a shipped binary. See
+/// [ADR-0230](../../../docs/adr/0230-where-the-programs-data-lives-is-told-rather-than-baked.md).
 ///
 /// `Debug` unconditionally rather than `#[cfg_attr(test, derive(Debug))]`: that
 /// idiom does not survive a crate boundary — `cfg(test)` is set when the
@@ -2288,25 +2352,40 @@ struct Sources {
     l4: std::path::PathBuf,
 }
 
-impl Default for Sources {
-    /// **The repository's own pair, resolved against the workspace root** —
-    /// which is what this program drew before it took an argument, so a bare
-    /// `cargo run -p karakuri` behaves as it always did.
+impl Sources {
+    /// **The pair a run with no paths opens on, under whichever preset library
+    /// answered.**
     ///
-    /// Against the workspace root rather than the working directory, and that
-    /// asymmetry with a typed path is on purpose: a default nobody named has to
-    /// find the file wherever the run was started from, and a path an operator
-    /// *typed* is theirs and is read from where they typed it.
-    fn default() -> Sources {
-        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    /// This was `Default`, and what it resolved against was
+    /// `env!("CARGO_MANIFEST_DIR")` — the build machine's own tree, baked in at
+    /// compile time. That was the only production line in the workspace doing
+    /// it, and it meant a binary installed anywhere else found no presets at
+    /// all: not a wrong pair, no pair, and the Library's `presets` tier a tier
+    /// with no file in it. A POSIX process cannot ask where it is, so the
+    /// answer is to be *told* — `--presets` — or to go looking from
+    /// [`std::env::current_exe`], which is
+    /// [`karakuri_environment::places::presets`] and not this file's business.
+    ///
+    /// What is this file's business is the two names, because they are this
+    /// program's choice of what to open on rather than a property of a preset
+    /// library: any directory of `.kir` files is a library, and these two are
+    /// what the reference workload is measured on — see
+    /// `the_capacity_is_the_l1s_own_declaration_and_the_l4_declares_none`,
+    /// which pins the L1's capacity because `docs/contributing.md` §1 quotes
+    /// figures taken against it.
+    ///
+    /// **Under the root rather than under the working directory**, and the
+    /// asymmetry with a typed path is the one the old `Default` had for the
+    /// same reason: a pair nobody named has to be found wherever the run was
+    /// started from, and a path an operator typed is theirs and is read from
+    /// where they typed it.
+    fn under(presets: &std::path::Path) -> Sources {
         Sources {
-            l1: root.join("examples/drift_shell.kir"),
-            l4: root.join("examples/soft_points.kir"),
+            l1: presets.join("drift_shell.kir"),
+            l4: presets.join("soft_points.kir"),
         }
     }
-}
 
-impl Sources {
     /// **What the mixer strip calls what this deck is playing**, and it is this
     /// file's word rather than the engine's.
     ///
@@ -2333,42 +2412,157 @@ impl Sources {
 
 /// **How this program is called**, printed for `--help` and for anything it
 /// cannot read as a pair.
+///
+/// The two flags are in the second paragraph rather than the first, which is
+/// where they belong: an operator reading this is looking for how to play
+/// something, and the answer is still the pair on the first line. See
+/// [`Sources`] for why a flag that answers *where the data lives* is not the
+/// second material vocabulary P-0031 refuses.
 const USAGE: &str = "\
-usage: karakuri [GEOMETRY.kir RENDERER.kir]
+usage: karakuri [--presets DIR] [--store DIR] [GEOMETRY.kir RENDERER.kir]
 
   The console, with a deck behind it. Both paths or neither: a Set is an L1 and
-  an L4, and with neither the repository's own pair is played.
+  an L4, and with neither the pair that ships in the preset library is played.
+
+  --presets DIR   the shipped preset library. Given, it is used and a directory
+                  that is not there is refused. Not given, it is looked for
+                  beside this binary — an .app bundle's Resources, a prefix
+                  install's share/karakuri, a portable examples/ — and last in
+                  the workspace this binary was compiled in. Which one answered
+                  is printed at startup. With none, there is no default pair
+                  and the two paths have to be given.
+  --store DIR     where the Library bay reads Sets and arrangements from, and
+                  where a save goes. Defaults to .karakuri beside the session.
+
+  Either flag may be given before or after the pair.
 
   This is not `karakuri-cli`'s command line and does not try to be — that one
-  has the flags, the store, the audio, the MIDI and the MCP server, and its
-  parser is its own. See `cargo run -p karakuri-cli -- --help`.";
+  has the flags, the audio, the MIDI and the MCP server, and its parser is its
+  own. It reads the same two directories, and `--store` means the same thing to
+  both. See `cargo run -p karakuri-cli -- --help`.";
 
-/// **The command line, read.** Two paths or none; `--help` or `-h` prints
-/// [`USAGE`]; anything else is a refusal that prints it.
+/// **Everything the command line settles**: what plays, and the two
+/// directories this program's data is in.
+///
+/// One value rather than three returns, because the three are decided together
+/// and one of them decides another: with no preset library there is no default
+/// pair, so [`Sources`] cannot be settled before `presets` is. Carrying the
+/// resolution itself rather than only its directory is what lets the legend say
+/// *which* candidate answered without asking again and getting a different
+/// answer.
+#[derive(Debug)]
+struct Launch {
+    sources: Sources,
+    /// Where the Library bay reads and a save writes — `--store`, or
+    /// [`karakuri_environment::places::STORE`].
+    store: std::path::PathBuf,
+    /// The preset library, and which of the places it was. `None` is a machine
+    /// with no library on it, which is a state rather than a failure: it is
+    /// fatal only for a run that needed a default pair, and the Library's
+    /// preset tier is simply empty. See
+    /// [`karakuri_environment::places::presets`].
+    presets: Option<karakuri_environment::places::Presets>,
+}
+
+/// **The command line, read.** Two paths or none, and two flags that are not
+/// about paths; `--help` or `-h` prints [`USAGE`]; anything else is a refusal
+/// that prints it.
 ///
 /// A free function over an iterator rather than a read of `std::env::args`
 /// inside [`main`], for the reason [`karakuri_environment`]'s refusals are free
 /// functions: `main` cannot be called from a test and a refusal nobody can
 /// reach is a refusal nobody checked. See
-/// `a_set_is_two_paths_or_none_and_anything_else_is_refused`.
-fn sources_from<I: IntoIterator<Item = String>>(args: I) -> Result<Sources, String> {
+/// `a_set_is_two_paths_or_none_and_anything_else_is_refused` and
+/// `the_two_flags_say_where_the_data_is_and_may_sit_on_either_side_of_the_pair`.
+///
+/// **It reaches a disk now**, which it did not before: resolving a presets root
+/// is existence checks on up to four directories. That is not a purity this
+/// function had for its own sake — it had it because the answer was a compiled
+/// constant — and the alternative is `main` doing the resolution and this
+/// function returning something that is not yet an answer, which puts the one
+/// refusal an operator will actually meet back out of a test's reach.
+fn sources_from<I: IntoIterator<Item = String>>(args: I) -> Result<Launch, String> {
     let args: Vec<String> = args.into_iter().collect();
     if args.iter().any(|a| a == "-h" || a == "--help") {
         return Err(String::new());
     }
-    match args.as_slice() {
-        [] => Ok(Sources::default()),
-        [l1, l4] => Ok(Sources {
+    // **A flag on either side of the pair**, which is what a pass over the
+    // whole line buys and a `match` on the slice could not: an operator types
+    // the flags in whatever order they think of them, and `karakuri-cli`
+    // accepts `--store` before or after its own command for the same reason
+    // (`list_sets_prints_and_is_never_a_run`).
+    let mut named: Option<std::path::PathBuf> = None;
+    let mut store: Option<std::path::PathBuf> = None;
+    let mut paths: Vec<String> = Vec::new();
+    let mut rest = args.into_iter();
+    while let Some(arg) = rest.next() {
+        match arg.as_str() {
+            "--presets" => {
+                named = Some(std::path::PathBuf::from(value_for("--presets", &mut rest)?))
+            }
+            "--store" => store = Some(std::path::PathBuf::from(value_for("--store", &mut rest)?)),
+            // **An unknown option is not a path.** Without this a `--prests`
+            // typo becomes the first half of a Set and is reported as a file
+            // that will not open, which sends the operator looking at their
+            // disk for a mistake they made on the command line.
+            other if other.starts_with('-') => return Err(format!("unknown option `{other}`")),
+            _ => paths.push(arg),
+        }
+    }
+
+    let presets = karakuri_environment::places::presets(named.as_deref())?;
+    let sources = match paths.as_slice() {
+        [] => match &presets {
+            Some(presets) => Sources::under(&presets.dir),
+            // The one place where having no preset library is fatal rather
+            // than empty: there is nothing to open on, and the alternative to
+            // saying so is a black window. The Library bay's own answer to the
+            // same fact is a tier with nothing in it.
+            None => return Err(karakuri_environment::places::no_launch_pair()),
+        },
+        [l1, l4] => Sources {
             l1: std::path::PathBuf::from(l1),
             l4: std::path::PathBuf::from(l4),
-        }),
-        [one] => Err(format!(
-            "one path given (`{one}`) and a Set needs two: a geometry and a renderer"
+        },
+        [one] => {
+            return Err(format!(
+                "one path given (`{one}`) and a Set needs two: a geometry and a renderer"
+            ))
+        }
+        many => {
+            return Err(format!(
+                "{} paths given and a Set is built from two: a geometry and a renderer",
+                many.len()
+            ))
+        }
+    };
+    Ok(Launch {
+        sources,
+        store: store
+            .unwrap_or_else(|| std::path::PathBuf::from(karakuri_environment::places::STORE)),
+        presets,
+    })
+}
+
+/// **The value after a flag, refused rather than defaulted or swallowed.**
+///
+/// `karakuri-cli`'s `value_for` is the same function with the same two
+/// silences written on it, and this is the second surface rather than a copy
+/// with a different opinion: a flag at the end of the line with nothing after
+/// it must not fall back, and a flag whose value is missing must not eat the
+/// next flag — `--presets --store x` reading `--store` as a directory would
+/// then blame `x` for being an unknown option.
+///
+/// No number arm, unlike that one: both flags here take a directory, and a
+/// directory beginning with `-` is a path an operator can still name as
+/// `./-odd`.
+fn value_for(flag: &str, rest: &mut impl Iterator<Item = String>) -> Result<String, String> {
+    match rest.next() {
+        Some(value) if !value.starts_with('-') => Ok(value),
+        Some(value) => Err(format!(
+            "`{flag}` was given no value — `{value}` is an option, not one"
         )),
-        many => Err(format!(
-            "{} paths given and a Set is built from two: a geometry and a renderer",
-            many.len()
-        )),
+        None => Err(format!("`{flag}` needs a value")),
     }
 }
 
@@ -3267,37 +3461,6 @@ fn transport(
         budget_ms,
     })
 }
-
-/// **Where this program looks for a library**, and it is the directory
-/// `karakuri-cli` looks in when nobody passes `--store`.
-///
-/// Relative to the working directory, deliberately unlike [`Sources`]'s
-/// defaults: a store is a place an operator keeps things and belongs beside
-/// the session, which is `karakuri-cli`'s own reason for the same choice. The
-/// repository keeps one at its root, so a `cargo run -p karakuri` from there
-/// has a Set to list rather than an empty bay.
-///
-/// # Still transcribed, and this is the one thing ADR-0214 said would go and
-/// has not
-///
-/// [ADR-0214](../../../docs/adr/0214-the-program-moves-out-of-the-cli-and-two-thin-binaries-sit-over-it.md)
-/// lists this constant as one of two transcriptions the move *deletes rather
-/// than carries*: *"`STORE` asks for `DEFAULT_STORE`, and the residency decode
-/// calls `mix::parse_residency`."* The residency half is done — `apply` calls
-/// `karakuri_environment::mix::parse_residency` now, and that function is
-/// `pub` for this caller.
-///
-/// **This half cannot be done yet, and the reason is which slice moved.**
-/// `DEFAULT_STORE` is at `karakuri-cli/src/main.rs:356` and is private.
-/// ADR-0214's boundary section says `main.rs` is *"7,688 non-test lines
-/// holding both and will not divide along a line anyone can name today"*, and
-/// it is the one module of the fourteen that has not moved: `karakuri-cli/src/`
-/// is that file and nothing else. Until it divides there is nothing to ask, so
-/// the two are the same directory on purpose and the day one moves this
-/// program lists an empty library rather than the wrong one — which is the
-/// sentence this comment has carried since it was written, still true and now
-/// with the blocker named rather than guessed at.
-const STORE: &str = ".karakuri";
 
 /// **What the Library bay lists**: the name of every Set the store holds.
 ///
@@ -4543,7 +4706,7 @@ fn played(gfx: &mut Gfx, operation: &Operation) -> Option<String> {
             }
         ));
     };
-    match loading(std::path::Path::new(STORE), slot, slot_salt(slot), aim, set) {
+    match loading(&gfx.store, slot, slot_salt(slot), aim, set) {
         Ok(line) => {
             // **What that slot is now playing**, written on the press that
             // changed it. A `Set` has no name of its own, so the strip and the
@@ -5150,6 +5313,17 @@ struct Gfx {
     /// Rewritten where the slot is: [`played`], on the press, which is also
     /// where the store is read. Nothing on the frame path touches it.
     material: Vec<String>,
+    /// **Where the library is**, copied from [`App::store`] when the device
+    /// was made.
+    ///
+    /// It is on both because the two readers are on both sides of the window:
+    /// `resumed` lists the bay before there is a `Gfx` at all, and [`played`]
+    /// and `performed` reach a disk on a key press and are handed nothing but
+    /// this. A `Path::new(STORE)` at each of those four call sites is what
+    /// this replaces, and the reason it can no longer be one is the whole of
+    /// the change — the directory is a thing the operator said, so it has to
+    /// be carried from where they said it.
+    store: std::path::PathBuf,
 }
 
 struct App {
@@ -5158,6 +5332,16 @@ struct App {
     /// and used once, in `resumed`. It is here rather than in [`Gfx`] because
     /// it is known before there is a device and outlives every remake of one.
     sources: Sources,
+    /// **Where the library is** — see [`Launch::store`]. Here for `sources`'
+    /// reason, and copied onto [`Gfx::store`] for the readers that are handed
+    /// only a device.
+    store: std::path::PathBuf,
+    /// **The preset library this run resolved**, kept for one purpose: the
+    /// legend says which of the places answered, and it says it by printing
+    /// what the resolution returned rather than a sentence about what it
+    /// probably did. `None` is a machine with no library, which reaches this
+    /// far only on a run that was given its pair by hand.
+    presets: Option<karakuri_environment::places::Presets>,
     /// A validation fault is said once rather than sixty times a second.
     faulted: bool,
     readout: Readout,
@@ -5195,10 +5379,12 @@ struct App {
 }
 
 impl App {
-    fn new(sources: Sources) -> App {
+    fn new(launch: Launch) -> App {
         App {
             gfx: None,
-            sources,
+            sources: launch.sources,
+            store: launch.store,
+            presets: launch.presets,
             faulted: false,
             readout: Readout::new(WINDOW.0 as f32, WINDOW.1 as f32),
             costs: Costs::new(),
@@ -5272,7 +5458,7 @@ impl App {
                     // answers `None` for every other operation and is why this
                     // is one line rather than a second route into the panel.
                     if let Some(line) = arrangement(
-                        std::path::Path::new(STORE),
+                        &gfx.store,
                         &mut readout.panel,
                         &mut readout.view.arrangement,
                         operation,
@@ -5497,12 +5683,12 @@ impl ApplicationHandler for App {
         // **The library before the legend too**, and once for the run: the
         // legend says how many Sets the bay lists, and `library` says why
         // where it is none.
-        self.readout.view.library = library(std::path::Path::new(STORE));
+        self.readout.view.library = library(&self.store);
         // **And the arrangement pill's menu, once for the run**, for
         // `library`'s reason and for one more: this is a directory read, and
         // the only thing that can add a name to it is a save this program
         // performs — which re-reads it there. See `arrangements`.
-        self.readout.view.arrangement.filed = arrangements(std::path::Path::new(STORE));
+        self.readout.view.arrangement.filed = arrangements(&self.store);
         // **And the Inspector's panes, before the first frame.**
         // `Set::published` says it is not for the frame path but *is* what a
         // console reads when a Set lands, and every slot is watched — so this
@@ -5516,7 +5702,8 @@ impl ApplicationHandler for App {
         // it — on a run that has one, and over a fader a hand can take hold
         // of. It is written again on every frame; this is the first.
         self.readout.view.master_out = Some(engine.deck.out());
-        self.readout.print_legend(budget, &governed);
+        self.readout
+            .print_legend(budget, &governed, self.presets.as_ref(), &self.store);
 
         // The first frame is owed to the window appearing, not drawn on a
         // still panel.
@@ -5525,6 +5712,7 @@ impl ApplicationHandler for App {
         self.gfx = Some(Gfx {
             budget_ms: budget,
             material,
+            store: self.store.clone(),
             window,
             gpu,
             surface,
@@ -6367,8 +6555,8 @@ impl ApplicationHandler for App {
 /// `skip(1)` drops the program's own name, which is `std::env::args`'s first
 /// element and not an argument.
 fn main() {
-    let sources = match sources_from(std::env::args().skip(1)) {
-        Ok(sources) => sources,
+    let launch = match sources_from(std::env::args().skip(1)) {
+        Ok(launch) => launch,
         // An empty message is `--help`, which is a request rather than a
         // mistake: the usage goes to stdout and the exit is 0.
         Err(why) if why.is_empty() => {
@@ -6389,7 +6577,7 @@ fn main() {
     // the rule actually lives. This is the state it starts in so that the
     // window between here and the first `about_to_wait` is not a spin either.
     event_loop.set_control_flow(ControlFlow::Wait);
-    event_loop.run_app(&mut App::new(sources)).expect("run");
+    event_loop.run_app(&mut App::new(launch)).expect("run");
 }
 
 // ---------------------------------------------------------------------------
@@ -6760,7 +6948,7 @@ mod tests {
     /// directory entirely is invisible to a test that writes and reads through
     /// the same wrong path. The same hole is open one layer up — this file
     /// chooses the name it hands over — so the same assertion is made here,
-    /// about `arrangements/<name>.arrangement.json` under [`STORE`]'s root.
+    /// about `arrangements/<name>.arrangement.json` under the store's root.
     #[test]
     fn an_arrangement_is_kept_at_the_path_the_stores_header_names() {
         let root = arrangement_root("kept");
@@ -7958,21 +8146,21 @@ mod tests {
     fn a_set_is_two_paths_or_none_and_anything_else_is_refused() {
         let of = |args: &[&str]| sources_from(args.iter().map(|a| (*a).to_string()));
 
-        let bare = of(&[]).expect("no arguments is the pair the repository ships");
-        assert_eq!(bare.l1, Sources::default().l1);
-        assert_eq!(bare.l4, Sources::default().l4);
+        let bare = of(&[]).expect("no arguments is the pair the preset library ships");
+        assert_eq!(bare.sources.l1, shipped().l1);
+        assert_eq!(bare.sources.l4, shipped().l4);
         assert!(
-            bare.l1.is_file() && bare.l4.is_file(),
+            bare.sources.l1.is_file() && bare.sources.l4.is_file(),
             "the default pair is not on the disk at {} and {}, so a bare run cannot draw",
-            bare.l1.display(),
-            bare.l4.display()
+            bare.sources.l1.display(),
+            bare.sources.l4.display()
         );
 
         let named = of(&["a/geo.kir", "b/ren.kir"]).expect("two paths are a Set");
-        assert_eq!(named.l1, std::path::PathBuf::from("a/geo.kir"));
-        assert_eq!(named.l4, std::path::PathBuf::from("b/ren.kir"));
+        assert_eq!(named.sources.l1, std::path::PathBuf::from("a/geo.kir"));
+        assert_eq!(named.sources.l4, std::path::PathBuf::from("b/ren.kir"));
         assert_eq!(
-            named.material(),
+            named.sources.material(),
             "geo + ren",
             "the strip is not named after what was actually loaded"
         );
@@ -8001,6 +8189,137 @@ mod tests {
         );
     }
 
+    /// **The two flags say where this program's data is, and either may sit on
+    /// either side of the pair.**
+    ///
+    /// The order half is the one an operator meets: they type the flags in
+    /// whatever order they think of them, and `karakuri-cli` accepts `--store`
+    /// before or after its own command for exactly this reason
+    /// (`list_sets_prints_and_is_never_a_run`). A parser that matched on the
+    /// argument slice — which is what this one was — can only ever accept one
+    /// of the two spellings.
+    ///
+    /// **And the pair still wins**, which is the claim [`Sources`]'s doc makes
+    /// about these flags not being a second material vocabulary: `--presets`
+    /// moves what a run with *no* paths opens on and reaches nothing else, so
+    /// a line with both a library and a pair plays the pair.
+    ///
+    /// Not quite a CPU test, and this is what changed: resolving a presets
+    /// root is existence checks on real directories. The library it names is
+    /// this workspace's own `examples/`, which is on the disk whenever these
+    /// tests run at all.
+    #[test]
+    fn the_two_flags_say_where_the_data_is_and_may_sit_on_either_side_of_the_pair() {
+        let of = |args: &[&str]| sources_from(args.iter().map(|a| (*a).to_string()));
+        let library = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples");
+        let library = library
+            .to_str()
+            .expect("this workspace's path is not utf-8");
+
+        // **The default store is the shared constant**, which is the whole of
+        // what deleting `const STORE` was for: this asserts the two programs
+        // read one directory rather than two that look alike.
+        assert_eq!(
+            of(&[]).expect("a bare run").store,
+            std::path::PathBuf::from(karakuri_environment::places::STORE),
+            "a run that said nothing about a store did not get the shared default"
+        );
+
+        for spelling in [
+            vec!["--store", "/tmp/library", "a/geo.kir", "b/ren.kir"],
+            vec!["a/geo.kir", "b/ren.kir", "--store", "/tmp/library"],
+            vec!["a/geo.kir", "--store", "/tmp/library", "b/ren.kir"],
+        ] {
+            let launch = of(&spelling).unwrap_or_else(|why| panic!("{spelling:?}: {why}"));
+            assert_eq!(
+                launch.store,
+                std::path::PathBuf::from("/tmp/library"),
+                "{spelling:?} read a store nobody asked for"
+            );
+            assert_eq!(
+                launch.sources.l1,
+                std::path::PathBuf::from("a/geo.kir"),
+                "{spelling:?} lost the pair to the flag"
+            );
+            assert_eq!(launch.sources.l4, std::path::PathBuf::from("b/ren.kir"));
+        }
+
+        // `--presets` with no pair: it is what the pair defaults to, and the
+        // resolution reports it as typed rather than as something found.
+        let told = of(&["--presets", library]).expect("a library that is there");
+        assert_eq!(
+            told.sources.l1,
+            std::path::Path::new(library).join("drift_shell.kir")
+        );
+        assert_eq!(
+            told.sources.l4,
+            std::path::Path::new(library).join("soft_points.kir")
+        );
+        assert_eq!(
+            told.presets.as_ref().map(|presets| presets.found),
+            Some(karakuri_environment::places::Found::Given),
+            "a `--presets` an operator typed was reported as a place this program went \
+             looking in"
+        );
+
+        // And with a pair, on either side: the pair wins and the library is
+        // still the one that was named.
+        for spelling in [
+            vec!["--presets", library, "a/geo.kir", "b/ren.kir"],
+            vec!["a/geo.kir", "b/ren.kir", "--presets", library],
+        ] {
+            let launch = of(&spelling).unwrap_or_else(|why| panic!("{spelling:?}: {why}"));
+            assert_eq!(
+                launch.sources.l1,
+                std::path::PathBuf::from("a/geo.kir"),
+                "{spelling:?}: `--presets` overrode the paths the operator named, which \
+                 would make it a second way of saying what plays"
+            );
+            assert_eq!(launch.sources.l4, std::path::PathBuf::from("b/ren.kir"));
+            assert_eq!(
+                launch.presets.map(|presets| presets.dir),
+                Some(std::path::PathBuf::from(library)),
+                "{spelling:?} lost the library it was given"
+            );
+        }
+
+        // A `--presets` that is not there is refused rather than searched
+        // past, and the sentence is `places`' own — one refusal, whichever
+        // program the operator reached it from.
+        let missing = std::path::Path::new(library).join("no-such-library");
+        let why = of(&["--presets", missing.to_str().expect("utf-8")])
+            .expect_err("a `--presets` that is not there was accepted");
+        assert_eq!(why, karakuri_environment::places::no_presets_at(&missing));
+
+        // A flag with nothing after it, and a flag whose value is the next
+        // flag. Neither falls back and neither swallows.
+        for (spelling, wanted) in [
+            (vec!["--presets"], "`--presets` needs a value"),
+            (vec!["--store"], "`--store` needs a value"),
+            (
+                vec!["--presets", "--store", "/tmp/library"],
+                "`--presets` was given no value — `--store` is an option, not one",
+            ),
+        ] {
+            assert_eq!(
+                of(&spelling).as_ref().err().map(String::as_str),
+                Some(wanted),
+                "{spelling:?}"
+            );
+        }
+
+        // **An unknown option is not a path**, which is the mistake a typo
+        // actually makes: without this, `--prests DIR` becomes a two-path Set
+        // and is reported as a file that will not open.
+        let typo =
+            of(&["--prests", library]).expect_err("an unknown option was read as half of a Set");
+        assert_eq!(typo, "unknown option `--prests`");
+        assert!(
+            !typo.is_empty(),
+            "a refusal came back with no sentence in it, which `main` reads as `--help`"
+        );
+    }
+
     /// **The capacity is the L1's own declaration, read off the `Checked`.**
     ///
     /// It was `const CAPACITY: u32 = 262144` here — `drift_shell.kir`'s
@@ -8019,7 +8338,7 @@ mod tests {
     /// figures (`docs/contributing.md` §1's reference workload).
     #[test]
     fn the_capacity_is_the_l1s_own_declaration_and_the_l4_declares_none() {
-        let sources = Sources::default();
+        let sources = shipped();
         let l1 = checked(&sources.l1);
         let declared = l1
             .capacity
@@ -8064,6 +8383,41 @@ mod tests {
              longer tell a per-file read from a constant — pick another `.kir`"
         );
     }
+}
+
+/// **The pair a bare run plays, for the tests that need one on the disk.**
+///
+/// [`Sources::under`] takes a preset library and does not go looking for one;
+/// this is the going-looking, and in a test binary the answer is always the
+/// last candidate — the workspace this file was compiled in, which is also the
+/// tree the test is run from. That is the development entry doing exactly what
+/// it is for, and it is why these tests can assert the pair is on the disk
+/// without an install anywhere.
+///
+/// A function rather than an `impl Default` on [`Sources`], because a
+/// `Default` is what baked the build machine's own tree into a shipped binary:
+/// a type whose default value is a search of the filesystem invites exactly
+/// that call from production, and a production caller now has to say which
+/// library it means.
+///
+/// **Below `mod tests` rather than beside [`Sources`], and that is not a
+/// matter of taste.** [`key_column::bound`] reads this file's own text for the
+/// keys the window loop binds and stops at the first line that is
+/// `#[cfg(test)]`; a test-only item placed above the loop moves that stop line
+/// up past the `match`, and the scan then finds nothing and every check built
+/// on it passes over an empty set. It did exactly that once, on the way to
+/// writing this. Here it is after the boundary, and reachable from all three
+/// test modules — [`tests`], [`key_column`] and [`gpu`] — because it is at the
+/// file's own scope, which the two that are not inside [`tests`] need.
+#[cfg(test)]
+fn shipped() -> Sources {
+    let presets = karakuri_environment::places::presets(None)
+        .expect("nothing was typed, so there is no typed path to refuse")
+        .expect(
+            "no preset library was found from the test binary, so the workspace tree this \
+             test compiled in has no `examples/` in it",
+        );
+    Sources::under(&presets.dir)
 }
 
 #[cfg(test)]
@@ -8637,7 +8991,7 @@ mod gpu {
         );
         let mut panel = Panel::new(1440.0, 900.0);
         view::rearrange(&mut panel, CANVAS);
-        let sources = Sources::default();
+        let sources = shipped();
         let engine = Engine::new(&gpu, &mut renderer, &sources, panel.layout(), 1.0);
         // One name per slot, which is what `Gfx::material` is: every slot
         // opens on the same pair, and a load is what makes them differ.
@@ -8761,20 +9115,14 @@ mod gpu {
         panel.solve();
         let rect = picture_rect(panel.layout(), CANVAS).expect("the picture is on screen");
         let cells = preview_rects(panel.layout(), CANVAS).expect("the preview row is on screen");
-        let mut engine = Engine::new(
-            &gpu,
-            &mut renderer,
-            &Sources::default(),
-            panel.layout(),
-            1.0,
-        );
+        let mut engine = Engine::new(&gpu, &mut renderer, &shipped(), panel.layout(), 1.0);
         // **Built at what the file declares**, which is the other half of
         // `the_capacity_is_the_l1s_own_declaration_and_the_l4_declares_none`:
         // that one says what the `.kir` says, and this one says the deck was
         // built with it rather than with a number written here.
         assert_eq!(
             engine.capacity,
-            checked(&Sources::default().l1)
+            checked(&shipped().l1)
                 .capacity
                 .expect("the L1 declares a capacity")
                 .default,
@@ -9094,13 +9442,7 @@ mod gpu {
         panel.solve();
         let rect = picture_rect(panel.layout(), CANVAS).expect("on screen");
         let want = physical(rect, 1.0);
-        let engine = Engine::new(
-            &gpu,
-            &mut renderer,
-            &Sources::default(),
-            panel.layout(),
-            1.0,
-        );
+        let engine = Engine::new(&gpu, &mut renderer, &shipped(), panel.layout(), 1.0);
 
         // The picture's, in both axes, and **neither of them is the window's**
         // — the picture is narrower than the window by both panes and taller
@@ -9192,13 +9534,7 @@ mod gpu {
             picture_rect(panel.layout(), CANVAS).expect("on screen"),
             1.0,
         );
-        let mut engine = Engine::new(
-            &gpu,
-            &mut renderer,
-            &Sources::default(),
-            panel.layout(),
-            1.0,
-        );
+        let mut engine = Engine::new(&gpu, &mut renderer, &shipped(), panel.layout(), 1.0);
         let first = engine.picture.id;
         assert_eq!(engine.picture.size, want);
 
@@ -9364,13 +9700,7 @@ mod gpu {
             (112, 63),
             "the mock's own cell, at the mock's own width"
         );
-        let mut engine = Engine::new(
-            &gpu,
-            &mut renderer,
-            &Sources::default(),
-            panel.layout(),
-            1.0,
-        );
+        let mut engine = Engine::new(&gpu, &mut renderer, &shipped(), panel.layout(), 1.0);
 
         // **The cell's, in both axes** — not the row's, not the picture's and
         // not the window's. The row holds four of these side by side with
@@ -9527,16 +9857,10 @@ mod gpu {
             egui_wgpu::Renderer::new(&gpu.device, FORMAT, egui_wgpu::RendererOptions::default());
         let mut panel = Panel::new(W as f32, H as f32);
         panel.solve();
-        let mut engine = Engine::new(
-            &gpu,
-            &mut renderer,
-            &Sources::default(),
-            panel.layout(),
-            1.0,
-        );
+        let mut engine = Engine::new(&gpu, &mut renderer, &shipped(), panel.layout(), 1.0);
 
         // The strips, written the way the frame writes them.
-        let material = vec![Sources::default().material(); engine.deck.slot_count()];
+        let material = vec![shipped().material(); engine.deck.slot_count()];
         let mut strips = Vec::new();
         mixer(&engine.deck, &material, &mut strips);
         assert_eq!(strips.len(), engine.deck.slot_count());
@@ -9620,13 +9944,7 @@ mod gpu {
             egui_wgpu::Renderer::new(&gpu.device, FORMAT, egui_wgpu::RendererOptions::default());
         let mut panel = Panel::new(1440.0, 900.0);
         panel.solve();
-        let engine = Engine::new(
-            &gpu,
-            &mut renderer,
-            &Sources::default(),
-            panel.layout(),
-            1.0,
-        );
+        let engine = Engine::new(&gpu, &mut renderer, &shipped(), panel.layout(), 1.0);
 
         assert_eq!(
             engine.deck.slot_count(),
@@ -9692,14 +10010,8 @@ mod gpu {
             egui_wgpu::Renderer::new(&gpu.device, FORMAT, egui_wgpu::RendererOptions::default());
         let mut panel = Panel::new(W as f32, H as f32);
         panel.solve();
-        let mut engine = Engine::new(
-            &gpu,
-            &mut renderer,
-            &Sources::default(),
-            panel.layout(),
-            1.0,
-        );
-        let material = vec![Sources::default().material(); engine.deck.slot_count()];
+        let mut engine = Engine::new(&gpu, &mut renderer, &shipped(), panel.layout(), 1.0);
+        let material = vec![shipped().material(); engine.deck.slot_count()];
 
         // **Before the pass, and this is the deck this program opens with.**
         // `Deck::new` brings every slot up Live and [`Engine::new`] rests all
@@ -9900,14 +10212,8 @@ mod gpu {
             egui_wgpu::Renderer::new(&gpu.device, FORMAT, egui_wgpu::RendererOptions::default());
         let mut panel = Panel::new(W as f32, H as f32);
         panel.solve();
-        let mut engine = Engine::new(
-            &gpu,
-            &mut renderer,
-            &Sources::default(),
-            panel.layout(),
-            1.0,
-        );
-        let material = vec![Sources::default().material(); engine.deck.slot_count()];
+        let mut engine = Engine::new(&gpu, &mut renderer, &shipped(), panel.layout(), 1.0);
+        let material = vec![shipped().material(); engine.deck.slot_count()];
 
         // The state, produced by the governor and not written here.
         let governed = engine.ask_to_prime(&gpu);
@@ -10084,14 +10390,8 @@ mod gpu {
             egui_wgpu::Renderer::new(&gpu.device, FORMAT, egui_wgpu::RendererOptions::default());
         let mut panel = Panel::new(W as f32, H as f32);
         panel.solve();
-        let mut engine = Engine::new(
-            &gpu,
-            &mut renderer,
-            &Sources::default(),
-            panel.layout(),
-            1.0,
-        );
-        let material = vec![Sources::default().material(); engine.deck.slot_count()];
+        let mut engine = Engine::new(&gpu, &mut renderer, &shipped(), panel.layout(), 1.0);
+        let material = vec![shipped().material(); engine.deck.slot_count()];
 
         // A wipe in progress on the deck that is on air: a straight front,
         // running at an angle, part of the way across.
@@ -10247,13 +10547,7 @@ mod gpu {
             egui_wgpu::Renderer::new(&gpu.device, FORMAT, egui_wgpu::RendererOptions::default());
         let mut panel = Panel::new(W as f32, H as f32);
         panel.solve();
-        let mut engine = Engine::new(
-            &gpu,
-            &mut renderer,
-            &Sources::default(),
-            panel.layout(),
-            1.0,
-        );
+        let mut engine = Engine::new(&gpu, &mut renderer, &shipped(), panel.layout(), 1.0);
         engine.look = STARTS_AT;
 
         // What the console reads this frame, off the look the engine holds.
@@ -10423,13 +10717,7 @@ mod gpu {
 
         let mut panel = Panel::new(W as f32, H as f32);
         panel.solve();
-        let mut engine = Engine::new(
-            &gpu,
-            &mut renderer,
-            &Sources::default(),
-            panel.layout(),
-            1.0,
-        );
+        let mut engine = Engine::new(&gpu, &mut renderer, &shipped(), panel.layout(), 1.0);
 
         // A different window on a different display, so nothing asserted below
         // can be what construction happened to leave in place — and at 1760

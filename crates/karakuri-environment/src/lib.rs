@@ -60,6 +60,16 @@
 //! and not a redesign: `use` paths changed, `pub` appeared where crate-private
 //! had been enough, and the code inside the functions did not.
 //!
+//! **[`places`] is the fourteenth and was none of the thirteen**, because it
+//! is the first module written *for* this package rather than moved into it.
+//! It is checked against the charter like anything else proposed here, and
+//! passes on the first clause without argument: where the shipped presets are
+//! and where the store is are two directories on a disk, and a directory is
+//! outside this process by any reading of that sentence. That it is also what
+//! deletes the two `.karakuri` transcriptions ADR-0214 named is the occasion
+//! rather than the reason — a module that passed the test only because it was
+//! convenient would be the test not being applied.
+//!
 //! **What is left in `karakuri-cli/src/` is `main.rs` and nothing else** — the
 //! window, the arguments, the key handler and `Live`. That is the line
 //! ADR-0214 said it would not name in advance, and ADR-0215 named the two ends
@@ -100,6 +110,7 @@
 // - `meta` — an artifact's card: what a compile pass can say, and where it lands.
 // - `midi` — a port, and what the operator asked for through it.
 // - `mix` — the performance as records: faders, blends, residency, the look.
+// - `places` — where the presets and the store are, told or gone looking for.
 // - `render` — a frame written to a PNG: the window's path, minus the window.
 // - `scratch` — the copies a live run edits, so an original is untouched.
 // - `session` — the recorder that writes the stream and the split that reads it.
@@ -113,6 +124,7 @@ pub mod mcp;
 pub mod meta;
 pub mod midi;
 pub mod mix;
+pub mod places;
 pub mod render;
 pub mod scratch;
 pub mod session;

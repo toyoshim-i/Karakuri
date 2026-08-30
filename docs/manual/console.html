@@ -101,7 +101,7 @@
               <div class="scopes">
                 <span class="scope sel" data-tip="Favourites. Selected. It is this library filtered rather than a fifth place a Set can be &mdash; the star is kept beside the Sets, in the store, so this scope is a question asked of `my sets` and never a collection of its own. Click to show it; click another scope to leave it. &#8853; MIDI: unassigned &mdash; there is no operation for a map to name yet.">favourites</span>
                 <span class="scope">my sets</span>
-                <span class="scope">presets</span>
+                <span class="scope" data-tip="What ships with the program rather than what you wrote, and it is read-only: nothing is kept here, and what you keep goes to the store with the rest of your Sets. Where these files are is told to the program when it starts rather than compiled into it &mdash; a program has no reliable way to ask where it is &mdash; so an installed copy is pointed at what the packaging put beside it, and `--presets DIR` says it by hand. Told nothing and finding nothing, the scope is empty and the program says so at startup rather than pretending. &#8853; MIDI: unassigned &mdash; there is no operation for a map to name yet.">presets</span>
                 <span class="scope" data-tip="A folder, and what it lists is Sets. A Set file and a bundle are one file &mdash; the same `.set.ndjson`, differing only in whether the sources are appended inside it &mdash; so this scope draws one kind of row, not two. A `.kir` is not one of them: it is a single node's source addressed by its content, and nothing takes one. A row here is taken into the store and then loaded, which is one press because taking it in is what gives it a name. &#8853; MIDI: unassigned &mdash; a map line names a state from a closed list and a directory is not one.">folder</span>
                 <span class="scope" data-tip="Add a scope. A library is asked questions rather than read end to end, so what you browse gets both wider and narrower with use.">+</span>
               </div>
@@ -1663,6 +1663,76 @@
           invented from this drawing would be the specification written
           backwards. What this page settles is the half a control cannot be
           specified without: the value it reads, and where that value lives.
+        </p>
+      </div>
+
+      <div class="note">
+        <h3>Where the presets come from, and why it is told rather than found</h3>
+        <p>
+          <strong>A program cannot ask the system where it is, so the honest
+          answer is an argument.</strong> POSIX gives a running program no
+          reliable way to learn its own path &mdash; what the platforms offer is
+          a best effort under a different name and with a different way of
+          failing on each of them, and the one thing every program really is
+          handed is the word its caller chose to start it with. So the root of
+          the shipped library is <code>--presets DIR</code>: something said to
+          the program rather than something it works out. <strong>The
+          alternative is what this program does today, and it is why this scope
+          has never had a file in it</strong> &mdash; the pair it opens on is
+          resolved against the tree it was built in, baked in at compile time,
+          so a binary that leaves the machine that built it points at a
+          directory that is not there.
+        </p>
+        <p>
+          <strong>Nobody types that flag on an installed copy, and the packaging
+          is what supplies it.</strong> Every platform has some way of naming a
+          place relative to where the program was installed &mdash; a bundle's
+          own resources, a prefix's share directory &mdash; and using it is the
+          packaging's job rather than the operator's. The flag is what makes it
+          sayable at all, and it is the same shape as <code>--store DIR</code>,
+          which names where what you keep is written. Neither of them is a
+          second way to name what <em>plays</em>: they say where this program's
+          data lives, and what goes on a deck is still two paths and nothing
+          else.
+        </p>
+        <p>
+          <strong>With nobody saying, four places are looked at in order and the
+          first that is a library wins</strong> &mdash; a directory with a
+          <code>.kir</code> in it, which is not the same question as whether
+          something is there, and the difference is not pedantry: a build of
+          this program from source sits in a directory that already has an
+          <code>examples</code> beside it, full of object files and no presets.
+          Each place is relative to the running
+          binary, because that is the one location a program can come close to:
+          <code>../Resources/examples</code> beside it, which is a macOS
+          <code>.app</code>; then <code>../share/karakuri/examples</code>, which
+          is a unix prefix install; then <code>examples</code> in its own
+          directory, which is a folder somebody copied. <strong>The fourth is
+          the workspace tree baked at compile time, and it is named here rather
+          than hidden.</strong> It is what keeps a run out of the repository
+          behaving as it always did; it is last, so no installed copy reaches it
+          before the three above it; and it is asked the same question as the
+          rest, so on any machine that is not the one that built the binary it
+          simply fails and the search ends. Which of the four answered is said at
+          startup, and it is read back off the answer rather than written down
+          beside it.
+        </p>
+        <p>
+          <strong>A path you typed is yours, and finding none is not a
+          fault.</strong> A <code>--presets</code> naming a directory that is not
+          there is refused, naming the flag, rather than quietly replaced by one
+          of the four: a path an operator typed is an instruction, and doing
+          something else with it while saying nothing is the failure this
+          instrument spends everywhere else to avoid. And when nobody said and
+          nothing was found there is no preset library &mdash; the program says
+          that once, naming <code>--presets</code>, creates nothing to make the
+          sentence less true, and this scope lists nothing. <strong>An empty
+          tier is a library nobody has filled rather than something gone
+          wrong</strong>; the one place it is more than that is the pair this
+          program opens on when you have named none, which comes out of the
+          preset library and so is not there either, and that is refused loudly
+          &mdash; naming the flag, and saying the two paths may be given instead
+          &mdash; rather than opening a window onto nothing.
         </p>
       </div>
 

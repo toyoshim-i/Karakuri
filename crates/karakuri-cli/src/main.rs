@@ -23,7 +23,8 @@
 // site below reads exactly as it did. What is left in this file is the window,
 // the arguments, the key handler and `Live` — a surface over them.
 use karakuri_environment::{
-    audio, compile, history, mcp, midi, mix, render, scratch, session, setfile, tempo_source, watch,
+    audio, compile, history, mcp, midi, mix, places, render, scratch, session, setfile,
+    tempo_source, watch,
 };
 // **Brought into scope rather than reached through their modules**, because
 // each was written here and every call site below is the one it already was.
@@ -354,15 +355,9 @@ impl Demo {
     }
 }
 
-/// Where the store lives when nothing says otherwise. A directory in the
-/// working tree rather than under `$HOME`: a session's material belongs beside
-/// the session, and a global store shared by every run is a decision an
-/// operator should make rather than inherit.
 /// Every node of one slot's build: the layer it was sorted onto, its index
 /// within that layer, and the hash of the source it was compiled from.
 type Nodes = Vec<(&'static str, u32, karakuri_store::hash::Hash)>;
-
-const DEFAULT_STORE: &str = ".karakuri";
 
 /// One press of the scrub keys, in beats. A quarter beat — a sixteenth of a bar
 /// in four — which is small enough to place a hit by ear and large enough to
@@ -1382,7 +1377,7 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
         latency_offset_ms: audio::DEFAULT_LATENCY_OFFSET_MS,
         budget_ms: DEFAULT_BUDGET_MS,
         demo: None,
-        store: PathBuf::from(DEFAULT_STORE),
+        store: PathBuf::from(places::STORE),
         save_set: None,
         load_set: None,
         record_session: None,
