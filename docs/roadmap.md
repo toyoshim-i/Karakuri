@@ -1146,6 +1146,28 @@ whether the values behind it exist anywhere in this workspace.
 These are questions rather than work, and every one of them was found by building the thing next to
 it.
 
+- **Which cut of the previous frame a feedback effect reads, and what holding it costs.** The one
+  effect [the console page](manual/console.html) names as an exception when it gives L5 a writable
+  form — *"reading the previous frame is a cycle, and wants a decision of its own."* **What that
+  page does not say is that the previous frame is not one thing.** It could be a Set's output, the
+  raw frame the mix wrote before anything downstream touched it, or the frame as it stands after
+  some effect in the chain — so a feedback procedure has to *name which cut it reads*, and the
+  vocabulary has no way to say that today.
+  **And a cut that is read has to be held, which is a frame-sized target and a copy per frame.**
+  Holding all of them against the chance that something reads one is the cost nobody would pay, so
+  the shape this points at is that **the selection recomposes the pipeline** — a cut nothing reads
+  is not retained, and a `.kir` that names one adds the retention to the graph the way an edge adds
+  a pass. Nothing in `karakuri-engine` does that today: the render graph is built from a Set's nodes
+  and the fold is fixed.
+  **Not decided, and deliberately not yet** — the material above is the framing a decision starts
+  from rather than an argument for an answer, and it was written down because it existed nowhere.
+  **What it blocks is stated rather than implied**: with
+  [ADR-0226](adr/0226-m5-closes-when-the-manual-is-implemented-and-the-meter-is-progress-rather-than-completion.md)
+  making the manual the exit condition, and the mock drawing `feedback` beside `bloom` and
+  `rgb shift`, **M5 cannot close without either taking this or changing the manual.** That is the
+  first place the new exit condition bites, and it is working rather than failing: the alternative
+  was a milestone that closed with a control drawn in the specification and absent from the panel.
+
 - **~~Where `Operation` becomes `Record`~~ — taken.** It is
   [`karakuri-operation-record`](../crates/karakuri-operation-record), a crate depending on the two
   leaves that may not depend on each other, and the reading it needs is a **value handed in** rather
