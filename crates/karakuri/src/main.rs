@@ -211,7 +211,7 @@ use std::time::{Duration, Instant};
 use karakuri_console::{egui, egui_wgpu, egui_winit};
 
 use karakuri_console::budget::PANEL_PASS;
-use karakuri_console::input::{claim, Claim};
+use karakuri_console::input::{claim, Claim, CONTROLS};
 use karakuri_console::panel::{
     Dragged, InHand, Knob, Op, Outcome, Panel, Pressed, Released, Visibility,
 };
@@ -1715,10 +1715,13 @@ impl Readout {
         let viewport = layout.viewport();
         println!();
         println!(
-            "the console, in a {:.0} x {:.0} viewport. every leaf gets its region; seven of \
-             them get a bay head, and every body is empty but the Program bay's two: the \
-             picture is a live engine frame, and deck A is auditioning in the first of the \
-             four preview cells under it.",
+            "the console, in a {:.0} x {:.0} viewport. every leaf gets its region, and what \
+             each one draws is the list further down rather than a sentence here: that list \
+             is the arrangement's own nodes read against the view the frame is drawn from, \
+             so a body that fills in says so without anybody rewriting a line of this. **the \
+             sentence this replaces said every body was empty but the Program bay's two**, \
+             and it went on saying it while bay after bay drew one — which is what a \
+             description kept beside the thing it describes is worth.",
             viewport.w, viewport.h
         );
         println!(
@@ -1767,7 +1770,9 @@ impl Readout {
              deck. the strip then follows because the DECK changed, not because \
              anything here remembered. a press on the track \
              off the knob does nothing, deliberately: a fader at 0.3 whose top is clicked \
-             must not jump to 1.0 on stage. everything else in the strip is a READOUT.",
+             must not jump to 1.0 on stage. the chips beside the faders are played too, and \
+             this file has stopped counting them: what a pointer reaches on this panel is \
+             said once, below, and asked of the crate that hit-tests it.",
             self.view.mixer.len(),
             match self.view.mixer.len() {
                 1 => "",
@@ -1833,15 +1838,20 @@ impl Readout {
                 Some(region) => match region.kind {
                     Kind::Bay { grip: true, .. } => "bay, with a grip".to_owned(),
                     Kind::Bay { .. } => "bay".to_owned(),
-                    // The other row with something in it, and everything in
-                    // it is a readout: the six controls the mock draws here
-                    // are six things that do not exist behind this panel, and
-                    // `view::transport` names each of them.
+                    // Four readouts, and then the controls that landed in
+                    // this row after them: the arrangement pill and, at the
+                    // far end, the tone map and the exposure. The six controls
+                    // the mock draws here are still six things that do not
+                    // exist behind this panel, and `view::transport` names
+                    // each of them. What a press in this row reaches is not
+                    // counted here — see the pointer's paragraph below.
                     Kind::Transport => "row, no heading: bpm, beat, bar, frame".to_owned(),
-                    // The one row with something in it: the console's first
-                    // control. The mixer's two faders are the other two, and
-                    // between them they are everything a press acts on that is
-                    // not a boundary.
+                    // The console's first control, and for a while its only
+                    // one. How many there are now is
+                    // `karakuri_console::input::CONTROLS` and is printed
+                    // below; a number kept here would be that claim in a
+                    // second place, which is the defect this legend is being
+                    // repaired of.
                     Kind::Outputs => "row, one sink: program view".to_owned(),
                     Kind::Pane => "pane, inside a bay".to_owned(),
                     Kind::Picture => "the picture, a sink".to_owned(),
@@ -1905,29 +1915,94 @@ impl Readout {
         println!(
             "the outputs row's dot folds the picture by name, so clicking it and pressing f \n\
              over the picture are the same operation reached from two surfaces. it is lit \n\
-             while the picture is on screen. the mixer's two faders are the panel's other \n\
-             controls, and they are a different kind: the dot names an operation on the \n\
-             ARRANGEMENT, which this crate performs, and a fader names one on the MIX, \n\
-             which it cannot — so the operation comes out and this file applies it."
+             while the picture is on screen. it is one of two kinds of control and a fader \n\
+             is the other: the dot names an operation on the ARRANGEMENT, which this crate \n\
+             performs, and a fader names one on the MIX, which it cannot — so the operation \n\
+             comes out and this file applies it."
+        );
+        println!();
+        println!(
+            "the pointer, and this file no longer keeps a list of what it reaches. a press \n\
+             in a gap takes the boundary and it follows the pointer. everywhere else \n\
+             `karakuri_console::input::claim` decides, and the {CONTROLS} controls its rule \n\
+             4 hit-tests are painted shapes with no widget behind them — nothing but that \n\
+             rule knows a press landed on one. the number is that crate's own constant, \n\
+             summed over the derivations the rule actually asks, so a control added there \n\
+             and not counted is a compile error rather than a sentence that has gone quiet. \n\
+             what each of them is, and what a press on it asks for, is written at the \n\
+             derivation that draws it: a copy here is precisely how this legend came to \n\
+             name three controls while every one of them answered a press."
         );
         println!();
         println!("keys — the pointer's position decides what each one acts on:");
-        println!("  click    the outputs dot: turn the program view sink off, and on again");
-        println!("  drag     press the left button in a gap and move: the boundary follows");
-        println!("  fader    press a mixer knob and move: the deck's gain or opacity follows");
-        println!("  f        fold the region under the pointer");
-        println!("  g        fold the split enclosing the region under the pointer");
-        println!("  z        unfold everything folded (a folded region has no rectangle, so");
-        println!("           the pointer cannot reach it to unfold it)");
-        println!("  s        solo the region under the pointer");
-        println!("  u        undo the solo");
-        println!("  r        reset to a fresh arrangement");
-        println!("  p        print every region's rectangle");
-        println!("  n        the room: day or night");
-        println!("  esc      quit");
+        for (key, what) in KEYS {
+            println!("  {key:<10}{what}");
+        }
         println!();
     }
 }
+
+/// **Every key this window binds, and the sentence the legend prints for it.**
+///
+/// The list an operator reads and the list the tests check are one list.
+/// `key_column::the_keys_this_file_lists_are_the_keys_the_window_loop_binds`
+/// reads the `match` in `window_event` out of this file's own text and asserts
+/// it is exactly these keys, so a key bound and not printed — or a key printed
+/// and not bound — fails there rather than being found by an operator pressing
+/// it and getting nothing.
+///
+/// **That test was already here and the legend was a second copy of its
+/// list**, which is the copy that drifted: the printed list stayed at nine
+/// keys while ten more were bound, and the operator who read it was told this
+/// program folds, solos, resets and quits.
+///
+/// The rows of `docs/manual/operations.html` each key reaches are
+/// `key_column::ROWS`, which is keyed off this table and stays in the test
+/// module: a page heading is what a check reads, and it is not something this
+/// program says to anybody.
+///
+/// The order is the order they print in — the arrangement's keys, then the
+/// deck and the library, then `esc`, then the three that are live only while
+/// the arrangement pill is asking for a name.
+const KEYS: &[(&str, &str)] = &[
+    ("f", "fold the region under the pointer"),
+    ("g", "fold the split enclosing the region under the pointer"),
+    (
+        "z",
+        "unfold everything folded — the pointer cannot reach one to unfold it",
+    ),
+    ("s", "solo the region under the pointer"),
+    ("u", "undo the solo"),
+    ("r", "reset to a fresh arrangement"),
+    ("p", "print every region's rectangle"),
+    ("n", "the room: day or night"),
+    (
+        "0",
+        "select deck A, which is the deck a load is addressed to",
+    ),
+    ("1", "select deck B"),
+    ("2", "select deck C"),
+    (
+        "3",
+        "select deck D, bound whether or not this engine has four slots",
+    ),
+    ("up", "the library cursor, up a row"),
+    ("down", "and down, as far as the rows the bay drew"),
+    ("l", "load the Set under that cursor onto the selected deck"),
+    (
+        "esc",
+        "quit — or, while a name is being typed, abandon the name",
+    ),
+    (
+        "return",
+        "take the name the arrangement pill is asking for, while it asks",
+    ),
+    ("backspace", "rub out a letter of that name"),
+    (
+        "space",
+        "a space in it — text while the pill is open, and not a key",
+    ),
+];
 
 /// A pointer event, stripped to what the rule needs. A button is left or it
 /// is not routed at all, and which wheel axis it was does not change who gets
@@ -5221,6 +5296,12 @@ impl ApplicationHandler for App {
         // frame handler takes the rest. See `inspector`, which is also where
         // the controls it could not place are reported.
         inspector(&engine.deck, &material, &mut self.readout.view.inspector);
+        // **And the Master bay's level, for the strips' reason.** The legend
+        // reports what each bay draws by asking the view, so a bay whose level
+        // has not been written yet reports itself as having no engine behind
+        // it — on a run that has one, and over a fader a hand can take hold
+        // of. It is written again on every frame; this is the first.
+        self.readout.view.master_out = Some(engine.deck.out());
         self.readout.print_legend(budget, &governed);
 
         // The first frame is owed to the window appearing, not drawn on a
@@ -7776,8 +7857,9 @@ mod key_column {
     //! well defined, because
     //! [ADR-0214](../../../docs/adr/0214-the-program-moves-out-of-the-cli-and-two-thin-binaries-sit-over-it.md)
     //! gave this workspace a second keyboard: `karakuri-cli` binds thirty-nine
-    //! keys and this program binds sixteen, **eight letters mean different
-    //! things on the two**, and a badge saying `key f g` did not say whose.
+    //! keys and this program binds every key in [`super::KEYS`], **eight
+    //! letters mean different things on the two**, and a badge saying
+    //! `key f g` did not say whose.
     //! (Nine when ADR-0220 was written; the library's load route added seven —
     //! the four that select a deck, the two that walk the library cursor, and
     //! `l`. The four are also the one place beyond `esc` where the two
@@ -7826,8 +7908,8 @@ mod key_column {
     //!   key is on the page, and it surfaces from the other direction the
     //!   moment somebody marks that row built.
     //! - **A key arm inside a block comment.** `/* … */` is not a line comment
-    //!   and reads as bound. A *false positive*, and it fails loudly: [`KEYS`]
-    //!   has no entry for it and
+    //!   and reads as bound. A *false positive*, and it fails loudly:
+    //!   [`super::KEYS`] has no entry for it and
     //!   [`the_keys_this_file_lists_are_the_keys_the_window_loop_binds`] names
     //!   it.
     //! - **This file does not press a key.** It reads an arm and reads the
@@ -7842,7 +7924,7 @@ mod key_column {
     //!   sufficient half, and it is not checked here either — one boundary
     //!   further out than the two files above stop at.
     //! - **Which rows a key lands on is written down rather than derived**, in
-    //!   [`KEYS`]. It has to be: `Op::Fold` folds a bay or a pane depending on
+    //!   [`ROWS`]. It has to be: `Op::Fold` folds a bay or a pane depending on
     //!   what the pointer is over, and only the page separates those two rows.
     //!   A wrong entry is a wrong claim, and it cannot be *quietly* wrong —
     //!   both assertions below read the same list, so an entry naming a row
@@ -7884,6 +7966,8 @@ mod key_column {
     use std::fs;
     use std::path::{Path, PathBuf};
 
+    use super::KEYS;
+
     /// The specification, relative to the workspace root.
     const PAGE: &str = "docs/manual/operations.html";
 
@@ -7905,8 +7989,9 @@ mod key_column {
 
     /// Where [`bound`] stops reading. Everything below the first of these in
     /// this file is a test, and a key spelled in a test is not a key this
-    /// program binds — including the ones spelled in [`KEYS`] a few lines down,
-    /// which would otherwise make the scan agree with itself.
+    /// program binds — including the ones spelled in [`ROWS`] a few lines down
+    /// and in [`super::KEYS`] above, which would otherwise make the scan agree
+    /// with itself.
     const TESTS: &str = "#[cfg(test)]";
 
     /// The two arm shapes the window loop's `match` is written in.
@@ -7919,7 +8004,7 @@ mod key_column {
     ///
     /// **Three of the four are only live while a name is being typed**, and
     /// they are spelled all the same: this table is what a key is *called*,
-    /// and when it is bound is [`KEYS`]' business.
+    /// and when it is bound is [`super::KEYS`]' business.
     const NAMED_KEYS: &[(&str, &str)] = &[
         ("Escape", "esc"),
         ("Enter", "return"),
@@ -7931,8 +8016,20 @@ mod key_column {
 
     /// **Every key this program binds, and the rows of [`PAGE`] it reaches.**
     ///
-    /// One entry per arm of the `match` in `window_event`, and the rows are the
-    /// page's headings byte for byte. Where an arm resolves through
+    /// One entry per key in [`super::KEYS`], which is the table the window
+    /// loop's legend prints and the one
+    /// [`the_keys_this_file_lists_are_the_keys_the_window_loop_binds`] holds
+    /// the `match` to. **The keys are not written twice**: that they are the
+    /// same keys is
+    /// [`every_key_the_legend_prints_has_its_rows_written_down`], both ways
+    /// round, so a key added to the legend with no rows recorded — or a row
+    /// mapping left behind by a key that went — fails here rather than at the
+    /// page. What is written down is only the *rows*, and it stays in this
+    /// module because a page heading is what a check reads and is not
+    /// something the program says to anybody.
+    ///
+    /// The rows are the page's headings byte for byte. Where an arm resolves
+    /// through
     /// `karakuri_console::panel::Op`, the rows are that variant's — the mapping
     /// `karakuri-console/tests/vocabulary.rs` pins in `rows_of`, which is why
     /// `f` and `g` each name two rows: a fold is a bay or a pane depending on
@@ -7941,7 +8038,7 @@ mod key_column {
     ///
     /// An empty list is a key that reaches no row, and [`NO_ROW`] is where the
     /// reason goes.
-    const KEYS: &[(&str, &[&str])] = &[
+    const ROWS: &[(&str, &[&str])] = &[
         // `Op::Fold` of the region under the pointer.
         ("f", &["Fold a bay away", "Fold a pane away"]),
         // `Op::FoldEnclosing` over a region, `Op::Fold` of the split over a
@@ -8002,7 +8099,7 @@ mod key_column {
 
     /// The keys that reach no row, so that one which starts reaching one stops
     /// being an exception, and a new exception is written down rather than
-    /// discovered. The reasons are at the entries in [`KEYS`].
+    /// discovered. The reasons are at the entries in [`ROWS`].
     const NO_ROW: &[&str] = &["n", "p", "up", "down", "return", "backspace", "space"];
 
     fn workspace() -> PathBuf {
@@ -8118,10 +8215,10 @@ mod key_column {
         found
     }
 
-    /// The rows [`KEYS`] says a key reaches, or `None` if this program does not
+    /// The rows [`ROWS`] says a key reaches, or `None` if this program does not
     /// bind it at all.
     fn rows_of(key: &str) -> Option<&'static [&'static str]> {
-        KEYS.iter().find(|(k, _)| *k == key).map(|(_, rows)| *rows)
+        ROWS.iter().find(|(k, _)| *k == key).map(|(_, rows)| *rows)
     }
 
     /// The floor under both directions: a scan that matched nothing would
@@ -8143,26 +8240,52 @@ mod key_column {
         );
     }
 
-    /// **The list and the `match` are the same list.** [`KEYS`] is the one
-    /// thing here the compiler cannot check, so an arm added without an entry —
-    /// or an entry left behind by an arm that went — arrives as a failure
-    /// rather than as a row nobody noticed had stopped being reachable.
+    /// **The list, the `match` and the legend are one list.**
+    ///
+    /// [`super::KEYS`] is the table the window loop prints when it starts, and
+    /// it is the one thing here the compiler cannot check: an arm added
+    /// without an entry — or an entry left behind by an arm that went —
+    /// arrives as a failure rather than as a key nobody noticed had stopped
+    /// being reachable, *or as a legend that goes on telling an operator this
+    /// program folds, solos, resets and quits*.
+    ///
+    /// That second half is why the printed table is the checked one. It was a
+    /// separate list of nine `println!`s, and it stayed at nine while ten more
+    /// keys were bound: the maintainer who read it reported the program
+    /// unchanged, which it was not.
     #[test]
     fn the_keys_this_file_lists_are_the_keys_the_window_loop_binds() {
         let listed: BTreeSet<String> = KEYS.iter().map(|(k, _)| (*k).to_owned()).collect();
         assert_eq!(
             bound(),
             listed,
-            "the keys the `match` in `window_event` binds are not the ones `KEYS` lists. An arm \
-             this file does not know about reaches an operation nothing checks the badge of; an \
-             entry with no arm claims a key an operator presses to no effect"
+            "the keys the `match` in `window_event` binds are not the ones `KEYS` lists — which \
+             is the list the legend prints. An arm this file does not know about reaches an \
+             operation nothing checks the badge of and is told to nobody; an entry with no arm \
+             is a legend naming a key an operator presses to no effect"
+        );
+    }
+
+    /// **And every key the legend prints has its rows written down**, both
+    /// ways round, which is what keeps [`ROWS`] from being a second list of
+    /// keys rather than a mapping off the first.
+    #[test]
+    fn every_key_the_legend_prints_has_its_rows_written_down() {
+        let printed: BTreeSet<&str> = KEYS.iter().map(|(k, _)| *k).collect();
+        let mapped: BTreeSet<&str> = ROWS.iter().map(|(k, _)| *k).collect();
+        assert_eq!(
+            printed, mapped,
+            "a key the legend prints has no entry in `ROWS`, or `ROWS` maps a key the legend \
+             does not print. The rows a key reaches cannot be derived — a fold is a bay or a \
+             pane depending on the pointer — so the mapping is written down, and this is what \
+             says it is written down for exactly the keys this program binds"
         );
     }
 
     /// And the keys that reach no row are exactly [`NO_ROW`], both ways round.
     #[test]
     fn the_keys_that_reach_no_row_are_the_ones_written_down() {
-        let silent: Vec<&str> = KEYS
+        let silent: Vec<&str> = ROWS
             .iter()
             .filter(|(_, rows)| rows.is_empty())
             .map(|(k, _)| *k)
@@ -8183,7 +8306,7 @@ mod key_column {
     #[test]
     fn every_key_the_instrument_binds_reaches_a_route_marked_built() {
         let badges = key_badges();
-        for (key, rows) in KEYS {
+        for (key, rows) in ROWS {
             for row in *rows {
                 let found = badges
                     .iter()
