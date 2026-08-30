@@ -6,7 +6,7 @@
 //! <hash>.kir                        source, immutable
 //! <hash>.meta.ndjson                regenerated metadata
 //! thumbnails/<hash>.mp4
-//! sets/<id>.set.ndjson
+//! sets/<id>.kbset
 //! sessions/<stamp>.ndjson
 //! arrangements/<name>.arrangement.json
 //! ```
@@ -126,19 +126,56 @@ impl Store {
         self.root.join(format!("{}.meta.ndjson", hash.short(64)))
     }
 
+    /// **What a stored Set file is called**, and the one place the suffix is
+    /// spelled. `Store::set_path` builds the name and [`Store::list_sets`]
+    /// derives an id back off it **by stripping this**, so two literals could
+    /// drift into a store that writes files it cannot list — and an id that
+    /// exists on disk under one spelling and nowhere in the listing is the
+    /// worst shape that disagreement can take, because neither side is wrong
+    /// on its own.
+    ///
+    /// **`.kbset` rather than `.set.ndjson`, and the reason is atomicity
+    /// rather than tidiness.** A Set file has two forms: an authoring one,
+    /// which names its parts by **relative path** and lives beside them, and
+    /// this one, which names them by content address and needs nothing from the
+    /// filesystem around it. A swap happens on a frame boundary and an
+    /// over-budget Set rolls back on its own
+    /// (`docs/principles/0005-a-swap-happens-on-a-frame-boundary-and-an-over-budget-set-rolls-back-on-its-own.md`),
+    /// and that holds only because **nothing is left to resolve at the moment
+    /// of the swap**. Let the authoring form into the store and a load walks
+    /// the filesystem while swapping: a neighbour may be missing, may have
+    /// changed since the file was written, may fail halfway — and a swap that
+    /// can partially fail is not a swap. So the store's invariant is that
+    /// everything in it is already resolved, and **the extension is what makes
+    /// that invariant checkable**.
+    ///
+    /// **This is not a new check.** The suffix was always stripped to find an
+    /// id, so an id could never exist without it; what changed is that the
+    /// check now means something. The authoring form's own spelling is
+    /// `.kset`, and there is deliberately no constant for it here: nothing in
+    /// this workspace reads one yet, and a name nothing reads is a claim about
+    /// a design rather than part of one. See
+    /// `docs/adr/0231-a-sets-two-forms-take-two-extensions-and-the-store-holds-only-the-resolved-one.md`.
+    pub const SET_FILE_SUFFIX: &str = ".kbset";
+
     fn set_path(&self, id: &str) -> PathBuf {
-        self.root.join("sets").join(format!("{id}.set.ndjson"))
+        self.root
+            .join("sets")
+            .join(format!("{id}{}", Store::SET_FILE_SUFFIX))
     }
 
     fn session_path(&self, stamp: &str) -> PathBuf {
         self.root.join("sessions").join(format!("{stamp}.ndjson"))
     }
 
-    /// **`<name>.arrangement.json`, spelled the way `<id>.set.ndjson` is**: the
-    /// operator's name, what kind of thing it is, and the format it is in. The
-    /// middle component is what lets [`Store::list_arrangements`] tell an
-    /// arrangement from an editor's backup or a half-written `.tmp` without
-    /// opening either, which is the same trick `sets/` already turns.
+    /// **`<name>.arrangement.json`, ending in a suffix the layout owns the way
+    /// `<id>.kbset` does**: the operator's name, what kind of thing it is, and
+    /// the format it is in. That suffix is what lets
+    /// [`Store::list_arrangements`] tell an arrangement from an editor's backup
+    /// or a half-written `.tmp` without opening either, which is the same trick
+    /// `sets/` turns with [`Store::SET_FILE_SUFFIX`] — there in one component
+    /// rather than two, because a Set's extension has a second job this one
+    /// does not: it says the file is already resolved.
     ///
     /// **`.json` and not `.ndjson`.** An arrangement is one document rather
     /// than a stream of records — there is no line to append and nothing to
@@ -202,7 +239,7 @@ impl Store {
         ndjson::read(&path)
     }
 
-    /// Read a Set file (`sets/<id>.set.ndjson`).
+    /// Read a Set file (`sets/<id>.kbset`).
     pub fn read_set(&self, id: &str) -> Result<Vec<Line>, StoreError> {
         ndjson::read(&self.set_path(id))
     }
@@ -367,10 +404,28 @@ impl Store {
     /// with is on every entry.
     ///
     /// **A name the layout does not claim is skipped, not repaired.** The
-    /// directory holds `<id>.set.ndjson`; an editor's backup, a `.tmp` left by
-    /// a write that died, a subdirectory someone made — those belong to whoever
-    /// put them there, and reporting one as a Set under a truncated id would
-    /// invent a library entry [`Store::read_set`] cannot open.
+    /// directory holds `<id>`[`SET_FILE_SUFFIX`](Store::SET_FILE_SUFFIX); an
+    /// editor's backup, a `.tmp` left by a write that died, a subdirectory
+    /// someone made — those belong to whoever put them there, and reporting one
+    /// as a Set under a truncated id would invent a library entry
+    /// [`Store::read_set`] cannot open.
+    ///
+    /// **So a file under `sets/` that does not carry that suffix has no id at
+    /// all**, and an id is the only route a Set has to a deck: nothing can ask
+    /// for what cannot be named. That is what keeps a swap atomic
+    /// (`docs/principles/0005-a-swap-happens-on-a-frame-boundary-and-an-over-budget-set-rolls-back-on-its-own.md`) —
+    /// the authoring form of a Set names its parts by relative path, so loading
+    /// one would resolve against the filesystem mid-swap, and a swap that can
+    /// partially fail is not a swap. The listing is where that wall stands,
+    /// and it stands by naming rather than by opening anything.
+    ///
+    /// **The concrete cost, because it is paid silently.** A Set written by a
+    /// build that spelled the suffix `.set.ndjson` is still on disk, still
+    /// readable text, and simply **stops appearing here** — no error, no
+    /// warning, nothing to notice but an id that used to be in the list and is
+    /// not. Nothing repairs it and nothing should: renaming a file this store
+    /// did not write would be guessing that its contents are already resolved,
+    /// which is the one thing the extension exists to stop being a guess.
     ///
     /// An empty store lists nothing, and that is not an error. A `sets/`
     /// directory removed under the store *is* one: the caller asked what is
@@ -384,7 +439,10 @@ impl Store {
             // Non-UTF-8 fails `to_str` and falls out of the listing with
             // everything else the layout does not claim — no lossy repair, and
             // no unwrap for a hostile name to trip.
-            let Some(id) = name.to_str().and_then(|n| n.strip_suffix(".set.ndjson")) else {
+            let Some(id) = name
+                .to_str()
+                .and_then(|n| n.strip_suffix(Store::SET_FILE_SUFFIX))
+            else {
                 continue;
             };
             if entry.file_type()?.is_dir() {

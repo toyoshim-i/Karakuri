@@ -6988,7 +6988,7 @@ mod tests {
         // thing beside `sets/`, `sessions/` and the artifacts, and not one of
         // them.
         assert!(
-            !root.join("sets").join("four_deck.set.ndjson").exists(),
+            !root.join("sets").join("four_deck.kbset").exists(),
             "the arrangement was filed as a Set"
         );
 

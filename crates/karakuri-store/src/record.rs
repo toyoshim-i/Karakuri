@@ -3,7 +3,7 @@
 //! One record per line, and concatenation is composition. The same record types
 //! serve three files:
 //!
-//! - a **Set file** (`.set.ndjson`) is a state projection — what is loaded and
+//! - a **Set file** (`.kbset`) is a state projection — what is loaded and
 //!   what every value currently is. It carries no time, so it never contains
 //!   [`Record::Tick`].
 //! - a **session stream** is a timeline — a Set file followed by ticks and the
@@ -866,7 +866,7 @@ pub enum Record {
     /// follows — a record that describes a change already made.
     Save {
         slot: u8,
-        /// What the Set file is called in the store: `sets/<id>.set.ndjson`.
+        /// What the Set file is called in the store: `sets/<id>.kbset`.
         /// A `String` because it is a name somebody chose, and the only thing
         /// in this record that can be looked up.
         id: String,

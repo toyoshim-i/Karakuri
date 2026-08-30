@@ -2119,7 +2119,7 @@ proc blob {
     /// lines are in memory.
     fn parsed(text: &str) -> Vec<Line> {
         let dir = tempfile::tempdir().expect("tempdir");
-        let path = dir.path().join("hand_written.set.ndjson");
+        let path = dir.path().join("hand_written.kbset");
         std::fs::write(&path, text).expect("write");
         karakuri_store::ndjson::read(&path).expect("a hand-written Set file parses")
     }

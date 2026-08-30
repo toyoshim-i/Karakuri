@@ -1296,7 +1296,7 @@ fn kept(args: &Value, slots: &Slots) -> Result<Operation, String> {
 /// `read_set`'s argument as the operation it names.
 ///
 /// **The same check `save_set` puts a name through, and the reason is the same
-/// one.** This id becomes `<store>/sets/<id>.set.ndjson`, so
+/// one.** This id becomes `<store>/sets/<id>.kbset`, so
 /// `../../../somewhere/else` is a path, and paths never cross this protocol —
 /// see [`checked_id`] and [`Slots`]. A read is not the harmless half of that
 /// rule: it is the half that hands a file's contents back to the caller.
@@ -1754,7 +1754,7 @@ const LISTED: usize = 20;
 /// and its own description ends by telling a model to use it to choose between
 /// things it has kept — which was unreachable, because nothing said what was
 /// kept. A model could read a Set it had just saved, in the same conversation,
-/// and nothing else; an operator had `ls` on a directory of `.set.ndjson`. This
+/// and nothing else; an operator had `ls` on a directory of `.kbset`. This
 /// is the other half, and it is the half the milestone is named for.
 ///
 /// **Most recent first, and the tie-break is why this sorts at all.**
@@ -2254,7 +2254,7 @@ fn layer_spelled(layer: Layer) -> &'static str {
 ///
 /// **A Set id is one path component.** [`crate::history::stamped_id`] says so
 /// where it explains why the date is spelled `20260816` rather than
-/// `2026/08/16`, and `Store::set_path` spells the file `sets/<id>.set.ndjson`
+/// `2026/08/16`, and `Store::set_path` spells the file `sets/<id>.kbset`
 /// without checking that what it was handed is one. That is the operator's own
 /// business on `--save-set`, where the id came out of their own shell. It is not
 /// a model's: this is the same rule [`Slots`] exists for — **paths never cross
@@ -3651,7 +3651,7 @@ proc probe_knobs {
     fn written_at(server: &Server, id: &str, secs: u64) {
         let path = store_root(&server.dir)
             .join("sets")
-            .join(format!("{id}.set.ndjson"));
+            .join(format!("{id}.kbset"));
         let file = std::fs::OpenOptions::new()
             .write(true)
             .open(&path)

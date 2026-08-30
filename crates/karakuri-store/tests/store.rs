@@ -184,7 +184,7 @@ fn unknown_records_survive_a_read_write_round_trip() {
     let dir = tempdir().unwrap();
     let store = Store::open(dir.path()).unwrap();
 
-    let path = dir.path().join("sets").join("with_unknown.set.ndjson");
+    let path = dir.path().join("sets").join("with_unknown.kbset");
     let original = concat!(
         r#"{"t":"set","id":"drift_01","v":1}"#,
         "\n",
@@ -255,7 +255,7 @@ fn write_set_accepts_a_merge_record() {
         &Record::Merge { live: Some(1) }
     );
 
-    let contents = fs::read_to_string(dir.path().join("sets").join("morph_01.set.ndjson")).unwrap();
+    let contents = fs::read_to_string(dir.path().join("sets").join("morph_01.kbset")).unwrap();
     assert!(
         contents.contains(r#"{"t":"merge","live":1}"#),
         "the merge did not go to disk as the line the spec prints: {contents}"
@@ -271,7 +271,7 @@ fn write_set_accepts_a_merge_record() {
         Line::new(Record::Merge { live: None }),
     ];
     store.write_set("morph_02", &unselected).unwrap();
-    let contents = fs::read_to_string(dir.path().join("sets").join("morph_02.set.ndjson")).unwrap();
+    let contents = fs::read_to_string(dir.path().join("sets").join("morph_02.kbset")).unwrap();
     assert!(
         contents.contains("{\"t\":\"merge\"}\n"),
         "an unselected merge wrote something beyond its own presence: {contents}"
@@ -292,7 +292,7 @@ fn a_merge_line_keeps_a_key_this_build_does_not_know() {
     let dir = tempdir().unwrap();
     let store = Store::open(dir.path()).unwrap();
 
-    let path = dir.path().join("sets").join("from_later.set.ndjson");
+    let path = dir.path().join("sets").join("from_later.kbset");
     let original = concat!(
         r#"{"t":"set","id":"morph_01","v":1}"#,
         "\n",
@@ -387,7 +387,7 @@ fn write_set_rejects_a_tick() {
     }
 
     // And nothing should have been written.
-    assert!(!dir.path().join("sets").join("bad.set.ndjson").exists());
+    assert!(!dir.path().join("sets").join("bad.kbset").exists());
 }
 
 #[test]
@@ -484,7 +484,7 @@ fn write_set_rejects_an_audio_frame_and_a_tempo_correction() {
         assert!(!dir
             .path()
             .join("sets")
-            .join(format!("{name}.set.ndjson"))
+            .join(format!("{name}.kbset"))
             .exists());
     }
 }
@@ -560,7 +560,7 @@ fn write_set_rejects_an_artifacts_metadata() {
         assert!(!dir
             .path()
             .join("sets")
-            .join(format!("{name}.set.ndjson"))
+            .join(format!("{name}.kbset"))
             .exists());
     }
 }
@@ -698,7 +698,7 @@ fn list_sets_carries_the_time_the_file_was_written() {
     let newer = SystemTime::UNIX_EPOCH + Duration::from_secs(1_700_000_000);
     for (id, stamp) in [("alpha", newer), ("zulu", older)] {
         store.write_set(id, &a_set()).unwrap();
-        let path = dir.path().join("sets").join(format!("{id}.set.ndjson"));
+        let path = dir.path().join("sets").join(format!("{id}.kbset"));
         fs::File::options()
             .write(true)
             .open(&path)
@@ -723,7 +723,7 @@ fn list_sets_carries_the_time_the_file_was_written() {
     );
 }
 
-/// **Only `<id>.set.ndjson` is a Set.** Everything else that can end up in that
+/// **Only `<id>.kbset` is a Set.** Everything else that can end up in that
 /// directory — a `.tmp` from a write that died, an editor's backup, a
 /// subdirectory — is somebody else's file, and reporting one as a Set means
 /// handing back an id [`Store::read_set`] cannot open. The `.tmp` case is not
@@ -736,11 +736,11 @@ fn list_sets_skips_what_the_layout_does_not_claim() {
     let sets = dir.path().join("sets");
 
     store.write_set("drift_01", &a_set()).unwrap();
-    fs::write(sets.join("drift_01.set.ndjson.tmp"), b"half a write").unwrap();
+    fs::write(sets.join("drift_01.kbset.tmp"), b"half a write").unwrap();
     fs::write(sets.join("notes.txt"), b"reminder").unwrap();
     fs::write(sets.join("drift_02.ndjson"), b"wrong suffix").unwrap();
     fs::write(sets.join("drift_03.set"), b"wrong suffix").unwrap();
-    fs::create_dir(sets.join("archive.set.ndjson")).unwrap();
+    fs::create_dir(sets.join("archive.kbset")).unwrap();
 
     let ids: Vec<String> = store
         .list_sets()
@@ -749,6 +749,72 @@ fn list_sets_skips_what_the_layout_does_not_claim() {
         .map(|e| e.id)
         .collect();
     assert_eq!(ids, ["drift_01"]);
+}
+
+/// **A file under `sets/` that does not carry `.kbset` has no id at all**, and
+/// an id is the only route a Set has to a deck: nothing can ask for what cannot
+/// be named.
+///
+/// That is the store's invariant rather than a tidiness rule. A swap happens on
+/// a frame boundary and an over-budget Set rolls back on its own (P-0005),
+/// which holds only because nothing is left to resolve at the moment of the
+/// swap — so the two files here are exactly the two that would break it: an
+/// authoring `.kset`, which names its parts by relative path and would send a
+/// load walking the filesystem mid-swap, and a Set written by a build that
+/// spelled the suffix `.set.ndjson`, whose contents nothing has ever checked
+/// against the claim the new name makes.
+///
+/// **The `.set.ndjson` half is the one worth writing down, because it is
+/// silent.** The file is still there, still readable text, and simply stops
+/// being listed — no error, nothing to notice but an id that used to be in the
+/// list. Nothing repairs it either, which this asserts: renaming a file the
+/// store did not write would be guessing that its contents are already
+/// resolved.
+#[test]
+fn a_file_without_the_suffix_has_no_id_and_no_route_to_a_deck() {
+    let dir = tempdir().unwrap();
+    let store = Store::open(dir.path()).unwrap();
+    let sets = dir.path().join("sets");
+
+    store.write_set("kept", &a_set()).unwrap();
+
+    // What an earlier build left behind: a perfectly parseable Set file, which
+    // is the point — nothing here opens it to find that out.
+    let earlier = sets.join("morph01.set.ndjson");
+    fs::write(&earlier, "{\"t\":\"set\",\"id\":\"morph01\",\"v\":1}\n").unwrap();
+    // And the form the extension exists to keep out of the store.
+    let authoring = sets.join("beside_its_parts.kset");
+    fs::write(
+        &authoring,
+        "{\"t\":\"set\",\"id\":\"beside_its_parts\",\"v\":1}\n",
+    )
+    .unwrap();
+
+    let ids: Vec<String> = store
+        .list_sets()
+        .unwrap()
+        .into_iter()
+        .map(|e| e.id)
+        .collect();
+    assert_eq!(
+        ids,
+        ["kept"],
+        "a file under `sets/` with no `.kbset` suffix was listed as a Set"
+    );
+
+    // No id, so no route to a deck: the name each file suggests reaches nothing.
+    for id in ["morph01", "beside_its_parts"] {
+        assert!(
+            store.read_set(id).is_err(),
+            "`{id}` read back, so the name on disk was an id after all"
+        );
+    }
+
+    // And both are still where their owner put them.
+    assert!(
+        earlier.exists() && authoring.exists(),
+        "a file was repaired away"
+    );
 }
 
 /// The same claim for artifacts, plus the ordering that makes a listing
@@ -953,7 +1019,7 @@ fn listing_reads_names_and_not_contents() {
     let store = Store::open(dir.path()).unwrap();
 
     fs::write(
-        dir.path().join("sets").join("garbage.set.ndjson"),
+        dir.path().join("sets").join("garbage.kbset"),
         b"this is not ndjson\n",
     )
     .unwrap();

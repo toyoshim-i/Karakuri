@@ -59,8 +59,7 @@ mod gpu {
         let store = dir.join("store");
         let store_arg = store.to_str().expect("utf-8 path").to_string();
         run(&["--store", &store_arg, "--save-set", "base"]);
-        let head =
-            std::fs::read_to_string(store.join("sets/base.set.ndjson")).expect("the saved Set");
+        let head = std::fs::read_to_string(store.join("sets/base.kbset")).expect("the saved Set");
         (store_arg, head)
     }
 
@@ -340,7 +339,7 @@ mod gpu {
         assert!(
             !Path::new(&store)
                 .join("sets")
-                .join(format!("{id}.set.ndjson"))
+                .join(format!("{id}.kbset"))
                 .exists(),
             "a replay wrote a Set file"
         );

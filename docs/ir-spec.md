@@ -1931,7 +1931,27 @@ known. The total-cost decision lives there, not in the artifact.
 
 ## Set file format
 
-`.set.ndjson`. One record per line. Concatenation is composition.
+`.kbset`. One record per line. Concatenation is composition — the extension no longer spells the
+encoding, and the line above is what says it.
+
+**The extension says the file is already resolved**, which is the store's invariant rather than a
+label on the format. Every `proc` here is a content address, so reading one of these resolves
+nothing against the filesystem around it. `.kset` is reserved for the **authoring** form — a Set
+file that names its `.kir` files by relative path and lives beside them
+([ADR-0229](adr/0229-a-set-file-is-authored-beside-its-parts-and-travels-as-a-bundle.md)) — and
+nothing in this workspace writes or reads one yet. The distinction is load-bearing rather than
+cosmetic: a swap happens on a frame boundary and an over-budget Set rolls back on its own
+([P-0005](principles/0005-a-swap-happens-on-a-frame-boundary-and-an-over-budget-set-rolls-back-on-its-own.md)),
+which holds only because nothing is left to resolve at the moment of the swap. A form that walked
+the filesystem while swapping could fail halfway — a neighbour missing, or changed since the file
+was written — and a swap that can partially fail is not a swap. So the store holds `.kbset` and
+only `.kbset`, and `Store::list_sets` derives an id by stripping that suffix, which is where the
+check already lands
+([ADR-0231](adr/0231-a-sets-two-forms-take-two-extensions-and-the-store-holds-only-the-resolved-one.md)).
+
+**Bundled or not is a property within `.kbset` and not a third format.** The `src` records below
+are appended to a file that was already resolved; what they save the receiver is a lookup in a
+store that has never held the material, not a resolution pass.
 
 ```ndjson
 {"t":"set","id":"morph_01","v":1}
