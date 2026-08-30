@@ -3580,35 +3580,43 @@ fn look(look: &Look) -> view::Look {
 /// the record *and* what the deck holds afterwards, and printing both would
 /// say one press twice.
 ///
-/// **The `Owed` arm has a caller now, and it is the deck head's sync chip.**
-/// This paragraph used to say nothing on this panel could reach either arm,
-/// and that it was written for the day one did. That day is the day the deck
-/// head landed: `Operation::SetSync` converts to `Owed(NotSettled)`, because
-/// what its record carries — the anchor that was asked for, or the one
-/// `Transport::engaged` clamped — is a decision about the bytes on disk that
-/// nobody has taken (ADR-0218 leaves it open by name). So the chip and the
-/// anchor beside it are **reachable affordances over an unwritable record**:
-/// the press is claimed, the operation is emitted, this sentence is printed
-/// with the question in it, and the deck does not move.
+/// **Nothing on this panel reaches the `Owed` arm on purpose any more**, and
+/// the paragraph that used to stand here is worth keeping as history because
+/// it was twice wrong in the same place. It first said no control could reach
+/// either arm and was written for the day one did; the deck head was that day,
+/// and it said the sync chip and the anchor beside it were **reachable
+/// affordances over an unwritable record** — the press claimed, the operation
+/// emitted, this sentence printed with the question in it, and the deck not
+/// moving.
 ///
-/// **That is the honest state and not a bug to route around.** A surface owns
+/// **What made the record unwritable was a question that had already been
+/// answered.** `Transport::engaged` decides what engaging a mode means, with
+/// the reason at its own definition: the anchor is the session tempo and the
+/// scrub is cleared. The clamp that looked like a decision about the bytes on
+/// disk is the identity on every tempo an oscillator can report, so there were
+/// never two answers to choose between — only a reading nobody was handing in.
+/// [`reading`] hands it in now, `written` writes `Record::Transport`, and
+/// [`apply`] moves the deck, which is the ninth and tenth of this panel's ten
+/// emitting controls arriving where the other eight already were.
+///
+/// **The refusal to route around it is what made that cheap.** A surface owns
 /// the affordance and never the authority
 /// ([P-0076](../../../docs/principles/0076-a-surface-owns-the-affordance-never-the-authority.md)),
-/// and this file writing a `Record::Transport` for a `SetSync` — computing the
-/// anchor itself, the way `karakuri-cli`'s `y` does — would be a window
-/// binary taking a decision about a file format
-/// ([P-0027](../../../docs/principles/0027-a-silently-wrong-image-loses-to-a-loud-failure.md)
-/// is what makes the printed line the right answer instead). **It is also why
-/// that row's panel badge stays `plan`:** ADR-0213's `has` is *an operator
-/// reaches the operation*, and an operator who presses this reaches the
-/// emission and not the move.
+/// so this file never wrote a `Record::Transport` of its own for a `SetSync` —
+/// computing the anchor here would have been a window binary taking a decision
+/// about a file format, and the printed line was the right answer until the
+/// conversion existed
+/// ([P-0027](../../../docs/principles/0027-a-silently-wrong-image-loses-to-a-loud-failure.md)).
+/// What changed is the conversion, not this file's authority: the anchor is
+/// still the engine's policy and this window still only reads a tempo.
 ///
-/// The other eight controls do write records. Five are the mixer's —
-/// `SetGain`, `SetOpacity`, `SetBlendMode`, `SetResidency` and
-/// `SetMaskShape` — two are the look's, and the eighth is the deck head's
-/// scrub, whose `Record::Transport` is settled and applied. The Outputs dot
-/// never arrives here at all, because it asks the panel for an arrangement
-/// [`Op`] and the panel performs it ([`Acted::Operated`]).
+/// So all ten controls write records. Five are the mixer's — `SetGain`,
+/// `SetOpacity`, `SetBlendMode`, `SetResidency` and `SetMaskShape` — two are
+/// the look's, and the last three are the deck head's: the scrub, the chip
+/// that cycles and the anchor that re-asks for the mode the deck is in
+/// (ADR-0218). The Outputs dot never arrives here at all, because it asks the
+/// panel for an arrangement [`Op`] and the panel performs it
+/// ([`Acted::Operated`]).
 ///
 /// **The mask is also the one that can reach [`Written::Owed`] by accident**,
 /// and that is worth having rather than designing away: a reading that did not
@@ -3864,11 +3872,10 @@ fn apply(record: &Record, deck: &mut Deck, look: &mut Look) -> Option<String> {
 /// (ADR-0156, ADR-0194).
 ///
 /// **`Current::default()` is *I read nothing*, and it is still the answer for
-/// five of this panel's ten emitting controls**: a gain, an opacity, a blend
-/// mode, a residency and the sync chip's own `SetSync` each carry everything
-/// their record carries or owe one nothing here can supply, so handing a
-/// reading in would be this file inventing a value. The mask mini is one of
-/// the four that need one, and it needs it for the deck the operation *names*
+/// four of this panel's ten emitting controls**: a gain, an opacity, a blend
+/// mode and a residency each carry everything their record carries, so handing
+/// a reading in would be this file inventing a value. The mask mini is one of
+/// the six that need one, and it needs it for the deck the operation *names*
 /// rather than for the deck the pointer is over — which is `Reading::Mask`'s
 /// own wording and the reason this takes the operation and not a slot.
 ///
@@ -3880,6 +3887,11 @@ fn apply(record: &Record, deck: &mut Deck, look: &mut Look) -> Option<String> {
 ///
 /// **The scrub's two arrows are the fourth**, and the reading they take is the
 /// one thing on this list that is not a completion: see the arm.
+///
+/// **The sync chip and the anchor are the fifth and sixth**, and they read the
+/// one thing here that belongs to no deck: the session tempo. That arm used to
+/// be absent and the two controls used to print a question instead of moving
+/// anything — see [`unwritten`] for what the question turned out to be.
 ///
 /// **The softness is read back**, where `karakuri-cli`'s `mix::current_mask`
 /// substitutes its own `MASK_SOFTNESS`: that program writes wipes and has a
@@ -3940,6 +3952,24 @@ fn reading(operation: &Operation, deck: &Deck, look: &Look) -> Current {
         }
         _ => None,
     };
+    // **The tempo the room is going at, and nothing about a slot.** Engaging
+    // a sync mode anchors the slot at the session tempo so that the picture
+    // does not move at the instant it goes on the grid, which is
+    // `karakuri_engine::transport::Transport::engaged`'s policy and the whole
+    // of what this reading is for. `mix::current_tempo` takes the oscillator
+    // rather than an `f32`, so this window cannot hand in a tempo the session
+    // never ran at — and it reads the grid rather than a clock, which is what
+    // lets the record be replayed
+    // ([P-0002](../../../docs/principles/0002-simulation-time-comes-from-a-record-never-from-a-clock.md)).
+    //
+    // **No slot check, unlike the three below.** The tempo is the session's,
+    // so a `SetSync` naming a slot the deck has not got is a record with a slot
+    // out of range rather than a reading that could not be taken, and
+    // `apply`'s own guard is what says so at the other end of the press.
+    let tempo = match *operation {
+        Operation::SetSync { .. } => Some(mix::current_tempo(deck.signals().oscillator())),
+        _ => None,
+    };
     let mask = match *operation {
         Operation::SetMaskShape { deck: slot, .. } => {
             let slot = usize::from(slot);
@@ -3968,6 +3998,7 @@ fn reading(operation: &Operation, deck: &Deck, look: &Look) -> Current {
         look,
         mask,
         transport,
+        tempo,
     }
 }
 
@@ -5248,10 +5279,12 @@ mod tests {
     /// skips the wrong mode.
     use karakuri_console::view::{SCRUB_BEATS, SYNCS};
     /// The two answers that are not a record. `Silent` is named only here,
-    /// because nothing in the running window reaches that arm; `Owed` has a
-    /// caller now — the deck head's sync chip emits an operation whose record
-    /// is not settled, which is [`unwritten`]'s whole reason and is asserted
-    /// below.
+    /// because nothing in the running window reaches that arm; `Owed` is
+    /// reachable only by a reading this window failed to take, which is the
+    /// mask's accident and the sync chip's missing tempo and is asserted
+    /// below. Neither is a gap in the vocabulary any more — the sync chip's
+    /// was `Owed::NotSettled` until the conversion took a session tempo, and
+    /// [`unwritten`] carries what that was.
     use karakuri_operation_record::{Owed, Silent};
 
     /// **The library is what the store holds, and a store that is not there is
@@ -6284,15 +6317,22 @@ mod tests {
     }
 
     /// **The deck head's two operations, as far as this program can take them
-    /// without a device** — and they go different distances, which is the
+    /// without a device** — and they go the same distance now, which is the
     /// point.
     ///
-    /// A scrub becomes a record and the record decodes; a sync mode does not,
-    /// and this window says so out loud. Both halves are asserted here because
-    /// the second is what `tests/panel_column.rs`'s one exemption rests on:
-    /// the sync chip's badge stays `plan` because an operator who presses it
-    /// reaches the emission and not the move, and the day that stops being
-    /// true it stops being true **here**.
+    /// They used to go different distances: a scrub became a record and a sync
+    /// mode did not, and the second half of that is what
+    /// `tests/panel_column.rs`'s one exemption rested on — the chip's badge
+    /// stayed `plan` because an operator who pressed it reached the emission
+    /// and not the move. That test said the day it stopped being true it would
+    /// stop being true here, and this is here.
+    ///
+    /// **The two are still not the same conversion, and that is what the
+    /// second half asserts.** A scrub is relative and reads the transport it
+    /// moves from; a mode is absolute and reads the session tempo, replacing
+    /// the anchor and clearing the scrub. A sync mode that came out carrying
+    /// the position the slot was scrubbed to would be the two conversions
+    /// having been made one.
     #[test]
     fn the_deck_heads_two_operations_go_different_distances() {
         // **The scrub is relative, so the record is where the slot is plus
@@ -6348,31 +6388,52 @@ mod tests {
             );
         }
 
-        // **A sync mode owes a record and no reading closes it.** The anchor
-        // clamp is the engine's and what the record carries is undecided
-        // (ADR-0218), so this is `NotSettled` rather than `NotRead` and
-        // handing in every reading this file can take does not change it.
+        // **A sync mode anchors at the session tempo and starts on the
+        // grid.** The reading handed in is the same one the scrub used —
+        // anchored at 128 and scrubbed to -1.5 — and none of it may survive:
+        // `Transport::engaged` clears the scrub because *"a slot brought back
+        // to the grid should be on the grid, not on wherever it was scrubbed
+        // to a song ago"*, and the anchor is the room's tempo rather than the
+        // one the slot was last locked to.
         let set = Operation::SetSync {
             deck: 1,
             sync: karakuri_operation::Sync::Beat,
         };
-        for reading in [Current::default(), current] {
-            assert_eq!(
-                written(&set, &reading),
-                Written::Owed(Owed::NotSettled),
-                "`SetSync` is not owed any more — if the record has been settled, this test is \
-                 what says the deck head's sync chip now moves a deck, and the exemption in \
-                 `karakuri-console`'s `tests/panel_column.rs` is what to delete"
-            );
-        }
+        let engaged = Current {
+            tempo: Some(126.0),
+            ..current
+        };
+        assert_eq!(
+            written(&set, &engaged),
+            Written::Records(vec![Record::Transport {
+                slot: 1,
+                sync: "beat".to_owned(),
+                anchor_bpm: 126.0,
+                scrub_beats: 0.0,
+            }]),
+            "a press of the deck head's sync chip, in a room at 126 bpm, did not come out \
+             anchored at 126 with the scrub cleared — either the slot's old anchor survived \
+             being re-engaged, or the position it was scrubbed to did"
+        );
+        // **And the reading is what makes it one.** Without the tempo the
+        // conversion says so rather than anchoring at a guess, which is the
+        // scrub's own arrangement two assertions up and the reason `reading`
+        // has an arm for this operation at all.
+        assert_eq!(
+            written(&set, &Current::default()),
+            Written::Owed(Owed::NotRead(karakuri_operation_record::Reading::Tempo)),
+            "a sync mode with no session tempo read came back with a record, which means the \
+             tempo it anchored the deck at was invented"
+        );
         let said = unwritten(&set, &written(&set, &Current::default())).expect(
-            "the sync chip's operation owes a record and this window said nothing at all — a \
-             press that reads, in silence, exactly like a press that did not work",
+            "a sync chip press with no tempo read said nothing at all — a press that reads, in \
+             silence, exactly like a press that did not work",
         );
         assert!(
-            said.contains("SetSync") && said.contains(Owed::NotSettled.why()),
-            "the window said `{said}`, which does not name both the operation and the question \
-             it is waiting on"
+            said.contains("SetSync")
+                && said.contains(Owed::NotRead(karakuri_operation_record::Reading::Tempo).why()),
+            "the window said `{said}`, which does not name both the operation and the reading \
+             it did not get"
         );
     }
 
