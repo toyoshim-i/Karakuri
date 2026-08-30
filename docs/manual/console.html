@@ -899,6 +899,17 @@
           reader is looking at, so the selection is a solid ring and focus is a
           dashed one.
         </p>
+        <p>
+          <strong>Two ways into the selection and neither of them is a
+          control</strong>: <code>0</code> to <code>3</code>, and a press
+          anywhere on a strip that no knob under the pointer claimed. The second
+          is why the strip is the one thing in this bay with no capsule and no
+          track of its own to press &mdash; it is the whole column, and what it
+          means is <em>address the keys here</em>. A deck the mixer is not
+          drawing a strip for cannot be selected, which is the letter on the
+          library's pill kept honest at the source: a readout that named a deck
+          the press would be refused on would be worse than no readout.
+        </p>
       </div>
 
       <div class="note">
@@ -1695,9 +1706,13 @@
           one name &mdash; which is the only reason a drag is safe to add later.
         </p>
         <p>
-          <strong>The key is owed and this page does not choose the
-          letter</strong>, because which keys exist is the operations page's to
-          say and that row has no key on it yet. <strong>MIDI is empty for a
+          <strong>The key is <code>l</code></strong>, and the choice is
+          <a href="operations.html">the operations page</a>'s rather than this
+          one's, because which keys exist is that page's to say. It was free on
+          both keyboards &mdash; the panel bound nine keys and the command line
+          thirty-nine, and <code>l</code> was in neither &mdash; so nothing had
+          to be taken off anything to spell the one gesture this bay exists for.
+          <strong>MIDI is empty for a
           reason of its own rather than for want of a letter</strong>: every
           target a map can name carries a deck number, a range, or a word from a
           closed list, and a Set is none of the three. A map belongs to the
@@ -1705,6 +1720,50 @@
           naming a Set would be a line about something the map has no reason to
           know &mdash; and the same argument that keeps a map a file is what
           says a Set id does not belong in one.
+        </p>
+        <p>
+          <strong>The cursor moves on the arrow keys and gets no row on the
+          operations page</strong>, which is a decision and not an omission, and
+          it is the one place this bay parts company with the deck selection
+          beside it. <em>Select a deck</em> has a row because the selection is
+          what <em>every</em> deck-addressed operation's keyboard translator
+          fills its <code>deck</code> in from &mdash; a gain, an opacity, a
+          blend, a residency, a sync, a scrub and a crossfade are unreachable
+          from the keyboard without it. The cursor is read by exactly one
+          operation, and that one carries the Set id in its own payload. So the
+          three surfaces that are not the keyboard have nothing to reach: a map
+          cannot name a Set at all, for the reason above; a model says
+          <em>load this Set into this deck</em> and has no use for a pointer at
+          a listing it is not looking at; and the panel's route is the drag,
+          which names both operands in the one gesture. <strong>A row here would
+          be the first rule written down as a permanent gap</strong> &mdash;
+          three columns that can never be anything but empty, on an operation
+          that exists to move a highlight. Keyboard focus is the precedent, and
+          it is settled under <em>Two focuses, and they do not look alike</em>
+          above: a pointer nobody but the keyboard can move is the surface's
+          own, and this page is where it is specified.
+        </p>
+        <p>
+          <strong>What the press does to the slot is re-point its source, and
+          that is the whole of what this row was blocked on.</strong> The
+          obvious reading &mdash; build the Set and put it in the slot &mdash;
+          is the one thing that may not happen: <code>Deck::install</code> is
+          the function that does it and is deliberately unreachable from a key
+          or a surface, because <strong>a live run changes its material by
+          letting the worker build it</strong>, and the worker is what the
+          budget watchdog is attached to. A Set handed straight in is a Set
+          nothing measured, on a deck that cannot roll it back. So the press
+          writes the library Set's procedures out where the slot's watcher is
+          already looking and lets go: the worker reads them, compiles them off
+          the render thread, and the swap lands at a frame boundary and is
+          judged for thirty frames against the budget like every other build.
+          <strong>A Set that cannot hold the frame is rolled back on its own</strong>
+          and the deck goes back to what it was playing, at the <code>t</code> it
+          was parked at. That is not a special case written for the library; it
+          is the path an edit already took, and the library is now one more thing
+          that walks it. The staging lane under this bay says what happened,
+          on the deck it happened to, because a load is a build and a build is
+          what that lane is about.
         </p>
       </div>
 

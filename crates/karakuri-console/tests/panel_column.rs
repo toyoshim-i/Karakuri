@@ -275,6 +275,13 @@ fn sample(variant: &str) -> Operation {
             deck: 0,
             beats: 0.25,
         },
+        // **The Mixer bay's sixth, and the one emission here that names no
+        // control**: a press anywhere on a strip that the trim, the fader, the
+        // blend, the tally and the mask all declined selects that deck. It is
+        // the console's own pointer — `SelectDeck` writes no record — so what
+        // performs it is the surface, which is why the badge it demands is a
+        // *panel* badge and there is nothing on the deck to check afterwards.
+        "SelectDeck" => Operation::SelectDeck { deck: 0 },
         other => panic!(
             "`{SRC}` constructs `Operation::{other}` and this file has no value for it — a \
              control started emitting an operation nobody accounted for. Add an arm here, and \

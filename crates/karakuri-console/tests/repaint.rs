@@ -142,6 +142,12 @@ fn a_still_panel_asks_for_no_repaint() {
     // cannot reach `egui` — is a claim withheld and not an action taken.
     assert_eq!(Change::Wheeled(Claim::Panel).repaint(), Repaint::Never);
 
+    // A key that asked a console pointer to move and found it already at the
+    // end of what it can point at — the library cursor on the last row it was
+    // listed, or the deck selection on a deck the mixer has no strip for. The
+    // press reached the console and the console draws exactly what it drew.
+    assert_eq!(Change::Pointed(false).repaint(), Repaint::Never);
+
     // And `egui` itself, on a pass that wanted nothing.
     assert_eq!(Repaint::asked(Duration::MAX), Repaint::Never);
     assert!(!Repaint::Never.wanted());
@@ -152,6 +158,7 @@ fn a_still_panel_asks_for_no_repaint() {
         Change::Pointer(Claim::Egui).repaint(),
         Change::Wheeled(Claim::Panel).repaint(),
         Change::Rearranged { moved: false }.repaint(),
+        Change::Pointed(false).repaint(),
         Repaint::asked(Duration::MAX),
     ]
     .into_iter()

@@ -592,10 +592,8 @@ four bays for most of this milestone.
 
 **Six of the console's nine regions draw a body**: the transport row, the Program bay's picture
 and preview cells, the Mixer bay's strips, the Library bay's listing, the Outputs row, and the
-Inspector. Of the other three, **Staging** draws its empty state — which is the only state this
-program can reach, because `crates/karakuri` builds both deck slots with `HotSwap::fixed` and no
-`swap::Event` of any variant is ever emitted — and **Master** and **Sequencer** draw nothing but
-their heads.
+Inspector. Of the other three, **Staging** and **Master** draw a body now and only the
+**Sequencer** draws nothing but its head.
 
 **Eight controls answer a pointer** — the Outputs dot, the mixer's two faders, its blend chip, its
 tally chip, its mask mini, and the transport row's arrangement pill, tone-map capsule and exposure
@@ -1065,10 +1063,10 @@ whether the values behind it exist anywhere in this workspace.
   slot* being `WriteProcedure` with a different producer that `mcp.rs` already performs end to end
   ([P-0019](principles/0019-prefer-the-mechanism-that-already-exists.md) a third time); and
   **no engine work is owed at all**, the judging window being public already. What survives is that
-  the head's `2 waiting` is not a queue depth, and that nothing reads any of it. **And in this program
-  the set is empty structurally rather than not-yet**: `crates/karakuri` builds both slots with
-  `HotSwap::fixed`, so **not one `swap::Event` of any variant is emitted in any run of the binary**,
-  and a candidate row would be ADR-0191's parked chip.
+  the head's `2 waiting` is not a queue depth, and that nothing reads any of it. **And the reason this program's set was empty has gone**:
+  `crates/karakuri` built both slots with `HotSwap::fixed`, whose sender is dropped at
+  construction, so no `swap::Event` of any variant was ever emitted. It builds them watched now, and
+  a load from the library reaches the same worker a save does — so the lane draws a row for either.
 
   **The most valuable row is one the mock does not draw**: after `Event::RolledBack` the watchdog puts
   the previous *Set* back on screen and **does not put the previous file back**, while the watcher
@@ -2212,11 +2210,11 @@ it.
   nothing could say, and both landed — **`KeepCandidate`** and **`RestoreProcedure`**, addressed by
   node rather than by version.
 
-  **The bay is drawn now, and what it draws is its empty state.** `crates/karakuri` builds both
-  deck slots with `HotSwap::fixed`, so **not one `swap::Event` of any variant is emitted in any run
-  of the binary** and the row set is empty *structurally* rather than not-yet. **Gated inside M5 on
-  a producer**, which is the watcher or MCP reaching this program's deck — not on a name, and not
-  on agents. See *The remaining bays, surveyed* under *Where this goes next*, which carries the
+  **The bay draws rows now, and the producer it was gated on is wired.** It built both deck slots
+  with `HotSwap::fixed` — whose sender is dropped at construction — so no `swap::Event` was ever
+  emitted; it builds them watched, and a library load reaches the same worker a file edit does. What
+  the lane still omits is the node address, `origin`, the timestamp and the head's count, each named
+  at the code. See *The remaining bays, surveyed* under *Where this goes next*, which carries the
   omission-by-omission accounting.
 - The `man / sug / auto` control: Manual / Suggest / Auto — ~~**on an address this document
   has not settled**, see *What authority is set on*. This bullet said *per-layer*, which is
