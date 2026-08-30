@@ -137,12 +137,20 @@
 //! [ADR-0190](../../../docs/adr/0190-the-parked-tally-rolls-because-two-lamps-do-not-fit-in-fifty-three-pixels.md)
 //! drew could not be seen by running this window.
 //!
-//! **Two slots, and three of the four preview cells are still off.** Deck A
-//! gets a live cell; deck B is parked, which is not stepping and not drawn, so
-//! there is nothing to audition in its cell; and C and D have nothing behind
-//! them at all. `off` is a state an operator chooses rather than a thing not
-//! built yet, and all three are the truth about this program rather than a gap
-//! in it.
+//! **Four slots, because a strip is a slot and a mixer is its channels.**
+//! The deck is built full — [`SLOTS`] is `deck::MAX_SLOTS` — and every slot
+//! holds this program's one pair at its own salt, since a `HotSwap` cannot
+//! hold nothing and this program has no second pair to give one. Deck A is
+//! Live; the other three rest at `Residency::Allocated`, which is what a
+//! channel nobody has asked anything of is: not stepping, not drawn, no
+//! contribution to the mix, and no frame time. An operator brings one up by
+//! cycling its tally or by loading a Set into it.
+//!
+//! **Three of the four preview cells are still off**, and for one reason: this
+//! program builds one preview sink and aims it at deck A, and nothing is
+//! auditioning the rest. `off` is a state an operator chooses rather than a
+//! thing not built yet, and all three are the truth about this program rather
+//! than a gap in it.
 //!
 //! # This file owns none of the model, and none of the view
 //!
@@ -222,7 +230,11 @@ use karakuri_console::view::{
     look as look_row, master as master_row, mixer as mixer_bay, outputs, picture_rect,
     preview_rects, Ask, Kind, Picture, View, DECKS, DECK_LETTERS,
 };
-use karakuri_engine::governor::{Report, SLOWEST_PRIME_ONE_IN};
+// **How many slots a deck can hold**, which is how many this one has — see
+// [`SLOTS`]. Not re-exported at the crate root, and asked of the module that
+// declares it rather than transcribed here.
+use karakuri_engine::deck::MAX_SLOTS;
+use karakuri_engine::governor::{Reason, Report, SLOWEST_PRIME_ONE_IN};
 // The engine's own `Published`, and its node kinds under the word the address
 // uses for them: `Kind` is already the console's *region* kind on this side,
 // and one word cannot be two things in one file.
@@ -298,6 +310,19 @@ const SAMPLE: usize = 240;
 /// What the panel had in it while they were taken is the last paragraph the
 /// reading prints. Re-take all three together, several runs at a time — one run
 /// is not a number here — and re-date them.
+///
+/// **They are a two-strip reading and this deck now draws four**, which is
+/// said here rather than left for the run to discover. ADR-0191 measured the
+/// second strip at **69 allocations and 137.4 kB a frame** — 456 to 525 —
+/// taken on this window at 1440x900 with nothing else changing, so two more
+/// strips should read near **663 and 969 kB**, and nothing else about the
+/// panel moved: the three slots that are not Live neither step nor draw, so
+/// the engine half is the one Set it was. That is 1.26x the figure below,
+/// inside [`DRIFT`], so the run will call the sentence current and it will be
+/// current — the figure quoted is what the panel read on the day it was read,
+/// and re-taking it needs a window, three still seconds and nine runs, none of
+/// which is reachable from `cargo test`. Re-take it the next time somebody has
+/// the window open.
 const WRITTEN_ALLOCS: u64 = 525;
 const WRITTEN_KB: f64 = 694.3;
 const WRITTEN_ON: &str = "2026-08-26";
@@ -1023,13 +1048,15 @@ impl Costs {
             println!(
                 "  the panel half is taken on this window at {:.0}x{:.0} logical, drawing a \
                  live picture, four preview cells with deck A auditioning in one and three \
-                 off, the mixer bay, the transport, the outputs row and deck B's parked \
+                 off, the mixer bay with a strip in every one of its four tracks, the \
+                 transport, the outputs row and deck B's parked \
                  tally rolling once a second — over Library, Staging, Inspector, Master and \
                  Sequencer, which are a head and nothing else. That is NOT the workspace's \
                  reference workload. The \
                  engine half is one Set of `{}` — {} elements at {}x{}, one step a frame — the \
-                 deck's second slot is parked, and a parked slot neither steps nor draws, \
-                 so it is in none of these numbers — and \
+                 deck's other three slots are allocated, one of them parked, and an \
+                 allocated slot neither steps nor draws, so none of them is in these \
+                 numbers — and \
                  that one canvas presented twice — into the picture's rectangle, \
                  and again into deck A's preview cell, both of which are the \
                  canvas's own shape. It is the workspace's reference workload \
@@ -1724,13 +1751,25 @@ impl Readout {
              description kept beside the thing it describes is worth.",
             viewport.w, viewport.h
         );
+        // **The cells, and the sentence this replaces was false.** It said C
+        // and D had nothing behind them and named the number — *a deck of TWO
+        // slots* — which was true of the deck that shipped before this one and
+        // is not true of a deck built full. What is left is one reason, and
+        // the letters in it are the deck's own: `ON_AIR` is the slot the one
+        // preview sink is aimed at, and every other slot is one nothing is
+        // drawing.
         println!(
-            "B, C and D read `off`, and for two different reasons. C and D have nothing \
-             behind them: this program's engine is a deck of TWO slots. B has a deck behind \
-             it and no audition — it is PARKED, which is not stepping and not drawn, so \
-             there is nothing for a cell to show. three cells saying off are what this \
-             program is rather than something left unfinished, and each cell that is on \
-             costs a present pass of its own."
+            "deck {}'s cell is the only one that is ON, and it is one reason now rather \
+             than two: this program builds ONE preview sink and aims it there. every slot \
+             of this deck holds a Set — there are {} of them and the mixer draws a strip \
+             for each — so no cell on this row is a cell with nothing behind it. the other \
+             {} read `off` because nothing is drawing those slots: a slot that is not LIVE \
+             is drawn only for an audition, and this program auditions one. cells saying \
+             off are what this program is rather than something left unfinished, and each \
+             cell that is on costs a present pass of its own.",
+            deck_letter(ON_AIR as u8),
+            self.view.mixer.len(),
+            DECKS - 1
         );
         println!(
             "the transport row reads the session's own oscillator — the tempo, the beat \
@@ -1786,16 +1825,54 @@ impl Readout {
         // fields `karakuri-cli`'s `report_governing` prints, so an operator
         // reading a park here and a park there is reading one thing.
         println!(
-            "deck B's strip is the one that MOVES: its chip reads ALLOC and rolls part of \
-             the way toward PRIM once a second and falls back, never landing, because what \
-             the slot was asked for and what it is doing disagree. this program asks for B \
-             to be primed at startup and the budget has no room, so `Deck::govern` holds it \
-             at allocated with the request intact — that is a PARK, which is `not now` and \
-             not `no`: nothing has to be asked twice, and the next pass over a deck with \
-             room admits it. nothing in this file writes a residency or draws a park; the \
-             strip carries both of the deck's own words for that slot and the view derives \
-             the rest. what the governor decided, in its own words:"
+            "deck {parked}'s strip is the one that MOVES: its chip reads ALLOC and rolls \
+             part of the way toward PRIM once a second and falls back, never landing, \
+             because what the slot was asked for and what it is doing disagree. this \
+             program asks for {parked} to be primed at startup and the budget has no room, \
+             so `Deck::govern` holds it at allocated with the request intact — that is a \
+             PARK, which is `not now` and not `no`: nothing has to be asked twice, and the \
+             next pass over a deck with room admits it. nothing in this file writes an \
+             effective residency or draws a park; the strip carries both of the deck's own \
+             words for that slot and the view derives the rest.",
+            parked = deck_letter(ASKED_TO_PRIME as u8)
         );
+        // **The slots nobody asked anything of, counted off the report rather
+        // than named here.** `Reason::OffAir` is the governor's own word for
+        // *allocated, and that is what was asked for*: it was not asked about
+        // these slots and did nothing to them. A list written out in this file
+        // would be this paragraph going on saying `C and D` the day the deck
+        // opens differently.
+        let resting: Vec<&str> = governed
+            .decisions
+            .iter()
+            .filter(|decision| decision.reason == Reason::OffAir)
+            .map(|decision| deck_letter(decision.slot as u8))
+            .collect();
+        if !resting.is_empty() {
+            println!(
+                "the other {} — {} — {} allocated and {} asked for nothing: the governor \
+                 reports `OffAir`, which is a slot at REST rather than a slot refused. each \
+                 holds this program's one pair at its own seed salt, because a slot cannot \
+                 hold nothing and this program has no second pair to give one; it steps \
+                 nothing, draws nothing and is in none of the frame numbers below. that is \
+                 what a channel with no material of its own is here, and an operator brings \
+                 one up by cycling its tally or loading a Set onto it.",
+                match resting.len() {
+                    1 => "slot",
+                    _ => "slots",
+                },
+                resting.join(" and "),
+                match resting.len() {
+                    1 => "is",
+                    _ => "are",
+                },
+                match resting.len() {
+                    1 => "was",
+                    _ => "were",
+                },
+            );
+        }
+        println!("what the governor decided, in its own words:");
         println!("  {governed}");
         for decision in governed.parked() {
             println!(
@@ -1856,11 +1933,14 @@ impl Readout {
                     Kind::Pane => "pane, inside a bay".to_owned(),
                     Kind::Picture => "the picture, a sink".to_owned(),
                     // Four cells, and this file knows which of them are on:
-                    // one slot of the deck's two is making texels, so deck A
-                    // and no other.
-                    Kind::Previews => "four previews, A live".to_owned(),
-                    // A bay like the other six, and then a strip per slot:
-                    // a strip is a deck slot, and this deck has two.
+                    // one preview sink, aimed at deck A, whatever the deck
+                    // has in the rest of its slots.
+                    Kind::Previews => {
+                        format!(
+                            "{DECKS} previews, deck {} auditioning",
+                            deck_letter(ON_AIR as u8)
+                        )
+                    }
                     // A bay like the other five, and then a row per Set
                     // the store holds — as many as the bay has room for, and
                     // the foot says so. `n of m`, exactly as the bay draws it.
@@ -1870,6 +1950,9 @@ impl Readout {
                             None => "bay, no store behind it".to_owned(),
                         }
                     }
+                    // A bay like the other six, and then a strip per slot:
+                    // a strip is a deck slot, and this deck is built full, so
+                    // this reads four.
                     Kind::Mixer => format!(
                         "bay, {} strip{}",
                         self.view.mixer.len(),
@@ -1984,7 +2067,7 @@ const KEYS: &[(&str, &str)] = &[
     ("2", "select deck C"),
     (
         "3",
-        "select deck D, bound whether or not this engine has four slots",
+        "select deck D — bound whatever the deck has, and this deck has a slot for it",
     ),
     ("up", "the library cursor, up a row"),
     ("down", "and down, as far as the rows the bay drew"),
@@ -2106,25 +2189,71 @@ fn knob_where(knob: Knob) -> String {
 /// engine renders cannot come from two places — see [`aims`].
 const CANVAS: (u32, u32) = (1280, 720);
 
-/// The seed salt, which decides where the elements start. Any value is a
-/// picture; 7 is the one `karakuri-cli`'s own tests use, so this looks like
-/// what they look like.
+/// **Deck A's seed salt**, which decides where its elements start. Any value
+/// is a picture; 7 is the one `karakuri-cli`'s own tests use, so this looks
+/// like what they look like.
+///
+/// **Deck A's, and the rest of the deck is counted off it** — see
+/// [`slot_salt`], which is the one place this file turns a slot into a seed.
 const SEED_SALT: u32 = 7;
 
-/// **Deck B's salt**, so that the slot the budget parks is a different
-/// simulation of the same procedure rather than a second copy of the same one.
-/// Nothing can see the difference while it is parked — a parked slot neither
-/// steps nor draws — and the frame it matters on is the one where somebody
-/// gives the deck room and both are on screen.
-const WARM_SEED_SALT: u32 = 8;
-
-/// **The two slots this deck has, and what each is for.**
+/// **Every slot the engine has, and this deck is built full.**
 ///
+/// `deck::MAX_SLOTS` rather than a number written here, and four of them
+/// rather than the two this program ran until now. A slot **is** a mixer
+/// channel — the bay draws one strip per slot, and the mock's page keeps its
+/// four tracks whatever the deck has
+/// ([ADR-0178](../../../docs/adr/0178-the-mixer-draws-four-tracks-and-as-many-strips-as-the-deck-has.md))
+/// — so what decides how many there are is what a `Deck` can hold, which
+/// `Deck::new` states in an assert: *"a deck holds 1 to MAX_SLOTS slots"*.
+///
+/// **This is what changed, and it is the whole change.** The second slot used
+/// to exist because a park needs somewhere to happen
+/// ([ADR-0191](../../../docs/adr/0191-the-panels-parked-deck-is-parked-by-the-governor-or-it-is-a-drawing-of-one.md)),
+/// which is a demonstration deciding the shape of the instrument. B, C and D
+/// are now here for the reason A is; the park still happens, on one of them,
+/// because it has to happen somewhere.
+///
+/// # Four slots is not four Live slots, and that is measured
+///
+/// **The reference workload does not fit the compute budget four times over
+/// on this machine.** `Deck::measure_slots` probes all four at startup, and
+/// `the_budget_parks_a_deck_and_the_strip_carries_both_residencies` prints
+/// what it got: four runs on an Apple M4 Pro read per-slot costs of 4.4 to
+/// 16.3 ms summing to 27.9, 30.0, 32.6 and 55.5 ms, against
+/// `governor::DEFAULT_COMPUTE_BUDGET_MS` of 16.7. **Four of even the cheapest
+/// reading seen — 4.39 ms — is 17.6 ms and still over.** They are host-clock
+/// numbers taken under `cargo test`, so they read coarse and biased high and
+/// spread by a factor of four between runs; what does not move across that
+/// spread is the verdict, which is the same property ADR-0191 bought its
+/// budget arithmetic for.
+///
+/// So this deck opens with **one** slot Live and the rest at
+/// `Residency::Allocated` ([`Engine::new`]) — not because four slots do not
+/// fit, but because three of them hold material nobody has asked for, and the
+/// budget says what the operator would be spending if they did. **If an
+/// operator puts all four on air the governor will not stop them**: it never
+/// takes a Live slot off air
+/// ([P-0033](../../../docs/principles/0033-the-governor-never-takes-a-live-slot-off-air.md)),
+/// so what happens is `Report::over_budget` and priming suspended — a warning
+/// on the legend's governor line and a decision left with the person who made
+/// it. That is the governor doing its job rather than this file second-guessing
+/// it with a slot count.
+const SLOTS: usize = MAX_SLOTS;
+
+/// **Which slot this program opens on air, and which one it asks to warm.**
+///
+/// Two of [`SLOTS`], named because this file has something to say about each.
 /// Deck A is Live and is the whole of what the Program bay draws. Deck B is
-/// asked to prime and is parked by the budget — see
-/// [`Engine::ask_to_prime`] — which is the one state on this panel where a
-/// slot's two residencies disagree, and until this deck had a second slot it
-/// could not be reached by running the window at all.
+/// asked to prime and is parked by the budget — see [`Engine::ask_to_prime`]
+/// — which is the one state on this panel where a slot's two residencies
+/// disagree, and nothing reaches it without somebody asking.
+///
+/// **The rest are named by nothing, which is the point of them.** A slot this
+/// file has no use for is not a slot that should not exist: it is a channel
+/// with nothing asked of it, resting at [`Residency::Allocated`] until an
+/// operator cycles its tally or loads material into it. See [`Engine::new`],
+/// where that resting state is written and argued.
 const ON_AIR: usize = 0;
 const ASKED_TO_PRIME: usize = 1;
 
@@ -2132,11 +2261,10 @@ const ASKED_TO_PRIME: usize = 1;
 /// takes.**
 ///
 /// A Set is built from an L1 and an L4 — a geometry and a renderer — and
-/// `Set::build` takes exactly those two. **They are one Set, not two slots**:
-/// the deck's two slots are this same pair built twice, at two seed salts
-/// ([`SEED_SALT`] and [`WARM_SEED_SALT`]), so that the slot the budget parks is
-/// a different simulation of the same procedure rather than a second copy of
-/// the same one.
+/// `Set::build` takes exactly those two. **They are one Set, and the deck has
+/// [`SLOTS`] of them**: every slot is this same pair built again at the salt
+/// [`slot_salt`] counts off for it, so four strips are four simulations of one
+/// procedure rather than one picture drawn four times.
 ///
 /// **Deliberately not `karakuri-cli`'s parser.** That program has thirty-odd
 /// flags, `--set a.kir,b.kir` among them, and they live in its own `main.rs`
@@ -2190,7 +2318,7 @@ impl Sources {
     /// list**, derived from the two paths rather than typed again.
     ///
     /// **It is what every slot *opens* on and not what one is playing**, which
-    /// is [`Gfx::material`]'s distinction: this program builds both slots from
+    /// is [`Gfx::material`]'s distinction: this program builds every slot from
     /// the one pair, and a load moves one of them to a Set the library names.
     /// So this answers once, at startup, and the per-slot name is kept and
     /// rewritten there.
@@ -2556,27 +2684,33 @@ impl Sink for Presented {
     }
 }
 
-/// **The engine behind the Program bay: a deck of two Sets, the present pass,
-/// and the two textures it lands in.**
+/// **The engine behind the Program bay: a deck of [`SLOTS`] Sets, the present
+/// pass, and the two textures it lands in.**
 ///
-/// Scaffolding, and it looks it: two slots, no audio, no MIDI, no store, no
+/// Scaffolding still in what it is wired to — no audio, no MIDI, no store, no
 /// arguments — and a watcher on each slot, which is the one thing here that is
 /// not the shortest path to texels and is there because the Staging lane's
 /// rows are verdicts on builds ([`watched`]). What `karakuri-cli` does around
 /// this is a program; what is here is the shortest path from two `.kir` files
 /// to texels — and now back again, which is what a watched slot is.
 ///
-/// **The second slot is not a picture, it is a residency.** [`ON_AIR`] is Live
-/// and is everything on screen; [`ASKED_TO_PRIME`] is asked to warm up and is
-/// parked by the budget in [`Engine::ask_to_prime`], which is what puts a
-/// pending request on this panel for the mixer's tally to draw. A parked slot
-/// neither steps nor draws, so it costs this window nothing per frame — the
-/// reading [`Costs::say`] prints is still one Set stepping.
+/// **The deck is full, and the slots are channels rather than exhibits.** It
+/// has every slot a `Deck` can hold, because a strip is a slot and a mixer is
+/// its channels; what is *in* them is this program's one pair at four salts,
+/// which is what a slot nobody has loaded anything into holds ([`Engine::new`]).
+/// [`ON_AIR`] is Live and is everything on screen. Every other slot rests at
+/// `Residency::Allocated` — not stepping, not drawn, contributing nothing —
+/// and [`ASKED_TO_PRIME`] is additionally asked to warm up and parked by the
+/// budget in [`Engine::ask_to_prime`], which is what puts a pending request on
+/// this panel for the mixer's tally to draw. **None of the three costs a frame
+/// anything**: the reading [`Costs::say`] prints is still one Set stepping, and
+/// three more slots did not change that.
 ///
-/// **Three of the four preview cells are still off, and now for two reasons.**
-/// Deck A is the only audition there is to show: deck B is parked and so is
-/// making no texels, and C and D have nothing behind them at all. Three cells
-/// reading `off` are the truth about this program rather than a gap in it.
+/// **Three of the four preview cells are still off, and now for one reason.**
+/// This program builds one preview sink and aims it at deck A; every slot has
+/// a Set behind it, and the three that are not being drawn have nothing to
+/// audition. Three cells reading `off` are the truth about this program rather
+/// than a gap in it.
 struct Engine {
     deck: Deck,
     /// **Elements per geometry, read off the L1's own `capacity` declaration**
@@ -2673,7 +2807,7 @@ struct Engine {
 /// against.
 ///
 /// - **`Layering::Overdraw` and no `live`** — `Set::build`'s own, which is
-///   what the two slots were built with: one target, however many renderers.
+///   what every slot was built with: one target, however many renderers.
 /// - **No `capacity`** — so each geometry is rebuilt at the capacity it
 ///   declares, which is [`capacity_of`]'s line asked again on the worker.
 ///   This program has no `--capacity` to override it (see [`USAGE`]), and
@@ -2683,8 +2817,8 @@ struct Engine {
 ///   `&[]` and says why: *"A pair assigns nothing, so the one source is salted
 ///   from the Set's seed and its ordinal — which for source 0 is that seed
 ///   unchanged."* So a rebuild is the same simulation of new material rather
-///   than a new one, and the two slots stay the two salts
-///   [`SEED_SALT`] and [`WARM_SEED_SALT`] name.
+///   than a new one, and every slot stays at the salt [`slot_salt`] counted
+///   off for it.
 /// - **The default camera** — `Request::camera` is an `Orbit` rather than an
 ///   `Option` because *"a Set holds a built-in camera whatever its files
 ///   declare"*, and this program loads none, so the default is what it is
@@ -2781,20 +2915,27 @@ impl Engine {
         let l1 = checked(&sources.l1);
         let l4 = checked(&sources.l4);
         let capacity = capacity_of(&l1);
-        // **The same pair twice, and the salt is the only difference.** The
-        // second slot exists to be asked for and refused, so what is in it
-        // matters less than that it is a Set the governor can measure and
-        // budget for like any other — building it from a second `.kir` pair
-        // would be this program loading material to make a point about a
-        // residency.
+        // **The same pair in every slot, and the salt is the only
+        // difference.** A slot cannot hold *nothing*: `HotSwap::new` takes a
+        // live `Set` and `Deck::new` takes one `HotSwap` per slot, so an empty
+        // slot is not a state this engine has and the nearest thing to it is a
+        // slot holding material nobody has asked for. What this program has to
+        // give them is one pair — [`Sources`] is the whole command line — so
+        // each gets it at its own salt ([`slot_salt`]): four slots of one
+        // procedure at four seeds are four simulations, and four slots at one
+        // seed would be one picture drawn four times, which is not a mixer
+        // either. Building three of them from other `.kir` files would be this
+        // program choosing material for the operator, which is the library's
+        // job and not a constructor's
+        // ([ADR-0228](../../../docs/adr/0228-a-library-load-re-points-the-slots-source-and-never-installs-a-set.md)).
         let built = |salt| {
             Set::build(&gpu.device, &gpu.queue, &l1, &l4, capacity, salt)
                 .expect("the pair builds a Set")
         };
         // **A watcher per slot, over that slot's own two files**, which is
         // `karakuri-cli`'s wiring and not a second one — one `HotSwap::new`
-        // over a `watch::Watch`, at the engine's own default budget. The two
-        // slots here are spelled with the *same* pair, and `watch`'s module
+        // over a `watch::Watch`, at the engine's own default budget. Every
+        // slot here is spelled with the *same* pair, and `watch`'s module
         // documentation says what that means: *"Two slots given the same files
         // both rebuild, which is right: the same edit reached both of them."*
         //
@@ -2807,16 +2948,57 @@ impl Engine {
         // `try_recv` either way, and everything a rebuild costs — the file
         // read, the four validation stages, the compile and `Set::build` — is
         // on the worker thread this spawns (P-0001).
-        let (on_air, aim_on_air) = watched(gpu, sources, built(SEED_SALT), ON_AIR, SEED_SALT);
-        let (warm, aim_warm) = watched(
-            gpu,
-            sources,
-            built(WARM_SEED_SALT),
-            ASKED_TO_PRIME,
-            WARM_SEED_SALT,
-        );
-        let aimed = vec![aim_on_air, aim_warm];
-        let mut deck = Deck::new(&gpu.device, vec![on_air, warm], CANVAS.0, CANVAS.1);
+        //
+        // **In slot order, and the loop is the whole of what four slots
+        // took**: a `Vec` of `HotSwap` is what `Deck::new` has always taken,
+        // and `Engine::aimed` is documented as being in the same order the
+        // strips and the preview cells are.
+        let mut swaps = Vec::with_capacity(SLOTS);
+        let mut aimed = Vec::with_capacity(SLOTS);
+        for slot in 0..SLOTS {
+            let salt = slot_salt(slot);
+            let (swap, aim) = watched(gpu, sources, built(salt), slot, salt);
+            swaps.push(swap);
+            aimed.push(aim);
+        }
+        let mut deck = Deck::new(&gpu.device, swaps, CANVAS.0, CANVAS.1);
+        // **Every slot but deck A rests at `Allocated`, which is what a
+        // channel nobody has asked anything of is.**
+        //
+        // `Deck::new` brings every slot up Live, and that is right for a deck
+        // built to *play* what is in it — a deck of one is then a bare Set,
+        // bit for bit (ADR-0038). This deck is built **full** rather than
+        // built to play four, so leaving them Live would put three
+        // simulations nobody asked for on the render thread and three layers
+        // nobody asked for into the fold: the reading [`Costs::say`] prints
+        // would stop being one Set a frame, and every slot comes up under
+        // `Blend::Add` at unity, so what the Program bay drew would be four
+        // simulations summed — the same material at four times its exposure,
+        // which is a mixer set wrong rather than a mixer.
+        //
+        // `Residency::Allocated` is the state the engine already has for this,
+        // rather than one invented here — *compiled, buffers held, not
+        // stepping, keeps its `t`* — and `deck::Frame::render` reads the
+        // effective residency into the composite's `live` flag, so an
+        // allocated slot contributes nothing to the mix, draws nothing, and
+        // steps nothing. The strip reads ALLOC, the cell reads `off`, and the
+        // slot costs its buffers and no frame time. That is
+        // [P-0019](../../../docs/principles/0019-prefer-the-mechanism-that-already-exists.md):
+        // *a slot with nothing in it* is a residency this deck already has a
+        // word for.
+        //
+        // **It is the request that is written**, which is the operator's half
+        // and the same half [`Engine::ask_to_prime`] writes — see
+        // `Deck::set_residency`. So an operator brings a channel up by cycling
+        // its tally chip or by loading material into it, and nothing has to
+        // undo a decision this constructor made. The governor is told nothing
+        // by it either: a slot whose request is Allocated is `Reason::OffAir`,
+        // which is *the governor was not asked about this slot*.
+        for slot in 0..SLOTS {
+            if slot != ON_AIR {
+                deck.set_residency(slot, Residency::Allocated);
+            }
+        }
         // **The meters are on, and that is a decision rather than a default.**
         // Five of the six things a mixer strip shows are settings the deck was
         // told; the meter is the only one that is a *measurement*, so with it
@@ -2825,10 +3007,10 @@ impl Engine {
         // this panel refuses, read from the other side. It costs a pipeline,
         // two buffers and a ring of staging buffers per slot, allocated here
         // and never on the render thread, which is the same terms `Deck::new`
-        // above is on; there are two slots, so it is two of each. The parked
-        // one reports no level — `Deck::level` is `None` for a slot that is
-        // not being drawn — which is the meter saying what it measured rather
-        // than a strip with a gap in it.
+        // above is on; there are [`SLOTS`] slots, so it is four of each. The
+        // three that are not Live report no level — `Deck::level` is `None`
+        // for a slot that is not being drawn — which is the meter saying what
+        // it measured rather than a strip with a gap in it.
         deck.enable_meters(&gpu.device);
         let present = Present::new(&gpu.device, PICTURE_FORMAT, CANVAS.0, CANVAS.1);
         let [picture, preview] = aims(layout, present.size());
@@ -2854,6 +3036,17 @@ impl Engine {
     /// pass this program makes, taken at startup where the stall it costs is
     /// free, and the whole of why a strip on this panel can read one residency
     /// and have been asked for another.
+    ///
+    /// **The other two slots are not in this, and that is the change.** Deck B
+    /// used to be the only other slot there was, so *the deck has a second
+    /// slot* and *the panel can show a park* were one sentence; they are two
+    /// now. C and D rest at `Residency::Allocated` — [`Engine::new`] says why
+    /// — were asked for nothing, and come back from the pass as
+    /// `Reason::OffAir`, which is the governor reporting that it was not asked
+    /// about them. They cost the arithmetic below nothing: `committed_ms` is
+    /// the sum over **Live** slots and deck A is the only one, so this sets
+    /// the same budget it set with two slots, off the same measurement, for
+    /// the same reason.
     ///
     /// **It is `karakuri-cli`'s order rather than a second one**: measure every
     /// slot before anything is decided about any of them, ask through
@@ -2928,11 +3121,15 @@ impl Engine {
     /// deck A's texture from the picture's rectangle was injected there and
     /// every test still passed**. `mod gpu` calls this the way the frame does.
     ///
-    /// **B, C and D stay `None`, and that is this program rather than a gap in
-    /// it**: deck A is the only slot making texels, so it is the only audition
-    /// there is to put in a cell. Deck B is parked and therefore neither
-    /// stepping nor drawn, and C and D have nothing behind them. An empty cell
-    /// is what off looks like, and the console draws it saying `off`.
+    /// **B, C and D stay `None`, and it is one fact now rather than two**:
+    /// this program builds **one** preview sink and aims it at deck A. Every
+    /// slot of this deck holds a Set, so no cell on this row is a cell with
+    /// nothing behind it; the three that read `off` are slots nothing is
+    /// drawing — B parked, C and D allocated — and a slot that is not Live is
+    /// drawn only for an audition (`deck::Frame::render`). One sink is not a
+    /// shortcut either: `Deck::preview` is an `Option<usize>`, so the deck
+    /// auditions one slot at a time whatever a console builds for it. An empty
+    /// cell is what off looks like, and the console draws it saying `off`.
     fn aim(
         &mut self,
         gpu: &Gpu,
@@ -3641,9 +3838,9 @@ fn mixer(deck: &Deck, names: &[String], out: &mut Vec<view::Strip>) {
     }
     for (slot, strip) in out.iter_mut().enumerate() {
         // **One name per slot, because a load moves one slot.** It was one
-        // name for the whole deck while both slots ran the same pair and
-        // nothing could change either of them; a library Set loaded into deck
-        // B would then have left both strips reading the pair this program was
+        // name for the whole deck while every slot ran the same pair and
+        // nothing could change any of them; a library Set loaded into deck
+        // B would then have left every strip reading the pair this program was
         // launched with, which is a readout that is wrong and says nothing
         // (P-0027). Empty for a slot nobody named, which draws no name at all
         // rather than somebody else's.
@@ -3931,7 +4128,7 @@ fn node_of(set: &Set, control: &Published) -> Option<(Layer, u32)> {
 ///
 /// `Set::published` is documented *"Allocates, so not the frame path. A
 /// console reads this when a Set lands, not per frame."* **A Set lands
-/// whenever a `.kir` in a slot is saved**, since both slots are watched, so
+/// whenever a `.kir` in a slot is saved**, since every slot is watched, so
 /// this is called at startup and again on the frame a build is installed or a
 /// rollback puts the previous Set back — `staging` is what answers *did one
 /// land*, and it is the only thing in this program that knows. Between those
@@ -4287,18 +4484,35 @@ fn pointed(view: &mut View, operation: &Operation) -> Option<String> {
     ))
 }
 
-/// **Which salt a slot's material is seeded from**, for a load to restate when
-/// the Set file recorded none.
+/// **Which salt a slot's material is seeded from** — the one it was built at,
+/// and the one a load restates when the Set file recorded none.
 ///
-/// The two the run was built with, and no third: a Set loaded into a slot is
-/// new *material* and not a new simulation, so a rebuild that derived its own
-/// seed would repaint every element in the slot for a reason nobody asked for
-/// — which is `Watch::salts`' own argument, met from the loading side.
+/// Deck A's is [`SEED_SALT`] and every slot after it is one further along, so
+/// this deck's four slots are four different simulations of the one procedure
+/// [`Sources`] names. **That generalises the reason the second salt was
+/// written for and then retires the constant.** `WARM_SEED_SALT` existed so
+/// that *the slot the budget parks is a different simulation rather than a
+/// second copy of the same one* — an argument about the parked slot, made when
+/// the parked slot was the only other slot there was. What it was really
+/// saying is that a deck of one picture repeated is not a mixer, and that is
+/// true of every slot rather than of deck B, so it is said once here and no
+/// constant states a reason that has gone
+/// ([P-0063](../../../docs/principles/0063-source-cites-what-is-in-force-not-a-plan.md)).
+///
+/// **`+ slot` rather than a table**, because a table of four numbers is four
+/// values with nothing to say about each other, and what is wanted is exactly
+/// *distinct, and deck A's is the one the CLI's tests use*. Distinctness is
+/// then arithmetic rather than four typed numbers nobody re-reads — which
+/// `every_slot_is_its_own_simulation` asserts salt by salt, off the Sets the
+/// deck actually built rather than off this function.
+///
+/// **The salts the run was built with, and no others**: a Set loaded into a
+/// slot is new *material* and not a new simulation, so a rebuild that derived
+/// its own seed would repaint every element in the slot for a reason nobody
+/// asked for — which is `Watch::salts`' own argument, met from the loading
+/// side.
 fn slot_salt(slot: usize) -> u32 {
-    match slot {
-        ON_AIR => SEED_SALT,
-        _ => WARM_SEED_SALT,
-    }
+    SEED_SALT + slot as u32
 }
 
 /// **A load, performed** — [`loading`] reached from an operation, and `None`
@@ -5291,7 +5505,7 @@ impl ApplicationHandler for App {
         self.readout.view.arrangement.filed = arrangements(std::path::Path::new(STORE));
         // **And the Inspector's panes, before the first frame.**
         // `Set::published` says it is not for the frame path but *is* what a
-        // console reads when a Set lands, and both slots are watched — so this
+        // console reads when a Set lands, and every slot is watched — so this
         // is the first of those readings rather than the only one, and the
         // frame handler takes the rest. See `inspector`, which is also where
         // the controls it could not place are reported.
@@ -6451,8 +6665,14 @@ mod tests {
         // Deck B, so the letter in the scratch name is not the first one and a
         // hard-coded `A` fails here.
         let (tx, rx) = std::sync::mpsc::channel();
-        let line = loading(&root, ASKED_TO_PRIME, WARM_SEED_SALT, &tx, "night01")
-            .unwrap_or_else(|e| panic!("the load failed: {e}"));
+        let line = loading(
+            &root,
+            ASKED_TO_PRIME,
+            slot_salt(ASKED_TO_PRIME),
+            &tx,
+            "night01",
+        )
+        .unwrap_or_else(|e| panic!("the load failed: {e}"));
         assert!(
             line.contains("deck B"),
             "the line does not say where: {line}"
@@ -6497,7 +6717,7 @@ mod tests {
 
         // And a Set that is not there is a sentence with nothing sent: the
         // deck goes on playing what it was.
-        let e = loading(&root, ON_AIR, SEED_SALT, &tx, "nothing01")
+        let e = loading(&root, ON_AIR, slot_salt(ON_AIR), &tx, "nothing01")
             .expect_err("a Set that is not in the store");
         assert!(e.contains("nothing01"), "the refusal does not name it: {e}");
         assert!(
@@ -8419,8 +8639,8 @@ mod gpu {
         view::rearrange(&mut panel, CANVAS);
         let sources = Sources::default();
         let engine = Engine::new(&gpu, &mut renderer, &sources, panel.layout(), 1.0);
-        // One name per slot, which is what `Gfx::material` is: both slots
-        // open on the same pair, and a load is what makes them differ.
+        // One name per slot, which is what `Gfx::material` is: every slot
+        // opens on the same pair, and a load is what makes them differ.
         let material = vec![sources.material(); engine.deck.slot_count()];
         let mut panes = Vec::new();
         inspector(&engine.deck, &material, &mut panes);
@@ -8565,8 +8785,8 @@ mod gpu {
         // answered** rather than three lines this test writes by hand: an id
         // or a rectangle assembled here is a test agreeing with itself about
         // the one thing `Engine::aim` exists to decide. Deck A auditions and
-        // B, C and D are off, which is the whole of what one *live* slot can
-        // show — the second slot is parked and makes no texels to audition.
+        // B, C and D are off, which is the whole of what one preview sink can
+        // show — the other three slots are allocated and make no texels.
         let mut view = View::new(ROOM);
         (view.picture, view.previews) = engine.aim(&gpu, &mut renderer, panel.layout(), 1.0);
         assert_eq!(
@@ -9374,6 +9594,70 @@ mod gpu {
         assert_eq!(after[0].gain, 0.5);
     }
 
+    /// **Every slot is its own simulation of the one procedure**, which is
+    /// what keeps a mixer of four channels from being one picture drawn four
+    /// times.
+    ///
+    /// [`slot_salt`] is the derivation and this asserts it where it lands:
+    /// the salt is read back off the `Set` the deck actually built, which
+    /// `Set::source_salts` exists for — *"a caller that assigned none finds
+    /// out what it got"* — so a slot built at the wrong seed, or four slots
+    /// built at one, fails here rather than in a picture only an operator with
+    /// two channels up would ever notice. **Read off the deck rather than by
+    /// calling `slot_salt` again**, which would be the test agreeing with
+    /// itself about the one thing it checks.
+    ///
+    /// It is deck A's salt that is named against a constant, because that one
+    /// is a claim about a *value* — 7 is what `karakuri-cli`'s own tests use,
+    /// so this program's picture looks like theirs. The rest is a claim about
+    /// distinctness, and distinctness is what is asserted.
+    #[test]
+    fn every_slot_is_its_own_simulation() {
+        const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
+
+        let gpu = Gpu::headless().expect("no GPU");
+        let mut renderer =
+            egui_wgpu::Renderer::new(&gpu.device, FORMAT, egui_wgpu::RendererOptions::default());
+        let mut panel = Panel::new(1440.0, 900.0);
+        panel.solve();
+        let engine = Engine::new(
+            &gpu,
+            &mut renderer,
+            &Sources::default(),
+            panel.layout(),
+            1.0,
+        );
+
+        assert_eq!(
+            engine.deck.slot_count(),
+            SLOTS,
+            "the deck is not built full, so the mixer has tracks with no channel in them"
+        );
+        let salts: Vec<u32> = (0..engine.deck.slot_count())
+            .map(|slot| {
+                let salts = engine.deck.slot(slot).set().source_salts();
+                assert_eq!(
+                    salts.len(),
+                    1,
+                    "the pair builds one geometry, so one salt is the whole of a slot's seed"
+                );
+                salts[0]
+            })
+            .collect();
+        assert_eq!(
+            salts[ON_AIR], SEED_SALT,
+            "deck A is not seeded at the salt `karakuri-cli`'s tests use, so this program's \
+             picture is not the one they look at"
+        );
+        let distinct: std::collections::BTreeSet<u32> = salts.iter().copied().collect();
+        assert_eq!(
+            distinct.len(),
+            salts.len(),
+            "two slots are the same simulation, so bringing a second channel up draws the \
+             first one again: {salts:?}"
+        );
+    }
+
     /// **A parked deck is reachable by running this window, and both of its
     /// residencies reach the strips.**
     ///
@@ -9399,8 +9683,6 @@ mod gpu {
     /// `NoHeadroom` is the budget refusing.
     #[test]
     fn the_budget_parks_a_deck_and_the_strip_carries_both_residencies() {
-        use karakuri_engine::governor::Reason;
-
         const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
         const W: u32 = 1440;
         const H: u32 = 900;
@@ -9419,12 +9701,45 @@ mod gpu {
         );
         let material = vec![Sources::default().material(); engine.deck.slot_count()];
 
-        // **Before the pass**, which is the state this file was in for its
-        // whole life: a deck out of `Deck::new` is Live on every slot, the two
-        // residencies agree, and nothing is pending.
+        // **Before the pass, and this is the deck this program opens with.**
+        // `Deck::new` brings every slot up Live and [`Engine::new`] rests all
+        // but deck A at Allocated, so the two residencies agree on every slot
+        // and nothing is pending: a park is something the governor does below,
+        // and nothing has asked for anything yet.
         let mut before = Vec::new();
         mixer(&engine.deck, &material, &mut before);
-        assert_eq!(before.len(), 2, "the deck is not two slots");
+        // **`DECKS` rather than `SLOTS`**, which is the claim rather than the
+        // definition: a strip is a slot, the bay draws four tracks whatever
+        // the deck has (ADR-0178), and what is being asserted is that every
+        // track this console lays out has a channel in it. Held against
+        // `SLOTS` it would be `Deck::new`'s argument compared with
+        // `Deck::slot_count`, which is the engine agreeing with itself.
+        assert_eq!(
+            before.len(),
+            DECKS,
+            "the deck does not fill the bay's tracks, so the mixer draws tracks with no \
+             channel in them"
+        );
+        assert_eq!(
+            before[ON_AIR].tally,
+            view::Tally::Live,
+            "the slot the Program bay draws is not live"
+        );
+        assert!(
+            before
+                .iter()
+                .enumerate()
+                .all(|(slot, strip)| slot == ON_AIR || strip.tally == view::Tally::Allocated),
+            "a slot nobody asked anything of opened somewhere other than allocated, so this \
+             deck steps and folds material the operator never called for: {:?}",
+            before.iter().map(|strip| strip.tally).collect::<Vec<_>>()
+        );
+        assert_eq!(
+            engine.deck.live_slots(),
+            1,
+            "more than one slot is live before anything was asked for, so the picture is a \
+             sum of simulations nobody chose"
+        );
         assert!(
             before.iter().all(|strip| strip.pending().is_none()),
             "a strip was pending before anything had asked for anything"
@@ -9450,6 +9765,72 @@ mod gpu {
             engine.deck.residency(ON_AIR),
             Residency::Live,
             "the governor took the picture off air"
+        );
+
+        // **The slots nobody asked anything of come back `OffAir`**, which is
+        // the governor saying it was not asked about them — and it is a
+        // different word from `NoHeadroom` on purpose: a park stands and is
+        // reconsidered every pass, and a slot at rest carries no request to
+        // stand. These are the ones the legend counts off this report rather
+        // than naming.
+        let resting: Vec<usize> = governed
+            .decisions
+            .iter()
+            .filter(|decision| decision.reason == Reason::OffAir)
+            .map(|decision| decision.slot)
+            .collect();
+        assert_eq!(
+            resting,
+            (0..SLOTS)
+                .filter(|slot| *slot != ON_AIR && *slot != ASKED_TO_PRIME)
+                .collect::<Vec<_>>(),
+            "the slots this program asked nothing of are not the ones the governor left \
+             alone — {governed}"
+        );
+
+        // **And the deck's committed cost is deck A's alone.** That is what
+        // keeps the arithmetic in `ask_to_prime` the arithmetic it was with
+        // two slots — `committed_ms` sums the **Live** slots, and three more
+        // allocated ones add nothing to it — and it is also the answer to
+        // whether four slots of the reference workload fit the frame budget:
+        // they are not being asked to.
+        assert!(
+            !governed.over_budget,
+            "one live slot is already over the budget this program set — {governed}"
+        );
+        let committed = engine
+            .deck
+            .slot(ON_AIR)
+            .measured_cost()
+            .expect("the probe measured deck A");
+        assert!(
+            (governed.committed_ms - committed.ms).abs() < f32::EPSILON,
+            "the committed cost is not deck A's alone, so a slot nobody asked for is being \
+             budgeted as if it were on air — {governed}"
+        );
+
+        // **What four of these would cost if they were all Live, printed
+        // rather than asserted.** It is this machine's number and a threshold
+        // on it would be a test that passes here and fails on the next machine
+        // — ADR-0191 measured this same Set at 3.9 ms and at 9.8 ms in two
+        // runs of one program, and `DEFAULT_COMPUTE_BUDGET_MS` is 16.7. So the
+        // measurement is taken where it can be taken and reported;
+        // `cargo test -p karakuri -- --nocapture` is where to read it.
+        // P-0012: it carries how it was taken — `Deck::measure_slots`, one
+        // `Probe` for the deck, at the probe's own resolution rather than at
+        // `CANVAS`.
+        let costs: Vec<f32> = (0..SLOTS)
+            .filter_map(|slot| engine.deck.slot(slot).measured_cost())
+            .map(|cost| cost.ms)
+            .collect();
+        println!(
+            "  the deck's {} slots measured {:?} ms, summing to {:.3} ms against a \
+             DEFAULT_COMPUTE_BUDGET_MS of {} ms — which is what the governor would hold \
+             four LIVE slots against, and over which it warns rather than acts",
+            costs.len(),
+            costs,
+            costs.iter().sum::<f32>(),
+            karakuri_engine::governor::DEFAULT_COMPUTE_BUDGET_MS
         );
 
         // And both residencies cross the seam, which is what the roll is drawn
