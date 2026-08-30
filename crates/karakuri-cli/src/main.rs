@@ -541,7 +541,7 @@ options:
                         every source it names inlined as `src` records, and
                         stop. That file loads on a machine whose store has
                         never held the material, so it is what you send
-                        somebody: `--bundle night01 > night01.ndjson`. An
+                        somebody: `--bundle night01 > night01.kbset`. An
                         artifact this store does not hold refuses the whole
                         bundle naming it, rather than producing a file that
                         looks self-contained and is not
@@ -733,7 +733,7 @@ struct Args {
     /// `--bind`, applied to every Set on the same terms as `overrides`.
     ///
     /// **This flag is a stand-in for a Set file and is shaped so it can be
-    /// retired for one.** Bindings belong in a `.set.ndjson`, but nothing
+    /// retired for one.** Bindings belong in a `.kbset`, but nothing
     /// loads one into the engine yet — `karakuri-store` decodes records and no
     /// other crate reads a `Record` — and that is its own slice of work. So
     /// the flag names the record's own fields, one comma-separated
@@ -2557,7 +2557,7 @@ fn listed_sets_at(root: &std::path::Path) -> Result<String, String> {
 /// **A bundle goes to standard output**, which is what this returning a
 /// `String` is: it is a file you *send somebody* — one self-contained patch
 /// that loads in a store which has never held the material — so it belongs
-/// where `karakuri-cli --bundle night01 > night01.bundle.ndjson` puts it. A
+/// where `karakuri-cli --bundle night01 > night01.kbset` puts it. A
 /// store directory would need a naming rule of its own for it, and a second
 /// copy of a Set sitting beside the Set is a second answer to which of them is
 /// the file.
@@ -7042,7 +7042,7 @@ mod tests {
         for (id, secs) in [("older", 1_000u64), ("newer", 2_000)] {
             let file = std::fs::OpenOptions::new()
                 .write(true)
-                .open(root.join("sets").join(format!("{id}.set.ndjson")))
+                .open(root.join("sets").join(format!("{id}.kbset")))
                 .expect("open the set file");
             file.set_times(
                 std::fs::FileTimes::new()

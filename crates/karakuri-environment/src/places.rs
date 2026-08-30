@@ -5,7 +5,7 @@
 //! | | where | who writes it |
 //! |---|---|---|
 //! | app presets | `examples/` | nobody — they ship with the program |
-//! | user presets | `<store>/sets/<id>.set.ndjson` | `--save-set`, and nothing else |
+//! | user presets | `<store>/sets/<id>.kbset` | `--save-set`, and nothing else |
 //! | scratch | `<store>/scratch/` | `--watch`, `--mcp`, and the operator's editor |
 //!
 //! That table has said `examples/` since it was written, and `examples/`

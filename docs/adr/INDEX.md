@@ -256,6 +256,7 @@ number; new records continue from the end.
 | [ADR-0228](0228-a-library-load-re-points-the-slots-source-and-never-installs-a-set.md) | A library load re-points the slot's source and never installs a Set | 2026-08-30 | accepted |
 | [ADR-0229](0229-a-set-file-is-authored-beside-its-parts-and-travels-as-a-bundle.md) | A Set file is authored beside its parts and travels as a bundle, never by a name a search path resolves | 2026-08-30 | accepted |
 | [ADR-0230](0230-where-the-programs-data-lives-is-told-rather-than-baked.md) | Where the program's data lives is told rather than baked, and a default is a search that says which candidate answered | 2026-08-30 | accepted |
+| [ADR-0231](0231-a-sets-two-forms-take-two-extensions-and-the-store-holds-only-the-resolved-one.md) | A Set's two forms take two extensions, and the store holds only the resolved one | 2026-08-30 | accepted |
 
 ## Retired numbers
 

@@ -262,7 +262,9 @@ there is no path to contain.
 
 - **The extension is not chosen.** A bundle and a store Set are `.set.ndjson`; whether an authoring
   file shares it or takes one of its own is open, and part 6 (*only the Set extension shows*) makes
-  it load-bearing for the tree rather than cosmetic.
+  it load-bearing for the tree rather than cosmetic. **Chosen on 2026-08-30 in
+  [ADR-0231](0231-a-sets-two-forms-take-two-extensions-and-the-store-holds-only-the-resolved-one.md):
+  `.kset` for the authoring form, `.kbset` for the store's.**
 - **There is no packaging step and no shipped application.** `cargo run` is the only way in
   ([README](../../README.md)), and the app-preset tier is *already* unreachable outside a source
   checkout: `Sources::default()` resolves `examples/` against `env!("CARGO_MANIFEST_DIR")`, baked at

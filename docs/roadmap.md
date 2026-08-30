@@ -660,7 +660,7 @@ in conversation on 2026-08-30.**
    resolver is `--bundle`'s missing half: `bundle` starts from `store.read_set(id)`, so today it can
    only bundle what a store already holds.
 2. **Then the store as a tree, which changes what an id is.** `Store` spells one flat
-   `sets/<id>.set.ndjson`, `list_sets` reads that directory, and `checked_id`
+   `sets/<id>.kbset`, `list_sets` reads that directory, and `checked_id`
    (`crates/karakuri-environment/src/mcp.rs`) holds an id to one path component **on purpose**, so
    that it cannot be a path; `checked_name` (`crates/karakuri/src/main.rs`) is the same wall for an
    arrangement name. The Library's head has drawn a breadcrumb two levels deep for as long as it has
@@ -1240,12 +1240,30 @@ it.
   rather than failing: the alternative was a milestone that closed with a control drawn in the
   specification and absent from the panel.
 
-- **What extension an authoring Set file takes.** A bundle and a store Set are `.set.ndjson`;
-  whether an authoring file shares it or takes one of its own is **the maintainer's to choose**, and
-  [ADR-0229](adr/0229-a-set-file-is-authored-beside-its-parts-and-travels-as-a-bundle.md) leaves it
-  open by name. It is load-bearing rather than cosmetic because part 6 of that record says **only the
-  Set extension shows** in the Library's tree: the extension is what the bay lists and what it hides.
-  **What it blocks is the authoring form**, which is step 2 of the order in the handover above.
+- **~~What extension an authoring Set file takes~~ — taken (2026-08-30,
+  [ADR-0231](adr/0231-a-sets-two-forms-take-two-extensions-and-the-store-holds-only-the-resolved-one.md)).**
+  **`.kset` is the
+  authoring form, and `.kbset` is the form the store holds and the form that travels**;
+  [ADR-0229](adr/0229-a-set-file-is-authored-beside-its-parts-and-travels-as-a-bundle.md) left it
+  open by name. **The argument is atomicity rather than tidiness, and it is the maintainer's**: the
+  copy stored on load has to be a `.kbset`, which is why the distinction is needed — skip that check
+  and atomic Set swapping stops being possible. A swap happens on a frame boundary and an
+  over-budget Set rolls back on its own
+  ([P-0005](principles/0005-a-swap-happens-on-a-frame-boundary-and-an-over-budget-set-rolls-back-on-its-own.md)),
+  which holds only because nothing is left to resolve at the moment of the swap; so the store's
+  invariant is that everything in it is **already resolved**, and the extension is what makes that
+  invariant checkable. **Where the cut falls is not "bundled or not"** but *does reading this file
+  resolve paths against the filesystem?* — inlined-or-not stays a property **within** `.kbset`,
+  which is what part 6's **only the Set extension shows** rests on: one kind of row in the bay, not
+  two.
+  **No check was added.** `Store::set_path` builds `sets/<id>.kbset` and `list_sets` derives an id
+  by stripping that suffix, so an id could never exist without it; a check that already existed
+  started meaning something. **What it costs is stated rather than hidden**: a Set written by an
+  earlier build, spelled `.set.ndjson`, is silently no longer listed, and `list_sets`' own
+  documentation is where a reader of the code meets that.
+  **What is still open is the authoring form itself** — its resolver, its wall against a relative
+  include that escapes its own directory, and the Library's filter — which is ADR-0229's and is the
+  step the handover above orders.
 
 - **Whether loading a shipped preset should write into the operator's own library.** ADR-0229 lists
   both forms in the Library and makes a load a packaging step that stores the bundle, so **opening a

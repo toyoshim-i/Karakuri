@@ -607,7 +607,7 @@ Three places, and only one of them is written to.
 | | where | who writes it |
 |---|---|---|
 | **App presets** | `examples/` | nobody. They ship with the program |
-| **Your presets** | `<store>/sets/<id>.set.ndjson` | `--save-set`, and the `k` key. `--list-sets` prints them |
+| **Your presets** | `<store>/sets/<id>.kbset` | `--save-set`, and the `k` key. `--list-sets` prints them |
 | **Scratch** | `<store>/scratch/` | `--watch`, `--mcp`, and your editor |
 
 **A run that can be edited copies its material into the scratch and runs from
@@ -664,8 +664,8 @@ A **bundle** is the same file with every source it names inlined after it, as a 
 `src` records per artifact, and it loads in a store that has never seen the material:
 
 ```sh
-karakuri-cli --bundle night01 > night01.ndjson     # yours
-karakuri-cli --unbundle night01.ndjson             # theirs
+karakuri-cli --bundle night01 > night01.kbset     # yours
+karakuri-cli --unbundle night01.kbset             # theirs
 ```
 
 **It goes to standard output rather than into the store**, because a bundle is a thing
