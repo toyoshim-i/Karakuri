@@ -2075,7 +2075,7 @@ without either appearing in the file.
   `--bind index=1`.
 - Unknown `t` values are ignored, for forward compatibility.
 - **`gain`, `opacity`, `blend`, `mask`, `transition`, `select`, `preview`, `residency`,
-  `look`, `canvas`, `procedure`, `authority` and `transport` are not in this list and must never be.** They are the session's
+  `look`, `master_out`, `canvas`, `procedure`, `authority` and `transport` are not in this list and must never be.** They are the session's
   rather than any Set's — see the session stream format. `canvas` is the sharpest case: a
   Set renders at whatever size it is handed, so a Set file that carried one would resize
   every *other* Set in the deck by being loaded.
@@ -2118,7 +2118,7 @@ that held one of each per Set. The engine caught up: params are per *node*, the 
 *source*, and each source runs at its own capacity.
 
 The *session* records are further along: `audio` and `tempo` per frame, and `gain`,
-`opacity`, `blend`, `preview`, `residency`, `look` and `transport` per key press, are each
+`opacity`, `blend`, `preview`, `residency`, `look`, `master_out` and `transport` per key press, are each
 built by the CLI, decoded back,
 and only then applied — and `karakuri-cli`'s `--record-session` writes them to a session
 stream as they happen, `--replay` reading it back. The path the engine is driven through is
@@ -2339,7 +2339,7 @@ session tempo, which **v0.2 had no record for**.
 Neither is state, so neither appears in a Set file: both are what a frame *saw* or
 *decided*, and the tempo belongs to the session rather than to any one Set.
 
-### The mix in the stream — `gain`, `opacity`, `blend`, `mask`, `transition`, `select`, `preview`, `residency`, `look`, `canvas`, `procedure`, `authority` and `transport`
+### The mix in the stream — `gain`, `opacity`, `blend`, `mask`, `transition`, `select`, `preview`, `residency`, `look`, `master_out`, `canvas`, `procedure`, `authority` and `transport`
 
 A session that carried the material and not the performance would replay the same Sets, on
 the same beat, all at whatever gain they happened to start at, with nothing ever going on
@@ -2501,6 +2501,23 @@ point together, because it is one value written to one uniform, and a stream tha
 the exposure without saying which operator it applies to would describe a look nobody can
 reconstruct. Session-wide rather than per slot, since tone mapping happens once, after the
 mix.
+
+**`master_out` is the level the composited frame enters the master chain at**, and it is
+deliberately not a fourth field on `look`:
+
+```ndjson
+{"t":"master_out","value":0.75}
+```
+
+The two are levels and they multiply in **different places** — this one where the mix writes
+the composited frame, `look`'s `exposure` where the present pass reads it, with the master
+chain's effects between them
+([ADR-0224](adr/0224-out-and-exposure-are-two-levels-that-multiply-in-different-places.md)).
+Folding them into one line would be recording their product, which is exactly what a replay
+could not take apart the day an effect lands between them. Session-wide and never per slot,
+for `look`'s reason: it is applied to the fold rather than to anything folded. Floored at
+zero and **open above 1.0**, because the pipeline is linear HDR and this level is applied to
+values no tone mapper has seen yet.
 
 `level`, `mode` and `op` are strings for the same reason `curve` and `noise.kind` are: an
 unrecognised value is the engine's to diagnose against what it actually supports, not the

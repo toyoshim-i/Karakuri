@@ -188,6 +188,11 @@ fn a_bay_gets_a_head_and_a_row_does_not() {
             // listing goes in. Its title is `view::LIBRARY_TITLE` and the rest
             // of that bay is asserted in `tests/library.rs`.
             Kind::Library => assert_eq!(*name, "library"),
+            // And the master is the third, for the same reason again:
+            // `View::draw` has to know which bay the out row goes in. Its
+            // title is `view::MASTER_TITLE` and the rest of that bay is
+            // asserted in `tests/master.rs`.
+            Kind::Master => assert_eq!(*name, "master"),
             other => panic!("{name} is a bay in the mock and a {other:?} here"),
         }
     }
@@ -241,12 +246,17 @@ fn a_bay_gets_a_head_and_a_row_does_not() {
     assert_eq!(
         REGIONS
             .iter()
-            .filter(|r| matches!(r.kind, Kind::Bay { .. } | Kind::Mixer | Kind::Library))
+            .filter(|r| {
+                matches!(
+                    r.kind,
+                    Kind::Bay { .. } | Kind::Mixer | Kind::Library | Kind::Master
+                )
+            })
             .count(),
         BAYS.len(),
         "the bay head has seven call sites, which is the whole of why it is a component"
     );
-    // And two of the seven are the bays with something in their bodies.
+    // And three of the seven are the bays with something in their bodies.
     assert_eq!(
         REGIONS.iter().filter(|r| r.kind == Kind::Mixer).count(),
         1,
@@ -256,6 +266,11 @@ fn a_bay_gets_a_head_and_a_row_does_not() {
         REGIONS.iter().filter(|r| r.kind == Kind::Library).count(),
         1,
         "a second library region: `View::draw` has one listing to give"
+    );
+    assert_eq!(
+        REGIONS.iter().filter(|r| r.kind == Kind::Master).count(),
+        1,
+        "a second master region: `View::draw` has one out level to give"
     );
 }
 

@@ -540,6 +540,28 @@ pub mod size {
         + MINI_H
         + STRIP_GAP_Y * 5.0;
 
+    // -- the master bay's out row -------------------------------------------
+
+    /// `.master-body`'s `padding: 8px 10px 10px`: the ring of card the bay's
+    /// rows sit inside, under the bay head. Two constants because the top and
+    /// the sides differ and the bottom is the sides' number again — the one
+    /// row this bay draws is measured off the first two, and the third is
+    /// under the chain nothing draws yet.
+    pub const MASTER_PAD_X: f32 = 10.0;
+    pub const MASTER_PAD_TOP: f32 = 8.0;
+
+    /// `.master-row`'s `gap: 8px`, between the `out` label, the track and the
+    /// figure. Not [`TRIM_GAP`]'s 5: the mixer's trim is a label against a
+    /// track inside a 53-wide strip and this row is the width of a bay.
+    pub const MASTER_GAP: f32 = 8.0;
+
+    /// **The out row**, which is one line of type: the tallest thing in it is
+    /// the label and the figure, both at [`BASE`], and the track is 5.
+    /// `lib.rs`'s minimum for this bay is written from the same 16.5 — *"the
+    /// out row 16.5"* — so the row a rectangle is given here and the height
+    /// the arrangement reserves are one number or neither.
+    pub const MASTER_ROW_H: f32 = BASE * LINE;
+
     // -- the library's list -------------------------------------------------
 
     /// `.lib-list`'s `padding: 3px`: the ring of card the rows sit inside,

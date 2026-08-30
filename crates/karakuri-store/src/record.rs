@@ -432,15 +432,15 @@ pub enum Record {
     // -- The mix: durable state that belongs to the *session* -------------
     //
     // Everything above describes one Set and goes into a Set file. These
-    // fourteen describe the deck the Sets are playing on, and a Set file must
+    // fifteen describe the deck the Sets are playing on, and a Set file must
     // not contain them — a Set does not know what fader it is under or whether
     // it is on air, and one that carried its gain would restore that gain
     // wherever it was next loaded. They are state all the same, which is what
     // separates them from the three below: `is_set_state` says no to all
-    // seventeen of them and means two different things by it. (It says no to the
+    // eighteen of them and means two different things by it. (It says no to the
     // four metadata records further down as well, for a third reason that is
     // not about state at all — see the group comment above `Record::Meta`; the
-    // count here is these seventeen and not that twenty-one. It read "seven" and
+    // count here is these eighteen and not that twenty-two. It read "seven" and
     // "twelve" from the commit that gave the mix a vocabulary until this one:
     // every record added since went in without the count moving, because a
     // prose count is not checked by anything. Both are counted off the
@@ -517,6 +517,43 @@ pub enum Record {
         op: String,
         exposure: f32,
         white_point: f32,
+    },
+    /// **One level on the composited frame, at the entry to the master
+    /// chain.**
+    ///
+    /// **No `slot`, and it is the second record in this group that has none.**
+    /// A gain, an opacity, a blend and a residency each describe one member of
+    /// the deck; this describes what the fold *produced*, after every one of
+    /// them has been applied — `karakuri_engine::deck::Deck::set_out` is what
+    /// it decodes to and says *"Not per slot"* at the setter. [`Record::Look`]
+    /// is the other one, and the two are session-wide for two different
+    /// reasons: tone mapping happens once because it happens *after* the mix,
+    /// and this happens once because it is what the mix wrote.
+    ///
+    /// **Not a field on [`Record::Look`], which is the shape it would fit
+    /// and the one it must not have.** The look is one value in the engine
+    /// written to one uniform; this is a different multiplication in a
+    /// different pass, and the master effects go between the two. Folding it
+    /// in would make an exposure change rewrite the master out and a master
+    /// out change rewrite the operator, and it would have to be pulled back
+    /// out the day the chain is not empty — the whole argument of
+    /// `docs/adr/0224-out-and-exposure-are-two-levels-that-multiply-in-different-places.md`,
+    /// which is also where the cost of saying so today is written down: with
+    /// nothing in the chain, no frame tells the two levels apart.
+    ///
+    /// **One value and no operator beside it**, which is why this is not
+    /// [`Record::Look`]'s shape in the other direction either: there is
+    /// nothing else about the master chain a stream can say yet, so a record
+    /// that carried more would be recording defaults nobody chose. It grows
+    /// the day an effect lands in the chain, on the terms
+    /// [`Record::Merge`] states for a per-input row.
+    ///
+    /// `value` is floored at zero and deliberately open above 1.0, on
+    /// [`Record::Gain`]'s terms and through the engine's same `clamp_gain`:
+    /// the mix is HDR and this level is applied to values a tone mapper has
+    /// not seen.
+    MasterOut {
+        value: f32,
     },
     /// **The procedure a deck slot is playing, from this moment on.**
     ///
@@ -1131,7 +1168,7 @@ impl Record {
     /// jobs. It lives in `docs/ir-spec.md` under "Records with an effect
     /// outside the stream", where a replay reads it.
     ///
-    /// A session stream carries the seventeen of the first two groups and none of
+    /// A session stream carries the eighteen of the first two groups and none of
     /// the third. That is the difference between the two files, stated from
     /// this side, and it is what [`Record::is_metadata`] is a separate function
     /// for: `Store::write_set` refuses a `param_decl` through *that* question so
@@ -1201,6 +1238,7 @@ impl Record {
             | Record::Blend { .. }
             | Record::Residency { .. }
             | Record::Look { .. }
+            | Record::MasterOut { .. }
             | Record::Canvas { .. }
             | Record::Procedure { .. }
             | Record::Authority { .. }

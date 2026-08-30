@@ -899,6 +899,39 @@ operations! {
     /// keyboard's compromise, not a surface's."*
     SetPreview { showing: Option<u8> } => "Choose what the output shows",
 
+    /// **One level on the composited frame, at the entry to the master
+    /// chain** — the whole fold rather than one deck of it.
+    ///
+    /// **It names no deck, and that is the one thing to get right here.**
+    /// Every other row in this group carries `deck: u8` because it acts on one
+    /// slot of the mix; this acts on what the mix *produced*, after every
+    /// edge has been applied. `karakuri_engine::deck::Deck::set_out` says so
+    /// at the setter — *"Not per slot"* — and it is also why nothing can
+    /// schedule a move on it: a `Control` is per slot, so there is no
+    /// transition for a hand here to cancel.
+    ///
+    /// **It is not [`Operation::SetExposure`], and the difference is where
+    /// each one multiplies rather than what either one means.** This is
+    /// applied where the mix writes the composited frame; the exposure is
+    /// applied where the present pass reads it; feedback, bloom and rgb shift
+    /// go between them. Until one of those exists there is nothing between the
+    /// two multiplications and no frame tells them apart — that cost was
+    /// weighed and taken in
+    /// `docs/adr/0224-out-and-exposure-are-two-levels-that-multiply-in-different-places.md`,
+    /// against the alternative of folding them into one number that would have
+    /// to be pulled back out of the tone mapper the day the chain is not
+    /// empty.
+    ///
+    /// **Unbounded above 1.0 and floored at zero**, which is
+    /// [`Operation::SetGain`]'s range and the same function behind it: the
+    /// pipeline is linear HDR and this level is applied to values a tone
+    /// mapper has not seen yet
+    /// (`docs/principles/0064-the-pipeline-is-linear-hdr-and-srgb-is-encoded-once-at-final-output.md`).
+    /// The clamp is the engine's, not this crate's — a conversion that
+    /// clamped would be a second opinion about a range the setter already
+    /// holds.
+    SetMasterOut { out: f32 } => "Master out",
+
     /// The transfer from unbounded linear HDR to something displayable.
     ///
     /// Names the operator; it does not carry the level going into it, which is
@@ -1350,13 +1383,14 @@ mod tests {
     /// moves with the page and is never lowered to make a shorter list pass.
     /// It was 49 once the arrangement gained a reset (ADR-0208), 50
     /// since a node gained an authority (ADR-0211), 52 since the
-    /// staging lane gained a keep and a put-back, and is 54 since the
+    /// staging lane gained a keep and a put-back, 54 since the
     /// arrangement's reset stopped being the only member of its family
-    /// (ADR-0221).
+    /// (ADR-0221), and is 55 since the master out became a level something
+    /// can name (ADR-0224).
     #[test]
     fn the_vocabulary_is_not_empty() {
         assert!(
-            Operation::TITLES.len() >= 54,
+            Operation::TITLES.len() >= 55,
             "only {} operations named — the vocabulary has shrunk below what the manual \
              specifies",
             Operation::TITLES.len()

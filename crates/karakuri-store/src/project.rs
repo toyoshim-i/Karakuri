@@ -151,6 +151,14 @@ fn key_for(record: &Record, ordinal: usize) -> Option<Key> {
         | Record::Blend { .. }
         | Record::Residency { .. }
         | Record::Look { .. }
+        // **Nothing to fold it onto, and it is not the deck's absence that
+        // says so.** A master out describes the whole fold rather than a
+        // member of it, so it has no address at all here — where a `gain`
+        // at least names a slot this file then refuses to write. It is the
+        // session's state for the same reason every record around it is:
+        // a Set file carrying one would set the level the *program* leaves
+        // at wherever that Set was next opened.
+        | Record::MasterOut { .. }
         | Record::Canvas { .. }
         | Record::Procedure { .. }
         // **A node's address and still dropped**, which none of its neighbours

@@ -1141,6 +1141,10 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
             | Record::Blend { .. }
             | Record::Residency { .. }
             | Record::Look { .. }
+            // The whole fold's own level, which is a deck's and never a
+            // Set's: it describes what the mix produced rather than one of
+            // the things that went into it. See `Record::MasterOut`.
+            | Record::MasterOut { .. }
             | Record::Canvas { .. }
             | Record::Procedure { .. }
             // An authority names a node the way the records above it do, and

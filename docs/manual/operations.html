@@ -66,7 +66,7 @@
       second copy of it here would be a list that goes stale.
     </p>
     <p>
-      <strong>54 operations, and 49 of the 232 ways in exist.</strong> Eight of
+      <strong>55 operations, and 50 of the 236 ways in exist.</strong> Eight of
       them are the console's own shape &mdash; moving a boundary, folding a bay
       or a pane, bringing one back, solo, and the three that reset, keep and put
       back an arrangement &mdash; and nine of their thirty-two routes exist: the
@@ -88,15 +88,17 @@
       panel to report itself and <code>n</code> changes its colours. Whether the
       instrument takes those letters or the command line gives them up is a
       decision nobody has made, and it is a change to this specification rather
-      than a note on it. <strong>Six <em>panel</em> routes are
-      marked built</strong>, and they are the whole of that column: the strip
-      trim, the strip fader, the strip button, the tally chip and the strip mask
-      mini, every one of them in the Mixer bay, and every divider on the panel,
-      which drags. The five controls already emitted
+      than a note on it. <strong>Fourteen <em>panel</em> routes are
+      marked built</strong>, and they are the whole of that column: the Mixer
+      bay's five &mdash; the strip trim, the strip fader, the strip button, the
+      tally chip and the strip mask mini &mdash; every divider on the panel,
+      which drags; the transport row's tone map capsule, its exposure track and
+      the arrangement pill's three rows; the deck head's sync chip and its
+      scrub; and the Master bay's out. The Mixer's five already emitted
       these operations while the console was an example; what changed is that
       <code>cargo run -p karakuri</code> puts them in front of a player, which is
       what a <em>panel</em> badge claims and what no program did until it existed.
-      The sixth is not a control but the console's own shape: a press on a gap
+      The one that is not a control is the console's own shape: a press on a gap
       takes the boundary in hand, and the moves and the release after it are the
       panel's rather than the interface's over it. <strong>The Outputs dot is drawn and
       pressable and its badge stays designed</strong>, which is a distinction
@@ -105,7 +107,7 @@
       across a switchable list of sinks. One entry of that list is not the list,
       so the control performs part of what the row names and the badge would be
       an over-claim.
-      Forty-five more are designed and out of reach, most of them in bays nothing
+      Thirty-eight more are designed and out of reach, most of them in bays nothing
       draws yet, and three the panel cannot reach at all. Where a badge names a
       region, that is where the control lives in
       <a href="console.html">the console</a>; three name none yet, and naming one
@@ -121,6 +123,15 @@
       badges specified a control that did not exist, the page that owns the
       console's words drew it next, and the panel was built to that. Nothing was
       designed at the keyboard.
+      <strong>The Master bay's <em>out</em> is the fourteenth and it arrived by
+      the same order read from the other end</strong>: the console page has
+      drawn that fader since before anything could move it, the engine gained
+      the level and the one multiply next
+      (<a href="console.html">the console</a>'s <em>Master, and the two levels
+      that are not one level</em>), and this row is the last of the three
+      rather than the first. Its other three columns are empty and that is the
+      state rather than an omission &mdash; no key is bound to it, no map target
+      names it and no tool publishes it.
       The counts
       here are read off the code rather than estimated, and they are what the
       Interface milestone is for.
@@ -372,6 +383,16 @@
           <span class="rt plan">panel <b>preview</b></span>
           <span class="rt plan">key <b>v</b></span>
           <span class="rt has">MIDI <b>note &rarr; preview N|mix</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+        </div>
+      </div>
+      <div class="op">
+        <div class="op-head"><h3>Master out</h3><span class="op-when ">immediate</span></div>
+        <p>One level on the composited frame, at the entry to the master chain &mdash; the whole fold rather than one deck of it, which is why this is the row in the group that names no deck. <strong>It is not the exposure below it.</strong> That is a second level at the far end of the same chain, and what makes them two is where each multiplies: this one is applied where the mix writes the frame, the exposure where the present pass reads it, and feedback, bloom and rgb shift go between them. A frame effect reads what it is handed, so which side of it a level sits on is the picture &mdash; a feedback trail fed at half the level decays from half. <strong>With the chain empty they are indistinguishable in every frame this program can draw</strong>, and that cost was taken deliberately rather than met later: <a href="console.html">the console page</a>'s <em>Master, and the two levels that are not one level</em> is the argument. Unbounded above 1.0 and floored at zero, on the trim's terms &mdash; the pipeline is linear HDR and nothing has tone mapped it yet. Nothing can schedule a move on it: a transition is per deck and this is the deck's own output, so there is no fade for a hand on it to cancel.</p>
+        <div class="rts">
+          <span class="rt has">panel <b>master out</b></span>
+          <span class="rt gap">key <b>&mdash;</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt gap">MCP <b>&mdash;</b></span>
         </div>
       </div>
@@ -783,7 +804,7 @@
     <h2>What the gaps say</h2>
     <p>
       <strong>MIDI is the narrowest by a wide margin.</strong> It reaches
-      eight of these fifty-four operations, and it cannot express a node
+      eight of these fifty-five operations, and it cannot express a node
       address, a parameter name or an id &mdash; nor a bare number, which is
       why it reaches one half of the mask and not the other. A map line carries
       a slot number, a word out of a value list, or a range, and an angle is
