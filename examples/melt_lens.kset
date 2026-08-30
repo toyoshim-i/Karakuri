@@ -1,0 +1,5 @@
+{"t":"set","id":"melt_lens","v":1}
+{"t":"part","layer":"L1","path":"drift_shell.kir"}
+{"t":"part","layer":"L4","path":"field_lens.kir"}
+{"t":"part","layer":"Field","path":"melt_blob.kir"}
+{"t":"edge","node":"field_lens","slot":"shape","to":"melt_blob"}

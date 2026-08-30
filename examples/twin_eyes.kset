@@ -1,0 +1,6 @@
+{"t":"set","id":"twin_eyes","v":1}
+{"t":"part","layer":"L1","path":"drift_shell.kir"}
+{"t":"part","layer":"L3","path":"beat_jump.kir"}
+{"t":"part","layer":"L4","path":"soft_points.kir"}
+{"t":"part","layer":"L4","index":1,"path":"second_eye.kir"}
+{"t":"edge","node":"second_eye","slot":"view","to":"orbit"}

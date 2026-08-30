@@ -1936,10 +1936,11 @@ encoding, and the line above is what says it.
 
 **The extension says the file is already resolved**, which is the store's invariant rather than a
 label on the format. Every `proc` here is a content address, so reading one of these resolves
-nothing against the filesystem around it. `.kset` is reserved for the **authoring** form — a Set
+nothing against the filesystem around it. `.kset` is the **authoring** form — a Set
 file that names its `.kir` files by relative path and lives beside them
-([ADR-0229](adr/0229-a-set-file-is-authored-beside-its-parts-and-travels-as-a-bundle.md)) — and
-nothing in this workspace writes or reads one yet. The distinction is load-bearing rather than
+([ADR-0229](adr/0229-a-set-file-is-authored-beside-its-parts-and-travels-as-a-bundle.md)), and
+[described below](#the-authoring-form). It is read and resolved; nothing writes one, because it
+is a file a person authors. The distinction is load-bearing rather than
 cosmetic: a swap happens on a frame boundary and an over-budget Set rolls back on its own
 ([P-0005](principles/0005-a-swap-happens-on-a-frame-boundary-and-an-over-budget-set-rolls-back-on-its-own.md)),
 which holds only because nothing is left to resolve at the moment of the swap. A form that walked
@@ -2162,6 +2163,81 @@ built by the CLI, decoded back,
 and only then applied — and `karakuri-cli`'s `--record-session` writes them to a session
 stream as they happen, `--replay` reading it back. The path the engine is driven through is
 the record's, in both directions.
+
+### The authoring form
+
+`.kset`. The same file, one record per line, with **one record type changed**: a node is a
+`part` naming its `.kir` by a **relative path**, where a resolved file's `slot` names it by
+content address.
+
+```ndjson
+{"t":"set","id":"morph_01","v":1}
+{"t":"part","layer":"L1","name":"near","path":"lattice_shell.kir"}
+{"t":"part","layer":"L1","index":1,"path":"parts/sphere_shell.kir"}
+{"t":"part","layer":"L2","path":"parts/morph.kir"}
+{"t":"part","layer":"L4","path":"soft_points.kir"}
+{"t":"capacity","layer":"L1","value":32768}
+{"t":"edge","node":"morph","slot":"far","to":"sphere_shell"}
+{"t":"camera","kind":"orbit","radius":8.0,"speed":0.15}
+```
+
+**A `part` carries what a `slot` carries, with a path where the address is**: `layer` and
+`index` are the node's address on exactly the `slot` rule — absent is 0 and 0 is not written —
+and `name` is what this Set calls the node, on the same terms and surviving resolution
+unchanged, because it is the same node and the `edge` above points at it by that name.
+Everything else a Set file holds — `capacity`, `param`, `bind`, `camera`, `seed`, `edge`,
+`merge` — is unchanged and means the same thing in both forms. **Only how a node's source is
+named differs.**
+
+**`part` is a `t` of its own and not a `slot` carrying a `path` instead of a `proc`.**
+[P-0031](principles/0031-a-name-means-one-thing-across-the-system.md) rules out precisely that
+— *"reusing a tag for a differently shaped record in a different file"* — and the bill would be
+paid by every reader that dispatches on `t` alone: a decoder meeting `slot` would have to know
+which file it came out of before it knew whether `proc` was there, and the one that forgot to
+ask would build a Set with a node missing rather than refuse a file. With two tags a decoder
+never meets a `slot` without an address, and **a `.kbset` that contains a `part` is a file
+disagreeing with its own extension** — refused rather than skipped, by name and by the path it
+wanted, because a `part` is a *node* and skipping one hands back a Set that is a geometry short.
+
+**What a `.kset` may contain** is what a `.kbset` may, with `part` in place of `slot`: the
+session's records and an artifact's declarations are out of it for the same reasons and with
+the same sentences. **What it may not do is reach outside its own directory.** A `part`'s path
+is resolved against the directory the `.kset` is in, and that directory is the whole of what it
+may name — an absolute path, a `..` that climbs out, and a symlink pointing out are three
+spellings of one escape, and each is refused out loud, naming the path and what it escaped.
+Refused rather than repaired: an include quietly rewritten into one that reads is a rule an
+operator can only find by experiment, and an authoring file is a thing you are *sent*. See
+[ADR-0229](adr/0229-a-set-file-is-authored-beside-its-parts-and-travels-as-a-bundle.md), *The
+wall the authoring form needs*.
+
+**A `slot` in a `.kset` is legal and unusual rather than wrong.** Resolution has nothing to do
+to one and passes it through, so what it names is material the receiving store must already
+hold — which is the one thing this form exists not to require. The same goes for a `src` run:
+a `.kset` that inlined a source has already carried it, and the resolved file carries it on.
+
+**Resolution is a read, a hash and a store put — never a compile.** A `slot`'s `proc` is the
+content address of the `.kir` *source*, so turning a `part` into one is: read the file, hash the
+bytes, put the artifact in the store, and write a `slot` naming that address. Nothing parses a
+procedure — the checker runs where a Set is *built* — and every path is put through the wall
+before a single byte is read, so a file with one escape in it stores nothing at all.
+
+**Resolving is packaging, and packaging is resolving done ahead of time** — *one operation, two
+moments* (ADR-0229 part 4). It is what makes the store's invariant keepable: a `.kbset` is
+resolved because something resolved it *before* it reached a store, rather than at the moment of
+a swap, where a neighbour that has gone missing or changed would fail after the exchange had
+begun. A swap that can partially fail is not a swap.
+
+**Implemented.** `karakuri-environment`'s `setfile::resolve` is the resolver and its own wall;
+`--bundle FILE.kset` is the route through the command line — the packaging step end to end,
+resolution followed by the same inlining `--bundle ID` does, to standard output. It is the flag
+that already existed rather than a second one beside it, because *Send a Set to somebody, and
+take one in* is the operation both moments belong to. `Store::write_set` refuses a `part` by
+name, which is where a `.kset` and a store are held apart, and nothing in `sets/` can be one:
+an id is the file name with `.kbset` stripped off it, so a `.kset` dropped in there has no id
+and can be asked for by nobody.
+
+**Not built: the Library's route to one.** Nothing lists a `.kset`, and loading one from the bay
+— which ADR-0229 part 3 says is a load that packages — is the next pass.
 
 ### What a binding does
 

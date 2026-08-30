@@ -31,3 +31,8 @@ winit = "0.30.13"
 # checking against a real one. The watcher's and the MCP server's own store
 # tests went with them to `karakuri-environment`.
 tempfile = "3"
+# `tests/examples.rs` reads the `.kset` files shipped in `examples/` as the
+# files they are, rather than through `karakuri_store::Record`: what it defends
+# is those files, and a reader sharing the program's vocabulary would move with
+# it and never fail. So it needs a JSON parser of its own.
+serde_json.workspace = true

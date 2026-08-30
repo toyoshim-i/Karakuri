@@ -646,19 +646,23 @@ directory of object files beside the binary, so the portable candidate would win
 in this repository and resolve a presets root with no presets in it. **The order below was settled
 in conversation on 2026-08-30.**
 
-1. **The Set file's two forms** (ADR-0229): an **authoring** form naming its `.kir` by relative
-   path and living beside the parts, and a **bundle** that resolves those and inlines them. The
-   Library lists both, and **loading an authoring file bundles it and stores it** — so a load *is*
-   packaging, performed at that moment, and distribution packaging is the same resolution done ahead
-   of time. **The payload already exists in the wrong language**:
-   `crates/karakuri-cli/tests/examples.rs` holds nine documented pairs and seven chains, three of
-   them carrying an `--edge`, as a Rust array whose own header says the pairing lives *"in prose and
-   in the files' own comments, never in the files"* and that deriving one *"would be this test
-   inventing an answer to a question the language has not asked."* The language is being asked now.
-   **The wall lands with the resolver rather than after it** — a relative include that escapes its
-   own directory reads any file on the machine and inlines it into a bundle you hand on — and that
-   resolver is `--bundle`'s missing half: `bundle` starts from `store.read_set(id)`, so today it can
-   only bundle what a store already holds.
+1. **The authoring form is built, and what is left of it is the panel.** A `.kset` names its parts
+   by relative path with a `part` record of its own — a `slot` carrying a path instead of an address
+   would be one `t` with two shapes, which is what
+   [P-0031](principles/0031-a-name-means-one-thing-across-the-system.md) rules out by name — and
+   `setfile::resolve` reads them, hashes them, puts them in the store and emits the `.kbset`.
+   **The wall is inside that same function rather than after it**, which
+   [ADR-0229](adr/0229-a-set-file-is-authored-beside-its-parts-and-travels-as-a-bundle.md) required:
+   *"the first thing that resolves an include without one is the defect."* An absolute path, a `..`
+   that climbs out, and a symlink pointing out are three spellings of one escape and each has its own
+   refusal; every part is walled before a byte is read, so a refusal stores nothing.
+   **`examples/` ships twenty-one `.kset`**, which is where the pairing went that
+   `crates/karakuri-cli/tests/examples.rs` used to hold as a Rust array — and the array was
+   incomplete: nine `.kir` it never named carried their own command line in their headers, so five
+   more Sets came out of comments rather than out of invention. No `.kir` is in no Set.
+   **What is left is the surface**: the Library's `presets` scope does not list them and no key
+   reaches one, which is the next pass and is where `places::is_a_library` — which asks for a `.kir`
+   today — will want to ask about a `.kset` instead.
 2. **Then the store as a tree, which changes what an id is.** `Store` spells one flat
    `sets/<id>.kbset`, `list_sets` reads that directory, and `checked_id`
    (`crates/karakuri-environment/src/mcp.rs`) holds an id to one path component **on purpose**, so

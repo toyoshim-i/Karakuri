@@ -1,0 +1,4 @@
+{"t":"set","id":"swirl_cloud","v":1}
+{"t":"part","layer":"L1","path":"drift_shell.kir"}
+{"t":"part","layer":"L2","path":"swirl_warp.kir"}
+{"t":"part","layer":"L4","path":"soft_points.kir"}

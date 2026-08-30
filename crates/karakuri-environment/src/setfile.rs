@@ -61,6 +61,7 @@
 //! param name is the same disagreement seen from the other side.
 
 use std::collections::BTreeMap;
+use std::path::{Component, Path, PathBuf};
 
 use karakuri_engine::binding::{Curve, NOISE_SIGNAL};
 use karakuri_engine::camera::Orbit;
@@ -988,6 +989,41 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
                 }
                 layer_names[at] = name.clone();
             }
+            // **A node this file has not resolved, in a file whose whole
+            // claim is that everything in it is.** Refused, and it is the one
+            // record here refused rather than noted.
+            //
+            // Every other line this decoder cannot honour is reported and
+            // skipped, because skipping one leaves the Set whole — a `gain`
+            // belongs to a deck, a `param_decl` to an artifact, and a Set built
+            // without either is the Set the file describes. A `part` is a
+            // **node**: skip it and the chain comes up a geometry short, or
+            // with a hole at an index nothing claims, and what an operator gets
+            // is a Set that draws the wrong picture rather than a file that was
+            // refused. That is precisely the "checking clean and coming up
+            // short later" this reader exists not to do.
+            //
+            // Nor is it resolved here, which is the other tempting answer. This
+            // function is handed lines and an id; the directory an authoring
+            // file's paths are relative to is not among them, and a decoder
+            // that went looking for one would be resolving the filesystem at
+            // the moment of a swap — the one thing `.kbset` exists to promise
+            // it never does (ADR-0231). [`resolve`] is where a `part` becomes a
+            // `slot`, before the file is a store's.
+            Record::Part {
+                layer,
+                index,
+                name,
+                path,
+            } => {
+                return Err(format!(
+                    "set `{file_id}`: {} names its `.kir` by the path `{path}`, and a resolved \
+                     Set file names every node by content address — a file carrying a `part` is \
+                     the authoring form, which is resolved against its own directory before it \
+                     reaches a store rather than while a Set is being swapped in",
+                    part_at(*layer, *index, name.as_deref(), path)
+                ))
+            }
             Record::Src { hash, line, s } => {
                 inlined.entry(*hash).or_default().insert(*line, s.clone());
             }
@@ -1341,6 +1377,303 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
         salts,
         notes,
     })
+}
+
+// -- Resolution: the authoring form, into the one a store may hold -------
+
+/// **The extension an authoring Set file wears**, and the whole of how one is
+/// told from a resolved one
+/// ([ADR-0231](../../../docs/adr/0231-a-sets-two-forms-take-two-extensions-and-the-store-holds-only-the-resolved-one.md)).
+/// `Store::SET_FILE_SUFFIX` is the other half and is the store's, because the
+/// store is the thing that may hold only that one.
+pub const AUTHORING_SUFFIX: &str = ".kset";
+
+/// **Resolve the authoring Set file at `path` into the resolved Set file it
+/// names**: every `part` read from disk relative to *this file's own
+/// directory*, hashed, put in the store as an artifact, and written out as a
+/// `slot` naming that address. Every other record is passed through unchanged
+/// and in place.
+///
+/// **This is the missing half of packaging**, and it is the same operation
+/// [`bundle`] performs at another moment
+/// ([ADR-0229](../../../docs/adr/0229-a-set-file-is-authored-beside-its-parts-and-travels-as-a-bundle.md)
+/// part 4, *"one operation, two moments"*): loading an authoring file *is*
+/// packaging it, and packaging for distribution is the same resolution done
+/// ahead of time. [`bundle`] starts from `store.read_set(id)` and so can only
+/// carry what a store already holds; this starts from a file on a disk that has
+/// never been in one.
+///
+/// **A read, a hash and a store put — never a compile.** A `slot`'s `proc` is
+/// the content address of the `.kir` *source*, so nothing here parses a
+/// procedure or asks a device for anything: the checker runs where a Set is
+/// built, which is [`from_lines`] and `unbundle`, and running it here as well
+/// would be a second place that decides whether material is admissible.
+///
+/// **Lines back rather than a file written**, on [`bundle`]'s terms: where the
+/// result goes is the caller's, and the two callers want different things —
+/// `--bundle FILE.kset` inlines them and prints, where a load would hand them
+/// to [`from_lines`].
+///
+/// **The wall is this function and not a later one.** ADR-0229: *"the wall is
+/// not a hardening pass to add afterwards, because the first thing that
+/// resolves an include without one is the defect."* Every path is put through
+/// [`contained`] **before a single byte is read or stored**, so a file with one
+/// escape in it stores nothing at all — a refusal that had already filed three
+/// artifacts would be a refusal an operator has to clean up after.
+pub fn resolve(store: &Store, path: &Path) -> Result<Vec<Line>, String> {
+    // **The extension is checked here and not only by whoever routed us**,
+    // because it is the whole of what says which form a file is, and a function
+    // whose contract is "resolve an authoring file" that resolves anything
+    // handed to it is a promise nothing keeps. A `.kbset` is *read* rather than
+    // resolved — it has nothing left to resolve, which is what its name asserts.
+    let named = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default();
+    if !named.ends_with(AUTHORING_SUFFIX) {
+        return Err(format!(
+            "`{}`: an authoring Set file is named `<name>{AUTHORING_SUFFIX}` and this is not — \
+             a Set's two forms are told apart by their extensions, and the resolved one \
+             (`{}`) names every node by content address and is read rather than resolved",
+            path.display(),
+            Store::SET_FILE_SUFFIX
+        ));
+    }
+    let lines = karakuri_store::ndjson::read(path)
+        .map_err(|e| format!("reading `{}`: {e}", path.display()))?;
+
+    // **The directory the file is in, and the whole of what its parts may
+    // name.** Canonical, because the comparison below is against it: on this
+    // maintainer's own machine a temporary directory is `/var/folders/…`, which
+    // *is* a symlink to `/private/var/folders/…`, so a root taken as spelled
+    // would fail to contain every path under it — the wall would refuse
+    // everything, and the first fix anybody reaches for when a wall refuses
+    // everything is to loosen it.
+    let dir = match path.parent() {
+        Some(dir) if !dir.as_os_str().is_empty() => dir,
+        // `foo.kset` with no directory at all: the file is in the working
+        // directory, and so are its parts.
+        _ => Path::new("."),
+    };
+    let root = std::fs::canonicalize(dir).map_err(|e| {
+        format!(
+            "`{}`: its own directory `{}` cannot be resolved ({e}), and a part is named \
+             relative to it",
+            path.display(),
+            dir.display()
+        )
+    })?;
+
+    // **Every path checked before any of them is read.** See this function's
+    // doc: a refusal in the middle of a file that had already stored three
+    // artifacts is a refusal with a mess behind it.
+    let mut checked: Vec<PathBuf> = Vec::new();
+    for line in &lines {
+        if let Record::Part {
+            layer,
+            index,
+            name,
+            path: include,
+        } = line.record()
+        {
+            checked.push(contained(
+                path,
+                &root,
+                include,
+                &part_at(*layer, *index, name.as_deref(), include),
+            )?);
+        }
+    }
+
+    let mut out = Vec::with_capacity(lines.len());
+    let mut checked = checked.into_iter();
+    for line in &lines {
+        match line.record() {
+            Record::Part {
+                layer,
+                index,
+                name,
+                path: include,
+            } => {
+                let file = checked
+                    .next()
+                    .expect("one checked path per part, in the order the parts were met");
+                let called = part_at(*layer, *index, name.as_deref(), include);
+                let source = std::fs::read(&file).map_err(|e| {
+                    format!(
+                        "`{}`: {called} names `{include}` and it cannot be read ({e})",
+                        path.display()
+                    )
+                })?;
+                // **The bytes as they are on disk**, because the hash is of the
+                // bytes: reading the file as text and writing it back would put
+                // a re-encoding between what the operator has and what the
+                // address names.
+                let proc_hash = store.put_artifact(&source).map_err(|e| {
+                    format!(
+                        "`{}`: {called} names `{include}` and storing it failed ({e})",
+                        path.display()
+                    )
+                })?;
+                // **The name is carried across**, because it is the same node:
+                // a `part` says what a `slot` says, and an `edge` in this same
+                // file points at it by that name.
+                out.push(Line::new(Record::Slot {
+                    layer: *layer,
+                    index: *index,
+                    name: name.clone(),
+                    proc_hash,
+                }));
+            }
+            // **Everything else, unchanged and in place.** `capacity`, `param`,
+            // `bind`, `camera`, `seed`, `edge` and `merge` mean the same thing
+            // in both forms — only how a node's source is named differs — so
+            // resolution is not a rewrite of the file, it is a rewrite of one
+            // record type. A `slot` already in an authoring file passes through
+            // here too: it names material by address, which the store must
+            // already hold, and that is unusual rather than wrong.
+            _ => out.push(line.clone()),
+        }
+    }
+    Ok(out)
+}
+
+/// **Resolve the authoring Set file at `path` and inline every source it
+/// names**: [`resolve`] and then the inlining [`bundle`] does, which is the
+/// packaging step end to end.
+///
+/// The two are separate functions and one call because they are separate facts:
+/// resolution is what turns paths into addresses, and inlining is what makes
+/// the result travel. A load would want the first and not the second.
+pub fn bundle_authored(store: &Store, path: &Path) -> Result<Vec<Line>, String> {
+    let lines = resolve(store, path)?;
+    // **The id is the file's own**, for the sentences the inlining owes about a
+    // node it cannot carry. A file that names none is named by its own path
+    // here — and refused later, by `unbundle`, with the sentence that already
+    // exists for it: an unbundle takes the id from the file rather than from
+    // the command line.
+    let id = lines
+        .iter()
+        .find_map(|line| match line.record() {
+            Record::Set { id, .. } => Some(id.clone()),
+            _ => None,
+        })
+        .unwrap_or_else(|| path.display().to_string());
+    with_inlined_source(store, &id, lines)
+}
+
+/// **The wall: the include, resolved, is under the authoring file's own
+/// directory — or it is refused by name.**
+///
+/// `root` is that directory, already canonical. The answer is the file to read.
+///
+/// **What transfers from `mcp::checked_id` and `karakuri`'s `checked_name` is
+/// where the wall sits, that it refuses rather than repairs, and that the
+/// refusal names what it refused** — not their rule. Those two guard **one path
+/// component** and allow letters, digits, `-` and `_`; an include is a relative
+/// *path* and has separators in it by construction, so the charset rule cannot
+/// be copied. The rule here is containment, and ADR-0229's section *The wall
+/// the authoring form needs* is where it was decided.
+///
+/// **Three spellings of one escape, and the third is the one that gets
+/// missed:**
+///
+/// - an **absolute** path, which is not relative to anything;
+/// - a **`..` that climbs out**, refused lexically — before the filesystem is
+///   asked anything — so that `../../etc/passwd` is refused whether or not it
+///   exists. A `..` that does *not* climb out (`sub/../l1.kir`) is an ordinary
+///   path and is allowed: what is refused is leaving, not the spelling;
+/// - a **symlink pointing out**, which is why the comparison is between
+///   *canonical* paths. `std::fs::canonicalize` resolves every link in the
+///   path, so a `parts` directory that is a link to `/etc` is caught along with
+///   a `passwd.kir` that is a link to a file in it.
+///
+/// **And the root is canonical for the same reason the target is.** A directory
+/// reached *through* a symlink — which is every temporary directory on macOS,
+/// where `/var` is a link to `/private/var` — would otherwise contain none of
+/// its own children by this comparison, and a wall that refuses everything is a
+/// wall somebody switches off.
+///
+/// **Refused, never repaired**, which is the precedents' rule and this
+/// program's: an include quietly rewritten into one that reads is a rule an
+/// operator can only find by experiment, and a Set that silently drew from
+/// somewhere else is worse than one that did not open.
+///
+/// **Why it exists at all**: an authoring file is a thing you are *sent*. An
+/// include that escapes its own directory means opening a Set somebody handed
+/// you reads any file on your machine and inlines it into a bundle you then
+/// hand on.
+fn contained(file: &Path, root: &Path, include: &str, called: &str) -> Result<PathBuf, String> {
+    let refusal = |what: String| {
+        format!(
+            "`{}`: {called} names `{include}`, and a part names a `.kir` under the Set file's \
+             own directory — {what}. Refused rather than repaired, and nothing was stored",
+            file.display()
+        )
+    };
+    if include.is_empty() {
+        return Err(refusal(
+            "this names nothing at all, and a node is its procedure".to_string(),
+        ));
+    }
+    let spelled = Path::new(include);
+    // Lexical, and first, so that the filesystem is never asked about a path
+    // that has already left. Two of the three refusals below need no disk at
+    // all, which is what lets them speak about a path that does not exist.
+    let mut depth: i32 = 0;
+    for part in spelled.components() {
+        match part {
+            Component::Prefix(_) | Component::RootDir => {
+                return Err(refusal(format!(
+                    "an absolute path is not relative to anything, so it names a file under \
+                     `{}` only by coincidence",
+                    root.display()
+                )))
+            }
+            Component::CurDir => {}
+            Component::Normal(_) => depth += 1,
+            Component::ParentDir => {
+                depth -= 1;
+                if depth < 0 {
+                    return Err(refusal(format!(
+                        "this climbs out of `{}`, which is that directory",
+                        root.display()
+                    )));
+                }
+            }
+        }
+    }
+    // **The link check, and it is a second question rather than a stricter
+    // version of the first.** Nothing lexical can see a symlink, and nothing
+    // about the filesystem can be asked of a path that is not there — so the
+    // two run in this order and say different things.
+    let real = std::fs::canonicalize(root.join(spelled)).map_err(|e| {
+        format!(
+            "`{}`: {called} names `{include}` and there is no such file beside the Set file \
+             ({e}) — an authoring Set file lives beside the parts it names",
+            file.display()
+        )
+    })?;
+    if !real.starts_with(root) {
+        return Err(refusal(format!(
+            "this resolves to `{}` and leaves `{}` — a symlink out is a `..` that climbs, in \
+             another spelling",
+            real.display(),
+            root.display()
+        )));
+    }
+    Ok(real)
+}
+
+/// How a refusal names one node of an authoring file: its address, and what it
+/// is called.
+///
+/// [`node_at`]'s counterpart, and it cannot be that function: a `part` has no
+/// hash, so the last resort a node's name falls back to — the artifact's short
+/// address — does not exist yet. What a `part` has instead is the path it
+/// names, which is the only other handle an operator has on it.
+fn part_at(layer: Layer, index: u32, name: Option<&str>, path: &str) -> String {
+    format!("{}:{index} `{}`", layer_name(layer), name.unwrap_or(path))
 }
 
 // -- Bundling: a Set file that carries its own material ------------------
@@ -3812,6 +4145,346 @@ proc dissolve {
                 .count(),
             2,
             "the node that will not compile lost its slot"
+        );
+    }
+
+    // -- The authoring form: resolution, and the wall around it -----------
+
+    /// An authoring Set file beside the two `.kir` the fixture wrote, naming
+    /// them by the relative paths they actually have.
+    ///
+    /// Written by hand rather than by a writer, because there is no writer:
+    /// a `.kset` is a file a person authors, and what these tests are about is
+    /// reading one somebody else wrote.
+    fn authored(dir: &tempfile::TempDir, name: &str, parts: &str) -> std::path::PathBuf {
+        let path = dir.path().join(name);
+        std::fs::write(
+            &path,
+            format!("{{\"t\":\"set\",\"id\":\"authored\",\"v\":1}}\n{parts}"),
+        )
+        .expect("write");
+        path
+    }
+
+    /// **A `.kset` resolves to the `.kbset` it names, with its parts in the
+    /// store as artifacts.**
+    ///
+    /// The whole of what resolution is, checked as three separate facts because
+    /// two of them can hold while the third does not: every `part` has become a
+    /// `slot`, each `slot` names the content address of the bytes on disk, and
+    /// the store can hand those bytes back. A resolver that emitted the right
+    /// records and stored nothing would pass the first two and produce a file
+    /// nobody can load.
+    #[test]
+    fn a_kset_resolves_to_the_kbset_it_names_with_its_parts_in_the_store() {
+        let (dir, store, l1, l4) = fixture();
+        let kset = authored(
+            &dir,
+            "night.kset",
+            "{\"t\":\"part\",\"layer\":\"L1\",\"path\":\"l1.kir\"}\n\
+             {\"t\":\"part\",\"layer\":\"L4\",\"name\":\"veil\",\"path\":\"l4.kir\"}\n\
+             {\"t\":\"capacity\",\"layer\":\"L1\",\"value\":8192}\n",
+        );
+
+        let resolved = resolve(&store, &kset).expect("every part is beside the file");
+
+        let l1_hash = Hash::of(&std::fs::read(&l1).expect("read"));
+        let l4_hash = Hash::of(&std::fs::read(&l4).expect("read"));
+        let records: Vec<&Record> = resolved.iter().map(Line::record).collect();
+        assert!(
+            matches!(records[1], Record::Slot { layer: Layer::L1, index: 0, name: None, proc_hash } if *proc_hash == l1_hash),
+            "the L1 part became a slot naming its source's address: {:?}",
+            records[1]
+        );
+        assert!(
+            matches!(records[2], Record::Slot { layer: Layer::L4, name: Some(name), proc_hash, .. } if name == "veil" && *proc_hash == l4_hash),
+            "the L4 part kept the name this Set gave it: {:?}",
+            records[2]
+        );
+        // **And everything else is passed through unchanged**, which is half of
+        // what makes the two forms one format.
+        assert!(
+            matches!(records[0], Record::Set { id, v: 1 } if id == "authored"),
+            "{:?}",
+            records[0]
+        );
+        assert!(
+            matches!(
+                records[3],
+                Record::Capacity {
+                    layer: Layer::L1,
+                    index: 0,
+                    value: 8192
+                }
+            ),
+            "{:?}",
+            records[3]
+        );
+        assert_eq!(records.len(), 4, "no record was added or dropped");
+
+        for hash in [l1_hash, l4_hash] {
+            assert!(
+                store.get_artifact(&hash).is_ok(),
+                "{}: resolution puts the bytes in the store, not only their address",
+                hash.short(12)
+            );
+        }
+    }
+
+    /// **A `.kbset` made from a `.kset` loads with the authoring file deleted,
+    /// and with the parts it named deleted too** — which is the whole point of
+    /// the form.
+    ///
+    /// An authoring file is only readable beside its neighbours; the resolved
+    /// one is readable anywhere its material is, and a bundle carries the
+    /// material with it. So this deletes the entire directory the `.kset` and
+    /// its `.kir` files lived in, unbundles into a store that has never held
+    /// any of it, and loads. Nothing that resolves a path could survive that,
+    /// which is what makes it the test of the difference rather than of the
+    /// pipeline.
+    #[test]
+    fn a_kbset_made_from_a_kset_loads_with_the_authoring_file_deleted() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let beside_it = dir.path().join("parts");
+        std::fs::create_dir(&beside_it).expect("mkdir");
+        std::fs::write(beside_it.join("l1.kir"), L1).expect("write l1");
+        std::fs::write(beside_it.join("l4.kir"), L4).expect("write l4");
+        std::fs::write(
+            beside_it.join("night.kset"),
+            "{\"t\":\"set\",\"id\":\"night\",\"v\":1}\n\
+             {\"t\":\"part\",\"layer\":\"L1\",\"path\":\"l1.kir\"}\n\
+             {\"t\":\"part\",\"layer\":\"L4\",\"path\":\"l4.kir\"}\n",
+        )
+        .expect("write kset");
+
+        let author = Store::open(dir.path().join("store")).expect("store");
+        let sent = as_a_file(
+            &bundle_authored(&author, &beside_it.join("night.kset"))
+                .expect("bundle the authoring file"),
+        );
+
+        // The authoring file, the parts, and the store that resolved them: all
+        // gone. What is left is the text in `sent`.
+        std::fs::remove_dir_all(dir.path()).expect("remove the whole directory");
+
+        let elsewhere = tempfile::tempdir().expect("tempdir");
+        let bare = Store::open(elsewhere.path()).expect("store");
+        unbundle(&bare, &sent).expect("the bundle carries its own sources");
+        let loaded = load(&bare, "night").expect("the set is filed and its artifacts are here");
+        assert_eq!(loaded.l1s[0].name, "ring");
+        assert_eq!(loaded.l4s[0].name, "points");
+    }
+
+    /// **A `part` in a `.kbset` refuses the load**, because it is a file
+    /// disagreeing with its own extension.
+    ///
+    /// Not skipped with a note, which is what this reader does with every other
+    /// line it cannot honour: a `part` is a *node*, and skipping one hands back
+    /// a Set that is a geometry short. The refusal names the node and the path
+    /// it wanted.
+    #[test]
+    fn a_part_in_a_resolved_set_file_refuses_the_load() {
+        let (_dir, store, l1, _l4) = fixture();
+        let here = stored(&store, &l1);
+        let text = format!(
+            "{{\"t\":\"set\",\"id\":\"mixed\",\"v\":1}}\n\
+             {{\"t\":\"slot\",\"layer\":\"L1\",\"proc\":\"{here}\"}}\n\
+             {{\"t\":\"part\",\"layer\":\"L4\",\"path\":\"l4.kir\"}}\n"
+        );
+        let refused = from_lines(&store, "mixed", &parsed(&text)).expect_err("a part is refused");
+        assert!(refused.contains("l4.kir"), "{refused}");
+        assert!(refused.contains("content address"), "{refused}");
+    }
+
+    /// **A part naming an absolute path is refused**, and the refusal names the
+    /// path.
+    ///
+    /// The first of the three spellings of one escape. It is refused without
+    /// the filesystem being asked anything, which is why the path here need not
+    /// exist — and why a machine where it *does* exist gets the same answer.
+    #[test]
+    fn a_part_naming_an_absolute_path_is_refused() {
+        let (dir, store, _l1, _l4) = fixture();
+        let kset = authored(
+            &dir,
+            "night.kset",
+            "{\"t\":\"part\",\"layer\":\"L1\",\"path\":\"/etc/passwd\"}\n",
+        );
+        let refused = resolve(&store, &kset).expect_err("an absolute path is not relative");
+        assert!(refused.contains("/etc/passwd"), "{refused}");
+        assert!(refused.contains("absolute path"), "{refused}");
+        assert!(
+            refused.contains("Refused rather than repaired"),
+            "{refused}"
+        );
+    }
+
+    /// **A part that climbs out of the Set file's own directory is refused**,
+    /// naming what it climbed out of.
+    ///
+    /// The second spelling. The `.kset` is one level down so that `..` has
+    /// somewhere to go, and the file it reaches for genuinely exists — a wall
+    /// that only refuses paths that were not there anyway is not a wall.
+    #[test]
+    fn a_part_that_climbs_out_of_the_set_files_directory_is_refused() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::fs::write(dir.path().join("l1.kir"), L1).expect("write the neighbour above");
+        let inside = dir.path().join("inside");
+        std::fs::create_dir(&inside).expect("mkdir");
+        let kset = inside.join("night.kset");
+        std::fs::write(
+            &kset,
+            "{\"t\":\"set\",\"id\":\"authored\",\"v\":1}\n\
+             {\"t\":\"part\",\"layer\":\"L1\",\"path\":\"../l1.kir\"}\n",
+        )
+        .expect("write");
+        let store = Store::open(dir.path().join("store")).expect("store");
+
+        let refused = resolve(&store, &kset).expect_err("`..` climbs out");
+        assert!(refused.contains("../l1.kir"), "{refused}");
+        assert!(refused.contains("climbs out of"), "{refused}");
+        assert!(
+            refused.contains(&inside.display().to_string())
+                || refused.contains(
+                    &std::fs::canonicalize(&inside)
+                        .expect("canonicalize")
+                        .display()
+                        .to_string()
+                ),
+            "the refusal names the directory that was escaped: {refused}"
+        );
+    }
+
+    /// **A `..` that lands back inside is an ordinary path and is allowed.**
+    ///
+    /// What the wall refuses is *leaving*, not the spelling — a rule that
+    /// refused every `..` would refuse `parts/../l1.kir`, which names a file in
+    /// the directory the Set file is in, and an operator would learn that by
+    /// experiment. This is the test that keeps the check on containment rather
+    /// than on characters.
+    #[test]
+    fn a_dotdot_that_lands_back_inside_is_a_path_and_is_allowed() {
+        let (dir, store, l1, _l4) = fixture();
+        std::fs::create_dir(dir.path().join("parts")).expect("mkdir");
+        let kset = authored(
+            &dir,
+            "night.kset",
+            "{\"t\":\"part\",\"layer\":\"L1\",\"path\":\"parts/../l1.kir\"}\n",
+        );
+        let resolved = resolve(&store, &kset).expect("this path never leaves the directory");
+        let l1_hash = Hash::of(&std::fs::read(&l1).expect("read"));
+        assert!(
+            matches!(resolved[1].record(), Record::Slot { proc_hash, .. } if *proc_hash == l1_hash),
+            "{:?}",
+            resolved[1].record()
+        );
+    }
+
+    /// **A part that is a symlink out of the directory is refused**, which is
+    /// the spelling that gets missed.
+    ///
+    /// Lexically this include is one plain component with no `..` and no
+    /// leading `/`; every character in it is one the other two rules allow. It
+    /// is only an escape once the link is followed, which is why the comparison
+    /// is between canonical paths — and why the fixture's own directory is
+    /// canonicalised too, since on macOS a temporary directory is itself
+    /// reached through a symlink and a naive comparison would refuse
+    /// everything.
+    #[test]
+    fn a_part_that_is_a_symlink_out_of_the_directory_is_refused() {
+        let elsewhere = tempfile::tempdir().expect("tempdir");
+        let secret = elsewhere.path().join("secret.kir");
+        std::fs::write(&secret, L1).expect("write the file outside");
+
+        let (dir, store, _l1, _l4) = fixture();
+        std::os::unix::fs::symlink(&secret, dir.path().join("innocent.kir")).expect("symlink");
+        let kset = authored(
+            &dir,
+            "night.kset",
+            "{\"t\":\"part\",\"layer\":\"L1\",\"path\":\"innocent.kir\"}\n",
+        );
+
+        let refused = resolve(&store, &kset).expect_err("the link points out of the directory");
+        assert!(refused.contains("innocent.kir"), "{refused}");
+        assert!(refused.contains("symlink out"), "{refused}");
+        assert!(
+            refused.contains(
+                &std::fs::canonicalize(&secret)
+                    .expect("canonicalize")
+                    .display()
+                    .to_string()
+            ),
+            "the refusal names where the link actually went: {refused}"
+        );
+        assert!(
+            store
+                .get_artifact(&Hash::of(&std::fs::read(&secret).expect("read")))
+                .is_err(),
+            "a refused part is not in the store: the wall runs before anything is read"
+        );
+    }
+
+    /// **A directory reached through a symlink still contains its own parts.**
+    ///
+    /// The other half of the sentence above, and the failure the first
+    /// implementation of a containment check makes: canonicalise the target and
+    /// not the root, and every part of every Set authored under `/var/folders`
+    /// on macOS — or under any linked path anywhere — is refused as an escape.
+    /// A wall that refuses everything is a wall somebody switches off.
+    #[test]
+    fn a_directory_reached_through_a_symlink_still_contains_its_own_parts() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let real = dir.path().join("real");
+        std::fs::create_dir(&real).expect("mkdir");
+        std::fs::write(real.join("l1.kir"), L1).expect("write");
+        std::fs::write(
+            real.join("night.kset"),
+            "{\"t\":\"set\",\"id\":\"authored\",\"v\":1}\n\
+             {\"t\":\"part\",\"layer\":\"L1\",\"path\":\"l1.kir\"}\n",
+        )
+        .expect("write");
+        let linked = dir.path().join("linked");
+        std::os::unix::fs::symlink(&real, &linked).expect("symlink");
+        let store = Store::open(dir.path().join("store")).expect("store");
+
+        resolve(&store, &linked.join("night.kset"))
+            .expect("the file's own directory contains the file's own parts, link or no link");
+    }
+
+    /// **A file that is not a `.kset` is not resolved**, because the extension
+    /// is the whole of what says which of a Set's two forms a file is.
+    #[test]
+    fn a_file_that_is_not_a_kset_is_not_resolved() {
+        let (dir, store, _l1, _l4) = fixture();
+        let kbset = authored(
+            &dir,
+            "night.kbset",
+            "{\"t\":\"part\",\"layer\":\"L1\",\"path\":\"l1.kir\"}\n",
+        );
+        let refused = resolve(&store, &kbset).expect_err("a `.kbset` is read, not resolved");
+        assert!(refused.contains(".kset"), "{refused}");
+    }
+
+    /// **A part naming a file that is not there says so**, rather than saying
+    /// it escaped.
+    ///
+    /// The two are different mistakes and an operator fixes them differently:
+    /// one is a typo or a part left behind, the other is a file that was trying
+    /// to leave. A wall that answered "refused" to both would send whoever
+    /// mistyped `l1.kir` looking for a security problem.
+    #[test]
+    fn a_part_naming_a_file_that_is_not_there_says_so() {
+        let (dir, store, _l1, _l4) = fixture();
+        let kset = authored(
+            &dir,
+            "night.kset",
+            "{\"t\":\"part\",\"layer\":\"L1\",\"path\":\"l9.kir\"}\n",
+        );
+        let refused = resolve(&store, &kset).expect_err("there is no `l9.kir`");
+        assert!(refused.contains("l9.kir"), "{refused}");
+        assert!(
+            refused.contains("no such file beside the Set file"),
+            "{refused}"
         );
     }
 }

@@ -1,0 +1,5 @@
+{"t":"set","id":"glow_lattice","v":1}
+{"t":"part","layer":"L1","path":"sphere_shell.kir"}
+{"t":"part","layer":"L4","path":"glow_march.kir"}
+{"t":"part","layer":"Field","path":"beam_lattice.kir"}
+{"t":"edge","node":"glow_march","slot":"shape","to":"beam_lattice"}
