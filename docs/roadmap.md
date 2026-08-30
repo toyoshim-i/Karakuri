@@ -260,8 +260,12 @@ component. Its tests still run without a device.
 
 **Two of the seven bays draw nothing but a head — master and sequencer — and a third, staging,
 draws its empty state, which is the only state this program can reach.** That is on purpose: a bay
-that looks finished does not get replaced, and each is waiting on values that do not exist, which
-the survey under *Where this goes next* names one by one. The other four have bodies: the Program
+that looks finished does not get replaced. **What each is waiting on is three different things and
+was described as one**, which the survey under *Where this goes next* now separates: the master's
+value exists and always has a reading (`Deck::out`, since
+[ADR-0224](adr/0224-out-and-exposure-are-two-levels-that-multiply-in-different-places.md)); the
+staging lane's producer exists in this workspace and `crates/karakuri` declines to use it; and only
+the sequencer is waiting on a value nothing anywhere holds. The other four have bodies: the Program
 bay's two regions, the Mixer bay's strips, the Library bay's listing, and the Inspector's node
 groups and parameter rows.
 
@@ -1193,9 +1197,11 @@ re-taken once that boundary is drawn.
    those *"become checkable one surface at a time as they migrate"*.
 4. **The remaining bays, surveyed — and the survey is the order.** Three of the five draw something
    now — the Library as a listing, the Staging lane as its empty state, the Inspector in full — and
-   the other two draw nothing but their heads. **The two are not the same kind of item as the three
-   that closed**: each is waiting on machinery rather than on drawing, which is why the range below
-   is not simply reduced by the bays that landed. What each is standing on is
+   the other two draw nothing but their heads. **They are not one kind of item and were counted as
+   one.** The master's level is read by `Deck::out` in every run, so its first pass is a drawing
+   and nothing else; the sequencer is waiting on a pattern no type in any crate holds, and on the
+   decision of where one lives. That is why the range below is not simply reduced by the bays that
+   landed, and it is a smaller reason than the one this sentence used to give. What each is standing on is
    [console.html](manual/console.html); what decides which comes next is whether the values behind
    it exist anywhere in this workspace.
 
@@ -1247,9 +1253,11 @@ re-taken once that boundary is drawn.
     machinery does, **and the first version of this sentence overstated it**. `install_if_ready`
     opens with *"not while something is on trial"* — a build that finishes during a judging window
     **does** stay in the channel until the verdict is in, and one superseded inside that window is
-    retired without ever being drawn. What holds is the conclusion rather than the claim: **nothing
-    exposes either the window or what is in it**, so the head's `2 waiting` is not a queue depth and
-    cannot become one without engine work nobody has costed.
+    retired without ever being drawn. **The conclusion holds and the reason given for it was
+    wrong.** `HotSwap::on_trial` and `HotSwap::pending_events` are public, and `Deck::slot` hands
+    over the `HotSwap` they are on — so the window and what is in it are exposed today, and no
+    engine work is owed at all. What survives is that the head's `2 waiting` is not a queue depth,
+    and that nothing reads any of it.
 
     **And in this program the set is empty structurally rather than not-yet.** `crates/karakuri`
     builds both slots with `HotSwap::fixed`, which constructs a receiver whose sender is dropped at
@@ -2903,9 +2911,10 @@ behind it. The list was.
 **What the range assumes, and three of its assumptions have since been met.** That the four undrawn
 regions — `staging`, `inspector`, `master`, `sequencer` — are the bulk of what is left, and that
 they cost roughly what the five drawn ones did. **The inspector is drawn and the staging lane draws
-its empty state**, so what is left of that assumption is `master` and `sequencer`, both of which
-are blocked on machinery rather than on drawing — which is a different kind of item from the two
-that closed, and is the reason the range is not simply reduced by two bays. That three decisions get taken rather than deferred: **who owns the pointer** (which the
+its empty state**, so what is left of that assumption is `master` and `sequencer` — and **only the
+sequencer is blocked on machinery**. The master's level exists and is read in every run; its first
+pass is a drawing the size of the exposure track. The range is not simply reduced by two bays
+because one of the two is still a bay nothing can draw, not because both are. That three decisions get taken rather than deferred: **who owns the pointer** (which the
 parameter surfaces and every tooltip in the console wait on), **what a thumbnail is of** (M4's, and
 judged here), and **the arena's insert and remove** (which the node editor and the inspector's `2
 up` both want, and whose remove half moves every `NodeId`) — **all three are still open.** That the
