@@ -1,0 +1,102 @@
+// A shape with no edges: space folded into cells, with a ball and two beams in
+// every one of them.
+//
+// `examples/melt_blob.kir` is the other field here and is one object — a sphere,
+// a box and a ring, at three known places. This one is a *pattern*: a single
+// `mod` maps every point in the world into one cell, so what the three lines
+// below describe once is drawn everywhere at once, and what the marcher meets is
+// a structure it can travel through rather than an object it can go round.
+//
+//     karakuri-cli --set sphere_shell.kir,beam_lattice.kir,glow_march.kir \
+//                  --edge glow_march.shape=beam_lattice
+//
+// **It does not fit under `examples/field_lens.kir`, and that is worth knowing
+// before reaching for it.** That marcher takes 34 steps, this field costs 103
+// ops per evaluation, and the pair estimates at 4450 ops/fragment against the
+// 4096 ceiling — refused where the Set is built, with both figures in the
+// message and neither file over on its own. `glow_march` takes 26 steps and
+// fits at 3710. This is the trade the specification names: a cheaper field buys
+// back steps, and a marcher's step count is chosen against the field it is
+// pointed at. `melt_blob` at 82 ops fits under both.
+//
+// **Domain repetition is `mod` and a subtraction, and nothing else.** Shifting
+// by half a cell before the fold and back after it is what centres the cell on
+// the origin; without the shift the ball sits at a corner and the lattice is
+// off by half in every direction. This language's `mod` is the non-negative one,
+// so the fold is correct on the negative side of the origin as well — which
+// `%` in WGSL would not be, and is the reason the specification says the
+// lowering inserts a wrapper.
+//
+// **The beams are boxes longer than a cell.** In folded space the coordinate
+// never leaves one cell, so a box whose half-extent along z is the whole cell
+// width has no ends: it meets the next cell's copy of itself and the two read as
+// one continuous rod. Two of them, along z and along x, make the frame.
+//
+// **`bound` is what keeps it finite.** An infinite lattice fills the frame edge
+// to edge and has no silhouette, so it is intersected with a sphere — `max` of
+// two distances, which is what `op_intersect` is — and the result is a ball of
+// structure sitting where the specification's viewing conditions ask material to
+// be. Turning `bound` up past 4 puts the camera inside the lattice, which is a
+// second look this one file has in it.
+//
+// **Cost is per evaluation and the caller pays it as many times as it marches.**
+// The four things below that are worth an op — the fold, three SDF calls and two
+// CSG operators — come to 103, and every one of them is a step some marcher
+// cannot take. Dropping `weld` for a hard union takes it to 95; dropping `pulse`
+// as well takes it to 89, which is what it would cost to fit under a 34-step
+// marcher. Both were kept: a field that breathes and welds is worth more here
+// than eight extra steps of somebody else's march.
+
+proc beam_lattice {
+  kind Field
+
+  // The spacing of the lattice. Small is a fine mesh and expensive to march
+  // through — a marcher stepping by the distance to the nearest surface takes
+  // small steps in a fine structure — and large is a few big pieces. Below
+  // about 0.7 the structure is finer than the step count can resolve and the
+  // surface starts to break up, which is the honest lower bound.
+  param cell   : float [0.5, 4.0] = 2.0
+
+  // Radius of the ball at the centre of each cell. It has to stay under half
+  // the cell or the balls merge into a solid and there is no lattice left; that
+  // is a real setting rather than a broken one, and it is why the range reaches
+  // 1.0 while the default is a third of it.
+  param ball   : float [0.05, 1.0] = 0.34
+
+  // Half-thickness of the two rods. At 0 they vanish and the picture is a cloud
+  // of loose balls; the top of the range is where the rods are thicker than the
+  // balls and the lattice reads as a grid of tubes with lumps on it.
+  param beam   : float [0.0, 0.4] = 0.09
+
+  // Radius of the sphere the lattice is cut out of.
+  param bound  : float [0.5, 4.0] = 3.0
+
+  // How much the balls swell and shrink, as a fraction of their radius. The
+  // whole lattice breathes together, which is what a marcher sees change from
+  // frame to frame while the camera holds still.
+  param pulse  : float [0.0, 1.0] = 0.25
+
+  // How softly the balls join the rods. At 0 the joint is a crease; at 1 the
+  // lattice is a single melted mass and the cell structure is barely readable.
+  param weld   : float [0.0, 1.0] = 0.25
+
+  field {
+    // The clock is the caller's, handed in at the call site — a field cannot
+    // know how the procedure evaluating it spells `t`, so reading it here is
+    // reading what that caller passed.
+    let breathe = 1.0 + pulse * sin(t * 1.1);
+
+    // The fold. Every point in the world lands in one cell centred on zero.
+    let half = cell * 0.5;
+    let q    = mod(point + vec3(half), vec3(cell)) - vec3(half);
+
+    let sph  = sd_sphere(q, ball * breathe);
+    let rod0 = sd_box(q, vec3(beam, beam, cell));
+    let rod1 = sd_box(q, vec3(cell, beam, beam));
+
+    let frame = op_union(rod0, rod1);
+    let lat   = op_smooth_union(sph, frame, weld);
+
+    distance = op_intersect(lat, sd_sphere(point, bound));
+  }
+}

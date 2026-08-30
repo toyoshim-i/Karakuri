@@ -1,0 +1,97 @@
+// Streaks with depth: near ones bright and warm, far ones dim and cold.
+//
+// `examples/drift_streaks.kir` is the other line renderer here and draws a
+// cloud that has no near and no far — an orbit sees a shell from outside and
+// every element is about the same distance away. This one is written for
+// material that runs *away* from the eye, where depth is the strongest thing in
+// the picture, and it spends its whole fragment block on that one fact.
+//
+//     --set warp_tunnel.kir,tunnel_eye.kir,speed_lines.kir
+//
+// **Depth is read off `position.z`, not off the camera.** A per-element L4 has
+// no `eye` — that ambient belongs to a fullscreen procedure — so a renderer
+// cannot know how far away anything is. What it can know is where an element
+// sits in the *geometry's* own space, and for a tube laid along z that is the
+// same information under another name. It is a deliberately narrow assumption
+// and it is the reason this file says `warp_tunnel` in its first line: over a
+// shell it tints by z rather than by distance, which is a gradient across the
+// picture rather than into it.
+//
+// **Exposure is far below the sprite renderers' and that is the topology, not
+// timidity.** A streak covers many more texels than the sprite it replaces and
+// the blend is additive, so the same number that reads as a lamp on a point
+// reads as a white sheet on a segment — `drift_streaks` sits a factor of ten
+// under `soft_points` for the same reason.
+
+proc speed_lines {
+  kind  L4
+  blend additive
+
+  consumes position, velocity
+
+  // Stroke width in pixels, uniform along the segment. The default is set
+  // against the reference workload rather than against the look: a quarter of a
+  // million segments is fill before it is anything else, and 1.0 with the
+  // `streak` below is what keeps the pass inside the frame budget there.
+  // `warp_tunnel`'s own default capacity is half that, where both can be ridden
+  // up.
+  param width    : float [0.5, 24.0] = 1.0
+
+  // Seconds of travel drawn behind each element. The range starts above zero
+  // because a segment whose two ends coincide is zero-area and draws nothing:
+  // a fader that reached 0 would be a fader that turns the picture off, which
+  // is what the mixer's own gain is for.
+  param streak   : float [0.02, 1.0] = 0.06
+
+  // Hue at the far end of the material, and how far it swings by the near end.
+  // `shift` is signed, so the same picture can run cold-to-warm or warm-to-cold
+  // without touching `hue`.
+  param hue      : float [0.0, 1.0]  = 0.55
+  param shift    : float [-1.0, 1.0] = 0.25
+
+  // How much dimmer the far end is than the near end. At 0 the tube is evenly
+  // lit and reads flat — worth seeing once, because it is what the depth cue is
+  // being weighed against.
+  param fade     : float [0.0, 1.0] = 0.6
+
+  // Where the near end of the ramp is, in world units along z. It is the eye's
+  // position in the geometry's space, and the default matches `tunnel_eye`'s
+  // own default of 7. Move the camera down the tube and this follows it.
+  param station  : float [-20.0, 20.0] = 7.0
+
+  // How long the ramp is. Short and the tunnel is a lit ring in a black pipe;
+  // long and it is an even wash.
+  param reach    : float [1.0, 40.0] = 16.0
+
+  param exposure : float [0.0, 8.0] = 0.35
+  param falloff  : float [0.5, 8.0] = 2.0
+
+  vertex {
+    clip   = camera * vec4(position, 1.0);
+
+    // The far end of the segment is this file's own arithmetic on attributes it
+    // already consumes: one `streak` of travel back the way the element came.
+    // Nothing about the geometry says a segment is wanted; assigning `clip_b`
+    // is the whole of that declaration.
+    clip_b = camera * vec4(position - velocity * streak, 1.0);
+
+    point_size = width;
+  }
+
+  fragment {
+    // `point_coord.y` crosses the stroke and `point_coord.x` runs along it from
+    // `clip` to `clip_b`, so this is a soft edge across a tail that thins out
+    // behind the element.
+    let across = abs(point_coord.y * 2.0 - 1.0);
+    let a      = pow(max(0.0, 1.0 - across), falloff) * (1.0 - point_coord.x * 0.85);
+
+    // 1 at the eye, 0 a `reach` further down the tube. Clamped rather than
+    // wrapped: material behind the station is at full brightness, which is what
+    // an element about to pass the camera should be.
+    let near = clamp(1.0 - (station - position.z) / reach, 0.0, 1.0);
+    let dim  = mix(1.0 - fade, 1.0, near);
+
+    let c = hsv_to_rgb(vec3(hue + shift * near, 0.8, 1.0));
+    color = vec4(c * exposure * dim, a);
+  }
+}

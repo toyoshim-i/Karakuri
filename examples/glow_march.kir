@@ -1,0 +1,110 @@
+// A marcher that never decides it has hit anything.
+//
+// `examples/field_lens.kir` is the other slot-taking marcher here and draws a
+// *surface*: it walks until the distance goes under a threshold, calls that a
+// hit, and shades by how many steps it took. This one has no threshold and no
+// hit. At every step it adds a little light, weighted by how close that point
+// was to the surface, and what comes out is the shape lit from inside — an
+// object made of glow, with the thin parts translucent and the thick parts
+// solid. Same field, two entirely different pictures.
+//
+//     karakuri-cli --set sphere_shell.kir,beam_lattice.kir,glow_march.kir \
+//                  --edge glow_march.shape=beam_lattice
+//
+// It draws `melt_blob` just as happily, and that is the point of the slot:
+//
+//     --set sphere_shell.kir,melt_blob.kir,glow_march.kir \
+//     --edge glow_march.shape=melt_blob
+//
+// **It is a fullscreen procedure**, which it declares by having no `vertex`
+// block. That brings two rules with it: `consumes` must be empty, and `eye` and
+// `ray` are readable — the camera's position and the direction through this
+// fragment, given rather than derived so that no shader here has to restate the
+// engine's projection convention. The Set still needs a geometry, and that
+// geometry is dead weight: nothing reads its buffers, so nothing steps them.
+// Pick something small. `sphere_shell.kir` at its default is a good choice, and
+// stacking a per-element renderer beside this one makes it not dead weight at
+// all.
+//
+// **The step is shortened deliberately.** `field_lens` steps by the full
+// distance, which is the fastest safe march to a surface. An accumulator wants
+// samples *near* the surface rather than one sample *on* it, and a fold like
+// `beam_lattice`'s makes the full step slightly optimistic where two cells meet,
+// so this one steps by three quarters and gets both smoothness and safety for
+// the same instruction.
+//
+// **The step count is 26 and that number is the budget.** A field is spliced
+// into the caller at every call site, so each step is another copy of the whole
+// field body, and the Set adds the two figures together against this
+// procedure's fragment ceiling of 4096 — neither file need be over on its own
+// for the pair to be refused. With `beam_lattice` at 103 ops per evaluation the
+// pair estimates at 3710 ops/fragment: 1032 of this file's own, plus 26
+// evaluations at 103. **28 is the most that field allows** — at 29 the pair
+// comes to 4127 and is refused by name, with both figures in the message. Two
+// steps of headroom is what is left for pointing this at a field that costs a
+// little more, which is exactly the trade `field_lens` records at 34.
+
+proc glow_march {
+  kind  L4
+  blend additive
+
+  uses shape : Field
+
+  // Turns the world rather than the camera, so this works under the built-in
+  // orbit without an L3 anywhere in the Set. The ray is rotated once for the
+  // whole march instead of once per sample, which is 26 rotations saved.
+  param spin     : float [0.0, 2.0] = 0.15
+
+  // How tightly the glow hugs the surface. This is the fader that decides what
+  // the material *is*: at 2 the object is a soft nebula with no boundary, at 40
+  // it is a thin bright skin over a hollow shape. The exponential means the
+  // number is a falloff rate in world units and not a threshold, which is the
+  // whole difference from a marcher that decides on a hit.
+  param tight    : float [1.0, 40.0] = 18.0
+
+  // How much of each sample's contribution is kept. It multiplies against the
+  // step count, so a Set that shortens the march wants it higher — the two are
+  // not independent and this is the one an operator rides.
+  param gain     : float [0.0, 4.0] = 1.2
+
+  // Hue at the near end of the march and how far it has travelled by the far
+  // end. Depth here is distance the ray has covered, which is the one thing a
+  // fullscreen procedure knows better than a per-element one: it has the ray.
+  param hue      : float [0.0, 1.0] = 0.60
+  param shift    : float [-1.0, 1.0] = 0.30
+
+  param sat      : float [0.0, 1.0] = 0.70
+  param exposure : float [0.0, 8.0] = 1.0
+
+  fragment {
+    let a  = -t * spin;
+    var p  = rot_y(eye, a);
+    let rd = rot_y(ray, a);
+
+    var glow = 0.0;
+    var went = 0.0;
+
+    for i in 0..26 {
+      let d = shape(p);
+
+      // `abs` so that a ray that ends up inside the shape keeps contributing on
+      // the way out rather than going dark, which is what makes a thick object
+      // read as full instead of hollow.
+      glow = glow + exp(-abs(d) * tight);
+
+      // The floor keeps a ray that lands exactly on the surface from stalling
+      // and spending every remaining step in one place.
+      let s = max(abs(d) * 0.75, 0.03);
+      p     = p + rd * s;
+      went  = went + s;
+    }
+
+    let g = glow * gain / 26.0;
+    let h = hue + shift * clamp(went * 0.04, 0.0, 1.0);
+    let c = hsv_to_rgb(vec3(h, sat, 1.0));
+
+    // Alpha is emission strength under `additive`, so a full 1.0 here means the
+    // colour above is what gets added — the brightness lives in `g`.
+    color = vec4(c * g * exposure, 1.0);
+  }
+}

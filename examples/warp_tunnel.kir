@@ -1,0 +1,107 @@
+// Material that comes at you instead of turning in front of you.
+//
+// Every other geometry here sits around the origin and is orbited. This one is
+// a **tube along z** that the camera stands inside: elements are scattered on
+// its wall and slide toward the eye, wrapping back to the far end when they
+// pass it. What it is for is speed — the picture is one long rush with a
+// direction, and it is the only thing in the library that has one.
+//
+//     --set warp_tunnel.kir,tunnel_eye.kir,speed_lines.kir
+//
+// The L3 is not decoration here. Seen from the built-in orbit this is a bar of
+// streaks lying across the frame, which is a perfectly usable second look; seen
+// from `tunnel_eye`, which stands on the axis, it is a tunnel. That is why this
+// pair ships a camera and the others do not.
+//
+// **It breaks the specification's "radius 1 to 4" advice on purpose**, and says
+// so rather than hoping nobody notices: a tunnel is long by definition. The
+// guidance is written for material an orbit looks *at* from outside, and this is
+// material a camera stands *in*. `bore` is what stays inside the advice — the
+// tube is about a metre and a half across — and `depth` is what does not.
+//
+// **`beats` is read, and it moves the material rather than a parameter.** Every
+// beat the whole tube lurches forward by `kick` world units — `floor(beats)` is
+// a staircase, so the jump is instant and lands exactly on the grid. Bind a
+// signal to a `param` and you get a value that follows the music; read `beats`
+// and you get *time itself* on the grid, which is the difference the ambient
+// exists for. `examples/beat_shell.kir` makes the same point with a swell.
+//
+// **Closed form**, which for this file is not a nicety: an accumulating tunnel
+// cannot be scrubbed, and a tunnel is exactly the material somebody will want to
+// run backwards.
+
+proc warp_tunnel {
+  kind     L1
+  topology lines
+  capacity [4096, 1048576] = 131072
+
+  // Radius of the tube. Every element sits between 75% and 100% of it, so the
+  // wall has thickness and does not read as a drawn circle. Under 0.6 the
+  // camera is close enough to the wall that the streaks smear across the whole
+  // frame, which is a real look and is why the range goes there.
+  param bore   : float [0.3, 4.0] = 1.6
+
+  // How long the tube is, end to end. It is also the wrap distance, so a change
+  // to it moves every element at once — expected, and the reason it is a shape
+  // control rather than something to ride during a phrase.
+  param depth  : float [4.0, 30.0] = 16.0
+
+  // World units per second of forward travel. This is the fader, and 12 is
+  // faster than the streaks can be followed and reads as pure light.
+  //
+  // **The range starts above zero**, for the reason the specification gives
+  // about `streak` one layer down: the emitted `velocity` below is this number,
+  // a line renderer builds its far end from `velocity`, and a segment whose two
+  // ends coincide is zero-area and draws nothing. A range reaching 0 would be a
+  // fader that blanks the slot at one end — which is what the mixer's own gain
+  // is for, and is not a thing a shape control should also do. Rendered as
+  // sprites the same file would be free to stop; this bound is the pairing's,
+  // and it is set where the pairing this file ships with needs it.
+  param rush   : float [0.4, 12.0] = 4.0
+
+  // World units jumped on every beat, on top of `rush`. At 0 the tunnel ignores
+  // the music; at 2 it is mostly the beat and barely the rush. The two together
+  // are what makes it possible to sit on a slow drift and still hit.
+  param kick   : float [0.0, 2.0] = 0.5
+
+  // Corkscrew. The angle of an element is turned by its distance along the tube,
+  // so the wall shears into a spiral — and because it is signed, the two ends of
+  // the fader are two different handednesses with a straight tube between them.
+  param twist  : float [-1.0, 1.0] = 0.25
+
+  // How far the tube's centre wanders off the axis. Small: past about 0.5 the
+  // wall crosses the camera and the material is briefly behind the eye, which
+  // drops those segments. That is the honest upper end and not a mistake.
+  param wobble : float [0.0, 1.0] = 0.25
+
+  // **`velocity` is emitted rather than left to the derivation rule**, and this
+  // file is where that matters. Derived velocity is the change in `position`
+  // over one step; an element that wrapped from the near end to the far end
+  // changed position by the whole length of the tube, so its derived velocity
+  // would be enormous for exactly one frame and the renderer would draw it as a
+  // streak across the entire frame. Emitting the analytic travel direction costs
+  // one `vec3` and removes the artifact rather than hiding it.
+  emit position, velocity
+
+  element {
+    let u = hash1(seed);
+    let v = hash1(seed + 5011u);
+    let w = hash1(seed + 91u);
+
+    // The whole tunnel's position along its own axis: a steady rush plus one
+    // step per beat. Written as a function of the clock, never accumulated.
+    let travel = rush * t + kick * floor(max(beats, 0.0));
+
+    // `mod` here is the wrap. It is the non-negative form — this language's
+    // `mod`, not WGSL's `%` — so an element never lands outside the tube even
+    // while `travel` is small.
+    let along = mod(u * depth + travel, depth) - depth * 0.5;
+
+    let ang  = v * 6.2831853 + along * twist;
+    let r    = bore * (0.75 + 0.25 * w);
+    let sway = sin(t * 0.7 + u * 6.2831853) * wobble;
+
+    position = vec3(cos(ang) * r + sway, sin(ang) * r, along);
+    velocity = vec3(0.0, 0.0, rush);
+  }
+}

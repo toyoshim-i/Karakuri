@@ -1,0 +1,100 @@
+// Dots with an edge. The one renderer here that is not soft.
+//
+// Every other sprite renderer in this library builds its alpha out of `pow` and
+// a falloff, so a sprite is a blur that fades into the background and a hundred
+// of them are a haze. This one uses `smoothstep` between two values a few
+// hundredths apart: a dot is a filled shape with a boundary, and a hundred of
+// them are a hundred dots. That is the whole difference, and it is what a mix
+// wants when everything else on the deck is a cloud.
+//
+//     --set step_grid.kir,hard_dots.kir
+//
+// **`square` mixes the two distance metrics**, which is the cheapest way to have
+// both shapes in one file: `length(point_coord * 2 - 1)` is a disc and
+// `max(|x|, |y|)` is a square, and blending the *distances* rather than the
+// results gives every rounded rectangle in between for two more instructions.
+//
+// **It consumes `size` and that is a real constraint.** Only `age` and
+// `velocity` have derivation rules; `size` has none, so a Set pairing this with
+// a geometry that does not emit it is refused where the Set is built. That is
+// the honest failure — a renderer sized off an attribute nobody supplies has no
+// size — and it is worth knowing before reaching for this over a shell.
+// `examples/step_grid.kir` is what it is written for.
+//
+// **It reads `beats` in a fragment block**, which is legal and worth seeing: the
+// ambient is available in every layer, so a renderer can hit on the grid over
+// material that does not. Over a geometry that emits `size` and ignores the
+// clock, `flash` would be the only thing in the picture that knows there is
+// music.
+
+proc hard_dots {
+  kind  L4
+  blend additive
+
+  consumes position, size
+
+  // Pixels per unit of the `size` attribute. Large by the standards of this
+  // library because there are two orders of magnitude fewer elements here than
+  // in a shell — sparse material has to be big to be material at all.
+  param dot_scale : float [0.5, 60.0] = 9.0
+
+  // 0 is a disc, 1 is a square, and the interesting settings are near neither.
+  param square    : float [0.0, 1.0] = 1.0
+
+  // Width of the boundary, as a fraction of the dot's radius. The range starts
+  // at 0.02 rather than 0: `smoothstep(1 - edge, 1, d)` with `edge` at zero is
+  // a division by zero, and even without that a boundary narrower than a pixel
+  // is an aliased dot rather than a sharper one. At 0.6 the dot is as soft as
+  // `soft_points`, which is the far end of the same fader.
+  param edge      : float [0.02, 0.6] = 0.06
+
+  // Two hues, picked per element by a hash. A two-colour field reads as a
+  // deliberate pattern where a continuous hue spread reads as confetti, and
+  // holding them apart on two faders is what lets an operator tune the pair
+  // rather than the spread.
+  param hue_a     : float [0.0, 1.0] = 0.08
+  param hue_b     : float [0.0, 1.0] = 0.55
+
+  // What fraction of the elements take the second hue. 0 and 1 are one colour.
+  param split     : float [0.0, 1.0] = 0.35
+
+  param sat       : float [0.0, 1.0] = 0.85
+  param exposure  : float [0.0, 8.0] = 0.55
+
+  // How hard the whole field brightens on the beat, and how quickly that decay
+  // runs out. `flash` at 0 is a field that ignores the music; `snap` is the
+  // exponent on the decay, so low is a swell and high is a strobe.
+  param flash     : float [0.0, 4.0] = 1.5
+  param snap      : float [1.0, 16.0] = 6.0
+
+  vertex {
+    clip = camera * vec4(position, 1.0);
+
+    // Straight from the attribute, with no perspective term: these are meant to
+    // read as marks on the frame rather than as objects at a distance, and a
+    // dot that grew as it came forward would be the second thing in the picture
+    // that moves.
+    point_size = dot_scale * size;
+  }
+
+  fragment {
+    let q  = abs(point_coord * 2.0 - 1.0);
+    let sq = max(q.x, q.y);
+    let ci = length(point_coord * 2.0 - 1.0);
+    let d  = mix(ci, sq, square);
+
+    // Inside the boundary the dot is fully covered. `1 - smoothstep` rather
+    // than a `pow` falloff is the whole reason this file exists.
+    let a = 1.0 - smoothstep(1.0 - edge, 1.0, d);
+
+    // `fract(beats)` is 0 on the beat and climbs to 1 just before the next one,
+    // so this is a spike that lands on the grid and decays off it.
+    let hit = pow(1.0 - fract(max(beats, 0.0)), snap);
+
+    let pick = step(1.0 - split, hash1(seed + 3u));
+    let h    = mix(hue_a, hue_b, pick);
+    let c    = hsv_to_rgb(vec3(h, sat, 1.0));
+
+    color = vec4(c * exposure * (1.0 + flash * hit), a);
+  }
+}
