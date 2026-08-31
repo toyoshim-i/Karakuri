@@ -116,6 +116,7 @@ use karakuri_ir::Kind;
 // `Layer` and the vocabulary's — is the cost `karakuri-operation` states it
 // pays on purpose, and this package is where two of them are checked against
 // each other.
+use karakuri_operation::gate::{self, Allowed};
 use karakuri_operation::{NodeAt, Operation};
 use karakuri_store::hash::Hash;
 use karakuri_store::ndjson::Line;
@@ -662,6 +663,7 @@ pub fn serve(
     slots: Slots,
     store: std::path::PathBuf,
     watching: bool,
+    opening: crate::Opening,
 ) -> Result<Reporter, String> {
     if slots.0.is_empty() {
         return Err("this run has no procedure files to serve — see `--load-set`".into());
@@ -685,6 +687,7 @@ pub fn serve(
         slots,
         store,
         watching,
+        opening,
         events: rx,
         asked,
         wiring,
@@ -738,6 +741,14 @@ struct State {
     /// changes nothing, which a model has no way to discover and every reason
     /// to be told.
     watching: bool,
+    /// **Which classes the operator has opened**, read on every call — see
+    /// [`crate::Opening`] and [`audited`]. A parameter of [`serve`] and not a
+    /// value this module chooses: a server that decided its own opening would
+    /// be the surface holding the authority, which is the shape
+    /// `docs/principles/0076-a-surface-owns-the-affordance-never-the-authority.md`
+    /// rules out. **Nor can a caller forget it**: it is positional, so a run
+    /// that does not mention an opening does not compile.
+    opening: crate::Opening,
     events: mpsc::Receiver<Event>,
     /// Where a save a client asks for goes. **Bounded and never blocked on** —
     /// see [`ASKED`]: this is sent into from a connection thread, and a render
@@ -1717,6 +1728,14 @@ fn listing(args: &Value) -> Result<Operation, String> {
 
 /// **One named operation, done.**
 ///
+/// **It takes an [`Allowed`] and not an [`Operation`], which is the audit made
+/// structural.** `karakuri_operation::gate::audit` is the only thing that
+/// builds one and its field is private to that crate, so there is no way to
+/// reach this function with an operation nobody checked — a path that skipped
+/// the gate does not compile rather than passing review.
+/// [ADR-0235](../../../docs/adr/0235-mcp-reaches-every-operation-and-what-could-stop-the-show-is-refused-until-the-operator-opens-it.md):
+/// *"an audit skipped on one path is the whole mechanism gone."*
+///
 /// The dispatch is over the vocabulary rather than over the tool's name, which
 /// is the whole of what routing buys this surface: the arm that reads a
 /// procedure is chosen by [`Operation::ReadProcedure`], so a tool renamed on the
@@ -1729,8 +1748,8 @@ fn listing(args: &Value) -> Result<Operation, String> {
 /// so quietly when the shape around it changes, and if an eighth tool ever
 /// arrives without an arm here the client is told which operation nothing
 /// performs rather than being answered by the wrong one.
-fn perform(operation: &Operation, state: &mut State) -> Called {
-    match operation {
+fn perform(allowed: &Allowed<'_>, state: &mut State) -> Called {
+    match allowed.operation() {
         Operation::ReadProcedure { deck, node } => {
             Called::Answered(read_procedure(*deck, *node, state))
         }
@@ -1784,9 +1803,40 @@ fn call_tool(request: &Value, state: &mut State) -> Result<Called, String> {
     let args = params.get("arguments").cloned().unwrap_or(json!({}));
 
     Ok(match asked(name, &args, &state.slots)? {
-        Asked::Named(operation) => perform(&operation, state),
+        // **The gate, and there is one of it.** Named, then audited, then done
+        // — every tool crosses this seam because [`perform`] takes what
+        // [`audited`] returns and nothing else can make one.
+        Asked::Named(operation) => match audited(&operation, state) {
+            Ok(allowed) => perform(&allowed, state),
+            Err(refused) => Called::Answered(Err(refused)),
+        },
         Asked::Refused(refusal) => Called::Answered(Err(refusal)),
     })
+}
+
+/// **This surface's one call into the audit.**
+///
+/// The classification, the four classes and the refusal sentence are
+/// `karakuri_operation::gate`'s and not this module's, which is
+/// [ADR-0236](../../../docs/adr/0236-a-map-is-the-layer-between-a-surface-and-the-vocabulary-and-the-audit-is-one-of-the-things-it-does.md)
+/// refusing to let one surface hold the rule: *"a rule held by one surface
+/// binds one surface"*, and a sequencer lane is already decided as a fifth
+/// route that would otherwise arrive with a second copy of the table. What is
+/// this module's is the two things only it can supply — **the opening the run
+/// was handed** and **what it has read of what is running**.
+///
+/// **And it has read nothing, which is said rather than defaulted.**
+/// `Running::unread()` is honest: this server holds `Slots`, a store root and a
+/// watch flag, and no residency at all. Exactly one row turns on that reading —
+/// `Operation::LoadSet`, whose class is *a deck in live mode* — and this
+/// surface publishes no tool that names it, so nothing is refused today that
+/// was not refused yesterday. The day a `load_set` tool lands it is refused
+/// with *which decks are live was not read* until somebody wires the reading,
+/// which is
+/// `docs/principles/0027-a-silently-wrong-image-loses-to-a-loud-failure.md`'s
+/// answer rather than a guess that the deck is idle.
+fn audited<'a>(operation: &'a Operation, state: &State) -> Result<Allowed<'a>, String> {
+    gate::audit(operation, state.opening.read(), gate::Running::unread())
 }
 
 /// One tool call's answer, in the shape the protocol gives a tool.
@@ -3090,6 +3140,16 @@ mod wire_tests {
         dir.path().join("store")
     }
 
+    /// **What a run starts with: all four classes closed.**
+    ///
+    /// Every fixture in this module serves under it, which is what makes
+    /// `the_seven_tools_still_work_with_every_class_closed` a property of the
+    /// whole file rather than of one test: if the gate had caught any of the
+    /// seven, this module would be red from end to end.
+    fn closed() -> crate::Opening {
+        crate::Opening::closed()
+    }
+
     impl Server {
         /// The library this server was started on, open from the test's side.
         fn store(&self) -> Store {
@@ -3279,7 +3339,14 @@ proc probe_knobs {
             write("blob.kir", PROBE_FIELD),
             write("l1_b.kir", PROBE_L1_B),
         ];
-        let reporter = serve(0, Slots(vec![(head, rest)]), store_root(&dir), true).expect("serve");
+        let reporter = serve(
+            0,
+            Slots(vec![(head, rest)]),
+            store_root(&dir),
+            true,
+            closed(),
+        )
+        .expect("serve");
         let port = reporter.port();
         stand_in(reporter, no_loop);
         Server { port, dir }
@@ -3301,8 +3368,14 @@ proc probe_knobs {
         std::fs::write(&l4, PROBE_L4).expect("l4");
         // Port 0: the operating system picks, and `serve` reports what it got —
         // which is also the fix for `--mcp 0` naming a port that is not the port.
-        let reporter =
-            serve(0, Slots(vec![(l1, vec![l4])]), store_root(&dir), watching).expect("serve");
+        let reporter = serve(
+            0,
+            Slots(vec![(l1, vec![l4])]),
+            store_root(&dir),
+            watching,
+            closed(),
+        )
+        .expect("serve");
         let port = reporter.port();
         (Server { port, dir }, reporter)
     }
@@ -3780,7 +3853,7 @@ proc probe_knobs {
         std::fs::write(&l1, PROBE_L1).expect("l1");
         std::fs::write(&l4, PROBE_L4).expect("l4");
         let shared = Slots(vec![(l1.clone(), vec![l4.clone()]), (l1, vec![l4])]);
-        let reporter = serve(0, shared, store_root(&dir), true).expect("serve");
+        let reporter = serve(0, shared, store_root(&dir), true, closed()).expect("serve");
         let port = reporter.port();
         std::mem::forget(reporter);
 
@@ -3828,7 +3901,7 @@ proc probe_knobs {
             (l1.clone(), vec![warp.clone(), l4.clone()]),
             (l1, vec![warp, l4]),
         ]);
-        let reporter = serve(0, shared, store_root(&dir), true).expect("serve");
+        let reporter = serve(0, shared, store_root(&dir), true, closed()).expect("serve");
         let port = reporter.port();
         std::mem::forget(reporter);
 
@@ -3914,8 +3987,14 @@ proc probe_knobs {
         std::fs::write(&l1, PROBE_L1).expect("l1");
         std::fs::write(&l4, PROBE_L4).expect("l4");
         let pair = (l1, vec![l4]);
-        let reporter =
-            serve(0, Slots(vec![pair.clone(), pair]), store_root(&dir), true).expect("serve");
+        let reporter = serve(
+            0,
+            Slots(vec![pair.clone(), pair]),
+            store_root(&dir),
+            true,
+            closed(),
+        )
+        .expect("serve");
         let server = Server {
             port: reporter.port(),
             dir,
@@ -4854,6 +4933,7 @@ proc probe_knobs {
             Slots(vec![(head, vec![first.clone(), second.clone()])]),
             store_root(&dir),
             true,
+            closed(),
         )
         .expect("serve");
         let port = reporter.port();
@@ -4980,7 +5060,7 @@ proc probe_knobs {
         let dir = tempfile::tempdir().expect("tempdir");
         let (slots, paths) = headed_by_a_camera(&dir);
         let (camera, l1) = (paths[0].clone(), paths[1].clone());
-        let reporter = serve(0, slots, store_root(&dir), true).expect("serve");
+        let reporter = serve(0, slots, store_root(&dir), true, closed()).expect("serve");
         let port = reporter.port();
         stand_in(reporter, no_loop);
 
@@ -5031,8 +5111,14 @@ proc probe_knobs {
         let l1 = write("l1.kir", PROBE_L1);
         let warp = write("warp.kir", PROBE_L2);
         let l4 = write("l4.kir", PROBE_L4);
-        let reporter =
-            serve(0, Slots(vec![(l1, vec![warp, l4])]), store_root(&dir), true).expect("serve");
+        let reporter = serve(
+            0,
+            Slots(vec![(l1, vec![warp, l4])]),
+            store_root(&dir),
+            true,
+            closed(),
+        )
+        .expect("serve");
         let port = reporter.port();
         stand_in(reporter, no_loop);
 
@@ -5136,8 +5222,14 @@ proc probe_knobs {
             write("l4.kir", PROBE_L4),
             write("blob.kir", PROBE_FIELD),
         ];
-        let reporter =
-            serve(0, Slots(vec![(head, rest)]), store_root(&dir), watching).expect("serve");
+        let reporter = serve(
+            0,
+            Slots(vec![(head, rest)]),
+            store_root(&dir),
+            watching,
+            closed(),
+        )
+        .expect("serve");
         let port = reporter.port();
         let seen = wiring_loop(reporter);
         (Server { port, dir }, seen)
@@ -5381,6 +5473,65 @@ proc probe_knobs {
             "a run that does rebuild was told it does not: {said}"
         );
     }
+
+    /// **The seven tools still work with every class closed**, over the socket
+    /// a model actually reaches them on.
+    ///
+    /// ADR-0235 puts all seven in the open set and promises *"no code in this
+    /// workspace changes on the day this is recorded"* of their behaviour. The
+    /// gate is new code on the path every one of them takes, so this is checked
+    /// rather than assumed — and checked here rather than only over
+    /// [`asked`], because the gate could have been wired into the wrong seam
+    /// and a unit test on the right one would never notice.
+    ///
+    /// **Two assertions, and the weaker one covers more.** The four this
+    /// fixture can carry to a real answer must succeed outright. All seven must
+    /// come back saying something other than the refusal — a tool that fails
+    /// because this fixture has no store, no saved set and no render loop is
+    /// this fixture failing it, and a tool the audit stopped says so in the one
+    /// sentence, which is what makes the two distinguishable at all.
+    #[test]
+    fn the_seven_tools_still_work_with_every_class_closed() {
+        let server = start(true);
+        let asked = [
+            ("read_procedure", json!({"slot": 0, "layer": "L4"}), true),
+            (
+                "write_procedure",
+                json!({"slot": 0, "layer": "L4", "source": PROBE_L4}),
+                true,
+            ),
+            ("swap_outcome", json!({}), true),
+            ("list_sets", json!({}), true),
+            // Answered by this fixture's refusals rather than by the gate: no
+            // set was ever saved, and `no_loop` is a render loop that says so.
+            ("read_set", json!({"id": "never_saved"}), false),
+            ("save_set", json!({"slot": 0}), false),
+        ];
+        for (name, args, must_succeed) in asked {
+            let (failed, said) = call(server.port, name, args);
+            assert!(
+                !said.contains("closed by default"),
+                "`{name}` was stopped by the audit, and ADR-0235 puts all seven tools in the \
+                 open set: {said}"
+            );
+            if must_succeed {
+                assert!(!failed, "`{name}`: {said}");
+            }
+        }
+
+        // **The seventh needs the other half of the surface**, so it gets the
+        // fixture that has one: `no_loop` never applies an edge, and a client
+        // waiting out `WIRE_REPLY` for it would be this test hanging rather
+        // than this test failing.
+        let (wiring, _seen) = wired(true);
+        let (failed, said) = call(
+            wiring.port,
+            "wire_input",
+            json!({"slot": 0, "node": "probe_warp_uses", "input": "shape", "to": "probe_blob"}),
+        );
+        assert!(!said.contains("closed by default"), "{said}");
+        assert!(!failed, "`wire_input`: {said}");
+    }
 }
 
 #[cfg(test)]
@@ -5401,6 +5552,9 @@ mod tests {
             // state without a directory — see `serve`.
             store: "a/store".into(),
             watching: true,
+            // **Closed, all four classes**, which is the state a run starts in
+            // and the state every test in this module reasons under.
+            opening: crate::Opening::closed(),
             events,
             asked: mpsc::sync_channel(ASKED).0,
             wiring: mpsc::sync_channel(ASKED).0,
@@ -5773,6 +5927,118 @@ mod tests {
             reply.get("error").is_none(),
             "a bad procedure must not look like a bad request"
         );
+    }
+
+    /// **Every tool this server publishes names an operation the gate lets
+    /// through**, which is ADR-0235's promise that nothing closes on the day it
+    /// is recorded: *"the seven tools that exist are unaffected. Nothing closes
+    /// today and no model loses a call it could make yesterday."*
+    ///
+    /// **The names come from [`tools`] rather than from a list written here**,
+    /// so an eighth tool that named a closed operation would fail this rather
+    /// than slip past a fixture that had not heard of it. The arguments are the
+    /// smallest each tool accepts — what is asserted is that [`asked`] names an
+    /// operation and that [`audited`] lets it by, not what the tool then does
+    /// with it.
+    #[test]
+    fn every_tool_this_server_publishes_names_an_operation_the_gate_lets_through() {
+        let (_tx, rx) = mpsc::channel();
+        let state = state(rx);
+        let arguments = [
+            ("read_procedure", json!({"slot": 0, "layer": "L4"})),
+            (
+                "write_procedure",
+                json!({"slot": 0, "layer": "L4", "source": "proc p { kind L4 }"}),
+            ),
+            (
+                "wire_input",
+                json!({"slot": 0, "node": "a", "input": "b", "to": "c"}),
+            ),
+            ("swap_outcome", json!({})),
+            ("read_set", json!({"id": "a"})),
+            ("list_sets", json!({})),
+            ("save_set", json!({"slot": 0})),
+        ];
+        // Sorted, because the order a tool is published in is `tools()`'s to
+        // choose and is not what this is about.
+        let mut published: Vec<String> = tools()
+            .as_array()
+            .expect("a list of tools")
+            .iter()
+            .map(|tool| tool["name"].as_str().expect("a name").to_string())
+            .collect();
+        published.sort();
+        let mut covered: Vec<String> = arguments.iter().map(|(name, _)| name.to_string()).collect();
+        covered.sort();
+        assert_eq!(
+            published, covered,
+            "this test and `tools()` have come apart — a tool nobody drives here is a tool \
+             nobody has checked against the gate"
+        );
+
+        for (name, args) in arguments {
+            let Asked::Named(operation) = asked(name, &args, &state.slots).expect("a known tool")
+            else {
+                panic!("`{name}` refused these arguments before the gate was reached");
+            };
+            audited(&operation, &state).unwrap_or_else(|refused| {
+                panic!(
+                    "`{name}` names `{}`, and ADR-0235 puts all seven tools in the open set: \
+                     {refused}",
+                    operation.title()
+                )
+            });
+        }
+    }
+
+    /// **A closed operation is refused at the seam every tool crosses, in the
+    /// one sentence.**
+    ///
+    /// Driven through [`audited`] rather than over the wire because **no tool
+    /// names a closed operation today** — ADR-0235 puts all seven in the open
+    /// set — so the seam is the only place this is reachable until the
+    /// floodgate opens. Asserted by equality against
+    /// `karakuri_operation::gate::refusal`, which is P-0061: one refusal, one
+    /// sentence, and no second spelling of it in this crate.
+    #[test]
+    fn a_closed_operation_is_refused_at_the_seam_every_tool_crosses() {
+        use karakuri_operation::gate::{Class, Standing};
+        let (_tx, rx) = mpsc::channel();
+        let state = state(rx);
+        let operation = Operation::SetGain {
+            deck: 0,
+            gain: 0.25,
+        };
+        assert_eq!(
+            audited(&operation, &state).expect_err("the mix faders are closed by default"),
+            gate::refusal(&operation, Standing::Closed(Class::MixFaders)).expect("a refusal"),
+        );
+    }
+
+    /// **A class the operator opens is open on the very next call**, which is
+    /// what the run holding a handle rather than a snapshot buys: an opening
+    /// set between two numbers has to be true of the call after it, and one
+    /// closed again has to be false of the call after that.
+    #[test]
+    fn a_class_the_operator_opens_is_open_on_the_next_call() {
+        use karakuri_operation::gate::{Class, Open};
+        let (_tx, rx) = mpsc::channel();
+        let state = state(rx);
+        let operation = Operation::SetGain {
+            deck: 0,
+            gain: 0.25,
+        };
+        assert!(audited(&operation, &state).is_err());
+        state.opening.set(Open::CLOSED.with(Class::MixFaders, true));
+        assert!(
+            audited(&operation, &state).is_ok(),
+            "the server read an opening it was handed at startup rather than the one the \
+             operator has now"
+        );
+        // And the other three are untouched by that hand.
+        assert!(audited(&Operation::SetExposure { exposure: 1.0 }, &state).is_err());
+        state.opening.set(Open::CLOSED);
+        assert!(audited(&operation, &state).is_err());
     }
 
     /// A notification has no `id` and is never answered — the one shape of

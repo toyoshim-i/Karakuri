@@ -5080,7 +5080,22 @@ impl ApplicationHandler for App {
                 // the library is: `read_set` reads a saved Set and its cards
                 // out of the same root `--save-set`, `--load-set` and the `k`
                 // key write into.
-                match mcp::serve(port, slots, self.args.store.clone(), self.args.watch) {
+                // **Closed, all four classes**, which is the state ADR-0235
+                // says a run starts in. It is handed in rather than decided
+                // inside the server: what a model may reach is the operator's
+                // to say (P-0078), and a constant compiled into the server is
+                // the one place it must not be said. **Nothing writes it
+                // yet** — the bay-head toggles are the console's — so every
+                // closed class stays closed for the whole run, and the handle
+                // is what the toggles will hold the other end of.
+                let opening = karakuri_environment::Opening::closed();
+                match mcp::serve(
+                    port,
+                    slots,
+                    self.args.store.clone(),
+                    self.args.watch,
+                    opening,
+                ) {
                     Ok(reporter) => {
                         // The port bound rather than the one asked for: `--mcp 0`
                         // takes an ephemeral one, and printing the 0 would name
@@ -11804,6 +11819,7 @@ mod wire_tests {
             mcp::Slots(vec![(l1, Vec::new())]),
             dir.path().join("store"),
             true,
+            karakuri_environment::Opening::closed(),
         )
         .expect("serve");
         let port = reporter.port();

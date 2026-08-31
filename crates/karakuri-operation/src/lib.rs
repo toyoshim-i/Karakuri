@@ -159,6 +159,13 @@
 
 use std::path::PathBuf;
 
+// **What may be asked, and by what** — the audit ADR-0235 decided, over the
+// vocabulary this crate names. Not an `Operation` and not part of the
+// vocabulary; the module's own documentation is where that is argued, and it
+// carries the `//!` rather than this line carrying a `///`, so that the links
+// in it resolve inside the module they name.
+pub mod gate;
+
 /// **A payload that has not been decided, on an operation that has.**
 ///
 /// The row is real — it is in `docs/manual/operations.html`, so it is part of
