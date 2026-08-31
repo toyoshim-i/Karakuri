@@ -146,11 +146,19 @@
 //! contribution to the mix, and no frame time. An operator brings one up by
 //! cycling its tally or by loading a Set into it.
 //!
-//! **Three of the four preview cells are still off**, and for one reason: this
-//! program builds one preview sink and aims it at deck A, and nothing is
-//! auditioning the rest. `off` is a state an operator chooses rather than a
-//! thing not built yet, and all three are the truth about this program rather
-//! than a gap in it.
+//! **Three of the four preview cells are off at a time**, and for one reason:
+//! this program builds one preview sink, and it puts it in the cell of the
+//! deck the output is auditioning — which a press on a cell moves. `off` is a
+//! state an operator chooses rather than a thing not built yet, and all three
+//! are the truth about this program rather than a gap in it.
+//!
+//! **The cell moves because every sink is handed the same frame.** There is
+//! one composited frame and `frame::compose` draws each sink from it, so the
+//! texture in that cell holds whatever the *output* is showing. A sink left in
+//! deck A's cell would draw deck C's material under the letter `A` the moment
+//! somebody auditioned C, which is the panel saying something false — so the
+//! cell follows the audition, and with the mix on the output it is
+//! [`ON_AIR`]'s, which is the deck the mix is here.
 //!
 //! # This file owns none of the model, and none of the view
 //!
@@ -228,7 +236,7 @@ use karakuri_console::room::Room;
 use karakuri_console::view::{
     self, arrangement as arrangement_pill, deck_head as deck_head_row, inspector as inspector_pane,
     look as look_row, master as master_row, mixer as mixer_bay, outputs, picture_rect,
-    preview_rects, Ask, Kind, Picture, Scope, View, DECKS, DECK_LETTERS,
+    preview_rects, program_bay, program_head, Ask, Kind, Picture, Scope, View, DECKS, DECK_LETTERS,
 };
 // **How many slots a deck can hold**, which is how many this one has — see
 // [`SLOTS`]. Not re-exported at the crate root, and asked of the module that
@@ -1426,11 +1434,11 @@ impl Readout {
                     did = Acted::Emitted(operation);
                 }
             }
-            // **A press the panel claimed is on one of the twelve controls
+            // **A press the panel claimed is on one of the eighteen controls
             // or on the panel itself**, and the controls are asked first for
             // the reason `claim` asked them last: rule 2 has already had its
             // refusal, so a press that got here and is on a control is that
-            // control's. All twelve are the same calls `claim` made — asked
+            // control's. All eighteen are the same calls `claim` made — asked
             // again, not copied.
             //
             // **The bay is derived once and asked four times**, exactly as
@@ -1440,12 +1448,12 @@ impl Readout {
             (Pointer::Down, Claim::Panel) => {
                 self.panel.solve();
                 // **The arrangement pill first, and it is the only one of the
-                // twelve whose order matters.** Its menu is drawn *over* the
+                // eighteen whose order matters.** Its menu is drawn *over* the
                 // bays, so while it is down a press inside the card belongs to
                 // the card and not to whatever it happens to be covering — and
                 // a press anywhere else is the dismissal, which is why the
                 // `None` below is `Ask::Shut` rather than a press that fell
-                // through. Shut, this is one capsule among twelve that never
+                // through. Shut, this is one capsule among eighteen that never
                 // overlap and the order is arbitrary.
                 let pill = arrangement_pill(
                     ctx,
@@ -1508,6 +1516,30 @@ impl Readout {
                             .or_else(|| head.scrub(at))
                     });
                 if let Some(operation) = deck_head {
+                    return (claim, Acted::Emitted(Some(operation)));
+                }
+                // **The Program bay head's `solo`**, and it is the one
+                // control on this panel that acts on the console's own shape
+                // from inside a bay rather than from the Outputs row. What it
+                // asks for is `ProgramHead::op` — the same two operations
+                // `s` and `u` perform, chosen from the layout rather than
+                // toggled — and this file performs it exactly as it performs
+                // the dot's.
+                if let Some(head) =
+                    program_head(ctx, self.panel.layout()).filter(|head| head.hit(at))
+                {
+                    return (claim, Acted::Operated(self.soloed(head.op())));
+                }
+                // **The four deck preview cells.** A press names a deck or
+                // the mix, and it goes down the path every emitted operation
+                // takes: `Operation::SetPreview`, `Record::Preview`, the
+                // deck. Asked before the mixer because a cell is in the
+                // Program bay and a strip is not — the two cannot overlap and
+                // the order is arbitrary, but the cells' answer is the
+                // cheaper one and there is no type to lay out for it.
+                if let Some(operation) = program_bay(self.panel.layout(), self.view.canvas)
+                    .and_then(|bay| bay.preview(self.view.showing, at))
+                {
                     return (claim, Acted::Emitted(Some(operation)));
                 }
                 let sink = outputs(ctx, self.panel.layout()).filter(|row| row.hit(at));
@@ -1668,6 +1700,31 @@ impl Readout {
         Acted::Emitted(Some(Operation::SaveArrangement { name }))
     }
 
+    /// A press on the Program bay head's `solo`. **The pill says what it
+    /// did** — which of the two operations it asked for — because the whole
+    /// point of the control is that it is the same solo `s` and `u` perform,
+    /// reached from a capsule instead of from the pointer.
+    ///
+    /// **The region is the picture's and never the pointer's**, which is the
+    /// one way this differs from `s`: a key solos whatever the pointer is
+    /// over, and this pill names `program-view` because
+    /// `docs/manual/console.html` says what it is for — *"Solo the program
+    /// view: the panel folds away and only the picture is left, which is also
+    /// how you capture this window."*
+    fn soloed(&mut self, op: Op) -> Outcome {
+        println!(
+            "program: {}",
+            match op {
+                Op::Solo(_) =>
+                    "solo the picture — everything else folds away, and the window                      is that region",
+                Op::Unsolo =>
+                    "the solo comes off — what was folded before it comes back,                      including whatever was already folded",
+                other => unreachable!("the solo pill asked for {other:?}"),
+            }
+        );
+        self.op(op)
+    }
+
     /// A press on the Outputs row's one control. **The dot says what it did**
     /// — which of the two operations it asked for, and what the picture is
     /// now — because the whole point of the control is that it is the same
@@ -1813,23 +1870,36 @@ impl Readout {
              than looks like: both ask `karakuri_environment::places::STORE`.",
             store.display()
         );
-        // **The cells, and the sentence this replaces was false.** It said C
+        // **The cells, and this sentence has been wrong twice.** It said C
         // and D had nothing behind them and named the number — *a deck of TWO
-        // slots* — which was true of the deck that shipped before this one and
-        // is not true of a deck built full. What is left is one reason, and
-        // the letters in it are the deck's own: `ON_AIR` is the slot the one
-        // preview sink is aimed at, and every other slot is one nothing is
-        // drawing.
+        // slots* — which was true of the deck that shipped before this one.
+        // Then it said the one sink was an audition, and it was not: nothing
+        // called `Deck::set_preview`, so the sink was a second copy of the
+        // picture and the word was a claim about a control that did not exist.
+        // **The cells are a control now** and the word is true, so the cell it
+        // names is read off the deck rather than written here.
+        // Which cell the sink is in, read the way `Engine::aim` reads it.
+        let showing = self.view.showing.map(usize::from).unwrap_or(ON_AIR);
         println!(
-            "deck {}'s cell is the only one that is ON, and it is one reason now rather \
-             than two: this program builds ONE preview sink and aims it there. every slot \
-             of this deck holds a Set — there are {} of them and the mixer draws a strip \
-             for each — so no cell on this row is a cell with nothing behind it. the other \
-             {} read `off` because nothing is drawing those slots: a slot that is not LIVE \
-             is drawn only for an audition, and this program auditions one. cells saying \
-             off are what this program is rather than something left unfinished, and each \
-             cell that is on costs a present pass of its own.",
-            deck_letter(ON_AIR as u8),
+            "deck {}'s cell is the only one that is ON, and which cell that is follows what \
+             the output is showing: this program builds ONE preview sink and puts it in the \
+             auditioned deck's cell. {} — press another cell and the sink goes there, press \
+             the one that is on and the mix comes back. every slot of this deck holds a Set \
+             — there are {} of them and the mixer draws a strip for each — so no cell on \
+             this row is a cell with nothing behind it. the other {} read `off` because \
+             nothing is drawing those slots: a slot that is not LIVE is drawn only for an \
+             audition, and this program auditions one at a time. cells saying off are what \
+             this program is rather than something left unfinished, and each cell that is \
+             on costs a present pass of its own.",
+            deck_letter(showing as u8),
+            match self.view.showing {
+                Some(deck) => format!("deck {} is auditioned", deck_letter(deck)),
+                None => format!(
+                    "the output is showing the MIX, so the sink is in deck {}'s cell — the \
+                     only LIVE slot, and therefore the deck the mix is",
+                    deck_letter(ON_AIR as u8)
+                ),
+            },
             self.view.mixer.len(),
             DECKS - 1
         );
@@ -1975,8 +2045,22 @@ impl Readout {
                 .and_then(karakuri_console::view::region)
             {
                 Some(region) => match region.kind {
-                    Kind::Bay { grip: true, .. } => "bay, with a grip".to_owned(),
-                    Kind::Bay { .. } => "bay".to_owned(),
+                    // **The pills are named because they are controls.** A
+                    // bay head's pills are exactly its controls — the table in
+                    // `view::REGIONS` says so, and the Program bay's `solo` is
+                    // the only one any bay has — so a head with one is a place
+                    // a press reaches and a legend that said `bay` would be
+                    // hiding it. Read off the table rather than written here.
+                    Kind::Bay { pills, grip, .. } => {
+                        let mut what = String::from("bay");
+                        if grip {
+                            what.push_str(", with a grip");
+                        }
+                        for pill in pills {
+                            what.push_str(&format!(", `{pill}` in its head"));
+                        }
+                        what
+                    }
                     // Four readouts, and then the controls that landed in
                     // this row after them: the arrangement pill and, at the
                     // far end, the tone map and the exposure. The six controls
@@ -1994,15 +2078,22 @@ impl Readout {
                     Kind::Outputs => "row, one sink: program view".to_owned(),
                     Kind::Pane => "pane, inside a bay".to_owned(),
                     Kind::Picture => "the picture, a sink".to_owned(),
-                    // Four cells, and this file knows which of them are on:
-                    // one preview sink, aimed at deck A, whatever the deck
-                    // has in the rest of its slots.
-                    Kind::Previews => {
-                        format!(
-                            "{DECKS} previews, deck {} auditioning",
+                    // Four cells, and this file knows which of them is on:
+                    // one preview sink, in the cell of the deck the output is
+                    // auditioning. **Read off the view rather than off
+                    // `ON_AIR`**, because a press on a cell moves it — a
+                    // constant here is exactly the legend naming a control's
+                    // state from before the control existed.
+                    Kind::Previews => match self.view.showing {
+                        Some(deck) => {
+                            format!("{DECKS} previews, deck {} auditioning", deck_letter(deck))
+                        }
+                        None => format!(
+                            "{DECKS} previews, the mix on the output and deck {}'s cell \
+                             showing it",
                             deck_letter(ON_AIR as u8)
-                        )
-                    }
+                        ),
+                    },
                     // A bay like the other five: a row of chips saying which
                     // library is being read, and then a row per Set that one
                     // holds — as many as the bay has room for, and the foot
@@ -2936,11 +3027,11 @@ impl Sink for Presented {
 /// anything**: the reading [`Costs::say`] prints is still one Set stepping, and
 /// three more slots did not change that.
 ///
-/// **Three of the four preview cells are still off, and now for one reason.**
-/// This program builds one preview sink and aims it at deck A; every slot has
-/// a Set behind it, and the three that are not being drawn have nothing to
-/// audition. Three cells reading `off` are the truth about this program rather
-/// than a gap in it.
+/// **Three of the four preview cells are off at a time, and for one reason.**
+/// This program builds one preview sink and puts it in the cell of the deck
+/// the output is auditioning; every slot has a Set behind it, and the three
+/// that are not being drawn have nothing to audition. Three cells reading
+/// `off` are the truth about this program rather than a gap in it.
 struct Engine {
     deck: Deck,
     /// **Elements per geometry, read off the L1's own `capacity` declaration**
@@ -2951,8 +3042,9 @@ struct Engine {
     present: Present,
     /// The Program bay's picture.
     picture: Presented,
-    /// **Deck A's preview cell**, and the second target the one [`Present`]
-    /// serves.
+    /// **The one deck preview cell that is on**, and the second target the one
+    /// [`Present`] serves. Which cell that is follows `Deck::preview` — see
+    /// [`Engine::aim`].
     ///
     /// [`Present::draw`] letterboxes the canvas into whatever target size it
     /// is handed — it takes the size as an argument and fits to it — so a
@@ -3243,16 +3335,20 @@ impl Engine {
         // it measured rather than a strip with a gap in it.
         deck.enable_meters(&gpu.device);
         let present = Present::new(&gpu.device, PICTURE_FORMAT, CANVAS.0, CANVAS.1);
-        let [picture, preview] = aims(layout, present.size());
+        // **A deck comes up showing the mix**, so the one preview sink starts
+        // on [`ON_AIR`]'s cell — which is the deck the mix *is* here, since it
+        // is the only Live slot. See [`aims`] for why that cell moves.
+        let [picture, preview] = aims(layout, present.size(), ON_AIR);
         Engine {
             deck,
             capacity,
             present,
             picture: Presented::new(gpu, renderer, "program view", picture, scale),
-            // Named for the deck it is of, because there is one of these per
-            // audition and a device message that says `deck preview` four
-            // times over says nothing.
-            preview: Presented::new(gpu, renderer, "deck A preview", preview, scale),
+            // **Named for what it is rather than for the deck it starts
+            // on.** It was `deck A preview`, and the cell it draws into
+            // follows the audition now — so a label naming one deck would be
+            // a device message that stops being true on the first press.
+            preview: Presented::new(gpu, renderer, "deck preview", preview, scale),
             // What a window that nobody has touched is drawn under — see
             // [`LOOK`], which is now a starting point rather than the whole of
             // it.
@@ -3351,15 +3447,25 @@ impl Engine {
     /// deck A's texture from the picture's rectangle was injected there and
     /// every test still passed**. `mod gpu` calls this the way the frame does.
     ///
-    /// **B, C and D stay `None`, and it is one fact now rather than two**:
-    /// this program builds **one** preview sink and aims it at deck A. Every
-    /// slot of this deck holds a Set, so no cell on this row is a cell with
-    /// nothing behind it; the three that read `off` are slots nothing is
-    /// drawing — B parked, C and D allocated — and a slot that is not Live is
-    /// drawn only for an audition (`deck::Frame::render`). One sink is not a
-    /// shortcut either: `Deck::preview` is an `Option<usize>`, so the deck
-    /// auditions one slot at a time whatever a console builds for it. An empty
-    /// cell is what off looks like, and the console draws it saying `off`.
+    /// **Three of the four stay `None`, and which three moves**: this program
+    /// builds **one** preview sink and puts it in the cell of the deck the
+    /// output is auditioning — `Deck::preview`, or [`ON_AIR`]'s cell while
+    /// the output is showing the mix. One sink is not a shortcut:
+    /// `Deck::preview` is an `Option<usize>`, so the deck auditions one slot
+    /// at a time whatever a console builds for it. Every slot of this deck
+    /// holds a Set, so no cell on this row is a cell with nothing behind it;
+    /// the three that read `off` are slots nothing is drawing, and a slot that
+    /// is not Live is drawn only for an audition (`deck::Frame::render`). An
+    /// empty cell is what off looks like, and the console draws it saying
+    /// `off`.
+    ///
+    /// **The cell moves because every sink is handed the same frame.**
+    /// `frame::compose` draws each sink from the one mix pass — *"every sink
+    /// is handed the same canvas and fits it into whatever size it has"* — so
+    /// this texture holds whatever the output is showing, and a cell lettered
+    /// `A` holding deck C's texels would be the panel saying something false
+    /// the moment somebody auditioned C. Following the audition is what keeps
+    /// the letter under the picture the letter of the picture.
     fn aim(
         &mut self,
         gpu: &Gpu,
@@ -3367,12 +3473,15 @@ impl Engine {
         layout: &karakuri_layout::Layout,
         scale: f32,
     ) -> (Option<Picture>, [Option<Picture>; DECKS]) {
-        let [picture_at, preview_at] = aims(layout, self.present.size());
+        // **Which cell the one sink is in: the deck being auditioned, or
+        // [`ON_AIR`]'s while the output shows the mix.** See [`aims`].
+        let cell = self.deck.preview().unwrap_or(ON_AIR);
+        let [picture_at, preview_at] = aims(layout, self.present.size(), cell);
         let picture = self
             .picture
             .aim(gpu, renderer, picture_at, scale, &mut self.freed);
         let mut previews = [None; DECKS];
-        previews[0] = self
+        previews[cell] = self
             .preview
             .aim(gpu, renderer, preview_at, scale, &mut self.freed);
         (picture, previews)
@@ -3382,7 +3491,8 @@ impl Engine {
 /// **Which rectangle each of the engine's sinks is sized from and drawn into,
 /// and there is no second answer to it anywhere in this file.**
 ///
-/// In sink order: the Program bay's picture, and deck A's preview cell. `None`
+/// In sink order: the Program bay's picture, and the preview cell named by
+/// `cell`. `None`
 /// is a region folded away, a bay folded, or the picture soloed — the sink
 /// then has no target and [`Sink::acquire`] refuses, so no present pass is
 /// recorded for it. That is the manual's *"it is on screen exactly when that
@@ -3400,7 +3510,11 @@ impl Engine {
 /// a second copy of that number, and the frame it is wrong on is one where the
 /// picture is the shape of a canvas nothing is rendering at — which is a
 /// letterbox nobody asked for and nothing on screen names.
-fn aims(layout: &karakuri_layout::Layout, canvas: (u32, u32)) -> [Option<egui::Rect>; 2] {
+fn aims(
+    layout: &karakuri_layout::Layout,
+    canvas: (u32, u32),
+    cell: usize,
+) -> [Option<egui::Rect>; 2] {
     [
         picture_rect(layout, canvas),
         // The **cell**, not the row it is in and not the region the row is
@@ -3411,7 +3525,13 @@ fn aims(layout: &karakuri_layout::Layout, canvas: (u32, u32)) -> [Option<egui::R
         // takes the canvas too: the cells' arrangement is decided by which one
         // leaves the *picture* larger, so the cell's own size is a function of
         // the picture's shape.
-        preview_rects(layout, canvas).map(|cells| cells[0]),
+        //
+        // **`cell` is the deck the output is auditioning**, and the reason it
+        // is an argument rather than a zero is at [`Engine::aim`]: one sink
+        // draws the composited frame, so the cell it lands in has to be the
+        // cell of the deck that frame is *of*. Every cell is the same size, so
+        // moving between them costs no resize and no registration.
+        preview_rects(layout, canvas).map(|cells| cells[cell.min(DECKS - 1)]),
     ]
 }
 
@@ -5285,6 +5405,42 @@ fn apply(record: &Record, deck: &mut Deck, look: &mut Look) -> Option<String> {
                 deck.transport(slot).scrub_beats()
             ))
         }
+        // **The one record here whose slot is an `Option`, and the option is
+        // the whole point.** `Record::Preview` carries `None` for the mix
+        // *"rather than a sentinel index, so a deck of a different size cannot
+        // read one as the other"*, and `Deck::set_preview` takes the same
+        // `Option` at the other end — so this arm is one `map` and no
+        // arithmetic.
+        //
+        // **The guard is `held` again, and here it has something to catch.**
+        // Every other slot on this panel comes off the deck's own count; a
+        // preview cell does not. The row of cells is `DECKS` wide whatever the
+        // deck holds, because the manual's four letters are the only thing
+        // naming a deck — so on a deck of fewer slots a press on the last cell
+        // names a slot that is not there, and `Deck::set_preview` **asserts**
+        // on one. A panic inside a `winit` callback aborts this process on
+        // macOS (see the module documentation), so the refusal is the guard
+        // rather than the message: nothing moves and nothing is printed, which
+        // is `mix::change`'s answer to the same record without its sentence.
+        Record::Preview { slot } => {
+            let slot = match slot {
+                Some(slot) => Some(held(slot)?),
+                None => None,
+            };
+            deck.set_preview(slot);
+            Some(format!(
+                "  preview: {} -> SetPreview {{ showing: {} }} -> Record::Preview ->                  deck.preview() = {:?} — every sink is drawn from the mix pass, so the                  picture and the cell under it show it together",
+                match slot {
+                    Some(slot) => format!("deck {}", deck_letter(slot as u8)),
+                    None => "the mix".to_owned(),
+                },
+                match slot {
+                    Some(slot) => slot.to_string(),
+                    None => "None".to_owned(),
+                },
+                deck.preview()
+            ))
+        }
         _ => None,
     }
 }
@@ -6606,6 +6762,12 @@ impl ApplicationHandler for App {
                 );
                 self.readout.view.picture = picture;
                 self.readout.view.previews = previews;
+                // **What the output is showing, beside the textures it
+                // decided.** The cell the sink is in is a function of this, so
+                // reading it anywhere else in the frame would be two answers
+                // to one question — the ring the console draws on a cell and
+                // the cell the texture went into.
+                self.readout.view.showing = gfx.engine.deck.preview().map(|slot| slot as u8);
 
                 // **What the transport row reads, written beside the frame it
                 // is about**, exactly as the two lines above are: the picture
@@ -8325,6 +8487,141 @@ mod tests {
         assert!(
             dot(&mut readout).1,
             "the picture is back and the dot is dark"
+        );
+    }
+
+    /// **A press on the Program bay's `solo` pill, through the window loop's
+    /// own routing.**
+    ///
+    /// `karakuri-console`'s `tests/solo_pill.rs` and `tests/vocabulary.rs`
+    /// assert everything up to the operation with no window anywhere; this is
+    /// the half ADR-0213 makes the badge mean — *"the row is claimed the day a
+    /// person who launched the instrument can perform that operation from the
+    /// panel in front of them"* — and a control demonstrated in that crate and
+    /// never wired here would pass there and be a lie the page tells.
+    ///
+    /// **Both directions, because the pill is both.** A solo takes every other
+    /// control off the screen, so the pill is the only thing left to press and
+    /// the undo has to come from it. What is asserted is the round trip an
+    /// operator makes: the picture is one region among many, a click on the
+    /// pill leaves it holding the window, and a click on the same pill —
+    /// **found again where it is now drawn**, because the solo moved every
+    /// rectangle on the console — puts everything back.
+    #[test]
+    fn a_press_on_the_solo_pill_solos_the_picture_and_undoes_it() {
+        let ctx = drawn_once();
+        let mut readout = Readout::new(1440.0, 900.0);
+        readout.panel.solve();
+        let picture = readout
+            .panel
+            .layout()
+            .find("program-view")
+            .expect("program-view");
+        let library = readout.panel.layout().find("library").expect("library");
+        // The capsule, asked of the derivation that draws it rather than
+        // remembered — which is the rule the whole of `input` is written to,
+        // and here it is load-bearing twice over.
+        let pill = |readout: &mut Readout| {
+            readout.panel.solve();
+            let head = program_head(&ctx, readout.panel.layout()).expect("the bay draws its pill");
+            (
+                Point::new(head.solo.center().x, head.solo.center().y),
+                head.soloed,
+            )
+        };
+
+        let (at, soloed) = pill(&mut readout);
+        assert!(!soloed, "something is soloed before anything was pressed");
+        assert!(
+            readout.panel.layout().visible(library),
+            "the library is off the screen already, so soloing would prove nothing"
+        );
+
+        assert_eq!(readout.pointer(&ctx, Pointer::Moved(at)).0, Claim::Panel);
+        let (claim, did) = readout.pointer(&ctx, Pointer::Down);
+        assert_eq!(claim, Claim::Panel);
+        assert_eq!(
+            did,
+            Acted::Operated(Outcome::Soloed(picture)),
+            "the press did not reach the pill"
+        );
+        assert!(
+            !readout.panel.dragging(),
+            "the press took a boundary in hand"
+        );
+        readout.pointer(&ctx, Pointer::Up);
+        readout.panel.solve();
+        assert!(
+            !readout.panel.layout().visible(library),
+            "the picture is soloed and the library is still on the screen"
+        );
+
+        // And the same pill, where it is now, undoes it.
+        let (at, soloed) = pill(&mut readout);
+        assert!(soloed, "the picture is soloed and the pill does not say so");
+        assert_eq!(readout.pointer(&ctx, Pointer::Moved(at)).0, Claim::Panel);
+        assert_eq!(
+            readout.pointer(&ctx, Pointer::Down).1,
+            Acted::Operated(Outcome::Unsoloed { was: true }),
+            "the pill did not undo the solo it made"
+        );
+        readout.pointer(&ctx, Pointer::Up);
+        readout.panel.solve();
+        assert!(
+            readout.panel.layout().visible(library),
+            "undoing the solo left the library folded"
+        );
+    }
+
+    /// **A press on a deck preview cell, through the window loop's own
+    /// routing** — and the second press on the same cell asks for the mix.
+    ///
+    /// The console's `tests/preview_cells.rs` asserts what a cell asks for
+    /// with no window anywhere; this is the half that says an operator reaches
+    /// it. What it adds beyond the claim is the **loop back through the
+    /// view**: the first press names a deck, this file writes that deck into
+    /// `View::showing` the way a frame does, and the second press on the same
+    /// cell then names the mix. A program that never wrote `showing` would
+    /// pass the console's test and give an operator a cell that could only
+    /// ever start an audition.
+    #[test]
+    fn a_press_on_a_preview_cell_names_that_deck_and_then_the_mix() {
+        const DECK: u8 = 2;
+        let ctx = drawn_once();
+        let mut readout = Readout::new(1440.0, 900.0);
+        // What a frame does before it reads a rectangle, and what the cells'
+        // arrangement is decided by.
+        view::rearrange(&mut readout.panel, readout.view.canvas);
+
+        let cells = preview_rects(readout.panel.layout(), readout.view.canvas)
+            .expect("the Program bay draws its cells");
+        let cell = cells[usize::from(DECK)].center();
+        let at = Point::new(cell.x, cell.y);
+
+        assert_eq!(readout.pointer(&ctx, Pointer::Moved(at)).0, Claim::Panel);
+        let (claim, did) = readout.pointer(&ctx, Pointer::Down);
+        assert_eq!(claim, Claim::Panel);
+        assert_eq!(
+            did,
+            Acted::Emitted(Some(Operation::SetPreview {
+                showing: Some(DECK)
+            })),
+            "the press on deck {}'s cell did not ask for that deck",
+            deck_letter(DECK)
+        );
+        assert!(
+            !readout.panel.dragging(),
+            "the press took a boundary in hand"
+        );
+        readout.pointer(&ctx, Pointer::Up);
+
+        // The frame that followed the press read the deck back and wrote it
+        // here — which is what makes the next press mean the other thing.
+        readout.view.showing = Some(DECK);
+        assert_eq!(
+            readout.pointer(&ctx, Pointer::Down).1,
+            Acted::Emitted(Some(Operation::SetPreview { showing: None })),
+            "a second press on the cell the output is showing did not end the audition"
         );
     }
 
@@ -11510,6 +11807,145 @@ mod gpu {
         assert!(
             previews[0].is_some() && engine.preview.acquire(&gpu) == Ok(()),
             "folding the picture away stopped deck A auditioning under it"
+        );
+    }
+
+    /// **The whole loop, closed on the audition: a press on a preview cell
+    /// moves what the output is showing, and the one sink follows it into that
+    /// cell.**
+    ///
+    /// `karakuri-console`'s `tests/preview_cells.rs` asserts everything up to
+    /// the operation with no engine anywhere, and `mod tests` asserts that the
+    /// window loop's routing reaches it. This is the other end and it needs a
+    /// device, because what moves is `Deck::preview` and because the second
+    /// half of the claim is about a **texture**.
+    ///
+    /// **Two things, and the second is the one worth the device.**
+    ///
+    /// - The press becomes `Record::Preview` and the record moves the deck,
+    ///   which is P-0028 on this control: it ends in the same record a MIDI
+    ///   pad's `note -> preview N` writes, rather than reaching
+    ///   `Deck::set_preview` by a second route.
+    /// - **The one preview sink moves into the auditioned deck's cell.**
+    ///   `frame::compose` hands every sink the same composited frame, so this
+    ///   texture holds whatever the output is showing — and with the sink left
+    ///   in deck A's cell, auditioning C would draw C's material in a cell
+    ///   lettered `A`. That is the panel saying something false, it is
+    ///   invisible to every test that does not look at which cell was aimed,
+    ///   and it is what this asserts against.
+    ///
+    /// **The middle step is checked too**, as the look's and the mask's are:
+    /// between the press and the record the deck must not have moved, or the
+    /// console would be applying what it is only supposed to ask for.
+    #[test]
+    fn a_press_on_a_preview_cell_moves_what_the_output_shows_and_the_sink_follows() {
+        const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
+        const W: u32 = 1440;
+        const H: u32 = 900;
+        /// Not [`ON_AIR`], so a sink that stayed where construction put it is
+        /// visible, and not slot 1 either — a wrong cell one along is the
+        /// likelier accident.
+        const AUDITION: u8 = 2;
+
+        let gpu = Gpu::headless().expect("no GPU");
+        let mut renderer =
+            egui_wgpu::Renderer::new(&gpu.device, FORMAT, egui_wgpu::RendererOptions::default());
+        let mut panel = Panel::new(W as f32, H as f32);
+        panel.solve();
+        let mut engine = Engine::new(&gpu, &mut renderer, &shipped(), panel.layout(), 1.0);
+        assert_eq!(
+            engine.deck.preview(),
+            None,
+            "a deck this program has just built is showing something other than the mix"
+        );
+
+        // What a frame does before it reads a rectangle.
+        view::rearrange(&mut panel, CANVAS);
+        let bay = view::program_bay(panel.layout(), CANVAS).expect("the Program bay is laid out");
+        let cell = bay.cells.expect("the bay draws its cells")[usize::from(AUDITION)].center();
+
+        // ---- the press ----------------------------------------------------
+        let operation = bay
+            .preview(None, Point::new(cell.x, cell.y))
+            .expect("a press on a preview cell");
+        assert_eq!(
+            operation,
+            Operation::SetPreview {
+                showing: Some(AUDITION)
+            },
+            "a press on deck {}'s cell did not ask for that deck",
+            deck_letter(AUDITION)
+        );
+        // **Nothing has been told anything yet.**
+        assert_eq!(
+            engine.deck.preview(),
+            None,
+            "the deck moved before the record did"
+        );
+
+        // ---- the record ---------------------------------------------------
+        let chosen = written(&operation, &reading(&operation, &engine.deck, &engine.look));
+        let Written::Records(records) = &chosen else {
+            panic!("a press on a preview cell wrote no record: {chosen:?}")
+        };
+        assert_eq!(
+            records.as_slice(),
+            [Record::Preview {
+                slot: Some(AUDITION)
+            }],
+            "the record is not the one a MIDI pad's `note -> preview N` writes"
+        );
+        assert!(
+            apply(&records[0], &mut engine.deck, &mut engine.look).is_some(),
+            "the record reached no setter"
+        );
+        assert_eq!(
+            engine.deck.preview(),
+            Some(usize::from(AUDITION)),
+            "the audition did not land on the deck"
+        );
+
+        // ---- the sink follows --------------------------------------------
+        let (_, previews) = engine.aim(&gpu, &mut renderer, panel.layout(), 1.0);
+        assert!(
+            previews[usize::from(AUDITION)].is_some(),
+            "the output is auditioning deck {} and its cell is empty",
+            deck_letter(AUDITION)
+        );
+        assert!(
+            previews
+                .iter()
+                .enumerate()
+                .all(|(deck, at)| at.is_some() == (deck == usize::from(AUDITION))),
+            "more than one cell was aimed at, or the wrong one was — this program builds one              preview sink and it belongs in the cell of the deck the frame is of"
+        );
+        let cells = preview_rects(panel.layout(), CANVAS).expect("the cells are on screen");
+        assert_eq!(
+            previews[usize::from(AUDITION)].expect("just asserted").rect,
+            cells[usize::from(AUDITION)],
+            "the texture is drawn somewhere other than the cell it was aimed at"
+        );
+
+        // ---- and the way back ---------------------------------------------
+        let back = bay
+            .preview(Some(AUDITION), Point::new(cell.x, cell.y))
+            .expect("a second press on the same cell");
+        assert_eq!(back, Operation::SetPreview { showing: None });
+        let chosen = written(&back, &reading(&back, &engine.deck, &engine.look));
+        let Written::Records(records) = &chosen else {
+            panic!("ending an audition wrote no record: {chosen:?}")
+        };
+        assert!(apply(&records[0], &mut engine.deck, &mut engine.look).is_some());
+        assert_eq!(
+            engine.deck.preview(),
+            None,
+            "the second press did not put the mix back on the output"
+        );
+        let (_, previews) = engine.aim(&gpu, &mut renderer, panel.layout(), 1.0);
+        assert!(
+            previews[ON_AIR].is_some() && previews[usize::from(AUDITION)].is_none(),
+            "with the mix back on the output the sink is not in {}'s cell",
+            deck_letter(ON_AIR as u8)
         );
     }
 

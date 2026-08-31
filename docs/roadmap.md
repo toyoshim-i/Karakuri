@@ -718,6 +718,19 @@ Everything from here down answers *what is each piece waiting on*, and none of i
   the other surfaces onto `karakuri-operation`, the remaining bays — and the first and third are
   closed.
 
+**And the panel has to grow audio, which its own header rules out.** Four rows of the panel column
+cannot be reached by a program with no audio device open — *Tap the beat* and *Nudge the latency
+offset* are `karakuri_environment::audio::Audio`'s methods and that type *"cannot be constructed
+without opening a device"*, tapping needs the output lag for the same reason the CLI's does,
+*Attach a beat source* is the tempo source, and *Attach a signal to a parameter* wants a bus with
+something on it. `crates/karakuri/src/main.rs`'s own header says the opposite in as many words —
+*"and **no more than that**: no audio, no MIDI, no MCP, no replay and no session"* — and that
+sentence was true of the program it described and is now a charter the exit condition contradicts.
+**Neither is wrong: what is missing is the record that the panel became the program that runs a
+show.** The machinery is `karakuri-environment`'s and `karakuri-cli` opens it already, so this is
+work rather than a blocker — but it is work nobody has costed, and the four rows sit in the board's
+`transport`, `tap`, `offset` and `sensitivity row` groups looking like drawings.
+
 **One thing is owed by the mixer and is nobody's next task**: `Control::MaskPosition` is the third
 control a transition can move, the strip has no control and no readout for that number, so **an
 armed wipe is the one scheduled move the console cannot draw** — an under-draw named in

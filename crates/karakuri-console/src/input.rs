@@ -75,7 +75,7 @@
 //!    describing itself to an operator has to say what a pointer reaches, and
 //!    a sentence saying it is where the count goes stale. What they are is
 //!    still written here, because a name is not a number and there is nowhere
-//!    else the thirteen sit together: the Outputs row's sink
+//!    else the eighteen sit together: the Outputs row's sink
 //!    ([`crate::view::outputs`]), a mixer strip's fader knob
 //!    ([`crate::view::Mixer::grab`]), its blend chip
 //!    ([`crate::view::Mixer::blend`]), its tally chip
@@ -84,11 +84,26 @@
 //!    ([`crate::view::arrangement`]), at the end of that row the tone map's
 //!    capsule and the exposure track ([`crate::view::look`]), in an
 //!    inspector pane's deck head the sync chip, the anchor and the scrub's two
-//!    arrows ([`crate::view::deck_head`]), and the Master bay's out
-//!    ([`crate::view::MasterRow::grab`]). The rule did not change to hold any
-//!    of the twelve that came after the first, which is what it was written
-//!    for — and each is asked exactly the way the first is: the derivation
-//!    that draws it, asked whether the point is on it, with nothing stored.
+//!    arrows ([`crate::view::deck_head`]), the Master bay's out
+//!    ([`crate::view::MasterRow::grab`]), the Program bay head's `solo`
+//!    ([`crate::view::program_head`]) and the four deck preview cells under it
+//!    ([`crate::view::ProgramBay::preview`]). The rule did not change to hold
+//!    any of the seventeen that came after the first, which is what it was
+//!    written for — and each is asked exactly the way the first is: the
+//!    derivation that draws it, asked whether the point is on it, with nothing
+//!    stored.
+//!
+//!    **The last five are the first two that a boundary's grab reaches**, and
+//!    the rule holds them unchanged for the reason it holds everything else:
+//!    rule 3 gives the boundary first refusal, so what the overlap costs is
+//!    the sliver of the control inside the band and never an ambiguity about
+//!    who is dragging. Both live where `docs/manual/console.html` draws them,
+//!    flush against a region's own edge: the `solo` capsule sits 5.25 into a
+//!    27-tall bay head whose top edge is the body row's, and a preview cell's
+//!    top edge *is* the `deck-previews` region's. `crate::view::program_head`
+//!    and `tests/preview_cells.rs` are where the two numbers are measured, and
+//!    changing either of them is a change to the console page or to [`GRAB`]
+//!    rather than a nudge.
 //!
 //!    **The sixth was the first control in the transport row**, which was four
 //!    readouts and nothing a press acted on until it landed
@@ -109,7 +124,7 @@
 //!    `.mini`'s padding argument met with a band. That is 16.5 in a row of 48
 //!    and therefore **15.75** as well. `tests/look.rs` measures both and fails
 //!    the same three ways `tests/arrangement_pill.rs` does; that two of the
-//!    thirteen agree is a fact about two capsules being one height, not a number
+//!    eighteen agree is a fact about two capsules being one height, not a number
 //!    either of them inherited.
 //!
 //!    **The ninth to the twelfth are the first controls that are not in a row
@@ -135,7 +150,7 @@
 //!    controls against every boundary and fails the same three ways
 //!    `tests/arrangement_pill.rs` does.
 //!
-//!    **The thirteenth is the Master bay's out**, and it is measured the same
+//!    **The thirteenth is the Master bay's out**, and it was measured the same
 //!    way off its own rectangle. The knob is 11 tall on a row of 16.5 that
 //!    starts [`crate::room::size::HEAD_H`] plus
 //!    [`crate::room::size::MASTER_PAD_TOP`] below the bay's top edge, so what
@@ -260,10 +275,27 @@
 //! under it: [`crate::view::ArrangementPill::ask`] answers *what does a press
 //! on it ask for* off the same laid-out pill this rule hit-tests — the menu
 //! down or up, the reset, a save under the name in use, or a restore of the
-//! name that was picked. It is the one of the twelve whose answer is sometimes
+//! name that was picked. It is the one of the eighteen whose answer is sometimes
 //! not an operation at all, and that is the affordance and the vocabulary
 //! staying apart rather than an exception: *open the menu* is not something a
 //! MIDI map or an MCP call could ever want to say.
+//!
+//! **So is the Program bay's `solo`**, and it is the first control this crate
+//! draws inside a bay head: [`crate::view::program_head`] answers *is this a
+//! control* here and *what does a press on it ask for* — [`crate::panel::Op::Solo`]
+//! of the picture, or [`crate::panel::Op::Unsolo`] where something is soloed
+//! already — off the same head-pill
+//! derivation that painted the capsule. It is the Outputs
+//! dot's arrangement exactly, two operations and no toggle, on the console's
+//! own shape rather than on the mix.
+//!
+//! **So are the four deck preview cells**, and they are the mixer bay's
+//! arrangement rather than the dot's: [`crate::view::ProgramBay`] is derived
+//! once and asked whether a point is on a cell and what that press asks for —
+//! `SetPreview` naming the deck the cell is, or the mix where the press is on
+//! the cell the output is already showing. Which cell is showing is handed in
+//! per frame like every other reading here, because the deck is the model of
+//! record for it.
 //!
 //! **Four questions, one derivation.** The mixer bay is laid out once per
 //! event and asked for every control it has — a knob, a blend chip, a tally
@@ -296,12 +328,15 @@
 use karakuri_layout::{Hit, Point};
 
 use crate::panel::{Panel, GRAB};
-use crate::view::{arrangement, deck_head, inspector, look, master, mixer, outputs, View};
+use crate::view::{
+    arrangement, deck_head, inspector, look, master, mixer, outputs, program_bay, program_head,
+    View,
+};
 
 /// **What each of rule 4's derivations answers for**, one entry per probe in
 /// [`claim`] and in that order: the Outputs sink, the arrangement pill, the
-/// look group's two, a strip's four, the Master bay's one, and a deck head's
-/// four.
+/// look group's two, a strip's four, the Master bay's one, a deck head's four,
+/// the Program bay head's `solo`, and the four deck preview cells.
 ///
 /// **It is a table and not a sentence because [`claim`] asks its probes out of
 /// an array of exactly this length.** A derivation added to rule 4 without an
@@ -314,7 +349,7 @@ use crate::view::{arrangement, deck_head, inspector, look, master, mixer, output
 /// about a control is — the clearance test the rule above says each one owes,
 /// `tests/mask.rs` being the most recent of them — and this entry is what has
 /// to be raised beside it.
-const CLAIMS: [usize; 6] = [1, 1, 2, 4, 1, 4];
+const CLAIMS: [usize; 8] = [1, 1, 2, 4, 1, 4, 1, 4];
 
 /// **How many controls rule 4 hit-tests**, summed over [`CLAIMS`].
 ///
@@ -423,7 +458,7 @@ pub fn claim(panel: &mut Panel, ctx: &egui::Context, view: &View, p: Point) -> C
         // point is on it — and no answer is stored.
         Hit::View(_) | Hit::Nothing => {
             let on_sink = || outputs(ctx, panel.layout()).is_some_and(|row| row.hit(p));
-            // The pill is the only one of the thirteen that is not in a bay, and
+            // The pill is the only one of the eighteen that is not in a bay, and
             // the only one asked with the menu already known to be shut: rule
             // 2 has answered for the open case above, so this is the capsule
             // alone.
@@ -475,6 +510,19 @@ pub fn claim(panel: &mut Panel, ctx: &egui::Context, view: &View, p: Point) -> C
                         .is_some_and(|head| head.owns(p))
                 })
             };
+            // **The one control this console has in a bay head**, and the only
+            // one of the eighteen whose capsule a boundary's grab reaches —
+            // `view::program_head` is where that 0.75 of a pixel is measured
+            // and argued, and rule 3 above is what decides it.
+            let on_solo = || program_head(ctx, panel.layout()).is_some_and(|head| head.hit(p));
+            // **The four deck preview cells, derived once for all of them**,
+            // which is a strip's arrangement one bay over: the cells are four
+            // questions about one arranged Program bay, and a second
+            // derivation would put the cells a press lands on in the other of
+            // the two arrangements. It asks for no type at all — a cell is a
+            // rectangle and a letter — so this is the cheapest probe here.
+            let on_cells =
+                || program_bay(panel.layout(), view.canvas).is_some_and(|bay| bay.owns(p));
             // **One probe per derivation, cheapest answer first**, and the
             // array is [`CLAIMS`]' length: a control reached through a
             // derivation that list does not have fails to compile here, which
@@ -488,6 +536,8 @@ pub fn claim(panel: &mut Panel, ctx: &egui::Context, view: &View, p: Point) -> C
                 &on_strip,
                 &on_master,
                 &on_deck_head,
+                &on_solo,
+                &on_cells,
             ];
             match probes.iter().any(|probe| probe()) {
                 true => Claim::Panel,

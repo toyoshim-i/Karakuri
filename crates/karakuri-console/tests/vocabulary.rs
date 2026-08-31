@@ -98,7 +98,7 @@
 //! here of which rows have a control would be a second copy of one
 //! ([P-0045](../../../docs/principles/0045-generate-the-vocabulary-prose-drifts-from-code.md)),
 //! and a copy of something nothing states. So [`reached_by_the_pointer`] asks
-//! a running panel, in **three passes**, because the pointer has two routes
+//! a running panel, in **four passes**, because the pointer has two routes
 //! into this section and not one:
 //!
 //! 1. It presses every boundary the arrangement has, at the middle of that
@@ -112,9 +112,13 @@
 //!    drives one — [`claim`], then the derivation that drew it, then the
 //!    caller performing the answer — over the transport row's arrangement pill
 //!    and every row of its menu. See [`reached_through_a_painted_control`].
+//! 4. It drives the second such control the same way: the `solo` pill in the
+//!    Program bay's head, pressed twice, because it answers with two
+//!    operations and the second is the one nothing else can reach. See
+//!    [`reached_through_the_program_bays_head`].
 //!
 //! **The first two routes are `Panel::press`, `moved` and `released`, and the
-//! third is none of them.** That sentence used to read *the pointer's whole
+//! last two are none of them.** That sentence used to read *the pointer's whole
 //! route into this section is `Panel::press`, `moved` and `released`*, and it
 //! stopped being true the day the arrangement pill was drawn: a press on a
 //! painted control never enters `Panel` at all until the caller has already
@@ -122,12 +126,13 @@
 //! because a grid sweep and a control are answered by different machinery and
 //! fail in different directions.
 //!
-//! **Four rows of this section an operator reaches, and only one of them is a
-//! row an [`Op`] names.** *Move a boundary* is in [`NO_OP`] because a drag is a
+//! **Five rows of this section an operator reaches, and two of them are rows
+//! an [`Op`] names.** *Move a boundary* is in [`NO_OP`] because a drag is a
 //! gesture rather than an operation; *Save the arrangement* and *Put a saved
 //! arrangement back* are in it because their payload is a file under a store
 //! this crate cannot reach; *Reset the arrangement* is [`Op::Reset`] and is the
-//! one the third pass performs rather than only names. Which operations the
+//! one the third pass performs rather than only names; *Solo a region* is
+//! [`Op::Solo`] and [`Op::Unsolo`], and the fourth pass performs both. Which operations the
 //! console can be *asked* for and what a hand on the panel can *do* are
 //! different questions, and this file pins both.
 //!
@@ -148,11 +153,14 @@
 //!   here, and the badge would be a lie the page tells on its own authority.
 //! - **A control this crate draws and a caller applies is invisible to the
 //!   sweep**, because the press never goes through [`Panel::press`]. **There
-//!   are two of them, and the third pass is what one of them cost.** The
+//!   are three of them, and the third and fourth passes are what two of them
+//!   cost.** The
 //!   Outputs row's sink chip (`view::Outputs::op`) answers [`Op::Fold`] or
 //!   [`Op::Unfold`] for the picture; the transport row's arrangement pill
 //!   (`view::ArrangementPill::ask`) answers an [`Op`], one of two
-//!   `karakuri_operation::Operation`s, or a move of its own menu.
+//!   `karakuri_operation::Operation`s, or a move of its own menu; and the
+//!   Program bay head's `solo` (`view::ProgramHead::op`) answers [`Op::Solo`]
+//!   of the picture or [`Op::Unsolo`].
 //!
 //!   The sink is **not this section's** — the page gives that control its own
 //!   row, *Choose where the frame goes*, in *Output and recording* — and
@@ -183,10 +191,10 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use common::{drawn_once, running};
+use common::{drawn_once, running, showing};
 use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::{Dragged, Op, Outcome, Panel, Pressed};
-use karakuri_console::view::{arrangement, Ask};
+use karakuri_console::view::{arrangement, program_head, Ask};
 use karakuri_layout::{Axis, NodeId, Point};
 
 /// The specification, relative to the workspace root.
@@ -723,6 +731,7 @@ fn reached_by_the_pointer() -> BTreeSet<&'static str> {
     );
 
     reached.extend(reached_through_a_painted_control());
+    reached.extend(reached_through_the_program_bays_head());
     reached
 }
 
@@ -929,6 +938,121 @@ fn reached_through_a_painted_control() -> BTreeSet<&'static str> {
     reached
 }
 
+/// **The fourth pass: the `solo` pill in the Program bay's head**, driven the
+/// way the window loop drives one.
+///
+/// It is a painted control like the arrangement pill, so the grid is blind to
+/// it for the reason [`reached_through_a_painted_control`] gives at length,
+/// and it is a pass of its own rather than an arm of that one because the two
+/// controls are answered by different machinery and fail in different
+/// directions: the pill hangs a menu over the console and this is one capsule
+/// with two answers.
+///
+/// **Both answers are performed and read back**, which is what makes this a
+/// demonstration rather than a naming. `ProgramHead::op` is
+/// [`Outputs::op`](karakuri_console::view::Outputs::op)'s shape — two
+/// operations chosen from the layout, never a toggle — so the pass presses it
+/// twice: once on a console with nothing soloed, which has to come back
+/// [`Outcome::Soloed`] and leave [`shape`] changed, and once on the console
+/// that left, which has to come back [`Outcome::Unsoloed`] and put `shape`
+/// back to exactly what a fresh panel's was. A pill that soloed and could not
+/// undo it would be half a row demonstrated, and the undo is the half a
+/// pointer has no other way to reach: a solo takes every other region off the
+/// screen, so nothing else is left to press.
+///
+/// **The second press is asked of a freshly derived head**, not of the one the
+/// first press came from. The solo moves every rectangle on the console, the
+/// bay is the window afterwards, and a capsule remembered across it would be a
+/// press somewhere the pill no longer is — which is [`claim`]'s own rule about
+/// asking the derivation again rather than storing its answer.
+///
+/// **What panics and what does not** is [`reached_through_a_painted_control`]'s
+/// division exactly: everything that would mean the demonstration is not
+/// running says so out loud — no head laid out, a press [`claim`] does not
+/// give the panel, an operation that said it soloed and did not — and the
+/// answer itself is left to
+/// [`every_arrangement_row_marked_built_is_reached_by_the_pointer`].
+fn reached_through_the_program_bays_head() -> BTreeSet<&'static str> {
+    let mut reached = BTreeSet::new();
+
+    let ctx = drawn_once();
+    let view = showing(&[]);
+    let mut p = panel();
+    let default = shape(&mut p);
+
+    // **Step one of the real route.** `claim` is what the window loop asks
+    // before anything acts, and a press it hands to `egui` never reaches the
+    // control at all. The pill's centre, because the capsule's top 0.75 is
+    // inside the grab of the boundary above the bay — `view::program_head` is
+    // where that is measured, and rule 3 is what decides it.
+    let head = program_head(&ctx, p.layout()).unwrap_or_else(|| {
+        panic!(
+            "the Program bay draws no `solo` pill on a solved console, so nothing here can \
+             demonstrate a row of `{SECTION}` from a pointer — this pass has stopped measuring \
+             rather than found the control gone"
+        )
+    });
+    let on_the_pill = point_of(head.solo.center());
+    assert_eq!(
+        claim(&mut p, &ctx, &view, on_the_pill),
+        Claim::Panel,
+        "`claim` gives a press on the Program bay's `solo` pill to `egui`, so no route into \
+         `{SECTION}` from this control exists however it is drawn"
+    );
+
+    // **Step two**: what the press asks for, off the same derivation `claim`
+    // hit-tested. **Step three**: the caller performs it — the pill holds no
+    // authority and applies nothing (P-0076).
+    let op = head.op();
+    let outcome = p.op(op);
+    p.solve();
+    assert_eq!(
+        outcome,
+        Outcome::Soloed(head.id),
+        "a press on the `solo` pill asked for `{op:?}`, which did not solo the picture"
+    );
+    assert_ne!(
+        shape(&mut p),
+        default,
+        "the `solo` pill soloed the picture and left the console looking exactly as it did, \
+         so the row was demonstrated and did not do what its row on {PAGE} says"
+    );
+    reached.extend(rows_of(op));
+
+    // And the other answer, off a head derived again on the console the first
+    // press left.
+    let head = program_head(&ctx, p.layout()).unwrap_or_else(|| {
+        panic!(
+            "the Program bay draws no `solo` pill with the picture soloed, so the undo this \
+             row promises is unreachable — a solo takes every other control off the screen, \
+             and this is the one left"
+        )
+    });
+    let on_the_pill = point_of(head.solo.center());
+    assert_eq!(
+        claim(&mut p, &ctx, &view, on_the_pill),
+        Claim::Panel,
+        "`claim` gives a press on the `solo` pill to `egui` once the picture is soloed"
+    );
+    let op = head.op();
+    let outcome = p.op(op);
+    p.solve();
+    assert_eq!(
+        outcome,
+        Outcome::Unsoloed { was: true },
+        "a second press on the `solo` pill asked for `{op:?}`, which did not undo the solo"
+    );
+    assert_eq!(
+        shape(&mut p),
+        default,
+        "undoing the solo from the pill left the console somewhere else — the row says it \
+         restores what was folded before, including whatever was already folded"
+    );
+    reached.extend(rows_of(op));
+
+    reached
+}
+
 /// The floor under both directions below, and the same one `panel_column.rs`
 /// carries: a scan that matched nothing satisfies every loop by iterating over
 /// nothing at all.
@@ -963,7 +1087,12 @@ fn the_sweep_finds_the_section_and_the_panel() {
 /// most of its rows name a home on a console that draws the furniture and
 /// hit-tests none of it.
 ///
-/// **Three of them no longer do, and that is what the third pass is.** The
+/// **Four of them no longer do, and that is what the third and fourth passes
+/// are.** *Solo a region* is the newest: `docs/manual/console.html` draws a
+/// `solo` pill in the Program bay's head and says it solos the picture, and
+/// the panel reaches both halves of the row through it — the solo and its
+/// undo, performed rather than named. The three before it are the arrangement
+/// family. The
 /// arrangement family names the transport row, `docs/manual/console.html`
 /// draws `arr · night ▾` there, and the panel reaches all three rows through
 /// it — the reset performed, the save and the restore named

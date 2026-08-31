@@ -69,12 +69,12 @@
       second copy of it here would be a list that goes stale.
     </p>
     <p>
-      <strong>64 operations, and 54 of the 272 ways in exist.</strong> Eight of
+      <strong>64 operations, and 56 of the 272 ways in exist.</strong> Eight of
       them are the console's own shape &mdash; moving a boundary, folding a bay
       or a pane, bringing one back, solo, and the three that reset, keep and put
-      back an arrangement &mdash; and nine of their thirty-two routes exist: the
-      drag, a key on each of five, and the transport row's arrangement pill on
-      three. <strong>Every row of that section has a route now</strong>, and the
+      back an arrangement &mdash; and ten of their thirty-two routes exist: the
+      drag, a key on each of five, the transport row's arrangement pill on
+      three, and the Program bay head's <em>solo</em>. <strong>Every row of that section has a route now</strong>, and the
       two that carry a name were the last: a key press cannot type one, so
       keeping an arrangement and putting one back waited on a control that
       could, and the pill is it. Resetting is the default case of those two and
@@ -94,14 +94,16 @@
       than a note on it. <strong>The twentieth was <code>e</code>, and the panel binds
       it now</strong> &mdash; the library's scope row was specified here before either keyboard
       had it, which is the order everything else on this page arrived in, and it is the one
-      built key badge in this column that no command line reaches. <strong>Fifteen <em>panel</em> routes are
+      built key badge in this column that no command line reaches. <strong>Seventeen <em>panel</em> routes are
       marked built</strong>, and they are the whole of that column: the Mixer
       bay's six &mdash; the strip trim, the strip fader, the strip button, the
       tally chip, the strip mask mini and the strip itself, which is where a
       deck is selected &mdash; every divider on the panel,
       which drags; the transport row's tone map capsule, its exposure track and
       the arrangement pill's three rows; the deck head's sync chip and its
-      scrub; and the Master bay's out. The Mixer's first five already emitted
+      scrub; the Master bay's out; and the Program bay's two &mdash; the
+      <em>solo</em> pill in its head, and the four deck preview cells under the
+      picture, which are one row however many cells name it. The Mixer's first five already emitted
       these operations while the console was an example; what changed is that
       <code>cargo run -p karakuri</code> puts them in front of a player, which is
       what a <em>panel</em> badge claims and what no program did until it existed.
@@ -117,7 +119,19 @@
       across a switchable list of sinks. One entry of that list is not the list,
       so the control performs part of what the row names and the badge would be
       an over-claim.
-      Beyond those fifteen, 46 more are designed and out of reach, most of them in
+      <strong>The Program bay's two are the first controls outside a bay's own
+      body</strong>, and they are the two halves of what that bay is: the pill
+      is the console's own shape, reached from a capsule rather than from the
+      pointer, and a cell is what the output is showing. Neither clears every
+      boundary's grab, which nothing on this panel had failed to do before &mdash;
+      the pill sits 5.25 into a 27-tall bay head whose top edge is the body
+      row's, and a cell's top edge is its region's &mdash; so a boundary keeps
+      the sliver of each that falls inside its band, deterministically and with
+      nothing ambiguous about it, and the rest is the control's. That is the
+      geometry <a href="console.html">the console</a> draws meeting the grab the
+      panel needs, and it is written here because moving either of them is a
+      change to this specification.
+      Beyond those seventeen, 44 more are designed and out of reach, most of them in
       bays nothing draws yet, and three the panel cannot reach at all. Where a badge names a
       region, that is where the control lives in
       <a href="console.html">the console</a>; three name none yet, and naming one
@@ -399,9 +413,9 @@
       </div>
       <div class="op">
         <div class="op-head"><h3>Choose what the output shows</h3><span class="op-when ">immediate</span></div>
-        <p>The mix, or one deck auditioned. MIDI can name a deck or the mix directly.</p>
+        <p>The mix, or one deck auditioned. MIDI can name a deck or the mix directly. <strong>The panel's control is the four deck preview cells</strong>, and a press on one names its own deck &mdash; except on the cell the output is already showing, which asks for the mix, because ending an audition is the other half of what this row can say and a cell is the only thing on the console naming a deck. The cell that is on the output wears its inset ring in the colour the Outputs dot lights in; the mix is no cell wearing it, exactly as the operation's own <code>None</code> is.</p>
         <div class="rts">
-          <span class="rt plan">panel <b>preview</b></span>
+          <span class="rt has">panel <b>preview</b></span>
           <span class="rt plan">key <b>v</b></span>
           <span class="rt has">MIDI <b>note &rarr; preview N|mix</b></span>
           <span class="rt gap">MCP <b>&mdash;</b></span>
@@ -976,9 +990,9 @@
       </div>
       <div class="op">
         <div class="op-head"><h3>Solo a region</h3><span class="op-when ">immediate</span></div>
-        <p>Everything that is not this region, on the way to it, or inside it folds away, and it holds the window. On the program that is the panel folding away and only the picture left, which is also how you capture this window. Undoing it restores what was folded before, including whatever was already folded.</p>
+        <p>Everything that is not this region, on the way to it, or inside it folds away, and it holds the window. On the program that is the panel folding away and only the picture left, which is also how you capture this window. Undoing it restores what was folded before, including whatever was already folded. <strong>The panel's control is the <em>solo</em> pill in the Program bay's head</strong> and it names the picture rather than the pointer &mdash; the one region on the console this pill is drawn for, and the one <a href="console.html">the console</a> says it is for. A press with a solo in force undoes it, so the pill is both directions of the row and the pointer needs no way of naming a region it cannot see.</p>
         <div class="rts">
-          <span class="rt plan">panel <b>solo</b></span>
+          <span class="rt has">panel <b>solo</b></span>
           <span class="rt has">key <b>s u</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt gap">MCP <b>&mdash;</b></span>
@@ -1133,11 +1147,12 @@
       until the instrument existed it was reachable from a pointer and nothing
       else &mdash; which is what this paragraph said, and it called it the first
       rule broken by the surface the first rule is about. Five of its eight rows
-      are built in the <em>key</em> column and four in the <em>panel</em>
+      are built in the <em>key</em> column and five in the <em>panel</em>
       column: <code>f</code> and <code>g</code> fold whatever the pointer is
       over, <code>z</code> brings everything back, <code>s</code> and
       <code>u</code> solo and unsolo, <code>r</code> resets, and the pointer
-      has the drag and the arrangement pill's three. <strong>How a region is unfolded without a mouse is decided, and
+      has the drag, the arrangement pill's three and the <em>solo</em> pill in
+      the Program bay's head. <strong>How a region is unfolded without a mouse is decided, and
       <code>z</code> is the answer</strong>: a folded region still has no
       rectangle, so a pointer still cannot reach it to undo itself, and it no
       longer has to. <strong>What is still short is the boundary.</strong> A

@@ -937,9 +937,17 @@ fn on_a_boundary(panel: &mut Panel) -> Point {
     Point::new(gap.x + gap.w * 0.5, gap.y + gap.h * 0.5)
 }
 
-/// Where the panel draws the one control it draws: the `solo` pill in the
-/// Program bay's head, near the right end of it. **The place a boundary and a
-/// widget are closest**, and so the place the rule is worth stating.
+/// The `solo` pill in the Program bay's head, near the right end of it.
+/// **The place a boundary and a control are closest**, and so the place the
+/// rule is worth stating.
+///
+/// **It was *the one control the panel draws* and it is a control that acts
+/// now**, which is what these two tests had to be re-read against: a press
+/// here used to be `egui`'s because nothing on the panel answered it, and it
+/// is the panel's under rule 4 because `view::program_head` answers it. The
+/// point is kept exactly where it was — 24 in from the right of the bay and 14
+/// down, which is inside the capsule — because what it is here for is the
+/// nearness to the boundary rather than the pill.
 fn on_the_solo_pill(panel: &mut Panel) -> Point {
     panel.solve();
     let program = rect_of(panel.layout(), "program");
@@ -957,8 +965,15 @@ fn a_pointer_on_a_boundary_is_the_panels() {
     );
 }
 
-/// **A pointer anywhere else is `egui`'s** — including on the one thing the
-/// panel draws that a hand would reach for.
+/// **A pointer off a boundary and off every control is `egui`'s** — and the
+/// `solo` pill is the case that says which of the two rules answered.
+///
+/// The pill used to be in the first half of that sentence: it was the one
+/// thing the panel drew that a hand would reach for, and a press on it was
+/// `egui`'s because nothing here answered it. It is a control now, so it is
+/// the panel's under rule 4 — **not** under rule 3, which is the distinction
+/// this test is for, and the point is far enough from the boundary above the
+/// bay that only rule 4 can be giving it away.
 #[test]
 fn a_pointer_off_a_boundary_is_eguis() {
     let ctx = drawn_once();
@@ -970,10 +985,19 @@ fn a_pointer_off_a_boundary_is_eguis() {
     assert_eq!(claim(&mut panel, &ctx, &showing(&[]), middle), Claim::Egui);
 
     let pill = on_the_solo_pill(&mut panel);
+    assert!(
+        !matches!(
+            panel.layout().hit(pill, karakuri_console::panel::GRAB),
+            karakuri_layout::Hit::Divider { .. }
+        ),
+        "the point taken for the solo pill is on a boundary, so what claims it below says \
+         nothing about the control"
+    );
     assert_eq!(
         claim(&mut panel, &ctx, &showing(&[]), pill),
-        Claim::Egui,
-        "the solo pill is not on a boundary, so it is egui's"
+        Claim::Panel,
+        "the solo pill is a control and no boundary grabs this point, so rule 4 is what \
+         gives the press to the panel"
     );
 
     // Outside the window entirely: nothing to grab, so egui's.
@@ -992,6 +1016,13 @@ fn a_pointer_off_a_boundary_is_eguis() {
 /// two things think they are dragging. The release matters just as much: asked
 /// after `released`, the claim sees no drag and hands `egui` a button-up it
 /// never saw the button-down for.
+///
+/// **The `solo` pill is in the wander now rather than in the before and
+/// after**, because it stopped being an elsewhere-point the day it became a
+/// control: rule 1 has to beat rule 4 as well as rule 3, and a point that is
+/// the panel's either way cannot say whether the drag kept its claim. What
+/// carries that half is the library's middle, which is on no control and on no
+/// boundary, and it goes `egui` -> panel -> `egui` across the gesture.
 #[test]
 fn a_drag_in_hand_keeps_its_claim_wherever_the_pointer_goes() {
     let ctx = drawn_once();
@@ -1002,9 +1033,10 @@ fn a_drag_in_hand_keeps_its_claim_wherever_the_pointer_goes() {
     let library = rect_of(panel.layout(), "library");
     let middle = Point::new(library.x + library.w * 0.5, library.y + library.h * 0.5);
 
-    // Before the press, the two elsewhere-points are egui's.
-    assert_eq!(claim(&mut panel, &ctx, &showing(&[]), pill), Claim::Egui);
+    // Before the press: the elsewhere-point is egui's, and the pill is the
+    // panel's for rule 4 rather than for anything this test is about.
     assert_eq!(claim(&mut panel, &ctx, &showing(&[]), middle), Claim::Egui);
+    assert_eq!(claim(&mut panel, &ctx, &showing(&[]), pill), Claim::Panel);
 
     panel.press(start);
     assert!(panel.dragging());
@@ -1025,8 +1057,8 @@ fn a_drag_in_hand_keeps_its_claim_wherever_the_pointer_goes() {
     assert!(!panel.dragging());
 
     // And afterwards the claim is back where it was.
-    assert_eq!(claim(&mut panel, &ctx, &showing(&[]), pill), Claim::Egui);
     assert_eq!(claim(&mut panel, &ctx, &showing(&[]), middle), Claim::Egui);
+    assert_eq!(claim(&mut panel, &ctx, &showing(&[]), pill), Claim::Panel);
     let boundary = on_a_boundary(&mut panel);
     assert_eq!(
         claim(&mut panel, &ctx, &showing(&[]), boundary),

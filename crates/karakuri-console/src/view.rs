@@ -536,6 +536,13 @@ pub struct Region {
     pub kind: Kind,
 }
 
+/// **The word on the Program bay's one pill**, in the mock's own spelling.
+///
+/// A constant rather than a literal in two places: [`REGIONS`] puts it in that
+/// bay's head and [`program_head`] finds it there again, and a pill nobody can
+/// find is a control that silently stops existing.
+const SOLO_PILL: &str = "solo";
+
 /// Every region the console draws, and what it draws there.
 ///
 /// **The table is the whole of what is region-specific.** A node the
@@ -570,10 +577,11 @@ pub const REGIONS: &[Region] = &[
         kind: Kind::Bay {
             title: "Program",
             // `solo` is an operation the panel already has — `Op::Solo` over
-            // whatever the pointer is on — so it is a control and not a
-            // readout. It is drawn, and it is the only pill in the mock's
-            // heads that is.
-            pills: &["solo"],
+            // the picture — so it is a control and not a readout. It is the
+            // only pill in the mock's heads that is, it is drawn, and a press
+            // on it now performs the operation: [`program_head`] is where the
+            // capsule and what it asks for both come from.
+            pills: &[SOLO_PILL],
             grip: true,
         },
     },
@@ -1373,6 +1381,81 @@ pub struct ProgramBay {
     pub cells: Option<[Rect; DECKS]>,
 }
 
+impl ProgramBay {
+    /// Which cell `p` is on, as a deck in [`DECK_LETTERS`] order.
+    ///
+    /// `None` for the ground between two cells, for anywhere else in the bay,
+    /// and for a console whose preview row is folded away -- a cell that is
+    /// not drawn is not one a press can be on.
+    pub fn cell(&self, p: karakuri_layout::Point) -> Option<u8> {
+        let at = Pos2::new(p.x, p.y);
+        self.cells?
+            .iter()
+            .position(|cell| cell.contains(at))
+            .map(|deck| deck as u8)
+    }
+
+    /// **What a press on a cell asks for**: `Operation::SetPreview`, naming
+    /// the deck the cell is, or the mix.
+    ///
+    /// `showing` is what the output is showing this frame -- `None` for the
+    /// mix -- and it is handed in because this crate has no deck (ADR-0156).
+    ///
+    /// # Pressing the cell that is on the output asks for the mix
+    ///
+    /// The row on `docs/manual/operations.html` is *"the mix, or one deck
+    /// auditioned"*, so both are the operation's to name and a control that
+    /// reached only the four decks would perform part of what the row says --
+    /// which is the Outputs dot's situation one bay along, and the reason that
+    /// badge is still `plan`. **The manual does not say which gesture asks for
+    /// the mix**, so this is decided here and the argument is the engine's own
+    /// sentence at `Deck::set_preview`: *"The way out of an audition is to end
+    /// it."* Ending it is therefore the second press on the cell that started
+    /// it, and every other cell names its own deck.
+    ///
+    /// # What a boundary keeps of a cell, and it is six pixels of one edge
+    ///
+    /// **Under the picture, a cell's top edge is the `deck-previews` region's
+    /// own.** The arrangement writes that region as *"63 + 9: the row of
+    /// previews and the padding under it"*, so the padding is below the cells
+    /// and nothing holds them off the boundary between the picture and the
+    /// row — which grabs [`crate::panel::GRAB`] = 6 past it. Beside the
+    /// picture there is no such boundary at all: the row is set aside and the
+    /// cells sit inside [`size::PROGRAM_BODY_PAD`] = 9 of the bay's padding,
+    /// which beats 6 on every side.
+    ///
+    /// So in one of the two arrangements a boundary keeps the top 6 of a cell
+    /// that is [`size::PREVIEW_ROW_H`] tall. [`crate::input`]'s rule 3 decides
+    /// that the same way every time — the boundary gets first refusal, and the
+    /// hazard that rule was written for does not arise — and what is lost is
+    /// the strip along the top. `tests/preview_cells.rs` states both halves
+    /// and fails if the sliver grows; the geometry is
+    /// `docs/manual/console.html`'s and the grab is the rule's, so changing
+    /// either is a decision somewhere else.
+    ///
+    /// **It computes the destination and names it**, which is
+    /// [P-0074](../../../docs/principles/0074-an-operation-says-what-it-wants-never-which-way-to-move.md):
+    /// the operation carries the value, and *the one that is showing* is this
+    /// surface's translation of it and not the operation's -- the same
+    /// arrangement the tally chip's *next residency* and the blend chip's
+    /// *next mode* already have.
+    pub fn preview(&self, showing: Option<u8>, p: karakuri_layout::Point) -> Option<Operation> {
+        let deck = self.cell(p)?;
+        Some(Operation::SetPreview {
+            showing: match showing == Some(deck) {
+                true => None,
+                false => Some(deck),
+            },
+        })
+    }
+
+    /// Whether `p` is on any of the cells -- the union of the four, for
+    /// [`crate::input`]'s rule 4.
+    pub fn owns(&self, p: karakuri_layout::Point) -> bool {
+        self.cell(p).is_some()
+    }
+}
+
 /// **The Program bay, arranged for the rectangle it solved to** — the one
 /// derivation of where the picture and the four cells go, and the only thing
 /// in this crate that reads the bay's geometry to decide it.
@@ -1464,6 +1547,136 @@ pub fn program_bay(layout: &karakuri_layout::Layout, canvas: (u32, u32)) -> Opti
         // Both folded. The bay has a head and no body at all, which is what it
         // had before any of this.
         (false, false) => None,
+    }
+}
+
+/// **The `solo` pill in the Program bay's head, derived** -- the one control
+/// this console has in a bay head, and the panel's route into *Solo a region*.
+///
+/// `docs/manual/console.html` draws it and says what it does in as many
+/// words: *"Solo the program view: the panel folds away and only the picture
+/// is left, which is also how you capture this window."* So the region it
+/// names is `program-view` and not the bay around it, and that is read off the
+/// page rather than chosen here.
+///
+/// # It is two operations and no toggle, which is [`Outputs::op`]'s rule
+///
+/// A solo has an undo and the vocabulary spells the two apart --
+/// `karakuri_operation::Operation::Solo`'s `region` is `None` for *undo the
+/// solo*, *"explicit rather than a toggle: the caller says which way"* -- so
+/// [`Op::Solo`] and [`Op::Unsolo`] are what a press asks for and the choosing
+/// between them is the affordance. [`ProgramHead::soloed`] is what it is
+/// chosen from, and it is read back out of the layout rather than remembered.
+///
+/// **It undoes a solo it did not make.** `Layout::solo` collapses everything
+/// off the soloed node's path, so the only solo this pill is still drawn under
+/// is one on `program-view` itself or on something enclosing it -- every other
+/// solo takes the Program bay off the screen and there is no pill to press.
+/// Which is the same sentence `Op::Unsolo` already carries: what an unsolo
+/// undoes is *the* solo, because there is only ever one.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ProgramHead {
+    /// **The control**: the `solo` capsule, which is what a press has to land
+    /// in. [`head_pills`]'s answer for it, so it is the rectangle
+    /// [`bay_head`] painted.
+    pub solo: Rect,
+    /// The node it solos: the picture, `program-view`.
+    pub id: NodeId,
+    /// Whether anything is soloed -- `layout.is_soloed()`, read here.
+    pub soloed: bool,
+}
+
+impl ProgramHead {
+    /// **What a press on the pill asks for.** See the type's own
+    /// documentation for why it is two operations rather than one that
+    /// toggles.
+    pub fn op(&self) -> Op {
+        match self.soloed {
+            true => Op::Unsolo,
+            false => Op::Solo(self.id),
+        }
+    }
+
+    /// Whether `p` is on the control.
+    pub fn hit(&self, p: karakuri_layout::Point) -> bool {
+        self.solo.contains(Pos2::new(p.x, p.y))
+    }
+}
+
+/// **The Program bay's head, derived**: the one pill in it, and the node it
+/// acts on.
+///
+/// `None` where there is no pill to press -- before the first frame, with the
+/// bay folded or off a solo somewhere else, or in a bay too short to hold its
+/// own head. That is [`outputs`]'s rule stated on a capsule instead of on a
+/// chip: a rectangle with nothing in it is not something to paint or to click.
+///
+/// **The pill is found by name rather than by position.** [`REGIONS`] is where
+/// a bay's controls are listed, and this reads [`SOLO_PILL`] out of the
+/// Program bay's entry -- so a second pill added to that head moves this one
+/// along and nothing here has to be told.
+///
+/// `layout` must be solved: [`karakuri_layout::Layout::rect`] refuses to
+/// answer from a dirty one. `ctx` is asked for the type, because a `.pill` is
+/// as wide as the word in it.
+///
+/// # What it costs the operator, and it is 0.75 of a pixel
+///
+/// **This is one of the first two controls on the console that do not clear
+/// every boundary's grab** — the four deck preview cells under it are the
+/// other, and [`ProgramBay::preview`] carries theirs. The number is worth
+/// having in front of you rather than in a test alone. A bay head is [`size::HEAD_H`] = 27 and a `.pill` is
+/// [`size::PILL_H`] = 16.5, centred, so there is (27 - 16.5) / 2 = **5.25** of
+/// head above the capsule -- against a [`crate::panel::GRAB`] of **6**. The
+/// Program bay is the first child of the centre column, so its top edge is the
+/// body row's, and the boundary between the transport row and the body grabs
+/// six pixels past it.
+///
+/// So the top **0.75** of the capsule is the boundary's and the other 15.75 is
+/// the panel's. [`crate::input`]'s rule 3 is what decides that and it decides
+/// it the same way every time: the boundary gets first refusal, there is no
+/// case where both think they are dragging, and the hazard that rule was
+/// written for does not arise. What is lost is the sliver, and
+/// `tests/solo_pill.rs` is what states the number and fails if it grows.
+///
+/// **The three things that could change it are all somebody else's**: the
+/// head's height and the pill's box are `docs/manual/console.html`'s, and
+/// `GRAB` is the rule's. This function draws the control where the page puts
+/// it.
+pub fn program_head(ctx: &egui::Context, layout: &karakuri_layout::Layout) -> Option<ProgramHead> {
+    // Fonts are not valid until `egui` has run a pass, exactly as in
+    // [`outputs`]: a press before the first frame is a press on a control that
+    // has never been drawn.
+    if ctx.cumulative_pass_nr() == 0 {
+        return None;
+    }
+    let bay = layout.find("program")?;
+    // The bay itself, its column folded around it, or a solo somewhere else:
+    // one question for every ancestor, which is [`program_bay`]'s own guard.
+    if !layout.visible(bay) {
+        return None;
+    }
+    let id = layout.find("program-view")?;
+    let Kind::Bay { pills, grip, .. } = region("program")?.kind else {
+        return None;
+    };
+    let rect = to_egui(layout.rect(bay));
+    let mut solo = None;
+    head_pills(ctx, rect, pills, grip, |index, capsule| {
+        if pills[index] == SOLO_PILL {
+            solo = Some(capsule);
+        }
+    });
+    let solo = solo?;
+    // A head clipped to a bay shorter than 27 has nowhere to put a 16.5
+    // capsule, and a capsule half out of the head is not one to press.
+    match head_box(rect).contains_rect(solo) {
+        true => Some(ProgramHead {
+            solo,
+            id,
+            soloed: layout.is_soloed(),
+        }),
+        false => None,
     }
 }
 
@@ -8783,6 +8996,23 @@ pub struct View {
     /// module documentation, and [`preview_rects`] for where the rectangles
     /// come from.
     pub previews: [Option<Picture>; DECKS],
+    /// **Which deck the output is auditioning this frame**, or `None` for the
+    /// mix — `karakuri_engine::deck::Deck::preview`, handed in.
+    ///
+    /// **The same seam as [`View::previews`] and it is not the same fact.**
+    /// That field is what is *behind* each of the four cells; this is what the
+    /// composited frame is showing, which is one answer for the whole output
+    /// and is the deck's own state. A console with no deck behind it shows the
+    /// mix, which is every test in this crate that does not say otherwise.
+    ///
+    /// **It is a reading and not a pointer**, unlike [`View::selection`] three
+    /// fields down: `Operation::SetPreview` writes `Record::Preview` and the
+    /// deck is the model of record for it, so a copy kept here would be this
+    /// crate holding somebody else's state (ADR-0156). It is read for two
+    /// things — the ring [`preview`] draws on the cell that is on the output,
+    /// and the destination [`ProgramBay::preview`] names, which is the mix
+    /// when the press is on the cell already showing.
+    pub showing: Option<u8>,
     /// **What the transport row reads this frame**, or `None` for a console
     /// with no engine behind it — which is every test in this crate, and what
     /// the row draws then is nothing at all.
@@ -9059,6 +9289,9 @@ impl View {
             room,
             picture: None,
             previews: [None; DECKS],
+            // The mix, which is what a deck comes up showing and what a
+            // console with no deck behind it can only be showing.
+            showing: None,
             transport: None,
             // The default arrangement, nothing filed and the menu shut, which
             // is every test in this crate and is a console with no store
@@ -9491,6 +9724,10 @@ impl View {
         let cells = program_bay(panel.layout(), self.canvas).and_then(|bay| bay.cells);
         let picture = self.picture;
         let previews = self.previews;
+        // **What the output is showing, read once for the frame** beside the
+        // pictures it is drawn against — the same reason the two pointers
+        // below are.
+        let showing = self.showing;
         let values = self.transport;
         let arr = &self.arrangement;
         let look_at = self.look;
@@ -9677,7 +9914,14 @@ impl View {
             // argument is.
             if let Some(cells) = cells {
                 for (deck, cell) in cells.into_iter().enumerate() {
-                    preview(ui, &pal, cell, deck, previews[deck]);
+                    preview(
+                        ui,
+                        &pal,
+                        cell,
+                        deck,
+                        previews[deck],
+                        showing == Some(deck as u8),
+                    );
                 }
             }
 
@@ -9785,7 +10029,14 @@ impl View {
 /// And the word follows the colour: the mock writes `C &middot; off` in a cell
 /// with nothing in it, so a cell that is off says `off` rather than leaving
 /// the reader to tell a dark thumbnail from an empty well.
-fn preview(ui: &Ui, pal: &Palette, cell: Rect, deck: usize, picture: Option<Picture>) {
+fn preview(
+    ui: &Ui,
+    pal: &Palette,
+    cell: Rect,
+    deck: usize,
+    picture: Option<Picture>,
+    showing: bool,
+) {
     let radius = CornerRadius::same(size::PREVIEW_RADIUS as u8);
     // Clipped to the cell for the reason the picture is clipped to its region:
     // the rectangle in `picture` came from outside, and a stale one is a
@@ -9799,7 +10050,29 @@ fn preview(ui: &Ui, pal: &Palette, cell: Rect, deck: usize, picture: Option<Pict
     painter.rect_stroke(
         cell,
         radius,
-        Stroke::new(size::HAIRLINE, pal.hair),
+        // **The cell the output is auditioning wears its inset shadow in
+        // `--c-mint`**, which is this console's colour for *on* — the Outputs
+        // row's lit dot and its halo are the same green, and nothing else on
+        // the panel uses it.
+        //
+        // **The mock has no state for this and it is owed one.** Its four
+        // cells say which decks are *running*; what the output is showing is a
+        // fifth fact, and with the audition on the deck the cell is drawn for,
+        // a picture in the cell and a picture in the cell say the same thing —
+        // so *deck C auditioned* and *the mix, which happens to be deck C* are
+        // indistinguishable without a mark. The mix is the absence of one,
+        // exactly as `Operation::SetPreview`'s `showing: None` is.
+        //
+        // **A ring rather than a word**, and rather than the lavender ring the
+        // Mixer bay puts round the selected strip: `console.html` is explicit
+        // that two marks meaning two things must not look alike — *"drawing
+        // them the same erases which of the two a reader is looking at"* — so
+        // this is the colour that already means on, on the stroke the cell
+        // already has.
+        match showing {
+            true => Stroke::new(size::HAIRLINE, pal.mint),
+            false => Stroke::new(size::HAIRLINE, pal.hair),
+        },
         StrokeKind::Inside,
     );
 
@@ -9912,10 +10185,7 @@ pub fn bay_head(
     pills: &[&str],
     grip: bool,
 ) -> Rect {
-    let head = Rect::from_min_max(
-        rect.min,
-        Pos2::new(rect.max.x, (rect.min.y + size::HEAD_H).min(rect.max.y)),
-    );
+    let head = head_box(rect);
     let painter = ui.painter().with_clip_rect(head);
 
     // `border-bottom: 1px solid var(--c-hair)`.
@@ -9926,16 +10196,17 @@ pub fn bay_head(
     );
 
     let mid = head.center().y;
-    let mut right = head.max.x - size::HEAD_PAD_X;
-
     if grip {
-        right -= grip_dots(ui, pal, Pos2::new(right, mid));
-        right -= size::PILL_GAP;
+        grip_dots(ui, pal, Pos2::new(head.max.x - size::HEAD_PAD_X, mid));
     }
-    for pill in pills.iter().rev() {
-        right -= pill_at(ui, pal, Pos2::new(right, mid), pill);
-        right -= size::PILL_GAP;
-    }
+    // **Painted where [`head_pills`] puts them rather than laid out again
+    // here.** That is [`outputs`]'s arrangement one row down: the capsule that
+    // is drawn and the capsule a press lands on are one rectangle, so the
+    // Program bay's `solo` cannot come apart from the control
+    // [`program_head`] hands to a caller.
+    head_pills(ui.ctx(), rect, pills, grip, |index, capsule| {
+        pill_at(ui, pal, capsule, pills[index]);
+    });
 
     // `text-transform: uppercase` plus `letter-spacing: 0.16em`, at
     // `--c-faint`. `egui`'s default proportional face has no bold, so
@@ -9956,20 +10227,80 @@ pub fn bay_head(
     head
 }
 
-/// One `.pill`, right-aligned to `right`. Returns its width, so a caller
-/// laying a row of them out right to left can step back by it.
-fn pill_at(ui: &Ui, pal: &Palette, right: Pos2, text: &str) -> f32 {
+/// **The box a bay head is painted into**: the top [`size::HEAD_H`] of the
+/// bay, clipped to the bay itself so that a bay shorter than its own head has
+/// a shorter head rather than one drawn over whatever is below it.
+///
+/// Two readers, which is why it is a function: [`bay_head`] paints into it and
+/// [`head_pills`] lays the head's controls out in it. The mid-line a pill is
+/// centred on is this box's, so a head clipped short takes its pills up with
+/// it and the two cannot disagree about where the row is.
+fn head_box(rect: Rect) -> Rect {
+    Rect::from_min_max(
+        rect.min,
+        Pos2::new(rect.max.x, (rect.min.y + size::HEAD_H).min(rect.max.y)),
+    )
+}
+
+/// The width of a `.pill` holding `text`: the run at [`size::BASE`], plus
+/// `.pill`'s `padding: 0 8px` either side.
+///
+/// `ctx` rather than a `Ui`, because [`program_head`] is a derivation and has
+/// no painter -- the same reason [`mixer`] and [`outputs`] measure their words
+/// off the context.
+fn pill_width(ctx: &egui::Context, text: &str) -> f32 {
+    let run = ctx.fonts_mut(|f| {
+        f.layout_no_wrap(
+            text.to_owned(),
+            FontId::new(size::BASE, FontFamily::Proportional),
+            Color32::PLACEHOLDER,
+        )
+        .size()
+        .x
+    });
+    run + size::PILL_PAD_X * 2.0
+}
+
+/// **Where a bay head's pills go**, right to left from the right edge of the
+/// head: the grip first where the mock draws one, then the pills in reverse,
+/// one [`size::PILL_GAP`] apart. `place` is called once per pill, with its
+/// index in `pills` and the capsule it occupies.
+///
+/// **One derivation for a painted pill and a pressed one.** [`bay_head`]
+/// paints from it and [`program_head`] hit-tests from it, which is the
+/// arrangement every other control on this console already has
+/// ([`crate::input`]): the derivation that draws a control is asked a second
+/// time rather than copied, so the capsule an operator sees and the capsule a
+/// press lands on cannot come apart.
+fn head_pills(
+    ctx: &egui::Context,
+    rect: Rect,
+    pills: &[&str],
+    grip: bool,
+    mut place: impl FnMut(usize, Rect),
+) {
+    let head = head_box(rect);
+    let mid = head.center().y;
+    let mut right = head.max.x - size::HEAD_PAD_X;
+    if grip {
+        right -= GRIP_W + size::PILL_GAP;
+    }
+    for (index, pill) in pills.iter().enumerate().rev() {
+        let w = pill_width(ctx, pill);
+        place(
+            index,
+            Rect::from_min_size(
+                Pos2::new(right - w, mid - size::PILL_H * 0.5),
+                egui::vec2(w, size::PILL_H),
+            ),
+        );
+        right -= w + size::PILL_GAP;
+    }
+}
+
+/// One `.pill`, painted into the capsule [`head_pills`] laid out for it.
+fn pill_at(ui: &Ui, pal: &Palette, rect: Rect, text: &str) {
     let painter = ui.painter();
-    let galley = painter.layout_no_wrap(
-        text.to_owned(),
-        FontId::new(size::BASE, FontFamily::Proportional),
-        pal.dim,
-    );
-    let w = galley.size().x + size::PILL_PAD_X * 2.0;
-    let rect = Rect::from_min_size(
-        Pos2::new(right.x - w, right.y - size::PILL_H * 0.5),
-        egui::vec2(w, size::PILL_H),
-    );
     painter.rect_stroke(
         rect,
         // `border-radius: 999px` on a box this short is a capsule.
@@ -9977,41 +10308,53 @@ fn pill_at(ui: &Ui, pal: &Palette, right: Pos2, text: &str) -> f32 {
         Stroke::new(1.0, pal.line),
         StrokeKind::Inside,
     );
+    let galley = painter.layout_no_wrap(
+        text.to_owned(),
+        FontId::new(size::BASE, FontFamily::Proportional),
+        pal.dim,
+    );
     painter.galley(
         Pos2::new(
             rect.min.x + size::PILL_PAD_X,
-            right.y - galley.size().y * 0.5,
+            rect.center().y - galley.size().y * 0.5,
         ),
         galley,
         pal.dim,
     );
-    w
 }
+
+/// The mock's `.grip`: two columns of three dots.
+const GRIP_COLS: usize = 2;
+const GRIP_ROWS: usize = 3;
+/// One dot's radius.
+const GRIP_R: f32 = 1.0;
+/// Centre to centre, both ways.
+const GRIP_STEP: f32 = 3.5;
+
+/// **How wide a grip is**, which [`head_pills`] steps back by before it places
+/// the first pill. A constant rather than a return value, because the pills
+/// are now laid out where nothing is painting.
+const GRIP_W: f32 = GRIP_STEP * (GRIP_COLS - 1) as f32 + GRIP_R * 2.0;
 
 /// The mock's `.grip`, `⋮⋮` — drawn rather than typed, because whether a
 /// vertical ellipsis is in `egui`'s default face is a question with no good
-/// answer and six dots is the same mark either way. Returns its width.
-fn grip_dots(ui: &Ui, pal: &Palette, right: Pos2) -> f32 {
-    const COLS: usize = 2;
-    const ROWS: usize = 3;
-    const R: f32 = 1.0;
-    const STEP: f32 = 3.5;
-    let w = STEP * (COLS - 1) as f32 + R * 2.0;
-    let h = STEP * (ROWS - 1) as f32;
+/// answer and six dots is the same mark either way. Right-aligned to `right`;
+/// its width is [`GRIP_W`], which is what the pills beside it step back by.
+fn grip_dots(ui: &Ui, pal: &Palette, right: Pos2) {
+    let h = GRIP_STEP * (GRIP_ROWS - 1) as f32;
     let painter = ui.painter();
-    for c in 0..COLS {
-        for r in 0..ROWS {
+    for c in 0..GRIP_COLS {
+        for r in 0..GRIP_ROWS {
             painter.circle_filled(
                 Pos2::new(
-                    right.x - w + R + c as f32 * STEP,
-                    right.y - h * 0.5 + r as f32 * STEP,
+                    right.x - GRIP_W + GRIP_R + c as f32 * GRIP_STEP,
+                    right.y - h * 0.5 + r as f32 * GRIP_STEP,
                 ),
-                R,
+                GRIP_R,
                 pal.faint,
             );
         }
     }
-    w
 }
 
 /// The mock's `.divider-v` between a bay's subdivisions: a `--c-hair` capsule
