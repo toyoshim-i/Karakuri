@@ -236,17 +236,22 @@ impl Slots {
     /// A slot's files, each under the layer and the index the rest of this
     /// program addresses it by.
     ///
-    /// **The layer is read off the file, not off its position.** The first path
-    /// is the slot's L1 — that is what [`crate::compile::sort_slot`] loads it as,
-    /// before it has
-    /// looked at a `kind` at all — and every later one is on the layer its own
-    /// `kind` line names, at its position *within that layer*, keeping file
-    /// order. That is the rule `history::seed` files snapshots under and the
-    /// rule the startup path sorts a `--set` chain by, and it is
-    /// [`crate::history::declared_kind`] here rather than a second scanner:
-    /// two readers of a `kind` line would be two answers to what layer a file
-    /// is on, and the layer a version is filed under has to be the layer an
-    /// agent addresses it by.
+    /// **The layer is read off the file, not off its position — the head
+    /// included.** Every path, the first one as much as the rest, is on the
+    /// layer its own `kind` line names, at its position *within that layer*,
+    /// keeping file order. It is [`crate::history::declared_kind`] here rather
+    /// than a second scanner: two readers of a `kind` line would be two answers
+    /// to what layer a file is on, and the layer a version is filed under has
+    /// to be the layer an agent addresses it by.
+    ///
+    /// **The head used to be filed as `L1` whatever it declared**, and nothing
+    /// downstream agreed with that: [`crate::compile::sort_compiled`] matches
+    /// on the head's own `kind` like every other entry, and `history::seed`
+    /// reads the head's `kind` line too. `--set a,b,c` takes whatever the
+    /// operator typed first, so a slot headed by a `kind L3` was addressed as
+    /// `L1:0` — a `write_procedure` carrying a valid L1 passed the kind guard,
+    /// overwrote the camera, and left the slot with a second geometry, no
+    /// camera and no way to reach the real L3 at all.
     ///
     /// A text scan and not a parse, for that function's reason: this surface
     /// works without compiling anything, and **a file that does not compile
@@ -273,11 +278,21 @@ impl Slots {
             // which had announced a port was silently no longer on it. `serve`
             // refuses an empty deck now; this stays correct anyway.
             .ok_or_else(|| crate::no_such_slot(slot, self.0.len()))?;
-        let mut nodes = vec![(Kind::L1, 0, &pair.0)];
+        // **The head's own `kind` line, and `L1` only where it has none.**
+        // That fallback is `history::seed`'s, exactly: the first path of a
+        // chain with no `kind` in it falls back to L1 and every later one to
+        // L4, so a file this scan cannot read is addressed here under the layer
+        // its snapshots are filed under there.
+        let head = std::fs::read(&pair.0)
+            .ok()
+            .and_then(|source| crate::history::declared_kind(&source))
+            .and_then(layer_named)
+            .unwrap_or(Kind::L1);
+        let mut nodes = vec![(head, 0, &pair.0)];
         // The next free index per layer, which the head has already taken one
         // of: a `--set` chain naming a second `kind L1` is a second source, and
         // it is L1 number 1 rather than the beginning of a fresh count.
-        let mut next: Vec<(Kind, usize)> = vec![(Kind::L1, 1)];
+        let mut next: Vec<(Kind, usize)> = vec![(head, 1)];
         for path in &pair.1 {
             let layer = std::fs::read(path)
                 .ok()
@@ -430,10 +445,14 @@ fn layer_list() -> String {
 /// for each of them: three are optional and two cannot be missing.
 fn absent(layer: Kind) -> &'static str {
     match layer {
-        // Unreachable, because a slot's first path is its L1 whatever it says.
-        // Written out anyway: the arm that cannot happen is the one that stops
-        // saying so quietly when the shape around it changes.
-        Kind::L1 => "which cannot happen — a slot's first file is its geometry",
+        // Reachable now that the head is filed under the `kind` it declares:
+        // a chain of nothing but a deformation and a renderer holds no
+        // geometry, and this is what such a slot is told. It does not get as
+        // far as a frame — the build refuses a Set with no L1 — but this
+        // surface answers before anything is built.
+        Kind::L1 => {
+            "a Set needs a geometry, and every file this slot names declares some other layer"
+        }
         Kind::L2 => {
             "a deformation is optional, and one is added by naming its file in the same \
              `--set` chain"
@@ -487,6 +506,22 @@ const ASKED: usize = 16;
 /// It becomes a file name under `<store>/sets/`, and a stamp is twenty
 /// characters.
 const MAX_ID: usize = 64;
+
+/// **What [`checked_id`] accepts, spelled for a schema.**
+///
+/// The same rule and not a second one: `checked_id` is still what refuses a
+/// bad id, because a client may send anything whatever a schema says, and this
+/// is that rule written where a model reads it *before* calling. A charset a
+/// tool enforces and does not publish is a refusal a caller had no way to
+/// avoid — which is [`kept`]'s argument about `"id": null`, applied to the
+/// argument it is about rather than to a null.
+///
+/// **The one constraint that cannot be published this way is the deck's**: how
+/// many slots this run holds is not knowable when `tools/list` is answered, and
+/// `minimum` is all a schema can say about `slot`. The upper bound stays a
+/// runtime refusal, and it names what the deck holds, which is more than a
+/// schema could have said.
+const ID_PATTERN: &str = "^[A-Za-z0-9_-]+$";
 
 /// **How long a `save_set` call waits for the render loop before it answers
 /// without an outcome.**
@@ -964,10 +999,15 @@ fn tools() -> Value {
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "slot": { "type": "integer", "description": "deck slot, from 0" },
+                    "slot": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "description": "deck slot, from 0",
+                    },
                     "layer": { "type": "string", "enum": layers },
                     "index": {
                         "type": "integer",
+                        "minimum": 0,
                         "description":
                             "which node of that layer, from 0, in the order the slot's files \
                              were named. A slot draws with as many L4s as it likes — the same \
@@ -986,16 +1026,27 @@ fn tools() -> Value {
                  worker thread, swapped in at a frame boundary, and measured for thirty \
                  frames — if it costs more than the frame budget it is dropped and the \
                  previous one comes back at the time it was parked at. So an expensive \
-                 mistake is survivable and a non-compiling one never reaches the screen. \
-                 **The diagnostics are the point of the return value**: if it does not \
-                 compile, what comes back is what the checker said, against the source.",
+                 mistake is survivable. **The diagnostics are the point of the return \
+                 value**: if it does not compile, what comes back is what the checker \
+                 said, against the source. **The check is of this procedure alone, and \
+                 the slot is rebuilt whole**: everything between nodes — what a renderer \
+                 consumes against what a geometry emits, what each `uses` slot is bound \
+                 to, the capacities, the cost of a field inlined into its caller — is \
+                 decided when the slot is assembled, so a clean write can still be \
+                 followed by a build failure `swap_outcome` reports. **A `uses` \
+                 declaration needs an `edge`, and this surface cannot write one**: \
+                 adding `uses <name> : <Geometry|Field|Camera|Source>` to a procedure \
+                 leaves the slot unable to rebuild, and there is no tool here that can \
+                 bind it or take it back — only rewriting the procedure without it \
+                 will.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "slot": { "type": "integer" },
+                    "slot": { "type": "integer", "minimum": 0 },
                     "layer": { "type": "string", "enum": layers },
                     "index": {
                         "type": "integer",
+                        "minimum": 0,
                         "description":
                             "which node of that layer, from 0. Omit for the first. The \
                              source's own `kind` line must name the same layer as this \
@@ -1021,9 +1072,12 @@ fn tools() -> Value {
             "description":
                 "Keep what a slot is playing, as a Set file that can be loaded again with \
                  `--load-set ID`. It writes the material **on screen** — the versions the \
-                 slot is running, by content hash, with the parameters, capacities and \
-                 salts the live Set holds now — and not what any file on disk says, which \
-                 is exactly what the operator's `k` key writes. That distinction is the \
+                 slot is running, by content hash, with the whole of the wiring and the \
+                 state around them: the parameters, the capacities, the bindings and the \
+                 seeds the live Set holds now, the edges binding each `uses` slot, \
+                 whether it composites and which renderer is live, and the camera — and \
+                 not what any file on disk says, which is exactly what the operator's \
+                 `k` key writes. That distinction is the \
                  point: a procedure that was written and then rolled back for cost is on \
                  disk and not on screen, and this saves the screen. **It waits for the \
                  disk and tells you what happened**, so what comes back names the id it \
@@ -1031,9 +1085,15 @@ fn tools() -> Value {
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "slot": { "type": "integer", "description": "deck slot, from 0" },
+                    "slot": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "description": "deck slot, from 0",
+                    },
                     "id": {
                         "type": "string",
+                        "pattern": ID_PATTERN,
+                        "maxLength": MAX_ID,
                         "description":
                             "what to file it under: letters, digits, `-` and `_`, and it \
                              becomes a file name. **An id that already names a set is \
@@ -1072,6 +1132,8 @@ fn tools() -> Value {
                 "properties": {
                     "id": {
                         "type": "string",
+                        "pattern": ID_PATTERN,
+                        "maxLength": MAX_ID,
                         "description":
                             "the id the set was filed under: letters, digits, `-` and \
                              `_`. It is what `save_set` came back naming, what \
@@ -1542,20 +1604,33 @@ fn write_procedure(deck: u8, node: NodeAt, source: &str, state: &State) -> Resul
     // Named as an address rather than as a layer, because two renderers or two
     // sources are only told apart by the index — the same `layer:index:`
     // `--param` writes.
+    // **The edit history is true of both branches**, and it used to be said in
+    // only one. `--mcp` on its own makes a run editable exactly as `--watch`
+    // does — `main.rs`'s `editable` is `watch || mcp.is_some()` — so the same
+    // two things have already happened either way: the deck runs from copies in
+    // the scratch, so the paths the operator named on the command line are not
+    // what this wrote to, and `history::seed` has filed the version the run
+    // started with. "It replaced the file on disk and there is no backup" was
+    // wrong about both halves, on the one surface whose reader has no other way
+    // to find out.
+    let kept = "This replaced the run's copy of the file, under the scratch the deck runs \
+                from — the paths named on the command line are not written to. The version \
+                it replaced is in the run's edit history under `<store>/history/`, so it can \
+                be got back, but not from here.";
     Ok(if state.watching {
         format!(
             "compiled and written to slot {slot} {name}:{index}.{shared} It is being built on a \
              worker thread and will swap in at a frame boundary; call `swap_outcome` to \
-             find out whether it landed or was rolled back for cost.\n\n\
-             This replaced the file on disk. The version it replaced is in the run's edit \
-             history under `<store>/history/`, where every version that compiled is kept — \
-             so it can be got back, but not from here."
+             find out whether it landed or was rolled back for cost.\n\n{kept} Every later \
+             version that compiles is kept there too."
         )
     } else {
         format!(
             "compiled and written to slot {slot} {name}:{index}.{shared} **This run was started \
              without `--watch`, so nothing will pick it up** — the file has changed and the \
-             screen has not. It replaced the file on disk and there is no backup."
+             screen has not.\n\n{kept} Only the version the run started with is there: \
+             nothing is snapshotting without `--watch`, so writing this node twice \
+             replaces the first write with no record of it."
         )
     })
 }
@@ -2635,6 +2710,26 @@ proc probe_warp {
 
   deform {
     position = vec3(position.x, position.y * 1.5, position.z);
+  }
+}
+"#;
+
+    /// **A deformation that declares a slot nothing here can bind.**
+    ///
+    /// It compiles on its own — a `uses` is a declaration, and one procedure is
+    /// all `compile::check` ever sees — and the Set it lands in refuses to
+    /// build until an `edge` says what fills `shape`. There is no tool on this
+    /// surface that writes one.
+    const PROBE_L2_USES: &str = r#"
+proc probe_warp_uses {
+  kind L2
+
+  uses shape : Field
+
+  consumes position
+
+  deform {
+    position = position * (1.0 + shape(position) * 0.1);
   }
 }
 "#;
@@ -4338,6 +4433,207 @@ proc probe_knobs {
              call, and the answer said the write had landed"
         );
     }
+
+    // -- what the audit of this file against the engine turned up -----------
+
+    /// A slot whose head is anything but a geometry, for the tests below.
+    ///
+    /// **`--set` takes whatever the operator typed first**, and nothing checks
+    /// that it is an L1 — the sort that assembles the slot reads every file's
+    /// own `kind` line, the head included, so a chain headed by a camera is an
+    /// ordinary slot with an ordinary camera in it.
+    fn headed_by_a_camera(dir: &tempfile::TempDir) -> (Slots, Vec<std::path::PathBuf>) {
+        let write = |name: &str, source: &str| {
+            let path = dir.path().join(name);
+            std::fs::write(&path, source).expect("fixture");
+            path
+        };
+        let camera = write("camera.kir", PROBE_L3);
+        let l1 = write("l1.kir", PROBE_L1);
+        let l4 = write("l4.kir", PROBE_L4);
+        (
+            Slots(vec![(camera.clone(), vec![l1.clone(), l4.clone()])]),
+            vec![camera, l1, l4],
+        )
+    }
+
+    /// **The head is addressed under the `kind` it declares**, like every other
+    /// file of the slot.
+    ///
+    /// It was filed as `L1:0` whatever it said, which no other reader of these
+    /// files agrees with: `compile::sort_compiled` matches on the head's own
+    /// `kind` and `history::seed` reads the head's `kind` line, taking a
+    /// position only where a file declares nothing. So a slot headed by a
+    /// camera had its camera at `L1:0`, its geometry unreachable, and its real
+    /// `L3` addressable by nobody.
+    #[test]
+    fn a_head_is_addressed_under_the_kind_it_declares() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let (slots, paths) = headed_by_a_camera(&dir);
+        let (camera, l1, l4) = (&paths[0], &paths[1], &paths[2]);
+
+        assert_eq!(
+            slots.path(0, Kind::L3, 0).expect("the head is the camera"),
+            camera,
+            "the head was not filed under the `kind` it declares"
+        );
+        assert_eq!(
+            slots
+                .path(0, Kind::L1, 0)
+                .expect("the geometry is reachable"),
+            l1,
+            "`L1:0` did not reach the file that declares `kind L1`"
+        );
+        assert_eq!(slots.path(0, Kind::L4, 0).expect("the renderer"), l4);
+
+        // The head has taken its own layer's index 0, so a second camera in the
+        // chain would be `L3:1` — the counting rule the head always had, now
+        // applied on the layer it is actually on.
+        let past = slots
+            .path(0, Kind::L3, 1)
+            .expect_err("this slot was given one camera");
+        assert!(past.contains("one L3"), "{past}");
+    }
+
+    /// **A file with no `kind` line at all keeps `history::seed`'s positional
+    /// answer**: the first path is an L1 and every later one a renderer.
+    ///
+    /// That fallback is the whole reason reading the head's `kind` is safe. A
+    /// slot whose head cannot be read — or that is a `.kir` the scan finds no
+    /// `kind` in — must still be addressable at `L1:0`, because that is where
+    /// its snapshots are filed.
+    #[test]
+    fn a_head_that_declares_nothing_is_still_the_slots_l1() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let silent = dir.path().join("silent.kir");
+        std::fs::write(&silent, "proc nothing_declared {\n}\n").expect("fixture");
+        let mute = dir.path().join("mute.kir");
+        std::fs::write(&mute, "proc also_nothing {\n}\n").expect("fixture");
+        let slots = Slots(vec![(silent.clone(), vec![mute.clone()])]);
+
+        assert_eq!(
+            slots.path(0, Kind::L1, 0).expect("the head is the L1"),
+            &silent
+        );
+        assert_eq!(
+            slots
+                .path(0, Kind::L4, 0)
+                .expect("a later one is a renderer"),
+            &mute
+        );
+    }
+
+    /// **A write lands on the file its address names, and a camera-headed slot
+    /// does not lose its camera to a valid L1.**
+    ///
+    /// This is what the address bug cost: `write_procedure(slot, "L1", 0, …)`
+    /// with a real geometry in it passed the kind guard — the source said L1
+    /// and the address said L1 — and overwrote the camera's file. The rebuild
+    /// then sorted by `kind`, so the slot quietly gained a second geometry and
+    /// lost the camera it was looking through.
+    #[test]
+    fn a_write_addressed_to_a_geometry_does_not_overwrite_the_head() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let (slots, paths) = headed_by_a_camera(&dir);
+        let (camera, l1) = (paths[0].clone(), paths[1].clone());
+        let reporter = serve(0, slots, store_root(&dir), true).expect("serve");
+        let port = reporter.port();
+        stand_in(reporter, no_loop);
+
+        let (failed, said) = call(
+            port,
+            "write_procedure",
+            json!({"slot":0,"layer":"L1","source":PROBE_L1_B}),
+        );
+        assert!(!failed, "{said}");
+        assert_eq!(
+            std::fs::read_to_string(&camera).expect("the camera is still there"),
+            PROBE_L3,
+            "a write addressed to `L1:0` landed on the head, which is the camera"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&l1).expect("the geometry"),
+            PROBE_L1_B,
+            "the write did not reach the file that declares `kind L1`"
+        );
+
+        // And the camera is readable at the address it is on, which is the
+        // other half of the same defect: the real L3 could be reached by
+        // nobody.
+        let (failed, read) = call(port, "read_procedure", json!({"slot":0,"layer":"L3"}));
+        assert!(!failed, "{read}");
+        assert!(read.contains("probe_camera"), "{read}");
+    }
+
+    /// **An L2 that declares `uses shape : Field` is written cleanly**, which
+    /// is the promise `write_procedure`'s description had to stop making.
+    ///
+    /// `compile::check` checks one procedure in isolation; everything between
+    /// nodes is `Set::validate`, which is where an unbound slot is refused. So
+    /// a clean write is not a slot that rebuilds — and there is no tool here
+    /// that can write the `edge` that would bind it, which is why the
+    /// description says so rather than leaving a model to find out by wedging
+    /// the slot it was editing.
+    #[test]
+    fn a_write_that_needs_an_edge_still_returns_cleanly() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let write = |name: &str, source: &str| {
+            let path = dir.path().join(name);
+            std::fs::write(&path, source).expect("fixture");
+            path
+        };
+        let l1 = write("l1.kir", PROBE_L1);
+        let warp = write("warp.kir", PROBE_L2);
+        let l4 = write("l4.kir", PROBE_L4);
+        let reporter =
+            serve(0, Slots(vec![(l1, vec![warp, l4])]), store_root(&dir), true).expect("serve");
+        let port = reporter.port();
+        stand_in(reporter, no_loop);
+
+        let (failed, said) = call(
+            port,
+            "write_procedure",
+            json!({"slot":0,"layer":"L2","source":PROBE_L2_USES}),
+        );
+        assert!(
+            !failed,
+            "the per-procedure check refused this, so the description's caveat is about \
+             something that cannot happen any more: {said}"
+        );
+    }
+
+    /// **A run with `--mcp` and no `--watch` has a scratch and an edit history
+    /// like any other**, and the answer used to tell it the opposite.
+    ///
+    /// `main.rs`'s `editable` is `watch || mcp.is_some()`: the deck runs from
+    /// copies, so the files the operator named are never written to, and
+    /// `history::seed` has filed the version the run started with. "It replaced
+    /// the file on disk and there is no backup" was wrong in both halves, and
+    /// it was wrong on the one surface whose reader cannot look at the
+    /// terminal.
+    #[test]
+    fn a_write_without_watch_still_says_where_the_old_version_went() {
+        let (server, reporter) = started(false);
+        stand_in(reporter, no_loop);
+        let (failed, said) = call(
+            server.port,
+            "write_procedure",
+            json!({"slot":0,"layer":"L4","source":PROBE_L4}),
+        );
+        assert!(!failed, "{said}");
+        assert!(
+            said.contains("`<store>/history/`"),
+            "the version it replaced is in the edit history and this does not say so: {said}"
+        );
+        assert!(
+            said.contains("scratch"),
+            "the file it replaced is the run's copy and this does not say so: {said}"
+        );
+        assert!(!said.contains("no backup"), "there is a backup: {said}");
+        // The thing that *is* true of this run stays said: nothing will pick
+        // the write up.
+        assert!(said.contains("without `--watch`"), "{said}");
+    }
 }
 
 #[cfg(test)]
@@ -5176,6 +5472,131 @@ mod tests {
                  surface performs it here because there was no record to route into, and \
                  that is what has changed",
                 operation.title()
+            );
+        }
+    }
+
+    // -- what the audit of this file against the engine turned up -----------
+
+    /// The description one published tool carries.
+    fn description(name: &str) -> String {
+        tools()
+            .as_array()
+            .expect("tools() is an array")
+            .iter()
+            .find(|tool| tool["name"] == json!(name))
+            .unwrap_or_else(|| panic!("`{name}` is not published"))["description"]
+            .as_str()
+            .expect("a tool has a description")
+            .to_string()
+    }
+
+    /// **What a clean write does not promise**, said where a model reads it.
+    ///
+    /// The description said a clean return meant the material compiled and so a
+    /// non-compiling change never reached the screen. `compile::check` sees one
+    /// procedure; everything between nodes is `Set::validate`, and one of the
+    /// things it refuses — a `uses` slot nothing binds — is a state this
+    /// surface can create and has no tool to undo. See
+    /// [`super::wire_tests::a_write_that_needs_an_edge_still_returns_cleanly`]
+    /// for the write that proves it.
+    #[test]
+    fn write_procedure_says_what_a_clean_write_does_not_promise() {
+        let described = description("write_procedure");
+        assert!(
+            described.contains("check is of this procedure alone"),
+            "a clean write is not a slot that builds, and the description does not say so: \
+             {described}"
+        );
+        assert!(
+            described.contains("swap_outcome"),
+            "nothing points at where the build failure will show up: {described}"
+        );
+        assert!(
+            described.contains("`uses`") && described.contains("`edge`"),
+            "a `uses` this surface cannot bind is not mentioned: {described}"
+        );
+    }
+
+    /// **A schema states the constraints its tool enforces.**
+    ///
+    /// `slot: -1` was refused with "`slot` is required and is a number", which
+    /// is a sentence about the wrong mistake — the same class of refusal
+    /// [`kept`] argues about for `"id": null`, and one a client could have been
+    /// told to avoid before it called. The bounds a schema *can* carry belong
+    /// in it; the deck's upper bound cannot be one, because how many slots this
+    /// run holds is not known when `tools/list` is answered.
+    #[test]
+    fn a_schema_states_the_constraints_its_tool_enforces() {
+        for tool in tools().as_array().expect("tools() is an array") {
+            let name = tool["name"].as_str().expect("a tool has a name");
+            let properties = &tool["inputSchema"]["properties"];
+            for counted in ["slot", "index"] {
+                let Some(schema) = properties.get(counted) else {
+                    continue;
+                };
+                assert_eq!(
+                    schema.get("minimum"),
+                    Some(&json!(0)),
+                    "`{name}`'s `{counted}` counts from 0 and the schema does not say so"
+                );
+            }
+            let Some(schema) = properties.get("id") else {
+                continue;
+            };
+            assert_eq!(
+                schema.get("pattern"),
+                Some(&json!("^[A-Za-z0-9_-]+$")),
+                "`{name}`'s `id` is put through `checked_id` and the schema does not \
+                 publish what it accepts"
+            );
+            assert_eq!(
+                schema.get("maxLength"),
+                Some(&json!(MAX_ID)),
+                "`{name}`'s `id` becomes a file name and the schema does not publish the \
+                 length"
+            );
+        }
+
+        // **And the published rule is the one that is enforced.** The pattern
+        // above is a literal here on purpose: a `checked_id` that started
+        // accepting a dot, or stopped accepting a dash, would leave the schema
+        // describing a tool that no longer exists.
+        assert!(checked_id("plain_id-9").is_ok());
+        for refused in ["a.b", "a b", "../x", ""] {
+            assert!(
+                checked_id(refused).is_err(),
+                "`{refused}` is outside the pattern the schema publishes and was accepted"
+            );
+        }
+        assert!(checked_id(&"x".repeat(MAX_ID)).is_ok());
+        assert!(checked_id(&"x".repeat(MAX_ID + 1)).is_err());
+    }
+
+    /// **`save_set` names everything it writes.**
+    ///
+    /// It described the file as the hashes, the parameters, the capacities and
+    /// the salts, and `setfile::save` writes the edges, the merge, the camera
+    /// and the seeds as well — so a model was told a Set file carries less of
+    /// its slot than it does, and the operations page's own row for this
+    /// operation had already said otherwise.
+    #[test]
+    fn save_set_names_everything_it_writes() {
+        let described = description("save_set");
+        for written in [
+            "parameter",
+            "capacit",
+            "binding",
+            "seed",
+            "edge",
+            "composite",
+            "live",
+            "camera",
+        ] {
+            assert!(
+                described.contains(written),
+                "`setfile::save` writes the {written} records and the description does not \
+                 mention them: {described}"
             );
         }
     }
