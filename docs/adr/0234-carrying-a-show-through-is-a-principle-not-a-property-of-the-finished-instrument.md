@@ -11,6 +11,18 @@ tags: [process, docs, live, mcp]
 
 # Carrying a show through is a principle, not a property of the finished instrument
 
+> **Annotated 2026-08-31, later the same day.** The MCP scope this record treats as settled — and
+> whose contradiction with the manual's rule 01 it left in *What this leaves undone* for the
+> maintainer to decide — was decided that evening, and rule 01 won:
+> [ADR-0235](0235-mcp-reaches-every-operation-and-what-could-stop-the-show-is-refused-until-the-operator-opens-it.md)
+> connects MCP to all 64 operations and closes the performance-stopping classes **by default**
+> rather than by scope, each opened from the head of the bay it belongs to. None of the three
+> readings offered below is the one taken. Two counts here are also true only of the morning they
+> were taken: `wire_input` landed the same day, so the tools are seven and the column is 7 `has` /
+> 57 `gap`. What this record argues — that the philosophy needed a principle, and that the scope had
+> a conclusion with no reason attached — is untouched, and P-0079 is what the decision was argued
+> against.
+
 ## Context
 
 The maintainer, on 2026-08-31, confirming why the MCP surface is deliberately narrow — not every
