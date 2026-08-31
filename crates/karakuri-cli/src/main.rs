@@ -5149,36 +5149,42 @@ impl Live {
     /// [`Live::operate`], because every operation a map line can produce is one
     /// `karakuri_operation_record::written` converts. **A keyboard is not that
     /// shape**, and this is the survey rather than an intention: of the
-    /// thirty-nine keys below, sixteen name an operation whose record converts,
-    /// eight name one whose record is owed, twelve name one that writes no
+    /// thirty-nine keys below, twenty name an operation whose record converts,
+    /// four name one whose record is owed, twelve name one that writes no
     /// record at all, and three name nothing in the vocabulary.
     ///
     /// - **Its record converts, so it goes through [`Live::operate`].**
     ///   `space` and `w` (`SetResidency`), `[`, `]` and `\` (`SetGain`),
     ///   `;` and `'` (`SetOpacity`), `m` (`SetBlendMode`), `v` (`SetPreview`),
     ///   `t` (`SetTonemap`), `-`, `=` and the backquote (`SetExposure`), `u`
-    ///   and `i` (`ScrubDeck`), `y` (`SetSync`). A key and a mapped pad reach
-    ///   the deck by **one
+    ///   and `i` (`ScrubDeck`), `y` (`SetSync`), `f` and `g` (`FadeDeck`),
+    ///   `x` (`Crossfade`), `r` (`SelectRenderer`). A key and a mapped pad
+    ///   reach the deck by **one
     ///   derivation**, which is the whole of why the two surfaces cannot drift.
     ///   Which way to step is still the keyboard's — a cycle and a nudge are
     ///   translations a surface makes, never operations
     ///   (`docs/principles/0074-…`).
     /// - **Its record is owed, so it keeps its present path** — each with the
-    ///   reason written at the function it ends in: `f`, `g`, `x` and `c`
-    ///   ([`Live::fade_slot`]), `r` ([`Live::cycle_renderer`]), `b`
-    ///   ([`Live::tap`]), `,` and `.` ([`Live::shift_octave`]). All six
+    ///   reason written at the function it ends in: `c` ([`Live::wipe`]), `b`
+    ///   ([`Live::tap`]), `,` and `.` ([`Live::shift_octave`]). All four
     ///   operations answer `Owed::NotSettled`, and the day one is settled its
     ///   function is what goes — the promise `run_surface`'s `TapBeat` arm
     ///   already carries. Routing one through `operate` today would print the
     ///   gap where the gesture used to happen, which is the one thing a change
     ///   of route may not do.
     ///
-    ///   **`y` was the seventh and this is what the promise looks like kept.**
-    ///   `Operation::SetSync` was owed for the engine's anchor clamp; the
-    ///   clamp turned out to be the identity on every tempo an oscillator can
-    ///   report, the conversion took a session tempo as a reading, and
-    ///   [`Live::cycle_sync`] moved to `operate` with its record-building
-    ///   deleted rather than kept in step.
+    ///   **It was eight, and the four that left are what the promise looks
+    ///   like kept twice.** `Operation::SetSync` was owed for the engine's
+    ///   anchor clamp; the clamp turned out to be the identity on every tempo
+    ///   an oscillator can report, the conversion took a session tempo as a
+    ///   reading, and [`Live::cycle_sync`] moved to `operate` with its
+    ///   record-building deleted rather than kept in step. `FadeDeck`,
+    ///   `Crossfade` and `SelectRenderer` went the same way and took a whole
+    ///   function with them: the quantum and the length `n` and `j` cycle are
+    ///   **this surface's**, `Current::transition` is where they are handed
+    ///   over, and `Live::fade_slot` is gone rather than kept beside the
+    ///   conversion. `c` is the one that stayed, because a wipe also carries a
+    ///   shape and a soft edge that nothing has assigned.
     /// - **It writes no record, and this surface is what has to perform it.**
     ///   `0`–`3` (`SelectDeck`), `z`, `n` and `j` (`SetTransition`), `a`
     ///   (`SizeWindow`), `k` (`SaveSet`), `o` and `p` (`SetLatencyOffset`),
@@ -5908,10 +5914,21 @@ impl Live {
     /// black card that still covers. A gain fade is reachable through the
     /// record and deliberately has no key — two keys that look alike and differ
     /// only under one blend mode is how an operator ends up fading the wrong
-    /// one in the dark.
+    /// one in the dark. `Operation::FadeDeck` says the same thing at its own
+    /// definition, which is why the choice is not repeated in the record this
+    /// writes.
+    ///
+    /// **One `operate` call, and [`Live::fade_slot`] is gone.** This built its
+    /// record where it stood while the quantum and the length had no owner;
+    /// they are the surface's, they are handed over as
+    /// `karakuri_operation_record::Current::transition`, and what this key
+    /// writes is `written`'s answer like every other settled key's.
     fn fade(&mut self, to: f32) {
         let slot = self.focus;
-        self.fade_slot(slot, to);
+        self.operate(&Operation::FadeDeck {
+            deck: slot as u8,
+            to,
+        });
         eprintln!(
             "slot {slot} fading to {to:.2} over {} beat{} from {}",
             self.fade_beats,
@@ -5939,16 +5956,26 @@ impl Live {
     /// The silencing is a `opacity` record like any other, so it cancels
     /// nothing the operator wanted and replays like anything else.
     ///
-    /// **Two of its four records are operations and two are owed.** The
-    /// silencing and the put-on-air *are* [`Operation::SetOpacity`] and
-    /// [`Operation::SetResidency`], so they go through [`Live::operate`] the
-    /// way a mapped pad's do and are derived in one place. The two scheduled
-    /// moves stay in [`Live::fade_slot`] because [`Operation::Crossfade`] is
-    /// `Owed::NotSettled`: its record needs the grid quantised onto a musical
-    /// instant, plus the quantum and the length `Operation::SetTransition`
-    /// sets and no record carries. **The day that is settled this function is
-    /// one `operate` call**, and until then it is one gesture spelled in the
-    /// parts that are decided.
+    /// **All four of its records are one operation now, and this function is
+    /// one `operate` call** — which is the sentence that used to be here as a
+    /// promise. It read *"the day that is settled this function is one
+    /// `operate` call"*, and the day was the one the quantum and the length
+    /// got an owner: they are the surface's,
+    /// `karakuri_operation_record::Current::transition` is where this program
+    /// hands them over, and `written` answers `Operation::Crossfade` with the
+    /// four records in the order above.
+    ///
+    /// **The two remaining lines are the keyboard's translation and not the
+    /// gesture.** *The next deck* is what `x` means here and the operation
+    /// names both decks, so working out which one and refusing a deck with
+    /// nowhere to go stays; everything past that is the conversion's.
+    ///
+    /// **The put-on-air is written even where the slot is already live**,
+    /// which is the one thing this changed about the stream. It used to be
+    /// conditional on `Deck::residency`, and the conversion has no deck to
+    /// ask: `Operation::Crossfade` says four records at its own definition,
+    /// and a `residency` record for a slot that is already live decodes to a
+    /// state it is already in.
     fn crossfade(&mut self) {
         let from = self.focus;
         let to = (from + 1) % self.deck.slot_count();
@@ -5956,18 +5983,10 @@ impl Live {
             eprintln!("crossfade needs somewhere to go — this deck holds one slot");
             return;
         }
-        self.operate(&Operation::SetOpacity {
-            deck: to as u8,
-            opacity: 0.0,
+        self.operate(&Operation::Crossfade {
+            from: from as u8,
+            to: to as u8,
         });
-        if self.deck.residency(to) != Residency::Live {
-            self.operate(&Operation::SetResidency {
-                deck: to as u8,
-                residency: mix::residency(Residency::Live),
-            });
-        }
-        self.fade_slot(from, 0.0);
-        self.fade_slot(to, 1.0);
         eprintln!(
             "crossfade {from} to {to} over {} beat{} from {}",
             self.fade_beats,
@@ -5994,8 +6013,15 @@ impl Live {
     /// shape, its position, the opacity, the blend mode and the put-on-air go
     /// through [`Live::operate`], because each of them *is* an operation the
     /// vocabulary names; only the scheduled move is left, and it is
-    /// [`Operation::Wipe`]'s own record, `Owed::NotSettled` for
-    /// [`Live::crossfade`]'s reason.
+    /// [`Operation::Wipe`]'s own record.
+    ///
+    /// **It is the last gesture here that builds one**, and the reason is no
+    /// longer the one [`Live::crossfade`] carried: the quantum and the length
+    /// have an owner now and a fade converts. What a wipe still owes is the
+    /// *shape* — `Operation::SetTransition`'s third setting, which this
+    /// program holds in `mask_kind` and `mask_angle` — and the soft edge,
+    /// which no operation names at all. `Owed::NotSettled` is what `written`
+    /// answers until somebody says whether those are the wipe's to write.
     ///
     /// **Six records where it used to write five**, and the extra one is what
     /// routing the mask honestly costs rather than an accident: the shape and
@@ -6120,12 +6146,12 @@ impl Live {
     /// see `playing_values` — so `k` after a press writes `{"t":"merge",
     /// "live":N}` and loading that file back comes up on renderer N.
     ///
-    /// **Its record is written here rather than through [`Live::operate`]**,
-    /// because [`Operation::SelectRenderer`] is `Owed::NotSettled` for
-    /// [`Live::fade_slot`]'s reason: a selection lands on the grid, and the
-    /// `start` below is a quantisation `written` has no engine to compute.
+    /// **Its record comes out of [`Live::operate`]**, which it did not while
+    /// the instant a selection lands on had nobody to supply it: the quantum
+    /// is this program's setting, `mix::current_transition` is where it
+    /// becomes an instant, and `written` writes the `select` record from it.
     /// Which renderer to move to is the keyboard's own translation and stays
-    /// here whatever happens to the record.
+    /// here, which is the whole of what is left of this function's arithmetic.
     fn cycle_renderer(&mut self) {
         let slot = self.focus;
         let set = self.deck.slot(slot).set();
@@ -6167,9 +6193,10 @@ impl Live {
             // them, which nothing here produces: start at the first.
             (None, _) => 0,
         };
-        let now = self.deck.signals().oscillator().beats();
-        let start = karakuri_engine::transition::quantise(now, self.quantum);
-        self.record(mix::select_record(slot, next, start));
+        self.operate(&Operation::SelectRenderer {
+            deck: slot as u8,
+            renderer: next as u32,
+        });
         eprintln!(
             "slot {slot} renderer {next} of {count} from {} — {}",
             self.quantum_name(),
@@ -6185,35 +6212,6 @@ impl Live {
                 )
             }
         );
-    }
-
-    /// One scheduled move on a slot's fader, through the record.
-    ///
-    /// The start is resolved **here**, once, against the grid as it stands: the
-    /// record carries an absolute beat count, because "at the next bar" is a
-    /// different instant depending on when it is read and a beat count is the
-    /// same one on every run.
-    ///
-    /// **Not through [`Live::operate`], and the reason is the record rather
-    /// than the route.** This is what `f`, `g`, `x` and `c` write, and the
-    /// operations they name — [`Operation::FadeDeck`], [`Operation::Crossfade`]
-    /// and [`Operation::Wipe`] — are all `Owed::NotSettled`: `written` cannot
-    /// build a `transition` record, because the start above is a quantisation
-    /// against the grid and the length is `Operation::SetTransition`'s, which
-    /// writes no record at all. Routing them through `operate` would print that
-    /// gap where a fade used to happen, which is the one thing a route change
-    /// may not do. This function is what goes the day the conversion lands.
-    fn fade_slot(&mut self, slot: usize, to: f32) {
-        let now = self.deck.signals().oscillator().beats();
-        let start = karakuri_engine::transition::quantise(now, self.quantum);
-        self.record(mix::transition_record(
-            slot,
-            karakuri_engine::transition::Control::Opacity,
-            to,
-            start,
-            self.fade_beats,
-            FADE_CURVE,
-        ));
     }
 
     /// Where a scheduled move starts: now, the next beat, or the next bar.
@@ -6418,11 +6416,34 @@ impl Live {
             Operation::SetSync { .. } => Some(mix::current_tempo(self.deck.signals().oscillator())),
             _ => None,
         };
+        // **The transition settings, for the three operations that schedule a
+        // move**, and the one reading here that is read off nothing: `n` and
+        // `j` set the quantum and the length, no record carries either, and
+        // they are this program's own state until it hands them over. That is
+        // the whole of what settling these three conversions decided — see
+        // `karakuri_operation_record::Transition`.
+        //
+        // `mix::current_transition` takes the oscillator and the quantum
+        // rather than an instant, so the start is
+        // `karakuri_engine::transition::quantise`'s answer and this file
+        // cannot hand in a beat the grid was never on.
+        let transition = match operation {
+            Operation::FadeDeck { .. }
+            | Operation::Crossfade { .. }
+            | Operation::SelectRenderer { .. } => Some(mix::current_transition(
+                self.deck.signals().oscillator(),
+                self.quantum,
+                self.fade_beats,
+                FADE_CURVE,
+            )),
+            _ => None,
+        };
         let current = Current {
             look: Some(mix::current_look(&self.look)),
             transport,
             mask,
             tempo,
+            transition,
         };
         match karakuri_operation_record::written(operation, &current) {
             Written::Records(records) => {
@@ -10172,16 +10193,8 @@ mod live_save_tests {
         ),
         (
             "wipe",
-            "`Wipe` — a mask no operation names at all, and a move quantised onto the grid",
-        ),
-        (
-            "cycle_renderer",
-            "`SelectRenderer` — the selection lands on a quantised instant",
-        ),
-        (
-            "fade_slot",
-            "`FadeDeck`, `Crossfade` and `Wipe` — quantised onto the grid, over a length \
-             `SetTransition` holds and no record carries",
+            "`Wipe` — the shape its front takes is `SetTransition`'s and the soft edge \
+             is no operation's, so nothing has said whose they are to write",
         ),
     ];
 
@@ -10207,11 +10220,13 @@ mod live_save_tests {
     ///
     /// The route `karakuri-midi` took is *operation → `written` → record*, and
     /// the reason it could take it whole is that every operation a map line
-    /// produces converts. A key handler cannot: six of its operations owe a
+    /// produces converts. A key handler cannot: three of its operations owe a
     /// record nobody can write yet, and routing one of those through `operate`
     /// would print the gap where the gesture used to be. It was seven, and
-    /// `SetSync` is the one that has left — a row deleted here rather than
-    /// kept, which is what the last loop below is for. So the ones that keep
+    /// four have left — `SetSync`, then `FadeDeck`, `Crossfade` and
+    /// `SelectRenderer` together when the transition settings became a
+    /// reading — each a row deleted here rather than kept, which is what the
+    /// last loop below is for. So the ones that keep
     /// their own path are named here rather than left to be noticed, and this
     /// is what stops the list growing by accident — a record built beside the
     /// conversion is exactly the drift `karakuri-operation-record` exists to
@@ -10241,12 +10256,14 @@ mod live_save_tests {
         }
         // A floor rather than a count, and a low one: what is guarded against
         // is the scan going quiet, which would let every direct write through.
-        // **Four, where it was five.** `cycle_sync` was the fifth and its
-        // record now comes out of `operate`, so a floor of five would fail as
-        // a dead scan on the day a row was correctly deleted — which is the
-        // one failure a guard against a dead scan must not invent.
+        // **Two, where it was five and then four.** `cycle_sync` was the
+        // fifth; `fade_slot` and `cycle_renderer` were the third and fourth
+        // and went together when the transition settings became a reading. A
+        // floor above what is left would fail as a dead scan on the day a row
+        // was correctly deleted — which is the one failure a guard against a
+        // dead scan must not invent.
         assert!(
-            reached.len() >= 4,
+            reached.len() >= 2,
             "only {} method(s) reading as record writers — the scan is not seeing \
              `Live`'s bodies: {reached:?}",
             reached.len()
@@ -10266,11 +10283,14 @@ mod live_save_tests {
     /// **The keys that keep their own path are exactly the ones whose record
     /// is not settled**, and this is what will say so the day one changes.
     ///
-    /// `f g`, `x`, `c`, `r`, `b` and `, .` build their records where they
+    /// `c`, `b` and `, .` build their records where they
     /// stand because `written` answers `Owed::NotSettled` for the operation
-    /// each of them names. **`y` is the one that has already gone**, and it
-    /// went the way this test names: `SetSync` stopped being owed, so the key
-    /// moved through [`Live::operate`] and its line here came out. That is a statement about
+    /// each of them names. **`y`, `f g`, `x` and `r` are the four that have
+    /// already gone**, and every one of them went the way this test names:
+    /// `SetSync` stopped being owed when the conversion took a session tempo,
+    /// and `FadeDeck`, `Crossfade` and `SelectRenderer` stopped when it took
+    /// the transition settings — so each key moved through [`Live::operate`]
+    /// and its line here came out, taking `Live::fade_slot` with it. That is a statement about
     /// `karakuri-operation-record` rather than about this file, so it is
     /// checked against that crate: the day somebody settles one of these
     /// conversions, this fails and names the key that is now due to move
@@ -10280,16 +10300,7 @@ mod live_save_tests {
     fn the_keys_that_keep_their_own_path_are_the_ones_whose_record_is_not_settled() {
         use karakuri_operation_record::Owed;
         let owed = [
-            ("f g", Operation::FadeDeck { deck: 0, to: 0.0 }),
-            ("x", Operation::Crossfade { from: 0, to: 1 }),
             ("c", Operation::Wipe { from: 0, to: 1 }),
-            (
-                "r",
-                Operation::SelectRenderer {
-                    deck: 0,
-                    renderer: 1,
-                },
-            ),
             ("b", Operation::TapBeat),
             (
                 ", .",

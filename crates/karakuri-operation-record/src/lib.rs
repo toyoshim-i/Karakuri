@@ -52,17 +52,17 @@
 //! added to the vocabulary does not compile here until somebody has said what
 //! it writes. The three answers are the three groups the survey found:
 //!
-//! - [`Written::Records`] — it writes these, in this order. Fourteen
+//! - [`Written::Records`] — it writes these, in this order. Seventeen
 //!   operations, eight of which need no reading at all.
-//! - [`Written::Silent`] — it writes none, and that is settled. Thirty-one,
+//! - [`Written::Silent`] — it writes none, and that is settled. Thirty-two,
 //!   for [`Silent`]'s four different reasons.
 //! - [`Written::Owed`] — it writes one and this build cannot make it.
-//!   Eighteen, for [`Owed`]'s three different reasons.
+//!   Fifteen, for [`Owed`]'s three different reasons.
 //!
 //! **`Owed` is not a refusal and not an error.** It is a gap this crate
 //! declares about itself, in the shape `karakuri_operation::Undecided` is: a
 //! caller that meets one has met a question nobody has answered, and printing
-//! it is more use than a silent no-op. Twelve of the eighteen are the
+//! it is more use than a silent no-op. Twelve of the fifteen are the
 //! vocabulary's own `Undecided` rows, and eight of those twelve are the master
 //! chain's three effects and the sequencer's five — two bays the manual
 //! specifies and nothing holds.
@@ -75,8 +75,26 @@
 //! from here — which is right, because a crate that pulled `wgpu` in would be
 //! unreachable from every surface again. Anything an operation's record needs
 //! that is arithmetic rather than a value has to arrive inside [`Current`], and
-//! the six operations whose record needs the grid's position or the beat
-//! tracker are [`Owed::NotSettled`] until somebody decides who computes it.
+//! the three operations whose record needs the beat tracker or a mask no
+//! operation names are [`Owed::NotSettled`] until somebody decides who supplies
+//! the rest.
+//!
+//! **Scheduling a move was four of those six and three of the four are now a
+//! reading.** A fade, a crossfade and a renderer selection each need the
+//! instant they land on, the length and the shape, and none of those is
+//! arithmetic once the instant is: `quantise` is computed where the operator
+//! asked, once, and its answer arrives here as [`Current::transition`].
+//! Nothing here divides by a quantum, which is the rule the tempo is read
+//! under one paragraph down — the arithmetic stays in the crate that owns the
+//! grid and what crosses the seam is its result.
+//!
+//! **The wipe is the fourth and is still owed**, which is the difference
+//! between a gesture that is a scheduled move and one that only contains one:
+//! `Operation::Wipe`'s six records include the shape the front takes, which is
+//! `Operation::SetTransition`'s third setting, and the soft edge, which no
+//! operation names at all. Those are a `Record::Mask`'s and reach a record
+//! through `Operation::SetMaskShape`; what a wipe still owes is who says they
+//! are its.
 //!
 //! **`Operation::SetSync` was the seventh and is now a reading**, which is what
 //! that sentence looks like when it is paid. `Transport::engaged` decides what
@@ -156,6 +174,86 @@ pub struct Transport {
     pub scrub_beats: f64,
 }
 
+/// **What the next scheduled move means**, which is what
+/// [`Operation::FadeDeck`], [`Operation::Crossfade`] and
+/// [`Operation::SelectRenderer`] each need and none of them carries.
+///
+/// **It is the surface's, and that is the decision this type is.** The quantum
+/// a move starts on and the length it lasts are `Operation::SetTransition`'s,
+/// which writes no record at all because it is a setting deciding what the
+/// *next* fade means — *"These change nothing you can see and write nothing to
+/// the stream"*. An operation says what it wants and never how it is
+/// scheduled, so a fade carrying its own quantum would be two answers to one
+/// question: the operator would set a length with `j` and a fade would arrive
+/// with a different one, and nothing anywhere would say which of them was the
+/// setting. What is scheduled is the operation's; when and how long is what
+/// the surface it was asked on already decided, and this is that decision
+/// handed over.
+///
+/// **This reading is a completion in [`Look`]'s sense, not a preference.**
+/// [`Record::Transition`] is written whole — a slot, a control, a
+/// destination, an instant, a length and a curve — and `Operation::FadeDeck`
+/// carries two of the six. The other four are here for exactly ADR-0192's
+/// reason: a stream that scheduled a fade without saying when it lands or how
+/// long it takes would describe a move nobody can reconstruct.
+///
+/// **The wipe shape is deliberately not here**, although it is
+/// `SetTransition`'s third setting. What this type holds is what
+/// `Record::Transition` and [`Record::Select`] need and the operation does not
+/// carry; a shape is a `Record::Mask`'s and reaches a record through
+/// [`Operation::SetMaskShape`], which converts already. A field for it would
+/// be a value no arm reads.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Transition {
+    /// **The musical instant the move lands on, in beats**, absolute on the
+    /// session's beat count.
+    ///
+    /// Absolute and never relative, which is [`Record::Transition`]'s own
+    /// rule: *"a relative instant is a different instant depending on when it
+    /// is read and a beat count is the same one on every run"*. Quantising to
+    /// the next bar happens where the operator asked, once —
+    /// `karakuri_engine::transition::quantise` is the one grid there is and
+    /// this crate cannot reach it, so what arrives here is that function's
+    /// answer rather than the quantum it was asked with.
+    ///
+    /// **A caller with no opinion about the grid has one to give, and ASAP
+    /// needed nothing invented.** `quantise` documents a quantum of 0 as
+    /// *"now"* and hands the beat count back unchanged, so a surface that
+    /// wants a cut passes the instant it is at and the move is due the moment
+    /// it is read — `Transition::value_at` and `Selection::due` are both `>=`,
+    /// so the instant itself belongs to the move. That is why this is one
+    /// `f64` and not an `Option` or a sum with an `Asap` arm: the grid already
+    /// spells *now*, and a second spelling of it here would be a value the
+    /// engine would have to be taught to read back.
+    pub start: f64,
+    /// **How long the move lasts, in beats. Zero is a cut**, which is
+    /// [`Record::Transition`]'s own reading of it and is what
+    /// `karakuri-cli`'s length cycle offers as its fourth position.
+    ///
+    /// Read by a fade and a crossfade and **not by a selection**:
+    /// `Record::Select` has no length and no curve, because *"half way to
+    /// renderer 2" does not name a picture*. A selection reads [`start`] alone
+    /// and the other two fields are beside the point of it rather than absent
+    /// from it, which is why this is one reading and not two.
+    ///
+    /// [`start`]: Transition::start
+    pub beats: f64,
+    /// **The shape the move takes**, and the one field here that is not on any
+    /// surface at all.
+    ///
+    /// No operation names a curve for a fade — `karakuri-cli` holds one
+    /// constant and says of it that it is *"Not on a key"*, because the other
+    /// three curves are for signals and a fade wants easing and nothing else.
+    /// So it is carried here for [`Look::white_point`]'s reason exactly: the
+    /// record is written whole, and a conversion that dropped it would have to
+    /// invent a shape for a move somebody else chose.
+    ///
+    /// The vocabulary's [`karakuri_operation::Curve`] rather than a wire name,
+    /// which is [`Look::tonemap`]'s rule — a `String` here would make this
+    /// crate the place a typo arrives.
+    pub curve: karakuri_operation::Curve,
+}
+
 /// **What is running, at the instant the operation arrives.**
 ///
 /// A plain struct of values rather than a trait the caller implements, and the
@@ -165,6 +263,14 @@ pub struct Transport {
 /// record at all** — it is a surface's own setting deciding what the *next*
 /// move means. A trait over "the deck" could not answer for them; a value
 /// handed in can, the day somebody decides whose they are.
+///
+/// **That day came, and [`Current::transition`] is what it looks like paid.**
+/// A length is nothing a deck holds and nothing a deck can be asked for, which
+/// is why the sentence above was written as a prediction; what settled it was
+/// deciding *whose* the setting is rather than finding somewhere to read it
+/// from. It is the surface's, it sits here beside `tempo`, `transport`, `look`
+/// and `mask`, and the four operations that were owed a
+/// scheduled move are three conversions and a wipe now.
 ///
 /// **Every field is optional, and [`Current::default`] means *I read
 /// nothing*.** That is load-bearing. A default `Look` would let
@@ -179,7 +285,10 @@ pub struct Transport {
 /// names exactly one deck, so a map from deck to transport would be a
 /// container built to be indexed once.
 /// [`Current::mask`] is the mask of that same deck, on the same terms.
-/// [`Current::tempo`] is the one reading here that belongs to no deck at all.
+/// [`Current::tempo`] and [`Current::transition`] are the two readings here
+/// that belong to no deck at all — one is the room's and one is the surface's,
+/// and a crossfade naming two decks reads the same transition for both halves
+/// because that is what makes it one gesture.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Current {
     pub look: Option<Look>,
@@ -217,6 +326,22 @@ pub struct Current {
     /// `mix`'s `a_sync_mode_writes_exactly_what_the_engine_would_engage`, in
     /// the one crate that can see both.
     pub tempo: Option<f32>,
+    /// **What the next scheduled move means**, which is what a fade, a
+    /// crossfade and a renderer selection are each half of. See
+    /// [`Transition`], which carries the whole argument for why it is the
+    /// surface's and not the operation's.
+    ///
+    /// **It is a convention on [`Current::tempo`]'s terms, and the structural
+    /// half is the same shape.** `karakuri_environment::mix`'s
+    /// `current_transition` takes the session's oscillator and a quantum
+    /// rather than a beat count, so a caller cannot hand in an instant the
+    /// grid never had without writing one down — and a caller with no opinion
+    /// about the grid gives a quantum of 0, which `quantise` answers with the
+    /// beat it is on. What is not structural is that this is the *setting* the
+    /// operator last chose rather than one the gesture invented, and that is
+    /// each surface's to keep: there is nothing to read it back from, which is
+    /// the whole reason it is handed in.
+    pub transition: Option<Transition>,
 }
 
 /// Which reading an [`Owed::NotRead`] wanted, so a caller can say what it did
@@ -229,9 +354,14 @@ pub enum Reading {
     Transport,
     /// [`Current::mask`], for the deck the operation names.
     Mask,
-    /// [`Current::tempo`] — the session's, and so the only one of the four
-    /// that names no deck.
+    /// [`Current::tempo`] — the session's, and so one of the two that names no
+    /// deck.
     Tempo,
+    /// [`Current::transition`] — the surface's, and the other one. A caller
+    /// that meets this forgot a setting it is already holding rather than a
+    /// reading it would have had to take off the engine, which makes it the
+    /// one of the five answered by remembering rather than by looking.
+    Transition,
 }
 
 /// **Why an operation writes no record**, and there are four different
@@ -299,21 +429,29 @@ pub enum Owed {
     /// and which nobody can yet say owes one.
     Undecided,
     /// **Its record is not a function of values alone, and who supplies the
-    /// rest is undecided.** Six operations, and they divide cleanly:
-    /// scheduling one (a fade, a crossfade, a wipe, a renderer selection)
-    /// needs the grid's position quantised onto a musical instant, plus the
-    /// quantum and the length that `Operation::SetTransition` sets and no
-    /// record carries; and moving the grid (a tap, an octave shift) needs the
-    /// beat tracker rather than a value, and may be refused by it.
+    /// rest is undecided.** Three operations, and they divide into two shapes:
+    /// moving the grid (a tap, an octave shift) needs the beat tracker rather
+    /// than a value and may be refused by it; and a wipe needs the shape its
+    /// front takes, which is `Operation::SetTransition`'s third setting, and
+    /// the soft edge, which no operation names anywhere.
     ///
-    /// **Setting a sync mode was the seventh and is not any more.** It was
-    /// held here because the anchor goes through the engine's clamp, so
-    /// whether the record carried what was asked for or what was clamped
-    /// looked like a decision about the bytes on disk. It is not one: the two
-    /// are the same number for every tempo an oscillator can report, and
-    /// what the record carries was decided at `Transport::engaged` with the
-    /// reason written at it. What was actually missing was a reading, and
-    /// [`Current::tempo`] is it.
+    /// **It was six, and the four that left went in two different ways.**
+    /// Setting a sync mode was held here because the anchor goes through the
+    /// engine's clamp, so whether the record carried what was asked for or
+    /// what was clamped looked like a decision about the bytes on disk. It is
+    /// not one: the two are the same number for every tempo an oscillator can
+    /// report, and what the record carries was decided at `Transport::engaged`
+    /// with the reason written at it. A fade, a crossfade and a renderer
+    /// selection were held for a different question — *whose* the quantum and
+    /// the length are — and that one had an answer rather than a computation
+    /// behind it: they are the surface's. Both times what was actually missing
+    /// was a reading; [`Current::tempo`] is the first and
+    /// [`Current::transition`] is the second.
+    ///
+    /// **The wipe stayed, and that is the line between the two answers.** Its
+    /// scheduled move is a fade's exactly; what it also carries is a mask, and
+    /// nothing has said whether the shape `SetTransition` holds is the wipe's
+    /// to write. Deciding that is one sentence and it is not this one.
     NotSettled,
 }
 
@@ -329,6 +467,9 @@ impl Owed {
             }
             Owed::NotRead(Reading::Mask) => "the mask of the deck it names was not read",
             Owed::NotRead(Reading::Tempo) => "the session tempo its anchor comes from was not read",
+            Owed::NotRead(Reading::Transition) => {
+                "the transition settings its move is scheduled by were not handed over"
+            }
             Owed::Undecided => "what it acts on is an open question in the vocabulary itself",
             Owed::NotSettled => "the record it writes is not a function of values alone, and who supplies the rest is undecided",
         }
@@ -341,15 +482,19 @@ pub enum Written {
     /// The records it writes, **in the order they must be written**, and never
     /// empty.
     ///
-    /// A list rather than one record, although every conversion built today
-    /// answers exactly one. `Operation::Crossfade` is four records and
-    /// `Operation::Wipe` is six — five until the mask took a row for its
-    /// shape and a row for its position, each of which writes a whole
-    /// `Record::Mask` (ADR-0201) — that is what `karakuri-cli`'s `crossfade`
-    /// and `wipe` already do, and it is the whole of what P-0028 claims: one
-    /// control, however many records the deck needs to be told. Both are
-    /// [`Owed::NotSettled`] for a different reason, and the shape of this
-    /// answer is not the thing keeping them out.
+    /// A list rather than one record, and **`Operation::Crossfade` is what it
+    /// was built for**: four records — the incoming deck silenced, put on air,
+    /// and the two scheduled moves — out of one press, which is the whole of
+    /// what P-0028 claims. One control, however many records the deck needs to
+    /// be told.
+    ///
+    /// It was written before anything answered more than one, against the day
+    /// a gesture would, and the prediction is what held: nothing about this
+    /// shape changed when the crossfade landed. `Operation::Wipe` is six for
+    /// the same reason — five until the mask took a row for its shape and a
+    /// row for its position, each of which writes a whole `Record::Mask`
+    /// (ADR-0201) — and is still [`Owed::NotSettled`], which was never about
+    /// the shape of this answer.
     Records(Vec<Record>),
     /// It writes none, and that is settled. See [`Silent`].
     Silent(Silent),
@@ -539,11 +684,85 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
             None => Written::Owed(Owed::NotRead(Reading::Tempo)),
         },
 
-        // ----- Owed: the grid and the tracker ------------------------------
-        Operation::FadeDeck { .. }
-        | Operation::Crossfade { .. }
-        | Operation::Wipe { .. }
-        | Operation::SelectRenderer { .. }
+        // ----- What it schedules, given the surface's settings -------------
+        //
+        // Three, and the reading they share is [`Current::transition`]: the
+        // instant the move lands on, how long it lasts and the shape it
+        // takes. None of the three is on the operation, because an operation
+        // says what it wants and never how it is scheduled.
+        //
+        // **The fader and never the trim.** `FadeDeck` says of itself that it
+        // is opacity only — *"a gain fade is in the record vocabulary and has
+        // no control"* — because opacity is what silences a deck under every
+        // blend mode, where a gain of zero under `over` is a black card that
+        // still covers what is beneath it.
+        Operation::FadeDeck { deck, to } => match current.transition {
+            Some(transition) => one(fade(*deck, *to, transition)),
+            None => Written::Owed(Owed::NotRead(Reading::Transition)),
+        },
+        // **One gesture, four records, and the order is the picture.**
+        //
+        // The incoming deck is silenced *first* and put on air second, and
+        // both halves are load-bearing: a deck comes up at full opacity and
+        // going off air does not lower it, so putting one on air without
+        // silencing it first shows it at full immediately — up to a bar
+        // before the fade it is supposed to arrive on, which is a cut with a
+        // decorative fade attached. And a fade to something that is not being
+        // composited is a fade to black, so it does have to go on air.
+        //
+        // **The put-on-air is unconditional**, which is the one place this
+        // differs from the keyboard gesture it replaces: `karakuri-cli` wrote
+        // the residency only when the deck was not already live. A record is
+        // what a replay reconstructs a performance from, and a conversion that
+        // skipped it would be reading a deck state this crate cannot see —
+        // there is no residency in [`Current`] and adding one would be a
+        // reading taken to omit a record rather than to write one.
+        // `Operation::Crossfade` says four records at its own definition, and
+        // four is what a replay gets.
+        //
+        // **Both halves read the same transition**, which is what makes them
+        // one gesture without being one type: they share a start and a length,
+        // and `karakuri_engine::transition` is where the argument for that
+        // lives — the first-class thing is the move, and every gesture anyone
+        // names is made of those.
+        Operation::Crossfade { from, to } => match current.transition {
+            Some(transition) => Written::Records(vec![
+                Record::Opacity {
+                    slot: *to,
+                    value: 0.0,
+                },
+                Record::Residency {
+                    slot: *to,
+                    level: karakuri_operation::Residency::Live.name().to_string(),
+                },
+                fade(*from, 0.0, transition),
+                fade(*to, 1.0, transition),
+            ]),
+            None => Written::Owed(Owed::NotRead(Reading::Transition)),
+        },
+        // **A choice and not a position, so it reads the instant and nothing
+        // else.** `Record::Select` carries no length and no curve — *"half way
+        // to renderer 2" does not name a picture* — and it is still the same
+        // reading rather than a narrower one, because what a surface holds is
+        // one setting: a selection scheduled from a quantum an operator set
+        // with `n` lands where the fades land, which is the point of setting
+        // it.
+        Operation::SelectRenderer { deck, renderer } => match current.transition {
+            Some(transition) => one(Record::Select {
+                slot: *deck,
+                renderer: *renderer,
+                start: transition.start,
+            }),
+            None => Written::Owed(Owed::NotRead(Reading::Transition)),
+        },
+
+        // ----- Owed: the tracker, and a mask nobody has assigned -----------
+        //
+        // **A wipe is here and its three neighbours are not**, which is the
+        // line [`Owed::NotSettled`] draws: its scheduled move is a fade's
+        // exactly, and the five records around it include a shape that is
+        // `Operation::SetTransition`'s and a soft edge no operation names.
+        Operation::Wipe { .. }
         | Operation::TapBeat
         | Operation::ScaleGrid { .. } => Written::Owed(Owed::NotSettled),
 
@@ -726,6 +945,39 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
 fn one(record: Record) -> Written {
     Written::Records(vec![record])
 }
+
+/// **One scheduled move on a deck's fader**, which is a fade and is half of a
+/// crossfade.
+///
+/// A function rather than three copies, for the reason a crossfade is two
+/// calls to it: the two halves have to agree about the start, the length and
+/// the shape or they are not one gesture, and a second spelling of this record
+/// is exactly the drift this crate exists to end.
+fn fade(slot: u8, to: f32, transition: Transition) -> Record {
+    Record::Transition {
+        slot,
+        control: OPACITY.to_string(),
+        to,
+        start: transition.start,
+        beats: transition.beats,
+        curve: transition.curve.name().to_string(),
+    }
+}
+
+/// **The wire name of the control a fade moves**, and the one spelling in this
+/// crate with no list of its own behind it.
+///
+/// `Record::Transition`'s `control` is `gain`, `opacity` or `mask`, and that
+/// list is `karakuri_engine::transition::Control` — the engine's, and
+/// unreachable from here. The vocabulary does not own a copy because no
+/// operation names a control: `Operation::FadeDeck` *is* the opacity one and
+/// says so at its own definition, and the gain fade the record vocabulary
+/// allows has no operation at all. So there is nothing here for a match to be
+/// exhaustive over, and what stands in for one is a test in
+/// `karakuri-environment`'s `mix` — the one place that sees this literal and
+/// the engine's list at once, exactly as the mode and level names one group up
+/// are checked there.
+const OPACITY: &str = "opacity";
 
 /// **The vocabulary's layer as the store's**, which is the one list this crate
 /// has to translate between rather than carry.
@@ -1291,6 +1543,225 @@ mod tests {
         );
     }
 
+    /// The transition settings nothing else in these tests happens to be: an
+    /// instant that is not zero and not a whole bar, a length that is not the
+    /// default and a curve that is not the first in the list — so a conversion
+    /// filling any of the three in from thin air is visible rather than
+    /// coincidentally right.
+    fn transition() -> Transition {
+        Transition {
+            start: 37.0,
+            beats: 6.0,
+            curve: karakuri_operation::Curve::Smooth,
+        }
+    }
+
+    /// **A fade lands on the instant and over the length the surface chose**,
+    /// which is the whole of what settling this conversion decided: the
+    /// quantum and the length are `Operation::SetTransition`'s, that operation
+    /// writes no record, and they reach the stream through the reading rather
+    /// than through the fade.
+    ///
+    /// **Opacity and never gain**, which is `Operation::FadeDeck`'s own
+    /// sentence: a fade to zero has to silence the deck under every blend
+    /// mode, and a gain of zero under `over` is a black card that still
+    /// covers.
+    #[test]
+    fn a_fade_lands_on_the_instant_and_the_length_the_surface_chose() {
+        let current = Current {
+            transition: Some(transition()),
+            ..Current::default()
+        };
+        assert_eq!(
+            records(written(&Operation::FadeDeck { deck: 2, to: 0.0 }, &current)),
+            vec![Record::Transition {
+                slot: 2,
+                control: "opacity".to_string(),
+                to: 0.0,
+                start: 37.0,
+                beats: 6.0,
+                curve: "smooth".to_string(),
+            }],
+            "a fade wrote a move on another control, at another instant, over another \
+             length or in another shape than the settings it was handed — every one of \
+             those four is the surface's and none of them is on the operation"
+        );
+    }
+
+    /// **A crossfade is four records and both halves share the move.**
+    ///
+    /// The order is the picture and not a preference: the arriving deck is
+    /// silenced *before* it is put on air, because a deck comes up at full
+    /// opacity and going off air does not lower it — putting one on air first
+    /// shows it at full immediately, up to a bar before the fade it is
+    /// supposed to arrive on. And a fade to something that is not composited
+    /// is a fade to black, so it does have to go on air.
+    ///
+    /// **The two moves share a start and a length**, which is what makes this
+    /// one gesture without being one type. A conversion that read the settings
+    /// twice could not be caught by an equality on one record; it is caught by
+    /// asserting the pair.
+    #[test]
+    fn a_crossfade_is_four_records_and_both_halves_share_the_move() {
+        let current = Current {
+            transition: Some(transition()),
+            ..Current::default()
+        };
+        assert_eq!(
+            records(written(&Operation::Crossfade { from: 0, to: 1 }, &current)),
+            vec![
+                Record::Opacity {
+                    slot: 1,
+                    value: 0.0,
+                },
+                Record::Residency {
+                    slot: 1,
+                    level: "live".to_string(),
+                },
+                Record::Transition {
+                    slot: 0,
+                    control: "opacity".to_string(),
+                    to: 0.0,
+                    start: 37.0,
+                    beats: 6.0,
+                    curve: "smooth".to_string(),
+                },
+                Record::Transition {
+                    slot: 1,
+                    control: "opacity".to_string(),
+                    to: 1.0,
+                    start: 37.0,
+                    beats: 6.0,
+                    curve: "smooth".to_string(),
+                },
+            ],
+            "a crossfade wrote something other than the four records its operation \
+             names, in another order, or gave its two halves different instants — the \
+             arriving deck is silenced before it is put on air, and the two moves are \
+             one gesture exactly because they share a start and a length"
+        );
+    }
+
+    /// **A selection is a cut, so it reads the instant and nothing else.**
+    ///
+    /// `Record::Select` has no length and no curve because *"half way to
+    /// renderer 2" does not name a picture*, and this is what says the
+    /// conversion agrees: the same operation against two readings that differ
+    /// in every field but the start writes the same record.
+    #[test]
+    fn a_selection_is_a_cut_and_reads_the_instant_alone() {
+        let select = Operation::SelectRenderer {
+            deck: 3,
+            renderer: 2,
+        };
+        let expected = vec![Record::Select {
+            slot: 3,
+            renderer: 2,
+            start: 37.0,
+        }];
+        let current = Current {
+            transition: Some(transition()),
+            ..Current::default()
+        };
+        assert_eq!(
+            records(written(&select, &current)),
+            expected,
+            "a selection landed on another renderer, another deck or another instant \
+             than the one it was handed"
+        );
+        let other = Current {
+            transition: Some(Transition {
+                start: 37.0,
+                beats: 0.0,
+                curve: karakuri_operation::Curve::Lin,
+            }),
+            ..Current::default()
+        };
+        assert_eq!(
+            records(written(&select, &other)),
+            expected,
+            "the length or the shape of a fade reached a selection's record — a \
+             selection is a choice and a choice is a cut"
+        );
+    }
+
+    /// **A cut is an instant that is now and a length of zero**, and both
+    /// halves of it arrive rather than being invented.
+    ///
+    /// `karakuri_engine::transition::quantise` documents a quantum of 0 as
+    /// *"now"* and hands the beat count straight back, so a surface asking for
+    /// a cut has nothing to say that the grid does not already spell: the
+    /// start is the beat the session is on. This crate never sees the quantum
+    /// — that is `karakuri_environment::mix`'s
+    /// `a_quantum_of_zero_starts_the_move_on_the_beat_it_was_asked_on`, in the
+    /// crate that owns the grid — and what it must not do is round, floor or
+    /// otherwise improve the instant it was handed.
+    #[test]
+    fn a_cut_is_the_instant_it_was_handed_and_a_length_of_zero() {
+        let current = Current {
+            // The beat count a session was at, unrounded on purpose: a
+            // conversion that quantised anything would move it.
+            transition: Some(Transition {
+                start: 12.375,
+                beats: 0.0,
+                curve: karakuri_operation::Curve::Smooth,
+            }),
+            ..Current::default()
+        };
+        assert_eq!(
+            records(written(&Operation::FadeDeck { deck: 1, to: 1.0 }, &current)),
+            vec![Record::Transition {
+                slot: 1,
+                control: "opacity".to_string(),
+                to: 1.0,
+                start: 12.375,
+                beats: 0.0,
+                curve: "smooth".to_string(),
+            }],
+            "a cut was moved onto a grid or given a length — a quantum of 0 is `now`, \
+             and an operator who asked for a cut is waiting for nothing"
+        );
+    }
+
+    /// **A surface that handed in no settings is told which reading it
+    /// forgot**, rather than getting a cut it did not ask for.
+    ///
+    /// This is [`a_reading_that_was_not_taken_is_owed_rather_than_guessed`] on
+    /// the reading that is not read off anything: a default of zero would be a
+    /// perfectly plausible `Transition` — a start of 0 is in the past and a
+    /// length of 0 is a cut — so a surface that forgot its settings would get
+    /// every fade as an instant jump and nothing anywhere would say so. All
+    /// three are asserted, because the failure is the conversion's and not one
+    /// operation's.
+    #[test]
+    fn a_surface_that_handed_in_no_settings_is_told_which_reading_it_forgot() {
+        for operation in [
+            Operation::FadeDeck { deck: 1, to: 0.0 },
+            Operation::Crossfade { from: 0, to: 1 },
+            Operation::SelectRenderer {
+                deck: 0,
+                renderer: 1,
+            },
+        ] {
+            assert_eq!(
+                written(&operation, &Current::default()),
+                Written::Owed(Owed::NotRead(Reading::Transition)),
+                "`{operation:?}` with no transition settings handed in came back with \
+                 something other than the reading it is missing — a default here is a \
+                 cut at beat zero, which is a move nobody asked for and a replay would \
+                 reproduce faithfully"
+            );
+        }
+        // And the sentence names the settings rather than something missing,
+        // which is what `NotRead` is for.
+        assert_ne!(
+            Owed::NotRead(Reading::Transition).why(),
+            Owed::NotSettled.why(),
+            "a surface that forgot its settings is told the same thing as one that met \
+             a question nobody has answered"
+        );
+    }
+
     /// **A file is not a record, and the whole arrangement family says so the
     /// same way.**
     ///
@@ -1334,13 +1805,10 @@ mod tests {
             "selecting a deck is a surface's own state and settled — not a gap"
         );
         assert_eq!(
-            written(
-                &Operation::FadeDeck { deck: 1, to: 0.0 },
-                &Current::default()
-            ),
+            written(&Operation::Wipe { from: 0, to: 1 }, &Current::default()),
             Written::Owed(Owed::NotSettled),
-            "a fade writes a `transition` record and cannot be written here — saying \
-             it is silent would lose a fade an operator asked for"
+            "a wipe writes six records and cannot be written here — saying it is silent \
+             would lose a wipe an operator asked for"
         );
         assert_eq!(
             written(

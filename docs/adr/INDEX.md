@@ -257,6 +257,7 @@ number; new records continue from the end.
 | [ADR-0229](0229-a-set-file-is-authored-beside-its-parts-and-travels-as-a-bundle.md) | A Set file is authored beside its parts and travels as a bundle, never by a name a search path resolves | 2026-08-30 | accepted |
 | [ADR-0230](0230-where-the-programs-data-lives-is-told-rather-than-baked.md) | Where the program's data lives is told rather than baked, and a default is a search that says which candidate answered | 2026-08-30 | accepted |
 | [ADR-0231](0231-a-sets-two-forms-take-two-extensions-and-the-store-holds-only-the-resolved-one.md) | A Set's two forms take two extensions, and the store holds only the resolved one | 2026-08-30 | accepted |
+| [ADR-0232](0232-a-control-is-thrown-because-the-request-is-asynchronous-and-a-curve-is-a-helper-on-the-control-map.md) | A control is thrown because the request is asynchronous, and a curve is a helper where the control map already sits | 2026-08-31 | accepted |
 
 ## Retired numbers
 
