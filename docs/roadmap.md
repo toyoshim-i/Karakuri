@@ -723,15 +723,12 @@ column cannot be reached by a program that has not — *Tap the beat* and *Nudge
 are `karakuri_environment::audio::Audio`'s methods and that type *"cannot be constructed without
 opening a device"*, tapping needs the output lag for the same reason the CLI's does, *Attach a beat
 source* is the tempo source, and *Attach a signal to a parameter* wants a bus with something on it.
-**This is unwired rather than ruled out**, and the distinction was got wrong once already:
-`crates/karakuri/src/main.rs`'s header says *"and **no more than that**: no audio, no MIDI, no MCP,
-no replay and no session"*, which reads as a charter and is an **inventory** — it lists what
-`karakuri-cli` wires and this program does not, which is why *replay* and *session* are in the same
-sentence. It is a description, and descriptions rot: the clause in front of it said *two slots*
-while the deck held four. ADR-0214 is the boundary that actually governs, and it makes this program
-one of two thin binaries over `karakuri-environment` — the package `audio.rs` lives in. So the four
-rows are work the design already anticipated, sitting in the board's `transport`, `tap`, `offset`
-and `sensitivity row` groups looking like drawings.
+**It is unwired, and that is all it is.** `crates/karakuri/src/main.rs`'s header says *"no audio,
+no MIDI, no MCP, no replay and no session"*; the word it was missing is *yet*, and it has it now.
+Nothing is refused and nothing has to be decided — ADR-0214 already makes this program one of two
+thin binaries over `karakuri-environment`, the package `audio.rs` lives in. The four rows are work,
+sitting in the board's `transport`, `tap`, `offset` and `sensitivity row` groups looking like
+drawings.
 
 **One thing is owed by the mixer and is nobody's next task**: `Control::MaskPosition` is the third
 control a transition can move, the strip has no control and no readout for that number, so **an
