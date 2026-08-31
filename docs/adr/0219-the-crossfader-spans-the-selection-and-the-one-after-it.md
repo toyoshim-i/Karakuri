@@ -1,10 +1,10 @@
 ---
 id: 0219
 title: The crossfader spans the selection and the one after it
-status: accepted
+status: superseded
 date: 2026-08-29
 supersedes: []
-superseded_by: []
+superseded_by: [0233]
 principles: [0028, 0076]
 tags: [ui]
 ---
