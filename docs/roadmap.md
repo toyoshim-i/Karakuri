@@ -782,6 +782,44 @@ sed -n '/^operations! {/,/^}$/p' crates/karakuri-operation/src/lib.rs |
   done
 ```
 
+```sh
+# how much the manual says about each thing it is still owed — the priority signal
+python3 -c '
+import re, pathlib
+s = pathlib.Path("docs/manual/operations.html").read_text()
+out = []
+for chunk in re.split(r"<h3", s)[1:]:
+    title = re.sub(r"<[^>]*>", "", chunk.split("</h3>")[0]).strip().lstrip(">")
+    m = re.search(r"class=\"rt (\w+)\">panel", chunk)
+    if not m or m.group(1) != "plan":
+        continue
+    body = chunk.split("</h3>", 1)[1].split("class=\"rt ")[0]
+    out.append((len(" ".join(re.sub(r"<[^>]*>", " ", body).split())), title))
+for n, t in sorted(out, reverse=True):
+    print(f"{n:5d}  {t}")
+'
+```
+
+**The fifth is a priority, and it is the maintainer's reading rule, given on 2026-08-31:** *the mock
+is not exhaustive. A tooltip is something everything should carry in the end, but only the
+characteristic ones are worked out. There will be gaps in the functions too — leave a purposeful
+note for those, aimed at what the thing is for — **and the more detail something is written in, the
+more important it is and the sooner it is wanted.*** So the length of what the page says about a row
+is not decoration: it is how much thought has been spent on it, and it sorts the board by what the
+specification cares about rather than by where a control happens to live.
+
+**An empty tooltip is not a defect to fill in.** It is a control nobody has needed to spell out yet,
+and treating it as a hole to close inverts the priority this command reads — which is a mistake this
+file can watch being made, twice on 2026-08-30 and 2026-08-31: the Library's `presets` scope and the
+transport's `audio-in` pill were each found without a tooltip and each read as *underspecified*. The
+first was right for a different reason — it was being built that day. The second is a control at the
+bottom of this list, and the reason to reach for it is that the maintainer asked for it, not that it
+had no prose.
+
+**What is owed where a function is missing is a note saying what it would be for.** Silence there is
+the one thing that loses information, because a gap with no note is indistinguishable from a
+decision.
+
 **The fourth is the newest and it answers a question the badges cannot.** A `plan` badge says a
 surface is meant to reach an operation and does not yet; it says nothing about *why*, and the two
 whys are not the same work. An operation nothing constructs is one nobody can route to at all —
