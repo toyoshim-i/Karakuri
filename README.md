@@ -46,10 +46,11 @@ cargo run -p karakuri-cli -- --render out.png --frames 240   # one frame to a PN
 console has the picture, the deck previews, the transport, the mixer, the Library bay and
 the Inspector, and no MIDI, MCP or replay yet. **It listens to the room**: it opens the
 default audio input at startup, the transport row's `audio-in` pill says which one and
-lists the others, and `b`, `,` and `.` tap the beat and move the grid an octave. The Staging lane draws its
-empty state, which is the only state that program can reach; the Master and Sequencer bays
-draw nothing but their heads. Press `h` in the CLI's window for the keys and `s` for the
-status line.
+lists the others, and `b`, `,` and `.` tap the beat and move the grid an octave. **Every slot
+watches its `.kir` pair**, so the Staging lane is empty until a file changes and then carries a
+row per slot whose newest build has a verdict outstanding. The Master bay draws its out row and
+the Sequencer bay draws nothing but its head. Press `h` in the CLI's window for the keys and `s`
+for the status line.
 
 **To play it rather than to judge it, read [`docs/manual.md`](docs/manual.md)** — a
 walkthrough, every flag and key, what the status line means, and a list of the things it
@@ -64,11 +65,14 @@ not about design, and it had no home until the manual had one.
 - Rust + wgpu 30 (WGSL), winit
 - **The CLI is scaffolding rather than the destination** — the end state is a GUI application, so
   the command line is deliberately an auxiliary way to reach what the records already carry. That
-  application is being built: [`karakuri-console`](crates/karakuri-console) opens a window with the
-  panel's arrangement in it — dividers that drag, regions that fold, a live engine frame in the
-  Program bay, the deck previews under or beside it, the transport, the mixer read off the deck, the Library bay
-  listing what the store holds, the Inspector read off the running Set, and the outputs. **It is a program now** — `cargo run -p karakuri`,
-  the binary in [`crates/karakuri`](crates/karakuri), which is what the panel column of
+  application is being built: `cargo run -p karakuri` — the binary in
+  [`crates/karakuri`](crates/karakuri) — opens a window with
+  [`karakuri-console`](crates/karakuri-console)'s arrangement in it — dividers that drag, regions
+  that fold, a live engine frame in the Program bay, the deck previews under or beside it, the
+  transport, the mixer read off the deck, the Library bay
+  listing what the store holds, the Inspector read off the running Set, and the outputs. **It is a program now**, and the console crate is
+  not one: it holds the arrangement and the view and opens nothing, because the window, the
+  device and the event loop are the binary's (ADR-0156). The binary is what the panel column of
   [the operations page](docs/manual/operations.html) is measured against (ADR-0213). It was an
   example until ADR-0214, and for one reason: everything a program needs beyond the panel was in
   `karakuri-cli`, which has no library target, so there was nothing for a binary to sit on. There

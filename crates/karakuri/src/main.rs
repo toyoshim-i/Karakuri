@@ -94,6 +94,31 @@
 //! the command line beside `--presets` and `--store`. Three things beyond the
 //! engine are here.
 //!
+//! **Each slot watches that pair**, which is [`watched`] and is one
+//! `HotSwap::new` over a `karakuri_environment::watch::Watch` — the same
+//! wiring `karakuri-cli` does for `--watch`, and the whole of what puts a row
+//! in the Staging lane: without it no `swap::Event` of any variant is emitted
+//! in this program, and the lane could reach no state but empty.
+//!
+//! **The store is opened to be read** — once, at startup, so the Library bay
+//! has names to list ([`library`]) — and **once to be written**, which is the
+//! arrangement family and the one thing in this program that reaches a disk on
+//! purpose: an operator's arrangement is kept under
+//! `arrangements/<name>.arrangement.json` and put back from there
+//! ([`arrangement`],
+//! [ADR-0221](../../../docs/adr/0221-an-arrangement-is-named-by-the-operator-and-kept-in-a-fourth-place.md)).
+//! The transport row's arrangement pill is what emits both, and it is the one
+//! control on this panel that asks for letters. The wiring is here because it
+//! can be nowhere else: the console cannot reach the store and the store
+//! cannot name a layout, so a third party is what joins them.
+//!
+//! And **records exist**: a mixer control emits an operation,
+//! `karakuri-operation-record` turns it into a `Record`, and [`apply`] is what
+//! moves the deck with it, because
+//! [P-0028](../../../docs/principles/0028-every-control-ends-in-the-same-record.md)
+//! is that every control ends in the same record. No record reaches a disk,
+//! and no record stream drives time.
+//!
 //! # What is not wired, and what each would be for
 //!
 //! **This list used to read `no audio, no MIDI, no MCP, no replay and no
@@ -132,28 +157,6 @@
 //! - **Session.** Recording the timeline as it happens, which is *Record the
 //!   session* — a `plan` badge with `rec` as its home, so the panel is meant
 //!   to reach this one and the transport already draws the button's place.
-//! **Each slot watches that pair**, which is [`watched`] and is one
-//! `HotSwap::new` over a `karakuri_environment::watch::Watch` — the same
-//! wiring `karakuri-cli` does for `--watch`, and the whole of what puts a row
-//! in the Staging lane: without it no `swap::Event` of any variant is emitted
-//! in this program, and the lane could reach no state but empty.
-//! **The store is opened to be read** — once, at
-//! startup, so the Library bay has names to list ([`library`]) — and **once
-//! to be written**, which is the arrangement family and the one thing in this
-//! program that reaches a disk on purpose: an operator's arrangement is kept
-//! under `arrangements/<name>.arrangement.json` and put back from there
-//! ([`arrangement`],
-//! [ADR-0221](../../../docs/adr/0221-an-arrangement-is-named-by-the-operator-and-kept-in-a-fourth-place.md)).
-//! No control emits either operation yet — the panel has nowhere to type a
-//! name — so nothing a player can press writes anything today, and the wiring
-//! is here because it can be nowhere else: the console cannot reach the store
-//! and the store cannot name a layout, so a third party is what joins them.
-//! And **records exist**: a mixer control
-//! emits an operation, `karakuri-operation-record` turns it into a `Record`,
-//! and [`apply`] is what moves the deck with it, because
-//! [P-0028](../../../docs/principles/0028-every-control-ends-in-the-same-record.md)
-//! is that every control ends in the same record. No record reaches a disk,
-//! and no record stream drives time.
 //!
 //! **What is missing is named rather than left to be noticed.** Audio, MIDI,
 //! MCP and replay are all `karakuri-environment`'s and all reachable from
@@ -353,38 +356,51 @@ const SAMPLE: usize = 240;
 /// ([ADR-0191](../../../docs/adr/0191-the-panels-parked-deck-is-parked-by-the-governor-or-it-is-a-drawing-of-one.md)).
 /// Nobody re-checked it for two commits, because nothing was checking it.
 ///
-/// **Taken on 2026-08-26**, over nine runs of this program on an Apple M4 Pro
-/// with nothing touching the window: per-frame medians of 524 to 538
-/// allocations and 671.4 to 695.3 kB, of which the two below are the middle.
-/// What the panel had in it while they were taken is the last paragraph the
-/// reading prints. Re-take all three together, several runs at a time — one run
-/// is not a number here — and re-date them.
+/// **Taken on 2026-08-31**, over nine runs of this program on an Apple M4 Pro
+/// with nothing touching the window, at the window size [`WINDOW`] opens:
+/// every one of the nine read the same per-frame median, and it is the two
+/// figures below. What the panel had in it while they were taken is the last
+/// paragraph the reading prints. Re-take all three together, several runs at a
+/// time — one run is not a number here — and re-date them.
 ///
-/// **They are a two-strip reading and this deck now draws four**, which is
-/// said here rather than left for the run to discover. ADR-0191 measured the
-/// second strip at **69 allocations and 137.4 kB a frame** — 456 to 525 —
-/// taken on this window at 1440x900 with nothing else changing, so two more
-/// strips should read near **663 and 969 kB**, and nothing else about the
-/// panel moved: the three slots that are not Live neither step nor draw, so
-/// the engine half is the one Set it was. That is 1.26x the figure below,
-/// inside [`DRIFT`], so the run will call the sentence current and it will be
-/// current — the figure quoted is what the panel read on the day it was read,
-/// and re-taking it needs a window, three still seconds and nine runs, none of
-/// which is reachable from `cargo test`. Re-take it the next time somebody has
-/// the window open.
-const WRITTEN_ALLOCS: u64 = 525;
-const WRITTEN_KB: f64 = 694.3;
-const WRITTEN_ON: &str = "2026-08-26";
+/// **The spread was nothing at all, which is a reading and not a guarantee.**
+/// The nine of 2026-08-26 disagreed by 14 allocations and these nine agreed to
+/// the allocation, because an untouched panel tessellates the same work every
+/// frame and nothing in the run varies it. It is not a promise that a tenth
+/// run agrees, and it is not a licence to take one: what makes a number here
+/// trustworthy is that several runs were asked, and a single run's median is
+/// what produced the last wrong one.
+///
+/// **The reading before this one predicted 1.26x and the panel did 2.89x**,
+/// which is kept because it is the argument for the counter rather than
+/// against it. 2026-08-26 read 525, and the note beside it reasoned from
+/// ADR-0191's **69 allocations and 137.4 kB a strip** that the two mixer
+/// strips since would put it near **663 and 969 kB** — inside [`DRIFT`], so
+/// the run would have called the sentence current. It was not two strips that
+/// landed. Three things the last reading's own *what the panel had in it*
+/// paragraph does not mention are on the panel now: the Inspector draws two
+/// panes off the running Set, the transport row draws an armed `audio-in` pill
+/// over an input measured every frame, and it draws the arrangement pill. A
+/// figure predicted from the one change somebody remembered is precisely the
+/// figure that goes stale in silence, and re-taking it needs a window, three
+/// still seconds and several runs, none of which is reachable from
+/// `cargo test`.
+const WRITTEN_ALLOCS: u64 = 1518;
+const WRITTEN_KB: f64 = 1781.6;
+const WRITTEN_ON: &str = "2026-08-31";
 
 /// How far a run may sit from [`WRITTEN_ALLOCS`] before the reading says the
 /// sentence quoting it has gone stale.
 ///
 /// **A factor, and a generous one, because an allocation count is not a
 /// constant**: a hard equality here would be a guard nobody could keep
-/// passing, and this file's own nine runs disagree by 14 allocations. Two is
-/// the smallest factor that still catches what actually happened — 184 to the
-/// mixer bay's 456 is 2.5x, so a band of two would have said so on the first
-/// run after that bay landed, and a band of ten would not have.
+/// passing. The nine runs behind 2026-08-26's figure disagreed by 14
+/// allocations; the nine behind the current one agreed to the allocation, and
+/// one machine's nine agreeing is not a promise the next machine's will. Two
+/// is the smallest factor that still catches what actually happened — 184 to
+/// the mixer bay's 456 is 2.5x, so a band of two would have said so on the
+/// first run after that bay landed, and a band of ten would not have. It is
+/// also what caught 525 going to 1518.
 ///
 /// **Two figures are held and the bytes are not**, which is a distinction
 /// rather than an omission: the bytes move with the allocation count, so a
@@ -1020,9 +1036,9 @@ impl Costs {
                  mixer bay landed — 456 allocations there, and 525 once deck B was parked \
                  (ADR-0191). Taken again on {WRITTEN_ON} over nine runs of this program \
                  with nothing touching the window: {WRITTEN_ALLOCS} allocations and \
-                 {WRITTEN_KB:.1} kB a frame in the middle of the nine, which spread 524 to \
-                 538 and 671.4 to 695.3 kB. What the panel had in it while they were taken \
-                 is the last paragraph below. What ADR-0164 is still right about is that \
+                 {WRITTEN_KB:.1} kB a frame, which is what every one of the nine read — to \
+                 the allocation, and to the tenth of a kilobyte. What the panel had in it \
+                 while they were taken is the last paragraph below. What ADR-0164 is still right about is that \
                  the price is paid on every frame drawn; what changed is how many frames pay \
                  it — 0 with a still panel and nothing in the Program bay, and the rate above \
                  with anything live in it."
@@ -1098,10 +1114,12 @@ impl Costs {
                 "  the panel half is taken on this window at {:.0}x{:.0} logical, drawing a \
                  live picture, four preview cells with deck A auditioning in one and three \
                  off, the mixer bay with a strip in every one of its four tracks, the \
-                 transport, the outputs row and deck B's parked \
+                 transport row with its `audio-in` and arrangement pills, the outputs row \
+                 and deck B's parked \
                  tally rolling once a second — over the Library bay's scope row and however \
-                 many rows the scope marked in it lists, over the Master bay's out row, and \
-                 over Staging, Inspector and Sequencer, which are a head and nothing else. \
+                 many rows the scope marked in it lists, over the Master bay's out row, over \
+                 the Inspector's two panes read off the running Set, and over Staging and \
+                 Sequencer, which are a head and nothing else. \
                  That is NOT the workspace's \
                  reference workload. The \
                  engine half is one Set of `{}` — {} elements at {}x{}, one step a frame — the \
@@ -4341,11 +4359,13 @@ fn arrangements(root: &std::path::Path) -> Vec<String> {
 ///
 /// Which is what lets it sit on the one path every emitted operation already
 /// takes ([`App::performed`]) rather than being a second route into the
-/// panel. **Nothing this program draws emits either of these two today** —
-/// the manual's rows say so, with four empty badges each and a name as the
-/// reason — and that is why the wiring is written rather than a reason to
-/// leave it out, exactly as [`unwritten`] is written for controls that do not
-/// exist yet.
+/// panel. **The transport row's arrangement pill emits both**, and the
+/// manual's two rows say it is the only one of the four surfaces that can: a
+/// `panel` badge each and three empty ones, because a name is what a key
+/// press, a map line and an unpublished tool each have no way to say. This
+/// wiring was written before that control existed — exactly as [`unwritten`]
+/// is written for controls that do not exist yet — and the control is what
+/// arrived at it.
 fn arrangement(
     root: &std::path::Path,
     panel: &mut Panel,
@@ -8972,12 +8992,14 @@ mod tests {
     /// constant, and hold [`drifted`] to catching what actually went wrong.
     #[test]
     fn a_reading_that_has_moved_says_the_sentence_quoting_it_is_stale() {
-        // The band a run has to stay inside to say nothing. Nine runs on
-        // 2026-08-26 read between 524 and 538, and a guard that fired on that
-        // spread is one nobody could keep passing.
+        // The band a run has to stay inside to say nothing. The nine runs
+        // behind the figure of 2026-08-31 agreed to the allocation; the nine
+        // behind 2026-08-26's read between 524 and 538, which is the widest
+        // run-to-run spread this file has ever taken, and a guard that fired
+        // on 14 allocations is one nobody could keep passing.
         assert_eq!(drifted(WRITTEN_ALLOCS, WRITTEN_ALLOCS), None);
         assert_eq!(
-            drifted(538, WRITTEN_ALLOCS),
+            drifted(WRITTEN_ALLOCS + 14, WRITTEN_ALLOCS),
             None,
             "the run-to-run spread of the reading this quotes must not read as staleness"
         );
