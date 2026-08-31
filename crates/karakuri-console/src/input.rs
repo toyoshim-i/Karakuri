@@ -83,7 +83,7 @@
 //!    describing itself to an operator has to say what a pointer reaches, and
 //!    a sentence saying it is where the count goes stale. What they are is
 //!    still written here, because a name is not a number and there is nowhere
-//!    else the twenty-three sit together: the Outputs row's sink
+//!    else the twenty-seven sit together: the Outputs row's sink
 //!    ([`crate::view::outputs`]), a mixer strip's fader knob
 //!    ([`crate::view::Mixer::grab`]), its blend chip
 //!    ([`crate::view::Mixer::blend`]), its tally chip
@@ -95,9 +95,10 @@
 //!    inspector pane's deck head the sync chip, the anchor and the scrub's two
 //!    arrows ([`crate::view::deck_head`]), the Master bay's out
 //!    ([`crate::view::MasterRow::grab`]), the Program bay head's `solo`
-//!    ([`crate::view::program_head`]) and the four deck preview cells under it
-//!    ([`crate::view::ProgramBay::preview`]). The rule did not change to hold
-//!    any of the seventeen that came after the first, which is what it was
+//!    ([`crate::view::program_head`]), the four deck preview cells under it
+//!    ([`crate::view::ProgramBay::preview`]) and the Library bay's scope chips
+//!    ([`crate::view::LibraryBay::chip`]). The rule did not change to hold
+//!    any of the twenty-six that came after the first, which is what it was
 //!    written for — and each is asked exactly the way the first is: the
 //!    derivation that draws it, asked whether the point is on it, with nothing
 //!    stored.
@@ -133,7 +134,7 @@
 //!    `.mini`'s padding argument met with a band. That is 16.5 in a row of 48
 //!    and therefore **15.75** as well. `tests/look.rs` measures both and fails
 //!    the same three ways `tests/arrangement_pill.rs` does; that two of the
-//!    twenty-three agree is a fact about two capsules being one height, not a
+//!    twenty-seven agree is a fact about two capsules being one height, not a
 //!    number
 //!    either of them inherited.
 //!
@@ -196,6 +197,32 @@
 //!    *asks for* is [`crate::view::Mixer::mask`]'s, and whether a press landed
 //!    on the chip is one rectangle either way
 //!    ([ADR-0203](../../../docs/adr/0203-the-mask-chip-carries-the-angle-it-does-not-control.md)).
+//!
+//!    **The twenty-fourth to the twenty-seventh are the Library bay's scope
+//!    chips**, and they are the first controls here whose *number* is a value
+//!    rather than a constant — one per scope the host handed the bay, which is
+//!    why [`CLAIMS`]' entry for them is [`Scope::ALL`]'s length written as an
+//!    expression. Their clearance is a sum and not a centring, which is the
+//!    Master bay's out's shape one column over: `.scopes` is drawn under the
+//!    bay head, so what holds the chips off the boundary **above** — the one
+//!    between the transport row and the body — is
+//!    [`crate::room::size::HEAD_H`] plus [`crate::room::size::SCOPES_PAD_Y`],
+//!    27 + 7 = **34**, against a [`GRAB`] of 6. Down
+//!    the left it is [`crate::room::size::SCOPES_PAD_X`]'s **9** off an edge
+//!    that is the viewport's rather than a divider's, and below them the
+//!    library's own list runs on for at least a hundred pixels before the
+//!    staging lane's boundary.
+//!
+//!    **The chip at the end of the row is the one that overruns**, and it is
+//!    the plainest case of what rule 3 costs anywhere on this console: the row
+//!    clips, four words laid end to end are wider than the mock's 218-wide
+//!    pane, and `folder` therefore starts inside the bay and finishes outside
+//!    it. What is *drawn* of it stops at the bay's edge, and the last six
+//!    pixels of that are the pane divider's under rule 3 — so a press there
+//!    drags the boundary, exactly as it does on the `solo` capsule and a
+//!    preview cell. **What brings the whole chip in is widening the pane**,
+//!    which that boundary allows and no maximum stops.
+//!    `tests/library.rs` measures both halves.
 //!
 //!    **A control claims what it acts on and no more.** A fader's *track* is
 //!    drawn by the console and is not claimed, because a press on it does
@@ -326,7 +353,26 @@
 //! derivation hands back a value and the program holding the run's opening
 //! writes it; this rule's only business with them is that a press on one is the
 //! panel's and not `egui`'s, which is the same business it has with the other
-//! twenty-two.
+//! twenty-six.
+//!
+//! **And so are the Library bay's scope chips**, which are the four preview
+//! cells' arrangement one column over: the bay is derived once and walked once
+//! for every chip in it, because a chip is as wide as the word in it and where
+//! the fourth one is depends on the first three.
+//! [`crate::view::LibraryBay::chip`] answers *is this a control* and *what
+//! does a press on it ask for* — [`crate::view::Chosen`], which is the chip
+//! the pointer landed on **and** `Operation::SelectScope` beside it. It is the
+//! one answer on this panel that carries a value the operation could not, and
+//! that is `SelectScope`'s payload being `Undecided` on purpose rather than a
+//! gap: a press is the first thing in this workspace that knows which member
+//! of a growable list it means, and whether that settles the payload is a
+//! decision about the vocabulary rather than about this rule.
+//!
+//! **The chip does not cycle where the key does.** `e` steps to the next scope
+//! and wraps, because a bare press cannot say *which*; a pointer press can, so
+//! it names the chip it landed on and no arithmetic happens anywhere. That is
+//! P-0074's division met by two surfaces rather than an inconsistency between
+//! them.
 //!
 //! **Four questions, one derivation.** The mixer bay is laid out once per
 //! event and asked for every control it has — a knob, a blend chip, a tally
@@ -361,15 +407,15 @@ use karakuri_operation::gate::Class;
 
 use crate::panel::{Panel, GRAB};
 use crate::view::{
-    arrangement, audio_in, deck_head, inspector, look, master, mcp_pill, mixer, outputs,
-    program_bay, program_head, View,
+    arrangement, audio_in, deck_head, inspector, library, look, master, mcp_pill, mixer, outputs,
+    program_bay, program_head, Scope, View,
 };
 
 /// **What each of rule 4's derivations answers for**, one entry per probe in
 /// [`claim`] and in that order: the Outputs sink, the audio-in pill, the
 /// arrangement pill, the look group's two, a strip's four, the Master bay's
 /// one, a deck head's four, the Program bay head's `solo`, the four deck
-/// preview cells, and the four class pills.
+/// preview cells, the Library bay's scope chips, and the four class pills.
 ///
 /// **It is a table and not a sentence because [`claim`] asks its probes out of
 /// an array of exactly this length.** A derivation added to rule 4 without an
@@ -382,7 +428,13 @@ use crate::view::{
 /// about a control is — the clearance test the rule above says each one owes,
 /// `tests/mask.rs` being the most recent of them — and this entry is what has
 /// to be raised beside it.
-const CLAIMS: [usize; 10] = [1, 1, 1, 2, 4, 1, 4, 1, 4, 4];
+/// **The scope row's entry is [`Scope::ALL`]'s length and not a typed four**,
+/// which is the one entry here that is written as an expression. The row is
+/// as long as the slice the host handed the bay, and what a host can hand it
+/// is values of [`Scope`] — so the number of chips a pointer can reach is the
+/// number of scopes that exist, and the day a fifth is added this rises with
+/// it rather than being a four somebody has to remember.
+const CLAIMS: [usize; 11] = [1, 1, 1, 2, 4, 1, 4, 1, 4, Scope::ALL.len(), 4];
 
 /// **How many controls rule 4 hit-tests**, summed over [`CLAIMS`].
 ///
@@ -578,6 +630,26 @@ pub fn claim(panel: &mut Panel, ctx: &egui::Context, view: &View, p: Point) -> C
             // rectangle and a letter — so this is the cheapest probe here.
             let on_cells =
                 || program_bay(panel.layout(), view.canvas).is_some_and(|bay| bay.owns(p));
+            // **The Library bay's scope chips**, and it is the first control
+            // this console has whose *count* is a value rather than a
+            // constant: the row is as long as the slice the host handed the
+            // bay. One derivation for all of them, which is a strip's
+            // arrangement — the chips are laid end to end from the row's left
+            // padding, so where the fourth is depends on how wide the first
+            // three words are, and a second walk would put the capsule a press
+            // lands on somewhere the wash is not.
+            //
+            // **The row is asked before any chip is**, inside
+            // `LibraryBay::chip`: `.scopes` clips, so at the mock's own width
+            // the fourth chip finishes outside the bay, and the part of it
+            // that is not drawn is not a target. The part that is inside the
+            // pane divider's grab is the boundary's under rule 3 above, which
+            // is this rule's ordinary price and is measured in
+            // `tests/library.rs`.
+            let on_scope = || {
+                library(panel.layout(), &view.scopes, &view.library)
+                    .is_some_and(|bay| bay.chip(ctx, &view.scopes, p).is_some())
+            };
             // **The four class pills, one derivation asked four times**, which
             // is a deck head's arrangement rather than a strip's: they are in
             // four different regions and cannot be one laid-out box, but they
@@ -611,6 +683,7 @@ pub fn claim(panel: &mut Panel, ctx: &egui::Context, view: &View, p: Point) -> C
                 &on_deck_head,
                 &on_solo,
                 &on_cells,
+                &on_scope,
                 &on_mcp,
             ];
             match probes.iter().any(|probe| probe()) {

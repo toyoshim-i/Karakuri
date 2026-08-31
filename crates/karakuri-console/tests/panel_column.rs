@@ -305,6 +305,18 @@ fn sample(variant: &str) -> Operation {
         "AttachBeatSource" => Operation::AttachBeatSource {
             source: karakuri_operation::BeatSource::AudioInput("default".to_owned()),
         },
+        // **The Library bay's scope chips**, and the one emission in this list
+        // whose payload cannot say what the control chose: `SelectScope`
+        // carries `Undecided`, deliberately, because *"an enum of the four
+        // here would assert that the list can be finished"*. So the chip
+        // travels beside the operation in `view::Chosen` rather than inside
+        // it, and what this file sees is the operation — which is the right
+        // thing for it to see, because what the badge claims is that an
+        // operator reaches *the row*, and the row is one operation over
+        // whichever scopes the list holds.
+        "SelectScope" => Operation::SelectScope {
+            scope: karakuri_operation::Undecided,
+        },
         other => panic!(
             "`{SRC}` constructs `Operation::{other}` and this file has no value for it — a \
              control started emitting an operation nobody accounted for. Add an arm here, and \

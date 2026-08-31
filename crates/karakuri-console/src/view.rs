@@ -257,7 +257,7 @@ use egui::{Color32, CornerRadius, FontFamily, FontId, Pos2, Rect, Stroke, Stroke
 use karakuri_layout::{Axis, Hit, NodeId};
 use karakuri_operation::gate::{Class, Open};
 use karakuri_operation::{
-    Authority, BeatSource, BlendMode, Operation, Residency, Sync, Tonemap, WipeKind,
+    Authority, BeatSource, BlendMode, Operation, Residency, Sync, Tonemap, Undecided, WipeKind,
 };
 
 use crate::budget::{Declared, PANEL_PASS};
@@ -650,11 +650,13 @@ pub fn region(name: &str) -> Option<&'static Region> {
 /// is the console the page draws.
 const MCP_SHUT: &str = "mcp · shut";
 
-/// **And the word while it is open.** The page specifies the shut state alone,
-/// so this is the other half of a sentence its four tooltips do write — *"Click
-/// to open the class; click again to shut it"* — rather than a second control.
-/// A pill reading `shut` in both states would be a control that never answers a
-/// press, which is the one thing those tooltips rule out.
+/// **And the word while it is open**, which `docs/manual/console.html`
+/// specifies under *what a model is refused, and where a class opens*: *"open,
+/// it reads `mcp · open` and is drawn armed"*. It is the other half of a
+/// sentence its four tooltips write — *"Click to open the class; click again to
+/// shut it"* — rather than a second control. A pill reading `shut` in both
+/// states would be a control that never answers a press, which is the one thing
+/// those tooltips rule out.
 const MCP_OPEN: &str = "mcp · open";
 
 /// **Which of the two a class reads as.** Two constants and this, so that the
@@ -4573,8 +4575,8 @@ pub fn unit_of(exposure: f32) -> f32 {
 /// that draws a control is the one that hit-tests it, so a control cannot be
 /// painted anywhere a press cannot reach — and it is what makes every
 /// rectangle here something `tests/look.rs` can ask about without a device.
-/// The measured price of the whole panel pass is a median 525 allocations a
-/// frame (`crates/karakuri`'s `WRITTEN_ALLOCS`, taken 2026-08-26); this adds
+/// The measured price of the whole panel pass is a median 1518 allocations a
+/// frame (`crates/karakuri`'s `WRITTEN_ALLOCS`, taken 2026-08-31); this adds
 /// on the order of forty, which is inside the factor of two that file will
 /// quote a figure across and is why the figure has not been re-taken here —
 /// re-taking one needs a window and three seconds of nobody touching it.
@@ -7701,6 +7703,66 @@ impl Scope {
     }
 }
 
+/// **What a press on a scope chip asks for**: the chip it landed on, and the
+/// operation of the vocabulary that names the asking.
+///
+/// # Two fields because the payload cannot carry the first one
+///
+/// [`Operation::SelectScope`] is `SelectScope { scope: Undecided }`, and that
+/// is deliberate at the operation: *"an enum of the four here would assert
+/// that the list can be finished, which is the claim that row exists to
+/// refuse"*. So the operation says **that a library was chosen** and cannot
+/// say **which**, and a control that could say which has to say it beside the
+/// operation rather than inside it. That is what this type is: one press, one
+/// answer, and the two halves cannot be got out of step because they are
+/// derived together from the chip the pointer was on.
+///
+/// **This is the first thing in the workspace that knows which chip.** A key
+/// press cannot type a name, so `e` steps and the arithmetic is the
+/// translator's ([P-0074]); a map line names a word from a closed list and
+/// this list is not closed; a model has no chip in front of it. A *pointer*
+/// press is none of those — it lands on one capsule and on no other, which is
+/// a way of naming a member of a growable list that did not exist here
+/// before. **Whether that settles the payload is a decision about the
+/// vocabulary and it is not taken here**: settling it means saying what a
+/// scope is named *by* — a folder scope has a path, `presets` has a root the
+/// program was told, and `favourites` and `my sets` have neither — and that
+/// sentence belongs on `docs/manual/operations.html` and in
+/// `karakuri-operation`, not in the first control that happened to want it.
+/// So the press works with the payload as it stands, and the proposal is
+/// written down where a maintainer reads it rather than performed here.
+///
+/// [P-0074]: ../../../docs/principles/0074-an-operation-says-what-it-wants-never-which-way-to-move.md
+#[derive(Debug, Clone, PartialEq)]
+pub struct Chosen {
+    /// **The chip the pointer was on**, which is a value of the row this
+    /// console was handed rather than a position in it: the caller marks it
+    /// through [`View::select_scope`], which refuses a scope with no chip.
+    pub scope: Scope,
+    /// **[`Operation::SelectScope`], and its payload is `Undecided`** — see
+    /// this type's own documentation for why the chip is not in it.
+    pub operation: Operation,
+}
+
+/// **One scope chip's width**: the word at [`size::BASE`] inside
+/// [`size::SCOPE_PAD_X`] either side, which is the whole of what `.scope` is
+/// as wide as — it draws no border, so there is nothing else to count.
+///
+/// Asked of `egui` rather than derived, for [`LibraryBay::pill`]'s reason one
+/// row up: a capsule is as wide as the words in it, and the only thing that
+/// knows how wide a word is is the thing that will paint it.
+fn chip_width(ctx: &egui::Context, name: &str) -> f32 {
+    ctx.fonts_mut(|f| {
+        f.layout_no_wrap(
+            name.to_owned(),
+            FontId::new(size::BASE, FontFamily::Proportional),
+            Color32::PLACEHOLDER,
+        )
+        .size()
+        .x
+    }) + size::SCOPE_PAD_X * 2.0
+}
+
 /// **The Library bay, laid out**: where the rows go, how many of them there is
 /// room for, and where the count under them goes.
 ///
@@ -7714,9 +7776,16 @@ impl Scope {
 /// in the root the program was told about (ADR-0230). The other two are drawn
 /// and answer nothing, for two different reasons written out at [`Scope`] —
 /// and neither is the placeholder ADR-0200 refuses, because a chip **is** the
-/// question and the question is real. What is still refused is the
-/// scaffolding: nothing in this bay answers a pointer, which is what a press
-/// on a chip would be.
+/// question and the question is real.
+///
+/// **The chips answer a press now**, which is `console.html`'s own affordance
+/// on each of them — *"Click to show it; click another scope to leave it"* —
+/// and it is the row `docs/manual/operations.html` names as this operation's
+/// home. What a press asks for is [`LibraryBay::chip`], and it is asked of
+/// the same derivation that paints the capsule. **Two of the four still
+/// answer nothing when they are chosen**, and that is unchanged and is the
+/// host's to say out loud: choosing *favourites* or *folder* is a question
+/// asked, and what is missing is the answer rather than the asking.
 ///
 /// **Both halves are handed in.** The scopes are a slice and the rows are a
 /// slice, and which rows go with which scope is the host's answer rather than
@@ -7772,9 +7841,31 @@ impl Scope {
 /// the deck selection says which deck, so **a load is *"a cursor and a key
 /// with no pointer anywhere in it"***. So the cursor is drawn and moved by
 /// keys, the pill is a **readout** that says where a press lands *before* the
-/// press, and neither answers a pointer: `tests/library.rs` holds that, and a
-/// drag from a row onto a strip is named on that page as *"a second route to
-/// the same command, and never the first"*.
+/// press, and neither answers a pointer: `tests/library.rs` holds that.
+///
+/// # The pill does not answer a press, and that is not the same as being inert
+///
+/// It is worth saying which of the two it is, because a capsule that reads
+/// `load → A` and does nothing when it is pressed reads like a control
+/// somebody forgot to wire. It is not one. **The pill is a readout and the
+/// panel's route to this row is the drag** — `console.html`: *"Dragging a row
+/// onto a strip is a second route to the same command, and never the first …
+/// it names both operands in the one gesture, which makes it the only way to
+/// load a deck without selecting it first"*, and the operations page carries
+/// that gesture as this row's panel badge and says of it, today, *"and it is
+/// not drawn"*.
+///
+/// **So a press on the pill would be a third route nobody specified**, and it
+/// would be the wrong one twice over: it would name the deck from the
+/// selection, which is what the *key* already does, so it would add a pointer
+/// to the one gesture both pages describe as having none — and it would leave
+/// the gesture that is specified still undrawn. What this bay owes is the
+/// drag; what it must not grow is a button.
+///
+/// **This is why the scope chips moved a badge and this row did not.** A chip
+/// is the control the page names for its row and it is now pressable; the
+/// drag is the control this page names for this row and it is not drawn, so
+/// the badge stays *designed* and says so.
 ///
 /// **The pill's letter is [`View::selection`]**, which this console now keeps
 /// — ADR-0219 recorded it as living *"in the specification and not in
@@ -7877,6 +7968,105 @@ impl LibraryBay {
             ),
             egui::vec2(width, size::PILL_H),
         )
+    }
+
+    /// **Every scope chip and its box**, left to right in the order the row
+    /// was handed them — the same walk [`scopes_into`] paints and
+    /// [`LibraryBay::chip`] hit-tests, so the capsule a press lands on is the
+    /// capsule the wash is drawn in.
+    ///
+    /// **A chip is as wide as the word in it**, so this is the one thing about
+    /// this bay that has to ask `egui` — [`library`] asks it for nothing, and
+    /// that sentence is still true of every *rectangle* the bay derives. The
+    /// widths are measured here rather than stored for [`LibraryBay::row`]'s
+    /// reason: a `Vec` of four rectangles would be an allocation on a path
+    /// that is asked once per pointer event.
+    ///
+    /// **The boxes are not clipped and the paint is.** `.scopes` is one row
+    /// and this console draws one row of it, so at the mock's own width the
+    /// fourth chip starts inside the bay and finishes outside it. What is
+    /// yielded here is the capsule's whole rectangle, because that is what the
+    /// paint wants; [`LibraryBay::chip`] is where a press is held to the part
+    /// of it that is drawn.
+    ///
+    /// Empty for a bay with no scope row at all, which is a console nobody has
+    /// told what libraries there are.
+    pub fn chips<'a>(
+        &self,
+        ctx: &'a egui::Context,
+        scopes: &'a [Scope],
+    ) -> impl Iterator<Item = (Scope, Rect)> + 'a {
+        let row = self.scopes;
+        let mut x = row.map_or(0.0, |row| row.min.x + size::SCOPES_PAD_X);
+        let top = row.map_or(0.0, |row| row.min.y + size::SCOPES_PAD_Y);
+        let drawn = row.map_or(0, |_| scopes.len());
+        scopes.iter().take(drawn).map(move |scope| {
+            let chip = Rect::from_min_size(
+                // **One padding down from the top of the row**, which is where
+                // `.scopes` puts it — and not the row's middle, which is half
+                // a pixel lower because the rule at the bottom is inside the
+                // row.
+                Pos2::new(x, top),
+                egui::vec2(chip_width(ctx, scope.name()), size::SCOPE_H),
+            );
+            x += chip.width() + size::SCOPES_GAP;
+            (*scope, chip)
+        })
+    }
+
+    /// **What a press at `p` on the scope row asks for**, or `None` where
+    /// there is no chip under it.
+    ///
+    /// # The chip is the control, and it names the library rather than a place
+    ///
+    /// `console.html` puts the affordance on the chip itself — *"Click to show
+    /// it; click another scope to leave it"* — and
+    /// `docs/manual/operations.html` names the whole row as this operation's
+    /// home. What comes out is [`Chosen`]: the chip the pointer was on, and
+    /// [`Operation::SelectScope`] beside it, because that operation's payload
+    /// is `Undecided` and cannot carry the chip. See [`Chosen`], which is
+    /// where the argument is and where the proposal that would change it is
+    /// written down.
+    ///
+    /// **It does not cycle.** The chip that was pressed is the chip that is
+    /// asked for, where `e` steps to the next one and wraps — and that is not
+    /// two answers to one question, it is P-0074's own division: a bare press
+    /// cannot say *which* and this one can, so the key does the arithmetic and
+    /// the pointer does not.
+    ///
+    /// # A chip is pressed only where it is drawn
+    ///
+    /// The row clips, so at the mock's width `folder` runs out past the bay's
+    /// own edge and into the pane divider's grab. The part of it that is
+    /// outside the row is not drawn, and a press there is a press on whatever
+    /// **is** drawn under the pointer — so the point is held to the row before
+    /// any chip is asked about. The part inside the divider's grab is the
+    /// boundary's, which [`crate::input::claim`]'s rule 3 decides and this
+    /// never sees.
+    ///
+    /// **`None` before the first pass**, which is [`mixer`]'s guard and
+    /// [`outputs`]': there are no fonts until `egui` has run one, so there is
+    /// no chip width to measure and nothing has been drawn to press.
+    pub fn chip(
+        &self,
+        ctx: &egui::Context,
+        scopes: &[Scope],
+        p: karakuri_layout::Point,
+    ) -> Option<Chosen> {
+        let row = self.scopes?;
+        if ctx.cumulative_pass_nr() == 0 {
+            return None;
+        }
+        let p = Pos2::new(p.x, p.y);
+        if !row.contains(p) {
+            return None;
+        }
+        self.chips(ctx, scopes)
+            .find(|(_, chip)| chip.contains(p))
+            .map(|(scope, _)| Chosen {
+                scope,
+                operation: Operation::SelectScope { scope: Undecided },
+            })
     }
 }
 
@@ -8111,12 +8301,14 @@ fn library_into(
 /// **The scope row, painted**: the chips left to right, the marked one washed,
 /// and the rule under the row.
 ///
-/// Where the row goes is [`library`]'s; this is [`rend_row_into`]'s shape one
-/// bay along, and deliberately so — the two are the same drawing. A chip is as
-/// wide as the word in it, so the widths are measured here at paint time
-/// rather than derived: no rectangle a caller can ask about depends on them,
-/// because **nothing in this row is a control** and there is nothing to hit
-/// test. `tests/library.rs` is where that is held.
+/// Where the row goes is [`library`]'s and where each chip in it goes is
+/// [`LibraryBay::chips`]'; this is [`rend_row_into`]'s shape one bay along,
+/// and deliberately so — the two are the same drawing. A chip is as wide as
+/// the word in it, so the widths are asked of `egui` rather than derived —
+/// and they are asked **once**, by the derivation this paint and
+/// [`crate::input::claim`] both walk, because a chip is a control now and a
+/// second measurement here would be a capsule a press could miss.
+/// `tests/library.rs` is where that is held.
 ///
 /// Term for term from `style.css`:
 ///
@@ -8149,28 +8341,17 @@ fn library_into(
 /// and a height the arrangement's own minimum could not be written from. So
 /// the clip is chosen, and it is chosen the same way the same question was
 /// answered one bay along.
-fn scopes_into(ui: &Ui, pal: &Palette, row: Rect, scopes: &[Scope], scope: usize) {
+fn scopes_into(ui: &Ui, pal: &Palette, bay: &LibraryBay, scopes: &[Scope], scope: usize) {
+    let Some(row) = bay.scopes else {
+        return;
+    };
     let painter = ui.painter().with_clip_rect(row);
-    let mut x = row.min.x + size::SCOPES_PAD_X;
-    for (at, name) in scopes.iter().map(|scope| scope.name()).enumerate() {
+    for (at, (kind, chip)) in bay.chips(ui.ctx(), scopes).enumerate() {
         let marked = at == scope;
         let ink = match marked {
             true => pal.lav,
             false => pal.faint,
         };
-        let galley = painter.layout_no_wrap(
-            name.to_owned(),
-            FontId::new(size::BASE, FontFamily::Proportional),
-            ink,
-        );
-        let w = galley.size().x + size::SCOPE_PAD_X * 2.0;
-        let chip = Rect::from_min_size(
-            // **One padding down from the top of the row**, which is where
-            // `.scopes` puts it — and not the row's middle, which is half a
-            // pixel lower because the rule at the bottom is inside the row.
-            Pos2::new(x, row.min.y + size::SCOPES_PAD_Y),
-            egui::vec2(w, size::SCOPE_H),
-        );
         // **The wash is the whole of the mark**, exactly as it is on the row
         // under the library cursor: `.scope` sets no border, no rule and no
         // dot, so a chip that is not marked draws nothing but its word.
@@ -8182,6 +8363,11 @@ fn scopes_into(ui: &Ui, pal: &Palette, row: Rect, scopes: &[Scope], scope: usize
                 tint(pal.lav, 15),
             );
         }
+        let galley = painter.layout_no_wrap(
+            kind.name().to_owned(),
+            FontId::new(size::BASE, FontFamily::Proportional),
+            ink,
+        );
         painter.galley(
             Pos2::new(
                 chip.min.x + size::SCOPE_PAD_X,
@@ -8190,7 +8376,6 @@ fn scopes_into(ui: &Ui, pal: &Palette, row: Rect, scopes: &[Scope], scope: usize
             galley,
             ink,
         );
-        x += w + size::SCOPES_GAP;
     }
 
     // `border-bottom: 1px solid var(--c-hair)` — the row's own bottom pixel,
@@ -9362,8 +9547,8 @@ impl DeckHead {
 /// bay along: the derivation that draws a control is the one that hit-tests
 /// it, so a control cannot be painted anywhere a press cannot reach. Two panes
 /// at three lookups is on the order of ten allocations a frame against the
-/// panel pass's measured median of 525 (`crates/karakuri`'s `WRITTEN_ALLOCS`,
-/// taken 2026-08-26), which is inside the factor of two that file quotes a
+/// panel pass's measured median of 1518 (`crates/karakuri`'s `WRITTEN_ALLOCS`,
+/// taken 2026-08-31), which is inside the factor of two that file quotes a
 /// figure across.
 ///
 /// # `None` is a row that cannot hold its own controls
@@ -10853,9 +11038,7 @@ impl View {
                             // head — it says which library is being read,
                             // where everything under it is what that library
                             // holds.
-                            if let Some(row) = bay.scopes {
-                                scopes_into(ui, &pal, row, scopes, scope);
-                            }
+                            scopes_into(ui, &pal, &bay, scopes, scope);
                             library_into(ui, &pal, &bay, sets, cursor_row, &load);
                         }
                     }
@@ -11344,16 +11527,18 @@ fn head_pills(
 ///
 /// The only caller that ever asks for the second is a class pill that is open,
 /// and it is the mock's own class rather than an invention here -- the audio-in
-/// pill already carries it, and its documentation is where the argument is:
-/// *"a pill that was only lit would leave which room is being heard unanswered,
-/// and a pill that only carried a name would make a dead input and a live one
-/// look alike at the distance a panel is read from."* An opening is the same
-/// pair of questions -- *which class* and *is it open* -- so it gets the same
-/// pair of answers.
+/// pill already carries it, and its documentation is where the argument was
+/// first written: *"a pill that was only lit would leave which room is being
+/// heard unanswered, and a pill that only carried a name would make a dead
+/// input and a live one look alike at the distance a panel is read from."* An
+/// opening is the same pair of questions -- *which class* and *is it open* --
+/// so it gets the same pair of answers.
 ///
-/// **`docs/manual/console.html` draws the shut state only**, because every
-/// class starts shut. The word is the page's; the treatment is the page's
-/// vocabulary applied to a state it had no reason to draw.
+/// **`docs/manual/console.html` draws the shut state only, because every class
+/// starts shut, and specifies the open one in words**: *what a model is
+/// refused, and where a class opens* says the pill reads `mcp · open` and is
+/// drawn armed, and makes that argument in its own terms. Both the word and the
+/// treatment are the page's.
 fn pill_into(ui: &Ui, pal: &Palette, rect: Rect, text: &str, armed: bool) {
     match armed {
         true => armed_pill_at(ui, pal, rect, text),
