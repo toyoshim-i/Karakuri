@@ -254,6 +254,20 @@ is the sixth by that drawing — or, read more usefully, it is the fifth one gen
 writes a value per step and a helper writes a curve over a length, and both are operations emitted
 on the slower clock.
 
+> **Annotated 2026-08-31, later the same day: what *"where the control map already sits"* points at
+> now has a name.**
+> [ADR-0236](0236-a-map-is-the-layer-between-a-surface-and-the-vocabulary-and-the-audit-is-one-of-the-things-it-does.md)
+> decides that a map is **the layer between a surface and the vocabulary**, holding three things —
+> which surface gesture names which operation, whether a surface may reach a class of operations at
+> all (the audit ADR-0235 requires), and helpers that carry time. **The position this record named by
+> pointing at `karakuri-midi` is the third of those**, and the pointing is why it could not be named
+> here: that crate was, and still is, the layer's only built instance. Nothing above changes — the
+> helper still does not exist, and where curve control goes is still what this record decided. That
+> record also takes up the question left open below about a helper and a sequencer lane, and answers
+> it only this far: they are the same job of the same layer, with steps where the helper has a curve,
+> and whether they are one mechanism or two is still open.
+> [P-0066](../principles/0066-an-adr-is-a-description-of-history-corrected-but-never-revised.md).
+
 ## Alternatives
 
 ### a. The operation carries the quantum and the length itself
