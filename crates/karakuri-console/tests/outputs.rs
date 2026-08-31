@@ -26,6 +26,7 @@ use karakuri_console::panel::{Op, Outcome, Panel, GRAB};
 use karakuri_console::room::size;
 use karakuri_console::view::outputs;
 use karakuri_layout::{Axis, Layout, Point, Rect};
+use karakuri_operation::gate::Open;
 
 /// A panel at a viewport, solved, with a context that has drawn once — the
 /// pair every test here starts from.
@@ -56,7 +57,7 @@ fn at(p: egui::Pos2) -> Point {
 fn the_control_is_the_rows_own_geometry() {
     let (panel, ctx) = console(SMALLEST);
     let row = rect_of(panel.layout(), "outputs");
-    let sink = outputs(&ctx, panel.layout()).expect("the row draws its sink");
+    let sink = outputs(&ctx, panel.layout(), Open::CLOSED).expect("the row draws its sink");
 
     // The word: `.outputs`'s left padding, and centred in the row.
     assert!(
@@ -67,11 +68,23 @@ fn the_control_is_the_rows_own_geometry() {
     );
     assert!(near(sink.label.center().y, row.y + row.h * 0.5));
 
-    // The chip: one `.outputs` gap after the word, 18.5 tall, centred.
+    // **The class pill, between the word and the chip** — one `.outputs` gap
+    // after the word, which is where `docs/manual/console.html` draws it and
+    // why: this row has no bay head to put an indicator in, so it sits beside
+    // the word that stands in for one. Its own geometry and everything it does
+    // are `tests/mcp_pill.rs`; what is asserted here is that it is in this row
+    // and that the chip is measured from it. See `view::Outputs::mcp`.
     assert!(
-        near(sink.sink.min.x, sink.label.max.x + size::OUTPUTS_GAP),
-        "the chip starts {} after the word and the gap is {}",
-        sink.sink.min.x - sink.label.max.x,
+        near(sink.mcp.min.x, sink.label.max.x + size::OUTPUTS_GAP),
+        "the class pill starts {} after the word and the gap is {}",
+        sink.mcp.min.x - sink.label.max.x,
+        size::OUTPUTS_GAP
+    );
+    // The chip: one `.outputs` gap after the pill, 18.5 tall, centred.
+    assert!(
+        near(sink.sink.min.x, sink.mcp.max.x + size::OUTPUTS_GAP),
+        "the chip starts {} after the class pill and the gap is {}",
+        sink.sink.min.x - sink.mcp.max.x,
         size::OUTPUTS_GAP
     );
     assert!(
@@ -147,7 +160,7 @@ fn the_row_is_the_height_a_sink_needs() {
 fn the_control_clears_every_boundarys_grab() {
     for viewport in [SMALLEST, PLAUSIBLE] {
         let (mut panel, ctx) = console(viewport);
-        let sink = outputs(&ctx, panel.layout()).expect("the row draws its sink");
+        let sink = outputs(&ctx, panel.layout(), Open::CLOSED).expect("the row draws its sink");
         let row = rect_of(panel.layout(), "outputs");
 
         // The clearance, stated against the constant it has to beat.
@@ -213,7 +226,7 @@ fn the_control_clears_every_boundarys_grab() {
 #[test]
 fn only_the_control_is_claimed_out_of_the_outputs_row() {
     let (mut panel, ctx) = console(PLAUSIBLE);
-    let sink = outputs(&ctx, panel.layout()).expect("the row draws its sink");
+    let sink = outputs(&ctx, panel.layout(), Open::CLOSED).expect("the row draws its sink");
     let row = rect_of(panel.layout(), "outputs");
 
     assert_eq!(
@@ -225,6 +238,15 @@ fn only_the_control_is_claimed_out_of_the_outputs_row() {
         claim(&mut panel, &ctx, &showing(&[]), at(sink.label.center())),
         Claim::Egui,
         "the word OUTPUTS is a heading and is being treated as a control"
+    );
+    // **And the class pill beside it is one**, which is this row's second
+    // control and the only one on the console that is not an operation at
+    // either end — `tests/mcp_pill.rs` is where it is all asserted, and this
+    // is the row saying it has two things in it a press can land on.
+    assert_eq!(
+        claim(&mut panel, &ctx, &showing(&[]), at(sink.mcp.center())),
+        Claim::Panel,
+        "the class pill in the Outputs row is not being claimed"
     );
     // Past the right of the chip, where the mock draws three more sinks and an
     // add-a-region pill and this console draws none of them.
@@ -260,7 +282,7 @@ fn a_control_that_has_not_been_drawn_is_not_there() {
     panel.solve();
     let fresh = egui::Context::default();
     assert_eq!(fresh.cumulative_pass_nr(), 0);
-    assert_eq!(outputs(&fresh, panel.layout()), None);
+    assert_eq!(outputs(&fresh, panel.layout(), Open::CLOSED), None);
 
     // And the claim rule falls back to what it was: the pointer is over the
     // outputs row, which without a control on it is `egui`'s.
@@ -290,7 +312,11 @@ fn the_dot_follows_the_picture_and_stores_nothing() {
     let mut layout = solved(PLAUSIBLE);
     let picture = id_of(&layout, "program-view");
 
-    let on = |layout: &Layout| outputs(&ctx, layout).expect("the row draws its sink").on;
+    let on = |layout: &Layout| {
+        outputs(&ctx, layout, Open::CLOSED)
+            .expect("the row draws its sink")
+            .on
+    };
     assert!(on(&layout), "the picture is on screen and the sink is dark");
 
     // The node itself, which is what the control asks for.
@@ -324,7 +350,7 @@ fn the_dot_follows_the_picture_and_stores_nothing() {
     layout.solo(id_of(&layout, "library"));
     layout.solve();
     assert_eq!(
-        outputs(&ctx, &layout),
+        outputs(&ctx, &layout, Open::CLOSED),
         None,
         "a solo left the outputs row invisible and its control still drawn"
     );
@@ -341,14 +367,24 @@ fn a_fold_from_anywhere_else_shows_on_the_dot() {
     let (mut panel, ctx) = console(PLAUSIBLE);
     let picture = panel.layout().find("program-view").expect("program-view");
 
-    assert!(outputs(&ctx, panel.layout()).expect("a sink").on);
+    assert!(
+        outputs(&ctx, panel.layout(), Open::CLOSED)
+            .expect("a sink")
+            .on
+    );
     panel.op(Op::Fold(picture));
     assert!(
-        !outputs(&ctx, panel.layout()).expect("a sink").on,
+        !outputs(&ctx, panel.layout(), Open::CLOSED)
+            .expect("a sink")
+            .on,
         "`f` over the picture folded it and the sink beside it says it is on"
     );
     panel.op(Op::UnfoldAll);
-    assert!(outputs(&ctx, panel.layout()).expect("a sink").on);
+    assert!(
+        outputs(&ctx, panel.layout(), Open::CLOSED)
+            .expect("a sink")
+            .on
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -366,7 +402,7 @@ fn the_dot_asks_for_a_fold_and_then_for_an_unfold() {
     let (mut panel, ctx) = console(PLAUSIBLE);
     let picture = panel.layout().find("program-view").expect("program-view");
 
-    let sink = outputs(&ctx, panel.layout()).expect("a sink");
+    let sink = outputs(&ctx, panel.layout(), Open::CLOSED).expect("a sink");
     assert!(sink.on);
     assert_eq!(sink.op(), Op::Fold(picture));
     assert_eq!(
@@ -378,7 +414,7 @@ fn the_dot_asks_for_a_fold_and_then_for_an_unfold() {
         }
     );
 
-    let sink = outputs(&ctx, panel.layout()).expect("a sink");
+    let sink = outputs(&ctx, panel.layout(), Open::CLOSED).expect("a sink");
     assert!(!sink.on);
     assert_eq!(sink.op(), Op::Unfold(picture));
     assert_eq!(
@@ -389,7 +425,11 @@ fn the_dot_asks_for_a_fold_and_then_for_an_unfold() {
             root: false
         }
     );
-    assert!(outputs(&ctx, panel.layout()).expect("a sink").on);
+    assert!(
+        outputs(&ctx, panel.layout(), Open::CLOSED)
+            .expect("a sink")
+            .on
+    );
 }
 
 /// **Off and on again through the control restores the arrangement exactly** —
@@ -411,7 +451,7 @@ fn folding_through_the_dot_and_back_restores_the_arrangement() {
     let previews = rect_of(panel.layout(), "deck-previews").h;
 
     // Off: the picture goes, and the inspector takes its height.
-    let sink = outputs(&ctx, panel.layout()).expect("a sink");
+    let sink = outputs(&ctx, panel.layout(), Open::CLOSED).expect("a sink");
     panel.op(sink.op());
     panel.solve();
     assert!(
@@ -429,7 +469,7 @@ fn folding_through_the_dot_and_back_restores_the_arrangement() {
     );
 
     // On: exactly what it was, rectangle for rectangle.
-    let sink = outputs(&ctx, panel.layout()).expect("a sink");
+    let sink = outputs(&ctx, panel.layout(), Open::CLOSED).expect("a sink");
     panel.op(sink.op());
     panel.solve();
     assert_eq!(
@@ -447,19 +487,19 @@ fn folding_through_the_dot_and_back_restores_the_arrangement() {
 fn a_folded_row_draws_no_control() {
     let ctx = drawn_once();
     let mut layout = solved(PLAUSIBLE);
-    assert!(outputs(&ctx, &layout).is_some());
+    assert!(outputs(&ctx, &layout, Open::CLOSED).is_some());
 
     layout.collapse(id_of(&layout, "outputs"));
     layout.solve();
     assert_eq!(
-        outputs(&ctx, &layout),
+        outputs(&ctx, &layout, Open::CLOSED),
         None,
         "the outputs row is folded away and its control is still being drawn"
     );
 
     layout.expand(id_of(&layout, "outputs"));
     layout.solve();
-    assert!(outputs(&ctx, &layout).is_some());
+    assert!(outputs(&ctx, &layout, Open::CLOSED).is_some());
 
     // And a window too narrow for the chip, which the mock answers by wrapping
     // the row and this console does not: there is one sink, and where it does
@@ -468,7 +508,7 @@ fn a_folded_row_draws_no_control() {
         w: 40.0,
         ..PLAUSIBLE
     });
-    assert_eq!(outputs(&ctx, &narrow), None);
+    assert_eq!(outputs(&ctx, &narrow, Open::CLOSED), None);
 }
 
 /// The row's own boundary is still draggable where the control is not: the
@@ -521,11 +561,13 @@ fn a_press_darkens_a_lit_dot_and_lights_a_dark_one_always() {
         let picture = panel.layout().find("program-view").expect("program-view");
 
         // Lit, and one press darkens it.
-        let sink = outputs(&ctx, panel.layout()).expect("a sink");
+        let sink = outputs(&ctx, panel.layout(), Open::CLOSED).expect("a sink");
         assert!(sink.on);
         panel.op(sink.op());
         assert!(
-            !outputs(&ctx, panel.layout()).expect("a sink").on,
+            !outputs(&ctx, panel.layout(), Open::CLOSED)
+                .expect("a sink")
+                .on,
             "a press on a lit dot left it lit"
         );
         panel.op(Op::UnfoldAll);
@@ -534,14 +576,16 @@ fn a_press_darkens_a_lit_dot_and_lights_a_dark_one_always() {
         // gets: the dot is what they pressed, and it has to answer.
         let by = panel.layout().find(hidden_by).expect("a region");
         panel.op(Op::Fold(by));
-        let sink = outputs(&ctx, panel.layout()).expect("a sink");
+        let sink = outputs(&ctx, panel.layout(), Open::CLOSED).expect("a sink");
         assert!(
             !sink.on,
             "the picture is off screen behind {hidden_by} and the dot is lit"
         );
         panel.op(sink.op());
         assert!(
-            outputs(&ctx, panel.layout()).expect("a sink").on,
+            outputs(&ctx, panel.layout(), Open::CLOSED)
+                .expect("a sink")
+                .on,
             "one press on the dark dot did not light it: the picture is folded behind \
              {hidden_by} and the operator has pressed the only control there is"
         );
@@ -564,7 +608,7 @@ fn the_bay_folded_around_the_picture_comes_back_with_one_press() {
 
     panel.op(Op::FoldEnclosing(picture));
     assert!(!panel.layout().visible(bay), "the bay did not fold");
-    let sink = outputs(&ctx, panel.layout()).expect("a sink");
+    let sink = outputs(&ctx, panel.layout(), Open::CLOSED).expect("a sink");
     assert!(!sink.on);
     assert_eq!(sink.op(), Op::Unfold(picture));
 
@@ -579,7 +623,11 @@ fn the_bay_folded_around_the_picture_comes_back_with_one_press() {
         "the picture was expanded inside a bay that is still folded, so the press \
          lit nothing"
     );
-    assert!(outputs(&ctx, panel.layout()).expect("a sink").on);
+    assert!(
+        outputs(&ctx, panel.layout(), Open::CLOSED)
+            .expect("a sink")
+            .on
+    );
     // And the picture has its height back, which is what *on screen* means.
     assert!(near(rect_of(panel.layout(), "program").h, 378.0));
 }
@@ -610,7 +658,7 @@ fn a_solo_hiding_the_picture_is_dropped_and_one_that_is_not_is_kept() {
     // The one solo that leaves this control on screen with the picture off it.
     panel.op(Op::Solo(row));
     assert!(panel.layout().is_soloed());
-    let sink = outputs(&ctx, panel.layout()).expect("the soloed row draws its sink");
+    let sink = outputs(&ctx, panel.layout(), Open::CLOSED).expect("the soloed row draws its sink");
     assert!(
         !sink.on,
         "everything but this row is folded and the dot is lit"
@@ -626,7 +674,11 @@ fn a_solo_hiding_the_picture_is_dropped_and_one_that_is_not_is_kept() {
         panel.layout().visible(picture),
         "the picture is still off screen"
     );
-    assert!(outputs(&ctx, panel.layout()).expect("a sink").on);
+    assert!(
+        outputs(&ctx, panel.layout(), Open::CLOSED)
+            .expect("a sink")
+            .on
+    );
 
     // **And the ordering, which is the case that decides it.** Fold the
     // picture, *then* solo this row: `unsolo` restores the flags the solo
@@ -639,11 +691,13 @@ fn a_solo_hiding_the_picture_is_dropped_and_one_that_is_not_is_kept() {
     let row = panel.layout().find("outputs").expect("outputs");
     panel.op(Op::Fold(picture));
     panel.op(Op::Solo(row));
-    let sink = outputs(&ctx, panel.layout()).expect("the soloed row draws its sink");
+    let sink = outputs(&ctx, panel.layout(), Open::CLOSED).expect("the soloed row draws its sink");
     assert!(!sink.on);
     panel.op(sink.op());
     assert!(
-        outputs(&ctx, panel.layout()).expect("a sink").on,
+        outputs(&ctx, panel.layout(), Open::CLOSED)
+            .expect("a sink")
+            .on,
         "the picture was folded before the solo, and undoing the solo put that fold \
          back over the press that was undoing it"
     );
@@ -659,7 +713,7 @@ fn a_solo_hiding_the_picture_is_dropped_and_one_that_is_not_is_kept() {
     panel.op(Op::Solo(panel.layout().find("program").expect("program")));
     assert!(panel.layout().visible(picture));
     assert_eq!(
-        outputs(&ctx, panel.layout()),
+        outputs(&ctx, panel.layout(), Open::CLOSED),
         None,
         "the outputs row is soloed away"
     );

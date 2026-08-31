@@ -31,8 +31,9 @@ use common::{drawn_once, id_of, near, rect_of, showing, solved, PLAUSIBLE, SMALL
 use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::Panel;
 use karakuri_console::room::{size, Room};
-use karakuri_console::view::{library, LibraryBay, Scope, View, DECK_LETTERS};
+use karakuri_console::view::{library, mcp_pill, LibraryBay, Scope, View, DECK_LETTERS};
 use karakuri_layout::{Point, Rect};
+use karakuri_operation::gate::{Class, Open};
 
 /// **The mock's own library, as names**: five Sets, in the order it draws
 /// them.
@@ -378,13 +379,36 @@ fn a_console_with_no_store_lists_nothing() {
     // its body at all. The two draw the same shapes or the Library is drawing
     // something a library nobody opened does not have — an empty list, or a
     // rule and a `0 of 0` under one.
+    //
+    // **The Master bay draws one thing the Library does not, and it is
+    // counted rather than the comparison being given up.** It carries the
+    // class pill that opens the master effects to a model and the Library
+    // carries none, because the Library is one of the four bays with no class
+    // of its own — ADR-0235 leaves *"whether a bay that carries no class draws
+    // the indicator at all"* open and the console draws nothing there. So the
+    // pill's own shapes are counted where they are and taken off: a number
+    // written down here instead would be this test's claim quietly becoming a
+    // claim about how `egui` tessellates a capsule.
     let master = to_egui(rect_of(panel.layout(), "master"));
+    let capsule = mcp_pill(
+        &drawn_once(),
+        panel.layout(),
+        Class::MasterEffects,
+        Open::CLOSED,
+    )
+    .expect("the Master bay draws its class pill")
+    .pill;
+    let pill = shapes_inside(&mut view, &mut panel, capsule).len();
+    assert!(
+        pill > 0,
+        "nothing at all was drawn inside the Master bay's class pill"
+    );
+    let in_master = shapes_inside(&mut view, &mut panel, master).len();
     assert_eq!(
         bare,
-        shapes_inside(&mut view, &mut panel, master).len(),
+        in_master - pill,
         "the Library bay draws {bare} shapes with no store behind it and the Master bay, \
-         which has no body at all, draws {}",
-        shapes_inside(&mut view, &mut panel, master).len()
+         which has no body at all, draws {in_master} less the {pill} of its class pill"
     );
 
     // With the store's names, the same frame draws the rows and the foot.
