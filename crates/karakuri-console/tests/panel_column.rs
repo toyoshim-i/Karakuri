@@ -290,6 +290,21 @@ fn sample(variant: &str) -> Operation {
         // the panel reaches both halves of the row's *"the mix, or one deck
         // auditioned"*.
         "SetPreview" => Operation::SetPreview { showing: Some(0) },
+        // **The transport row's audio-in pill**, whose card lists the inputs
+        // the machine has and whose rows are the picking. One operation over
+        // however many inputs there are, and the string is the description the
+        // device answered to when the list was read — which is the same string
+        // `AudioInput::open` matches a selector against, so what leaves the
+        // panel is what opens the device.
+        //
+        // **The row it claims was a `launch` row until this control existed**:
+        // `--audio-in` was the only way in and nothing could change it after
+        // the run started. A card that lists the inputs and opens one is that
+        // row reached during a set, which is a change to the page and is made
+        // there rather than assumed here.
+        "AttachBeatSource" => Operation::AttachBeatSource {
+            source: karakuri_operation::BeatSource::AudioInput("default".to_owned()),
+        },
         other => panic!(
             "`{SRC}` constructs `Operation::{other}` and this file has no value for it — a \
              control started emitting an operation nobody accounted for. Add an arm here, and \

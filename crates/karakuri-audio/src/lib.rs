@@ -75,6 +75,6 @@ pub mod lock;
 pub mod tempo;
 
 pub use analysis::{Analysis, Analyzer};
-pub use device::{staleness, AudioError, AudioInput, Reading};
+pub use device::{inputs, staleness, AudioError, AudioInput, Reading};
 pub use lock::{BeatLock, Correction, Reason};
 pub use tempo::{fold, tracking_window, Estimate, Tracker};

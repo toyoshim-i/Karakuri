@@ -58,10 +58,18 @@
 //!    there, and the price is that a boundary cannot be dragged with a menu
 //!    open. Pressing it shuts the menu, and the second press drags.
 //!
-//!    See [`crate::view::Arrangement::open`], which is the whole of the
-//!    condition, and `tests/arrangement_pill.rs`, which asserts both halves —
-//!    that a boundary under the open card goes to the panel, and that it goes
-//!    back to being an ordinary boundary the moment the menu is shut.
+//!    See [`crate::view::Arrangement::open`] and
+//!    [`crate::view::AudioIn::open`], which are the whole of the condition,
+//!    and `tests/arrangement_pill.rs` and `tests/audio_in.rs`, which assert
+//!    both halves for each — that a boundary under the open card goes to the
+//!    panel, and that it goes back to being an ordinary boundary the moment
+//!    the card is shut.
+//!
+//!    **Two cards can be down and never at once.** The audio-in pill has one
+//!    too, and this clause is written over both: whichever is open claims the
+//!    press that would have opened the other, and that press shuts it. So the
+//!    second press opens the second card, which is the same one-extra-press
+//!    price a boundary already pays.
 //! 3. Otherwise, if the pointer is within [`GRAB`] of a boundary, it is the
 //!    panel's and `egui` does not see the event.
 //! 4. **Otherwise, if the pointer is on a control the console draws, it is the
@@ -75,12 +83,13 @@
 //!    describing itself to an operator has to say what a pointer reaches, and
 //!    a sentence saying it is where the count goes stale. What they are is
 //!    still written here, because a name is not a number and there is nowhere
-//!    else the eighteen sit together: the Outputs row's sink
+//!    else the nineteen sit together: the Outputs row's sink
 //!    ([`crate::view::outputs`]), a mixer strip's fader knob
 //!    ([`crate::view::Mixer::grab`]), its blend chip
 //!    ([`crate::view::Mixer::blend`]), its tally chip
 //!    ([`crate::view::Mixer::tally`]), its mask mini
-//!    ([`crate::view::Mixer::mask`]), the transport row's arrangement pill
+//!    ([`crate::view::Mixer::mask`]), the transport row's audio-in pill
+//!    ([`crate::view::audio_in`]) and its arrangement pill
 //!    ([`crate::view::arrangement`]), at the end of that row the tone map's
 //!    capsule and the exposure track ([`crate::view::look`]), in an
 //!    inspector pane's deck head the sync chip, the anchor and the scrub's two
@@ -124,7 +133,7 @@
 //!    `.mini`'s padding argument met with a band. That is 16.5 in a row of 48
 //!    and therefore **15.75** as well. `tests/look.rs` measures both and fails
 //!    the same three ways `tests/arrangement_pill.rs` does; that two of the
-//!    eighteen agree is a fact about two capsules being one height, not a number
+//!    nineteen agree is a fact about two capsules being one height, not a number
 //!    either of them inherited.
 //!
 //!    **The ninth to the twelfth are the first controls that are not in a row
@@ -271,11 +280,18 @@
 //! the one control on this panel that does not name a destination — because
 //! the vocabulary has none for it to name.
 //!
+//! **So is the audio-in pill**, which is the same shape over a device:
+//! [`crate::view::AudioInPill::ask`] answers *what does a press on it ask for*
+//! off the same laid-out pill this rule hit-tests — the card down or up, or
+//! `AttachBeatSource` naming the input that was picked. What it cannot answer
+//! is whether that input is still there, and it does not try: a device that
+//! has gone between the listing and the press is refused where it is opened.
+//!
 //! **So is the arrangement pill**, one row up and over a control with a menu
 //! under it: [`crate::view::ArrangementPill::ask`] answers *what does a press
 //! on it ask for* off the same laid-out pill this rule hit-tests — the menu
 //! down or up, the reset, a save under the name in use, or a restore of the
-//! name that was picked. It is the one of the eighteen whose answer is sometimes
+//! name that was picked. It is the one of the nineteen whose answer is sometimes
 //! not an operation at all, and that is the affordance and the vocabulary
 //! staying apart rather than an exception: *open the menu* is not something a
 //! MIDI map or an MCP call could ever want to say.
@@ -329,14 +345,15 @@ use karakuri_layout::{Hit, Point};
 
 use crate::panel::{Panel, GRAB};
 use crate::view::{
-    arrangement, deck_head, inspector, look, master, mixer, outputs, program_bay, program_head,
-    View,
+    arrangement, audio_in, deck_head, inspector, look, master, mixer, outputs, program_bay,
+    program_head, View,
 };
 
 /// **What each of rule 4's derivations answers for**, one entry per probe in
-/// [`claim`] and in that order: the Outputs sink, the arrangement pill, the
-/// look group's two, a strip's four, the Master bay's one, a deck head's four,
-/// the Program bay head's `solo`, and the four deck preview cells.
+/// [`claim`] and in that order: the Outputs sink, the audio-in pill, the
+/// arrangement pill, the look group's two, a strip's four, the Master bay's
+/// one, a deck head's four, the Program bay head's `solo`, and the four deck
+/// preview cells.
 ///
 /// **It is a table and not a sentence because [`claim`] asks its probes out of
 /// an array of exactly this length.** A derivation added to rule 4 without an
@@ -349,7 +366,7 @@ use crate::view::{
 /// about a control is — the clearance test the rule above says each one owes,
 /// `tests/mask.rs` being the most recent of them — and this entry is what has
 /// to be raised beside it.
-const CLAIMS: [usize; 8] = [1, 1, 2, 4, 1, 4, 1, 4];
+const CLAIMS: [usize; 9] = [1, 1, 1, 2, 4, 1, 4, 1, 4];
 
 /// **How many controls rule 4 hit-tests**, summed over [`CLAIMS`].
 ///
@@ -445,7 +462,12 @@ pub fn claim(panel: &mut Panel, ctx: &egui::Context, view: &View, p: Point) -> C
     // Rule 2: a menu that is down is a hand mid-choice, and every point of the
     // console is part of that gesture until it is shut. Before the boundary,
     // because the card is drawn across boundaries on purpose.
-    if view.arrangement.open() {
+    // **Either card**, and they are two clauses of one rule rather than two
+    // rules: a card that is down is a hand mid-choice whichever pill put it
+    // there, and the next press is part of that gesture either way. They can
+    // never both be down — the press that would open the second one lands
+    // while the first is open, so this claims it and it shuts that one.
+    if view.arrangement.open() || view.audio.as_ref().is_some_and(|audio| audio.open()) {
         return Claim::Panel;
     }
     // Rule 3 before rule 4: the boundary's first refusal is what the ordering
@@ -458,13 +480,27 @@ pub fn claim(panel: &mut Panel, ctx: &egui::Context, view: &View, p: Point) -> C
         // point is on it — and no answer is stored.
         Hit::View(_) | Hit::Nothing => {
             let on_sink = || outputs(ctx, panel.layout()).is_some_and(|row| row.hit(p));
-            // The pill is the only one of the eighteen that is not in a bay, and
-            // the only one asked with the menu already known to be shut: rule
-            // 2 has answered for the open case above, so this is the capsule
-            // alone.
-            let on_pill = || {
-                arrangement(ctx, panel.layout(), view.transport, &view.arrangement)
+            // **The two pills that are not in a bay**, and the only two asked
+            // with their cards already known to be shut: rule 2 has answered
+            // for the open case above, so these are the capsules alone.
+            //
+            // The audio-in pill is asked first because it is drawn first —
+            // the arrangement pill is laid out from where it ends, so asking
+            // in the other order would derive the second from the first
+            // anyway.
+            let on_audio = || {
+                audio_in(ctx, panel.layout(), view.transport, view.audio.as_ref())
                     .is_some_and(|pill| pill.hit(p))
+            };
+            let on_pill = || {
+                arrangement(
+                    ctx,
+                    panel.layout(),
+                    view.transport,
+                    view.audio.as_ref(),
+                    &view.arrangement,
+                )
+                .is_some_and(|pill| pill.hit(p))
             };
             // **The bay is derived once for all of its controls**, since a
             // knob, a blend chip, a tally chip and a mask mini are four
@@ -485,6 +521,7 @@ pub fn claim(panel: &mut Panel, ctx: &egui::Context, view: &View, p: Point) -> C
                     ctx,
                     panel.layout(),
                     view.transport,
+                    view.audio.as_ref(),
                     &view.arrangement,
                     view.look,
                 )
@@ -511,7 +548,7 @@ pub fn claim(panel: &mut Panel, ctx: &egui::Context, view: &View, p: Point) -> C
                 })
             };
             // **The one control this console has in a bay head**, and the only
-            // one of the eighteen whose capsule a boundary's grab reaches —
+            // one of the nineteen whose capsule a boundary's grab reaches —
             // `view::program_head` is where that 0.75 of a pixel is measured
             // and argued, and rule 3 above is what decides it.
             let on_solo = || program_head(ctx, panel.layout()).is_some_and(|head| head.hit(p));
@@ -531,6 +568,7 @@ pub fn claim(panel: &mut Panel, ctx: &egui::Context, view: &View, p: Point) -> C
             // did, so a press on the sink still costs one galley lookup.
             let probes: [&dyn Fn() -> bool; CLAIMS.len()] = [
                 &on_sink,
+                &on_audio,
                 &on_pill,
                 &on_look,
                 &on_strip,

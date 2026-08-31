@@ -410,29 +410,80 @@ fn describe(device: &cpal::Device) -> String {
         .unwrap_or_else(|| "unnamed input".to_string())
 }
 
+/// **What input devices there are**, by the description [`AudioInput::open`]
+/// matches a selector against and [`AudioInput::description`] hands back — so
+/// a name from this list, passed back to `open`, opens that device.
+///
+/// # A list that exists only inside a refusal is not a list
+///
+/// This enumeration was here before this function was, and the only way to
+/// reach it was to ask for a device that is not there and read
+/// [`AudioError::NoMatch`]'s `available`. That is fine for the operator who
+/// mistyped `--audio-in`, which is what it was written for, and it is not a
+/// listing: **a menu cannot be drawn from the text of an error.** A panel that
+/// wanted to offer the room's inputs would have had to open a device it did
+/// not want, under a name it made up, in the hope of being turned down — and
+/// then parse the sentence it was turned down with. The refusal is a sentence
+/// for a person; this is a value for a program, and the two now come out of
+/// one enumeration rather than agreeing by accident.
+///
+/// **It reads the host every call and caches nothing.** An interface plugged
+/// in between two calls is a different answer, and it should be: the caller
+/// that asks is a hand about to open a menu, which is exactly the moment the
+/// answer has to be current. It is not a thing to ask on a frame path
+/// (`docs/principles/0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md`),
+/// for the same reason a directory listing is not.
+///
+/// **Empty is a room with no microphone, and it is not a failure** — see
+/// `docs/principles/0034-a-quiet-room-is-not-a-missing-microphone.md`. Nothing
+/// here decides what to do about that, because deciding is the caller's: a
+/// machine with no input is a machine where every name answers what it
+/// answered before audio existed.
+pub fn inputs() -> Vec<String> {
+    named(&enumerated(&cpal::default_host()))
+}
+
+/// Every input this host offers, in the host's own order. **One enumeration**,
+/// held rather than repeated: [`pick`] needs the devices to match against and
+/// the names to refuse with, and asking the host twice for one press is how
+/// the two answers came to be able to disagree.
+fn enumerated(host: &cpal::Host) -> Vec<cpal::Device> {
+    host.input_devices()
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>()
+}
+
+/// What those devices are called — the one place a device becomes a name, so
+/// [`inputs`] and a refusal's `available` are the same list said twice rather
+/// than two lists.
+fn named(devices: &[cpal::Device]) -> Vec<String> {
+    devices.iter().map(describe).collect()
+}
+
 fn pick(host: &cpal::Host, selector: &str) -> Result<cpal::Device, AudioError> {
-    let inputs = || {
-        host.input_devices()
-            .into_iter()
-            .flatten()
-            .collect::<Vec<_>>()
-    };
+    let mut devices = enumerated(host);
     if selector.eq_ignore_ascii_case("default") {
         return host
             .default_input_device()
             .ok_or_else(|| AudioError::NoMatch {
                 wanted: selector.to_string(),
-                available: inputs().iter().map(describe).collect(),
+                available: named(&devices),
             });
     }
     let wanted = selector.to_lowercase();
-    inputs()
-        .into_iter()
-        .find(|d| describe(d).to_lowercase().contains(&wanted))
-        .ok_or_else(|| AudioError::NoMatch {
+    // `position` and then a remove, rather than `find`: the list is what the
+    // refusal carries, so it has to still be here after the match failed.
+    match devices
+        .iter()
+        .position(|d| describe(d).to_lowercase().contains(&wanted))
+    {
+        Some(at) => Ok(devices.swap_remove(at)),
+        None => Err(AudioError::NoMatch {
             wanted: selector.to_string(),
-            available: inputs().iter().map(describe).collect(),
-        })
+            available: named(&devices),
+        }),
+    }
 }
 
 #[cfg(test)]
@@ -502,6 +553,41 @@ mod tests {
             analysis_lag: 0.032,
             at: Instant::now(),
         }
+    }
+
+    /// **The list a menu would draw is the list a refusal carries.**
+    ///
+    /// [`inputs`] exists because the enumeration used to be reachable only by
+    /// being turned down, and the whole point of naming it is that the two
+    /// are one answer. So the check is that they *are* one: ask for a device
+    /// that cannot be there, and what the refusal names is what the listing
+    /// names.
+    ///
+    /// **It needs no device and it is not a test that passes because nothing
+    /// ran.** A machine with no inputs answers `[]` on both sides and the
+    /// assertion still bites — it compares two derivations, not a list
+    /// against a length. A machine with inputs compares the names. What it
+    /// cannot check either way is that a stream opens, which is what no test
+    /// in this crate checks and why everything above [`AudioInput`] is a pure
+    /// function.
+    #[test]
+    fn the_refusal_names_the_same_inputs_the_listing_does() {
+        // Not a substring of any device description anywhere: `pick` matches
+        // case-insensitively on `contains`, so the selector has to be
+        // something no name can hold.
+        let nowhere = "\u{fffd}no such audio input\u{fffd}";
+        let error = AudioInput::open(nowhere, 120.0)
+            .err()
+            .expect("a device by that name cannot exist");
+        let AudioError::NoMatch { wanted, available } = &error else {
+            panic!("asking for a device that is not there answered `{error}`");
+        };
+        assert_eq!(wanted, nowhere);
+        assert_eq!(
+            available,
+            &inputs(),
+            "the refusal's list and the listing came out of two enumerations"
+        );
     }
 
     /// **A device that has stopped delivering reaches zero, and takes
