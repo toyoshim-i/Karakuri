@@ -106,11 +106,20 @@
 //! record is gone. It writes two `Record::Mask` where it wrote one, which is
 //! what routing it honestly costs: each row writes the record whole.
 //!
-//! **The rest are still here and each has a reason.** `transition_record` is
-//! `fade_slot`'s and `wipe`'s and `select_record` is `cycle_renderer`'s: `Operation::FadeDeck`,
-//! `Operation::Crossfade`, `Operation::Wipe` and `Operation::SelectRenderer`
-//! all need the grid quantised onto a musical instant, plus the quantum and the
-//! length that `Operation::SetTransition` sets and no record carries.
+//! **`select_record` went the same way, and `transition_record` is down to one
+//! caller.** They were `cycle_renderer`'s and `fade_slot`'s, held while
+//! `Operation::FadeDeck`, `Operation::Crossfade` and `Operation::SelectRenderer`
+//! needed the grid quantised onto a musical instant plus the quantum and the
+//! length `Operation::SetTransition` sets and no record carries. **The quantum
+//! and the length turned out not to be missing but unassigned**, and they are
+//! the surface's: `karakuri_operation_record::Current` carries them the way it
+//! carries the look and the mask, [`current_transition`] is the reading that
+//! hands them over, and the three operations write their own records now. A
+//! selection is one record, so `select_record` had nothing left to be and is
+//! gone; `transition_record` stays because `Operation::Wipe` is still owed —
+//! its six records include a shape `SetTransition` holds and a soft edge no
+//! operation names — and it is `wipe`'s alone until that is settled.
+//!
 //! `look_record` builds the launch look, which is a complete look rather than
 //! an ask. `canvas_record` names a record no operation writes. Each of them
 //! goes the day its operation's conversion is settled — see ADR-0194.
@@ -271,6 +280,24 @@ pub fn wipe_kind(kind: MaskKind) -> karakuri_operation::WipeKind {
 }
 
 /// The engine's sync mode, as the vocabulary's. See [`blend_mode`].
+/// **The engine's curve as the vocabulary's**, for the one of these lists that
+/// had no wire to reach until a fade converted.
+///
+/// `karakuri_operation::Curve` has existed since the vocabulary did —
+/// `Operation::AttachSignal` carries one — and nothing ever needed its name,
+/// because that operation writes no session record. A scheduled move does:
+/// `Record::Transition`'s `curve` is what a replay reads the shape of a fade
+/// back out of. So this is the fifth of these functions and it arrived last,
+/// for the reason the others arrived when they did.
+pub fn curve(shape: Curve) -> karakuri_operation::Curve {
+    match shape {
+        Curve::Lin => karakuri_operation::Curve::Lin,
+        Curve::Pow2 => karakuri_operation::Curve::Pow2,
+        Curve::Sqrt => karakuri_operation::Curve::Sqrt,
+        Curve::Smooth => karakuri_operation::Curve::Smooth,
+    }
+}
+
 pub fn sync(mode: Sync) -> karakuri_operation::Sync {
     match mode {
         Sync::Free => karakuri_operation::Sync::Free,
@@ -381,7 +408,53 @@ pub fn current_mask(mask: Mask) -> karakuri_operation_record::Mask {
     }
 }
 
+/// **What the next scheduled move means, as the reading the conversion
+/// needs.**
+///
+/// `Operation::FadeDeck` carries a deck and a destination, because that is
+/// what a control can say; `Record::Transition` carries the instant, the
+/// length and the shape too, because that is what a replay can reconstruct a
+/// move from. The three that are missing are `Operation::SetTransition`'s —
+/// a surface's own setting deciding what the *next* fade means — so they are
+/// handed in, and this is the fifth of these.
+///
+/// **It takes the grid and a quantum rather than a start, and that is the
+/// whole of the function.** `karakuri_engine::transition::quantise` is where
+/// the next musical instant is decided, once, at the moment the operator
+/// asked; `karakuri-operation-record` cannot reach it any more than it can
+/// reach the oscillator, and a conversion that divided by a quantum of its own
+/// would be a second grid. Asking for the oscillator and the quantum instead
+/// of a beat count is what makes that structural rather than a hope
+/// ([P-0026](../../../docs/principles/0026-a-guarantee-is-structural-or-it-is-a-convention-that-says-so.md)),
+/// which is [`current_tempo`]'s arrangement exactly.
+///
+/// **A caller with no opinion about the grid gives a quantum of 0**, which
+/// `quantise` documents as *"now"* and answers with the beat count it was
+/// handed — so ASAP is a setting a surface already has rather than anything
+/// this signature had to invent. See
+/// [`tests::a_quantum_of_zero_starts_the_move_on_the_beat_it_was_asked_on`].
+pub fn current_transition(
+    grid: &Oscillator,
+    quantum: f64,
+    beats: f64,
+    shape: Curve,
+) -> karakuri_operation_record::Transition {
+    karakuri_operation_record::Transition {
+        start: karakuri_engine::transition::quantise(grid.beats(), quantum),
+        beats,
+        curve: curve(shape),
+    }
+}
+
 /// A scheduled move, as the record that carries it.
+///
+/// **`wipe`'s alone now.** `fade_slot` was the other caller and is gone: a
+/// fade, a crossfade and a renderer selection write their records through
+/// `karakuri_operation_record::written` since the transition settings became a
+/// reading. `Operation::Wipe` is still owed — the shape its front takes is
+/// `Operation::SetTransition`'s and the soft edge is no operation's at all —
+/// so the one gesture that still builds a move by hand still needs this. It
+/// goes the day that is settled.
 pub fn transition_record(
     slot: usize,
     control: Control,
@@ -397,20 +470,6 @@ pub fn transition_record(
         start,
         beats,
         curve: curve.name().to_string(),
-    }
-}
-
-/// A scheduled selection — which renderer of a slot goes live, and when — as
-/// the record that carries it.
-///
-/// No length and no curve, and that is the record rather than an omission: a
-/// selection is a choice and a choice is a cut. See
-/// `karakuri_engine::transition::Selection`.
-pub fn select_record(slot: usize, renderer: usize, start: f64) -> Record {
-    Record::Select {
-        slot: slot as u8,
-        renderer: renderer as u32,
-        start,
     }
 }
 
@@ -871,6 +930,16 @@ mod tests {
                  `Record::Authority` carries the name"
             );
         }
+        for shape in karakuri_engine::binding::CURVES {
+            assert_eq!(
+                curve(shape).name(),
+                shape.name(),
+                "the vocabulary and the engine spell one curve two ways, and \
+                 `Record::Transition` carries the name — a fade whose shape does not \
+                 decode is a move that fails to replay rather than one that eases \
+                 differently"
+            );
+        }
     }
 
     /// One record, as `karakuri-operation-record` writes it.
@@ -899,6 +968,38 @@ mod tests {
             }
             other => panic!("`{}` is not one record: {other:?}", operation.title()),
         }
+    }
+
+    /// A reading of the transition settings a surface is holding, for the
+    /// three operations that schedule a move.
+    ///
+    /// Through [`current_transition`] rather than by spelling a
+    /// `karakuri_operation_record::Transition`, which is `from_operation`'s
+    /// rule one function down: what these tests convert is what a surface
+    /// hands over, including the curve going through the two copies of that
+    /// list.
+    fn scheduled(
+        at: u8,
+        quantum: f64,
+        beats: f64,
+        shape: Curve,
+    ) -> karakuri_operation_record::Current {
+        karakuri_operation_record::Current {
+            transition: Some(current_transition(&grid_at(at), quantum, beats, shape)),
+            ..karakuri_operation_record::Current::default()
+        }
+    }
+
+    /// A session oscillator standing on beat `at`.
+    ///
+    /// 120 BPM makes a beat half a second, so a step of that length is a beat
+    /// apiece and the position is exact rather than a float that nearly is —
+    /// which matters here, because what these tests are about is the instant a
+    /// move lands on.
+    fn grid_at(at: u8) -> Oscillator {
+        let mut grid = Oscillator::new(120.0);
+        grid.advance(at, 0.5);
+        grid
     }
 
     /// A reading of a mask that is wearing exactly this, for the two
@@ -981,6 +1082,178 @@ mod tests {
         );
     }
 
+    /// **A quantum of zero starts the move on the beat it was asked on**,
+    /// which is what a surface with no opinion about the grid hands in.
+    ///
+    /// `karakuri_engine::transition::quantise` documents 0 as *"now"* —
+    /// *"an operator who wants a cut does not want to wait for the bar"* — and
+    /// this is what makes that reachable through the conversion rather than
+    /// only through the engine: the reading carries the instant the session is
+    /// already at, so `written` has nothing to invent and no grid to consult.
+    ///
+    /// The three quanta a keyboard offers are asserted together, because what
+    /// is being checked is that this function is `quantise` and not a second
+    /// opinion about it.
+    #[test]
+    fn a_quantum_of_zero_starts_the_move_on_the_beat_it_was_asked_on() {
+        let grid = grid_at(33);
+        assert_eq!(grid.beats(), 33.0, "the fixture is not where it says it is");
+        // Now, the next beat, the next bar.
+        for (quantum, expected) in [(0.0, 33.0), (1.0, 33.0), (4.0, 36.0)] {
+            assert_eq!(
+                current_transition(&grid, quantum, 4.0, Curve::Smooth).start,
+                expected,
+                "a quantum of {quantum} on beat 33 scheduled the move at something \
+                 other than {expected} — this reading is `quantise` handed over, not a \
+                 second grid"
+            );
+        }
+        // And a cut is due the instant it is read, which is what a start of
+        // *now* has to mean: `Transition::value_at` and `Selection::due` are
+        // both `>=`, so the beat it was asked on belongs to the move.
+        let now = current_transition(&grid, 0.0, 0.0, Curve::Smooth);
+        assert!(
+            karakuri_engine::transition::Transition::new(
+                0,
+                Control::Opacity,
+                1.0,
+                0.0,
+                now.start,
+                now.beats,
+                Curve::Smooth,
+            )
+            .value_at(grid.beats())
+            .is_some(),
+            "a cut scheduled for now had not begun by now — an operator asking for a \
+             cut is waiting for nothing"
+        );
+    }
+
+    /// **What the conversion schedules decodes back onto the fader**, which is
+    /// the one wire name in `karakuri-operation-record` with no list behind it.
+    ///
+    /// `Record::Transition`'s `control` is `karakuri_engine::transition::Control`'s
+    /// list, the vocabulary owns no copy of it — no operation names a control,
+    /// because `Operation::FadeDeck` *is* the opacity one — and that crate
+    /// cannot reach the engine. So the literal it writes is checked here, in
+    /// the one package that sees both, exactly as the blend and residency
+    /// spellings one test up are. A fade that decoded to `gain` would move the
+    /// trim instead of the fader, which under `over` is a deck that dims
+    /// without ever getting out of the way.
+    #[test]
+    fn what_the_conversion_schedules_decodes_back_onto_the_fader() {
+        for shape in karakuri_engine::binding::CURVES {
+            let record = from_operation_reading(
+                karakuri_operation::Operation::FadeDeck { deck: 1, to: 0.0 },
+                scheduled(33, 4.0, 8.0, shape),
+            );
+            assert_eq!(
+                change(&record, 4).expect("built here"),
+                Some(Change::Transition {
+                    slot: 1,
+                    control: Control::Opacity,
+                    to: 0.0,
+                    start: 36.0,
+                    beats: 8.0,
+                    curve: shape,
+                }),
+                "the fade `written` builds did not decode back as a move on the fader \
+                 in {}, so the control or the curve it spells is not the one the engine \
+                 reads",
+                shape.name()
+            );
+        }
+    }
+
+    /// **The records `fade_slot` and `cycle_renderer` built by hand are the
+    /// ones the conversion writes.**
+    ///
+    /// The two functions are gone: a fade, a crossfade and a renderer
+    /// selection go through `Live::operate` now that the transition settings
+    /// are a reading. This is what says the change of route did not change a
+    /// byte of what they write, on
+    /// [`the_records_the_gestures_built_by_hand_are_what_the_conversion_writes`]'s
+    /// terms — literals on the right-hand side, because an expectation derived
+    /// from `written` would assert that `written` equals itself.
+    ///
+    /// The crossfade is here whole, and it is the one that could not be
+    /// checked this way before: it is four records out of one press, and its
+    /// two halves have to carry the same instant or they are two fades that
+    /// happen to be near each other.
+    #[test]
+    fn the_moves_the_keys_built_by_hand_are_what_the_conversion_writes() {
+        use karakuri_operation::Operation;
+        use karakuri_operation_record::{written, Written};
+
+        // Beat 33, the next bar, over four beats, eased — which is what the
+        // `f` key with the console's own defaults asked for.
+        let current = scheduled(33, 4.0, 4.0, Curve::Smooth);
+        assert_eq!(
+            from_operation_reading(Operation::FadeDeck { deck: 2, to: 0.0 }, current),
+            Record::Transition {
+                slot: 2,
+                control: "opacity".to_string(),
+                to: 0.0,
+                start: 36.0,
+                beats: 4.0,
+                curve: "smooth".to_string(),
+            },
+            "the move a fade writes is not what `Live::fade_slot` wrote"
+        );
+
+        let Written::Records(records) = written(&Operation::Crossfade { from: 0, to: 1 }, &current)
+        else {
+            panic!("a crossfade with its settings read wrote no records");
+        };
+        assert_eq!(
+            records,
+            vec![
+                Record::Opacity {
+                    slot: 1,
+                    value: 0.0
+                },
+                Record::Residency {
+                    slot: 1,
+                    level: "live".to_string()
+                },
+                Record::Transition {
+                    slot: 0,
+                    control: "opacity".to_string(),
+                    to: 0.0,
+                    start: 36.0,
+                    beats: 4.0,
+                    curve: "smooth".to_string(),
+                },
+                Record::Transition {
+                    slot: 1,
+                    control: "opacity".to_string(),
+                    to: 1.0,
+                    start: 36.0,
+                    beats: 4.0,
+                    curve: "smooth".to_string(),
+                },
+            ],
+            "the four records a crossfade writes are not what `Live::crossfade` and \
+             `Live::fade_slot` wrote between them"
+        );
+
+        assert_eq!(
+            from_operation_reading(
+                Operation::SelectRenderer {
+                    deck: 3,
+                    renderer: 1
+                },
+                current
+            ),
+            Record::Select {
+                slot: 3,
+                renderer: 1,
+                start: 36.0,
+            },
+            "the selection `r` writes is not what `mix::select_record` wrote"
+        );
+    }
+
     use karakuri_engine::TonemapOp;
 
     /// The round trip, which is the whole claim: what the live path builds is
@@ -1034,7 +1307,16 @@ mod tests {
                 },
             ),
             (
-                select_record(2, 1, 64.0),
+                from_operation_reading(
+                    karakuri_operation::Operation::SelectRenderer {
+                        deck: 2,
+                        renderer: 1,
+                    },
+                    // A grid at beat 33 and a quantum of 64, so the instant
+                    // is one a reader can see was quantised rather than
+                    // passed through.
+                    scheduled(33, 64.0, 0.0, Curve::Lin),
+                ),
                 Change::Select {
                     slot: 2,
                     renderer: 1,

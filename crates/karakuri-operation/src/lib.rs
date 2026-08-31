@@ -425,6 +425,30 @@ pub enum Curve {
     Smooth,
 }
 
+impl Curve {
+    /// **The lower-case word a record spells**, which is what
+    /// `karakuri_store::record::Record::Transition`'s `curve` carries and what
+    /// a `bind` record has always carried.
+    ///
+    /// It arrived later than [`BlendMode::name`] and its neighbours because
+    /// nothing needed it: the one operation carrying a curve —
+    /// [`Operation::AttachSignal`] — writes no session record, so this list
+    /// had no wire to reach. A scheduled move does: the shape a fade takes is
+    /// part of what a replay reconstructs it from, and
+    /// `karakuri-operation-record` is where a curve now becomes a name.
+    ///
+    /// A match rather than a table, for [`BlendMode::name`]'s reason: a curve
+    /// added to the enum does not compile until somebody has spelled it.
+    pub fn name(self) -> &'static str {
+        match self {
+            Curve::Lin => "lin",
+            Curve::Pow2 => "pow2",
+            Curve::Sqrt => "sqrt",
+            Curve::Smooth => "smooth",
+        }
+    }
+}
+
 /// The shape a wipe's front takes. `karakuri_engine::deck::MaskKind`'s three.
 ///
 /// **A shape is this and an angle**, which is why it is not the six-item list

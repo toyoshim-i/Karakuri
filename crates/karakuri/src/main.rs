@@ -5576,11 +5576,30 @@ fn reading(operation: &Operation, deck: &Deck, look: &Look) -> Current {
     // corrected.** It said four where there are three and named a fifth that
     // would be a fourth, which is a figure nothing checks going stale in the
     // one comment whose whole argument is that the compiler does the checking.
+    // **The transition settings are the one reading this window answers
+    // `None` for, and it is an answer rather than an omission.** The type grew
+    // them the day `FadeDeck`, `Crossfade` and `SelectRenderer` stopped being
+    // owed, which is exactly the event the paragraph above was written to
+    // catch — so this is somebody saying whether this window can take it, and
+    // the answer is that it has nothing to say.
+    //
+    // A quantum and a length are a *surface's* setting deciding what the next
+    // move means, and this panel draws no control that sets either: the
+    // transition row is not built, the crossfader is not drawn at all, and no
+    // control here emits any of the three operations that read them. A value
+    // handed in would be this file inventing a setting nobody chose, which is
+    // the failure `Current`'s every-field-optional rule exists to prevent —
+    // and if a control ever does emit one before the settings exist, the
+    // window prints *the transition settings its move is scheduled by were not
+    // handed over* and names the operation, which is a sentence rather than a
+    // fade at a length the operator never set.
+    let transition = None;
     Current {
         look,
         mask,
         transport,
         tempo,
+        transition,
     }
 }
 
@@ -8778,37 +8797,82 @@ mod tests {
     ///
     /// This is what the third answer is *for*, and the cheap harness is the
     /// one that treats *not `Records`* as a no-op. A press that emitted
-    /// `FadeDeck` would then look exactly like a press that emitted
+    /// `Wipe` would then look exactly like a press that emitted
     /// `SelectDeck` — nothing printed and nothing moved — and an operator
-    /// would read the first as *the fade did not take* when what happened is
-    /// *nobody has decided what a fade writes* (`Owed` is a question, not an
+    /// would read the first as *the wipe did not take* when what happened is
+    /// *nobody has decided what a wipe writes* (`Owed` is a question, not an
     /// error: ADR-0194).
+    ///
+    /// **The operation this names used to be `FadeDeck` and had to change**,
+    /// which is the test doing what it says on the line below: a fade stopped
+    /// being owed the day the transition settings became a reading, so the
+    /// operation named here is now `Operation::Wipe` — the one whose record is
+    /// still nobody's to write, because it carries a shape
+    /// `Operation::SetTransition` holds and a soft edge no operation names.
+    /// The fade has not left this test, though: it is the second half, and it
+    /// is now the *other* kind of gap — a reading this window does not have,
+    /// said with the name of the reading in it.
     ///
     /// **Neither sentence is asserted word for word.** What has to hold is
     /// that the window says something, that it names the operation and the
     /// reason, and that the two answers are two different sentences.
     #[test]
     fn an_operation_whose_record_is_owed_is_said_rather_than_swallowed() {
-        // Owed, and `NotSettled` is the reason: a fade needs the grid
-        // quantised onto a musical instant and the transition settings that
-        // no record carries.
-        let fade = Operation::FadeDeck { deck: 1, to: 0.0 };
-        let owed = written(&fade, &Current::default());
+        // Owed, and `NotSettled` is the reason: a wipe carries a mask whose
+        // shape is a console setting and whose soft edge no operation names,
+        // so nobody has said what it writes.
+        let wipe = Operation::Wipe { from: 0, to: 1 };
+        let owed = written(&wipe, &Current::default());
         assert_eq!(
             owed,
             Written::Owed(Owed::NotSettled),
-            "a fade is not owed any more — this test names the operation it does, and \
+            "a wipe is not owed any more — this test names the operation it does, and \
              the one it names has to still be one nobody can write"
         );
-        let said = unwritten(&fade, &owed).expect(
-            "a fade owes a record and this window said nothing at all — a press whose \
+        let said = unwritten(&wipe, &owed).expect(
+            "a wipe owes a record and this window said nothing at all — a press whose \
              record nobody has decided how to write reads, in silence, exactly like a \
              press that did not work",
         );
         assert!(
-            said.contains("FadeDeck") && said.contains(Owed::NotSettled.why()),
+            said.contains("Wipe") && said.contains(Owed::NotSettled.why()),
             "the window said `{said}`, which does not name both the operation and the \
              question it is waiting on"
+        );
+
+        // **And the other gap, which is this window's rather than nobody's.**
+        // A fade converts now, and what it needs is the quantum and the length
+        // a surface holds — which this panel does not, because it draws no
+        // control that sets either. So a press that emitted one would be told
+        // *which reading* was not handed over rather than getting a fade at a
+        // length nobody chose, and the sentence has to be a different one from
+        // the wipe's above or the two gaps read alike.
+        let fade = Operation::FadeDeck { deck: 1, to: 0.0 };
+        let unread = written(&fade, &Current::default());
+        assert_eq!(
+            unread,
+            Written::Owed(Owed::NotRead(
+                karakuri_operation_record::Reading::Transition
+            )),
+            "a fade with no transition settings handed in came back with something \
+             other than the reading it is missing — a default here is a cut at beat \
+             zero, which is a move nobody asked for"
+        );
+        let told = unwritten(&fade, &unread).expect(
+            "a fade this window cannot schedule said nothing at all, so a control that \
+             emitted one would read exactly like a control that did not work",
+        );
+        assert!(
+            told.contains("FadeDeck")
+                && told
+                    .contains(Owed::NotRead(karakuri_operation_record::Reading::Transition).why()),
+            "the window said `{told}`, which does not name both the operation and the \
+             reading it did not get"
+        );
+        assert_ne!(
+            told, said,
+            "a reading this window forgot and a record nobody has decided how to write \
+             read as the same sentence"
         );
 
         // Silent, and settled: which deck the keys are addressed to is a
