@@ -1012,6 +1012,7 @@ fn the_readouts_in_the_transport_row_are_not_controls() {
         &ctx,
         panel.layout(),
         view.transport,
+        None,
         &view.arrangement,
     )
     .expect("the row draws its one control");

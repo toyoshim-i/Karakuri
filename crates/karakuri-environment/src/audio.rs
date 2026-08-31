@@ -27,8 +27,38 @@
 
 use std::time::Instant;
 
-use karakuri_audio::lock::{BeatLock, Reason};
-use karakuri_audio::{AudioError, AudioInput, Correction};
+use karakuri_audio::lock::BeatLock;
+
+/// **What the last correction was for** — a trim, an acquire, a tap, an
+/// octave. Re-exported for [`inputs`]' reason: a surface that says out loud
+/// what the grid just did has to be able to name which of the four it was, and
+/// `karakuri` reaches this crate and not `karakuri-audio`.
+pub use karakuri_audio::lock::Reason;
+use karakuri_audio::{AudioInput, Correction};
+
+/// **Why an input did not open**, so a surface can say which of the reasons it
+/// was rather than only that something failed. [`Audio::open`] hands it back,
+/// and a caller that could not name the type would have nothing to match on —
+/// which is the difference between *a room with no microphone* and *the device
+/// you named is not there*, and those are two different answers.
+pub use karakuri_audio::AudioError;
+
+/// **What input devices there are**, for whoever is about to offer a choice of
+/// them — `karakuri_audio::inputs`, re-exported rather than wrapped.
+///
+/// It is here because this module is the door: `karakuri` takes its audio
+/// through this file and **does not name `karakuri-audio` in its manifest at
+/// all**, so without this the one surface that wants to offer a choice of
+/// inputs could not ask what there is. (`karakuri-cli` does name that crate,
+/// for `Reason`, and could ask it directly; it asks here, because two callers
+/// asking two crates the same question is how the answers come apart.)
+///
+/// **Re-exported rather than wrapped.** A wrapper would be a second function
+/// that can only ever return what this one returns, and the listing and the
+/// refusal a bad selector produces have only just been made one answer —
+/// putting a third name in front of it is how they come apart again.
+pub use karakuri_audio::inputs;
+
 use karakuri_engine::Signals;
 use karakuri_signal::measured::{AudioFrame, MAX_BANDS};
 use karakuri_store::record::Record;

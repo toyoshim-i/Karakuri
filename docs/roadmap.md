@@ -431,9 +431,11 @@ assumed, and that is now a test that fails if the control moves, the row shorten
 
 **The transport row is drawn**, and it shows the four things the console can actually know: the
 BPM, the beat grid, the bar number, and the frame readout against the display's refresh interval
-([ADR-0177](adr/0177-the-transport-row-shows-what-the-console-can-know.md)). `audio-in`, `tap`,
-`learn`, `map`, `landed` and `● rec` are named in the source with what is missing behind each and
-drawn nowhere. The grid is **as many dots as a bar has beats** rather than four, because
+([ADR-0177](adr/0177-the-transport-row-shows-what-the-console-can-know.md)). `tap`, `learn`,
+`map`, `landed` and `● rec` are named in the source with what is missing behind each and drawn
+nowhere. **`audio-in` was the sixth of those and is drawn now**: the panel opens an input, and the
+pill says which one and lists the others under a card — the arrangement pill's own mechanism over a
+device rather than a file (ADR-0225). The grid is **as many dots as a bar has beats** rather than four, because
 `karakuri-signal` marks its own `BEATS_PER_BAR` provisional until the format carries a time
 signature, and a transcribed 4 would go on saying four the day that changes. **What it draws is a
 light that travels those dots** rather than one of them lighting at a time, and the mock's own
@@ -718,17 +720,32 @@ Everything from here down answers *what is each piece waiting on*, and none of i
   the other surfaces onto `karakuri-operation`, the remaining bays — and the first and third are
   closed.
 
-**And the panel has to open an audio device, which nothing has costed.** Four rows of the panel
-column cannot be reached by a program that has not — *Tap the beat* and *Nudge the latency offset*
-are `karakuri_environment::audio::Audio`'s methods and that type *"cannot be constructed without
-opening a device"*, tapping needs the output lag for the same reason the CLI's does, *Attach a beat
-source* is the tempo source, and *Attach a signal to a parameter* wants a bus with something on it.
-**It is unwired, and that is all it is.** `crates/karakuri/src/main.rs`'s header says *"no audio,
-no MIDI, no MCP, no replay and no session"*; the word it was missing is *yet*, and it has it now.
-Nothing is refused and nothing has to be decided — ADR-0214 already makes this program one of two
-thin binaries over `karakuri-environment`, the package `audio.rs` lives in. The four rows are work,
-sitting in the board's `transport`, `tap`, `offset` and `sensitivity row` groups looking like
-drawings.
+**The panel opens an audio device now, and it cost less than the estimate this paragraph
+declined to write.** It opens the host's default at startup — not behind a flag: `karakuri-cli` is
+told which input to take and refuses to start without it, because a scripted render has nobody
+standing there, and this program has somebody standing there and a pill they can pick on. Three
+decisions were written into the code rather than left to be inferred: a machine with **no** input is
+a state and not a fault (P-0034, and the run continues); an input somebody **named** and that is not
+there is a refusal said out loud with the list as it is now (P-0027) but never fatal, because a
+window with a set on it must not close over a cable; and an input that **goes away mid-set** is
+nobody's to notice, because `staleness` already takes both confidences to zero over half a second
+and a watchdog that re-opened the stream would re-lock the grid in the middle of a set.
+
+**Three of the four rows it was blocking moved and the fourth is blocked on a letter.** *Attach a
+beat source* is the `audio-in` pill's card in the panel column; *Tap the beat* and *Halve or double
+the grid* are `b`, `,` and `.` in the key column, which the command line means the same three things
+by. *Nudge the latency offset* is specified as `o` and `p`, this program binds `p` to `Op::Report`,
+and a badge naming two keys with one bound would be a badge that lies — so the row is where it was
+and the decision it is waiting on is [every operation](manual/operations.html)'s, not this file's.
+*Attach a signal to a parameter* was the fourth row in the old list here and is a bay's worth of work
+of its own, with nothing to do with a device being open.
+
+**What the tap and the octave do not do is go through `written`.** `written(TapBeat)` and
+`written(ScaleGrid)` both answer `Owed(NotSettled)` — a tap's record is the beat lock's answer, and
+a `Current` carries no correction — so those two keys reach `karakuri_environment::audio` directly,
+exactly as `karakuri-cli`'s do, and each says which `Record::Tempo` it applied. **That is a gap in
+`karakuri-operation-record` and not in the panel**, and closing it is what would let those two rows
+emit like every other control.
 
 **One thing is owed by the mixer and is nobody's next task**: `Control::MaskPosition` is the third
 control a transition can move, the strip has no control and no readout for that number, so **an

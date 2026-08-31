@@ -255,7 +255,9 @@ use std::time::Duration;
 use egui::epaint::text::{LayoutJob, TextFormat};
 use egui::{Color32, CornerRadius, FontFamily, FontId, Pos2, Rect, Stroke, StrokeKind, Ui};
 use karakuri_layout::{Axis, Hit, NodeId};
-use karakuri_operation::{Authority, BlendMode, Operation, Residency, Sync, Tonemap, WipeKind};
+use karakuri_operation::{
+    Authority, BeatSource, BlendMode, Operation, Residency, Sync, Tonemap, WipeKind,
+};
 
 use crate::budget::{Declared, PANEL_PASS};
 use crate::panel::{unit, Grab, InHand, Knob, Op, Panel, GRAB};
@@ -1935,11 +1937,11 @@ impl Transport {
 /// # None of these four is a control, and that is the answer rather than an
 /// omission
 ///
-/// A point in this row that is not inside a boundary's [`GRAB`] and not on the
-/// arrangement pill is `egui`'s. Every one of the mock's *other* controls in
-/// this row is in the list below of things that are not drawn, so what is left
-/// beside the pill — a tempo, a beat, a bar and a frame time — is four
-/// readouts, and a readout is not something a press acts on.
+/// A point in this row that is not inside a boundary's [`GRAB`] and not on one
+/// of the pills is `egui`'s. Every one of the mock's *other* controls in this
+/// row is in the list below of things that are not drawn, so what is left
+/// beside them — a tempo, a beat, a bar and a frame time — is four readouts,
+/// and a readout is not something a press acts on.
 /// `tests/transport.rs` asserts it over the row rather than leaving it to be
 /// inferred from the absence of a hit test, and it asks with the pill drawn so
 /// that the assertion cannot pass on the control having gone.
@@ -1952,16 +1954,12 @@ impl Transport {
 ///
 /// # What is in the mock's row and is deliberately not here
 ///
-/// The mock draws ten things and **four of them exist**. Each of the other six
-/// is a control over machinery that is in neither this crate nor the program,
-/// and drawing one is the scaffolding this module's documentation refuses — a
-/// pill that looks like a control and does nothing does not get replaced:
+/// The mock draws ten things and **five of them exist**. Each of the other
+/// five is a control over machinery that is in neither this crate nor the
+/// program, and drawing one is the scaffolding this module's documentation
+/// refuses — a pill that looks like a control and does nothing does not get
+/// replaced:
 ///
-/// - `audio-in`, drawn `.armed`, is the session listening to the room. What
-///   would be behind it is a measured `AudioFrame` on the session's signals,
-///   and nothing here opens an input or installs one — a `Deck` with nobody
-///   calling `set_audio` runs on a synthesized bus, and an armed pill would
-///   say the room is being listened to while it is not.
 /// - `tap` is tap tempo: a performer's taps timed and turned into a tempo
 ///   correction. Nothing times a tap here, and the pill would correct nothing.
 /// - `learn` is MIDI learn, and its own tooltip says what it would do —
@@ -1973,7 +1971,14 @@ impl Transport {
 ///   nobody has plugged in is worse than no menu. **It is the one item in this
 ///   list that has a twin that is drawn**: [`arrangement`] is this pill's
 ///   shape over a file that does exist, which is the manual's own argument for
-///   putting the arrangement family in this row.
+///   putting the arrangement family in this row — and [`audio_in`] is the same
+///   shape a third time, over a device.
+///
+/// **`audio-in` was the sixth of these and is drawn now.** What was written
+/// here about it was that nothing opened an input, *"and an armed pill would
+/// say the room is being listened to while it is not"* — which is still the
+/// rule: [`AudioIn`] is `None` on a console nobody has told, and then there is
+/// no pill at all rather than one claiming anything.
 /// - `landed` is what the last write did — *landed, rolled back for cost, or
 ///   failed to build*. That is a build watcher's verdict over a hot swap, and
 ///   nothing writes a procedure while this panel runs, so the pill would be
@@ -2486,6 +2491,573 @@ fn transport_into(ui: &Ui, pal: &Palette, row: &TransportRow) {
 }
 
 // ---------------------------------------------------------------------------
+// The audio-in pill
+// ---------------------------------------------------------------------------
+
+/// **The pill's first word**, `docs/manual/console.html`'s own, hyphen and
+/// all: it is the head of the group of four that need an input, and the page
+/// names that group by this pill.
+const AUDIO_LABEL: &str = "audio-in";
+
+/// **What the pill says with no input open**, and it is a word for a state
+/// rather than a name — [`NO_ARRANGEMENT`] one pill to the left, and the
+/// preview cell's `C · off` one bay down.
+///
+/// **It is not the same statement as silence**, which is the whole of
+/// [P-0034](../../../docs/principles/0034-a-quiet-room-is-not-a-missing-microphone.md):
+/// a quiet room measures `0.0` at full confidence and this pill would name the
+/// input it measured it through. `none` is *no provider* — every name answers
+/// what it answered before audio existed — and the two must not read alike on
+/// a panel, because one of them is a room and the other is a cable.
+const NO_INPUT: &str = "none";
+
+/// **What the card says where the machine has no inputs at all.**
+///
+/// A menu with nothing in it would be a card an operator presses and cannot
+/// tell from one that failed to open, so the empty case says which it is. It
+/// is drawn the way [`Menu::Naming`]'s field is — a card with one line in it
+/// and no rows, so [`AudioInPill::row`] hands out no rectangle for something
+/// that is not a list — and it is a sentence rather than a row because there
+/// is nothing to pick: a press on it shuts the menu like a press on any other
+/// part of the card.
+const NO_INPUTS: &str = "no inputs on this machine";
+
+/// **What the audio-in pill reads this frame, and whether its menu is down.**
+///
+/// # The input and the list are handed in, for [`Arrangement`]'s reason
+///
+/// Which input is open is a device and what inputs there are is an
+/// enumeration of the host. `src/` takes no device (ADR-0156) and this crate's
+/// manifest holds nothing that could reach one, so whoever opened the input
+/// reads both and writes them here — the arrangement pill's seam with a
+/// microphone in place of a directory.
+///
+/// # The menu is not handed in, and that is the other half of the same seam
+///
+/// Whether the card is down is what the *control* is doing rather than what
+/// the instrument is doing, so it lives here and moves only through
+/// [`AudioIn::opened`] and [`AudioIn::shut`] — ADR-0225 §d, one pill along. A
+/// menu open in the program's memory would be this console drawing a state it
+/// could not answer questions about.
+///
+/// **Two states and not [`Menu`]'s three.** That enum's third state is a name
+/// being typed, and nothing here asks for letters: an input is picked from the
+/// list of the ones that exist, and a device is not named into being. The
+/// *mechanism* is ADR-0225's and is shared — the card hangs from the pill, it
+/// is `.lib-row` inside `.lib-list` padding, it counts itself in the Library
+/// bay's foot, and `input.rs`'s rule 2 is modal over it — and it is the
+/// mechanism that record is about, not the shape of the flag.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AudioIn {
+    /// **The input in use**, by the description the device answers to, or
+    /// `None` for an instrument with nothing open. See [`NO_INPUT`].
+    pub device: Option<String>,
+    /// **Every input the machine has**, in the order the host listed them.
+    ///
+    /// **Read when the menu opens rather than per frame**, which is
+    /// [`Arrangement::filed`]'s rule for its reason: enumerating a host is a
+    /// device read and a frame path does not do one (P-0072). It changes when
+    /// somebody plugs something in, and the press that opens the menu is the
+    /// moment that matters — so the list a hand is about to read is the list
+    /// as of the press.
+    ///
+    /// Empty is a machine with no inputs, and the card says so in as many
+    /// words ([`NO_INPUTS`]).
+    pub inputs: Vec<String>,
+    /// Whether the card is down. Private for [`Arrangement::menu`]'s reason.
+    down: bool,
+}
+
+impl AudioIn {
+    /// **An instrument with nothing open and nothing listed**, and the menu
+    /// shut. A `const` for [`Arrangement::NONE`]'s reason: a test can name the
+    /// state without building one.
+    ///
+    /// It is not what [`View::audio`] holds by default — that is `None`, which
+    /// is a console nobody has told anything about audio and draws no pill at
+    /// all. This is the console that has been told, and told there is nothing.
+    pub const NONE: AudioIn = AudioIn {
+        device: None,
+        inputs: Vec::new(),
+        down: false,
+    };
+
+    /// **What the pill says after `audio-in ·`**: the input in use, or
+    /// [`NO_INPUT`].
+    pub fn word(&self) -> &str {
+        self.device.as_deref().unwrap_or(NO_INPUT)
+    }
+
+    /// The card is down.
+    pub fn open(&self) -> bool {
+        self.down
+    }
+
+    /// Put it down.
+    pub fn opened(&mut self) {
+        self.down = true;
+    }
+
+    /// Take it away.
+    pub fn shut(&mut self) {
+        self.down = false;
+    }
+
+    /// **How many rows the open card has**: one per input. Zero while it is
+    /// shut, and zero on a machine with no inputs — that card is a sentence,
+    /// not a list.
+    fn rows(&self) -> usize {
+        match self.down {
+            true => self.inputs.len(),
+            false => 0,
+        }
+    }
+}
+
+/// **What a press on the audio-in pill or on one of its rows asks for.**
+///
+/// Three arms rather than [`Ask`]'s five, and it is a second enum rather than
+/// three of that one: two of those arms are the arrangement family's — a name
+/// being asked for and a `panel::Op` — and neither is a thing this control can
+/// ever want. A shared enum with two arms that cannot happen is a `match` every
+/// caller has to answer for twice.
+#[derive(Debug, Clone, PartialEq)]
+pub enum AudioAsk {
+    /// Put the card down — a press on the pill with it shut. **The caller
+    /// reads the host on this**, and writes what it found into
+    /// [`AudioIn::inputs`] before the next frame draws the card.
+    Open,
+    /// Take it away — a press on the pill again, or anywhere on the card that
+    /// is not a row.
+    Shut,
+    /// **Listen to this input**, named. [`Operation::AttachBeatSource`] with a
+    /// [`BeatSource::AudioInput`] carrying the name the row was drawn with —
+    /// which is the name the device answered to when the list was read, and
+    /// the name `AudioInput::open` matches a selector against.
+    ///
+    /// **Nothing is refused here.** A device that has gone away since the list
+    /// was read is refused where it is opened, out loud, with the list as it
+    /// is then (P-0027, P-0076): this control cannot see a device and must not
+    /// pretend to.
+    Operation(Operation),
+}
+
+/// **The audio-in pill, laid out**: the capsule, what is written in it, and
+/// the card under it while it is down.
+///
+/// One derivation, for [`ArrangementPill`]'s reason — [`View::draw`] paints
+/// exactly these rectangles and [`crate::input::claim`] hit-tests exactly
+/// these rectangles.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AudioInPill {
+    /// **The capsule**, which is what a press has to land in to open the card.
+    pub pill: Rect,
+    /// Where `audio-in · Scarlett 2i2` is painted, inside the capsule's
+    /// padding.
+    pub text: Rect,
+    /// The `▾` after it. Drawn rather than typed — see [`CHEVRON_W`].
+    pub chevron: Rect,
+    /// **The card, or `None` while it is shut.**
+    pub menu: Option<Rect>,
+    /// **How many of [`AudioIn::rows`] the card has room for**, between the
+    /// pill and the bottom of the console. Fewer than there are is a machine
+    /// with more inputs than the window is tall, and the foot says `n of m`
+    /// in the Library bay's own words rather than the list quietly ending.
+    /// Zero while it is shut, and zero on a machine with no inputs.
+    pub rows: usize,
+    /// **What the card would list if the window were tall enough**, carried so
+    /// that the foot and the rows are one number rather than two.
+    pub of: usize,
+}
+
+impl AudioInPill {
+    /// Whether `p` is on the pill itself.
+    pub fn hit(&self, p: karakuri_layout::Point) -> bool {
+        self.pill.contains(Pos2::new(p.x, p.y))
+    }
+
+    /// **Whether `p` is anywhere this control owns** — the pill, or the card
+    /// while it is down.
+    pub fn owns(&self, p: karakuri_layout::Point) -> bool {
+        let at = Pos2::new(p.x, p.y);
+        self.pill.contains(at) || self.menu.is_some_and(|menu| menu.contains(at))
+    }
+
+    /// **Where one row of the card is**, from the top — [`ArrangementPill::row`]
+    /// without the rule, because this card has no verbs above its list.
+    ///
+    /// Panics on a row this card has not got, which is that function's rule: a
+    /// caller has invented an item.
+    pub fn row(&self, index: usize) -> Rect {
+        assert!(index < self.rows, "row {index} of a card of {}", self.rows);
+        let menu = self.menu.expect("a card with rows in it");
+        Rect::from_min_size(
+            Pos2::new(
+                menu.min.x + size::LIB_LIST_PAD,
+                menu.min.y + size::LIB_LIST_PAD + size::LIB_ROW_H * index as f32,
+            ),
+            egui::vec2(menu.width() - size::LIB_LIST_PAD * 2.0, size::LIB_ROW_H),
+        )
+    }
+
+    /// **Which input `p` is on**, as an index into [`AudioIn::inputs`], or
+    /// `None` for a point on no row — the card's padding, its foot, or
+    /// anywhere off it.
+    pub fn item(&self, p: karakuri_layout::Point) -> Option<usize> {
+        let at = Pos2::new(p.x, p.y);
+        (0..self.rows).find(|index| self.row(*index).contains(at))
+    }
+
+    /// **What a press at `p` asks for**, or `None` where the press was on
+    /// nothing this control owns. [`ArrangementPill::ask`]'s shape over a list
+    /// with no verbs in it.
+    ///
+    /// A press on the pill toggles the card; a press anywhere else on the card
+    /// shuts it, because a press that did nothing at all is the one thing
+    /// worse than a press that declines.
+    pub fn ask(&self, audio: &AudioIn, p: karakuri_layout::Point) -> Option<AudioAsk> {
+        if self.hit(p) {
+            return Some(match audio.open() {
+                true => AudioAsk::Shut,
+                false => AudioAsk::Open,
+            });
+        }
+        let menu = self.menu?;
+        if !menu.contains(Pos2::new(p.x, p.y)) {
+            return None;
+        }
+        Some(
+            match self.item(p).and_then(|index| audio.inputs.get(index)) {
+                Some(name) => AudioAsk::Operation(Operation::AttachBeatSource {
+                    source: BeatSource::AudioInput(name.clone()),
+                }),
+                None => AudioAsk::Shut,
+            },
+        )
+    }
+}
+
+/// **The audio-in pill's furniture, derived**: the capsule, the words in it,
+/// and the card under it.
+///
+/// # Where it sits, and why it is first of the drawn controls in this row
+///
+/// `docs/manual/console.html`'s `.transport` puts `.tracker` — the four things
+/// that need an input — immediately after `bar 37`, and this pill is the head
+/// of that group. Everything the mock draws between the bar and here is
+/// nothing at all, so this lands one [`size::TRANSPORT_GAP`] after the bar,
+/// which is where [`arrangement`] used to land; the arrangement pill is now
+/// laid out from *this* pill's right edge, because the three items between the
+/// two of them — `tap`, the octave and `learn`, and then `map` — are still
+/// undrawn and a flex row closes up.
+///
+/// **The other three of its own group are still not drawn**, and that is why
+/// the gap after this pill is the row's rather than the group's tighter one:
+/// the group ends here, and what follows it is the next group along. The day
+/// `tap` and the octave are drawn they go between, at [`size::PILL_GAP`], and
+/// the page already says so.
+///
+/// # No pill at all where the console has not been told
+///
+/// `None` wherever [`transport`] answers `None` — the row folded away, soloed
+/// away, too narrow, or a console with no engine behind it — and `None` again
+/// where `audio` is `None`, which is a console nobody has said anything to
+/// about audio and is every test in this crate that does not say otherwise. A
+/// pill reading `audio-in · none` on a console that was never told is a
+/// reading invented here, which is [`View::transport`]'s own rule: **empty is
+/// a state and unasked is not.**
+///
+/// # What it costs to ask
+///
+/// One galley lookup for the pill's own words, always, and **while the card is
+/// down one more per input**, since the card is as wide as the widest name in
+/// it. Paid on a pointer event and on a frame, and only while an operator is
+/// looking at the card.
+///
+/// `layout` must be solved: [`Layout::rect`] refuses to answer from a dirty
+/// one.
+pub fn audio_in(
+    ctx: &egui::Context,
+    layout: &karakuri_layout::Layout,
+    values: Option<Transport>,
+    audio: Option<&AudioIn>,
+) -> Option<AudioInPill> {
+    let audio = audio?;
+    // The row, asked once and for everything, exactly as `arrangement` asks
+    // it: whether there is one at all, and where the bar ended.
+    let row = transport(ctx, layout, values)?;
+    let strip = to_egui(layout.rect(layout.find("transport")?));
+    let width = |text: &str| {
+        ctx.fonts_mut(|f| {
+            f.layout_no_wrap(
+                text.to_owned(),
+                FontId::new(size::BASE, FontFamily::Proportional),
+                Color32::PLACEHOLDER,
+            )
+            .size()
+            .x
+        })
+    };
+
+    let text_w = width(&audio_text(audio));
+    let pill_w = size::PILL_PAD_X * 2.0 + text_w + size::SINK_GAP + CHEVRON_W;
+    let mid = strip.center().y;
+    let pill = Rect::from_min_size(
+        Pos2::new(
+            row.bar.max.x + size::TRANSPORT_GAP,
+            mid - size::PILL_H * 0.5,
+        ),
+        egui::vec2(pill_w, size::PILL_H),
+    );
+    // The same rule `arrangement` and `outputs_row` state: a capsule that does
+    // not fit in the row it is drawn in is no control at all, rather than half
+    // of one over the frame readout.
+    if !strip.contains_rect(pill) || pill.max.x + size::TRANSPORT_GAP > row.frame.min.x {
+        return None;
+    }
+    let text = Rect::from_min_size(
+        Pos2::new(pill.min.x + size::PILL_PAD_X, mid - size::PILL_H * 0.5),
+        egui::vec2(text_w, size::PILL_H),
+    );
+    let chevron = Rect::from_center_size(
+        Pos2::new(pill.max.x - size::PILL_PAD_X - CHEVRON_W * 0.5, mid),
+        egui::vec2(CHEVRON_W, CHEVRON_H),
+    );
+
+    let (menu, rows, of) = input_card(&pill, layout, audio, &width);
+    Some(AudioInPill {
+        pill,
+        text,
+        chevron,
+        menu,
+        rows,
+        of,
+    })
+}
+
+/// **The pill's words**: `audio-in · Scarlett 2i2`, or `audio-in · none`. One
+/// run of text, for [`pill_text`]'s reason.
+fn audio_text(audio: &AudioIn) -> String {
+    format!("{AUDIO_LABEL} · {}", audio.word())
+}
+
+/// **The card under the audio-in pill**: where it is, how many rows fit in it,
+/// and how many there are.
+///
+/// [`menu_card`]'s arithmetic without the hairline, because this list has no
+/// verbs over it — so the furniture is the padding alone. A machine with no
+/// inputs gets a card one line tall with [`NO_INPUTS`] in it and no rows at
+/// all, which is the shape `menu_card` gives a name being typed and for the
+/// same reason: that card is not a list, and nothing may hand out a row
+/// rectangle for it.
+fn input_card(
+    pill: &Rect,
+    layout: &karakuri_layout::Layout,
+    audio: &AudioIn,
+    width: &dyn Fn(&str) -> f32,
+) -> (Option<Rect>, usize, usize) {
+    if !audio.open() {
+        return (None, 0, 0);
+    }
+    let viewport = to_egui(layout.viewport());
+    let top = pill.max.y + size::PILL_GAP;
+    let furniture = size::LIB_LIST_PAD * 2.0;
+
+    if audio.inputs.is_empty() {
+        let card = held_inside(
+            &viewport,
+            pill.min.x,
+            top,
+            width(NO_INPUTS).max(pill.width()) + (size::LIB_ROW_PAD_X + size::LIB_LIST_PAD) * 2.0,
+            furniture + size::LIB_ROW_H,
+        );
+        return (Some(card), 0, 0);
+    }
+
+    let of = audio.rows();
+    let widest = audio
+        .inputs
+        .iter()
+        .map(|name| width(name))
+        .fold(pill.width(), f32::max);
+    // How many rows there is room for between the card's top and the bottom of
+    // the console. Asked twice for `menu_card`'s reason: the foot is only owed
+    // where something is left out.
+    let room = |foot: f32| {
+        (((viewport.max.y - top - furniture - foot) / size::LIB_ROW_H).floor()).max(0.0) as usize
+    };
+    let rows = match room(0.0) >= of {
+        true => of,
+        false => room(size::LIB_FOOT_H).min(of),
+    };
+    let foot = match rows < of {
+        true => size::LIB_FOOT_H,
+        false => 0.0,
+    };
+    let card = held_inside(
+        &viewport,
+        pill.min.x,
+        top,
+        widest + (size::LIB_ROW_PAD_X + size::LIB_LIST_PAD) * 2.0,
+        furniture + size::LIB_ROW_H * rows as f32 + foot,
+    );
+    (Some(card), rows, of)
+}
+
+/// **The audio-in pill, painted**, and the card under it.
+///
+/// Where everything goes is [`audio_in`]'s, so this paints and derives
+/// nothing. Term for term from `.pill` and `.pill.armed` in `style.css`:
+///
+/// - shut, with nothing open: the ordinary capsule — `border: 1px solid
+///   var(--c-line); color: var(--c-dim)` — which is [`arrangement_into`]'s
+///   treatment and this is the same pill two places along the same row.
+/// - **with an input open, `.armed`**: `border-color: transparent; color:
+///   var(--c-mint); background: color-mix(in srgb, var(--c-mint) 14%,
+///   transparent)`, which is the mock's own class on this pill and the one
+///   place in this row a colour means *live*. The `box-shadow: 0 0 9px
+///   var(--c-glow)` goes with it, exactly as the beat grid's lit dot carries
+///   its halo.
+///
+/// **The colour and the word say the same thing on purpose.** A pill that was
+/// only lit would leave *which* room is being heard unanswered, and a pill
+/// that only carried a name would make a dead input and a live one look alike
+/// at the distance a panel is read from.
+fn audio_in_into(ui: &Ui, pal: &Palette, pill: &AudioInPill, audio: &AudioIn) {
+    let painter = ui.painter();
+    let radius = CornerRadius::same((size::PILL_H * 0.5) as u8);
+    let armed = audio.device.is_some();
+    let ink = match armed {
+        true => pal.mint,
+        false => pal.dim,
+    };
+    if armed {
+        painter.add(
+            egui::epaint::Shadow {
+                offset: [0, 0],
+                blur: ARMED_GLOW,
+                spread: 0,
+                color: pal.glow,
+            }
+            .as_shape(pill.pill, radius),
+        );
+        painter.rect_filled(pill.pill, radius, tint(pal.mint, ARMED_WASH));
+    } else {
+        painter.rect_stroke(
+            pill.pill,
+            radius,
+            Stroke::new(size::HAIRLINE, pal.line),
+            StrokeKind::Inside,
+        );
+    }
+    let galley = painter.layout_no_wrap(
+        audio_text(audio),
+        FontId::new(size::BASE, FontFamily::Proportional),
+        ink,
+    );
+    painter.galley(
+        Pos2::new(
+            pill.text.min.x,
+            pill.text.center().y - galley.size().y * 0.5,
+        ),
+        galley,
+        ink,
+    );
+    painter.add(egui::Shape::convex_polygon(
+        vec![
+            pill.chevron.left_top(),
+            pill.chevron.right_top(),
+            Pos2::new(pill.chevron.center().x, pill.chevron.max.y),
+        ],
+        ink,
+        Stroke::NONE,
+    ));
+
+    let Some(card) = pill.menu else {
+        return;
+    };
+    painter.add(pal.shadow.as_shape(card, CornerRadius::same(8)));
+    painter.rect_filled(card, CornerRadius::same(8), pal.panel);
+    painter.rect_stroke(
+        card,
+        CornerRadius::same(8),
+        Stroke::new(size::HAIRLINE, pal.line),
+        StrokeKind::Inside,
+    );
+
+    let line = |rect: Rect, text: String, colour: Color32| {
+        let galley = painter.layout_no_wrap(
+            text,
+            FontId::new(size::BASE, FontFamily::Proportional),
+            colour,
+        );
+        painter.galley(
+            Pos2::new(
+                rect.min.x + size::LIB_ROW_PAD_X,
+                rect.center().y - galley.size().y * 0.5,
+            ),
+            galley,
+            colour,
+        );
+    };
+
+    // **A machine with no inputs**, which is a sentence and not a list —
+    // `pill.rows` is zero, so `row` hands out nothing.
+    if audio.inputs.is_empty() {
+        let only = Rect::from_min_size(
+            Pos2::new(
+                card.min.x + size::LIB_LIST_PAD,
+                card.min.y + size::LIB_LIST_PAD,
+            ),
+            egui::vec2(card.width() - size::LIB_LIST_PAD * 2.0, size::LIB_ROW_H),
+        );
+        line(only, NO_INPUTS.to_owned(), pal.faint);
+        return;
+    }
+
+    for index in 0..pill.rows {
+        let name = &audio.inputs[index];
+        // **The one that is open is the one colour the list has**, for the
+        // reason the pill has one: a card of names with nothing marked leaves
+        // an operator to remember which they picked.
+        let colour = match audio.device.as_deref() == Some(name.as_str()) {
+            true => pal.mint,
+            false => pal.text,
+        };
+        line(pill.row(index), name.clone(), colour);
+    }
+    // **`n of m`, in the Library bay's own words**, and only where the list
+    // could not be shown whole.
+    if pill.rows < pill.of {
+        let foot = Rect::from_min_max(
+            Pos2::new(card.min.x, card.max.y - size::LIB_FOOT_H),
+            card.max,
+        );
+        let galley = painter.layout_no_wrap(
+            format!("{} of {}", pill.rows, pill.of),
+            FontId::new(size::BASE, FontFamily::Proportional),
+            pal.faint,
+        );
+        painter.galley(
+            Pos2::new(
+                foot.min.x + size::LIB_ROW_PAD_X,
+                foot.center().y - galley.size().y * 0.5,
+            ),
+            galley,
+            pal.faint,
+        );
+    }
+}
+
+/// **The mock's `box-shadow: 0 0 9px var(--c-glow)` on `.pill.armed`**, as the
+/// blur it is.
+const ARMED_GLOW: u8 = 9;
+
+/// **`color-mix(in srgb, var(--c-mint) 14%, transparent)`**, as the percentage
+/// [`tint`] takes.
+const ARMED_WASH: u8 = 14;
+
+// ---------------------------------------------------------------------------
 // The arrangement pill
 // ---------------------------------------------------------------------------
 
@@ -2920,10 +3492,11 @@ impl ArrangementPill {
 /// `docs/manual/console.html`'s `.transport` is a flex row and this pill is
 /// the last item in it before the `.sep`, immediately after
 /// `map · nanoKONTROL2 ▾`. Everything the mock draws between the bar and that
-/// pill is one of the six controls [`transport`] names and does not draw, so a
-/// flex row closes up and this lands one [`size::TRANSPORT_GAP`] after
-/// `bar 37`. That is the mock's own layout with the undrawn items taken out,
-/// and not a position chosen here.
+/// pill is one of the five controls [`transport`] names and does not draw, so
+/// a flex row closes up and this lands one [`size::TRANSPORT_GAP`] after the
+/// audio-in pill — or after `bar 37` on a console with no audio-in pill at
+/// all. That is the mock's own layout with the undrawn items taken out, and
+/// not a position chosen here.
 ///
 /// **It moves with the tempo, by a glyph or two.** `92.5` is narrower than
 /// `128.0` and everything after it slides, which is what a flex row is and
@@ -2957,6 +3530,7 @@ pub fn arrangement(
     ctx: &egui::Context,
     layout: &karakuri_layout::Layout,
     values: Option<Transport>,
+    audio: Option<&AudioIn>,
     arr: &Arrangement,
 ) -> Option<ArrangementPill> {
     // The row, asked once and for everything: whether there is one at all,
@@ -2983,11 +3557,17 @@ pub fn arrangement(
     // chevron — the one gap the mock states inside a capsule.
     let pill_w = size::PILL_PAD_X * 2.0 + text_w + size::SINK_GAP + CHEVRON_W;
     let mid = strip.center().y;
+    // **Where the group before this one ended**, which is the audio-in pill
+    // where the console has been told about audio and the bar where it has
+    // not — the same one-answer arrangement [`look`] takes of *this* pill. The
+    // three items the mock draws in between are still undrawn, so a flex row
+    // closes up and the gap is the row's own.
+    let after = match audio_in(ctx, layout, values, audio) {
+        Some(before) => before.pill.max.x,
+        None => row.bar.max.x,
+    };
     let pill = Rect::from_min_size(
-        Pos2::new(
-            row.bar.max.x + size::TRANSPORT_GAP,
-            mid - size::PILL_H * 0.5,
-        ),
+        Pos2::new(after + size::TRANSPORT_GAP, mid - size::PILL_H * 0.5),
         egui::vec2(pill_w, size::PILL_H),
     );
     // The same rule [`outputs_row`] states: a capsule that does not fit in the
@@ -3640,7 +4220,7 @@ pub fn unit_of(exposure: f32) -> f32 {
 ///
 /// **Nothing already drawn moves**, which is a consequence and not the reason:
 /// [`arrangement`] is still one [`size::TRANSPORT_GAP`] after the bar, because
-/// everything the mock draws between the two is still one of the six controls
+/// everything the mock draws between the two is still one of the five controls
 /// [`transport`] names and does not draw.
 ///
 /// # The order inside the group, and where the figure goes
@@ -3695,6 +4275,7 @@ pub fn look(
     ctx: &egui::Context,
     layout: &karakuri_layout::Layout,
     values: Option<Transport>,
+    audio: Option<&AudioIn>,
     arr: &Arrangement,
     look: Option<Look>,
 ) -> Option<LookRow> {
@@ -3703,7 +4284,7 @@ pub fn look(
     // exists at all, and where the group before this one ended. `transport`
     // answers the first for the whole module and `arrangement` is laid out
     // from it, so this is that one answer read one item further along.
-    let pill = arrangement(ctx, layout, values, arr)?;
+    let pill = arrangement(ctx, layout, values, audio, arr)?;
     let row = transport(ctx, layout, values)?;
     let strip = to_egui(layout.rect(layout.find("transport")?));
     let width = |text: &str| {
@@ -9045,6 +9626,24 @@ pub struct View {
     /// default arrangement, nothing filed, and the menu shut. See
     /// [`Arrangement`] and [`arrangement`].
     pub arrangement: Arrangement,
+    /// **What the audio-in pill in that row reads, and whether its card is
+    /// down** — or `None` for a console nobody has told anything about audio,
+    /// which is every test in this crate and draws no pill at all.
+    ///
+    /// **The same two halves [`View::arrangement`] has**, over a device
+    /// instead of a file: which input is open and what inputs there are are a
+    /// microphone and an enumeration of a host, and `src/` has neither
+    /// (ADR-0156) — so whoever opened one writes them here. Whether the card
+    /// is down is this crate's and moves only through [`AudioIn`]'s methods.
+    ///
+    /// **`Option`, where the arrangement is not**, and the difference is real:
+    /// every console has an arrangement — the default one, which is what is on
+    /// screen — and a console has an *input* only if somebody opened one and
+    /// said so. `Some(AudioIn::NONE)` is a program that looked and found
+    /// nothing, and it draws `audio-in · none`; `None` is a program that never
+    /// said, and a pill drawn for it would be this crate answering a question
+    /// about a device on its own authority. See [`audio_in`].
+    pub audio: Option<AudioIn>,
     /// **What the two look controls in that row read this frame**, or `None`
     /// for a console with no engine behind it — which is every test in this
     /// crate that does not hand one in, and what the row draws there is
@@ -9303,6 +9902,10 @@ impl View {
             // is every test in this crate and is a console with no store
             // behind it.
             arrangement: Arrangement::NONE,
+            // Nobody has said anything about audio, which is every test in
+            // this crate: no pill at all, rather than one reading `none` on
+            // this crate's own authority. See the field.
+            audio: None,
             // No engine behind the console, so there is no look to draw — the
             // transport's own answer, one group along.
             look: None,
@@ -9736,6 +10339,10 @@ impl View {
         let showing = self.showing;
         let values = self.transport;
         let arr = &self.arrangement;
+        // **Read once for the frame beside the arrangement**, and for the same
+        // reason: the arrangement pill is laid out from where this one ends,
+        // so a frame that asked twice could lay the two out from two answers.
+        let audio = self.audio.as_ref();
         let look_at = self.look;
         let out = self.master_out;
         let strips = self.mixer.as_slice();
@@ -9791,7 +10398,9 @@ impl View {
                         // above the bays wants. Where it goes is `look`'s
                         // answer and not this pass's: the same call
                         // `input::claim` makes.
-                        if let Some(row) = look(ui.ctx(), panel.layout(), values, arr, look_at) {
+                        if let Some(row) =
+                            look(ui.ctx(), panel.layout(), values, audio, arr, look_at)
+                        {
                             look_into(ui, &pal, &row);
                         }
                     }
@@ -9953,7 +10562,19 @@ impl View {
             // one call, and where it goes is `arrangement`'s answer — the same
             // call `input::claim` makes, so the pill that is painted is the
             // pill that is clicked.
-            if let Some(pill) = arrangement(ui.ctx(), panel.layout(), values, arr) {
+            // **The audio-in pill, and its card over everything**, for the
+            // arrangement pill's reason one item to the left: the card hangs
+            // out of the row and down over the bays. It is painted before the
+            // arrangement pill because it is drawn before it in the row; the
+            // two cards can never both be down, since `input`'s rule 2 sends
+            // the press that would open the second one to whichever is already
+            // open, and that press shuts it.
+            if let Some(audio) = audio {
+                if let Some(pill) = audio_in(ui.ctx(), panel.layout(), values, Some(audio)) {
+                    audio_in_into(ui, &pal, &pill, audio);
+                }
+            }
+            if let Some(pill) = arrangement(ui.ctx(), panel.layout(), values, audio, arr) {
                 arrangement_into(ui, &pal, &pill, arr);
             }
         });

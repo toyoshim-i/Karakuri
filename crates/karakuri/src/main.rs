@@ -102,14 +102,21 @@
 //! charter twice. Each line below says what the thing would be *for*, so that
 //! whoever reaches one knows what they are reaching for.
 //!
-//! - **Audio.** The beat tracker and the signal bus. Without a device open,
-//!   nothing here has a tempo it did not invent and no `bind` has anything to
-//!   read, so four rows of [the operations page](../../../docs/manual/operations.html)'s
-//!   panel column cannot be reached: *Tap the beat*, *Nudge the latency
-//!   offset*, *Attach a beat source* and *Attach a signal to a parameter*.
-//!   `karakuri_environment::audio` is the wiring and `karakuri-cli` opens it
-//!   already. **Wanted early**, and for a reason that is not the panel column:
-//!   material that moves with the room is what a demo looks like.
+//! - **Audio, and this one is wired now.** The window opens the host's
+//!   default input at startup and the transport row's `audio-in` pill says
+//!   which it is and lists the others ([`listening`], [`attached`]), so the
+//!   signal bus carries a measurement rather than an invention and the grid
+//!   follows the room. What that reached on
+//!   [the operations page](../../../docs/manual/operations.html): *Attach a
+//!   beat source* in the panel column, and *Tap the beat* and *Halve or double
+//!   the grid* in the key column — `b`, `,` and `.`. **Two of the four rows it
+//!   was waiting on are still out of reach and for two different reasons.**
+//!   *Nudge the latency offset* is specified as `o` and `p` and this program
+//!   already binds `p` to `Op::Report`; whether the panel takes the letter or
+//!   the command line gives it up is a change to that page and nobody has made
+//!   it, so no key is bound and the badge stays designed. *Attach a signal to
+//!   a parameter* is a bay's worth of work of its own and is nothing to do
+//!   with a device being open.
 //! - **MIDI.** A control surface, so a hand reaches a fader without a mouse.
 //!   `karakuri-midi` and `examples/surface.map` exist and `--midi-in`
 //!   `--midi-map` drive them. **No operation names attaching one**, so this is
@@ -267,9 +274,10 @@ use karakuri_console::panel::{
 use karakuri_console::repaint::{Change, Repaint};
 use karakuri_console::room::Room;
 use karakuri_console::view::{
-    self, arrangement as arrangement_pill, deck_head as deck_head_row, inspector as inspector_pane,
-    look as look_row, master as master_row, mixer as mixer_bay, outputs, picture_rect,
-    preview_rects, program_bay, program_head, Ask, Kind, Picture, Scope, View, DECKS, DECK_LETTERS,
+    self, arrangement as arrangement_pill, audio_in as audio_in_pill, deck_head as deck_head_row,
+    inspector as inspector_pane, look as look_row, master as master_row, mixer as mixer_bay,
+    outputs, picture_rect, preview_rects, program_bay, program_head, Ask, AudioAsk, AudioIn, Kind,
+    Picture, Scope, View, DECKS, DECK_LETTERS,
 };
 // **How many slots a deck can hold**, which is how many this one has — see
 // [`SLOTS`]. Not re-exported at the crate root, and asked of the module that
@@ -285,10 +293,10 @@ use karakuri_engine::{
     compose, Blend, Committed, Control, Deck, Event, Gpu, HotSwap, Look, Mask, MaskKind, Present,
     Residency, Set, Sink, Skip, TonemapOp, DEFAULT_BUDGET_MS,
 };
-use karakuri_environment::{mix, watch};
+use karakuri_environment::{audio, mix, watch};
 use karakuri_ir::Kind as Layer;
 use karakuri_layout::{Axis, Hit, Layout, NodeId, Point};
-use karakuri_operation::{BlendMode, Operation, Undecided};
+use karakuri_operation::{BeatSource, BlendMode, GridScale, Operation, Undecided};
 use karakuri_operation_record::{written, Current, Written};
 use karakuri_store::record::Record;
 use karakuri_store::store::Store;
@@ -1467,11 +1475,11 @@ impl Readout {
                     did = Acted::Emitted(operation);
                 }
             }
-            // **A press the panel claimed is on one of the eighteen controls
+            // **A press the panel claimed is on one of the nineteen controls
             // or on the panel itself**, and the controls are asked first for
             // the reason `claim` asked them last: rule 2 has already had its
             // refusal, so a press that got here and is on a control is that
-            // control's. All eighteen are the same calls `claim` made — asked
+            // control's. All nineteen are the same calls `claim` made — asked
             // again, not copied.
             //
             // **The bay is derived once and asked four times**, exactly as
@@ -1480,18 +1488,48 @@ impl Readout {
             // derivations would be four answers.
             (Pointer::Down, Claim::Panel) => {
                 self.panel.solve();
-                // **The arrangement pill first, and it is the only one of the
-                // eighteen whose order matters.** Its menu is drawn *over* the
+                // **The audio-in pill first**, and it and the arrangement pill
+                // are the only two of the nineteen whose order matters: each
+                // draws a card *over* the bays, so while one is down a press
+                // inside it belongs to the card and not to whatever it is
+                // covering. They are asked in the order they are drawn, which
+                // is also the order they are laid out in — the arrangement
+                // pill's place is measured from this one's right edge.
+                //
+                // **Only one card can be down**, so the two blocks cannot both
+                // claim a press: `input::claim`'s rule 2 gives the press to
+                // the panel while either is open, and a press outside the open
+                // card is that card's dismissal.
+                let listing = audio_in_pill(
+                    ctx,
+                    self.panel.layout(),
+                    self.view.transport,
+                    self.view.audio.as_ref(),
+                );
+                let heard = listing
+                    .as_ref()
+                    .zip(self.view.audio.as_ref())
+                    .and_then(|(pill, audio)| pill.ask(audio, at));
+                if self.view.audio.as_ref().is_some_and(AudioIn::open) {
+                    did = self.listened(heard.unwrap_or(AudioAsk::Shut));
+                    return (claim, did);
+                }
+                if let Some(ask) = heard {
+                    did = self.listened(ask);
+                    return (claim, did);
+                }
+                // **The arrangement pill next, for the same reason.** Its menu is drawn *over* the
                 // bays, so while it is down a press inside the card belongs to
                 // the card and not to whatever it happens to be covering — and
                 // a press anywhere else is the dismissal, which is why the
                 // `None` below is `Ask::Shut` rather than a press that fell
-                // through. Shut, this is one capsule among eighteen that never
+                // through. Shut, this is one capsule among nineteen that never
                 // overlap and the order is arbitrary.
                 let pill = arrangement_pill(
                     ctx,
                     self.panel.layout(),
                     self.view.transport,
+                    self.view.audio.as_ref(),
                     &self.view.arrangement,
                 );
                 let asked = pill
@@ -1515,6 +1553,7 @@ impl Readout {
                     ctx,
                     self.panel.layout(),
                     self.view.transport,
+                    self.view.audio.as_ref(),
                     &self.view.arrangement,
                     self.view.look,
                 );
@@ -1647,6 +1686,58 @@ impl Readout {
             (Pointer::Down | Pointer::Up | Pointer::Wheel, _) => {}
         }
         (claim, did)
+    }
+
+    /// **A press on the audio-in pill or on its card**, and what this
+    /// program does about it.
+    ///
+    /// [`Readout::arranged`]'s shape one pill to the left, and the split is
+    /// the same: the two answers that are the *control's* own state are
+    /// performed here, and the one that is an operation leaves as one.
+    ///
+    /// **Opening the card is where the host is read**, and it is the only
+    /// place: a listing of a machine's inputs is a device enumeration, which
+    /// is not a thing to do on a frame path (P-0072) — the same rule under
+    /// which the Library bay's names and the arrangement pill's are read on a
+    /// press. So the list a hand is about to read is the list as of the press
+    /// that opened it, an interface plugged in a minute ago included.
+    fn listened(&mut self, ask: AudioAsk) -> Acted {
+        let Some(audio) = self.view.audio.as_mut() else {
+            // A press on a pill that is not drawn, which `audio_in` answers
+            // `None` to and this cannot reach. Said rather than unreachable.
+            return Acted::Nothing;
+        };
+        match ask {
+            AudioAsk::Open => {
+                audio.inputs = karakuri_environment::audio::inputs();
+                let held = audio.inputs.len();
+                println!(
+                    "audio-in: `{}` — {}",
+                    audio.word(),
+                    match held {
+                        0 => String::from(
+                            "this machine has no audio inputs, and the card says so rather than                              opening empty"
+                        ),
+                        1 => String::from("one input to pick from"),
+                        many => format!("{many} inputs to pick from"),
+                    }
+                );
+                audio.opened();
+                Acted::Nothing
+            }
+            AudioAsk::Shut => {
+                audio.shut();
+                Acted::Nothing
+            }
+            // **Out of this crate and into the one that can open a device.**
+            // The pill names the input and `attached` opens it, which is the
+            // seam ADR-0156 draws: a control asks, and whoever holds the
+            // device decides.
+            AudioAsk::Operation(operation) => {
+                audio.shut();
+                Acted::Emitted(Some(operation))
+            }
+        }
     }
 
     /// **A press on the arrangement pill or on its menu**, and what this
@@ -1958,10 +2049,38 @@ impl Readout {
             }
         );
         println!(
-            "six things the mock draws in that row are NOT drawn, and each is a control \
-             over machinery that is in neither this crate nor this program: audio-in, tap, \
-             learn, map, landed and rec. `view::transport` names them one by one with what \
-             is missing behind each."
+            "five things the mock draws in that row are NOT drawn, and each is a control \
+             over machinery that is in neither this crate nor this program: tap, learn, map, \
+             landed and rec. `view::transport` names them one by one with what is missing \
+             behind each. `audio-in` was the sixth until this program opened an input: it is \
+             drawn now, it says which room is being heard, and its card lists the others."
+        );
+        // **What the pill is actually reading, off the view rather than off a
+        // sentence.** The legend was found lying five ways on 2026-08-30 by
+        // saying what this program probably does; this says what it did.
+        println!(
+            "{}",
+            match self
+                .view
+                .audio
+                .as_ref()
+                .and_then(|audio| audio.device.as_deref())
+            {
+                Some(device) => format!(
+                    "the `audio-in` pill reads `{device}` and is drawn armed. energy, onset and \
+                     band0..7 on the session's bus are measured from that input every frame, and \
+                     the beat lock corrects the oscillator the transport row above draws. `b` \
+                     taps, `,` and `.` move the grid an octave, and a press on the pill lists \
+                     what else this machine has."
+                ),
+                None => String::from(
+                    "the `audio-in` pill reads `none`, which is a state and not a fault: no \
+                     input is open, every signal name answers what it answered before audio \
+                     existed, and the grid free-runs at the session tempo. a press on the pill \
+                     lists what this machine has, and `b`, `,` and `.` say so rather than \
+                     doing nothing."
+                ),
+            }
         );
         println!(
             "the mixer draws {} strip{}, because a strip is a deck SLOT and this deck has \
@@ -2097,12 +2216,13 @@ impl Readout {
                         what
                     }
                     // Four readouts, and then the controls that landed in
-                    // this row after them: the arrangement pill and, at the
-                    // far end, the tone map and the exposure. The six controls
-                    // the mock draws here are still six things that do not
-                    // exist behind this panel, and `view::transport` names
-                    // each of them. What a press in this row reaches is not
-                    // counted here — see the pointer's paragraph below.
+                    // this row after them: the audio-in pill, the arrangement
+                    // pill and, at the far end, the tone map and the exposure.
+                    // The five the mock draws here and this panel does not are
+                    // still five things that do not exist behind it, and
+                    // `view::transport` names each of them. What a press in
+                    // this row reaches is not counted here — see the pointer's
+                    // paragraph below.
                     Kind::Transport => "row, no heading: bpm, beat, bar, frame".to_owned(),
                     // The console's first control, and for a while its only
                     // one. How many there are now is
@@ -2274,6 +2394,18 @@ const KEYS: &[(&str, &str)] = &[
     (
         "e",
         "the library's scope: the next chip along, and it wraps",
+    ),
+    (
+        "b",
+        "tap the beat — three taps set the tempo, any tap sets the phase",
+    ),
+    (
+        ",",
+        "halve the grid, and the tracker's octave window with it",
+    ),
+    (
+        ".",
+        "double it — refused where the result leaves 60..200 BPM",
     ),
     ("up", "the library cursor, up a row"),
     ("down", "and down, as far as the rows the bay drew"),
@@ -5805,6 +5937,16 @@ struct Gfx {
     /// device: that is the seam `karakuri-console` keeps, and this is the side
     /// of it that is allowed one.
     engine: Engine,
+    /// **The room this window is listening to**, or `None` for a machine with
+    /// no input — see [`listening`], where all three of that decision's cases
+    /// are argued.
+    ///
+    /// It is here beside the engine rather than on [`App`] because the two
+    /// halves of what it is for are both here: the deck's signal bus is what a
+    /// measurement is written into, and the *output lag* a beat correction
+    /// leads by is this display's frame queue. A window remade is a display
+    /// remade, and the input is re-opened with it.
+    audio: Option<audio::Audio>,
     /// **What a frame has to fit in on this window**, read from the display
     /// once when the window opened — see [`budget_ms`].
     budget_ms: Option<f32>,
@@ -5984,6 +6126,23 @@ impl App {
                     // is the mix. Each answers `None` for every other
                     // operation, which is what keeps this two lines rather
                     // than two more routes into the engine.
+                    // **The one that reaches a device**, and it is here
+                    // beside the arrangement for the same reason: it writes no
+                    // record either — `written` answers `Silent(NoRecord)`,
+                    // because nothing in the session stream says what the beat
+                    // is taken from — and what it changes is this program's
+                    // audio session and the pill that reads it. The session
+                    // tempo is read first so that the borrow of `gfx.audio`
+                    // below does not have to hold the deck as well.
+                    let session_bpm = gfx.engine.deck.signals().oscillator().bpm();
+                    if let Some(line) = attached(
+                        &mut gfx.audio,
+                        session_bpm,
+                        &mut readout.view.audio,
+                        operation,
+                    ) {
+                        println!("{line}");
+                    }
                     if let Some(line) = pointed(&mut readout.view, operation) {
                         println!("{line}");
                     }
@@ -6232,6 +6391,19 @@ impl ApplicationHandler for App {
         // it — on a run that has one, and over a fader a hand can take hold
         // of. It is written again on every frame; this is the first.
         self.readout.view.master_out = Some(engine.deck.out());
+        // **And the room, before the legend**, because the legend says which
+        // input is open and the answer is the host's rather than a sentence
+        // here. The session tempo is the deck's own oscillator: it is what the
+        // grid free-runs at and where the tracker's octave window starts, and
+        // they are one number because they are one statement.
+        let (audio, said) = listening(engine.deck.signals().oscillator().bpm());
+        println!("{said}");
+        // **The pill is told even where nothing opened**, which is the
+        // distinction `View::audio` exists to draw: `Some(AudioIn)` with no
+        // device is a program that looked and found nothing and draws
+        // `audio-in · none`, where `None` would be a console nobody had told
+        // and would draw no pill at all — on a program that did look.
+        self.readout.view.audio = Some(told(audio.as_ref()));
         self.readout
             .print_legend(budget, &governed, self.presets.as_ref(), &self.store);
 
@@ -6240,6 +6412,7 @@ impl ApplicationHandler for App {
         self.costs.owes();
         window.request_redraw();
         self.gfx = Some(Gfx {
+            audio,
             budget_ms: budget,
             material,
             store: self.store.clone(),
@@ -6701,6 +6874,47 @@ impl ApplicationHandler for App {
                         App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
                         return;
                     }
+                    // **The beat, tapped.** The one key on this panel
+                    // that reaches the room rather than the deck or the
+                    // arrangement, and the first of three that need an input
+                    // open. What it does and why it does not go through
+                    // `written` is [`tapped`].
+                    Key::Character("b") => {
+                        println!(
+                            "{}",
+                            tapped(
+                                &mut gfx.audio,
+                                &mut gfx.engine.deck,
+                                Instant::now(),
+                                self.started,
+                            )
+                        );
+                        App::wants(
+                            gfx,
+                            &mut self.egui_due,
+                            &mut self.costs,
+                            Change::Emitted(Some(&Operation::TapBeat)).repaint(),
+                        );
+                        return;
+                    }
+                    // **The grid, an octave either way**, and the two keys the
+                    // page specifies for it. Refused where the result would
+                    // leave the trackable range, which is the beat lock's call
+                    // — see [`scaled`].
+                    Key::Character(",") | Key::Character(".") => {
+                        let by = match key.logical_key.as_ref() {
+                            Key::Character(",") => GridScale::Halve,
+                            _ => GridScale::Double,
+                        };
+                        println!("{}", scaled(&mut gfx.audio, &mut gfx.engine.deck, by));
+                        App::wants(
+                            gfx,
+                            &mut self.egui_due,
+                            &mut self.costs,
+                            Change::Emitted(Some(&Operation::ScaleGrid { by })).repaint(),
+                        );
+                        return;
+                    }
                     Key::Character("n") => {
                         // **The key that changes the screen without touching
                         // the pointer and without touching the model.** The
@@ -6835,6 +7049,13 @@ impl ApplicationHandler for App {
                 // that. Two calls would be two answers to *is anything making
                 // texels*, taken either side of the whole frame.
                 let live = live(&self.readout.view);
+                // **The room, read before the row that reads the grid it
+                // moves.** A measurement taken after `transport` would be a
+                // tempo drawn one frame behind the correction that made it,
+                // which is the one thing this row cannot be: it is what an
+                // operator watches to tell a lock from a coincidence. See
+                // `measure_audio`.
+                measure_audio(&mut gfx.audio, &mut gfx.engine.deck, self.costs.rate_now());
                 self.readout.view.transport =
                     transport(&gfx.engine.deck, &self.costs, gfx.budget_ms, live);
                 // **And what the two look controls at the end of that row
@@ -7172,6 +7393,359 @@ impl ApplicationHandler for App {
     }
 }
 
+// ---------------------------------------------------------------------------
+// The room this instrument is listening to
+// ---------------------------------------------------------------------------
+
+/// **What this program opens on, and it is not a flag.**
+///
+/// `karakuri-cli` is told which input to take with `--audio-in` and refuses to
+/// start without the one it was told; this program opens the host's default
+/// and, from then on, is told by a hand on the `audio-in` pill. The two are
+/// different on purpose and the difference is the surface:
+///
+/// - **A flag is a contract made before the run.** Asking for one and getting
+///   none is a run that is not the run that was asked for, so
+///   `karakuri-cli` exits — and it is right to, because a render or a set
+///   played from a script has nobody standing there to notice.
+/// - **This program has somebody standing there.** It draws a pill that says
+///   which input is open and lists the others, so *which room* is a question
+///   the panel can both ask and answer while it is running. A second way to
+///   say it on the command line would be a launch-time answer to a question
+///   the panel already answers better, and `USAGE` says in as many words that
+///   this is not `karakuri-cli`'s command line.
+///
+/// **And it opens something rather than nothing**, which is the choice that
+/// matters for what this instrument is: material that moves with the room is
+/// what the panel looks like, and an instrument that listens only after being
+/// asked comes up looking like one that cannot. `default` is what a machine
+/// answers when nobody has chosen, which is exactly the state a program that
+/// has just started is in.
+const LISTEN_ON: &str = "default";
+
+/// **One simulation step**, which is what the audio path has to be told a
+/// frame advances the session by so a beat correction lands on the right one.
+/// `karakuri-cli` names the same constant for the same reason.
+const DT: f32 = karakuri_engine::set::DT;
+
+/// **Open the input this program listens on, and say what happened.**
+///
+/// Returns the session and one line for the legend — never a refusal that
+/// stops the run, and that is the decision rather than an omission. The three
+/// cases it has to be right about are the three the window can meet, and two
+/// principles point in different directions across them:
+///
+/// 1. **No device at all.**
+///    [P-0034](../../../docs/principles/0034-a-quiet-room-is-not-a-missing-microphone.md)
+///    — *a quiet room is not a missing microphone* — and neither is a missing
+///    microphone a fault. Nobody asked for one here: this program opens the
+///    default because that is what an instrument does, and a machine with no
+///    input is a machine where every name goes on answering what it answered
+///    before audio existed and the oscillator free-runs. It is said out loud,
+///    once, and the run continues. Exiting would mean a laptop with its
+///    microphone switched off cannot open the panel at all.
+/// 2. **A device that was named and is not there.** A different case, and
+///    [P-0027](../../../docs/principles/0027-a-silently-wrong-image-loses-to-a-loud-failure.md)
+///    is why: somebody said *that one*, and going quietly on with a different
+///    one — or with none — is the silently wrong picture. It cannot happen
+///    *here*, because nothing names an input at launch; it happens at the
+///    pill, where the list an operator picked from was read at the press and a
+///    device can have gone away since. [`attached`] is that case and it is
+///    loud there. **Loud and not fatal**, which is where this program parts
+///    from `karakuri-cli`: a window with a set on it must not close because an
+///    interface was unplugged, and the operator is standing in front of the
+///    refusal.
+/// 3. **A device that goes away mid-set.** Nothing here notices, deliberately,
+///    and that *is* the answer: `karakuri-audio`'s `staleness` takes the
+///    confidence of both the signals and the tempo estimate to zero over half
+///    a second, every bound parameter is handed back to the value it had, and
+///    the grid free-runs from wherever it was. A watchdog that re-opened the
+///    stream would be a second answer to a question that already has one, and
+///    it would re-lock the grid to a room in the middle of a set. What an
+///    operator does about it is pick again on the pill.
+///
+/// A free function rather than a step of `resumed`, for the reason
+/// [`sources_from`] is one: `resumed` cannot be called from a test, and a
+/// refusal nobody can reach is a refusal nobody checked. See
+/// [`unopened`], which is the half of it that has no device in it at all.
+fn listening(session_bpm: f32) -> (Option<audio::Audio>, String) {
+    match audio::Audio::open(LISTEN_ON, audio::DEFAULT_LATENCY_OFFSET_MS, DT, session_bpm) {
+        Ok(open) => {
+            let line = format!(
+                "audio in: {} at {} Hz — energy, onset and band0..7 are measured from this room \
+                 now, and the beat corrects the session's oscillator. output offset {:.0} ms. \
+                 the transport row's `audio-in` pill says which input this is and lists the \
+                 others; `b` taps the beat and `,` and `.` move the grid an octave.",
+                open.description(),
+                open.sample_rate(),
+                open.latency_offset_ms()
+            );
+            (Some(open), line)
+        }
+        Err(why) => (None, unopened(LISTEN_ON, &why)),
+    }
+}
+
+/// **What to say about an input that did not open**, and which of the two
+/// kinds of nothing it was.
+///
+/// Split out from [`listening`] because it is the whole of the judgement and
+/// none of the device: a machine with no inputs and a machine whose default
+/// vanished are two sentences, and the difference between them is the
+/// difference between P-0034 and P-0027. Being a function of an error and a
+/// string, it is checkable where no input can be opened at all — which is
+/// every machine a test runs on, whatever it happens to have plugged in.
+///
+/// **The empty case is not apologetic and the non-empty one is not calm.** A
+/// machine with no inputs is a state; a machine with inputs where the one
+/// asked for is not among them is somebody's mistake or somebody's cable, and
+/// the list is what they need rather than an invitation to go and look.
+fn unopened(selector: &str, why: &audio::AudioError) -> String {
+    match why {
+        audio::AudioError::NoMatch { available, .. } if available.is_empty() => String::from(
+            "audio in: none — this machine has no audio inputs, which is a state and not a \
+             fault: every signal name answers what it answered before audio existed, and the \
+             grid free-runs at the session tempo. the `audio-in` pill says `none` and its card \
+             says so too.",
+        ),
+        audio::AudioError::NoMatch { available, .. } => format!(
+            "audio in: `{selector}` is not one of this machine's {} input{} — {}. nothing is \
+             open; pick one on the `audio-in` pill.",
+            available.len(),
+            match available.len() {
+                1 => "",
+                _ => "s",
+            },
+            available.join(", ")
+        ),
+        // Config, Build, SampleFormat: a device that is there and would not
+        // start. Said in the audio crate's own words rather than translated —
+        // it is the only thing that knows what a host refused.
+        other => format!(
+            "audio in: none — `{selector}` is there and would not open: {other}. nothing is \
+             open; pick another on the `audio-in` pill."
+        ),
+    }
+}
+
+/// **What the `audio-in` pill reads**, out of the session this program opened.
+///
+/// One line, and it is a function rather than an assignment for the reason
+/// [`transport`] is one: it is the seam, and there is exactly one place the
+/// answer is derived. The card's list is **not** here — it is read on the
+/// press that opens the card and nowhere else (P-0072), so a reading taken
+/// every frame would be a directory read on the frame path with a microphone
+/// in place of the directory.
+fn told(open: Option<&audio::Audio>) -> AudioIn {
+    let mut told = AudioIn::NONE;
+    told.device = open.map(|open| open.description().to_owned());
+    told
+}
+
+/// **A press on one of the `audio-in` card's rows, performed**, and what this
+/// file says about it. `None` for every operation that is not it, exactly as
+/// [`arrangement`] and [`pointed`] answer `None` for everything that is not
+/// theirs.
+///
+/// This is the second of [`listening`]'s three cases and the only one that can
+/// arrive during a set: the card lists what the host had **at the press that
+/// opened it**, and an interface unplugged between that press and this one is
+/// a name the operator picked that is not there any more. P-0027 — the refusal
+/// is printed with the list as it is *now*, and **the input that was already
+/// open stays open**: dropping it would answer a mistyped pick by taking away
+/// the room, which is the one thing nobody asked for.
+///
+/// **`AttachBeatSource` writes no record** (`written` answers
+/// `Silent(NoRecord)`: no session-stream variant carries what the beat is
+/// taken from), so nothing downstream of this moves the deck. What moves is
+/// this program's own audio session and the pill that reads it.
+///
+/// A `BeatSource::Process` reaches here and is declined in one sentence: the
+/// panel has no control that names one and `--tempo-source` is
+/// `karakuri-cli`'s. It is answered rather than ignored, because an operation
+/// that arrives and does nothing at all is the failure P-0027 is about.
+fn attached(
+    open: &mut Option<audio::Audio>,
+    session_bpm: f32,
+    told_pill: &mut Option<AudioIn>,
+    operation: &Operation,
+) -> Option<String> {
+    let Operation::AttachBeatSource { source } = operation else {
+        return None;
+    };
+    let selector = match source {
+        BeatSource::AudioInput(selector) => selector,
+        BeatSource::Process(command) => {
+            return Some(format!(
+                "  attach: `{command}` is a process, and nothing on this panel starts one — \
+                 `karakuri-cli --tempo-source` is where that half of the row lives"
+            ))
+        }
+    };
+    // The offset the operator has already dialled in survives the change of
+    // device: it is a property of this room's outputs and not of its input,
+    // which is the whole of what `LATENCY_OFFSET_RANGE`'s documentation is
+    // about. A new session at the default would silently undo it.
+    let offset = open
+        .as_ref()
+        .map(|open| open.latency_offset_ms())
+        .unwrap_or(audio::DEFAULT_LATENCY_OFFSET_MS);
+    match audio::Audio::open(selector, offset, DT, session_bpm) {
+        Ok(opened) => {
+            let line = format!(
+                "  attach: {} at {} Hz -> AttachBeatSource -> no record, and that is settled: \
+                 nothing in the session stream says what the beat was taken from. the grid \
+                 follows this room now, at offset {:.0} ms",
+                opened.description(),
+                opened.sample_rate(),
+                opened.latency_offset_ms()
+            );
+            *open = Some(opened);
+            *told_pill = Some(told(open.as_ref()));
+            Some(line)
+        }
+        // **The one that was open stays open**, and the pill goes on naming
+        // it: what failed is the pick, not the room.
+        Err(why) => Some(format!(
+            "  attach: {} — {}",
+            selector,
+            match open.as_ref() {
+                Some(open) => format!("{why}. `{}` is still open", open.description()),
+                None => format!("{why}. nothing is open"),
+            }
+        )),
+    }
+}
+
+/// **One frame's worth of audio**: read the room, and hand the session what it
+/// said.
+///
+/// The same three lines `karakuri-cli`'s `measure_audio` is, minus the two
+/// halves this program does not have — there is no session recorder to hand
+/// the record to, and no tempo source to yield the grid to, so the grid is
+/// always this tracker's ([`audio::Grid::Owned`]).
+///
+/// **The signals are copied out of the deck and back in**, which is what
+/// `Deck::signals` and `set_signals` are for: the bus is a `Copy` value and
+/// the deck is the model of record for it, so an `AudioFrame` reaching a
+/// binding goes through the deck rather than round it.
+///
+/// `interval` is how fast frames are actually arriving, which is half the
+/// output lag a beat correction leads by. It is [`Costs::rate_now`] inverted
+/// — the same measurement the transport row draws as `fps`, asked once more
+/// rather than measured a second time, so the number the row shows and the
+/// number the lag is built from cannot disagree. `None` is a window that has
+/// not drawn a stretch yet, and `Audio::frame` ignores an interval outside
+/// `(0, 1)`: the smoothed value simply holds, which is the right answer for a
+/// frame nobody can time.
+fn measure_audio(open: &mut Option<audio::Audio>, deck: &mut Deck, interval: Option<f64>) {
+    let Some(open) = open.as_mut() else {
+        return;
+    };
+    let mut signals = *deck.signals();
+    let (_audio, tempo) = open.frame(
+        &mut signals,
+        interval.map(|rate| 1.0 / rate as f32).unwrap_or(0.0),
+        f32::from(STEPS_A_FRAME) * DT,
+        audio::Grid::Owned,
+    );
+    deck.set_signals(signals);
+
+    // **A correction worth saying out loud is one that is a decision rather
+    // than a trim** — acquiring, re-acquiring, a tap, an octave — which is
+    // `karakuri-cli`'s rule and is here for P-0030's reason: an operator who
+    // cannot see the grid decide cannot tell a lock from a coincidence. A trim
+    // happens on every frame once locked and says nothing.
+    let reason = open.reason();
+    if let (Some(Record::Tempo { bpm, .. }), Some(reason)) = (tempo, reason) {
+        if !matches!(reason, karakuri_environment::audio::Reason::Trim) {
+            println!("beat: {reason:?} at {bpm:.1} bpm");
+        }
+    }
+}
+
+/// **A tap on the beat**, performed against the room this program is listening
+/// to, and what to say about it.
+///
+/// # Why it does not go through `written`
+///
+/// Every other control on this panel emits an `Operation`, `written` turns it
+/// into a `Record` and [`apply`] moves the deck with it — P-0028. A tap
+/// **does** end in a record: `karakuri_environment::audio` writes a
+/// `Record::Tempo` for it and applies it to the session's oscillator, which is
+/// the same record a replay would hand the engine. What it cannot do is come
+/// out of `written`: that function is a pure function of the operation and a
+/// reading, and a tap's record is the *beat lock's* answer — the tapped tempo,
+/// the phase error against the oscillator, the output lag — none of which a
+/// `Current` carries. So `written(TapBeat)` answers `Owed(NotSettled)`, and
+/// routing this key through [`App::performed`] would print *"nothing moved,
+/// and nothing here decides it"* about a press that moved the grid.
+///
+/// **That is a gap in `karakuri-operation-record` and it is named here rather
+/// than papered over**: the day a `Current` can carry a correction, this key
+/// emits like every other control and this function goes. Until then it is
+/// `karakuri-cli`'s own wiring, which is what the panel was asked to use.
+fn tapped(
+    open: &mut Option<audio::Audio>,
+    deck: &mut Deck,
+    at: Instant,
+    started: Instant,
+) -> String {
+    let Some(open) = open.as_mut() else {
+        return String::from(
+            "tap: no audio input — a tap sets the grid this room is being tracked against, and \
+             there is no room. open one on the transport row's `audio-in` pill",
+        );
+    };
+    let mut signals = *deck.signals();
+    let record = open.tap(&mut signals, at, started);
+    deck.set_signals(signals);
+    match record {
+        Record::Tempo { bpm, shift, .. } => format!(
+            "tap: -> Record::Tempo {{ bpm: {bpm:.1}, shift: {shift:+.3} }} — three taps or more \
+             set the tempo and any tap sets the phase"
+        ),
+        other => format!("tap: -> {other:?}"),
+    }
+}
+
+/// **The grid, an octave up or down**, performed against the same session, and
+/// what to say about it.
+///
+/// [`tapped`]'s note about `written` word for word: `ScaleGrid` is the other
+/// half of that `Owed(NotSettled)` arm, and for the same reason.
+///
+/// **Refused where the result would leave the trackable range**, which is the
+/// lock's call and not this file's — 60 to 200 BPM is under two octaves wide,
+/// so at most one of the two directions is ever live and a control that undid
+/// itself two seconds later would be worse than one that says no.
+fn scaled(open: &mut Option<audio::Audio>, deck: &mut Deck, by: GridScale) -> String {
+    let (factor, word) = match by {
+        GridScale::Halve => (0.5, "half"),
+        GridScale::Double => (2.0, "double"),
+    };
+    let Some(open) = open.as_mut() else {
+        return format!(
+            "grid: no audio input — {word} moves the tracker's octave window, which only exists \
+             while a room is being tracked. open one on the transport row's `audio-in` pill"
+        );
+    };
+    let mut signals = *deck.signals();
+    let moved = open.octave(&mut signals, factor);
+    deck.set_signals(signals);
+    match moved {
+        Some(Record::Tempo { bpm, .. }) => format!(
+            "grid: {word} -> Record::Tempo {{ bpm: {bpm:.1} }} — the tracker's window went with \
+             it, and the phase did not move"
+        ),
+        Some(other) => format!("grid: {word} -> {other:?}"),
+        None => format!(
+            "grid: {word} refused — the result would leave the trackable range, and the next \
+             estimate that disagreed would drag the grid straight back"
+        ),
+    }
+}
+
 /// **The command line, then the window.**
 ///
 /// The arguments are read *before* the event loop exists, so a refusal is a
@@ -7228,6 +7802,107 @@ mod tests {
     /// was `Owed::NotSettled` until the conversion took a session tempo, and
     /// [`unwritten`] carries what that was.
     use karakuri_operation_record::{Owed, Silent};
+
+    /// **The three things this program has decided about a room, and none of
+    /// them needs a device.**
+    ///
+    /// The house rule for this pass was to say how what could not be opened
+    /// was tested. This is it: `listening`'s judgement is [`unopened`], which
+    /// is a pure function of an error, and the case that can only happen
+    /// during a set — an input picked off a list and gone by the time it is
+    /// opened — is reachable on any machine at all by picking a name no device
+    /// can have. **What is deliberately not here is that a real input opens**;
+    /// that is `karakuri-audio`'s ignored `the_default_input_opens_and_delivers`
+    /// and no assertion in this file could stand in for it.
+    ///
+    /// 1. **No device at all is not a fault** (P-0034): the sentence says
+    ///    `none` is a state, and says what goes on answering.
+    /// 2. **A device that was named and is not there is loud** (P-0027): the
+    ///    sentence carries the list, so an operator who picked a cable that has
+    ///    gone is holding the right names rather than an invitation to go and
+    ///    look.
+    /// 3. **And a refused pick does not take the room away.** Nothing is open
+    ///    in this test, so what is asserted is the half that can be: the answer
+    ///    says so rather than going quiet.
+    #[test]
+    fn a_room_with_no_microphone_is_a_state_and_a_named_one_that_is_gone_is_a_refusal() {
+        let quiet = unopened(
+            "default",
+            &audio::AudioError::NoMatch {
+                wanted: "default".to_owned(),
+                available: Vec::new(),
+            },
+        );
+        assert!(
+            quiet.contains("no audio inputs") && quiet.contains("not a fault"),
+            "a machine with no inputs was told it had a problem: {quiet}"
+        );
+        assert!(
+            !quiet.contains("VB-Cable"),
+            "the empty case named a device: {quiet}"
+        );
+
+        let missing = unopened(
+            "scarlett",
+            &audio::AudioError::NoMatch {
+                wanted: "scarlett".to_owned(),
+                available: vec!["VB-Cable".to_owned(), "Built-in".to_owned()],
+            },
+        );
+        assert!(
+            missing.contains("scarlett")
+                && missing.contains("VB-Cable")
+                && missing.contains("Built-in"),
+            "the refusal did not carry what the operator needs: {missing}"
+        );
+        assert!(
+            !missing.contains("not a fault"),
+            "a device somebody named and is not there was reported as a state: {missing}"
+        );
+
+        // **The case that can only arrive during a set**, on a machine with
+        // whatever it happens to have plugged in: a pick nothing can match.
+        // Nothing is opened — `pick` refuses before a stream is built — so
+        // this runs anywhere and touches no hardware.
+        let mut open: Option<audio::Audio> = None;
+        let mut told_pill = Some(AudioIn::NONE);
+        let line = attached(
+            &mut open,
+            120.0,
+            &mut told_pill,
+            &Operation::AttachBeatSource {
+                source: BeatSource::AudioInput("\u{fffd}no such audio input\u{fffd}".to_owned()),
+            },
+        )
+        .expect("`attached` answered nothing for an attach");
+        assert!(
+            line.contains("nothing is open"),
+            "a refused pick said nothing about what is open now: {line}"
+        );
+        assert!(open.is_none(), "a refused pick opened something");
+
+        // And a process is declined in one sentence rather than ignored.
+        let process = attached(
+            &mut open,
+            120.0,
+            &mut told_pill,
+            &Operation::AttachBeatSource {
+                source: BeatSource::Process("beats --stdout".to_owned()),
+            },
+        )
+        .expect("`attached` ignored a beat source it cannot take");
+        assert!(
+            process.contains("tempo-source"),
+            "a process was declined without saying where that half of the row lives: {process}"
+        );
+
+        // Every other operation is somebody else's, which is what keeps this
+        // one line in `performed` rather than a second route into the device.
+        assert_eq!(
+            attached(&mut open, 120.0, &mut told_pill, &Operation::TapBeat),
+            None
+        );
+    }
 
     /// **Every verdict the engine can report says what it does to the lane,
     /// and a row leaves it only when the file and the picture agree.**
@@ -9708,6 +10383,22 @@ mod key_column {
         // column stays `plan` and this key is what makes the key column
         // `has`.
         ("e", &["Choose which scope the library shows"]),
+        // **The three that need a room**, and they are the first keys here
+        // that reach neither the arrangement nor the deck. `b` is a tap and
+        // `,` and `.` are the octave; each performs against the audio session
+        // this program opened, and each says so when there is none rather
+        // than doing nothing (`super::tapped`, `super::scaled`).
+        //
+        // **They are the two rows that moved in this column and not a third**:
+        // *Nudge the latency offset* is specified as `o` and `p`, and `p` is
+        // `Op::Report` here. The page says whether the instrument takes those
+        // letters or the command line gives them up is a decision nobody has
+        // made and is a change to the specification, so that row's key badge
+        // stays `plan` and no arm binds `o` alone — a badge naming two keys
+        // with one of them bound would be a badge that lies.
+        ("b", &["Tap the beat"]),
+        (",", &["Halve or double the grid"]),
+        (".", &["Halve or double the grid"]),
         // **The library cursor, and it reaches no row on purpose.** Nothing in
         // the vocabulary moves it: `docs/manual/console.html` decides that
         // where the deck selection has a row of its own, and the argument is
@@ -11645,6 +12336,7 @@ mod gpu {
             &ctx,
             panel.layout(),
             view.transport,
+            view.audio.as_ref(),
             &view.arrangement,
             view.look,
         )
@@ -11696,6 +12388,7 @@ mod gpu {
             &ctx,
             panel.layout(),
             view.transport,
+            view.audio.as_ref(),
             &view.arrangement,
             Some(look(&engine.look)),
         )

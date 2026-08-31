@@ -851,8 +851,8 @@ fn reached_through_a_painted_control() -> BTreeSet<&'static str> {
     let mut view = running();
     view.arrangement.name = Some(IN_USE.to_owned());
     view.arrangement.filed = vec![IN_USE.to_owned()];
-    let pill =
-        arrangement(&ctx, p.layout(), view.transport, &view.arrangement).unwrap_or_else(|| {
+    let pill = arrangement(&ctx, p.layout(), view.transport, None, &view.arrangement)
+        .unwrap_or_else(|| {
             panic!(
                 "the transport row draws no arrangement pill on a solved console with an \
                  engine behind it, so nothing here can demonstrate a row of `{SECTION}` from a \
@@ -883,7 +883,7 @@ fn reached_through_a_painted_control() -> BTreeSet<&'static str> {
         ),
     }
 
-    let open = arrangement(&ctx, p.layout(), view.transport, &view.arrangement)
+    let open = arrangement(&ctx, p.layout(), view.transport, None, &view.arrangement)
         .expect("the pill was drawn a moment ago and the panel has not moved");
     assert!(
         open.rows > 0,

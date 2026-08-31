@@ -157,6 +157,7 @@ fn count(word: &str) -> usize {
         ("fifteen", 15),
         ("sixteen", 16),
         ("seventeen", 17),
+        ("eighteen", 18),
         ("twenty", 20),
         ("thirty-two", 32),
         ("thirty-seven", 37),

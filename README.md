@@ -44,7 +44,9 @@ cargo run -p karakuri-cli -- --render out.png --frames 240   # one frame to a PN
 
 `karakuri` is the panel and `karakuri-cli` is still what you play a whole set with: the
 console has the picture, the deck previews, the transport, the mixer, the Library bay and
-the Inspector, and no audio, MIDI, MCP, watcher or replay yet. The Staging lane draws its
+the Inspector, and no MIDI, MCP or replay yet. **It listens to the room**: it opens the
+default audio input at startup, the transport row's `audio-in` pill says which one and
+lists the others, and `b`, `,` and `.` tap the beat and move the grid an octave. The Staging lane draws its
 empty state, which is the only state that program can reach; the Master and Sequencer bays
 draw nothing but their heads. Press `h` in the CLI's window for the keys and `s` for the
 status line.
@@ -71,7 +73,9 @@ not about design, and it had no home until the manual had one.
   example until ADR-0214, and for one reason: everything a program needs beyond the panel was in
   `karakuri-cli`, which has no library target, so there was nothing for a binary to sit on. There
   is now — [`karakuri-environment`](crates/karakuri-environment). `karakuri-cli` is still what you
-  play a whole set with: the console has no audio, MIDI, MCP, watcher or replay yet
+  play a whole set with: the console has no MIDI, MCP or replay yet, and it does open an audio
+  input — so the signal bus carries a measurement rather than an invention, and the grid follows
+  the room
 - **Every operation is named once and every surface routes into that name** — the manual's first
   rule. [`karakuri-operation`](crates/karakuri-operation) is every one of those names, checked against
   [the manual's own page](docs/manual/operations.html) by a test — **how many there are is not written

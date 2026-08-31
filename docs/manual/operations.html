@@ -49,12 +49,15 @@
       <strong>The <em>key</em> column is the instrument's keyboard</strong>
       &mdash; the keys <code>cargo run -p karakuri</code> binds, and no other
       program's. Two programs in this repository have a keyboard and they are
-      not the same keyboard: the instrument binds sixteen keys,
+      not the same keyboard: the instrument binds twenty-three keys,
       <code>karakuri-cli</code> binds thirty-nine, and eight letters mean one
-      thing at the panel and something else at the command line. Five keys
-      agree, and four of the five arrived together: <code>esc</code> quits on
-      both, and <code>0</code> to <code>3</code> select a deck on both, because
-      a deck is a slot number and there was nothing to translate. So a
+      thing at the panel and something else at the command line. Eight keys
+      agree, and they arrived in two groups of one reason each: <code>esc</code>
+      quits on both and <code>0</code> to <code>3</code> select a deck on both,
+      because a deck is a slot number and there was nothing to translate; and
+      <code>b</code>, <code>,</code> and <code>.</code> tap the beat and move
+      the grid an octave on both, because those three address the beat tracker
+      and there is one of it. So a
       <em>built</em> key badge names a key an
       operator at the panel can press today, for the same reason a
       <em>built</em> panel badge names a control they can reach: both columns
@@ -69,7 +72,7 @@
       second copy of it here would be a list that goes stale.
     </p>
     <p>
-      <strong>64 operations, and 56 of the 272 ways in exist.</strong> Eight of
+      <strong>64 operations, and 59 of the 272 ways in exist.</strong> Eight of
       them are the console's own shape &mdash; moving a boundary, folding a bay
       or a pane, bringing one back, solo, and the three that reset, keep and put
       back an arrangement &mdash; and ten of their thirty-two routes exist: the
@@ -80,10 +83,10 @@
       could, and the pill is it. Resetting is the default case of those two and
       is reached from both &mdash; <code>r</code>, and <em>start a new one</em>
       on the same pill.
-      <strong>Nineteen <em>key</em> badges are designed rather than built, and
+      <strong>Seventeen <em>key</em> badges are designed rather than built, and
       every one of them is a key the command line binds today.</strong> The
-      column is the instrument's keyboard and the instrument binds seventeen keys,
-      so the nineteen are what the command line reaches and the panel does not; the
+      column is the instrument's keyboard and the instrument binds twenty-three keys,
+      so the seventeen are what the command line reaches and the panel does not; the
       letters stay because this page is where a key is specified, and seven of
       them are already spoken for at the panel &mdash; <code>f</code> and
       <code>g</code> fold, <code>z</code> brings back what is folded,
@@ -91,16 +94,29 @@
       panel to report itself and <code>n</code> changes its colours. Whether the
       instrument takes those letters or the command line gives them up is a
       decision nobody has made, and it is a change to this specification rather
-      than a note on it. <strong>The twentieth was <code>e</code>, and the panel binds
+      than a note on it.
+      <strong>One of those seven is now holding a row back rather than merely
+      noted.</strong> <em>Nudge the latency offset</em> is specified as
+      <code>o</code> and <code>p</code>; the instrument opened an audio input
+      and reached the two rows beside it &mdash; <em>Tap the beat</em> on
+      <code>b</code>, <em>Halve or double the grid</em> on <code>,</code> and
+      <code>.</code>, all three of which the command line means the same thing by
+      &mdash; and left this one alone, because <code>p</code> is the panel's
+      report and a badge naming two keys with one of them bound would be a badge
+      that lies. Taking <code>p</code>, moving the report, or specifying a
+      different pair are three changes to this page and one of them has to be
+      made before the row moves. <strong>The twentieth was <code>e</code>, and the panel binds
       it now</strong> &mdash; the library's scope row was specified here before either keyboard
       had it, which is the order everything else on this page arrived in, and it is the one
-      built key badge in this column that no command line reaches. <strong>Seventeen <em>panel</em> routes are
+      built key badge in this column that no command line reaches. <strong>Eighteen <em>panel</em> routes are
       marked built</strong>, and they are the whole of that column: the Mixer
       bay's six &mdash; the strip trim, the strip fader, the strip button, the
       tally chip, the strip mask mini and the strip itself, which is where a
       deck is selected &mdash; every divider on the panel,
-      which drags; the transport row's tone map capsule, its exposure track and
-      the arrangement pill's three rows; the deck head's sync chip and its
+      which drags; the transport row's tone map capsule, its exposure track,
+      the arrangement pill's three rows and the <em>audio&#8209;in</em> pill,
+      whose card lists this machine's inputs and opens the one you pick; the
+      deck head's sync chip and its
       scrub; the Master bay's out; and the Program bay's two &mdash; the
       <em>solo</em> pill in its head, and the four deck preview cells under the
       picture, which are one row however many cells name it. The Mixer's first five already emitted
@@ -131,7 +147,7 @@
       geometry <a href="console.html">the console</a> draws meeting the grab the
       panel needs, and it is written here because moving either of them is a
       change to this specification.
-      Beyond those seventeen, 43 more are designed and out of reach, most of them in
+      Beyond those eighteen, 42 more are designed and out of reach, most of them in
       bays nothing draws yet, and four the panel cannot reach at all. Where a badge names a
       region, that is where the control lives in
       <a href="console.html">the console</a>; three name none yet, and naming one
@@ -185,10 +201,12 @@
     <div class="opgroup">
       <div class="op">
         <div class="op-head"><h3>Tap the beat</h3><span class="op-when ">immediate</span></div>
-        <p>Three taps or more set the tempo; any tap sets the phase. Refused without an audio input attached.</p>
+        <p>Three taps or more set the tempo; any tap sets the phase. Refused without an audio input
+          attached &mdash; and the refusal says where to open one rather than doing nothing, because
+          a key that declines and a key that is not bound are the same experience.</p>
         <div class="rts">
           <span class="rt plan">panel <b>tap</b></span>
-          <span class="rt plan">key <b>b</b></span>
+          <span class="rt has">key <b>b</b></span>
           <span class="rt has">MIDI <b>note &rarr; tap</b></span>
           <span class="rt gap">MCP <b>&mdash;</b></span>
         </div>
@@ -198,7 +216,7 @@
         <p>Moves the tracker's octave window with it, and is refused if it would leave the trackable range.</p>
         <div class="rts">
           <span class="rt plan">panel <b>&frac12; &times;2</b></span>
-          <span class="rt plan">key <b>, .</b></span>
+          <span class="rt has">key <b>, .</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt gap">MCP <b>&mdash;</b></span>
         </div>
@@ -245,10 +263,17 @@
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Attach a beat source</h3><span class="op-when launch">launch</span></div>
-        <p>An audio input to track, or an external process to follow. Four keys are refused without one.</p>
+        <div class="op-head"><h3>Attach a beat source</h3><span class="op-when ">immediate</span></div>
+        <p>An audio input to track, or an external process to follow. Four keys are refused without one.
+          <strong>The audio half stopped being launch-only when the panel got a control for
+          it</strong>: the transport row's <em>audio&#8209;in</em> pill lists the inputs the machine
+          has and opens the one you pick, read at the press rather than at startup &mdash; so an
+          interface plugged in during a set is attached during that set, and one that has gone in
+          the meantime is refused out loud with the list as it is then. <strong>A process is still a
+          flag before the run</strong>: nothing on the panel starts one, and there is no list to
+          offer of processes that do not exist yet.</p>
         <div class="rts">
-          <span class="rt plan">panel <b>transport</b></span>
+          <span class="rt has">panel <b>transport</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt gap">MCP <b>&mdash;</b></span>
