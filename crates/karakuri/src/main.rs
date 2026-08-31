@@ -278,10 +278,11 @@ use karakuri_console::panel::{Dragged, InHand, Knob, Op, Outcome, Panel, Pressed
 use karakuri_console::repaint::{Change, Repaint};
 use karakuri_console::room::Room;
 use karakuri_console::view::{
-    self, arrangement as arrangement_pill, audio_in as audio_in_pill, deck_head as deck_head_row,
-    inspector as inspector_pane, look as look_row, master as master_row, mixer as mixer_bay,
-    outputs, picture_rect, preview_rects, program_bay, program_head, Ask, AudioAsk, AudioIn, Kind,
-    Picture, Scope, View, DECKS, DECK_LETTERS,
+    self, arrangement as arrangement_pill, audio_in as audio_in_pill, class_at,
+    deck_head as deck_head_row, inspector as inspector_pane, look as look_row,
+    master as master_row, mcp_pill, mixer as mixer_bay, outputs, picture_rect, preview_rects,
+    program_bay, program_head, Ask, AudioAsk, AudioIn, Kind, McpPill, Picture, Scope, View, DECKS,
+    DECK_LETTERS,
 };
 // **How many slots a deck can hold**, which is how many this one has — see
 // [`SLOTS`]. Not re-exported at the crate root, and asked of the module that
@@ -297,9 +298,10 @@ use karakuri_engine::{
     compose, Blend, Committed, Control, Deck, Event, Gpu, HotSwap, Look, Mask, MaskKind, Present,
     Residency, Set, Sink, Skip, TonemapOp, DEFAULT_BUDGET_MS,
 };
-use karakuri_environment::{audio, mix, watch};
+use karakuri_environment::{audio, mix, watch, Opening};
 use karakuri_ir::Kind as Layer;
 use karakuri_layout::{Axis, Hit, Layout, NodeId, Point};
+use karakuri_operation::gate::{Class, Open};
 use karakuri_operation::{BeatSource, BlendMode, GridScale, Operation, Undecided};
 use karakuri_operation_record::{written, Current, Written};
 use karakuri_store::record::Record;
@@ -1210,6 +1212,22 @@ fn ms(d: Duration) -> f64 {
 struct Readout {
     panel: Panel,
     view: View,
+    /// **What the operator has opened to a model**, and the one piece of state
+    /// in this struct that is neither the panel's nor a reading of the engine.
+    ///
+    /// It is a handle rather than a value because the whole point of it is that
+    /// a *second* reader has it: `karakuri_environment::mcp::serve` takes a
+    /// clone and reads it on every call, so an opening is live rather than a
+    /// snapshot taken at startup. `View::opening` is this handle read once a
+    /// frame; this is the model of record.
+    ///
+    /// **Nothing in this process serves MCP yet**, and that is said out loud
+    /// rather than left to be discovered: this program's own header lists MCP
+    /// among what is not wired. So today the four pills write a value only this
+    /// program and its tests read back — and the wiring that makes it matter is
+    /// one `serve` call, not another control. What would be far harder to add
+    /// afterwards is the thing that is built: a surface that can say *open*.
+    opening: Opening,
 }
 
 impl Readout {
@@ -1217,6 +1235,8 @@ impl Readout {
         Readout {
             panel: Panel::new(width, height),
             view: View::new(Room::Day),
+            // Four classes shut, which is what a run starts with (ADR-0235).
+            opening: Opening::closed(),
         }
     }
 
@@ -1611,10 +1631,19 @@ impl Readout {
                 // `s` and `u` perform, chosen from the layout rather than
                 // toggled — and this file performs it exactly as it performs
                 // the dot's.
-                if let Some(head) =
-                    program_head(ctx, self.panel.layout()).filter(|head| head.hit(at))
+                if let Some(head) = program_head(ctx, self.panel.layout(), self.view.opening)
+                    .filter(|head| head.hit(at))
                 {
                     return (claim, Acted::Operated(self.soloed(head.op())));
+                }
+                // **The four class pills**, and this is the one press in this
+                // file that leaves by neither of the other two doors. See
+                // `Readout::opened`, which is where the reason is.
+                if let Some(pill) = Class::ALL.iter().find_map(|class| {
+                    mcp_pill(ctx, self.panel.layout(), *class, self.view.opening)
+                        .filter(|pill| pill.hit(at))
+                }) {
+                    return (claim, self.opened(&pill));
                 }
                 // **The four deck preview cells.** A press names a deck or
                 // the mix, and it goes down the path every emitted operation
@@ -1628,7 +1657,8 @@ impl Readout {
                 {
                     return (claim, Acted::Emitted(Some(operation)));
                 }
-                let sink = outputs(ctx, self.panel.layout()).filter(|row| row.hit(at));
+                let sink =
+                    outputs(ctx, self.panel.layout(), self.view.opening).filter(|row| row.hit(at));
                 let bay = mixer_bay(ctx, self.panel.layout(), &self.view.mixer);
                 // **The Master bay's out is a `Grab` like a strip's**, so it
                 // joins the knob rather than taking an arm of its own: what
@@ -1861,6 +1891,78 @@ impl Readout {
             }
         );
         self.op(op)
+    }
+
+    /// **A press on one of the four class pills**, and the one press in this
+    /// program that is neither an operation on the arrangement nor one on the
+    /// mix.
+    ///
+    /// # Why it takes a different path from every other press in this file
+    ///
+    /// Everything else here ends in one of two places. A control over the
+    /// console's own shape asks for a [`Op`], `Panel` performs it, and what
+    /// comes back is an [`Outcome`]. A control over the mix emits an
+    /// [`Operation`], [`written`] turns it into a `Record` and [`apply`] moves
+    /// the deck with it — P-0028, *every control ends in the same record*. A
+    /// reader who has just met those two will reach for the second here,
+    /// because it is the one every new control has taken for a year.
+    ///
+    /// **It must not be routed as an `Operation`, and
+    /// [ADR-0236](../../docs/adr/0236-a-map-is-the-layer-between-a-surface-and-the-vocabulary-and-the-audit-is-one-of-the-things-it-does.md)
+    /// is explicit about it.** The opening is configuration of the *map* — the
+    /// layer every surface reaches the vocabulary through — and not a member of
+    /// the vocabulary the map addresses. The rule is narrower than *map
+    /// configuration is never an operation*, because `Operation::PointLane`
+    /// already is one: **a setting that decides whether a surface may reach a
+    /// class of operations cannot itself be one of those operations.** Rule 01
+    /// would make such an operation reachable from all four surfaces, MCP
+    /// included, and a permission an actor can grant itself is not a
+    /// permission. There is no 65th row on the operations page for the same
+    /// reason, and ADR-0235's *"the opening setting has no operation"* is
+    /// annotated as settled by exactly this.
+    ///
+    /// So: no `Operation`, no `Record`, no [`Acted::Emitted`]. What a press
+    /// hands over is a value — `McpPill::next`, the opening with one class set
+    /// the other way and the other three written back as they were — and the
+    /// run's `Opening` is where it goes. **Somebody will one day try to fix
+    /// this into the vocabulary**; this paragraph is what it costs them to do
+    /// it, and `Acted::Opened` is the type that will not let it happen quietly.
+    ///
+    /// **The view's copy is written in the same breath as the handle**, not
+    /// left for the next frame's read. `input::claim` and the probe above both
+    /// hit-test against `View::opening`, and the pill is not the same width in
+    /// its two states — so a press that moved the handle and not the view would
+    /// leave the very next press aimed at the capsule that was there before it.
+    fn opened(&mut self, pill: &McpPill) -> Acted {
+        // **Annotated, and the annotation is load bearing in two ways.** It
+        // says what a press composes — an opening and not a `bool` — and it is
+        // what keeps `Open` named outside `#[cfg(test)]`: a test-only `use` of
+        // it would sit above the window loop, and `key_column`'s scan of this
+        // file's own text stops at the first `#[cfg(test)]` line it meets.
+        let next: Open = pill.next(self.view.opening);
+        self.opening.set(next);
+        self.view.opening = next;
+        let open = next.holds(pill.class);
+        // **What the pill says it did, in the words a refusal says it in.**
+        // `Class::title` and `Class::opened_at` are the gate's own strings, so
+        // the sentence a model is refused with and the sentence an operator
+        // reads at the pill name one thing the same way (P-0061).
+        println!(
+            "{}: `{}` — {} is {} to a model. {}. the operator opens it at {}.",
+            pill.class.bay(),
+            view::mcp_word(open),
+            pill.class.title(),
+            match open {
+                true => "open",
+                false => "shut",
+            },
+            match open {
+                true => "calls in this class are performed",
+                false => "calls in this class are refused, and the refusal says so",
+            },
+            pill.class.opened_at()
+        );
+        Acted::Opened
     }
 
     /// A press on the Outputs row's one control. **The dot says what it did**
@@ -2321,6 +2423,22 @@ impl Readout {
                     None => "not drawn".to_owned(),
                 },
             };
+            // **And the class pill where the region draws one**, appended
+            // rather than written into each arm: four regions carry one, they
+            // are four different `Kind`s, and an arm apiece would be four
+            // copies of one sentence — which is the defect this legend was
+            // repaired of the last time. What it says is the gate's own words,
+            // so the sentence an operator reads here and the sentence a model
+            // is refused with cannot drift apart.
+            let what = match layout.name(node.id).and_then(class_at) {
+                Some(class) => format!(
+                    "{what}, `{}` at {} — {}",
+                    view::mcp_word(self.view.opening.holds(class)),
+                    class.opened_at(),
+                    class.title()
+                ),
+                None => what,
+            };
             println!(
                 "  {:width$}{:<16} {:<22} {}",
                 "",
@@ -2338,6 +2456,19 @@ impl Readout {
              is the other: the dot names an operation on the ARRANGEMENT, which this crate \n\
              performs, and a fader names one on the MIX, which it cannot — so the operation \n\
              comes out and this file applies it."
+        );
+        println!();
+        println!(
+            "four of the regions above carry an `mcp` pill, and each says beside its own line \n\
+             which state its class is in. each opens one class of operations to a model; every \n\
+             operation stays connected either way, and what shut changes is that the call is \n\
+             answered with a refusal instead of being performed — one that names the class and \n\
+             says which pill opens it. it is the one control on this panel that is neither an \n\
+             operation on the ARRANGEMENT nor one on the MIX: it is a setting of the map every \n\
+             surface reaches the vocabulary through, and a setting deciding whether a surface \n\
+             may reach a class of operations cannot be a member of that class (ADR-0236). \n\
+             nothing in this process serves MCP yet, so what these four write is read here, by \n\
+             this file's tests, and by nothing else."
         );
         println!();
         println!(
@@ -2484,6 +2615,18 @@ enum Acted {
     /// **A fader translated a drag into the vocabulary**, or the drag moved
     /// the pointer over a value that did not change and asked for nothing.
     Emitted(Option<Operation>),
+    /// **A class pill was pressed**, and what it wrote went to the run's
+    /// `Opening` rather than to the arrangement or to the deck.
+    ///
+    /// **A fourth answer rather than a reuse of `Nothing`**, and the difference
+    /// is the whole of ADR-0236: this press is not an operation and must never
+    /// be made into one, so it cannot be an `Emitted`; and it is not nothing
+    /// either, because a word on the panel changed. See `Readout::opened`.
+    ///
+    /// It carries no payload because there is none to carry: what changed is
+    /// held in the `Opening`, which is a handle another surface reads, and a
+    /// copy of it in this enum would be the second answer to *what is open*.
+    Opened,
 }
 
 fn folding(folded: bool) -> &'static str {
@@ -6130,6 +6273,14 @@ impl App {
     ) -> Repaint {
         match acted {
             Acted::Nothing => otherwise,
+            // **A class pill earns the frame the claimed press already earns,
+            // and no more.** Nothing in the arrangement moved and no operation
+            // was emitted; what changed is one word in one capsule, and
+            // `Change::Pointer(Claim::Panel)` — which is what `otherwise` is on
+            // every path that can reach this arm — is already `Repaint::Now`. A
+            // `Change` of its own would be a second answer to a question that
+            // is already answered.
+            Acted::Opened => otherwise,
             Acted::Operated(outcome) => Change::Operated(outcome).repaint(),
             Acted::Emitted(operation) => {
                 if let Some(operation) = operation.as_ref() {
@@ -7156,6 +7307,13 @@ impl ApplicationHandler for App {
                 // present pass read it, so the two are read off two different
                 // objects and written here in the same breath (ADR-0224).
                 self.readout.view.master_out = Some(gfx.engine.deck.out());
+                // **And which classes are open to a model**, read off the
+                // handle rather than remembered from the last press on a pill.
+                // Nothing but a pill writes it today; the handle exists because
+                // an MCP server holds a clone of it and reads it on every call,
+                // and a view that trusted its own last write would be the
+                // console answering on that server's behalf.
+                self.readout.view.opening = self.readout.opening.read();
                 // **And what the mixer strips read**, beside the frame they
                 // are about for the same reason. One strip per slot, so two —
                 // see `mixer`.
@@ -9447,6 +9605,173 @@ mod tests {
         ctx
     }
 
+    /// **The whole of what the four class pills are for: an operation the gate
+    /// refuses becomes one it allows, because a hand pressed a capsule.**
+    ///
+    /// # Why it is here and can be nowhere else
+    ///
+    /// It crosses three crates and no two of them can see the third.
+    /// `karakuri-console` draws the pill and hands back a value; it must not
+    /// name `karakuri-environment` at all (ADR-0156), so it cannot reach the
+    /// handle. `karakuri-environment` holds the `Opening` and cannot see a
+    /// console. `karakuri-operation`'s gate holds the audit and the refusal and
+    /// depends on neither. **This file is the only place all three are in
+    /// scope**, which is the same reason `key_column` is a unit test in this
+    /// binary: a surface is where the buck stops, nothing may depend on this
+    /// package, and the checks that need everything at once live in it.
+    ///
+    /// # What it asserts, in the order an operator's afternoon goes
+    ///
+    /// 1. `SetGain` is in the mix-fader class, which is the classification
+    ///    ADR-0235 drew — asserted against `standing` rather than assumed, so
+    ///    that a row moved out of the class fails here rather than making this
+    ///    test quietly vacuous.
+    /// 2. On a run nobody has touched it is **refused**, and the sentence is
+    ///    `gate::refusal`'s own **by equality** — P-0061, *a refusal a person
+    ///    can reach from two surfaces is one sentence*, asserted against the
+    ///    function rather than with a `contains`. It names the Mixer bay,
+    ///    because a model that is told only *no* reports the instrument as
+    ///    incapable instead of as closed.
+    /// 3. A press on the Mixer bay's pill — through `Readout::pointer`, which
+    ///    is the same routing a hand goes through, and not by calling `set`
+    ///    here — opens the class.
+    /// 4. **The same call, the same audit, now allowed.** Nothing about the
+    ///    operation changed and nothing about the vocabulary changed; the list
+    ///    a model reads never shortened at any point.
+    /// 5. **And exactly that class.** The other three are still shut and an
+    ///    operation in one of them is still refused, which is the property the
+    ///    console's own `a_press_opens_exactly_one_class_and_leaves_the_other_three_shut`
+    ///    makes about the value and this one makes about the run.
+    /// 6. A second press shuts it, and the call is refused again — the other
+    ///    half of the page's *"click again to shut it"*, seen from the gate.
+    #[test]
+    fn the_gate_lets_a_refused_operation_through_once_the_class_is_open() {
+        use karakuri_operation::gate::{audit, refusal, standing, Running, Standing};
+
+        let ctx = drawn_once();
+        let mut readout = Readout::new(1440.0, 900.0);
+        readout.panel.solve();
+
+        // A write to a mix fader: unpriced, immediate, irreversible, and what
+        // the audience is looking at — P-0079's three answers, all missing.
+        let write = Operation::SetGain { deck: 0, gain: 0.5 };
+        assert_eq!(
+            standing(&write, Running::unread()),
+            Standing::Closed(Class::MixFaders),
+            "`SetGain` is no longer in the class this test is about"
+        );
+        // And one from another class, to hold the press to one class below.
+        let elsewhere = Operation::SetPreview { showing: None };
+        assert_eq!(
+            standing(&elsewhere, Running::unread()),
+            Standing::Closed(Class::InputsAndOutputs)
+        );
+
+        // 2. Refused, in one sentence, and it says where a hand opens it.
+        let refused = audit(&write, readout.opening.read(), Running::unread())
+            .expect_err("a mix write is allowed on a run nobody has opened anything on");
+        assert_eq!(
+            refused,
+            refusal(&write, Standing::Closed(Class::MixFaders)).expect("a refusal has a sentence")
+        );
+        assert!(
+            refused.contains("the head of the Mixer bay"),
+            "the refusal does not say where the pill is: {refused}"
+        );
+
+        // 3. The press. Where the capsule is comes from the same derivation
+        // that painted it, and the event goes through the window loop's own
+        // routing — `Opening::set` is never called from this test.
+        let capsule = |readout: &mut Readout| {
+            readout.panel.solve();
+            let pill = mcp_pill(
+                &ctx,
+                readout.panel.layout(),
+                Class::MixFaders,
+                readout.view.opening,
+            )
+            .expect("the Mixer bay draws its class pill");
+            (
+                Point::new(pill.pill.center().x, pill.pill.center().y),
+                pill.open,
+            )
+        };
+        let (at, open) = capsule(&mut readout);
+        assert!(!open, "the pill reads open on a run that has just started");
+        assert_eq!(readout.pointer(&ctx, Pointer::Moved(at)).0, Claim::Panel);
+        let (claim, did) = readout.pointer(&ctx, Pointer::Down);
+        assert_eq!(claim, Claim::Panel);
+        assert_eq!(
+            did,
+            Acted::Opened,
+            "the class pill went down one of the other two paths — an `Operation` \
+             or an operation on the arrangement — and ADR-0236 says it is neither"
+        );
+        readout.pointer(&ctx, Pointer::Up);
+
+        // 4. The same call, the same audit, allowed.
+        let allowed = audit(&write, readout.opening.read(), Running::unread())
+            .expect("the operator opened the class and the call is still refused");
+        assert_eq!(allowed.operation(), &write);
+
+        // 5. And exactly that class.
+        for class in Class::ALL {
+            assert_eq!(
+                readout.opening.read().holds(*class),
+                *class == Class::MixFaders,
+                "one press opened or shut {class:?} as well"
+            );
+        }
+        assert_eq!(
+            audit(&elsewhere, readout.opening.read(), Running::unread())
+                .expect_err("opening the mix faders opened the outputs too"),
+            refusal(&elsewhere, Standing::Closed(Class::InputsAndOutputs)).expect("a sentence")
+        );
+
+        // 6. And a second press shuts it again.
+        let (at, open) = capsule(&mut readout);
+        assert!(
+            open,
+            "the pill did not read open after the press that opened it"
+        );
+        readout.pointer(&ctx, Pointer::Moved(at));
+        assert_eq!(readout.pointer(&ctx, Pointer::Down).1, Acted::Opened);
+        assert_eq!(readout.opening.read(), Open::CLOSED);
+        assert_eq!(
+            audit(&write, readout.opening.read(), Running::unread())
+                .expect_err("the class was shut again and the call still goes through"),
+            refused
+        );
+    }
+
+    /// **All four pills are reachable through the window loop's routing**, not
+    /// the Mixer's alone — three of them are in a bay head and the fourth is in
+    /// a row that has none, and the one this file could most easily have got
+    /// wrong is the one with no head to hang it in.
+    #[test]
+    fn each_of_the_four_pills_opens_its_own_class_through_a_press() {
+        let ctx = drawn_once();
+        for class in Class::ALL {
+            let mut readout = Readout::new(1440.0, 900.0);
+            readout.panel.solve();
+            let pill = mcp_pill(&ctx, readout.panel.layout(), *class, readout.view.opening)
+                .unwrap_or_else(|| panic!("{class:?} draws no pill"));
+            let at = Point::new(pill.pill.center().x, pill.pill.center().y);
+
+            assert_eq!(readout.pointer(&ctx, Pointer::Moved(at)).0, Claim::Panel);
+            assert_eq!(readout.pointer(&ctx, Pointer::Down).1, Acted::Opened);
+            assert_eq!(
+                readout.opening.read(),
+                Open::CLOSED.with(*class, true),
+                "a press on {class:?}'s pill did not open exactly it"
+            );
+            // **The view is written in the same breath as the handle**, or the
+            // very next press is aimed at the capsule that used to be there:
+            // the two words are not the same width.
+            assert_eq!(readout.view.opening, readout.opening.read());
+        }
+    }
+
     /// **A press on the outputs dot, through the window loop's own routing.**
     ///
     /// The other half of the test above: that one is a boundary the panel
@@ -9470,7 +9795,8 @@ mod tests {
             .expect("program-view");
         let dot = |readout: &mut Readout| {
             readout.panel.solve();
-            let row = outputs(&ctx, readout.panel.layout()).expect("the row draws its sink");
+            let row = outputs(&ctx, readout.panel.layout(), Open::CLOSED)
+                .expect("the row draws its sink");
             (Point::new(row.sink.center().x, row.sink.center().y), row.on)
         };
 
@@ -9549,7 +9875,8 @@ mod tests {
         // and here it is load-bearing twice over.
         let pill = |readout: &mut Readout| {
             readout.panel.solve();
-            let head = program_head(&ctx, readout.panel.layout()).expect("the bay draws its pill");
+            let head = program_head(&ctx, readout.panel.layout(), Open::CLOSED)
+                .expect("the bay draws its pill");
             (
                 Point::new(head.solo.center().x, head.solo.center().y),
                 head.soloed,

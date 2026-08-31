@@ -34,6 +34,7 @@ use karakuri_console::panel::{Op, Outcome, Panel, GRAB};
 use karakuri_console::room::size;
 use karakuri_console::view::{program_head, MOCK_CANVAS};
 use karakuri_layout::{Hit, Point};
+use karakuri_operation::gate::Open;
 
 /// A console at `viewport`, arranged for the mock's canvas and drawn once —
 /// which is what a `.pill`'s width takes.
@@ -63,7 +64,8 @@ fn the_capsule_is_a_pill_in_the_bay_head() {
         let (mut panel, ctx) = console(viewport);
         panel.solve();
         let bay = rect_of(panel.layout(), "program");
-        let head = program_head(&ctx, panel.layout()).expect("the Program bay draws its pill");
+        let head = program_head(&ctx, panel.layout(), Open::CLOSED)
+            .expect("the Program bay draws its pill");
 
         assert!(
             near(head.solo.height(), size::PILL_H),
@@ -110,7 +112,8 @@ fn the_pill_names_the_picture_and_never_the_pointer() {
         .layout()
         .find("program-view")
         .expect("the arrangement names the picture");
-    let head = program_head(&ctx, panel.layout()).expect("the Program bay draws its pill");
+    let head =
+        program_head(&ctx, panel.layout(), Open::CLOSED).expect("the Program bay draws its pill");
     assert_eq!(head.id, picture);
     assert_eq!(head.op(), Op::Solo(picture));
 }
@@ -134,7 +137,7 @@ fn a_press_solos_the_picture_and_a_second_press_undoes_it() {
         "the library is already off the screen, so soloing the picture would prove nothing"
     );
 
-    let head = program_head(&ctx, panel.layout()).expect("a pill");
+    let head = program_head(&ctx, panel.layout(), Open::CLOSED).expect("a pill");
     assert_eq!(panel.op(head.op()), Outcome::Soloed(picture));
     panel.solve();
     assert!(
@@ -145,7 +148,7 @@ fn a_press_solos_the_picture_and_a_second_press_undoes_it() {
     // The head derived again, on the console the solo left — the pill has
     // moved with the bay, and a remembered capsule would be a press somewhere
     // it no longer is.
-    let head = program_head(&ctx, panel.layout())
+    let head = program_head(&ctx, panel.layout(), Open::CLOSED)
         .expect("the pill is still drawn with the picture soloed, and it is the only one left");
     assert!(
         head.soloed,
@@ -166,7 +169,7 @@ fn a_press_solos_the_picture_and_a_second_press_undoes_it() {
 fn a_press_off_the_pill_asks_for_nothing_and_is_not_claimed() {
     let (mut panel, ctx) = console(PLAUSIBLE);
     panel.solve();
-    let head = program_head(&ctx, panel.layout()).expect("a pill");
+    let head = program_head(&ctx, panel.layout(), Open::CLOSED).expect("a pill");
     // Just left of the capsule, in the head's own ground, and just below it,
     // in the bay's body.
     let beside = egui::pos2(head.solo.min.x - 6.0, head.solo.center().y);
@@ -218,7 +221,7 @@ fn the_boundary_above_the_bay_keeps_the_top_of_the_capsule() {
         let (mut panel, ctx) = console(viewport);
         panel.solve();
         let bay = rect_of(panel.layout(), "program");
-        let head = program_head(&ctx, panel.layout()).expect("a pill");
+        let head = program_head(&ctx, panel.layout(), Open::CLOSED).expect("a pill");
 
         // The clearance, stated against the constant it does not beat.
         let clearance = (size::HEAD_H - size::PILL_H) * 0.5;
@@ -275,7 +278,7 @@ fn a_folded_program_bay_has_no_pill_to_press() {
         let (mut panel, ctx) = console(PLAUSIBLE);
         panel.solve();
         let bay = panel.layout().find("program").expect("the Program bay");
-        let where_it_was = program_head(&ctx, panel.layout())
+        let where_it_was = program_head(&ctx, panel.layout(), Open::CLOSED)
             .expect("a pill before anything is folded")
             .solo
             .center();
@@ -295,20 +298,20 @@ fn a_folded_program_bay_has_no_pill_to_press() {
             }
         );
         assert!(
-            program_head(&ctx, panel.layout()).is_none(),
+            program_head(&ctx, panel.layout(), Open::CLOSED).is_none(),
             "a folded Program bay still laid its pill out (enclosing: {enclosing})"
         );
 
         panel.op(Op::Unfold(folds));
         panel.solve();
         assert!(
-            program_head(&ctx, panel.layout()).is_some(),
+            program_head(&ctx, panel.layout(), Open::CLOSED).is_some(),
             "unfolding the bay left the pill dead (enclosing: {enclosing})"
         );
         // And in the same place, so the answer above is the fold rather than
         // the control having moved.
         assert!(near(
-            program_head(&ctx, panel.layout())
+            program_head(&ctx, panel.layout(), Open::CLOSED)
                 .expect("a pill")
                 .solo
                 .center()
@@ -325,7 +328,7 @@ fn a_folded_program_bay_has_no_pill_to_press() {
 fn a_console_that_has_never_drawn_has_no_pill() {
     let panel = common::arranged(PLAUSIBLE, MOCK_CANVAS);
     assert!(
-        program_head(&egui::Context::default(), panel.layout()).is_none(),
+        program_head(&egui::Context::default(), panel.layout(), Open::CLOSED).is_none(),
         "a pill was laid out before `egui` had any fonts"
     );
 }

@@ -196,6 +196,7 @@ use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::{Dragged, Op, Outcome, Panel, Pressed};
 use karakuri_console::view::{arrangement, program_head, Ask};
 use karakuri_layout::{Axis, NodeId, Point};
+use karakuri_operation::gate::Open;
 
 /// The specification, relative to the workspace root.
 const PAGE: &str = "docs/manual/operations.html";
@@ -993,7 +994,7 @@ fn reached_through_the_program_bays_head() -> BTreeSet<&'static str> {
     // control at all. The pill's centre, because the capsule's top 0.75 is
     // inside the grab of the boundary above the bay — `view::program_head` is
     // where that is measured, and rule 3 is what decides it.
-    let head = program_head(&ctx, p.layout()).unwrap_or_else(|| {
+    let head = program_head(&ctx, p.layout(), Open::CLOSED).unwrap_or_else(|| {
         panic!(
             "the Program bay draws no `solo` pill on a solved console, so nothing here can \
              demonstrate a row of `{SECTION}` from a pointer — this pass has stopped measuring \
@@ -1029,7 +1030,7 @@ fn reached_through_the_program_bays_head() -> BTreeSet<&'static str> {
 
     // And the other answer, off a head derived again on the console the first
     // press left.
-    let head = program_head(&ctx, p.layout()).unwrap_or_else(|| {
+    let head = program_head(&ctx, p.layout(), Open::CLOSED).unwrap_or_else(|| {
         panic!(
             "the Program bay draws no `solo` pill with the picture soloed, so the undo this \
              row promises is unreachable — a solo takes every other control off the screen, \

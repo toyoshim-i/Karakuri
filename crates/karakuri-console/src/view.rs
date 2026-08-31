@@ -255,6 +255,7 @@ use std::time::Duration;
 use egui::epaint::text::{LayoutJob, TextFormat};
 use egui::{Color32, CornerRadius, FontFamily, FontId, Pos2, Rect, Stroke, StrokeKind, Ui};
 use karakuri_layout::{Axis, Hit, NodeId};
+use karakuri_operation::gate::{Class, Open};
 use karakuri_operation::{
     Authority, BeatSource, BlendMode, Operation, Residency, Sync, Tonemap, WipeKind,
 };
@@ -637,6 +638,319 @@ pub const REGIONS: &[Region] = &[
 /// panel does not draw a face for.
 pub fn region(name: &str) -> Option<&'static Region> {
     REGIONS.iter().find(|r| r.name == name)
+}
+
+// ---------------------------------------------------------------------------
+// The four class pills: what a model may reach, and the hand that opens it
+// ---------------------------------------------------------------------------
+
+/// **The word on a class's pill while the class is shut**, in the mock's own
+/// spelling. `docs/manual/console.html` draws all four of them this way and
+/// draws none of them any other way, because every class starts shut and shut
+/// is the console the page draws.
+const MCP_SHUT: &str = "mcp · shut";
+
+/// **And the word while it is open.** The page specifies the shut state alone,
+/// so this is the other half of a sentence its four tooltips do write — *"Click
+/// to open the class; click again to shut it"* — rather than a second control.
+/// A pill reading `shut` in both states would be a control that never answers a
+/// press, which is the one thing those tooltips rule out.
+const MCP_OPEN: &str = "mcp · open";
+
+/// **Which of the two a class reads as.** Two constants and this, so that the
+/// word a hand presses, the word [`crate::input`] measures the capsule by, and
+/// the word a program prints in a legend are one string.
+///
+/// Exported for the third of those: the answer to *what does this pill say* is
+/// this crate's and nobody else's, and a caller that wrote the words out again
+/// would be the copy that goes stale — which is the defect `karakuri`'s startup
+/// legend has already been repaired of once.
+pub fn mcp_word(open: bool) -> &'static str {
+    match open {
+        true => MCP_OPEN,
+        false => MCP_SHUT,
+    }
+}
+
+/// **Where a class's pill is drawn**, as the arrangement's own name for the
+/// region.
+///
+/// [`Class::bay`] is the same answer in the words a *refusal* says it in —
+/// `Program`, `Mixer`, `Master`, `Outputs` — and these are the regions those
+/// name. A `match` rather than a lowercase of that function, so a fifth class
+/// stops the build here instead of looking for a region nobody has drawn;
+/// `tests/mcp_pill.rs` asserts the two answers agree, in both directions.
+pub fn opens(class: Class) -> &'static str {
+    match class {
+        Class::LiveDeck => "program",
+        Class::MixFaders => "mixer",
+        Class::MasterEffects => "master",
+        Class::InputsAndOutputs => "outputs",
+    }
+}
+
+/// **The class a region opens**, or `None` for the nine regions that open none.
+///
+/// **A bay carrying no class draws no pill**, which is the answer that commits
+/// to neither of the two ADR-0235 leaves open: it lists *"whether a bay that
+/// carries no class draws the indicator at all"* as undecided, and the manual
+/// says why it matters — *"an indicator that is present everywhere reads as a
+/// state wherever it is absent"*. Drawing nothing at the Library, the
+/// Inspector, Staging and the Sequencer is what the page draws.
+pub fn class_at(region: &str) -> Option<Class> {
+    Class::ALL
+        .iter()
+        .copied()
+        .find(|class| opens(*class) == region)
+}
+
+/// **A bay head's furniture**: the word in it, the controls the mock draws in
+/// it, whether it carries a grip, and the class it opens.
+///
+/// [`Kind::Bay`] carries the first three in [`REGIONS`] and the four bays that
+/// are kinds of their own — the Mixer, the Master, the Library and the Staging
+/// lane — carried them nowhere, because [`View::draw`] wrote them out at its
+/// own call to [`bay_head`]. **That was one copy while nothing but the paint
+/// needed them and it is four copies now**: [`mcp_pill`] has to lay a head's
+/// pills out again to find the class capsule among them, and a head whose words
+/// the paint and the press disagreed about is precisely the defect
+/// [`head_pills`] was written against.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Head {
+    /// The mock's own capitalisation; `.bay-head` upper-cases at paint time.
+    pub title: &'static str,
+    /// The controls the table lists in this head, and only the controls.
+    pub pills: &'static [&'static str],
+    /// Whether the mock draws a `.grip` at the right of it.
+    pub grip: bool,
+    /// The class this head opens, where it opens one — [`class_at`].
+    pub class: Option<Class>,
+}
+
+/// **The head a region draws**, or `None` where it has none.
+///
+/// The transport and the Outputs row are headless (ADR-0159), and a pane, the
+/// picture and the preview row are inside a bay that has one. **The Outputs row
+/// answering `None` here is what makes the fourth class pill a placement of its
+/// own** — see [`outputs`], which is where it goes instead.
+pub fn head_of(region: &Region) -> Option<Head> {
+    let (title, pills, grip): (_, &'static [&'static str], _) = match region.kind {
+        Kind::Bay { title, pills, grip } => (title, pills, grip),
+        Kind::Mixer => (MIXER_TITLE, &[], false),
+        Kind::Master => (MASTER_TITLE, &[], true),
+        Kind::Library => (LIBRARY_TITLE, &[], true),
+        Kind::Staging => (STAGING_TITLE, &[], false),
+        Kind::Transport | Kind::Outputs | Kind::Pane | Kind::Picture | Kind::Previews => {
+            return None
+        }
+    };
+    Some(Head {
+        title,
+        pills,
+        grip,
+        class: class_at(region.name),
+    })
+}
+
+/// **How many capsules one bay head can hold**: the most any entry in
+/// [`REGIONS`] lists — the Program bay's `solo` — plus the class pill.
+const HEAD_PILLS: usize = 2;
+
+/// And every entry fits. A head listing one more control than this would lose
+/// its class pill off the end of [`HeadWords`] silently, which is a control
+/// that stops existing rather than a build that stops.
+const _: () = {
+    let mut at = 0;
+    while at < REGIONS.len() {
+        if let Kind::Bay { pills, .. } = REGIONS[at].kind {
+            assert!(pills.len() < HEAD_PILLS)
+        }
+        at += 1;
+    }
+};
+
+/// **Every capsule in a head this frame**: the table's own controls, and then
+/// the class pill where the bay opens a class.
+///
+/// **The class pill is last, which is rightmost.** [`head_pills`] lays a head
+/// out right to left, and `docs/manual/console.html` draws the Program bay's
+/// head as `1920×1080`, `solo`, `mcp · shut`, `previews 2 of 4` — so the
+/// opening sits to the right of `solo`. That is read off the page rather than
+/// chosen here, and it is why `solo`'s own capsule moves when a class is
+/// opened: the two words are not the same width, and one derivation answering
+/// for both is what keeps the pill an operator sees and the pill a press lands
+/// on the same rectangle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HeadWords {
+    words: [&'static str; HEAD_PILLS],
+    len: usize,
+}
+
+impl HeadWords {
+    /// The words, in the order [`head_pills`] takes them.
+    pub fn as_slice(&self) -> &[&'static str] {
+        &self.words[..self.len]
+    }
+}
+
+impl Head {
+    /// This head's capsules under `open` — see [`HeadWords`].
+    pub fn words(&self, open: Open) -> HeadWords {
+        let mut words = [""; HEAD_PILLS];
+        let mut len = 0;
+        for pill in self.pills.iter().take(HEAD_PILLS) {
+            words[len] = pill;
+            len += 1;
+        }
+        if let Some(class) = self.class {
+            words[len] = mcp_word(open.holds(class));
+            len += 1;
+        }
+        HeadWords { words, len }
+    }
+}
+
+/// **One capsule in a bay head, by the word in it** — [`head_pills`]'s answer,
+/// asked for one pill rather than for all of them.
+///
+/// The one derivation three readers share: [`bay_head`] paints from it,
+/// [`program_head`] finds `solo` in it and [`mcp_pill`] finds the class pill in
+/// it. `None` where the head is too short to hold the capsule, which is a bay
+/// clipped shorter than its own head — a capsule half out of a head is not one
+/// to press.
+fn head_capsule(
+    ctx: &egui::Context,
+    rect: Rect,
+    head: &Head,
+    open: Open,
+    want: &str,
+) -> Option<Rect> {
+    let words = head.words(open);
+    let words = words.as_slice();
+    let mut found = None;
+    head_pills(ctx, rect, words, head.grip, |index, capsule| {
+        if words[index] == want {
+            found = Some(capsule);
+        }
+    });
+    found.filter(|capsule| head_box(rect).contains_rect(*capsule))
+}
+
+/// **A class's pill, derived**: the capsule, the class it opens, and whether
+/// that class is open now.
+///
+/// # It has no `op`, and that is the decision rather than an omission
+///
+/// [`Outputs::op`] and [`ProgramHead::op`] both answer *what does a press ask
+/// for* with a named [`Op`], and every other control on this panel answers with
+/// an [`Operation`]. **This one answers with neither**, and
+/// [ADR-0236](../../../docs/adr/0236-a-map-is-the-layer-between-a-surface-and-the-vocabulary-and-the-audit-is-one-of-the-things-it-does.md)
+/// is why: the opening is **configuration of the map** — the layer every
+/// surface reaches the vocabulary through — and not a member of the vocabulary
+/// the map addresses. The rule it draws is narrower than *map configuration is
+/// never an operation*, because [`Operation::PointLane`] already is one: **a
+/// setting that decides whether a surface may reach a class of operations
+/// cannot itself be one of those operations**, since rule 01 would then make it
+/// reachable from the surface it governs, and a permission an actor can grant
+/// itself is not a permission.
+///
+/// So a press hands back a **value** — [`McpPill::next`] — and whoever holds
+/// the run's `karakuri_environment::Opening` writes it there. This crate takes
+/// no such handle and names nothing in that package (ADR-0156); what it does
+/// name is [`Open`], which is `karakuri-operation`'s and is the leaf every
+/// surface already depends on.
+///
+/// # Refused rather than hidden, which is why the pill is only ever a pill
+///
+/// Nothing on this console is turned off while a class is shut. ADR-0235:
+/// *"the list never shortens and the call is refused"*, and the manual says it
+/// of the operator too — *"Nothing here is ever refused to a hand."* So this
+/// control draws a word and changes no other control's state, and a reader
+/// looking for the half of it that greys something out will not find one.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct McpPill {
+    /// **The control**: the capsule a press has to land in, which is the
+    /// rectangle [`bay_head`] or [`outputs_into`] painted.
+    pub pill: Rect,
+    /// The class it opens.
+    pub class: Class,
+    /// Whether that class is open — read out of the opening handed in, and kept
+    /// nowhere here.
+    pub open: bool,
+}
+
+impl McpPill {
+    /// **What a press asks for**, and it is a state rather than a direction:
+    /// the opening handed in, with this one class set the other way.
+    ///
+    /// [`Open::with`] *"names a state and never a direction"* (P-0074), and the
+    /// toggle is this method choosing which state it means — the same
+    /// affordance-over-a-named-thing [`Outputs::op`] and [`ProgramHead::op`]
+    /// have, one layer out of the vocabulary.
+    ///
+    /// **It takes the opening rather than holding it**, so a press writes the
+    /// other three classes back exactly as they were: a control that returned a
+    /// bare `bool` would leave the caller to compose the value, which is the
+    /// one place three classes could quietly be shut by a press on the fourth.
+    pub fn next(&self, open: Open) -> Open {
+        open.with(self.class, !self.open)
+    }
+
+    /// Whether `p` is on the control.
+    pub fn hit(&self, p: karakuri_layout::Point) -> bool {
+        self.pill.contains(Pos2::new(p.x, p.y))
+    }
+}
+
+/// **One of the four class pills, derived**, or `None` where there is none to
+/// press — before the first frame, with the bay folded, off a solo somewhere
+/// else, or in a bay too short to hold its own head.
+///
+/// **Three of the four sit in a bay head** and come out of [`head_capsule`],
+/// which is [`head_pills`] asked a second time rather than copied. **The fourth
+/// sits in a row that has no head at all** — [`Kind::Outputs`] is a headless
+/// strip (ADR-0159) — so it comes out of [`outputs`], beside the word that
+/// stands in for a head. `Class::opened_at` is the gate saying the same thing
+/// in the words a refusal uses: three are *the head of the … bay* and one is
+/// *the Outputs row, which has no head*.
+///
+/// `layout` must be solved. `ctx` is asked for the type, because a `.pill` is
+/// as wide as the word in it — and the two words are not the same width, which
+/// is why this takes the opening rather than reading it back off anything.
+pub fn mcp_pill(
+    ctx: &egui::Context,
+    layout: &karakuri_layout::Layout,
+    class: Class,
+    open: Open,
+) -> Option<McpPill> {
+    // Fonts are not valid until `egui` has run a pass, exactly as in
+    // [`outputs`] and [`program_head`]: a press before the first frame is a
+    // press on a control that has never been drawn.
+    if ctx.cumulative_pass_nr() == 0 {
+        return None;
+    }
+    let name = opens(class);
+    let node = layout.find(name)?;
+    // The region itself, a column folded around it, or a solo somewhere else:
+    // one question for every ancestor, which is [`program_head`]'s own guard.
+    if !layout.visible(node) {
+        return None;
+    }
+    let pill = match head_of(region(name)?) {
+        Some(head) => head_capsule(
+            ctx,
+            to_egui(layout.rect(node)),
+            &head,
+            open,
+            mcp_word(open.holds(class)),
+        )?,
+        None => outputs(ctx, layout, open)?.mcp,
+    };
+    Some(McpPill {
+        pill,
+        class,
+        open: open.holds(class),
+    })
 }
 
 /// One region, where it solved to this frame.
@@ -1618,6 +1932,12 @@ impl ProgramHead {
 /// Program bay's entry -- so a second pill added to that head moves this one
 /// along and nothing here has to be told.
 ///
+/// **A second pill was duly added and this capsule duly moved.** The class pill
+/// ([`mcp_pill`]) sits to `solo`'s right and is not the same width in its two
+/// states, which is why this now takes an opening: [`head_capsule`] lays the
+/// whole head out under that opening and hands back the one capsule asked for,
+/// so the two pills cannot be laid out against two different states.
+///
 /// `layout` must be solved: [`karakuri_layout::Layout::rect`] refuses to
 /// answer from a dirty one. `ctx` is asked for the type, because a `.pill` is
 /// as wide as the word in it.
@@ -1645,7 +1965,11 @@ impl ProgramHead {
 /// head's height and the pill's box are `docs/manual/console.html`'s, and
 /// `GRAB` is the rule's. This function draws the control where the page puts
 /// it.
-pub fn program_head(ctx: &egui::Context, layout: &karakuri_layout::Layout) -> Option<ProgramHead> {
+pub fn program_head(
+    ctx: &egui::Context,
+    layout: &karakuri_layout::Layout,
+    open: Open,
+) -> Option<ProgramHead> {
     // Fonts are not valid until `egui` has run a pass, exactly as in
     // [`outputs`]: a press before the first frame is a press on a control that
     // has never been drawn.
@@ -1659,27 +1983,16 @@ pub fn program_head(ctx: &egui::Context, layout: &karakuri_layout::Layout) -> Op
         return None;
     }
     let id = layout.find("program-view")?;
-    let Kind::Bay { pills, grip, .. } = region("program")?.kind else {
-        return None;
-    };
-    let rect = to_egui(layout.rect(bay));
-    let mut solo = None;
-    head_pills(ctx, rect, pills, grip, |index, capsule| {
-        if pills[index] == SOLO_PILL {
-            solo = Some(capsule);
-        }
-    });
-    let solo = solo?;
+    let head = head_of(region("program")?)?;
     // A head clipped to a bay shorter than 27 has nowhere to put a 16.5
-    // capsule, and a capsule half out of the head is not one to press.
-    match head_box(rect).contains_rect(solo) {
-        true => Some(ProgramHead {
-            solo,
-            id,
-            soloed: layout.is_soloed(),
-        }),
-        false => None,
-    }
+    // capsule, and a capsule half out of the head is not one to press --
+    // [`head_capsule`]'s own guard, which is why it is not repeated here.
+    let solo = head_capsule(ctx, to_egui(layout.rect(bay)), &head, open, SOLO_PILL)?;
+    Some(ProgramHead {
+        solo,
+        id,
+        soloed: layout.is_soloed(),
+    })
 }
 
 /// **The Program bay's body**: its rectangle less the head painted over the
@@ -4497,6 +4810,31 @@ pub struct Outputs {
     /// Where the word OUTPUTS is painted: its top-left, and the box the
     /// galley fills.
     pub label: Rect,
+    /// **The class pill**, beside the word that stands in for a head.
+    ///
+    /// **This row is the one placement the console had no precedent for.** The
+    /// other three openings sit in a bay head, where [`head_pills`] has laid
+    /// capsules out since the `solo` pill landed; this row is headless
+    /// (ADR-0159, [`Kind::Outputs`]) — no hairline, no pills and no grip — so
+    /// there was nothing to add a capsule to. `docs/manual/console.html` says
+    /// where it goes and why in as many words: *"This row has no bay head to
+    /// put an indicator in — it is headless, like the transport — so the pill
+    /// sits beside the word that stands in for one."*
+    ///
+    /// So it is laid out here, in `.outputs`'s own flex row, between the word
+    /// and the first sink: one [`size::OUTPUTS_GAP`] after the label, one
+    /// before the chip, [`size::PILL_H`] tall and centred in the row like
+    /// everything else in it. **Which is why [`outputs`] takes an opening**:
+    /// the two words are not the same width, so where the sink starts depends
+    /// on what the pill says.
+    ///
+    /// [`mcp_pill`] is what reads it back out, so that the four openings are
+    /// one type and one probe however differently the two placements are
+    /// arrived at.
+    pub mcp: Rect,
+    /// Whether the class this row's pill opens is open — read out of the
+    /// opening handed in, and kept nowhere here.
+    pub open: bool,
     /// **The control**: `.sink`'s capsule, dot and name together, which is
     /// what a press has to land in. The mock gives the whole chip the click,
     /// not the dot alone — a 7px dot is not a target a hand finds, which is
@@ -4588,7 +4926,11 @@ impl Outputs {
 /// `layout` must be solved: [`Layout::rect`] refuses to answer from a dirty
 /// one. `ctx` is asked for the type: the chip's width is the width of the name
 /// in it, and where the name goes is where the word before it ended.
-pub fn outputs(ctx: &egui::Context, layout: &karakuri_layout::Layout) -> Option<Outputs> {
+pub fn outputs(
+    ctx: &egui::Context,
+    layout: &karakuri_layout::Layout,
+    open: Open,
+) -> Option<Outputs> {
     // **Fonts are not valid until `egui` has run a pass**, and it says so
     // outright. A pointer event can reach this before the first frame — the
     // window is up and the loop has not drawn yet — so the answer there is
@@ -4600,6 +4942,11 @@ pub fn outputs(ctx: &egui::Context, layout: &karakuri_layout::Layout) -> Option<
     let row = to_egui(layout.rect(layout.find("outputs")?));
     let id = layout.find("program-view")?;
     let label = ctx.fonts_mut(|f| f.layout_job(label_job(Color32::PLACEHOLDER)).size().x);
+    // **The class pill's own word**, measured the way every capsule on this
+    // console is: `.pill` is as wide as what is in it, and the two states are
+    // not the same width.
+    let opened = open.holds(Class::InputsAndOutputs);
+    let pill = pill_width(ctx, mcp_word(opened));
     let name = ctx.fonts_mut(|f| {
         f.layout_no_wrap(
             PROGRAM_VIEW.to_owned(),
@@ -4609,8 +4956,10 @@ pub fn outputs(ctx: &egui::Context, layout: &karakuri_layout::Layout) -> Option<
         .size()
         .x
     });
-    outputs_row(row, label, name).map(|(label, sink, dot)| Outputs {
+    outputs_row(row, label, pill, name).map(|(label, mcp, sink, dot)| Outputs {
         label,
+        mcp,
+        open: opened,
         sink,
         dot,
         id,
@@ -4640,14 +4989,30 @@ pub fn outputs(ctx: &egui::Context, layout: &karakuri_layout::Layout) -> Option<
 /// the quarter pixel the CSS and the row disagree by is spent here rather than
 /// argued about: `align-items: center` is what the CSS says, and it is what
 /// leaves the two clearances equal.
-fn outputs_row(row: Rect, label_w: f32, name_w: f32) -> Option<(Rect, Rect, Rect)> {
+fn outputs_row(
+    row: Rect,
+    label_w: f32,
+    pill_w: f32,
+    name_w: f32,
+) -> Option<(Rect, Rect, Rect, Rect)> {
     let mid = row.center().y;
     let label = Rect::from_min_size(
         Pos2::new(row.min.x + size::OUTPUTS_PAD_X, mid - size::HEAD_SIZE * 0.5),
         egui::vec2(label_w, size::HEAD_SIZE),
     );
+    // **The class pill, between the word and the first sink**, which is where
+    // `docs/manual/console.html` draws it and why: this row has no head to put
+    // an indicator in, so it sits beside the word that stands in for one. It is
+    // a `.pill` and not a `.sink` — [`size::PILL_H`] and not
+    // [`size::SINK_H`] — because it is the same capsule the three bay heads
+    // draw, and a control that looked like a sink here would read as a fifth
+    // output.
+    let mcp = Rect::from_min_size(
+        Pos2::new(label.max.x + size::OUTPUTS_GAP, mid - size::PILL_H * 0.5),
+        egui::vec2(pill_w, size::PILL_H),
+    );
     let sink = Rect::from_min_size(
-        Pos2::new(label.max.x + size::OUTPUTS_GAP, mid - size::SINK_H * 0.5),
+        Pos2::new(mcp.max.x + size::OUTPUTS_GAP, mid - size::SINK_H * 0.5),
         egui::vec2(
             size::SINK_PAD_X * 2.0 + size::SINK_DOT + size::SINK_GAP + name_w,
             size::SINK_H,
@@ -4662,7 +5027,7 @@ fn outputs_row(row: Rect, label_w: f32, name_w: f32) -> Option<(Rect, Rect, Rect
     // a rectangle with no extent in it, and one too narrow for the chip has
     // nowhere to put it. Either way there is no control.
     match row.contains_rect(sink) {
-        true => Some((label, sink, dot)),
+        true => Some((label, mcp, sink, dot)),
         false => None,
     }
 }
@@ -9811,6 +10176,23 @@ pub struct View {
     /// this crate and is a console with no engine behind it: there is no
     /// picture to draw, and the four cells still have to go somewhere.
     pub canvas: (u32, u32),
+    /// **Which classes the operator has opened to a model**, written per frame
+    /// by whoever holds the run's opening.
+    ///
+    /// **Handed in like every other value here**, and for the sharper version
+    /// of the usual reason: the model of record is a
+    /// `karakuri_environment::Opening`, which is a handle a *second* surface
+    /// reads on every MCP call — so a copy kept in this crate would be the
+    /// console answering on the server's behalf, and would go on saying *open*
+    /// after something else shut it. This crate names
+    /// [`karakuri_operation::gate::Open`] and nothing in `karakuri-environment`
+    /// at all (ADR-0156); [`McpPill::next`] hands a value back and whoever owns
+    /// the handle writes it.
+    ///
+    /// **[`Open::CLOSED`] until somebody says otherwise**, which is every test
+    /// in this crate and is the state ADR-0235 says a run starts in: four
+    /// classes shut, and no way to write down an `Open` that starts open.
+    pub opening: Open,
     /// **How long the panel has been animating**, written per frame by
     /// whoever has the clock — see [`Phase`], which carries the whole
     /// argument for why this is a value and not an `Instant`.
@@ -9935,6 +10317,9 @@ impl View {
             // grows it — the same reason `mixer` is built with a capacity.
             inspector: Vec::with_capacity(PANES),
             canvas: MOCK_CANVAS,
+            // Four classes shut, which is the run ADR-0235 describes and is
+            // also a console nobody has handed an opening to.
+            opening: Open::CLOSED,
             phase: Phase::ZERO,
             // Deck A and the first row, which is where the mock draws both
             // marks. Neither is a reading of anything, so neither has a
@@ -10365,14 +10750,18 @@ impl View {
         let waiting = self.staging.as_slice();
         let panes = self.inspector.as_slice();
         let phase = self.phase;
+        // **The opening, read once for the pass.** Every head that opens a
+        // class lays its pills out against this one value, so no two capsules
+        // on a frame can be placed against two different states.
+        let opening = self.opening;
         let frame = egui::Frame::NONE.fill(pal.ground);
         egui::CentralPanel::default().frame(frame).show(ui, |ui| {
             for placed in &self.placed {
                 let rect = to_egui(placed.rect);
                 match placed.region.kind {
-                    Kind::Bay { title, pills, grip } => {
+                    Kind::Bay { .. } => {
                         card(ui, &pal, rect);
-                        bay_head(ui, &pal, rect, title, pills, grip);
+                        head_into(ui, &pal, rect, placed.region, opening);
                         // The inspector is the one bay that is a split, and
                         // its panes' boundary is drawn as the mock's
                         // `.divider-v` rather than left as bare ground: it is
@@ -10410,7 +10799,7 @@ impl View {
                     // the chip that is painted is the chip that is clicked.
                     Kind::Outputs => {
                         card(ui, &pal, rect);
-                        if let Some(row) = outputs(ui.ctx(), panel.layout()) {
+                        if let Some(row) = outputs(ui.ctx(), panel.layout(), opening) {
                             outputs_into(ui, &pal, &row);
                         }
                     }
@@ -10423,7 +10812,7 @@ impl View {
                     // means nothing at all* is decided in one place.
                     Kind::Mixer => {
                         card(ui, &pal, rect);
-                        bay_head(ui, &pal, rect, MIXER_TITLE, &[], false);
+                        head_into(ui, &pal, rect, placed.region, opening);
                         if let Some(bay) = mixer(ui.ctx(), panel.layout(), strips) {
                             mixer_into(ui, &pal, &bay, phase, selection);
                         }
@@ -10440,7 +10829,7 @@ impl View {
                     // knob a hand takes hold of.
                     Kind::Master => {
                         card(ui, &pal, rect);
-                        bay_head(ui, &pal, rect, MASTER_TITLE, &[], true);
+                        head_into(ui, &pal, rect, placed.region, opening);
                         if let Some(row) = master(ui.ctx(), panel.layout(), out) {
                             master_into(ui, &pal, &row);
                         }
@@ -10456,7 +10845,7 @@ impl View {
                     // one place.
                     Kind::Library => {
                         card(ui, &pal, rect);
-                        bay_head(ui, &pal, rect, LIBRARY_TITLE, &[], true);
+                        head_into(ui, &pal, rect, placed.region, opening);
                         if let Some(bay) = library(panel.layout(), scopes, sets) {
                             // **The chips before the rows**, and painted from
                             // the draw rather than from inside the listing's
@@ -10481,7 +10870,7 @@ impl View {
                     // a readout, and a bay head's pills are its controls.
                     Kind::Staging => {
                         card(ui, &pal, rect);
-                        bay_head(ui, &pal, rect, STAGING_TITLE, &[], false);
+                        head_into(ui, &pal, rect, placed.region, opening);
                         if let Some(bay) = staging(panel.layout(), waiting) {
                             staging_into(ui, &pal, &bay, waiting);
                         }
@@ -10747,6 +11136,11 @@ fn outputs_into(ui: &Ui, pal: &Palette, row: &Outputs) {
     let galley = painter.layout_job(label_job(pal.faint));
     painter.galley(row.label.min, galley, pal.faint);
 
+    // **The class pill, painted exactly as a bay head's is** — the same
+    // [`pill_at`] the other three go through, in a row that has no head to put
+    // it in. See [`Outputs::mcp`].
+    pill_into(ui, pal, row.mcp, mcp_word(row.open), row.open);
+
     let (ink, fill, dot) = match row.on {
         true => (pal.text, tint(pal.mint, 14), pal.mint),
         false => (pal.dim, pal.well, pal.faint),
@@ -10804,54 +11198,74 @@ fn card(ui: &Ui, pal: &Palette, rect: Rect) {
 /// which is what `justify-content: space-between` on a two-child flex row
 /// comes to: the title takes the left and the group takes the right, and the
 /// group's own order is its writing order once it is placed.
-pub fn bay_head(
-    ui: &Ui,
-    pal: &Palette,
-    rect: Rect,
-    title: &str,
-    pills: &[&str],
-    grip: bool,
-) -> Rect {
-    let head = head_box(rect);
-    let painter = ui.painter().with_clip_rect(head);
+///
+/// **The head arrives as a [`Head`] rather than as three arguments**, because
+/// the four bays that are kinds of their own used to spell theirs out at this
+/// call and there is now a second reader of every one of them: [`mcp_pill`]
+/// lays the same head out again to find the class capsule in it. One table
+/// (`head_of`), one derivation (`head_pills`), and the capsule an operator sees
+/// is the capsule a press lands on.
+pub fn bay_head(ui: &Ui, pal: &Palette, rect: Rect, head: &Head, open: Open) -> Rect {
+    let box_of = head_box(rect);
+    let painter = ui.painter().with_clip_rect(box_of);
 
     // `border-bottom: 1px solid var(--c-hair)`.
-    let rule = head.max.y - size::HAIRLINE * 0.5;
+    let rule = box_of.max.y - size::HAIRLINE * 0.5;
     painter.line_segment(
-        [Pos2::new(head.min.x, rule), Pos2::new(head.max.x, rule)],
+        [Pos2::new(box_of.min.x, rule), Pos2::new(box_of.max.x, rule)],
         Stroke::new(size::HAIRLINE, pal.hair),
     );
 
-    let mid = head.center().y;
-    if grip {
-        grip_dots(ui, pal, Pos2::new(head.max.x - size::HEAD_PAD_X, mid));
+    let mid = box_of.center().y;
+    if head.grip {
+        grip_dots(ui, pal, Pos2::new(box_of.max.x - size::HEAD_PAD_X, mid));
     }
     // **Painted where [`head_pills`] puts them rather than laid out again
     // here.** That is [`outputs`]'s arrangement one row down: the capsule that
     // is drawn and the capsule a press lands on are one rectangle, so the
     // Program bay's `solo` cannot come apart from the control
-    // [`program_head`] hands to a caller.
-    head_pills(ui.ctx(), rect, pills, grip, |index, capsule| {
-        pill_at(ui, pal, capsule, pills[index]);
+    // [`program_head`] hands to a caller -- nor its class pill from the one
+    // [`mcp_pill`] hands over.
+    let words = head.words(open);
+    let words = words.as_slice();
+    head_pills(ui.ctx(), rect, words, head.grip, |index, capsule| {
+        pill_into(ui, pal, capsule, words[index], words[index] == MCP_OPEN);
     });
 
     // `text-transform: uppercase` plus `letter-spacing: 0.16em`, at
     // `--c-faint`. `egui`'s default proportional face has no bold, so
     // `font-weight: 700` is not honoured — see `room`'s documentation.
     let job = spaced(
-        &title.to_uppercase(),
+        &head.title.to_uppercase(),
         size::HEAD_SIZE,
         pal.faint,
         size::HEAD_TRACKING,
     );
     let galley = painter.layout_job(job);
     painter.galley(
-        Pos2::new(head.min.x + size::HEAD_PAD_X, mid - galley.size().y * 0.5),
+        Pos2::new(box_of.min.x + size::HEAD_PAD_X, mid - galley.size().y * 0.5),
         galley,
         pal.faint,
     );
 
-    head
+    box_of
+}
+
+/// **A region's head, painted** — the one call all five of the console's
+/// headed bays make.
+///
+/// It was five calls to [`bay_head`] with the title, the pills and the grip
+/// written out at each: one copy while the paint was the only reader of them,
+/// and four copies the moment [`mcp_pill`] had to lay the same head out again
+/// to find a class capsule in it. [`head_of`] is the table now and this is the
+/// one caller that turns it into paint.
+///
+/// A no-op for a region with no head, which is the transport, the Outputs row,
+/// a pane, the picture and the preview row.
+fn head_into(ui: &Ui, pal: &Palette, rect: Rect, region: &Region, open: Open) {
+    if let Some(head) = head_of(region) {
+        bay_head(ui, pal, rect, &head, open);
+    }
 }
 
 /// **The box a bay head is painted into**: the top [`size::HEAD_H`] of the
@@ -10923,6 +11337,58 @@ fn head_pills(
         );
         right -= w + size::PILL_GAP;
     }
+}
+
+/// **One capsule in either of the mock's two treatments**: the ordinary
+/// `.pill`, or `.pill.armed` where what it names is live.
+///
+/// The only caller that ever asks for the second is a class pill that is open,
+/// and it is the mock's own class rather than an invention here -- the audio-in
+/// pill already carries it, and its documentation is where the argument is:
+/// *"a pill that was only lit would leave which room is being heard unanswered,
+/// and a pill that only carried a name would make a dead input and a live one
+/// look alike at the distance a panel is read from."* An opening is the same
+/// pair of questions -- *which class* and *is it open* -- so it gets the same
+/// pair of answers.
+///
+/// **`docs/manual/console.html` draws the shut state only**, because every
+/// class starts shut. The word is the page's; the treatment is the page's
+/// vocabulary applied to a state it had no reason to draw.
+fn pill_into(ui: &Ui, pal: &Palette, rect: Rect, text: &str, armed: bool) {
+    match armed {
+        true => armed_pill_at(ui, pal, rect, text),
+        false => pill_at(ui, pal, rect, text),
+    }
+}
+
+/// `.pill.armed`: no border, a `--c-mint` word over a wash of the same, and the
+/// `box-shadow: 0 0 9px var(--c-glow)` that goes with it.
+fn armed_pill_at(ui: &Ui, pal: &Palette, rect: Rect, text: &str) {
+    let painter = ui.painter();
+    let radius = CornerRadius::same((size::PILL_H * 0.5) as u8);
+    painter.add(
+        egui::epaint::Shadow {
+            offset: [0, 0],
+            blur: ARMED_GLOW,
+            spread: 0,
+            color: pal.glow,
+        }
+        .as_shape(rect, radius),
+    );
+    painter.rect_filled(rect, radius, tint(pal.mint, ARMED_WASH));
+    let galley = painter.layout_no_wrap(
+        text.to_owned(),
+        FontId::new(size::BASE, FontFamily::Proportional),
+        pal.mint,
+    );
+    painter.galley(
+        Pos2::new(
+            rect.min.x + size::PILL_PAD_X,
+            rect.center().y - galley.size().y * 0.5,
+        ),
+        galley,
+        pal.mint,
+    );
 }
 
 /// One `.pill`, painted into the capsule [`head_pills`] laid out for it.
