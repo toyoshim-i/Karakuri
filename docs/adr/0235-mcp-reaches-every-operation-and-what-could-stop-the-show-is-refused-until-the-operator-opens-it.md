@@ -440,6 +440,17 @@ Handed over precisely, because the pages are another writer's:
 - **The opening setting has no operation.** Nothing in `karakuri-operation` names it, so there is
   either a 65th row on the operations page or a reason it is not one — and if it is a row, rule 01
   says it is reachable from four surfaces, which walks straight into the question above.
+  *(**Annotated 2026-08-31, later the same day: this one is settled and there is a reason it is not
+  a row.**
+  [ADR-0236](0236-a-map-is-the-layer-between-a-surface-and-the-vocabulary-and-the-audit-is-one-of-the-things-it-does.md)
+  decides that the opening is **configuration of the map** — the layer every surface reaches the
+  vocabulary through — and not a member of the vocabulary the map addresses, so no 65th row exists
+  and the circularity does not arise. The rule it draws is narrower than *map configuration is never
+  an operation*, because `Operation::PointLane` already is one: **a setting that decides whether a
+  surface may reach a class of operations cannot itself be one of those operations**, since rule 01
+  would make it reachable from the surface it governs. What survives of the item above it is
+  `SetAuthority` alone, which is a genuine row and still open.
+  [P-0066](../principles/0066-an-adr-is-a-description-of-history-corrected-but-never-revised.md).)*
 - **Whether the clock, `Quit`, `SelectDeck` and the lane rows are closed as this record classes
   them.** They are the rule applied past the examples it was given, and each is one line to move.
 - **What "inputs and outputs" covers.** Read here as the instrument's signal I/O — the beat source,
