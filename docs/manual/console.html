@@ -1434,9 +1434,16 @@
           <strong>The node is omitted rather than approximated</strong>, and
           the letter is not standing in for it: the address a verdict has is
           the slot, and the finer one is a derivation nobody has written. It
-          <em>is</em> derivable &mdash; every build reports a hash per node,
-          and consecutive builds differ where the hashes do &mdash; and until
-          something diffs them, a node written on this row would be invented.
+          <em>is</em> derivable in principle &mdash; a build can report a hash
+          per node, and consecutive builds differ where the hashes do &mdash;
+          but <strong>the program that draws this panel reports none of
+          them</strong>. Those hashes cross on the build channel only when the
+          build is putting its sources into the store, and this program's
+          watchers are handed no store, so the channel a diff would read is
+          not merely unread: it is silent. That is two missing things rather
+          than one, and only the command-line player has the first of them.
+          Until a build reports its nodes and something diffs consecutive
+          builds, a node written on this row would be invented.
           The two operations that address a node wait on the same derivation,
           which is why neither is offered on a row yet.
         </p>
@@ -1481,9 +1488,29 @@
           favour: a version that held the budget leaves the file and the
           picture agreeing, which is the whole of what the lane is there to
           show a disagreement in. That is the cost judgement standing in for
-          the taste one, it is honest about which of the two it is, and it is
-          what stops a lane with no <em>keep</em> from filling up and never
-          emptying.
+          the taste one, and it is honest about which of the two it is.
+        </p>
+        <p>
+          <strong>What the substitution does not do is empty the lane, and
+          this page used to claim it did.</strong> A budget verdict is only
+          ever reached on a slot that is <em>being drawn</em>: a parked or
+          resting slot's trial is frozen, on the rule that a slot nobody is
+          looking at is not paying for the frames it would be judged on, so a
+          build that lands there has a verdict outstanding for as long as the
+          slot stays off air and its row never leaves. The program that hosts
+          this panel opens deck A live and the other three parked, and every
+          slot watches the same pair of files &mdash; so one save rebuilds all
+          four, deck A's row clears when its thirty measured frames come in
+          under budget, and <strong>three rows stay in the lane for the rest
+          of the run</strong>. That is a reading and not a stall: those three
+          builds really do have a verdict outstanding, and saying so is the
+          lane working. <strong>And it is the strongest argument for
+          <em>keep</em> there is.</strong> The taste-against-cost paragraph
+          above says the substitution answers the wrong question; this says
+          that on three slots out of four it does not answer at all. In the
+          ordinary run of this program the only thing that could take those
+          rows off the lane is a person saying they are done with them, and
+          that person has no control to say it with.
         </p>
         <p>
           <strong>A candidate that was rolled back is the row this lane most
@@ -1525,6 +1552,20 @@
           older versions is <em>walk the edit history</em>, which is on the
           operations page with no address anybody has settled &mdash; and this
           lane is the surface that row has been waiting for.
+        </p>
+        <p>
+          <strong>And the version it puts back has to exist, which in this
+          program it does not.</strong> What a restore reads is the store's
+          edit history &mdash; every version that <em>compiled</em>, kept
+          whether or not it landed, which is why a real attempt thrown out for
+          cost is exactly the one still there. That history is written by a
+          run that was told to keep one, and <strong>the program that draws
+          this panel keeps none</strong>: nothing is put under a content
+          address and no version is filed, so a restore here would have
+          nothing to restore from. The operations page says this of the same
+          act and this page did not. It is the second half of what the control
+          waits on, the first being the node address above, and neither half
+          is a drawing.
         </p>
         <p>
           <strong>Empty, the lane draws nothing at all.</strong> No row, no

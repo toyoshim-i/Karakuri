@@ -1268,7 +1268,11 @@ whether the values behind it exist anywhere in this workspace.
   date is formatted by the host and handed in.
 - **Staging — drawn on 2026-08-29 as its empty state, and it has a second state now: one row per
   slot**, carrying the deck's letter, the build's label and the budget's verdict, and leaving on
-  `Accepted`, the one outcome where the file and the picture agree again. Two things this entry used
+  `Accepted`, the one outcome where the file and the picture agree again. **That exit only fires on
+  the deck being drawn**, which is the finding below and which
+  [console.html](manual/console.html) had drawn the opposite conclusion from until 2026-08-31: a
+  parked slot's trial is frozen by `HotSwap::begin_frame_parked`, so of the four rows one save
+  produces, deck A's clears and B, C and D's stay for the run. Two things this entry used
   to say were wrong: **it needs no operation**, *regeneration of a slot* being `WriteProcedure` with a
   different producer that `mcp.rs` already performs end to end
   ([P-0019](principles/0019-prefer-the-mechanism-that-already-exists.md) a third time); and
@@ -1278,10 +1282,13 @@ whether the values behind it exist anywhere in this workspace.
   ([ADR-0228](adr/0228-a-library-load-re-points-the-slots-source-and-never-installs-a-set.md)).
   **Four things are omitted rather than drawn as placeholders**, which is ADR-0200's rule: the node
   address, `origin`, the timestamp, and the head's count — and the head's `2 waiting` was never a
-  queue depth. **The node address is the sharpest**: `swap::Event` carries an id and a label, the
-  per-node hashes cross on the *other* channel as `watch::Built.nodes`, and **nothing diffs
-  consecutive builds** — that one unwritten derivation blocks the row's address and both of the
-  lane's controls. **And a checker refusal still reaches no row at all**: a `.kir` the checker turns
+  queue depth. **The node address is the sharpest**: `swap::Event` carries an id and a label, and the
+  per-node hashes would cross on the *other* channel as `watch::Built.nodes` — except that **in this
+  program that channel carries nothing**. `Built` is constructed only inside
+  `if let Some((store, tx)) = &self.stored`, and `watched()` calls neither `Watch::storing_to` nor
+  `Watch::snapshotting_to`, which its own doc says outright. So the address is short a diff **and** a
+  producer, and *nothing diffs consecutive builds* was never the whole blocker — the list below is.
+  **And a checker refusal still reaches no row at all**: a `.kir` the checker turns
   down produces no `Request`, so the disagreement an operator most wants to see is said on stdout —
   closing it is an engine change, `Source::poll` having no way to say *I refused*.
 
@@ -1295,6 +1302,60 @@ whether the values behind it exist anywhere in this workspace.
   ([P-0031](principles/0031-a-name-means-one-thing-across-the-system.md)) — and they address a node
   rather than a version, so choosing among older ones is `WalkHistory`, still `Undecided` for want of
   exactly that address: **this lane is the surface that row has been waiting for.**
+
+  **What those two controls are waiting on is six things, and this entry used to name one of them.**
+  They were taken up on 2026-08-31 and stopped on both, and the list is what stopped them. **Nothing
+  in it is a drawing** — the row the controls would hang on is already painted, and the two things a
+  reader should take from the list are that most of the cost is wiring `karakuri-cli` already has,
+  and that one item is a decision nobody has taken.
+
+  1. **A store the build path can write.** `watched()` (`crates/karakuri/src/main.rs`) constructs
+     each slot's `watch::Watch` and calls neither `Watch::storing_to` nor `Watch::snapshotting_to`.
+     The panel does reach a store — `library()` lists one and the arrangement pill writes one — but
+     it opens a handle per press and drops it, and `library()` **refuses to create a missing root on
+     purpose**, so nothing here is a handle a build or a restore could hold.
+  2. **A `Built` receiver on the render thread.** The `Sender<Built>` is `storing_to`'s second
+     argument and `crates/karakuri` creates no such channel at all, so the per-node hashes have no
+     reader even once item 1 exists.
+  3. **A baseline, because the first build of a run has nothing before it.** The startup Set is
+     `Set::build` in `Engine::new` rather than the watcher, so it emits no `Built` and the first one
+     a run sees would read as every node changed. `karakuri-cli` answers this with `history::seed`;
+     the panel calls it nowhere. **And the baseline has to be re-seeded on every `watch::Aim`**,
+     since a library load re-points a slot at different files
+     ([ADR-0228](adr/0228-a-library-load-re-points-the-slots-source-and-never-installs-a-set.md)) —
+     diffing a loaded Set against the one that was there before would name every node of it.
+  4. **An undecided answer: what the lane draws when one build changes two nodes.** A rebuild
+     restates the whole stack, so a save touching two files is one `Built` with two changed hashes
+     and one `swap::Event`. One row cannot name two nodes, and two rows means the lane's row model
+     stops being one-per-slot — which is exactly what `staging()` and `view::Candidate` are built on,
+     `Verdict::Settled` clearing a slot with a `retain` on `row.deck`. **This is a decision and not
+     an implementation**, and it stands in front of both controls.
+  5. **A reader for the edit history, which exists nowhere.**
+     `karakuri_environment::history` has `record`, `seed` and `stamped_id` and **no lister**: nothing
+     outside that module's own tests opens `<store>/history/` to answer *what came before this
+     version*. `Operation::WalkHistory` is `Undecided` for the same absence, and *Put a node's
+     previous version back* is one step of exactly this reader.
+  6. **A history to read at all.** Item 5 has nothing to list until this program keeps one, and it
+     is not the same wiring as item 1: `storing_to` puts a build's sources under a content address,
+     `snapshotting_to` keeps every version that compiled. A restore owes both.
+
+  **And one hazard, recorded because it is the kind that is found late.** `scratch::place` is called
+  from exactly one place in `crates/karakuri` — `loading()`, on a library load — so a run given
+  `.kir` paths on the command line, which is every default run, **watches those paths in place**. A
+  restore that wrote a file in such a run would overwrite the operator's own source at the path they
+  typed, which is precisely the destruction `scratch.rs` was created to stop: *"three shipped presets
+  were replaced in one session."* So *Put a node's previous version back* owes a decision about
+  **where it writes** before it owes any code, and placing it in the scratch is not obviously the
+  answer — that would move the slot off the file the operator has open.
+
+  **Which of the two to start, if either.** **`Keep a candidate` needs items 1–4 and neither 5 nor
+  6**, and it has no hazard: it writes nothing, its record question is settled
+  (`Written::Silent(Silent::Surface)`), and what it changes is the lane. **The restore needs all six
+  plus the where-it-writes decision** (`Written::Silent(Silent::OnLanding)`). And the argument for
+  the first of them is stronger than this entry has ever made it: with the budget verdict clearing
+  only the drawn deck's row, a lane with no *keep* does fill up and stay full in an ordinary run, so
+  *keep* is not a nicety over the watchdog's substitution — it is the only way three of the four rows
+  can ever leave.
 
   **`origin` is a record rather than a drawing**: the prompt, the model and the seed are specified in
   [ir-spec.md](ir-spec.md) and **produced by nothing**, so `you, 14:41` against `agent` cannot be told
