@@ -132,6 +132,62 @@ pub mod setfile;
 pub mod tempo_source;
 pub mod watch;
 
+/// **What the operator has opened to an automatic route**, shared between
+/// whoever draws the toggle and whoever reads it on every call.
+///
+/// [`karakuri_operation::gate::Open`] is the value — four classes, all closed
+/// to begin, and no way to write one down that starts open. This is the handle
+/// that makes it *live*: ADR-0235's whole shape is that **an operator opens a
+/// class ahead of a show or between numbers**, so a server handed a snapshot at
+/// startup could not implement the decision at all. A bay head's pill writes
+/// through one of these and [`mcp::serve`] reads through another clone of the
+/// same one.
+///
+/// **It is not the audit and it holds no table** — the classification and the
+/// refusal are `karakuri_operation::gate`'s, one copy for every route
+/// (ADR-0236). This is only where the operator's answer is kept while a run is
+/// going, which is this package's clause rather than the vocabulary's: it is
+/// state a surface writes and another surface reads, and nothing here knows
+/// which surface either is.
+///
+/// **Nothing writes one yet.** The bay-head toggles are the console's and are
+/// not built; until they are, a run holds a handle that stays
+/// [`Open::CLOSED`](karakuri_operation::gate::Open::CLOSED) and every closed
+/// class is refused, which is the state ADR-0235 says a run starts in.
+/// `docs/principles/0036-an-invariant-that-is-not-yet-true-says-so.md`.
+#[derive(Debug, Clone, Default)]
+pub struct Opening(std::sync::Arc<std::sync::RwLock<karakuri_operation::gate::Open>>);
+
+impl Opening {
+    /// A run's opening, with all four classes closed. **The name says the
+    /// state** rather than leaving it to a `Default` a caller reads as *empty*:
+    /// what this is is the closed one.
+    pub fn closed() -> Opening {
+        Opening::default()
+    }
+
+    /// What is open now. Read on every call rather than held, because a class
+    /// the operator closed between two calls has to be closed for the second.
+    ///
+    /// **A poisoned lock reads as closed.** The alternative is a panic on a
+    /// call path, and the safe answer to *is this open* when the thing holding
+    /// it fell over is no.
+    pub fn read(&self) -> karakuri_operation::gate::Open {
+        self.0
+            .read()
+            .map(|open| *open)
+            .unwrap_or(karakuri_operation::gate::Open::CLOSED)
+    }
+
+    /// What the operator just said. Whoever draws the toggle calls this; a
+    /// poisoned lock drops the write rather than panicking on the surface.
+    pub fn set(&self, open: karakuri_operation::gate::Open) {
+        if let Ok(mut held) = self.0.write() {
+            *held = open;
+        }
+    }
+}
+
 /// **How long the end of a run waits for saves still being written.**
 ///
 /// Long enough that a save of a few dozen lines and a handful of artifacts
