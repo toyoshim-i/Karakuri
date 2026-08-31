@@ -173,6 +173,15 @@ a batch**, so read the ten allocations as a direction and not a finding: the lik
 them is the second halo the travelling light draws on the frames it is between two dots
 ([ADR-0212](../adr/0212-the-beat-is-a-light-that-travels-and-it-declares-for-itself.md)), and one
 reading cannot tell that from the swing this paragraph has already been caught by twice.
+**Re-taken on 2026-08-31 over nine runs, and this one moved by a factor**: **1518 allocations and
+1781.6 kB a frame**, which every one of the nine read to the allocation and to the tenth of a
+kilobyte. It is 2.89x the 525 above, against a band of two, and the prediction written beside the
+old figure was 1.26x — reasoned from the two mixer strips somebody remembered, on a panel that had
+since gained the Inspector's two panes, an armed `audio-in` pill over an input measured every frame,
+and the arrangement pill. **A figure predicted from the one change somebody remembered is precisely
+the figure that goes stale in silence**, which is the argument for the counter rather than against
+it, and `crates/karakuri`'s `WRITTEN_ALLOCS` is where the number and its check are printed together.
+
 [ADR-0164](../adr/0164-the-panel-is-budgeted-rather-than-forbidden-to-allocate.md)'s **184 and
 226.2 kB** is not that number's predecessor in any comparable sense: it was a mean over 180 frames
 of an empty panel driven by a loop that always drew, it is still true of the panel it measured, and

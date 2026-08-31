@@ -303,6 +303,18 @@ nine, and 524 to 538 allocations a frame. The nine were taken over about an hour
 through it, which is the machine rather than the panel: the allocation count barely moves while
 the milliseconds climb by a fifth. That is the price the rest of P-0072 is for.
 
+**The allocation count was re-taken on 2026-08-31 over nine runs and it is the figure that
+moved: 1518 allocations and 1781.6 kB a frame**, which every one of the nine read to the
+allocation and to the tenth of a kilobyte. That is 2.89x the 525 above — past the factor of two
+`crates/karakuri` will carry a figure across, and exactly what the counter exists to catch, since
+the note beside the old number predicted 1.26x by reasoning from the one change somebody
+remembered. Three things the 2026-08-26 reading's own *what the panel had in it* paragraph does
+not mention are on the panel now: the Inspector draws two panes off the running Set, the transport
+row draws an armed `audio-in` pill over an input measured every frame, and it draws the arrangement
+pill. **The rate and the percentage were not re-taken with it**, so the fps and the 18.1–22.2%
+above are still a reading of the 2026-08-26 panel and are the two numbers on this line to distrust
+first.
+
 **This line read 10.9% for two commits after it stopped being true**, which is the failure worth
 recording beside the number: 10.9% was the picture and the preview row alone, and what moved it
 was the mixer bay arriving rather than the parked deck. Nobody re-took it, because a figure in
@@ -608,18 +620,61 @@ count**: every slot but A comes up at `Residency::Allocated` — not stepping, n
 the fold — and **only the *request* is written**, so an operator raises a channel by cycling its
 tally or loading a Set and nothing has to undo a constructor's decision.
 
-**The Library loads.** `0` `1` `2` `3` select a deck, `up` and `down` move the bay's cursor, and
-`l` **re-points that slot's source** — so the worker builds it and the budget watchdog watches it,
-exactly as they do an edited file, and the Staging lane draws the verdict with nothing added to it
+**The Library loads, and it has two tiers to load from.** `0` `1` `2` `3` select a deck, `up` and
+`down` move the bay's cursor, `e` steps the scope, and `l` **re-points that slot's source** — so the
+worker builds it and the budget watchdog watches it, exactly as they do an edited file, and the
+Staging lane draws the verdict with nothing added to it
 ([ADR-0228](adr/0228-a-library-load-re-points-the-slots-source-and-never-installs-a-set.md)).
-`Deck::install` stays unreachable from a surface; it was never the route.
+`Deck::install` stays unreachable from a surface; it was never the route. **Two of the four scopes
+answer**: `my sets`, which is `Store::list_sets`, and `presets`, which is the `.kset` files in the
+root the program was told about; `favourites` and `folder` are drawn and answer nothing, each for a
+reason written at `karakuri_console::view::Scope`. **A preset row is taken in and then loaded on the
+one press**, because taking it in is what gives the Set the id a load needs — ADR-0229's *one
+operation, two moments* — so `my sets` gains a row the operator did not write, which
+[the console page](manual/console.html) says out loud rather than leaving to be met as a surprise.
 
-**And there is material to load**: nine `.kir` files as four complete pairs, bringing `examples/` to
-thirty-one. Before them the library held one Set, written in August in a language that has since
-dropped a keyword it uses, in one working copy — `.karakuri/` is gitignored, so **a fresh clone's
-Library is empty**, which is what
+**And there is material to load, and it ships with the repository now**: `examples/` holds
+thirty-one `.kir`, twenty-one `.kset` and one `surface.map`, and every `.kir` is in a Set. The
+`.kset` files are what a fresh clone opens on, because `.karakuri/` is gitignored and **a fresh
+clone's `my sets` is still empty** — the presets tier is the one that is not, which is what
 [ADR-0229](adr/0229-a-set-file-is-authored-beside-its-parts-and-travels-as-a-bundle.md) was written
-against.
+against and what
+[ADR-0230](adr/0230-where-the-programs-data-lives-is-told-rather-than-baked.md)'s search now asks a
+candidate directory for: `places::is_a_library` asks for a `.kset`, not a `.kir`.
+
+**A model reaches every operation, and what could stop a show is shut until a hand opens it**
+([ADR-0235](adr/0235-mcp-reaches-every-operation-and-what-could-stop-the-show-is-refused-until-the-operator-opens-it.md),
+2026-08-31). The narrow tool list was a scope and it is a default now: a closed call arrives and is
+**refused** by name, saying which class it is, that an operator can open it, and where the pill is —
+because a tool a model cannot see is a capability it reports the instrument as lacking.
+`karakuri-operation`'s `gate` is the audit and the one place the split lives, with **no wildcard
+arm**, so a sixty-fifth operation stops the build until somebody says which class it is in. The
+panel draws the four indicators — the Program, Mixer and Master bay heads and the Outputs row, which
+has none and takes the pill beside the word that stands in for one. **Two things about that are
+worth arriving knowing.** **Nothing in `crates/karakuri` serves MCP yet**, so today those pills
+write into an `Opening` only this program reads back; the wiring that makes it matter is one `serve`
+call rather than another control, and the half that would have been hard to add afterwards — a
+surface that can say *open* — is the half that is built. And **four switches do not cover
+forty-one closed rows**: the clock's six, the sequencer's five, `Quit`, *Select a deck* and rule
+06's authority belong to no class, so nothing on the console opens them and no indicator is
+specified that would. That an opening is **map configuration and not a sixty-fifth operation** is settled
+([ADR-0236](adr/0236-a-map-is-the-layer-between-a-surface-and-the-vocabulary-and-the-audit-is-one-of-the-things-it-does.md)):
+a map is the layer between a surface and the vocabulary, and the audit is one of the three jobs it
+does.
+
+**Three transition rows stopped owing a record nobody could write, and one control stopped
+existing.** `karakuri_operation_record::Current` carries a transition reading now — the instant a
+scheduled move lands on, how long it lasts and its curve, resolved rather than as a quantum — so
+*Fade a deck out or in*, *Crossfade to the next deck* and *Choose which renderer of a deck is live*
+convert when a caller hands one in and answer `Owed::NotRead` when it does not, which is the only
+one of the owed reasons that names something a caller can do
+([ADR-0232](adr/0232-a-control-is-thrown-because-the-request-is-asynchronous-and-a-curve-is-a-helper-on-the-control-map.md)).
+**Three are still `Owed::NotSettled` and each says why**: a wipe's front shape is
+`Operation::SetTransition`'s and its soft edge is on no surface, and a tap and an octave shift need
+the beat tracker rather than a value and may be refused by it. **And the mixer has no crossfader**
+([ADR-0233](adr/0233-the-consoles-mixer-has-no-crossfader.md)) — the mix is the channel faders, `x`
+is where a crossfade is asked for, and the row's panel badge reads `—` rather than naming a control
+that is not there.
 
 **No figure for how much of this is reached is written here, on purpose.** The meter is the panel
 column of [every operation](manual/operations.html)
@@ -646,7 +701,8 @@ wrong one**: nothing had to divide, because the constant belongs in the package 
 already reach. **And the search's test is not existence** — a cargo build puts an `examples`
 directory of object files beside the binary, so the portable candidate would win every `cargo run`
 in this repository and resolve a presets root with no presets in it. **The order below was settled
-in conversation on 2026-08-30.**
+in conversation on 2026-08-30, and the first of the three closed on 2026-08-31** — so what is in
+front of whoever picks this up is item 2.
 
 1. **The authoring form is built, and what is left of it is the panel.** A `.kset` names its parts
    by relative path with a `part` record of its own — a `slot` carrying a path instead of an address
@@ -662,10 +718,12 @@ in conversation on 2026-08-30.**
    `crates/karakuri-cli/tests/examples.rs` used to hold as a Rust array — and the array was
    incomplete: nine `.kir` it never named carried their own command line in their headers, so five
    more Sets came out of comments rather than out of invention. No `.kir` is in no Set.
-   **What is left is the surface**: the Library's `presets` scope does not list them and no key
-   reaches one, which is the next pass and is where `places::is_a_library` — which asks for a `.kir`
-   today — will want to ask about a `.kset` instead.
-2. **Then the store as a tree, which changes what an id is.** `Store` spells one flat
+   **And the surface landed the same day, so this item is closed**: the Library's `presets` scope
+   lists them, `e` steps to it, `l` takes the row under the cursor into the store and loads it in
+   one press, and `places::is_a_library` asks a candidate directory for a `.kset` rather than for a
+   `.kir` — a library being a listing of what you can put on a deck rather than a directory of
+   parts.
+2. **Next: the store as a tree, which changes what an id is.** `Store` spells one flat
    `sets/<id>.kbset`, `list_sets` reads that directory, and `checked_id`
    (`crates/karakuri-environment/src/mcp.rs`) holds an id to one path component **on purpose**, so
    that it cannot be a path; `checked_name` (`crates/karakuri/src/main.rs`) is the same wall for an
@@ -874,7 +932,9 @@ now and the group reads one, which is the command's other use: it says so withou
 ([ADR-0217](adr/0217-the-counting-allocator-ships-because-a-written-number-nothing-checks-goes-stale.md)). `crates/karakuri` installs a counting `#[global_allocator]` over the
 whole process so the reading can be held against `WRITTEN_ALLOCS`, and the argument is that file's
 own history rather than a preference: the previous number went 184 → 456 → 525 as the mixer bay and
-the parked deck landed and **stayed wrong for two commits, "because nothing was checking it"**. A
+the parked deck landed and **stayed wrong for two commits, "because nothing was checking it"** —
+and 525 → 1518 on 2026-08-31, which is the same drift caught on the run that produced it rather
+than two commits later. A
 cargo feature lost on [P-0012](principles/0012-a-measurement-carries-how-it-was-taken.md) — a number
 taken in a configuration nobody ships is about a different program — and a test target lost because
 the declared figures are medians of a running instrument with a deck under load, not of a fixture.
@@ -984,10 +1044,13 @@ reason for existing.** **Re-anchoring has no route
 on any surface**: `Transport::engage` says re-engaging the mode a slot is already in is how an
 operator re-anchors, and `cycle_sync` always moves to the next *allowed* mode, so neither the `y` key
 nor a cycling chip can ask for the mode it is in. **The crossfader's ends were unspecified** — the
-operation names both decks and the mock hardcodes `A … B`, with nothing saying which two a
-four-deck mixer's fader spans; the page now resolves it to the selection and the one after it, so
-the panel and `x` are one gesture. **The crossfader's knob has no record for a half-done throw**, so
-it is written as a readout of the two channel faders plus a throw rather than as a drag. **`offset`
+operation named both decks and the mock hardcoded `A … B`, with nothing saying which two a
+four-deck mixer's fader spans; the page resolved it to the selection and the one after it, and then
+**the control lost the argument outright and there is no crossfader**
+([ADR-0233](adr/0233-the-consoles-mixer-has-no-crossfader.md), 2026-08-31), so the panel and `x` are
+one gesture by there being one of them. **Its knob had no record for a half-done throw**, which made
+it a readout of the two channel faders plus a throw rather than a drag — *a control whose only
+remaining function is a trigger is a button drawn as a fader*, and that is what took it out. **`offset`
 names two different things** — the latency offset and a beat anchor's `±offset` — and both now carry
 their unit, but read strictly [P-0031](principles/0031-a-name-means-one-thing-across-the-system.md)
 wants one of them renamed, which is `operations.html`'s row to change. And **`SetCompositing` is a
@@ -1148,17 +1211,24 @@ routes into [`karakuri-operation`](../crates/karakuri-operation):
   ([ADR-0175](adr/0175-an-operation-carries-what-it-acts-on.md)).
 - **The CLI's key handler is surveyed too, and most of it had already moved**
   ([ADR-0198](adr/0198-a-gesture-converts-in-the-parts-that-are-decided.md)): of its thirty-nine keys,
-  fifteen already reached `Live::operate`, **nine** name operations that are `Owed::NotSettled` and
-  keep their own path with the reason at the function, **twelve** name `Silent` operations and
-  **cannot route through `operate` at all**, and **three** (`s`, `h`, `?`) name nothing in the
-  vocabulary. What moved is the parts of two gestures, deleting the last three records this program
-  derived twice. A test asserts the seven owed operations are still owed, so the day one of those
-  conversions lands the failure names the key that is due to move.
+  **twenty** name an operation whose record converts and reach `Live::operate`, **four** (`c`, `b`,
+  `,`, `.`) name one whose record is owed and keep their own path with the reason at the function,
+  **twelve** name `Silent` operations and **cannot route through `operate` at all**, and **three**
+  (`s`, `h`, `?`) name nothing in the vocabulary. **It was fifteen and eight on 2026-08-30**: `y`,
+  `f`, `g`, `x` and `r` moved when `SetSync` took a session tempo as a reading and `FadeDeck`,
+  `Crossfade` and `SelectRenderer` took the transition settings as one
+  ([ADR-0232](adr/0232-a-control-is-thrown-because-the-request-is-asynchronous-and-a-curve-is-a-helper-on-the-control-map.md)),
+  and `Live::fade_slot` went with them. A test asserts the operations behind the remaining four keys
+  are still owed, so the day one of those conversions lands the failure names the key that is due to
+  move, and `OWED_RECORD_PATHS` is a floor of two rows where it was five.
 - **MCP names its operations and performs them itself**
   ([ADR-0199](adr/0199-mcp-names-its-operations-and-performs-them-itself.md)), because `written`
-  answers `Silent` for all six tools and there is no `Live` on a connection thread; what routes is the
-  **naming**. **The page needed no edit**, which makes this the first of the four route columns to
-  become checkable at all.
+  answers `Silent` for all seven tools and there is no `Live` on a connection thread; what routes is
+  the **naming**. **The page needed no edit**, which makes this the first of the four route columns
+  to become checkable at all. `wire_input` is the seventh and landed on 2026-08-31, and **the MCP column's
+  figures are not transcribed here** — the first of the four commands under *The meter is one
+  column* prints them, and a count of tools written into prose is the failure that section exists
+  to stop.
 
 ##### The remaining bays, surveyed — and the survey is the order
 
@@ -1181,14 +1251,16 @@ whether the values behind it exist anywhere in this workspace.
   **What the load leaves undone is listed at that record** and none of it is a drawing: the listing
   is read once at startup, so a Set saved while the window is up is neither shown nor loadable until
   the next run — closing that wants a *reason* to re-read rather than a timer, which is a decision of
-  its own. **Five of the mock's controls stay undrawn and each waits on something different**: the
-  *favourite* is a fact nothing here writes, so **an operation that sets one is owed**; a folder
-  *scope* waits on **an operation that can ask a directory for a listing**, `ListSets { holds, layer }`
-  having nowhere to put one; the *filters* have that same operation and no index to answer it. **And
-  the `presets` scope is a tier with no file in it**, which is
-  [ADR-0229](adr/0229-a-set-file-is-authored-beside-its-parts-and-travels-as-a-bundle.md)'s subject:
-  `examples/` holds thirty-one `.kir` and one `surface.map` and not one Set file, and a directory of
-  parts is not a listing of what you can put on a deck. The sixth
+  its own. **The scopes are drawn now and two of the four answer**, and what is left of the mock's
+  bay waits on something different in each case: the *favourite* is a fact nothing here writes, so
+  **an operation that sets one is owed**; a folder *scope* is a chip that answers nothing and waits
+  on **an operation that can ask a directory for a listing**, `ListSets { holds, layer }` having
+  nowhere to put one; the *filters* have that same operation and no index to answer it. **And
+  the `presets` scope has files in it as of 2026-08-31**, which is
+  [ADR-0229](adr/0229-a-set-file-is-authored-beside-its-parts-and-travels-as-a-bundle.md)'s subject
+  settled: `examples/` held thirty-one `.kir` and one `surface.map` and not one Set file, and a
+  directory of parts is not a listing of what you can put on a deck — it ships twenty-one `.kset`
+  now, the scope lists them, `e` steps to it and `l` takes one in and loads it. The sixth
   omission is [ADR-0200](adr/0200-a-bays-first-pass-draws-the-values-that-exist-and-omits-the-rest.md)'s:
   the **time** beside each name had a value and no spelling until `setfile` moved to
   [`karakuri-environment`](../crates/karakuri-environment) on 2026-08-29, and **what it still waits on

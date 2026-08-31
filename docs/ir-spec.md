@@ -2237,8 +2237,12 @@ name, which is where a `.kset` and a store are held apart, and nothing in `sets/
 an id is the file name with `.kbset` stripped off it, so a `.kset` dropped in there has no id
 and can be asked for by nobody.
 
-**Not built: the Library's route to one.** Nothing lists a `.kset`, and loading one from the bay
-— which ADR-0229 part 3 says is a load that packages — is the next pass.
+**And the Library's route to one is built.** The bay's `presets` scope lists the `.kset` files in
+the root the program was told about, and `l` over a row of it takes the file in and then loads it
+in one press — ADR-0229 part 3's load that packages, performed at the second of its two moments.
+What is refused there is `resolve`'s refusal and nothing new: a part named from outside the file's
+own directory is not read, and an id the store already holds is refused rather than overwritten,
+so a preset that will not come in loads nothing and leaves what is on air alone.
 
 ### What a binding does
 

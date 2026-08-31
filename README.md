@@ -15,7 +15,8 @@ Four properties define it, and each has a document behind it:
   [docs/ir-spec.md](docs/ir-spec.md)
 - **AI-native.** An LLM can write this language from the specification alone, and `--mcp`
   serves the Model Context Protocol on loopback so a chat client can read a slot's
-  procedure, rewrite it, and be told what the compiler and the frame budget made of it.
+  procedure, rewrite it, wire what that procedure declares to another node, and be told what the
+  compiler and the frame budget made of it.
   What has actually been demonstrated is in [docs/roadmap.md](docs/roadmap.md)
 - **Real-time.** A changed procedure is compiled on a worker thread, installed at a frame
   boundary, watched for a window, and rolled back automatically if it costs too much.
@@ -34,6 +35,7 @@ Rust stable and a GPU.
 ```sh
 cargo run -p karakuri                                        # the console
 cargo run -p karakuri -- geometry.kir renderer.kir           # the console, on your own pair
+cargo run -p karakuri -- --presets DIR --store DIR           # tell it where its data lives
 
 cargo run -p karakuri-cli                                    # a window
 cargo run -p karakuri-cli -- --watch                         # edit a .kir, watch it swap
@@ -44,11 +46,18 @@ cargo run -p karakuri-cli -- --render out.png --frames 240   # one frame to a PN
 
 `karakuri` is the panel and `karakuri-cli` is still what you play a whole set with: the
 console has the picture, the deck previews, the transport, the mixer, the Library bay and
-the Inspector, and no MIDI, MCP or replay yet. **It listens to the room**: it opens the
+the Inspector, and no MIDI, MCP, replay or session recording yet — the four `mcp` pills that
+open a class of operations to a model are drawn and pressable, and nothing in this process
+serves MCP for them to govern. **It listens to the room**: it opens the
 default audio input at startup, the transport row's `audio-in` pill says which one and
-lists the others, and `b`, `,` and `.` tap the beat and move the grid an octave. **Every slot
+lists the others, `b`, `,` and `.` tap the beat and move the grid an octave, and `o` and `p`
+nudge the latency offset. **Every slot
 watches its `.kir` pair**, so the Staging lane is empty until a file changes and then carries a
-row per slot whose newest build has a verdict outstanding. The Master bay draws its out row and
+row per slot whose newest build has a verdict outstanding. **And it keeps an arrangement**: the
+transport's arrangement pill names the layout you are working in and puts it back later, under
+`arrangements/<name>.arrangement.json` in the store — the one thing this program writes to disk
+on purpose. The Library lists what your store holds and what ships with the
+program, and `l` puts the row under the cursor on the selected deck. The Master bay draws its out row and
 the Sequencer bay draws nothing but its head. Press `h` in the CLI's window for the keys and `s`
 for the status line.
 
@@ -77,8 +86,8 @@ not about design, and it had no home until the manual had one.
   example until ADR-0214, and for one reason: everything a program needs beyond the panel was in
   `karakuri-cli`, which has no library target, so there was nothing for a binary to sit on. There
   is now — [`karakuri-environment`](crates/karakuri-environment). `karakuri-cli` is still what you
-  play a whole set with: the console has no MIDI, MCP or replay yet, and it does open an audio
-  input — so the signal bus carries a measurement rather than an invention, and the grid follows
+  play a whole set with: the console has no MIDI, MCP, replay or session recording yet, and it does
+  open an audio input — so the signal bus carries a measurement rather than an invention, and the grid follows
   the room
 - **Every operation is named once and every surface routes into that name** — the manual's first
   rule. [`karakuri-operation`](crates/karakuri-operation) is every one of those names, checked against
@@ -92,9 +101,12 @@ not about design, and it had no home until the manual had one.
   write yet and twelve name one that writes no record at all and therefore has to be performed by
   the surface holding the state. **All four surfaces have an answer now**: the console's own
   arrangement operations stay where they are, blocked on the manual rather than on the code
-  (ADR-0197), and **MCP names its six tools' operations and performs them itself** (ADR-0199) —
-  every one of the six writes no record where it is asked, so there is nothing for `Live::operate`
-  to do with them, and what routes is the name. The manual's MCP column is the first of the four
+  (ADR-0197), and **MCP names its seven tools' operations and performs them itself** (ADR-0199) —
+  every one of the seven writes no record where it is asked, so there is nothing for `Live::operate`
+  to do with them, and what routes is the name. **A model is connected to every operation and the
+  ones that could stop a show are refused until an operator opens their class** from the head of the
+  bay it belongs to (ADR-0235), which is a setting of that same map rather than an operation of its
+  own (ADR-0236). The manual's MCP column is the first of the four
   route columns a test can check
 - Audio input exists — spectrum, energy, onset, and a beat grid that corrects the local
   oscillator. External sync exists out of process: `--tempo-source` runs a separate program
