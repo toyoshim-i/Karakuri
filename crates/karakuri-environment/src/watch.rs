@@ -298,7 +298,15 @@ pub struct Watch {
     /// A change has been seen but not yet acted on — see "Debouncing" above.
     settling: bool,
     /// **Where a re-point arrives**, and `None` for a watcher nobody can
-    /// re-point — every offscreen path, and every slot `karakuri-cli` builds.
+    /// re-point — every offscreen path.
+    ///
+    /// **`karakuri-cli`'s watched slots used to be in that list and are not
+    /// any more.** They were, for as long as nothing on that surface could
+    /// change what a slot is wired with; `wire_input` can, and an edge is not
+    /// a file, so the only way it reaches a build worker is an aim — see
+    /// `main::Aiming`. A slot that surface does *not* watch still has no
+    /// watcher at all, which is a different thing from a watcher that cannot
+    /// be re-pointed.
     ///
     /// A channel rather than a shared cell for the reason this module polls
     /// rather than taking `notify`: the worker is a poll loop already, so

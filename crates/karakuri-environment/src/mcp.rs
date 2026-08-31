@@ -28,27 +28,42 @@
 //!
 //! ## It names its operations, and it performs them itself
 //!
-//! Every one of the six tools is one of the vocabulary's operations
+//! Every one of the seven tools is one of the vocabulary's operations
 //! `docs/manual/operations.html` specifies — `read_procedure`,
-//! `write_procedure`, `swap_outcome`, `save_set`, `read_set` and `list_sets`
-//! are `ReadProcedure`, `WriteProcedure`, `SwapOutcome`, `SaveSet`, `ReadSet`
-//! and `ListSets` — and the call becomes that operation in [`asked`] before
-//! anything is done with it. [`perform`] then dispatches on the operation
-//! rather than on the tool's name, so the row on the page a tool claims is the
-//! row its operation's title names.
+//! `write_procedure`, `wire_input`, `swap_outcome`, `save_set`, `read_set` and
+//! `list_sets` are `ReadProcedure`, `WriteProcedure`, `WireInput`,
+//! `SwapOutcome`, `SaveSet`, `ReadSet` and `ListSets` — and the call becomes
+//! that operation in [`asked`] before anything is done with it. [`perform`]
+//! then dispatches on the operation rather than on the tool's name, so the row
+//! on the page a tool claims is the row its operation's title names.
 //!
 //! **What it does not do is hand the operation to `Live::operate`, and that is
 //! `Silent`'s shape rather than an omission.** `karakuri_operation_record`'s
-//! `written` answers `Silent` for all six: `Question` for the four that ask —
+//! `written` answers `Silent` for all seven: `Question` for the four that ask —
 //! a record is what a replay reconstructs a performance from, and a question
-//! changes no performance — and `OnLanding` for the two whose record is
+//! changes no performance — `OnLanding` for the two whose record is
 //! written where the work lands, `Record::Procedure` at the swap and
-//! `Record::Save` at the frame the save landed. An operation routed through
+//! `Record::Save` at the frame the save landed, and `NoRecord` for
+//! `wire_input`. An operation routed through
 //! `operate` that writes no record prints *no record* and does nothing, which
 //! is `docs/adr/0198-…`'s finding about twelve of the keyboard's keys and holds
-//! here for all six tools. There is no `Live` on these threads to route into
-//! either: this server reaches the render loop for exactly one thing, and it is
-//! the channel below.
+//! here for all seven tools. There is no `Live` on these threads to route into
+//! either: this server reaches the render loop for two things, and both go on
+//! the channels below.
+//!
+//! ## The seventh tool is a hole in the first paragraph of this file
+//!
+//! `Record::Procedure` closed the material half of P-0028 for a *procedure*.
+//! `wire_input` reopens a strip of it: `written` answers
+//! `Silent(Silent::NoRecord)` for `WireInput`, because `Record::Edge` is a
+//! **Set file's** record and has no `slot` to carry the deck a live rewiring
+//! names. So a model that binds `morph.far` at minute ten replays with the
+//! Set's launch wiring — which, where the `uses` was written in the same
+//! session, is a replay that does not build at all. That is stated here rather
+//! than left to be discovered, it is asserted in
+//! `no_tool_writes_a_record_where_it_is_asked` below, and what closes it is
+//! a `slot` on `Record::Edge` and a `written` arm for it, neither of which is
+//! this file's to write.
 //!
 //! ## Most of this never touches the frame
 //!
@@ -170,6 +185,61 @@ impl Reply {
     }
 }
 
+/// **An edge one client is asking the render loop to write.**
+///
+/// **The second thing this server reaches the loop for, and it is the loop for
+/// the same reason a save is**: the wiring a slot rebuilds with is not on disk
+/// anywhere. A procedure is a file, so `write_procedure` writes one and lets
+/// `--watch` find it; an edge is a *statement about a Set* that the run holds —
+/// `Args::edges` at launch, `Watch::edges` on every rebuild, `Live::edges` when
+/// a save asks what the slot is wired with — and nothing in this process but
+/// the render loop can see any of the three. A copy kept here would be a second
+/// answer to what the run is wired with, which is the shape
+/// `docs/principles/0068-a-kir-never-names-a-node-of-a-set.md` warns about from
+/// the other end: *every surface that rebuilds one has to carry the names it
+/// was spelled with rather than regenerate them.*
+///
+/// **What the loop owes a request it takes**, so that the contract is written
+/// where the sender is rather than in whoever drains it:
+///
+/// 1. **Replace, keyed on `(node, slot)`, in the run's own wiring for that deck
+///    — the list a rebuild restates (`Watch::edges`) and a save records
+///    (`Live::edges`), which are one list and not two — and touch no other
+///    edge.** That is
+///    what `--edge` beside `--load-set` already does — the file's edges, minus
+///    the slots the flags name, plus the flags' — and it is forced rather than
+///    chosen: `SetError::SlotBoundTwice` refuses two edges on one slot, so an
+///    append would make the *second* call on a slot a refusal and leave a model
+///    unable to change its mind.
+/// 2. **Rebuild the slot the deck names**, on the path an edit takes: compiled
+///    on a worker, swapped at a frame boundary, judged against the budget and
+///    rolled back on its own if it costs too much. An edge is priced by the same
+///    validation as everything else between nodes, which is the whole of why
+///    this is inside MCP's scope — see the description of [`tools`]'s
+///    `wire_input`.
+/// 3. **Answer once, at the frame it was applied on** — [`Reply::settled`],
+///    with what the loop would have printed. Not at the swap: what the *build*
+///    made of it is `swap_outcome`'s answer, as it is for every other rebuild,
+///    and a tool that waited for thirty judged frames would be a tool that holds
+///    a connection open across a transition.
+pub struct WireRequest {
+    /// Which deck slot the edge is about. Checked against [`Slots`] before it
+    /// is sent, in the sentence every other surface refuses an absent slot in.
+    ///
+    /// **The deck is on the operation** — `Operation::WireInput` carries one —
+    /// so an edge asked for here is a statement about *this* deck's Set and not
+    /// about the run. `--edge` is run-wide because a launch flag is one command
+    /// line for every Set it starts; a request made during a show names the
+    /// deck it is about.
+    pub slot: usize,
+    /// The edge itself, in the engine's own type: both ends by name, which is
+    /// `Record::Edge`'s decision and the reason `Operation::WireInput` is the
+    /// one operation addressed by name at both ends.
+    pub edge: karakuri_engine::set::Edge,
+    /// Where the answer goes. One message: see the contract above.
+    pub reply: Reply,
+}
+
 /// What a [`Reply`] carries, in the order it carries it.
 enum News {
     Accepted(String),
@@ -182,6 +252,12 @@ pub struct Reporter {
     /// What clients have asked the loop to do. The receiving half, because this
     /// is the direction [`Event`] does not go in.
     requests: mpsc::Receiver<SaveRequest>,
+    /// And the edges they have asked it to write. **A channel of its own rather
+    /// than one queue of a request enum**: the two are drained by one loop but
+    /// they are not one queue's worth of pressure — a deck being saved to a slow
+    /// disk must not be able to fill the queue an edit is rewired through, and
+    /// [`ASKED`] is a bound on each kind rather than on both together.
+    wires: mpsc::Receiver<WireRequest>,
     /// Reports the queue had no room for. **Counted rather than lost quietly**:
     /// a client that is told what happened must be told when it is not the
     /// whole story.
@@ -215,6 +291,22 @@ impl Reporter {
     /// every frame, and an empty `collect` allocates nothing.
     pub fn saves(&self) -> impl Iterator<Item = SaveRequest> + '_ {
         self.requests.try_iter()
+    }
+
+    /// **Every edge a client has asked to be written since this was last
+    /// called.**
+    ///
+    /// Drained beside [`Reporter::saves`] and on the same terms, and what the
+    /// loop owes each one is written at [`WireRequest`].
+    ///
+    /// **A loop that never calls this is not silently obeyed.** Every request
+    /// carries a [`Reply`] the client waits [`WIRE_REPLY`] for, so a run whose
+    /// loop does not drain this answers *the render loop had not taken this
+    /// edge* — which is true, is loud, and is the third of
+    /// `docs/principles/0079-…`'s answers rather than a tool that reports work
+    /// nobody did.
+    pub fn wires(&self) -> impl Iterator<Item = WireRequest> + '_ {
+        self.wires.try_iter()
     }
 
     /// The port actually bound, which is not the one asked for when that was 0.
@@ -492,7 +584,11 @@ const IDLE: std::time::Duration = std::time::Duration::from_secs(30);
 /// a hole in it must say so.
 const QUEUED: usize = 256;
 
-/// How many save requests may be waiting for the render loop at once.
+/// How many requests of one kind may be waiting for the render loop at once.
+///
+/// **Per channel, not per loop**: the saves and the edges are counted apart —
+/// see [`Reporter::wires`] — so a client waiting on a slow disk cannot use up
+/// the room an edit needs to be rewired through.
 ///
 /// [`QUEUED`]'s trade in the other direction, and the same one: a bound, and a
 /// refusal rather than a wait when it is reached. The loop takes every request
@@ -534,6 +630,21 @@ const ID_PATTERN: &str = "^[A-Za-z0-9_-]+$";
 const SAVE_REPLY: std::time::Duration =
     std::time::Duration::from_secs(crate::SAVE_WAIT.as_secs() + 5);
 
+/// **How long a `wire_input` call waits for the render loop to take its edge.**
+///
+/// Not [`SAVE_REPLY`], and the difference is what is being waited for. A save
+/// waits for a *disk*, whose worst case is somebody else's mount; this waits for
+/// the loop to reach the top of a frame, apply the edge and say so — which is
+/// one frame at any frame rate anybody plays at, and this many seconds is room
+/// for a loop that is busy rather than an estimate of the work.
+///
+/// **It is not a wait for the build.** What the rebuild made of the edge lands
+/// thirty judged frames later and is `swap_outcome`'s answer, exactly as it is
+/// for a written procedure. A tool that waited for that would hold a connection
+/// open across a transition to tell a model something a second call can ask
+/// for.
+const WIRE_REPLY: std::time::Duration = std::time::Duration::from_secs(5);
+
 /// Serve MCP on `port`, loopback only, until the process ends.
 ///
 /// Returns the [`Reporter`] the render loop keeps. The listener and everything
@@ -567,6 +678,8 @@ pub fn serve(
     // handed one half of everything it shares with this server, once, before a
     // frame has run.
     let (asked, requests) = mpsc::sync_channel(ASKED);
+    // The edges, on a channel of their own — see [`Reporter::wires`].
+    let (wiring, wires) = mpsc::sync_channel(ASKED);
 
     let state = std::sync::Arc::new(std::sync::Mutex::new(State {
         slots,
@@ -574,6 +687,7 @@ pub fn serve(
         watching,
         events: rx,
         asked,
+        wiring,
         recent: Vec::new(),
         dropped: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
     }));
@@ -608,6 +722,7 @@ pub fn serve(
     Ok(Reporter {
         sender: tx,
         requests,
+        wires,
         dropped,
         port: bound.port(),
     })
@@ -629,6 +744,9 @@ struct State {
     /// loop that has stopped taking requests must produce an answer rather than
     /// a thread that never returns.
     asked: mpsc::SyncSender<SaveRequest>,
+    /// And where an edge a client asks for goes, on the same terms and for the
+    /// same reasons — see [`WireRequest`] and [`Reporter::wires`].
+    wiring: mpsc::SyncSender<WireRequest>,
     /// What the swap machinery has said, newest last, bounded.
     recent: Vec<String>,
     dropped: std::sync::Arc<std::sync::atomic::AtomicU64>,
@@ -895,6 +1013,10 @@ const PROTOCOL: &str = "2024-11-05";
 /// comes back out here. Returning a value that still has work in it is the
 /// smallest thing that makes the boundary visible: a comment saying "do not
 /// wait here" would be a comment.
+///
+/// **`wire_input` is the second thing that waits**, and it waits for a frame
+/// rather than for a disk — which is shorter and is still somebody else's
+/// thread, so it belongs out here for exactly the same reason.
 enum Pending {
     /// Nothing left to do. `None` is a notification, which is answered with no
     /// body at all.
@@ -904,6 +1026,21 @@ enum Pending {
     Saving {
         id: Value,
         news: mpsc::Receiver<News>,
+    },
+    /// An edge the render loop has been asked to write.
+    ///
+    /// **A variant of its own rather than a second `Saving`**, because the two
+    /// wait different lengths for differently shaped news — see [`WIRE_REPLY`]
+    /// against [`SAVE_REPLY`], and [`applied`] against [`awaited`].
+    Wiring {
+        id: Value,
+        news: mpsc::Receiver<News>,
+        /// What this server knows about the run that the loop's own sentence
+        /// will not say — today, that a run without `--watch` has no watcher to
+        /// rebuild the slot. Built under the lock, where [`State`] is; appended
+        /// to an answer the loop wrote, because it is a fact about the run
+        /// rather than about the edge.
+        note: String,
     },
 }
 
@@ -919,6 +1056,21 @@ impl Pending {
                 "jsonrpc": "2.0",
                 "id": id,
                 "result": tool_result(awaited(&news, SAVE_REPLY)),
+            })),
+            // **The note is appended to what the loop said and only where the
+            // loop said it worked.** A refusal is the loop's whole sentence;
+            // adding "and by the way this run does not rebuild" to it would put
+            // two answers in front of a model that has one mistake to fix.
+            Pending::Wiring { id, news, note } => Some(json!({
+                "jsonrpc": "2.0",
+                "id": id,
+                "result": tool_result(applied(&news, WIRE_REPLY).map(|said| {
+                    if note.is_empty() {
+                        said
+                    } else {
+                        format!("{said}\n\n{note}")
+                    }
+                })),
             })),
         }
     }
@@ -951,6 +1103,7 @@ fn dispatch(request: &Value, state: &mut State) -> Pending {
             // [`Pending`]; this `return` is the only thing carrying that
             // decision, so it is the one line here worth reading twice.
             Ok(Called::Saving(news)) => return Pending::Saving { id, news },
+            Ok(Called::Wiring { news, note }) => return Pending::Wiring { id, news, note },
             Ok(Called::Answered(outcome)) => Ok(tool_result(outcome)),
             Err(e) => Err(Refused::BadParams(e)),
         },
@@ -1034,11 +1187,15 @@ fn tools() -> Value {
                  to, the capacities, the cost of a field inlined into its caller — is \
                  decided when the slot is assembled, so a clean write can still be \
                  followed by a build failure `swap_outcome` reports. **A `uses` \
-                 declaration needs an `edge`, and this surface cannot write one**: \
-                 adding `uses <name> : <Geometry|Field|Camera|Source>` to a procedure \
-                 leaves the slot unable to rebuild, and there is no tool here that can \
-                 bind it or take it back — only rewriting the procedure without it \
-                 will.",
+                 declaration needs an `edge`, and `wire_input` writes one**: adding \
+                 `uses <name> : <Geometry|Field|Camera|Source>` to a procedure leaves \
+                 the slot unable to build until an edge says which node fills it, so \
+                 write the procedure and then call `wire_input`. The builds between \
+                 the two are refusals `swap_outcome` reports, and what was on air \
+                 stays on air through them. **Taking one back is the half that is \
+                 missing**: nothing here unbinds an edge, so a procedure rewritten \
+                 without a `uses` it had been wired for leaves an edge naming a slot \
+                 nothing declares, and the slot refuses to build for that instead.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -1056,6 +1213,69 @@ fn tools() -> Value {
                     "source": { "type": "string", "description": "the whole procedure" },
                 },
                 "required": ["slot", "layer", "source"],
+            },
+        },
+        {
+            "name": "wire_input",
+            "description":
+                "Bind one node's declared input to another node of the same deck slot \
+                 — the `edge` a `uses` declaration needs before the slot can build. A \
+                 procedure declares each input under a name of its own (`uses far : \
+                 Geometry`, `uses shape : Field`, `uses view : Camera`, `uses only : \
+                 Source`) and never names the node that fills it; the Set says that, \
+                 and this is how it is said. **Both ends are node names, not \
+                 addresses**: `read_procedure`'s `layer` and `index` are a position, \
+                 and a position moves when a slot's files are reordered — which would \
+                 silently change which geometry a morph blends towards. A node is \
+                 called what the Set named it, or what its own procedure calls itself \
+                 where nothing named it; `read_set` and `list_sets` answer in those \
+                 names. **An edge already binding this input is replaced**, and every \
+                 other edge is left alone — so changing your mind is one call and \
+                 never a refusal about a slot being bound twice. **Nothing here \
+                 unbinds one**: an edge outlives the `uses` that needed it, so a \
+                 procedure rewritten without a `uses` it was wired for leaves an edge \
+                 naming a slot nothing declares, and the slot refuses to build for \
+                 that instead. **The names are the Set's and this server cannot check \
+                 them**: a node the Set does not hold, a slot the node does not \
+                 declare, or a far end of the wrong kind is refused where the slot is \
+                 built — in the same sentence `--edge` meets — and comes back through \
+                 `swap_outcome` with everything else a rebuild decided. The rebuild \
+                 itself is a procedure write's: compiled on a worker thread, swapped \
+                 at a frame boundary, measured for thirty frames and rolled back on \
+                 its own if it costs too much.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "slot": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "description": "deck slot, from 0: whose Set this edge is about",
+                    },
+                    "node": {
+                        "type": "string",
+                        "description":
+                            "the node that declares the input, by name — `morph` in \
+                             `--edge morph.far=sphere_shell`",
+                    },
+                    "input": {
+                        "type": "string",
+                        "description":
+                            "what that node's procedure calls the input — `far`, from \
+                             `uses far : Geometry`. It is `input` and not `slot` \
+                             because `slot` means the deck slot in every tool here, \
+                             and one word means one thing across this surface.",
+                    },
+                    "to": {
+                        "type": "string",
+                        "description":
+                            "the node bound to it, by name — `sphere_shell`. A slot \
+                             declared `: Geometry` or `: Source` takes an L1, `: \
+                             Field` a Field, `: Camera` an L3 or the built-in camera; \
+                             a far end of the wrong kind is refused where the slot is \
+                             built and names what the Set holds.",
+                    },
+                },
+                "required": ["slot", "node", "input", "to"],
             },
         },
         {
@@ -1196,6 +1416,12 @@ fn tools() -> Value {
 enum Called {
     Answered(Result<String, String>),
     Saving(mpsc::Receiver<News>),
+    /// An edge the loop has been asked for, and what this server has to add to
+    /// whatever it answers — see [`Pending::Wiring`].
+    Wiring {
+        news: mpsc::Receiver<News>,
+        note: String,
+    },
 }
 
 /// **What one tool call names, in the vocabulary** — or the refusal its
@@ -1235,6 +1461,10 @@ fn asked(name: &str, args: &Value, slots: &Slots) -> Result<Asked, String> {
             Err(refusal) => Asked::Refused(refusal),
         },
         "write_procedure" => match written_procedure(args, slots) {
+            Ok(operation) => Asked::Named(operation),
+            Err(refusal) => Asked::Refused(refusal),
+        },
+        "wire_input" => match wired_input(args, slots) {
             Ok(operation) => Asked::Named(operation),
             Err(refusal) => Asked::Refused(refusal),
         },
@@ -1317,6 +1547,80 @@ fn written_procedure(args: &Value, slots: &Slots) -> Result<Operation, String> {
         },
         source: source.to_string(),
     })
+}
+
+/// `wire_input`'s arguments as the operation they name.
+///
+/// **Both ends are names and neither is a [`NodeAt`]**, which is the one place
+/// this surface departs from the address the rest of it uses — and it is a
+/// decision made twice before this tool existed. `Record::Edge` states it: *a
+/// position moves when the list is reordered, and reordering silently changing
+/// which geometry a morph blends towards is the exact failure this record exists
+/// to end.* [`NodeAt`]'s own documentation states the other half: *so
+/// `Operation::WireInput` takes names and everything else takes this, and the
+/// two are not interchangeable.* A tool here that took `{layer, index}` because
+/// its five neighbours do would be spelling an edge in the one address an edge
+/// may not be spelled in, and
+/// `docs/principles/0068-a-kir-never-names-a-node-of-a-set.md` is what it would
+/// be breaking: the names are the *Set's* answer, and a procedure never knows
+/// them.
+///
+/// **Nothing here checks that the names resolve, and that is not laziness.**
+/// The nodes of a Set are named by the Set — `--set morph=warp.kir` names one,
+/// and a bare file is named after the procedure inside it — and [`Slots`] holds
+/// paths, not names, because a path never crosses this protocol. So a check
+/// built from the files alone would accept an edge that is wrong wherever a
+/// name was given on the command line and refuse one that is right, which is
+/// `docs/principles/0039-…`'s failure exactly: a warning that fires on healthy
+/// material. The names are refused where the Set is built, in the sentence
+/// `--edge` meets there too
+/// (`docs/principles/0061-a-refusal-a-person-can-reach-from-two-surfaces-is-one-sentence.md`).
+///
+/// **The deck is checked last**, after all four arguments have been read, on
+/// [`written_procedure`]'s terms: an argument this tool cannot do without is
+/// named before a slot number that may also be wrong.
+fn wired_input(args: &Value, slots: &Slots) -> Result<Operation, String> {
+    let slot = args
+        .get("slot")
+        .and_then(Value::as_u64)
+        .ok_or("`slot` is required and is a number")? as usize;
+    let node = edge_name(args, "node", "the node that declares the input")?;
+    let input = edge_name(args, "input", "what that node's procedure calls the input")?;
+    let to = edge_name(args, "to", "the node bound to it")?;
+    let deck = deck_named(slot, slots)?;
+    Ok(Operation::WireInput {
+        deck,
+        node,
+        // **`Operation::WireInput`'s `slot` is the *input*, and this surface's
+        // `slot` is the deck's.** One word for two things is what the schema's
+        // `input` exists to avoid
+        // (`docs/principles/0031-a-name-means-one-thing-across-the-system.md`),
+        // and this line is where the two spellings meet.
+        slot: input,
+        to,
+    })
+}
+
+/// One end of an edge, or the refusal an empty one earns.
+///
+/// **Empty is refused rather than resolved to nothing**, which is `parse_edge`'s
+/// rule on the command line and its sentence: *every part names something.* An
+/// edge with no slot in it is a statement about a node, and there is no such
+/// statement — and a name is not otherwise constrained here, because a node is
+/// called whatever `--set` or a `proc` line called it and this server is not the
+/// thing that decides what that may be.
+fn edge_name(args: &Value, key: &str, what: &str) -> Result<String, String> {
+    let named = args
+        .get(key)
+        .and_then(Value::as_str)
+        .ok_or_else(|| format!("`{key}` is required and is a string: {what}"))?;
+    if named.is_empty() {
+        return Err(format!(
+            "`{key}` is empty, and every part of an edge names something: a node, the \
+             input it declares, and the node bound to it"
+        ));
+    }
+    Ok(named.to_string())
 }
 
 /// `save_set`'s arguments as the operation they name.
@@ -1419,10 +1723,10 @@ fn listing(args: &Value) -> Result<Operation, String> {
 /// wire goes on doing what its operation says, and a tool that named a different
 /// operation would visibly do something else.
 ///
-/// **The last arm cannot happen** — [`asked`] builds six operations and this
-/// matches those six. It is written out rather than left to a wildcard for
+/// **The last arm cannot happen** — [`asked`] builds seven operations and this
+/// matches those seven. It is written out rather than left to a wildcard for
 /// [`absent`]'s reason: the arm that cannot happen is the one that stops saying
-/// so quietly when the shape around it changes, and if a seventh tool ever
+/// so quietly when the shape around it changes, and if an eighth tool ever
 /// arrives without an arm here the client is told which operation nothing
 /// performs rather than being answered by the wrong one.
 fn perform(operation: &Operation, state: &mut State) -> Called {
@@ -1434,6 +1738,19 @@ fn perform(operation: &Operation, state: &mut State) -> Called {
             Called::Answered(write_procedure(*deck, *node, source, state))
         }
         Operation::SwapOutcome => Called::Answered(swap_outcome(state)),
+        // **Refused here for what this server can decide and waited for
+        // elsewhere**, which is `save_set`'s shape and for the same reason: the
+        // wiring a slot rebuilds with is the render loop's, and the names in it
+        // are the Set's.
+        Operation::WireInput {
+            deck,
+            node,
+            slot,
+            to,
+        } => match wire_input(*deck, node, slot, to, state) {
+            Ok((news, note)) => Called::Wiring { news, note },
+            Err(refusal) => Called::Answered(Err(refusal)),
+        },
         // Answered here like a read and unlike `save_set`: a card is a file, the
         // render loop does not hold one, and there is nothing to wait for.
         Operation::ReadSet { id } => Called::Answered(read_set(id, state)),
@@ -1704,6 +2021,78 @@ fn save_set(deck: u8, id: Option<&str>, state: &State) -> Result<mpsc::Receiver<
             }
         })?;
     Ok(rx)
+}
+
+/// **[`Operation::WireInput`], done**: ask the render loop to bind one node's
+/// declared input to another node.
+///
+/// Nothing about the Set is read here and nothing could be — see
+/// [`wired_input`] on why the names are not checked on this side — so what this
+/// does is hand the request over and give the caller back the half it waits on.
+///
+/// **It is `save_set`'s shape and `write_procedure`'s promise.** The request
+/// goes to the loop like a save, because only the loop holds what a slot is
+/// wired with; but what comes back is a write's answer rather than a save's — an
+/// edge lands the way an edited procedure lands, at a frame boundary and under
+/// the same budget, so the tool answers when the edge is *written* and points at
+/// `swap_outcome` for what the build made of it. See [`WIRE_REPLY`].
+///
+/// **No record is written anywhere, and that is a hole rather than a design.**
+/// `karakuri_operation_record::written` answers `Silent(Silent::NoRecord)` for
+/// `WireInput`: `Record::Edge` exists and is a *Set file's*, with no `slot` to
+/// carry the deck this operation names. So a rewiring during a set is the one
+/// thing a model can do here that a replay does not reconstruct — see the module
+/// documentation, which says what would close it.
+fn wire_input(
+    deck: u8,
+    node: &str,
+    input: &str,
+    to: &str,
+    state: &State,
+) -> Result<(mpsc::Receiver<News>, String), String> {
+    let slot = usize::from(deck);
+    let (tx, rx) = mpsc::channel();
+    state
+        .wiring
+        .try_send(WireRequest {
+            slot,
+            edge: karakuri_engine::set::Edge {
+                node: node.to_string(),
+                slot: input.to_string(),
+                to: to.to_string(),
+            },
+            reply: Reply(tx),
+        })
+        // **Answered rather than waited for**, in [`save_set`]'s two shapes and
+        // its words: a queue nobody is emptying and a loop that has ended are
+        // different facts, and neither of them may leave a model holding a call.
+        .map_err(|e| match e {
+            mpsc::TrySendError::Full(_) => format!(
+                "the render loop has {ASKED} edges queued and no room for another: it is \
+                 taking them slower than they are arriving, or it is not running frames at \
+                 all. Nothing was rewired, and asking again is safe"
+            ),
+            mpsc::TrySendError::Disconnected(_) => {
+                "the render loop has ended: this run is shutting down and nothing was \
+                 rewired"
+                    .to_string()
+            }
+        })?;
+    // **What the loop's own sentence will not say.** The loop knows what it did
+    // with the edge; only this side knows how the run was started, and a run
+    // without `--watch` has no watcher to rebuild the slot with the new wiring —
+    // which is the same thing `write_procedure` says about a file nothing will
+    // pick up, about the other half of one edit.
+    let note = if state.watching {
+        String::new()
+    } else {
+        "**This run was started without `--watch`, so no watcher will rebuild the slot** \
+         — what is on screen was built with the wiring this run started with and will go \
+         on being it. The edge is the run's from here on, so a `save_set` of this slot \
+         records it; the picture does not change."
+            .to_string()
+    };
+    Ok((rx, note))
 }
 
 /// **What one saved Set holds, and what each of its procedures declares** —
@@ -2449,6 +2838,61 @@ fn awaited(news: &mpsc::Receiver<News>, wait: std::time::Duration) -> Result<Str
         None => format!(
             "the render loop had not taken this save after {wait:?} — it is running slowly \
              or not at all. Nothing was saved, and asking again is safe."
+        ),
+    })
+}
+
+/// **Wait for one edge to be applied, and say something true when it is not.**
+///
+/// **Not [`awaited`], because a save and an edge are not waiting for the same
+/// kind of thing.** A save's third state is real and unavoidable — the loop took
+/// it, the disk has not answered, and *neither a success nor a failure* is the
+/// only honest report. An edge has no such state by construction: the loop
+/// applies it at the frame it takes it and answers there, and everything slow
+/// about it — the compile, the swap, the thirty judged frames — happens after
+/// the answer and is `swap_outcome`'s to report. So the two sentences a timeout
+/// can produce here are *it was not taken* and *it was taken and then the loop
+/// went quiet*, and the second one is a loop at odds with what
+/// [`WireRequest`] says it owes rather than an ordinary outcome.
+///
+/// **A run whose loop does not drain [`Reporter::wires`] at all ends up in the
+/// first of those**, which is the point: a tool that reported success into a
+/// channel nobody empties would be this surface claiming work that never
+/// happened.
+fn applied(news: &mpsc::Receiver<News>, wait: std::time::Duration) -> Result<String, String> {
+    let deadline = std::time::Instant::now() + wait;
+    let mut accepted: Option<String> = None;
+    while let Some(left) = deadline.checked_duration_since(std::time::Instant::now()) {
+        match news.recv_timeout(left) {
+            Ok(News::Accepted(said)) => accepted = Some(said),
+            Ok(News::Settled(outcome)) => return outcome,
+            Err(mpsc::RecvTimeoutError::Timeout) => break,
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                return Err(match accepted {
+                    Some(said) => format!(
+                        "{said}\n\nThe render loop then ended without saying what it did \
+                         with the edge. Whether the slot was rewired is not something this \
+                         server can still find out — `read_set` on a set saved since would \
+                         say, and nothing else here will."
+                    ),
+                    None => "the render loop ended before it took this edge: nothing was \
+                             rewired"
+                        .to_string(),
+                })
+            }
+        }
+    }
+    Err(match accepted {
+        Some(said) => format!(
+            "{said}\n\n**This is neither a success nor a failure.** The edge was taken and \
+             the loop had not said what it did with it after {wait:?}, which is a frame it \
+             should have answered on. Do not write the same edge again on the assumption \
+             that it was lost — ask `swap_outcome` what the slot has been doing."
+        ),
+        None => format!(
+            "the render loop had not taken this edge after {wait:?} — it is running slowly, \
+             it is not running frames at all, or this run's loop does not take edges. \
+             Nothing was rewired, and asking again is safe."
         ),
     })
 }
@@ -4570,10 +5014,12 @@ proc probe_knobs {
     ///
     /// `compile::check` checks one procedure in isolation; everything between
     /// nodes is `Set::validate`, which is where an unbound slot is refused. So
-    /// a clean write is not a slot that rebuilds — and there is no tool here
-    /// that can write the `edge` that would bind it, which is why the
-    /// description says so rather than leaving a model to find out by wedging
-    /// the slot it was editing.
+    /// a clean write is not a slot that rebuilds, and this is still true after
+    /// `wire_input` exists: the binding is a **second** call, and the window
+    /// between the two is a slot that does not build. What changed is that
+    /// there is now a second call to make — see
+    /// [`a_uses_written_here_can_be_bound_here_and_the_slot_builds`], which
+    /// takes this write the rest of the way.
     #[test]
     fn a_write_that_needs_an_edge_still_returns_cleanly() {
         let dir = tempfile::tempdir().expect("tempdir");
@@ -4634,6 +5080,307 @@ proc probe_knobs {
         // the write up.
         assert!(said.contains("without `--watch`"), "{said}");
     }
+
+    // -- the edge, which is the other half of a `uses` ---------------------
+
+    /// **A stand-in loop that takes the edges as well, and keeps them where a
+    /// test can look at them.**
+    ///
+    /// [`stand_in`] answers saves and nothing else, which is what every test
+    /// before this one needed. What a rewiring *is* belongs to the render loop
+    /// and needs a deck and a watcher; what these tests are about is that the
+    /// edge crosses with both its ends intact and that the edge which crosses is
+    /// one that makes the slot build.
+    fn wiring_loop(
+        reporter: Reporter,
+    ) -> std::sync::Arc<std::sync::Mutex<Vec<(usize, karakuri_engine::set::Edge)>>> {
+        let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let kept = seen.clone();
+        std::thread::spawn(move || loop {
+            for request in reporter.saves() {
+                no_loop(request);
+            }
+            for request in reporter.wires() {
+                let WireRequest { slot, edge, reply } = request;
+                let said = format!(
+                    "slot {slot}: `{}.{}` is bound to `{}`, and the slot is rebuilding",
+                    edge.node, edge.slot, edge.to
+                );
+                kept.lock().expect("seen").push((slot, edge));
+                reply.settled(Ok(said));
+            }
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        });
+        seen
+    }
+
+    /// A slot of a geometry, a deformation, a renderer and a field — the
+    /// smallest chain in which a `uses shape : Field` has something to be bound
+    /// to.
+    #[allow(clippy::type_complexity)]
+    fn wired(
+        watching: bool,
+    ) -> (
+        Server,
+        std::sync::Arc<std::sync::Mutex<Vec<(usize, karakuri_engine::set::Edge)>>>,
+    ) {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let write = |name: &str, source: &str| {
+            let path = dir.path().join(name);
+            std::fs::write(&path, source).expect("fixture");
+            path
+        };
+        let head = write("l1.kir", PROBE_L1);
+        let rest = vec![
+            write("warp.kir", PROBE_L2),
+            write("l4.kir", PROBE_L4),
+            write("blob.kir", PROBE_FIELD),
+        ];
+        let reporter =
+            serve(0, Slots(vec![(head, rest)]), store_root(&dir), watching).expect("serve");
+        let port = reporter.port();
+        let seen = wiring_loop(reporter);
+        (Server { port, dir }, seen)
+    }
+
+    /// One of the fixture's files, checked, exactly as this surface checks a
+    /// written one.
+    fn checked(dir: &std::path::Path, name: &str) -> Checked {
+        let path = dir.join(name);
+        let source =
+            std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+        crate::compile::check(&source)
+            .unwrap_or_else(|e| panic!("{} does not check: {e}", path.display()))
+    }
+
+    /// **Whether the fixture's slot assembles**, with the wiring it is given.
+    ///
+    /// `Set::validate` is `Set::build_many`'s whole check pass and needs no
+    /// device, which is the only reason this can be asserted here at all: it is
+    /// the same rule the render loop's rebuild would meet, run against the files
+    /// that are actually on disk after a write.
+    fn assembles(
+        dir: &std::path::Path,
+        edges: &[karakuri_engine::set::Edge],
+    ) -> Result<(), karakuri_engine::set::SetError> {
+        let l1 = checked(dir, "l1.kir");
+        let warp = checked(dir, "warp.kir");
+        let l4 = checked(dir, "l4.kir");
+        let blob = checked(dir, "blob.kir");
+        karakuri_engine::Set::validate(
+            &[(&l1, 8)],
+            &[&warp],
+            &[],
+            &[&blob],
+            &[&l4],
+            karakuri_engine::set::Layering::Overdraw,
+            7,
+            &[],
+            karakuri_engine::set::Wiring {
+                edges,
+                ..Default::default()
+            },
+        )
+        .map(|_| ())
+    }
+
+    /// **The test that would have caught it**: a `uses` written through this
+    /// server, an edge written through this server, and the slot assembling.
+    ///
+    /// This is the whole trap and the whole fix in one run. `write_procedure`
+    /// accepted a procedure declaring `uses shape : Field` — it compiles, and
+    /// one procedure is all `compile::check` ever sees — and the slot then
+    /// failed to build with `SetError::SlotUnbound`, which nothing on this
+    /// surface could answer. The middle assertion is that failure, asserted
+    /// rather than described, so that this test is about a trap that was real;
+    /// the last is that the edge **this server sent to the loop** is the one
+    /// that closes it.
+    #[test]
+    fn a_uses_written_here_can_be_bound_here_and_the_slot_builds() {
+        let (server, seen) = wired(true);
+        let dir = server.dir.path().to_path_buf();
+
+        // Before anything: the fixture assembles, so a refusal below is about
+        // what the test did and not about the fixture.
+        assembles(&dir, &[]).expect("the fixture's own slot assembles");
+
+        let (failed, said) = call(
+            server.port,
+            "write_procedure",
+            json!({"slot":0,"layer":"L2","source":PROBE_L2_USES}),
+        );
+        assert!(!failed, "{said}");
+
+        // **The trap, on the frame it goes wrong.** The file on disk is the one
+        // the model wrote, it checks, and the slot it is in does not assemble.
+        let refused = assembles(&dir, &[]).expect_err(
+            "a `uses` nothing binds assembled — this test's middle is gone and the two \
+             halves either side of it are about nothing",
+        );
+        assert!(
+            matches!(refused, karakuri_engine::set::SetError::SlotUnbound { .. }),
+            "the slot failed to assemble for something other than the unbound `uses` this \
+             test is about: {refused}"
+        );
+
+        // **The way out, over the wire.** Both ends by name: the node is what
+        // the procedure calls itself, because nothing named it.
+        let (failed, said) = call(
+            server.port,
+            "wire_input",
+            json!({"slot":0,"node":"probe_warp_uses","input":"shape","to":"probe_blob"}),
+        );
+        assert!(!failed, "{said}");
+
+        let edges: Vec<karakuri_engine::set::Edge> = seen
+            .lock()
+            .expect("seen")
+            .iter()
+            .map(|(_, edge)| edge.clone())
+            .collect();
+        assert_eq!(
+            edges.len(),
+            1,
+            "one call, one edge on the loop's channel — {edges:?}"
+        );
+        assembles(&dir, &edges).expect(
+            "the edge this server sent the render loop does not bind the `uses` this \
+             server wrote: a model can still put a slot in a state only the command line \
+             gets it out of",
+        );
+    }
+
+    /// **Both ends reach the loop as the names that were typed**, and the input
+    /// is not one of them.
+    ///
+    /// Three strings on one request is three chances to hand the loop the wrong
+    /// one, and every mistake of that kind reads as a working call: the edge is
+    /// written, the slot refuses to build, and the refusal is about a node
+    /// nobody named. Every one of these three names is a different word, on
+    /// purpose.
+    #[test]
+    fn an_edge_reaches_the_loop_with_the_deck_and_both_ends_as_they_were_typed() {
+        let (server, seen) = wired(true);
+        let (failed, said) = call(
+            server.port,
+            "wire_input",
+            json!({"slot":0,"node":"declaring_node","input":"the_input","to":"far_end"}),
+        );
+        assert!(!failed, "{said}");
+        let seen = seen.lock().expect("seen");
+        let (slot, edge) = seen.first().expect("the loop was sent an edge");
+        assert_eq!(*slot, 0, "the deck slot the call named");
+        assert_eq!(edge.node, "declaring_node", "the node that declares it");
+        assert_eq!(
+            edge.slot, "the_input",
+            "`input` on the wire is the edge's `slot`, which is what the procedure calls \
+             its declared input — the deck's slot is the request's own field"
+        );
+        assert_eq!(edge.to, "far_end", "the node it is bound to");
+        // The loop's own words come back to the client unchanged, which is what
+        // makes a refusal from the Set legible to a model.
+        assert!(
+            said.contains("declaring_node") && said.contains("far_end"),
+            "what the loop said did not reach the client: {said}"
+        );
+    }
+
+    /// **Every part of an edge names something**, which is `parse_edge`'s rule
+    /// on the command line and the same sentence here.
+    ///
+    /// An absent part and an empty one are the two shapes, and neither may reach
+    /// the render loop: an edge with a hole in it is a statement about a node,
+    /// and there is no such statement.
+    #[test]
+    fn every_part_of_an_edge_names_something() {
+        let (server, seen) = wired(true);
+        for (missing, args) in [
+            ("node", json!({"slot":0,"input":"shape","to":"probe_blob"})),
+            (
+                "input",
+                json!({"slot":0,"node":"probe_warp","to":"probe_blob"}),
+            ),
+            ("to", json!({"slot":0,"node":"probe_warp","input":"shape"})),
+            (
+                "node",
+                json!({"slot":0,"node":"","input":"shape","to":"probe_blob"}),
+            ),
+            (
+                "input",
+                json!({"slot":0,"node":"probe_warp","input":"","to":"probe_blob"}),
+            ),
+            (
+                "to",
+                json!({"slot":0,"node":"probe_warp","input":"shape","to":""}),
+            ),
+        ] {
+            let (failed, said) = call(server.port, "wire_input", args.clone());
+            assert!(failed, "`{args}` was accepted as an edge: {said}");
+            assert!(
+                said.contains(missing),
+                "an edge missing `{missing}` was refused without naming it: {said}"
+            );
+        }
+        // A slot number is still a slot number, and the deck is checked after
+        // the four arguments have been read.
+        let (failed, said) = call(
+            server.port,
+            "wire_input",
+            json!({"slot":9,"node":"probe_warp","input":"shape","to":"probe_blob"}),
+        );
+        assert!(failed, "slot 9 was accepted: {said}");
+        assert!(
+            said.contains("this deck holds"),
+            "a slot this deck does not hold was refused in some other surface's words: \
+             {said}"
+        );
+        assert!(
+            seen.lock().expect("seen").is_empty(),
+            "a refused edge reached the render loop"
+        );
+    }
+
+    /// **A run without `--watch` has no watcher, and the answer says so** — the
+    /// same fact `write_procedure` states about the other half of one edit.
+    ///
+    /// The edge is still sent: it is the run's wiring from then on, and a
+    /// `save_set` of that slot records it. What does not happen is the rebuild,
+    /// and a model told "the slot is rebuilding" by a run that has nothing to
+    /// rebuild it with would go looking for a change on screen that is never
+    /// coming.
+    #[test]
+    fn an_edge_written_without_watch_says_no_watcher_will_rebuild_the_slot() {
+        let (server, seen) = wired(false);
+        let (failed, said) = call(
+            server.port,
+            "wire_input",
+            json!({"slot":0,"node":"probe_warp","input":"shape","to":"probe_blob"}),
+        );
+        assert!(!failed, "{said}");
+        assert!(
+            said.contains("without `--watch`"),
+            "a run with no watcher did not say so: {said}"
+        );
+        assert_eq!(
+            seen.lock().expect("seen").len(),
+            1,
+            "the edge was not sent at all, so a save of this slot would not record it"
+        );
+
+        // And with a watcher, the caveat is absent rather than always printed —
+        // a warning that fires on healthy material teaches a reader to skip it.
+        let (server, _seen) = wired(true);
+        let (failed, said) = call(
+            server.port,
+            "wire_input",
+            json!({"slot":0,"node":"probe_warp","input":"shape","to":"probe_blob"}),
+        );
+        assert!(!failed, "{said}");
+        assert!(
+            !said.contains("without `--watch`"),
+            "a run that does rebuild was told it does not: {said}"
+        );
+    }
 }
 
 #[cfg(test)]
@@ -4656,6 +5403,7 @@ mod tests {
             watching: true,
             events,
             asked: mpsc::sync_channel(ASKED).0,
+            wiring: mpsc::sync_channel(ASKED).0,
             recent: Vec::new(),
             dropped: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
         }
@@ -5305,6 +6053,7 @@ mod tests {
         match name {
             "read_procedure" => json!({ "slot": 0, "layer": "L4" }),
             "write_procedure" => json!({ "slot": 0, "layer": "L4", "source": "" }),
+            "wire_input" => json!({ "slot": 0, "node": "warp", "input": "shape", "to": "blob" }),
             "swap_outcome" => json!({}),
             "save_set" => json!({ "slot": 0 }),
             "read_set" => json!({ "id": "a_set" }),
@@ -5365,7 +6114,7 @@ mod tests {
         );
         let published = published();
         assert!(
-            published.len() >= 6,
+            published.len() >= 7,
             "only {} tools published — this server has fewer than the page's MCP column \
              claims",
             published.len()
@@ -5439,9 +6188,17 @@ mod tests {
         }
     }
 
-    /// **Not one of the six writes a record where it is asked**, which is why
+    /// **Not one of the seven writes a record where it is asked**, which is why
     /// none of them routes through `Live::operate` and why this module performs
     /// its own.
+    ///
+    /// **And one of them writes no record at all, which is a hole this test
+    /// pins rather than blesses.** `wire_input` answers `NoRecord` because
+    /// `Record::Edge` is a Set file's record with no `slot` to carry the deck
+    /// `WireInput` names — so a rewiring during a set is the one thing a model
+    /// can do on this surface that a replay does not reconstruct. It is asserted
+    /// here so that the day `Record::Edge` grows a `slot` and `written` answers
+    /// with it, this fails and names the tool whose answer has changed.
     ///
     /// Asserted against `karakuri-operation-record` rather than against this
     /// file, in the shape ADR-0198 gave the key handler's owed list: the day one
@@ -5461,6 +6218,9 @@ mod tests {
                 // the frame the save landed, `Record::Procedure` when a swap
                 // lands or is rolled back.
                 "save_set" | "write_procedure" => Silent::OnLanding,
+                // **Nothing carries it**, which is the hole named above and not
+                // a question this tool asks or work it lands.
+                "wire_input" => Silent::NoRecord,
                 other => {
                     panic!("`{other}` is published and this test does not know what it writes")
                 }
@@ -5514,7 +6274,17 @@ mod tests {
         );
         assert!(
             described.contains("`uses`") && described.contains("`edge`"),
-            "a `uses` this surface cannot bind is not mentioned: {described}"
+            "a `uses` and the edge it needs are not mentioned: {described}"
+        );
+        // **And it names the tool that binds it.** The description used to say
+        // there was no such tool and to offer *rewrite the procedure without
+        // it* as the only way out — a warning sign on a trap. There is a tool
+        // now, and a model reading this one is reading the sentence that has to
+        // point at it.
+        assert!(
+            described.contains("wire_input"),
+            "the tool that writes the `edge` a `uses` needs is not named where a model \
+             writing a `uses` will read it: {described}"
         );
     }
 
@@ -5599,5 +6369,163 @@ mod tests {
                  mention them: {described}"
             );
         }
+    }
+
+    // -- the edge ----------------------------------------------------------
+
+    /// **An edge is named at both ends and never addressed by a position.**
+    ///
+    /// This is the one tool whose arguments are not `{slot, layer, index}`, and
+    /// the asymmetry is deliberate: `Record::Edge`'s reason is that *a position
+    /// moves when the list is reordered, and reordering silently changing which
+    /// geometry a morph blends towards is the exact failure this record exists
+    /// to end*, and `NodeAt`'s own documentation says the two spellings are not
+    /// interchangeable. A tool given a `layer` and an `index` here because its
+    /// neighbours have them would be that failure with a schema in front of it,
+    /// and it is the kind of tidying that looks like consistency — so it is
+    /// asserted against rather than left to a comment.
+    #[test]
+    fn an_edge_is_named_at_both_ends_and_never_addressed_by_a_position() {
+        let properties = tools()
+            .as_array()
+            .expect("tools() is an array")
+            .iter()
+            .find(|tool| tool["name"] == json!("wire_input"))
+            .expect("`wire_input` is published")["inputSchema"]["properties"]
+            .clone();
+        for named in ["node", "to"] {
+            assert_eq!(
+                properties[named]["type"],
+                json!("string"),
+                "`{named}` is one end of an edge and an end of an edge is a name"
+            );
+        }
+        for positional in ["layer", "index"] {
+            assert!(
+                properties.get(positional).is_none(),
+                "`wire_input` takes `{positional}` — an edge spelled as a position is the \
+                 one thing `Record::Edge` exists to prevent"
+            );
+        }
+        // **And the deck's slot is still the deck's.** `Operation::WireInput`
+        // calls the declared input `slot` too, so the wire's `input` and the
+        // wire's `slot` must land on different fields — the mistake that reads
+        // as a working call and fails at the Set.
+        let asked = asked(
+            "wire_input",
+            &json!({"slot":0,"node":"morph","input":"far","to":"sphere_shell"}),
+            &slots(),
+        )
+        .expect("a published tool");
+        let Asked::Named(Operation::WireInput {
+            deck,
+            node,
+            slot,
+            to,
+        }) = asked
+        else {
+            panic!("`wire_input` no longer names `WireInput`");
+        };
+        assert_eq!(deck, 0, "`slot` on the wire is the deck slot");
+        assert_eq!(node, "morph");
+        assert_eq!(slot, "far", "`input` on the wire is the operation's `slot`");
+        assert_eq!(to, "sphere_shell");
+    }
+
+    /// **`wire_input` says what it replaces and what it cannot take back.**
+    ///
+    /// Two facts a model cannot find out by calling it, and each is a way to
+    /// wedge a slot. A second edge on a bound input would be
+    /// `SetError::SlotBoundTwice` if it were appended rather than replaced, so
+    /// *changing your mind is one call* has to be said or a model will not try;
+    /// and an edge outlives the `uses` that needed it, so a procedure rewritten
+    /// without that `uses` leaves an edge naming a slot nothing declares — a
+    /// state this surface still cannot get out of, and the reason the missing
+    /// half is named in the description rather than discovered.
+    #[test]
+    fn wire_input_says_what_it_replaces_and_what_it_cannot_take_back() {
+        let described = description("wire_input");
+        assert!(
+            described.contains("replaced"),
+            "an edge already binding this input is replaced, and a model reading this \
+             would not know it: {described}"
+        );
+        assert!(
+            described.contains("unbinds"),
+            "nothing here takes an edge back, and the description does not say so — which \
+             is the trap this tool otherwise leaves behind it: {described}"
+        );
+        assert!(
+            described.contains("swap_outcome"),
+            "the names are refused where the Set is built and nothing points at where \
+             that refusal will show up: {described}"
+        );
+        assert!(
+            described.contains("names, not") || described.contains("names and not"),
+            "an edge is named at both ends and the description does not say why it is not \
+             an address: {described}"
+        );
+    }
+
+    /// **An edge the render loop does not take ends, and says something true.**
+    ///
+    /// [`awaited`]'s three cases, for the wait that is not a save's — see
+    /// [`applied`]. The first of them is the one that matters most here and is
+    /// not hypothetical: a run whose loop never drains [`Reporter::wires`]
+    /// reaches it on every call, and *nothing was rewired* is what such a run
+    /// has to answer rather than a claim about a rebuild nobody started.
+    #[test]
+    fn an_edge_the_loop_does_not_take_ends_and_says_something_true() {
+        // Never taken. Nothing was rewired and saying so is safe.
+        let (held, news) = mpsc::channel::<News>();
+        let started = std::time::Instant::now();
+        let said = applied(&news, std::time::Duration::from_millis(60))
+            .expect_err("an edge nobody took came back as a success");
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(1),
+            "the wait ran past its bound"
+        );
+        assert!(said.contains("Nothing was rewired"), "{said}");
+        drop(held);
+
+        // Taken, then silence. Neither a success nor a failure, and it does not
+        // tell a model to write the edge again.
+        let (tx, news) = mpsc::channel();
+        tx.send(News::Accepted("slot 0: taking an edge".to_string()))
+            .expect("accepted");
+        let said = applied(&news, std::time::Duration::from_millis(60))
+            .expect_err("an edge with no outcome came back as a success");
+        assert!(said.contains("slot 0: taking an edge"), "{said}");
+        assert!(
+            said.contains("neither a success nor a failure"),
+            "an edge with no outcome was reported as one or the other: {said}"
+        );
+
+        // The loop ended without answering: told at once rather than at the
+        // deadline, which the long wait here is what proves.
+        let (tx, news) = mpsc::channel::<News>();
+        drop(tx);
+        let started = std::time::Instant::now();
+        let said = applied(&news, std::time::Duration::from_secs(60))
+            .expect_err("a loop that ended came back as a success");
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(1),
+            "a client waited out the deadline on a loop that was already gone"
+        );
+        assert!(
+            said.contains("nothing was rewired"),
+            "a loop that ended before taking the edge said something else: {said}"
+        );
+
+        // And the loop's own answer is what a client gets when there is one.
+        let (tx, news) = mpsc::channel();
+        Reply(tx).settled(Ok(
+            "slot 0: `morph.far` is bound to `sphere_shell`".to_string()
+        ));
+        assert_eq!(
+            applied(&news, std::time::Duration::from_secs(60)),
+            Ok("slot 0: `morph.far` is bound to `sphere_shell`".to_string()),
+            "what the loop said did not come back unchanged"
+        );
     }
 }

@@ -3502,7 +3502,10 @@ fn main() {
             // Fixed, never watching: an offscreen run is a function of its
             // inputs, and a save landing halfway through a sequence would make
             // it a function of the operator's editor as well.
-            let mut deck = build_deck(&gpu, &procs, &args, false, false, w, h, None, None);
+            // **Nothing to re-aim, and nothing that could ask.** This path
+            // watches nothing and serves no MCP, so every entry would be
+            // `None` and no `wire_input` can reach it.
+            let (mut deck, _) = build_deck(&gpu, &procs, &args, false, false, w, h, None, None);
             eprintln!(
                 "rendering the mix of {} Set{}, {w}x{h}, {} frames, \
                  {} at exposure {:.2} -> {}",
@@ -3655,6 +3658,252 @@ fn recorded_live(args: &Args, slot: usize) -> Option<u32> {
     }
 }
 
+/// **One slot's watcher, and the aim it is pointed at.**
+///
+/// **The run holds this so that a rewiring can reach the build worker.** The
+/// wiring a slot rebuilds with is not on disk anywhere — `Args::edges` at
+/// launch, `watch::Watch::edges` on every rebuild, [`Live::edges`] at a save —
+/// so an edge written during a show has to be *handed* to the watcher, and
+/// `watch::Watch::aimed_by` is the one way in. It is deliberately not an
+/// install: `Deck::install` would put a Set on air that nothing measured, and
+/// an aim instead says *look at this instead* and lets go, after which
+/// everything is the path an edit already takes — compiled on the worker,
+/// swapped at a frame boundary, judged against the budget and rolled back on
+/// its own if it costs too much. That is [`mcp::WireRequest`]'s second point,
+/// and reaching it this way is why there is no second route into a slot.
+///
+/// **The aim is kept and not only the sender**, because an `Aim` is every field
+/// of the slot's identity and *anything left out comes back as the outgoing
+/// slot's* — a fold silently un-selected, a camera back at `Orbit::default()`,
+/// salts that repaint every element. A rewiring changes one field of thirteen,
+/// so the other twelve have to be restated from somewhere, and this is that
+/// somewhere: what the watcher was started at, moved forward by every aim sent
+/// since.
+struct Aiming {
+    /// The other end of `watch::Watch::aimed_by`'s channel, for this slot's
+    /// watcher and no other. A watcher re-pointed through somebody else's
+    /// sender would rebuild a deck nobody named.
+    aim: std::sync::mpsc::Sender<watch::Aim>,
+    /// **Where that watcher is pointed**, kept in step with what has been sent:
+    /// the values it was constructed with until the first aim, and the last aim
+    /// after that. A copy that stopped being updated would restate a stale
+    /// wiring on the *second* rewiring of a run, which is the hardest version
+    /// of this mistake to see.
+    at: watch::Aim,
+}
+
+impl Aiming {
+    /// **Point the watcher at the same material with `edges` instead**, and
+    /// answer whether it is still there to be pointed.
+    ///
+    /// `Err` is a build worker that has ended — the receiver is gone — which is
+    /// a run shutting down. It is reported rather than swallowed: the edge is
+    /// in the run's wiring either way, and *nothing will rebuild* is a
+    /// different fact from *the slot is recompiling*.
+    fn re_aim(&mut self, edges: Vec<karakuri_engine::set::Edge>) -> Result<(), ()> {
+        self.at.edges = edges;
+        self.aim.send(restated(&self.at)).map_err(|_| ())
+    }
+}
+
+/// One aim, said again — because `watch::Aim` is not `Clone` and a re-point
+/// restates every field of it.
+///
+/// **No `..` on either side of this**, which is `Watch::repointed`'s own rule
+/// met from the sending end: it destructures with no `..` so that a field
+/// added to `Aim` cannot be left behind, and a *sender* that filled the new
+/// field with a default would defeat that from here. The compiler names all
+/// thirteen, so the day a fourteenth arrives this stops compiling rather than
+/// quietly re-aiming a slot at it.
+fn restated(aim: &watch::Aim) -> watch::Aim {
+    let watch::Aim {
+        head,
+        rest,
+        layering,
+        live,
+        capacity,
+        seed_salt,
+        salts,
+        camera,
+        overrides,
+        published,
+        bindings,
+        edges,
+        authorities,
+    } = aim;
+    watch::Aim {
+        head: head.clone(),
+        rest: rest.clone(),
+        layering: *layering,
+        live: *live,
+        capacity: *capacity,
+        seed_salt: *seed_salt,
+        salts: salts.clone(),
+        camera: *camera,
+        overrides: overrides.clone(),
+        published: published.clone(),
+        bindings: bindings.clone(),
+        edges: edges.clone(),
+        authorities: authorities.clone(),
+    }
+}
+
+/// **Every edge a client asked for on one frame, applied to the run's wiring
+/// and answered.**
+///
+/// This is [`mcp::WireRequest`]'s three points, and it is a free function so
+/// that all three are checkable without a window, a GPU or a `Deck` — the
+/// wiring, the re-aim and the sentence are the whole of what this decides, and
+/// none of them needs one.
+///
+/// # Replace, keyed on the input
+///
+/// An edge is dropped and the new one appended, keyed on `(node, slot)` — the
+/// node that declares the input and what its procedure calls it — which is
+/// `--edge`'s own spelling beside `--load-set` a few hundred lines up, down to
+/// the `retain` and the order it leaves behind. It is forced rather than
+/// chosen: `SetError::SlotBoundTwice` refuses two edges on one input where the
+/// Set is built, so an append would make the *second* call on an input a
+/// refusal and leave a model unable to change its mind.
+///
+/// **The key does not include the deck slot, because the run's wiring does
+/// not.** `Live::edges` is one list for the whole run and an edge naming a node
+/// a Set has not got is passed over where the Set is built — see
+/// `karakuri_engine::set::Wiring::edges`. So a request names a deck slot to say
+/// *which slot rebuilds*, and two slots holding a node of the same name share
+/// one entry in this list, exactly as they do when `--edge` is typed on the
+/// command line.
+///
+/// # A slot this deck does not hold
+///
+/// **Refused, in [`no_such_slot`]'s words, and nothing is rewired** — the
+/// decision [`Live::save_set`] already makes for a save and for its reason: a
+/// key press cannot name a slot the deck has not got and a tool call can, and
+/// this is the guard that does not depend on the surface that asked having one.
+/// The MCP server checks the number against `mcp::Slots` before it sends, so a
+/// model meets its refusal there; the deck's own count is a thing only the run
+/// knows, and this is where it is known.
+///
+/// **Residency is deliberately not consulted.** An off-air slot is wired and
+/// rebuilt like any other: a slot is prepared while it is dark and put on air
+/// afterwards, so refusing an edge on an allocated slot would forbid the one
+/// order an operator actually works in. What a rebuild of a dark slot costs is
+/// the same as any other rebuild and is judged the same way.
+///
+/// # The same input wired twice on one frame
+///
+/// **Every request is applied, in the order it arrived, and the last one is
+/// what the run is wired with** — a rewiring is a model changing its mind, and
+/// the frame a change of mind lands on is not something a client controls. One
+/// aim per slot goes out after all of them are in the list, so the rebuild
+/// carries the settled wiring rather than an intermediate one, and
+/// `Watch::repointed` takes only the newest aim anyway.
+///
+/// **A request the same frame overwrote is told so**, which is the only part of
+/// this that costs anything: its edge *was* written and then replaced, and a
+/// reply saying only "wired" would be a true sentence about a state the run no
+/// longer holds by the end of the frame it was sent on.
+///
+/// # What each answer is
+///
+/// `Err` is the refusal above and nothing else. A slot with no watcher is not a
+/// failure — the edge is in the run's wiring, a `save_set` records it, and the
+/// only thing missing is the rebuild, which the sentence says. That matches the
+/// note `mcp::wire_input` already adds for a run started without `--watch`.
+fn rewired(
+    asked: &[(usize, karakuri_engine::set::Edge)],
+    edges: &mut Vec<karakuri_engine::set::Edge>,
+    aims: &mut [Option<Aiming>],
+    slot_count: usize,
+) -> Vec<Result<String, String>> {
+    // **Every edge into the list before any watcher is re-aimed**, so that a
+    // frame carrying two of them rebuilds once, at the wiring the frame ended
+    // with.
+    let mut said: Vec<Option<Result<String, String>>> = asked.iter().map(|_| None).collect();
+    let mut named: Vec<usize> = Vec::new();
+    for (at, (slot, edge)) in asked.iter().enumerate() {
+        if !slot_in_range(*slot, slot_count) {
+            said[at] = Some(Err(format!(
+                "{}, and nothing was rewired",
+                no_such_slot(*slot, slot_count)
+            )));
+            continue;
+        }
+        edges.retain(|held| !(held.node == edge.node && held.slot == edge.slot));
+        edges.push(edge.clone());
+        if !named.contains(slot) {
+            named.push(*slot);
+        }
+    }
+    // `None` for a slot with no watcher at all, `Some(false)` for one whose
+    // build worker has ended: two different things to say, and neither of them
+    // is "the slot is recompiling".
+    let rebuilding: Vec<(usize, Option<bool>)> = named
+        .into_iter()
+        .map(|slot| {
+            let state = aims
+                .get_mut(slot)
+                .and_then(Option::as_mut)
+                .map(|aiming| aiming.re_aim(edges.clone()).is_ok());
+            (slot, state)
+        })
+        .collect();
+    for (at, (slot, edge)) in asked.iter().enumerate() {
+        if said[at].is_some() {
+            continue;
+        }
+        let mut line = format!(
+            "slot {slot}: wired `{}.{}={}`",
+            edge.node, edge.slot, edge.to
+        );
+        // Keyed on the input alone, like the replacement above: whichever deck
+        // slot a later request named, it took this entry in the run's wiring.
+        //
+        // **Only ones that were applied**, which is the whole reason this is a
+        // second pass rather than a lookahead in the first: a later request
+        // refused for its slot number wrote nothing, and telling this one it
+        // had been replaced by an edge that never landed would be the same lie
+        // in the other direction.
+        let over = asked[at + 1..].iter().find(|(later_slot, later)| {
+            slot_in_range(*later_slot, slot_count)
+                && later.node == edge.node
+                && later.slot == edge.slot
+        });
+        if let Some((_, later)) = over {
+            let _ = write!(
+                line,
+                ", and a later request on this frame replaced it with `{}` — the run is \
+                 wired with that one and it is what the rebuild carries",
+                later.to
+            );
+        }
+        let state = rebuilding
+            .iter()
+            .find(|(named, _)| named == slot)
+            .and_then(|(_, state)| *state);
+        let tail = match state {
+            Some(true) => {
+                " — the slot is recompiling with it, and `swap_outcome` says what the build \
+                 made of it"
+            }
+            Some(false) => {
+                " — this slot's build worker has ended, so nothing will rebuild: the edge is \
+                 the run's from here on and a `save_set` of this slot records it"
+            }
+            None => {
+                " — this slot has no watcher, so nothing rebuilds: what is on air was built \
+                 with the wiring the run started with, and a `save_set` of this slot records \
+                 the edge"
+            }
+        };
+        line.push_str(tail);
+        said[at] = Some(Ok(line));
+    }
+    // Every entry was filled by one of the two loops above: the first answers
+    // the refusals and the second answers everything it skipped.
+    said.into_iter().map(Option::unwrap).collect()
+}
+
 /// `meters` is false for the offscreen paths: a `--render` has nobody to show
 /// a level to, and a meter that nothing reads is a compute pass and a staging
 /// ring per frame for no reason. That is the whole point of it being opt-in.
@@ -3678,7 +3927,12 @@ fn build_deck(
     // holding what the run started with. `None` for a run that cannot be
     // edited — see `history`.
     snapshots: Option<history::Shared>,
-) -> Deck {
+    // **The deck, and where each of its slots can be re-pointed** — one entry
+    // per slot, `None` for every slot with no watcher behind it. The senders
+    // are made where the watchers are, because a sender paired with the wrong
+    // slot's watcher would rebuild a deck the caller did not name; see
+    // [`Aiming`].
+) -> (Deck, Vec<Option<Aiming>>) {
     // One flag per binding, shared across every slot: a binding names a layer
     // and a param, and a deck of four slots is four chances for it to land.
     let mut attached = vec![false; args.bindings.len()];
@@ -3698,7 +3952,7 @@ fn build_deck(
             )
         })
         .collect();
-    let swaps: Vec<_> = procs
+    let built: Vec<(HotSwap, Option<Aiming>)> = procs
         .iter()
         .enumerate()
         .map(|(slot, material)| {
@@ -3751,58 +4005,98 @@ fn build_deck(
                 live,
             );
             if watch {
+                // **What this slot's watcher is pointed at, stated once.** It
+                // used to be thirteen arguments to `Watch::new` and it is now
+                // an `Aim` those arguments are read out of, because a re-point
+                // has to restate every one of them — see [`Aiming`] and
+                // `watch::Aim`, whose own documentation is that *anything left
+                // out comes back as the outgoing slot's*. Building the aim here
+                // and starting the watcher from it is what makes "where this
+                // watcher is pointed" one value rather than two lists that
+                // agree today.
+                let at = watch::Aim {
+                    // **With the names, not only the paths.** A rebuild
+                    // resolves its edges against them, and a watcher that
+                    // handed the sort bare paths would rename every node
+                    // on the first save.
+                    head: args.sets[slot].0.clone(),
+                    rest: args.sets[slot].1.clone(),
+                    // **The same reading the Set was built with**, and
+                    // the whole reason it is read once above: a rebuild
+                    // restates the layering rather than re-deriving it, so
+                    // a slot that loaded a composited Set file is still
+                    // compositing after the first save of a `.kir` in it.
+                    // A rebuild that let this be worked out again from
+                    // `--merge` alone would quietly discard what was
+                    // loaded — which is `Watch::camera`'s failure, in the
+                    // one place the picture does not even come back.
+                    layering,
+                    // **And the selection with it**, for the same reason
+                    // and in the same breath: a fold restated to every
+                    // input live is a rebuild silently un-selecting what
+                    // the file selected. See `Watch::live`.
+                    live,
+                    capacity: args.capacity_given.then_some(args.capacity),
+                    seed_salt: salts[slot]
+                        .first()
+                        .copied()
+                        .unwrap_or_else(|| seed_for(slot)),
+                    // **Restated on every rebuild rather than derived
+                    // there.** A slot filled from a Set file is running at
+                    // the salts that file recorded, and a rebuild that
+                    // derived its own would change every colour in it on the
+                    // next save of a `.kir`.
+                    salts: salts[slot].clone(),
+                    // **The same reading the Set was built with**, and
+                    // stated as an `Orbit` rather than as the `Option` it
+                    // was read as: a slot that loaded no `camera` record is
+                    // running at `Orbit::default()`, because that is what
+                    // `Set::build_many` builds and what leaving it
+                    // unassigned above therefore means. See `Watch::camera`
+                    // for why the option buys nothing past this line.
+                    camera: camera.unwrap_or_default(),
+                    overrides: args.overrides.clone(),
+                    published: args.published.clone(),
+                    bindings: args.bindings.clone(),
+                    // **The run's wiring, which is one list and not one per
+                    // slot** — see `Live::edges`. `wire_input` replaces an
+                    // entry in it and re-aims this watcher with the result.
+                    edges: args.edges.clone(),
+                    authorities: Vec::new(),
+                };
+                // **Opened for every watched slot rather than only under
+                // `--mcp`**, because the sender is what pairs a slot with its
+                // own watcher and pairing it later would mean holding the
+                // thirteen values above somewhere else to do it. A run nobody
+                // rewires never sends on it and it costs a `Sender`.
+                let (aim, aimed) = std::sync::mpsc::channel();
                 // One worker and one watcher per slot, over that slot's own
                 // two files. That is what makes "the slot whose files changed"
                 // the thing that rebuilds: no slot can see another's edit.
-                HotSwap::new(&gpu.device, &gpu.queue, set, args.budget_ms, {
+                let swap = HotSwap::new(&gpu.device, &gpu.queue, set, args.budget_ms, {
                     let watcher = watch::Watch::new(
                         slot,
-                        // **With the names, not only the paths.** A rebuild
-                        // resolves its edges against them, and a watcher that
-                        // handed the sort bare paths would rename every node
-                        // on the first save.
-                        args.sets[slot].0.clone(),
-                        args.sets[slot].1.clone(),
-                        // **The same reading the Set was built with**, and
-                        // the whole reason it is read once above: a rebuild
-                        // restates the layering rather than re-deriving it, so
-                        // a slot that loaded a composited Set file is still
-                        // compositing after the first save of a `.kir` in it.
-                        // A rebuild that let this be worked out again from
-                        // `--merge` alone would quietly discard what was
-                        // loaded — which is `Watch::camera`'s failure, in the
-                        // one place the picture does not even come back.
-                        layering,
-                        // **And the selection with it**, for the same reason
-                        // and in the same breath: a fold restated to every
-                        // input live is a rebuild silently un-selecting what
-                        // the file selected. See `Watch::live`.
-                        live,
-                        args.capacity_given.then_some(args.capacity),
-                        salts[slot]
-                            .first()
-                            .copied()
-                            .unwrap_or_else(|| seed_for(slot)),
-                        // **Restated on every rebuild rather than derived
-                        // there.** A slot filled from a Set file is running at
-                        // the salts that file recorded, and a rebuild that
-                        // derived its own would change every colour in it on the
-                        // next save of a `.kir`.
-                        salts[slot].clone(),
-                        // **The same reading the Set was built with**, and
-                        // stated as an `Orbit` rather than as the `Option` it
-                        // was read as: a slot that loaded no `camera` record is
-                        // running at `Orbit::default()`, because that is what
-                        // `Set::build_many` builds and what leaving it
-                        // unassigned above therefore means. See `Watch::camera`
-                        // for why the option buys nothing past this line.
-                        camera.unwrap_or_default(),
-                        args.overrides.clone(),
-                        args.published.clone(),
-                        args.bindings.clone(),
-                        args.edges.clone(),
-                        Vec::new(),
-                    );
+                        at.head.clone(),
+                        at.rest.clone(),
+                        at.layering,
+                        at.live,
+                        at.capacity,
+                        at.seed_salt,
+                        at.salts.clone(),
+                        at.camera,
+                        at.overrides.clone(),
+                        at.published.clone(),
+                        at.bindings.clone(),
+                        at.edges.clone(),
+                        at.authorities.clone(),
+                    )
+                    // **Where a re-point arrives.** Every slot this program
+                    // watches can be re-aimed from the render thread, which is
+                    // how an edge written over MCP reaches the build worker:
+                    // `Watch::aimed_by`'s own documentation says a load *"lets
+                    // go"* and everything after it is the path an edit already
+                    // takes, which is exactly what `WireRequest` asks for.
+                    .aimed_by(aimed);
                     // The history is kept whether or not a session is
                     // being recorded: the two answer different questions —
                     // see `Watch::snapshots`. One `Shared` across every
@@ -3820,12 +4114,18 @@ fn build_deck(
                         Some((store, tx)) => watcher.storing_to(store.clone(), tx.clone()),
                         None => watcher,
                     })
-                })
+                });
+                (swap, Some(Aiming { aim, at }))
             } else {
-                HotSwap::fixed(set)
+                // **No watcher and therefore nothing to re-aim.** An edge
+                // written into a run like this one is still the run's — a save
+                // records it — and nothing rebuilds, which is what
+                // [`rewired`] says in that slot's sentence.
+                (HotSwap::fixed(set), None)
             }
         })
         .collect();
+    let (swaps, aims): (Vec<HotSwap>, Vec<Option<Aiming>>) = built.into_iter().unzip();
     let mut deck = Deck::new(&gpu.device, swaps, width, height);
     // The session's one local oscillator, before the first frame. `SEED` is
     // the seed every noise stream comes off — the same explicit seed the Sets
@@ -3845,7 +4145,7 @@ fn build_deck(
     for (binding, _) in args.bindings.iter().zip(&attached).filter(|(_, on)| **on) {
         eprintln!("  {}", describe(binding, deck.signals()));
     }
-    deck
+    (deck, aims)
 }
 
 /// One binding, in a line, ending with what it will do rather than only what
@@ -4479,11 +4779,35 @@ struct Live {
     /// Read from the arguments rather than from the live Set, which is the one
     /// place `Live::save_set` does that and needs its reason. An edge is
     /// consumed where a Set is *built* and is not kept on it, so there is
-    /// nothing to read back; and unlike a param or a salt it cannot move during
-    /// a run — no key and no MCP tool rewires a `uses` slot, and every rebuild
-    /// restates this same list. So this is a copy of a value, not a second copy
+    /// nothing to read back. So this is a copy of a value, not a second copy
     /// of a rule, which is the distinction `saving_capacities` was fixed over.
+    ///
+    /// **It moves during a run, and this is where it moves.** That sentence
+    /// used to read *no key and no MCP tool rewires a `uses` slot*; `wire_input`
+    /// does, and [`rewired`] is what it reaches. There is still no second
+    /// answer to what the run is wired with — this list is the one, a rewiring
+    /// replaces one entry of it and hands the whole of it to the slot's watcher
+    /// through [`Aiming`], so the list a rebuild restates and the list a save
+    /// records stay one list.
+    ///
+    /// **One list for the run and not one per slot**, which is what makes the
+    /// key `(node, slot)` and not `(deck, node, slot)` — see [`rewired`], and
+    /// `Wiring::edges` for why an edge naming a node a Set has not got is
+    /// simply passed over.
+    ///
+    /// **A limit worth naming**: a rewiring re-aims only the slot the request
+    /// named, so any *other* watcher goes on restating the list it was last
+    /// aimed with until it is itself re-aimed. That is invisible unless two
+    /// slots hold nodes of the same name, which is also the only case where one
+    /// entry in this list was ever about two Sets. Re-aiming every watcher
+    /// instead would recompile the whole deck for one edge, which is a far
+    /// louder wrong answer.
     edges: Vec<karakuri_engine::set::Edge>,
+    /// **Where each slot's watcher can be re-pointed**, one entry per slot and
+    /// `None` for a slot with no watcher — a run without `--watch`, and every
+    /// `HotSwap::fixed`. See [`Aiming`]: this is how an edge written over MCP
+    /// reaches the thing that rebuilds with it.
+    aims: Vec<Option<Aiming>>,
     /// The store root a live save writes into. The *root* and not an open
     /// store: every part of a save that touches a disk happens on the thread
     /// that does it — see [`Save::run`].
@@ -4624,7 +4948,7 @@ impl ApplicationHandler for App {
             }
             false => (None, None),
         };
-        let mut deck = build_deck(
+        let (mut deck, aims) = build_deck(
             &gpu,
             &procs,
             &self.args,
@@ -4849,6 +5173,7 @@ impl ApplicationHandler for App {
             startup: self.placed.clone(),
             loaded_set: self.args.load_set.clone(),
             edges: self.args.edges.clone(),
+            aims,
             store_root: self.args.store.clone(),
             save_tx,
             saves,
@@ -5131,8 +5456,57 @@ impl Live {
             return;
         };
         let asked: Vec<mcp::SaveRequest> = mcp.saves().collect();
+        // **Both channels drained before either is acted on**, for the borrow
+        // reason above and for a second one: they are two queues by design —
+        // see `mcp::Reporter::wires` — so a deck being saved to a slow disk
+        // cannot delay a rewiring, and taking them in one pass is what keeps
+        // that true on this side too.
+        let wires: Vec<mcp::WireRequest> = mcp.wires().collect();
         for request in asked {
             self.save_set(request.slot, request.id, Some(request.reply));
+        }
+        self.rewire(wires);
+    }
+
+    /// **Every edge asked for since the last frame, written and answered here,
+    /// on this frame.**
+    ///
+    /// The decisions are [`rewired`]'s and are written there, because none of
+    /// them needs a `Live`. What is here is the two things that do: the deck's
+    /// own slot count, which is the only thing that knows how many slots there
+    /// are, and the answer going back to whoever asked.
+    ///
+    /// **Answered once, at the frame it was applied on**, which is
+    /// [`mcp::WireRequest`]'s third point. Not at the swap: what the *build*
+    /// made of the edge is `swap_outcome`'s answer, as it is for every other
+    /// rebuild, and a tool that waited for thirty judged frames would hold a
+    /// connection open across a transition.
+    ///
+    /// **One sentence for both audiences**, which is [`refused`]'s rule: what
+    /// the terminal is told and what the client is handed are the same words,
+    /// so the second cannot be right on the day it is written and wrong at the
+    /// next correction.
+    fn rewire(&mut self, asked: Vec<mcp::WireRequest>) {
+        if asked.is_empty() {
+            return;
+        }
+        let mut wires = Vec::with_capacity(asked.len());
+        let mut replies = Vec::with_capacity(asked.len());
+        for mcp::WireRequest { slot, edge, reply } in asked {
+            wires.push((slot, edge));
+            replies.push(reply);
+        }
+        let said = rewired(
+            &wires,
+            &mut self.edges,
+            &mut self.aims,
+            self.deck.slot_count(),
+        );
+        for (reply, said) in replies.into_iter().zip(said) {
+            match &said {
+                Ok(line) | Err(line) => eprintln!("{line}"),
+            }
+            reply.settled(said);
         }
     }
 
@@ -11024,5 +11398,470 @@ mod live_save_tests {
              was built from"
             );
         }
+    }
+}
+
+/// **What `wire_input` asks the render loop for, and what the loop does with
+/// it.**
+///
+/// The three points [`mcp::WireRequest`] states are the three these defend:
+/// replace keyed on the input, re-aim the slot so it rebuilds, and answer once
+/// at the frame it was applied on. Everything below [`rewired`] needs is a list
+/// of edges and a channel — no window, no GPU and no `Deck` — which is why that
+/// function is not a method; the one test here that goes through the socket is
+/// the one about the *answer*, because only a real client can be told anything.
+#[cfg(test)]
+mod wire_tests {
+    use super::*;
+    use std::io::{BufRead, Write};
+
+    fn edge(node: &str, slot: &str, to: &str) -> karakuri_engine::set::Edge {
+        karakuri_engine::set::Edge {
+            node: node.to_string(),
+            slot: slot.to_string(),
+            to: to.to_string(),
+        }
+    }
+
+    /// A watcher's worth of aim, with nothing in it that matters here except
+    /// the edges: what these tests read off a re-point is the wiring it carries
+    /// and whether one arrived at all.
+    fn aimed(edges: Vec<karakuri_engine::set::Edge>) -> watch::Aim {
+        watch::Aim {
+            head: Named::bare("head.kir"),
+            rest: Vec::new(),
+            layering: karakuri_engine::set::Layering::Overdraw,
+            live: None,
+            capacity: None,
+            seed_salt: 7,
+            salts: vec![7],
+            camera: karakuri_engine::camera::Orbit::default(),
+            overrides: Vec::new(),
+            published: Vec::new(),
+            bindings: Vec::new(),
+            edges,
+            authorities: Vec::new(),
+        }
+    }
+
+    /// One watched slot, and the end a re-point arrives on.
+    fn watcher(
+        edges: Vec<karakuri_engine::set::Edge>,
+    ) -> (Aiming, std::sync::mpsc::Receiver<watch::Aim>) {
+        let (aim, aimed_at) = std::sync::mpsc::channel();
+        (
+            Aiming {
+                aim,
+                at: aimed(edges),
+            },
+            aimed_at,
+        )
+    }
+
+    /// **An edge is replaced on the input it binds, and no other edge moves.**
+    ///
+    /// The replacement is keyed on `(node, slot)` — the node that declares the
+    /// input and what its procedure calls it — so a second `uses` on the *same
+    /// node* is a different entry, and so is the same input name on a different
+    /// node. A key that were only the node would silently unbind `morph.near`
+    /// when `morph.far` was rewired; one that were only the input name would do
+    /// it across nodes. Both are here, because both would build a Set nobody
+    /// asked for and neither shows up on the call that did it.
+    #[test]
+    fn a_wire_replaces_the_edge_on_the_input_it_binds_and_leaves_every_other_alone() {
+        let mut edges = vec![
+            edge("morph", "far", "sphere_shell"),
+            edge("morph", "near", "lattice"),
+            edge("veil", "far", "torus"),
+        ];
+        let (aiming, aims) = watcher(edges.clone());
+        let mut slots = vec![Some(aiming)];
+
+        let said = rewired(
+            &[(0, edge("morph", "far", "drift_shell"))],
+            &mut edges,
+            &mut slots,
+            1,
+        );
+
+        assert_eq!(said.len(), 1);
+        assert!(said[0].is_ok(), "{:?}", said[0]);
+        assert_eq!(
+            edges.len(),
+            3,
+            "the run is wired with {} edges after replacing one of three: {edges:?}",
+            edges.len()
+        );
+        assert!(
+            edges.contains(&edge("morph", "far", "drift_shell")),
+            "the edge asked for is not in the run's wiring: {edges:?}"
+        );
+        assert!(
+            edges.contains(&edge("morph", "near", "lattice")),
+            "rewiring `morph.far` took `morph.near` with it: {edges:?}"
+        );
+        assert!(
+            edges.contains(&edge("veil", "far", "torus")),
+            "rewiring `morph.far` took `veil.far` with it — the key is the node and the \
+             input, not the input alone: {edges:?}"
+        );
+        // And what the watcher was handed is the same list, not the one it
+        // started with: a rebuild restates its own edges, so a re-aim that
+        // carried the old wiring would put the old edge back on the next build.
+        let sent = aims.try_recv().expect("the slot was not re-aimed");
+        assert_eq!(sent.edges, edges, "the re-aim carried a different wiring");
+    }
+
+    /// **A second wire on one input replaces rather than appends.**
+    ///
+    /// `SetError::SlotBoundTwice` refuses two edges on one input where the Set
+    /// is built, so an append would make the *second* call on an input a
+    /// refusal — a model that changed its mind would have wired the slot into a
+    /// state it cannot build and cannot leave. The two calls are separate
+    /// frames here, which is the ordinary case; the same thing on one frame is
+    /// the test below.
+    #[test]
+    fn a_second_wire_on_one_input_replaces_rather_than_appends() {
+        let mut edges = vec![edge("morph", "far", "sphere_shell")];
+        let (aiming, aims) = watcher(edges.clone());
+        let mut slots = vec![Some(aiming)];
+
+        for to in ["drift_shell", "lattice_shell"] {
+            let said = rewired(&[(0, edge("morph", "far", to))], &mut edges, &mut slots, 1);
+            assert!(said[0].is_ok(), "{:?}", said[0]);
+        }
+
+        assert_eq!(
+            edges,
+            vec![edge("morph", "far", "lattice_shell")],
+            "one input is bound {} times: a Set built from this is refused for \
+             `SlotBoundTwice` and the second call is where a model loses its way back",
+            edges.len()
+        );
+        // Both frames re-aimed the slot, and the second one carries the second
+        // edge — the first would leave the picture on the wiring the model
+        // changed its mind about.
+        let sent: Vec<watch::Aim> = aims.try_iter().collect();
+        assert_eq!(
+            sent.len(),
+            2,
+            "one frame's rewiring did not reach the watcher"
+        );
+        assert_eq!(sent[1].edges, vec![edge("morph", "far", "lattice_shell")]);
+    }
+
+    /// **Two wires on one input on one frame: both are applied in order, the
+    /// later one is what the run holds, and the earlier one is told so.**
+    ///
+    /// One aim goes out per slot after every edge on the frame is in the list,
+    /// so the rebuild carries the wiring the frame ended with rather than an
+    /// intermediate one. And the reply to the overwritten request says it was
+    /// overwritten: it did write its edge, so a refusal would be false, and a
+    /// bare "wired" would be a true sentence about a state the run no longer
+    /// held by the end of the frame it was sent on.
+    #[test]
+    fn two_wires_on_one_input_in_one_frame_leave_the_run_wired_with_the_later_one() {
+        let mut edges = vec![edge("morph", "far", "sphere_shell")];
+        let (aiming, aims) = watcher(edges.clone());
+        let mut slots = vec![Some(aiming)];
+
+        let said = rewired(
+            &[
+                (0, edge("morph", "far", "drift_shell")),
+                (0, edge("morph", "far", "lattice_shell")),
+            ],
+            &mut edges,
+            &mut slots,
+            1,
+        );
+
+        assert_eq!(
+            edges,
+            vec![edge("morph", "far", "lattice_shell")],
+            "the run is wired with something other than the last edge of the frame"
+        );
+        let first = said[0].as_ref().expect("the first was applied");
+        assert!(
+            first.contains("replaced it with `lattice_shell`"),
+            "the overwritten request was told its edge stands: {first}"
+        );
+        assert!(
+            said[1]
+                .as_ref()
+                .expect("the second was applied")
+                .contains("recompiling"),
+            "the edge the run kept was not reported as rebuilding: {:?}",
+            said[1]
+        );
+        let sent: Vec<watch::Aim> = aims.try_iter().collect();
+        assert_eq!(
+            sent.len(),
+            1,
+            "two edges on one frame re-aimed the slot {} times: a frame rebuilds once, at \
+             the wiring it ended with",
+            sent.len()
+        );
+        assert_eq!(sent[0].edges, vec![edge("morph", "far", "lattice_shell")]);
+    }
+
+    /// **A slot this deck does not hold is refused, and nothing is rewired.**
+    ///
+    /// The MCP server checks the number against its `Slots` before it sends, so
+    /// a model meets the refusal there — this is the guard that does not depend
+    /// on the surface that asked having one, which is exactly what
+    /// `Live::save_set` says about the same check. The run's wiring is the part
+    /// worth asserting: a refusal that had already edited the list would leave
+    /// the deck wired by a call it said it had refused.
+    #[test]
+    fn a_wire_naming_a_slot_this_deck_does_not_hold_is_refused_and_nothing_is_rewired() {
+        let mut edges = vec![edge("morph", "far", "sphere_shell")];
+        let (aiming, aims) = watcher(edges.clone());
+        let mut slots = vec![Some(aiming)];
+
+        // With one that *is* applied in front of it, on the same input: a
+        // refusal writes nothing, so the request before it must not be told
+        // that a later one replaced its edge.
+        let said = rewired(
+            &[
+                (0, edge("morph", "far", "lattice_shell")),
+                (4, edge("morph", "far", "drift_shell")),
+            ],
+            &mut edges,
+            &mut slots,
+            1,
+        );
+
+        let refusal = said[1]
+            .as_ref()
+            .expect_err("a slot 4 of a one-slot deck was accepted");
+        assert!(refusal.contains("no slot 4"), "{refusal}");
+        assert!(refusal.contains("nothing was rewired"), "{refusal}");
+        assert_eq!(
+            edges,
+            vec![edge("morph", "far", "lattice_shell")],
+            "a refused request edited the run's wiring anyway"
+        );
+        let kept = said[0].as_ref().expect("the slot 0 request was applied");
+        assert!(
+            !kept.contains("replaced it with"),
+            "a request that was refused was reported as having replaced the edge in front \
+             of it: {kept}"
+        );
+        let sent: Vec<watch::Aim> = aims.try_iter().collect();
+        assert_eq!(
+            sent.len(),
+            1,
+            "a refused request re-aimed a watcher, so a slot is rebuilding for a call that \
+             was told nothing happened"
+        );
+        assert_eq!(sent[0].edges, vec![edge("morph", "far", "lattice_shell")]);
+    }
+
+    /// **A slot with no watcher is not a failure, and the reply says what did
+    /// not happen.**
+    ///
+    /// A run without `--watch` has nothing that rebuilds. The edge is still the
+    /// run's — a `save_set` records it — so a refusal would be false; and a
+    /// bare "wired" would let a model wait for a picture that is never going to
+    /// change. `mcp::wire_input` adds the same fact from its side, where it is
+    /// the only thing that knows how the run was started.
+    #[test]
+    fn a_wire_on_a_slot_with_no_watcher_is_applied_and_says_nothing_rebuilds() {
+        let mut edges = Vec::new();
+        let mut slots: Vec<Option<Aiming>> = vec![None];
+
+        let said = rewired(
+            &[(0, edge("morph", "far", "drift_shell"))],
+            &mut edges,
+            &mut slots,
+            1,
+        );
+
+        let line = said[0]
+            .as_ref()
+            .expect("a run without a watcher refused an edge");
+        assert!(
+            line.contains("no watcher") && line.contains("save_set"),
+            "{line}"
+        );
+        assert_eq!(edges, vec![edge("morph", "far", "drift_shell")]);
+    }
+
+    /// **The frame drains the edges, and not only the saves.**
+    ///
+    /// This is the failure the whole surface was in when `wire_input` landed:
+    /// the tool was finished, the channel was there, and the render loop
+    /// answered none of it — so every call waited out `WIRE_REPLY` and came
+    /// back with a true sentence saying nothing had been rewired. Everything
+    /// else here tests what [`rewired`] decides; nothing else tests that a
+    /// frame ever asks it. `Live::run_requests` needs a window and a GPU, so
+    /// this is read off the source, which is
+    /// `a_frame_attends_to_its_saves_before_anything_can_stop_them`'s own
+    /// technique and for its reason: asserting where a statement is beats
+    /// asserting nothing and calling it untestable. Comment lines are dropped
+    /// first, so prose about draining cannot stand in for a drain.
+    #[test]
+    fn a_frame_takes_the_edges_a_client_asked_for_and_not_only_the_saves() {
+        let source = include_str!("main.rs");
+        let body = source
+            .split_once("\n    fn run_requests(&mut self) {")
+            .expect("`Live::run_requests` is no longer spelled that way")
+            .1;
+        let body = body
+            .split("\n    }")
+            .next()
+            .expect("the end of `Live::run_requests`");
+        let code: Vec<&str> = body
+            .lines()
+            .filter(|line| !line.trim_start().starts_with("//"))
+            .collect();
+        let code = code.join("\n");
+        for call in ["mcp.wires()", "self.rewire(wires)"] {
+            assert!(
+                code.contains(call),
+                "`Live::run_requests` does not `{call}`: a `wire_input` call on this run \
+                 waits out its deadline and is told the loop never took the edge"
+            );
+        }
+    }
+
+    // -- over the socket -------------------------------------------------
+
+    /// One tool call, over TCP exactly as a client makes it. The answer is the
+    /// thing being tested, so nothing here shares a channel with the server —
+    /// it is the wire.
+    fn call(port: u16, name: &str, args: serde_json::Value) -> (bool, String) {
+        let body = serde_json::json!({
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": {"name": name, "arguments": args},
+        })
+        .to_string();
+        let mut stream = std::net::TcpStream::connect(("127.0.0.1", port)).expect("connect");
+        stream
+            .set_read_timeout(Some(Duration::from_secs(20)))
+            .expect("read timeout");
+        stream
+            .write_all(
+                format!(
+                    "POST / HTTP/1.1\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}",
+                    body.len()
+                )
+                .as_bytes(),
+            )
+            .expect("write");
+        let mut reader = std::io::BufReader::new(stream);
+        let mut line = String::new();
+        reader.read_line(&mut line).expect("status line");
+        let mut length = 0usize;
+        loop {
+            let mut header = String::new();
+            reader.read_line(&mut header).expect("header");
+            let header = header.trim_end();
+            if header.is_empty() {
+                break;
+            }
+            if let Some((name, value)) = header.split_once(':') {
+                if name.eq_ignore_ascii_case("content-length") {
+                    length = value.trim().parse().unwrap_or(0);
+                }
+            }
+        }
+        let mut body = vec![0u8; length];
+        std::io::Read::read_exact(&mut reader, &mut body).expect("body");
+        let reply: serde_json::Value =
+            serde_json::from_slice(&body).expect("the server answered something that is not JSON");
+        let result = &reply["result"];
+        (
+            result["isError"].as_bool().unwrap_or(true),
+            result["content"][0]["text"]
+                .as_str()
+                .unwrap_or("")
+                .to_string(),
+        )
+    }
+
+    /// **A `wire_input` call is answered at the frame the edge was applied on,
+    /// and the run is wired with it.**
+    ///
+    /// End to end: the call goes over the socket, the request crosses
+    /// `mcp::Reporter::wires`, a stand-in frame loop applies it with the same
+    /// [`rewired`] the real one calls, and the answer comes back down the
+    /// connection the model is holding open. **Without the drain this is
+    /// exactly the failure that was here**: the tool waits out `WIRE_REPLY` and
+    /// says *the render loop had not taken this edge*, which is true, is loud,
+    /// and is not a rewiring.
+    ///
+    /// The frame loop is a thread rather than a `Live` because a `Live` needs a
+    /// window and a GPU. What it stands in for is the drain and the answer, and
+    /// those are the whole of `Live::rewire`.
+    #[test]
+    fn a_wire_request_is_answered_at_the_frame_it_was_applied_on() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let l1 = dir.path().join("l1.kir");
+        std::fs::write(&l1, "proc probe { kind L1 }").expect("fixture");
+        let reporter = mcp::serve(
+            0,
+            mcp::Slots(vec![(l1, Vec::new())]),
+            dir.path().join("store"),
+            true,
+        )
+        .expect("serve");
+        let port = reporter.port();
+
+        // What the run is wired with, shared so the test can read it back —
+        // the render loop's own copy is `Live::edges` and nothing else holds
+        // one.
+        let edges = Arc::new(std::sync::Mutex::new(vec![edge(
+            "morph",
+            "far",
+            "sphere_shell",
+        )]));
+        let (aiming, aims) = watcher(edges.lock().expect("fresh mutex").clone());
+        let run = edges.clone();
+        // The thread never ends, which is what keeps the reporter alive: a
+        // dropped reporter is a run that has quit, and the tool has a
+        // different true sentence for that.
+        std::thread::spawn(move || {
+            let mut slots = vec![Some(aiming)];
+            loop {
+                let asked: Vec<mcp::WireRequest> = reporter.wires().collect();
+                if !asked.is_empty() {
+                    let mut wires = Vec::new();
+                    let mut replies = Vec::new();
+                    for mcp::WireRequest { slot, edge, reply } in asked {
+                        wires.push((slot, edge));
+                        replies.push(reply);
+                    }
+                    let mut held = run.lock().expect("the run's wiring");
+                    let said = rewired(&wires, &mut held, &mut slots, 1);
+                    drop(held);
+                    for (reply, said) in replies.into_iter().zip(said) {
+                        reply.settled(said);
+                    }
+                }
+                std::thread::sleep(Duration::from_millis(2));
+            }
+        });
+
+        let (failed, said) = call(
+            port,
+            "wire_input",
+            serde_json::json!({"slot": 0, "node": "morph", "input": "far", "to": "drift_shell"}),
+        );
+        assert!(!failed, "the call came back as a failure: {said}");
+        assert!(
+            said.contains("wired `morph.far=drift_shell`"),
+            "the client was told something other than what the loop did: {said}"
+        );
+        assert_eq!(
+            *edges.lock().expect("the run's wiring"),
+            vec![edge("morph", "far", "drift_shell")],
+            "the client was answered and the run is not wired with the edge"
+        );
+        assert_eq!(
+            aims.try_recv().expect("the slot was not re-aimed").edges,
+            vec![edge("morph", "far", "drift_shell")],
+            "the edge was written and nothing was asked to rebuild with it"
+        );
     }
 }
