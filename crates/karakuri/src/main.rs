@@ -88,10 +88,19 @@
 //!
 //! # The engine here is the shortest path from two files to texels
 //!
-//! Two slots, built from one `.kir` pair the way `karakuri-cli` builds them,
-//! and **no more than that**: no audio, no MIDI, no MCP, no replay and no
-//! session. The pair is [`Sources`], and it is the whole of what this program
-//! takes from the command line. Three things beyond the engine are here.
+//! Four slots, built from one `.kir` pair the way `karakuri-cli` builds them,
+//! and **no more than that today**: no audio, no MIDI, no MCP, no replay and
+//! no session. **That is an inventory of what is wired and not a charter** —
+//! it lists what `karakuri-cli` wires and this program does not, which is why
+//! *replay* and *session* stand in the same sentence, and
+//! [ADR-0214](../../../docs/adr/0214-the-program-moves-out-of-the-cli-and-two-thin-binaries-sit-over-it.md)
+//! makes this one of two thin binaries over `karakuri-environment`, the
+//! package `audio.rs` lives in. Four rows of the operations page's panel
+//! column need a device open and are unwired rather than ruled out; the
+//! sentence has been read the other way once already, and it said *two slots*
+//! for as long as the deck had four. The pair is [`Sources`] with a preset
+//! library behind it, and the two positional paths are what this program takes
+//! from the command line beside `--presets` and `--store`. Three things beyond the engine are here.
 //! **Each slot watches that pair**, which is [`watched`] and is one
 //! `HotSwap::new` over a `karakuri_environment::watch::Watch` — the same
 //! wiring `karakuri-cli` does for `--watch`, and the whole of what puts a row
