@@ -259,6 +259,7 @@ number; new records continue from the end.
 | [ADR-0231](0231-a-sets-two-forms-take-two-extensions-and-the-store-holds-only-the-resolved-one.md) | A Set's two forms take two extensions, and the store holds only the resolved one | 2026-08-30 | accepted |
 | [ADR-0232](0232-a-control-is-thrown-because-the-request-is-asynchronous-and-a-curve-is-a-helper-on-the-control-map.md) | A control is thrown because the request is asynchronous, and a curve is a helper where the control map already sits | 2026-08-31 | accepted |
 | [ADR-0233](0233-the-consoles-mixer-has-no-crossfader.md) | The console's mixer has no crossfader, and the page had already argued it away from the other end | 2026-08-31 | accepted |
+| [ADR-0234](0234-carrying-a-show-through-is-a-principle-not-a-property-of-the-finished-instrument.md) | Carrying a show through is a principle, not a property of the finished instrument | 2026-08-31 | accepted |
 
 ## Retired numbers
 
