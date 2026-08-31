@@ -387,8 +387,16 @@ impl Change<'_> {
                 // operation that had nothing to act on — `g` on the root,
                 // which is the one node with no split enclosing it. Neither
                 // moved anything on screen, and **these are the arms that make
-                // the clause true**: a key that reaches the model and changes
-                // nothing costs nothing.
+                // the clause true**: an operation that reaches the model and
+                // changes nothing costs nothing.
+                //
+                // **The report is the arm this clause is most exposed to**: it
+                // is the one outcome that comes back carrying a `Vec` of every
+                // region, so it reads like a change and is not. No key reaches
+                // it since `p` became the latency offset the operations page
+                // specifies (`panel::Op::Report`), so what asks it is this
+                // crate's own suite — the arm is here for the operation rather
+                // than for a key.
                 //
                 // Two more used to be here — the pointer on a divider, and
                 // nothing under the pointer — and they left with the pointer

@@ -133,15 +133,18 @@
 //!   signal bus carries a measurement rather than an invention and the grid
 //!   follows the room. What that reached on
 //!   [the operations page](../../../docs/manual/operations.html): *Attach a
-//!   beat source* in the panel column, and *Tap the beat* and *Halve or double
-//!   the grid* in the key column — `b`, `,` and `.`. **Two of the four rows it
-//!   was waiting on are still out of reach and for two different reasons.**
-//!   *Nudge the latency offset* is specified as `o` and `p` and this program
-//!   already binds `p` to `Op::Report`; whether the panel takes the letter or
-//!   the command line gives it up is a change to that page and nobody has made
-//!   it, so no key is bound and the badge stays designed. *Attach a signal to
-//!   a parameter* is a bay's worth of work of its own and is nothing to do
-//!   with a device being open.
+//!   beat source* in the panel column, and *Tap the beat*, *Halve or double
+//!   the grid* and *Nudge the latency offset* in the key column — `b`, `,`,
+//!   `.`, `o` and `p`. **The last of those took a letter back.** The page
+//!   specifies the offset as `o` and `p`, this program bound `p` to
+//!   `Op::Report`, and a badge naming two keys with one of them bound would
+//!   be a badge that lies; asked whether a panel diagnostic needs a shortcut
+//!   at all, the answer was that it does not. So `p` is the offset on both
+//!   keyboards now and the report keeps no key — see [`nudged`] and
+//!   `Op::Report`, which the console still performs and nothing here asks
+//!   for. **One of the four rows it was waiting on is still out of reach**:
+//!   *Attach a signal to a parameter* is a bay's worth of work of its own and
+//!   is nothing to do with a device being open.
 //! - **MIDI.** A control surface, so a hand reaches a fader without a mouse.
 //!   `karakuri-midi` and `examples/surface.map` exist and `--midi-in`
 //!   `--midi-map` drive them. **No operation names attaching one**, so this is
@@ -271,9 +274,7 @@ use karakuri_console::{egui, egui_wgpu, egui_winit};
 
 use karakuri_console::budget::PANEL_PASS;
 use karakuri_console::input::{claim, Claim, CONTROLS};
-use karakuri_console::panel::{
-    Dragged, InHand, Knob, Op, Outcome, Panel, Pressed, Released, Visibility,
-};
+use karakuri_console::panel::{Dragged, InHand, Knob, Op, Outcome, Panel, Pressed, Released};
 use karakuri_console::repaint::{Change, Repaint};
 use karakuri_console::room::Room;
 use karakuri_console::view::{
@@ -1409,30 +1410,25 @@ impl Readout {
             // match is exhaustive rather than because a line is owed. See
             // `Panel::restore`.
             Outcome::Restored => {}
-            Outcome::Report(rows) => {
-                println!("regions:");
-                let lines: Vec<String> = rows
-                    .iter()
-                    .map(|row| {
-                        format!(
-                            "  {:width$}{:<18} {:>7.1},{:>7.1}  {:>7.1} x {:>7.1} {}",
-                            "",
-                            self.label(row.id),
-                            row.rect.x,
-                            row.rect.y,
-                            row.rect.w,
-                            row.rect.h,
-                            match row.state {
-                                Visibility::Folded => "folded",
-                                Visibility::InsideAFold => "inside a fold",
-                                Visibility::Visible => "",
-                            },
-                            width = row.depth * 2
-                        )
-                    })
-                    .collect();
-                println!("{}", lines.join("\n"));
-            }
+            // **And nothing that goes through here can produce this one
+            // either, since 2026-08-31.** `Op::Report` was `p`, `p` is the
+            // latency offset the operations page specifies, and a panel
+            // diagnostic with no useful shortcut to point at loses the letter
+            // rather than keeping one of a specified pair. Nothing else in
+            // this program names the operation, so no key, no control and no
+            // pointer route can reach it and there is no sentence to say.
+            //
+            // **The words went with the route rather than being kept for
+            // one.** A formatter for an outcome nothing produces is this file
+            // claiming a route it has not got
+            // ([P-0063](../../../docs/principles/0063-source-cites-what-is-in-force-not-a-plan.md)),
+            // and the table it printed is not the one the startup legend
+            // prints: that one is each region's *min and max*, once, before
+            // anything has been dragged, and this was each region's solved
+            // rectangle and whether it is folded, at any moment. The
+            // operation still answers that, to `karakuri-console`'s own
+            // tests; what is gone is this program asking.
+            Outcome::Report(_) => {}
             // One operation can still find nothing to act on, and it is not
             // about the pointer: the root has no split enclosing it. *Nothing
             // under the pointer* is said by `key`, before an operation is
@@ -2385,8 +2381,16 @@ impl Readout {
 /// program says to anybody.
 ///
 /// The order is the order they print in — the arrangement's keys, then the
-/// deck and the library, then `esc`, then the three that are live only while
-/// the arrangement pill is asking for a name.
+/// deck and the library, then the five that address the room, then `esc`, then
+/// the three that are live only while the arrangement pill is asking for a
+/// name.
+///
+/// **`p` is the latency offset here and was the report until 2026-08-31.**
+/// The page specifies the offset as `o` and `p`; a badge naming two keys with
+/// one of them bound would be a badge that lies, and a panel diagnostic with
+/// no useful shortcut to point at loses the letter rather than keeping it. The
+/// operation it named is still `karakuri_console::panel::Op::Report` and
+/// nothing in this program asks for it.
 const KEYS: &[(&str, &str)] = &[
     ("f", "fold the region under the pointer"),
     ("g", "fold the split enclosing the region under the pointer"),
@@ -2397,7 +2401,6 @@ const KEYS: &[(&str, &str)] = &[
     ("s", "solo the region under the pointer"),
     ("u", "undo the solo"),
     ("r", "reset to a fresh arrangement"),
-    ("p", "print every region's rectangle"),
     ("n", "the room: day or night"),
     (
         "0",
@@ -2424,6 +2427,15 @@ const KEYS: &[(&str, &str)] = &[
     (
         ".",
         "double it — refused where the result leaves 60..200 BPM",
+    ),
+    (
+        "o",
+        "the latency offset, five milliseconds down — negative, and the picture waits for the \
+         music",
+    ),
+    (
+        "p",
+        "and five up — positive, and the picture leads it; held inside 200 ms either way",
     ),
     ("up", "the library cursor, up a row"),
     ("down", "and down, as far as the rows the bay drew"),
@@ -6163,6 +6175,14 @@ impl App {
                     ) {
                         println!("{line}");
                     }
+                    // **The second that reaches that device**, and it is here
+                    // for the reason the attach is: `written` answers
+                    // `Silent(NoRecord)` for it too, so there is nothing for
+                    // `apply` to do and the session this program opened is the
+                    // only thing that holds the value. See [`nudged`].
+                    if let Some(line) = nudged(&mut gfx.audio, operation) {
+                        println!("{line}");
+                    }
                     if let Some(line) = pointed(&mut readout.view, operation) {
                         println!("{line}");
                     }
@@ -6710,7 +6730,6 @@ impl ApplicationHandler for App {
                     },
                     Key::Character("u") => Op::Unsolo,
                     Key::Character("r") => Op::Reset,
-                    Key::Character("p") => Op::Report,
                     // **The deck selection, which is the command line's own
                     // four keys.** They are the one place the two keyboards
                     // agree on a letter's meaning besides `esc`, and they
@@ -6933,6 +6952,53 @@ impl ApplicationHandler for App {
                             &mut self.costs,
                             Change::Emitted(Some(&Operation::ScaleGrid { by })).repaint(),
                         );
+                        return;
+                    }
+                    // **The latency offset, and the third of the three keys
+                    // that need an input open.** Unlike `b`, `,` and `.` this
+                    // one goes through [`App::performed`] like every other
+                    // key on this panel: `written(SetLatencyOffset)` answers
+                    // `Silent(NoRecord)` rather than `Owed(NotSettled)` —
+                    // nothing in the session stream carries a delay between
+                    // what a room hears and what it sees — so the line
+                    // `unwritten` prints about it is true, where the tap's
+                    // would have been *"nothing moved, and nothing here
+                    // decides it"* about a press that moved the grid.
+                    //
+                    // **The operation is absolute and the key is the nudge**,
+                    // which is `Operation::SetLatencyOffset`'s own rule: *"an
+                    // absolute value can express every nudge and a nudge
+                    // cannot express a setting, and a fader has to be able to
+                    // reach it"*. So the press reads the value it is standing
+                    // on and adds a step, exactly as `karakuri-cli`'s two do.
+                    //
+                    // **With no input attached there is nothing to read**, and
+                    // no operation is emitted at all — the offset is a term in
+                    // the lead the tracker corrects against, and a value
+                    // dialled against no room would be dropped the moment one
+                    // opened, because `attached` starts a new session at the
+                    // offset the old one held and at the default when there
+                    // was none. Said out loud rather than swallowed, on
+                    // [`tapped`]'s and [`scaled`]'s terms: a key that does
+                    // nothing and a key that is not bound are the same
+                    // experience.
+                    Key::Character("o") | Key::Character("p") => {
+                        let Key::Character(name) = key.logical_key.as_ref() else {
+                            unreachable!("the arm this is in")
+                        };
+                        let step = offset_step(name).expect("the arm this is in");
+                        let acted = match gfx.audio.as_ref() {
+                            Some(open) => Acted::Emitted(Some(Operation::SetLatencyOffset {
+                                ms: open.latency_offset_ms() + step,
+                            })),
+                            None => {
+                                println!("{}", NO_ROOM_FOR_AN_OFFSET);
+                                Acted::Nothing
+                            }
+                        };
+                        let repaint =
+                            App::performed(gfx, &mut self.readout, &acted, Repaint::Never);
+                        App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
                         return;
                     }
                     Key::Character("n") => {
@@ -7495,7 +7561,8 @@ fn listening(session_bpm: f32) -> (Option<audio::Audio>, String) {
                 "audio in: {} at {} Hz — energy, onset and band0..7 are measured from this room \
                  now, and the beat corrects the session's oscillator. output offset {:.0} ms. \
                  the transport row's `audio-in` pill says which input this is and lists the \
-                 others; `b` taps the beat and `,` and `.` move the grid an octave.",
+                 others; `b` taps the beat, `,` and `.` move the grid an octave, and `o` and \
+                 `p` nudge that offset five milliseconds a press.",
                 open.description(),
                 open.sample_rate(),
                 open.latency_offset_ms()
@@ -7635,6 +7702,101 @@ fn attached(
             }
         )),
     }
+}
+
+/// **What a press on `o` or `p` moves the offset by**, and `None` for every
+/// other key.
+///
+/// A function rather than two literals in the arm so that the **sign** is
+/// something a test can ask about. `docs/manual/console.html` says which half
+/// gets read wrong — *"the sign is the half that gets read wrong at two in the
+/// morning, so it is said in words here rather than left to be worked out"* —
+/// and a pair of keys wired the wrong way round is a control that reads
+/// correct and points backwards.
+///
+/// The step is `karakuri_environment::audio`'s own constant, which is what
+/// `karakuri-cli`'s `o` and `p` step by: *five milliseconds a press* is one
+/// number and this program does not keep a second copy of it.
+fn offset_step(key: &str) -> Option<f32> {
+    match key {
+        "o" => Some(-audio::LATENCY_OFFSET_STEP_MS),
+        "p" => Some(audio::LATENCY_OFFSET_STEP_MS),
+        _ => None,
+    }
+}
+
+/// **What the offset keys say on a panel with no input attached.**
+///
+/// `docs/manual/console.html` is the specification and it is plain about it:
+/// *"It only means anything with an audio input attached, and the audio-in
+/// pill is what says whether there is one."* So the press changes nothing,
+/// says why, and names the control that would fix it — [`tapped`]'s and
+/// [`scaled`]'s sentence for the same state, one row along.
+const NO_ROOM_FOR_AN_OFFSET: &str = "offset: no audio input — the offset is the delay between \
+                                     what a room hears and what it sees, and there is no room. \
+                                     open one on the transport row's `audio-in` pill";
+
+/// **What to say about an offset that moved**, out of what was asked for and
+/// what the session came back with.
+///
+/// A function of two numbers and nothing else, so that both halves of
+/// `console.html`'s contract are checkable without a device:
+///
+/// - **The sign, in words.** *"Negative and the picture waits for the music,
+///   positive and it leads"* — the page says it in words rather than leaving
+///   `−15 ms` to be interpreted, and so does this.
+/// - **The bound, when it bit.** The value is *"held inside 200 ms either
+///   way"*, which `karakuri_environment::audio` enforces and this reports: a
+///   press that asked for 205 and got 200 is a control at the end of its
+///   travel, and a control that answers the same number twice with nothing
+///   said is indistinguishable from a broken one (P-0030).
+fn offset_said(asked: f32, now: f32) -> String {
+    let sense = match now < 0.0 {
+        true => "the picture waits for the music",
+        false => "the picture leads the music",
+    };
+    let held = match (asked - now).abs() > f32::EPSILON {
+        true => format!(
+            " — held at {:+.0} ms, which is as far either way as it goes",
+            now
+        ),
+        false => String::new(),
+    };
+    format!("  offset: {now:+.0} ms — {sense}{held}")
+}
+
+/// **The latency offset, performed against the session this program opened**,
+/// and `None` for every operation that is not it — [`attached`]'s shape, one
+/// control along, and beside it in [`App::performed`] for the same reason.
+///
+/// **`SetLatencyOffset` writes no record** (`written` answers
+/// `Silent(NoRecord)`: nothing in the session stream carries a delay between
+/// two outputs, which is a property of a room and not of a performance), so
+/// nothing downstream of this moves the deck. What moves is the lead every
+/// beat correction is applied with — `Audio::output_lag` — and the frame the
+/// picture is drawn on relative to it.
+///
+/// **The operation is absolute and this is where it lands.** It is applied
+/// through `Audio::nudge_latency_offset`, which is the only way in and is the
+/// one that clamps: the offset is held inside `LATENCY_OFFSET_RANGE` there, so
+/// this file states no bound of its own and cannot state a different one. A
+/// *setting* becomes the step that reaches it, which is what lets a fader
+/// emit this operation the day one exists without a second application path.
+///
+/// **With nothing open there is nothing to offset**, and the key arm says so
+/// before an operation is built — see [`NO_ROOM_FOR_AN_OFFSET`]. This arm
+/// answers the case an operation arrives from anywhere else in that state,
+/// because an operation that arrives and does nothing at all is the failure
+/// P-0027 is about.
+fn nudged(open: &mut Option<audio::Audio>, operation: &Operation) -> Option<String> {
+    let Operation::SetLatencyOffset { ms } = *operation else {
+        return None;
+    };
+    let Some(open) = open.as_mut() else {
+        return Some(format!("  {NO_ROOM_FOR_AN_OFFSET}"));
+    };
+    let now = open.nudge_latency_offset(ms - open.latency_offset_ms());
+    Some(offset_said(ms, now))
 }
 
 /// **One frame's worth of audio**: read the room, and hand the session what it
@@ -7922,6 +8084,119 @@ mod tests {
             attached(&mut open, 120.0, &mut told_pill, &Operation::TapBeat),
             None
         );
+    }
+
+    /// **"Five milliseconds a press, down and up"** — `docs/manual/operations.html`'s
+    /// row, and the sign `docs/manual/console.html` says is the half that gets
+    /// read wrong at two in the morning: *"Negative and the picture waits for
+    /// the music, positive and it leads."*
+    ///
+    /// A pair of keys wired the wrong way round reads correct and points
+    /// backwards, and nothing an operator can see from the panel would say so
+    /// — the console draws no offset. The step is asked of
+    /// `karakuri_environment::audio` rather than transcribed, so this checks
+    /// which way each key goes and that both go by the one constant the
+    /// command line's own `o` and `p` use.
+    #[test]
+    fn o_steps_the_offset_down_and_p_steps_it_up_by_the_one_step_both_keyboards_use() {
+        assert_eq!(
+            offset_step("o"),
+            Some(-audio::LATENCY_OFFSET_STEP_MS),
+            "`o` is the key that makes the picture wait for the music, so it steps the offset \
+             down"
+        );
+        assert_eq!(
+            offset_step("p"),
+            Some(audio::LATENCY_OFFSET_STEP_MS),
+            "`p` is the key that makes the picture lead, so it steps the offset up"
+        );
+        assert_eq!(
+            audio::LATENCY_OFFSET_STEP_MS,
+            5.0,
+            "the page says five milliseconds a press and the constant says otherwise — the page \
+             is the specification, so one of the two is wrong and it is not this test"
+        );
+        // Every other key is somebody else's, which is what lets one arm read
+        // the step out of the letter rather than two arms carrying a literal.
+        for key in ["b", ",", ".", "r", "n", "0"] {
+            assert_eq!(
+                offset_step(key),
+                None,
+                "`{key}` is not an offset key and `offset_step` claimed it was"
+            );
+        }
+    }
+
+    /// **"Negative and the picture waits for the music, positive and it
+    /// leads"**, and **"held inside 200 milliseconds either way"** — the two
+    /// halves of `docs/manual/console.html`'s offset contract that a panel can
+    /// be held to without a device.
+    ///
+    /// The second is the one a control is silent about by default: the value
+    /// is clamped in `karakuri_environment::audio` and a press at the end of
+    /// the travel would otherwise print the same number as the press before it
+    /// with nothing said, which is P-0030's *an instrument says what it did*
+    /// read from the far end.
+    #[test]
+    fn the_offset_says_which_way_it_points_and_says_when_it_was_held_at_the_bound() {
+        let waiting = offset_said(-15.0, -15.0);
+        assert!(
+            waiting.contains("the picture waits for the music"),
+            "a negative offset did not say which of the two is late: {waiting}"
+        );
+        let leading = offset_said(20.0, 20.0);
+        assert!(
+            leading.contains("the picture leads the music"),
+            "a positive offset did not say which of the two is late: {leading}"
+        );
+        assert!(
+            !leading.contains("as far either way as it goes"),
+            "an offset nothing held claimed it was at the end of its travel: {leading}"
+        );
+
+        // The far end, asked for by one step and refused by five: the numbers
+        // are the range's own, so a range that moved moves this with it.
+        let top = *audio::LATENCY_OFFSET_RANGE.end();
+        let held = offset_said(top + audio::LATENCY_OFFSET_STEP_MS, top);
+        assert!(
+            held.contains("as far either way as it goes"),
+            "a press that asked past the bound and got the bound said nothing about it: {held}"
+        );
+        assert!(
+            held.contains(&format!("{top:+.0} ms")),
+            "the sentence about a clamped press does not carry the value it was held at: {held}"
+        );
+    }
+
+    /// **"It only means anything with an audio input attached"** —
+    /// `docs/manual/console.html`, and the operations page's row says it too.
+    ///
+    /// The offset is a term in the lead a beat correction is applied with, so
+    /// with no room being listened to there is nothing for the picture to be
+    /// early or late against and nothing to read the current value off. A
+    /// value dialled against no session would be dropped the moment one opened
+    /// — [`attached`] starts a new one at the offset the old one held and at
+    /// the default when there was none — so the press changes nothing and says
+    /// why, which is [`tapped`]'s and [`scaled`]'s answer to the same state.
+    #[test]
+    fn the_offset_keys_say_so_and_change_nothing_with_no_input_attached() {
+        let mut open: Option<audio::Audio> = None;
+        let line = nudged(&mut open, &Operation::SetLatencyOffset { ms: 25.0 })
+            .expect("`nudged` answered nothing for an offset");
+        assert!(
+            line.contains("no audio input") && line.contains("audio-in"),
+            "a press with nothing open did not say why or where the input is picked: {line}"
+        );
+        assert!(open.is_none(), "a press with nothing open opened something");
+        // The same sentence the key arm prints before it builds an operation
+        // at all, so the two paths into this state cannot drift apart.
+        assert!(
+            line.contains(NO_ROOM_FOR_AN_OFFSET),
+            "the two ways into a panel with no room say two different things: {line}"
+        );
+
+        // Every other operation is somebody else's, on `attached`'s terms.
+        assert_eq!(nudged(&mut open, &Operation::TapBeat), None);
     }
 
     /// **Every verdict the engine can report says what it does to the lane,
@@ -10177,14 +10452,18 @@ mod key_column {
     //! well defined, because
     //! [ADR-0214](../../../docs/adr/0214-the-program-moves-out-of-the-cli-and-two-thin-binaries-sit-over-it.md)
     //! gave this workspace a second keyboard: `karakuri-cli` binds thirty-nine
-    //! keys and this program binds every key in [`super::KEYS`], **eight
+    //! keys and this program binds every key in [`super::KEYS`], **seven
     //! letters mean different things on the two**, and a badge saying
     //! `key f g` did not say whose.
     //! (Nine when ADR-0220 was written; the library's load route added seven —
     //! the four that select a deck, the two that walk the library cursor, and
-    //! `l`. The four are also the one place beyond `esc` where the two
+    //! `l`. The four are also one of the places beyond `esc` where the two
     //! keyboards **agree**, because a deck is a slot number and there was
-    //! nothing to translate.)
+    //! nothing to translate. Eight when the audio session landed and `b`,
+    //! `,` and `.` joined them, and seven since `p` stopped being the panel's
+    //! report and became the latency offset the page specifies — the one
+    //! letter this column has ever taken *back* from the panel, and the pair
+    //! `o` and `p` agree on both keyboards now.)
     //!
     //! The page now says whose, in its legend: **the key column is the
     //! instrument's keyboard**, which is this file's `match` on
@@ -10367,10 +10646,6 @@ mod key_column {
         // The room's colours. Nothing in the arrangement moves and no
         // `Outcome` says so, which is why it is not an operation.
         ("n", &[]),
-        // `Op::Report`, and it has no row for good: its reply is a list of
-        // pixel rectangles keyed by a private handle, which three of the four
-        // surfaces could not carry (ADR-0205).
-        ("p", &[]),
         ("r", &["Reset the arrangement"]),
         ("s", &["Solo a region"]),
         // `Op::UnfoldAll` — the page carries the region and the everything
@@ -10411,16 +10686,19 @@ mod key_column {
         // this program opened, and each says so when there is none rather
         // than doing nothing (`super::tapped`, `super::scaled`).
         //
-        // **They are the two rows that moved in this column and not a third**:
-        // *Nudge the latency offset* is specified as `o` and `p`, and `p` is
-        // `Op::Report` here. The page says whether the instrument takes those
-        // letters or the command line gives them up is a decision nobody has
-        // made and is a change to the specification, so that row's key badge
-        // stays `plan` and no arm binds `o` alone — a badge naming two keys
-        // with one of them bound would be a badge that lies.
+        // **And the third row moved with them, which took a letter back.**
+        // *Nudge the latency offset* is specified as `o` and `p`; `p` was
+        // `Op::Report` here and a badge naming two keys with one of them
+        // bound would be a badge that lies, so the decision the page was
+        // waiting on was made on 2026-08-31 and it was the first of the three
+        // it named: the instrument takes the letters and the panel diagnostic
+        // keeps no key. All five of these mean the same thing on both
+        // keyboards.
         ("b", &["Tap the beat"]),
         (",", &["Halve or double the grid"]),
         (".", &["Halve or double the grid"]),
+        ("o", &["Nudge the latency offset"]),
+        ("p", &["Nudge the latency offset"]),
         // **The library cursor, and it reaches no row on purpose.** Nothing in
         // the vocabulary moves it: `docs/manual/console.html` decides that
         // where the deck selection has a row of its own, and the argument is
@@ -10453,7 +10731,7 @@ mod key_column {
     /// The keys that reach no row, so that one which starts reaching one stops
     /// being an exception, and a new exception is written down rather than
     /// discovered. The reasons are at the entries in [`ROWS`].
-    const NO_ROW: &[&str] = &["n", "p", "up", "down", "return", "backspace", "space"];
+    const NO_ROW: &[&str] = &["n", "up", "down", "return", "backspace", "space"];
 
     fn workspace() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR"))

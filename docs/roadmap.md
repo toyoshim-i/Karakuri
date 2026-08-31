@@ -731,12 +731,16 @@ window with a set on it must not close over a cable; and an input that **goes aw
 nobody's to notice, because `staleness` already takes both confidences to zero over half a second
 and a watchdog that re-opened the stream would re-lock the grid in the middle of a set.
 
-**Three of the four rows it was blocking moved and the fourth is blocked on a letter.** *Attach a
+**All four rows it was blocking moved, and the fourth took a decision to get there.** *Attach a
 beat source* is the `audio-in` pill's card in the panel column; *Tap the beat* and *Halve or double
 the grid* are `b`, `,` and `.` in the key column, which the command line means the same three things
-by. *Nudge the latency offset* is specified as `o` and `p`, this program binds `p` to `Op::Report`,
-and a badge naming two keys with one bound would be a badge that lies — so the row is where it was
-and the decision it is waiting on is [every operation](manual/operations.html)'s, not this file's.
+by. *Nudge the latency offset* is specified as `o` and `p`, and this program bound `p` to
+`Op::Report` — a badge naming two keys with one bound would be a badge that lies, so the row waited
+on the letter. **The maintainer's, on 2026-08-31: a panel diagnostic does not need a shortcut, so
+delete it.** The key went and the variant did not: three files read `Op::Report`, and two of them
+are load-bearing for something else — it is the only operation that reads every rectangle, which is
+what catches a stale solve, and the only outcome that comes back carrying a `Vec` and must still
+answer `Repaint::Never`. What this program deleted is its own English for a route it no longer has.
 *Attach a signal to a parameter* was the fourth row in the old list here and is a bay's worth of work
 of its own, with nothing to do with a device being open.
 

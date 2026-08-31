@@ -470,6 +470,35 @@ pub enum Op {
     /// A fresh arrangement, at the same viewport.
     Reset,
     /// Every node and where it solved to.
+    ///
+    /// **No surface binds a key to this, and none has since 2026-08-31.**
+    /// `crates/karakuri/src/main.rs` bound `p` to it and printed the table;
+    /// `docs/manual/operations.html` specifies `p` as half of *Nudge the
+    /// latency offset*, a badge naming two keys with one of them bound would
+    /// be a badge that lies, and a panel diagnostic asked what shortcut it
+    /// needed had no answer worth the letter. So the letter went and the
+    /// operation stayed.
+    ///
+    /// **What still reads it is this crate's own suite**, and neither test is
+    /// a test *of* this variant:
+    /// [`tests/panel.rs`](../../tests/panel.rs) asks for a report immediately
+    /// after a solo with nothing solving in between, which is what catches
+    /// [`Panel::op`] leaving a solve owed — it is the only operation that
+    /// reads every rectangle, so it is the only one that can; and
+    /// [`tests/repaint.rs`](../../tests/repaint.rs) asks it because
+    /// [`Outcome::Report`] is the one outcome that carries a `Vec` and must
+    /// still answer [`crate::repaint::Repaint::Never`], which is the case
+    /// P-0072's still-panel clause is most exposed to.
+    ///
+    /// **And it is not the startup legend's table.** That one is each
+    /// region's *min and max* — the constraints, printed once, before
+    /// anything has been dragged. This is each region's solved rectangle and
+    /// whether it is folded, at whatever moment it is asked. Nothing else in
+    /// the system answers the second.
+    ///
+    /// `tests/vocabulary.rs` goes on pinning that no row on
+    /// `docs/manual/operations.html` names it, which is permanent
+    /// (ADR-0205) and is about the page rather than about a key.
     Report,
 }
 
