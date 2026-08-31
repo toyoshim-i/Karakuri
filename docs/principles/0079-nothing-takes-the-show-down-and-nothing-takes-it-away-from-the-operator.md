@@ -112,6 +112,19 @@ its own exit: the answer that would let a model turn a knob is not a bigger tool
 per-node authority (rule 06, ADR-0211) — an operator granting a node, which puts a hand back in the
 loop rather than removing the hazard.
 
+**Annotated 2026-08-31, the evening of the day this was written.** The scope above is now a
+**default** and not a scope, and the tools are seven rather than six — `wire_input` landed the same
+morning. The maintainer's decision is that MCP is connected to every operation and that the classes
+which could stop a performance are closed until an operator opens the one they belong to from its
+bay's head, a call into a closed class being *refused* rather than hidden
+([ADR-0235](../adr/0235-mcp-reaches-every-operation-and-what-could-stop-the-show-is-refused-until-the-operator-opens-it.md)).
+**The per-operation argument above is what that record draws the classes with**, and it changes job
+rather than losing: the three answers decide which class an operation falls in and therefore why it
+is closed by default, and the operator's opening decides whether a closed class is reachable now.
+The exit this paragraph names — an operator granting, which puts a hand back in the loop — is the
+one that was taken, one level up from a node of a Set to a class of operations, because the mix
+faders, the master chain and the outputs are no node's.
+
 **The governor's rollback.** Why it is automatic: waiting for a human is answer three, and answer
 two was available. Why it never demotes a Live slot: taking a slot off air is not a recovery, it is
 the failure — there is no recovery from it and no way to explain it to an audience (P-0033). This
