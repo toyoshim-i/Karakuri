@@ -144,14 +144,32 @@ Point a chat client at `http://127.0.0.1:8737/` and it can **read a slot's proce
 it, and be told what happened**. "The one that's showing now, a bit more vivid" is a small
 edit to a declarative file, and hot-swapping that file is what `--watch` already does.
 
-Six tools. `read_procedure` gives you the source; `write_procedure` checks it and, if it
+Seven tools. `read_procedure` gives you the source; `write_procedure` checks it and, if it
 compiles, writes it — **and if it does not compile, what comes back is the checker's
 diagnostics, against the source**, which is what lets a model fix its own mistake;
 `swap_outcome` says whether the result landed, was rolled back for costing too much, or
 failed to build. A write returning cleanly means it compiled, not that it is on screen, so
 the third tool is where the loop closes.
 
-`save_set` is the fourth, and it is the `k` key reachable from a client: **it keeps what a
+`wire_input` is the fourth, and it is the other half of a write. A procedure declares each
+input under a name of its own — `uses far : Geometry`, `uses shape : Field`, `uses view :
+Camera`, `uses only : Source` — and never says which node fills it. The Set says that, as an
+`edge`, and this is how a model says it: `--edge morph.far=sphere_shell` at a terminal, four
+arguments here. **Both ends are node names rather than addresses**, because a position moves
+when a slot's files are reordered and that would silently change which geometry a morph
+blends towards; a node is called what the Set named it, or what its own procedure calls
+itself where nothing named it, which is what `read_set` and `list_sets` answer in. An edge
+already binding that input is replaced and every other edge is left alone, so changing your
+mind is one call and never a refusal about a slot being bound twice. **Adding a `uses` to a
+procedure leaves the slot unable to build until an edge fills it**, so write the procedure
+and then wire it — the builds in between are refusals `swap_outcome` reports, and what was on
+air stays on air through them. **Nothing here unbinds one**: a procedure rewritten without a
+`uses` it was wired for leaves an edge naming a slot nothing declares, and the slot refuses
+to build for that instead. A name the Set does not hold, a slot the node does not declare, or
+a far end of the wrong kind is refused where the slot is built, in the same sentence `--edge`
+meets, and comes back through `swap_outcome` with everything else that rebuild decided.
+
+`save_set` is the fifth, and it is the `k` key reachable from a client: **it keeps what a
 slot is playing** as a Set file you can reload with `--load-set`. Give it a `slot`, and an
 `id` if you want to name the result — leave the `id` out and it is named after the moment it
 was saved, exactly as the key press is. **An `id` you choose overwrites a set already under
@@ -170,7 +188,7 @@ hash ([ADR-0138](adr/0138-a-model-names-a-set-not-a-hash.md)), and it states wha
 procedure *declares* rather than what the set turned it to
 ([ADR-0139](adr/0139-a-card-states-what-a-procedure-declares-and-not-what-a-set-turned-it-to.md)).
 
-`read_set` is the fifth and it is the way back in. Give it the id of a set you kept and it
+`read_set` is the sixth and it is the way back in. Give it the id of a set you kept and it
 says **what that set holds and what each procedure in it declares**: every node with its
 layer and the name the set gave it, what the procedure calls itself, each knob with the two
 numbers a value has to lie between and the value it takes when nothing turns it, the element
@@ -184,7 +202,7 @@ without a card — put as bytes, or put by a build older than cards — is descr
 that, and not as a broken library: cards are derived, one appears the next time something
 compiles that artifact and stores it, and the source is in the store either way.
 
-`list_sets` is the sixth, and it is what makes the fifth reachable. `read_set` answers about
+`list_sets` is the seventh, and it is what makes the sixth reachable. `read_set` answers about
 an id you already have, and the ids of everything kept before this conversation are not
 something a model can guess — so this lists **what the store holds**: every set, most
 recently written first, with an address and a name per node. Two optional filters, because a
@@ -203,8 +221,10 @@ every topology, and every stage output — **generated from the checker's own ta
 than written down beside them. Prose goes stale; those lists cannot, because the same tables
 are what reject a procedure.
 
-Nothing here can do anything a key cannot — it is the third control surface after the
-keyboard and MIDI, on the same terms. **A set a model rewrote replays with no model
+It is the third control surface after the keyboard and MIDI, on the same terms — and one
+thing here has no key: **binding a declared input is `wire_input` and `--edge`, and no key
+press asks for it**, because a `uses` is written in the same breath as the procedure that
+declares it and the keyboard has never had a way to say a node's name. **A set a model rewrote replays with no model
 attached**: `--record-session` writes a `procedure` record whenever a swap lands, so
 `--replay` rebuilds the slot at the frame it changed on. That was not true when this surface
 was first built, and it is the one thing it needed of the format.

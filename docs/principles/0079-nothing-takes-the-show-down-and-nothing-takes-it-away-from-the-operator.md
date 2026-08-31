@@ -95,8 +95,8 @@ the operator gets, made as legible as this system can make it.
 
 ## What it settles
 
-**MCP's scope.** Six tools — `read_procedure`, `write_procedure`, `swap_outcome`, `read_set`,
-`list_sets`, `save_set`. `docs/manual/operations.html` states the shape of that and no reason for
+**MCP's scope.** Seven tools — `read_procedure`, `write_procedure`, `wire_input`,
+`swap_outcome`, `read_set`, `list_sets`, `save_set`. `docs/manual/operations.html` states the shape of that and no reason for
 it: *"A model can rewrite a whole procedure and cannot turn one knob … touches nothing in the mix,
 the clock or what is on air."* The reason is this rule, applied per operation rather than per actor.
 `write_procedure` has all three answers standing behind it: the source is priced before it is built
@@ -113,8 +113,8 @@ per-node authority (rule 06, ADR-0211) — an operator granting a node, which pu
 loop rather than removing the hazard.
 
 **Annotated 2026-08-31, the evening of the day this was written.** The scope above is now a
-**default** and not a scope, and the tools are seven rather than six — `wire_input` landed the same
-morning. The maintainer's decision is that MCP is connected to every operation and that the classes
+**default** and not a scope; the seventh tool, `wire_input`, landed the same morning and is listed
+with the rest above, where this paragraph first read six. The maintainer's decision is that MCP is connected to every operation and that the classes
 which could stop a performance are closed until an operator opens the one they belong to from its
 bay's head, a call into a closed class being *refused* rather than hidden
 ([ADR-0235](../adr/0235-mcp-reaches-every-operation-and-what-could-stop-the-show-is-refused-until-the-operator-opens-it.md)).
@@ -216,7 +216,9 @@ In code the three answers are `karakuri-ir`'s check pass and `cost::estimate` (r
 [governor.rs](../../crates/karakuri-engine/src/governor.rs) (undo),
 [deck.rs](../../crates/karakuri-engine/src/deck.rs) and
 [probe.rs](../../crates/karakuri-engine/src/probe.rs) (be loud about what it measured and what it
-dropped), and `crates/karakuri-environment/src/mcp.rs`, whose six tools are the scope this settles.
+dropped), and `crates/karakuri-environment/src/mcp.rs`, whose seven tools are the scope this settles — now a
+default rather than a scope, with `karakuri-operation`'s `gate.rs` holding the classes, the
+refusals and where each one is opened (ADR-0235).
 What defends it in practice is listed in [roadmap.md](../roadmap.md) under *Continuous concerns →
 Live safety*, whose own preamble is the reason this is a principle and not a milestone: **"Not
 milestones. These degrade silently if not defended at every step."**
