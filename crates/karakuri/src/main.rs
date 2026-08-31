@@ -2027,10 +2027,12 @@ impl Readout {
             );
         }
         println!(
-            "the crossfade row under the strips is NOT drawn — an A/B track, wipe, iris, \
-             next bar, 8 beats and go are a transition being armed and fired, and nothing \
-             here holds what is armed. nor are the two focuses: the deck selection and \
-             keyboard focus must not look alike, and this console keeps neither."
+            "the transition row under the strips is NOT drawn — wipe, iris, next bar, \
+             8 beats and go are a transition being armed and fired, and nothing here holds \
+             what is armed. the crossfader that used to sit over it is not undrawn but \
+             gone: the mixer has no crossfader. nor are the two focuses drawn: the deck \
+             selection and keyboard focus must not look alike, and this console keeps \
+             neither."
         );
         println!();
         for node in self.panel.nodes() {
@@ -5587,7 +5589,7 @@ fn reading(operation: &Operation, deck: &Deck, look: &Look) -> Current {
     //
     // A quantum and a length are a *surface's* setting deciding what the next
     // move means, and this panel draws no control that sets either: the
-    // transition row is not built, the crossfader is not drawn at all, and no
+    // transition row is not built, there is no crossfader to build, and no
     // control here emits any of the three operations that read them. A value
     // handed in would be this file inventing a setting nobody chose, which is
     // the failure `Current`'s every-field-optional rule exists to prevent —
