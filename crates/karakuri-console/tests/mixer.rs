@@ -220,7 +220,8 @@ fn a_strip_is_the_mocks_own_boxes() {
     // `lib.rs` derives the mixer's 316 as a bay head, `.mixer-strips`'s 6 + 6
     // around a strip, and `.xfade`'s 61 — so a strip is this tall in both
     // places or in neither, and what is left under the strips is the
-    // crossfade row this pass does not draw.
+    // transition row this pass does not draw, plus the 23.5 the crossfader
+    // took with it when the mixer was decided to have none.
     assert!(
         near(size::STRIP_H, 215.5),
         "a strip is {} tall",
@@ -231,8 +232,8 @@ fn a_strip_is_the_mocks_own_boxes() {
             316.0 - size::HEAD_H - size::STRIPS_PAD * 2.0 - size::STRIP_H,
             61.5
         ),
-        "what the mixer has left under its strips is not `.xfade`'s 61 — the bay's own \
-         27 + 227.5 + 61 was rounded up by the half pixel this is over"
+        "what the mixer has left under its strips is not the 61 `.xfade` was reserved — the \
+         bay's own 27 + 227.5 + 61 was rounded up by the half pixel this is over"
     );
 
     let strips = mock_strips();

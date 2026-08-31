@@ -824,9 +824,11 @@ than estimated**: the claim that it is negligible is not made.
 
 **The manual has caught up, and writing it found more than it closed** ([console.html](manual/console.html),
 2026-08-29). Three homes were reported missing and **one of the three was already drawn**: the
-crossfader is `.xfade`'s first row, which `karakuri-console`'s own arithmetic already counts as 61
-of the mixer's 316 — it had no name and no tooltip rather than no markup, so it gained prose and a
-tooltip and no second control. The **deck head** and the **latency offset** were genuinely absent and
+crossfader was `.xfade`'s first row, which `karakuri-console`'s arithmetic counted as part of the
+mixer's 316 — it had no name and no tooltip rather than no markup, so it gained prose and a tooltip
+and no second control. **That row is gone as of 2026-08-31**
+([ADR-0233](adr/0233-the-consoles-mixer-has-no-crossfader.md)), and what it left behind is a bay
+reserving 23.5 pixels for nothing. The **deck head** and the **latency offset** were genuinely absent and
 now exist: the deck head under each `.half-head` in the **inspector** rather than on a preview cell,
 because a `free | tempo | beat` triplet is about 106px against a preview cell's 112 and rule 05
 already says everything about what a deck *is* lives there; the offset beside the `audio-in` pill
@@ -886,10 +888,14 @@ over-cautious: `beats` is the grid evaluated at the material's own `t`, and unde
 itself advances at the tempo ratio, so the pair runs beats-driven motion at the *square* of it —
 `deck.rs` states exactly that, and
 [P-0027](principles/0027-a-silently-wrong-image-loses-to-a-loud-failure.md) is what makes a refusal
-the right answer rather than a quiet picture. And the crossfader's mark is right as a readout: it is
+the right answer rather than a quiet picture. And the crossfader's mark was right as a readout: it is
 one number derived from two recorded ones, and a draggable mark would have to invert a projection
 that is not invertible, inventing the split between two `SetOpacity` records by a law no record
-names ([P-0028](principles/0028-every-control-ends-in-the-same-record.md)). That answers a tension
+names ([P-0028](principles/0028-every-control-ends-in-the-same-record.md)). **That argument outlived
+the control**, and is half of why there is none
+([ADR-0233](adr/0233-the-consoles-mixer-has-no-crossfader.md), 2026-08-31): everything below this
+paragraph about a crossfader is what was found on the day, and the control it was found about is
+gone. That answers a tension
 [ADR-0180](adr/0180-the-operation-vocabulary-is-a-crate-with-no-dependencies.md) recorded and left
 open — *"one of those needs a different name or a different control"* — and it got a different
 control.
@@ -898,8 +904,12 @@ control.
 in, and the fault is in the cycling affordances rather than in the vocabulary
 ([ADR-0218](adr/0218-re-anchoring-is-set-sync-naming-the-mode-the-deck-is-in-and-a-cycle-cannot-say-it.md)) — a `ReAnchor` variant lost to
 [P-0074](principles/0074-an-operation-says-what-it-wants-never-which-way-to-move.md), which
-predicted this shape by name. The crossfader spans the selection and the one after it, so the panel
-and the `x` key are one gesture ([ADR-0219](adr/0219-the-crossfader-spans-the-selection-and-the-one-after-it.md)); fixed `A…B` and assignable ends both lost. And
+predicted this shape by name. The crossfader was decided to span the selection and the one after it, so
+that the panel and the `x` key would be one gesture
+([ADR-0219](adr/0219-the-crossfader-spans-the-selection-and-the-one-after-it.md)); fixed `A…B` and
+assignable ends both lost. **The control itself lost on 2026-08-31**
+([ADR-0233](adr/0233-the-consoles-mixer-has-no-crossfader.md)) — the mix is the channel faders, and
+`x` is where a crossfade is asked for. And
 **the beat anchor's `±offset` is renamed the scrub** — it already had that name and was not using
 it, since its control is *Scrub*, its operation is `ScrubDeck`, and `Transport`'s own field
 documentation calls it *"the operator's scrub"*; the latency offset keeps the word because it is the

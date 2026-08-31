@@ -66,3 +66,9 @@ that two `SelectDeck` presses already meet.
   no record names. That answers the tension
   [ADR-0180](0180-the-operation-vocabulary-is-a-crate-with-no-dependencies.md) recorded and left
   open: *"one of those needs a different name or a different control."* It got a different control.
+- **Annotated 2026-08-31: the control this record is about was removed.**
+  [ADR-0233](0233-the-consoles-mixer-has-no-crossfader.md) decided that the console's mixer has no
+  crossfader, so nothing spans two decks and the sentence owed above is owed by nobody. This is
+  annotation and not supersession — the subject went, the decision was not reversed, and no record
+  answers *which two decks* differently
+  ([P-0066](../principles/0066-an-adr-is-a-description-of-history-corrected-but-never-revised.md)).

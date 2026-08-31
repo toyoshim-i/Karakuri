@@ -477,7 +477,13 @@ fn right_pane() -> Spec {
             // of 7 + 7 padding, five 5px gaps and its contents: name 15, tally
             // 13.5, trim 13.5, `.fader-col`'s stated 104, number 15, mode
             // 15.5) = 227.5, and `.xfade` (1px rule, 8 + 10 padding, a 16.5
-            // row, a 7px gap and an 18.5 row) = 61.
+            // row, a 7px gap and an 18.5 row) = 61. **The 16.5 row and the gap
+            // were the crossfader's**, and the mock stopped drawing them the
+            // day the mixer was decided to have no crossfader — so `.xfade` is
+            // 37.5 there and this bay reserves 23.5 for a row nothing draws.
+            // The height has not been re-derived, which is a decision about
+            // the bay rather than a transcription, and it is written down
+            // rather than silently carried.
             //
             // **Minimum equals the size**, and that is the manual rather than
             // laziness: *"Four channel strips, all visible, nothing that

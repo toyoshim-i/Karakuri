@@ -5363,12 +5363,16 @@ impl<'a> Mixer<'a> {
 ///   the console does not have, and the number that *is* known — how many
 ///   strips there are — is on the face of the bay already. It arrives with
 ///   paging.
-/// - **`.xfade`, the whole crossfade row under the strips**: an A/B track with
-///   a handle on it, and `wipe`, `iris`, `next bar`, `8 beats` and `go`. That
-///   is a transition being armed and then fired, and every one of them is a
-///   control over machinery the console cannot reach — nothing here holds what
-///   is armed, and `go` would fire nothing. It is 61 of the bay's 316 and it
-///   stays empty.
+/// - **`.xfade`, the transition row under the strips**: `wipe`, `iris`, `next
+///   bar`, `8 beats` and `go`. That is a transition being armed and then
+///   fired, and every one of them is a control over machinery the console
+///   cannot reach — nothing here holds what is armed, and `go` would fire
+///   nothing. **The A/B track that used to sit above it is not a row this
+///   console owes**: the mixer has no crossfader, and `console.html`'s *The
+///   mixer has no crossfader* is the argument. The block is 37.5 of the mock's
+///   bay now and the bay still reserves 61 for it, which is the 16.5 row and
+///   the 7 gap the crossfader took with it — a height nobody has re-derived,
+///   said here rather than assumed.
 /// - **`.wfocus`, which is the second of the mock's two focuses**: keyboard
 ///   focus, transient, wherever tab lands. The mock draws it as a dashed sun
 ///   outline and the deck selection as a solid lavender ring, on purpose,
@@ -5449,7 +5453,9 @@ pub fn mixer<'a>(
 /// The region less [`size::HEAD_H`] for the bay head painted over the top of
 /// it, inset by [`size::STRIPS_PAD`] left, right and top, and **exactly
 /// [`size::STRIP_H`] tall** rather than whatever is left over. The bay is
-/// taller than its strips by design — `.xfade` is the other 61 of it — and a
+/// taller than its strips by design — the reservation for `.xfade` is the
+/// other 61 of it, 23.5 of which is the crossfader row the mock no longer
+/// draws — and a
 /// mixer with room to grow (it is the only visible child of a soloed right
 /// pane, and a fixed child with room takes it, ADR-0157) grows the bay and not
 /// the strips: a `.strip` is a column of fixed type around a `.fader-col`
@@ -9236,8 +9242,8 @@ pub struct View {
     /// names.
     ///
     /// Read by [`mixer_into`] for the ring and by [`library`] for the letter
-    /// on the load pill; `console.html`'s crossfader spans it and the one
-    /// after it, and nothing draws that yet.
+    /// on the load pill, and those two are the whole of it: `console.html`'s
+    /// crossfader read it as well, and there is no crossfader.
     selection: u8,
     /// **Which Set in the Library bay a load would take**, the mock's
     /// `.lib-row.cursor`, and the second of this console's two pointers.
