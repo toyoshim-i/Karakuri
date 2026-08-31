@@ -221,10 +221,15 @@ every topology, and every stage output — **generated from the checker's own ta
 than written down beside them. Prose goes stale; those lists cannot, because the same tables
 are what reject a procedure.
 
-It is the third control surface after the keyboard and MIDI, on the same terms — and one
-thing here has no key: **binding a declared input is `wire_input` and `--edge`, and no key
-press asks for it**, because a `uses` is written in the same breath as the procedure that
-declares it and the keyboard has never had a way to say a node's name. **A set a model rewrote replays with no model
+It is the third control surface after the keyboard and MIDI, on the same terms: **nothing here
+may do anything a key cannot, and that is the goal rather than a report.** One thing does today
+— **binding a declared input is `wire_input` and `--edge`, and no key press asks for it**,
+because a `uses` is written in the same breath as the procedure that declares it and the
+keyboard has never had a way to say a node's name. That is a debt against rule 01 and not an
+exception carved out of it; what it is waiting on is a way for a press to say a node's name,
+which the Inspector's node head is specified to give it
+([P-0036](principles/0036-an-invariant-that-is-not-yet-true-says-so.md): an invariant that is
+not yet true says so). **A set a model rewrote replays with no model
 attached**: `--record-session` writes a `procedure` record whenever a swap lands, so
 `--replay` rebuilds the slot at the frame it changed on. That was not true when this surface
 was first built, and it is the one thing it needed of the format.
