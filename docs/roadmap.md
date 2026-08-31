@@ -718,18 +718,20 @@ Everything from here down answers *what is each piece waiting on*, and none of i
   the other surfaces onto `karakuri-operation`, the remaining bays — and the first and third are
   closed.
 
-**And the panel has to grow audio, which its own header rules out.** Four rows of the panel column
-cannot be reached by a program with no audio device open — *Tap the beat* and *Nudge the latency
-offset* are `karakuri_environment::audio::Audio`'s methods and that type *"cannot be constructed
-without opening a device"*, tapping needs the output lag for the same reason the CLI's does,
-*Attach a beat source* is the tempo source, and *Attach a signal to a parameter* wants a bus with
-something on it. `crates/karakuri/src/main.rs`'s own header says the opposite in as many words —
-*"and **no more than that**: no audio, no MIDI, no MCP, no replay and no session"* — and that
-sentence was true of the program it described and is now a charter the exit condition contradicts.
-**Neither is wrong: what is missing is the record that the panel became the program that runs a
-show.** The machinery is `karakuri-environment`'s and `karakuri-cli` opens it already, so this is
-work rather than a blocker — but it is work nobody has costed, and the four rows sit in the board's
-`transport`, `tap`, `offset` and `sensitivity row` groups looking like drawings.
+**And the panel has to open an audio device, which nothing has costed.** Four rows of the panel
+column cannot be reached by a program that has not — *Tap the beat* and *Nudge the latency offset*
+are `karakuri_environment::audio::Audio`'s methods and that type *"cannot be constructed without
+opening a device"*, tapping needs the output lag for the same reason the CLI's does, *Attach a beat
+source* is the tempo source, and *Attach a signal to a parameter* wants a bus with something on it.
+**This is unwired rather than ruled out**, and the distinction was got wrong once already:
+`crates/karakuri/src/main.rs`'s header says *"and **no more than that**: no audio, no MIDI, no MCP,
+no replay and no session"*, which reads as a charter and is an **inventory** — it lists what
+`karakuri-cli` wires and this program does not, which is why *replay* and *session* are in the same
+sentence. It is a description, and descriptions rot: the clause in front of it said *two slots*
+while the deck held four. ADR-0214 is the boundary that actually governs, and it makes this program
+one of two thin binaries over `karakuri-environment` — the package `audio.rs` lives in. So the four
+rows are work the design already anticipated, sitting in the board's `transport`, `tap`, `offset`
+and `sensitivity row` groups looking like drawings.
 
 **One thing is owed by the mixer and is nobody's next task**: `Control::MaskPosition` is the third
 control a transition can move, the strip has no control and no readout for that number, so **an
