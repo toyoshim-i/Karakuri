@@ -49,15 +49,20 @@
       <strong>The <em>key</em> column is the instrument's keyboard</strong>
       &mdash; the keys <code>cargo run -p karakuri</code> binds, and no other
       program's. Two programs in this repository have a keyboard and they are
-      not the same keyboard: the instrument binds twenty-three keys,
-      <code>karakuri-cli</code> binds thirty-nine, and eight letters mean one
-      thing at the panel and something else at the command line. Eight keys
-      agree, and they arrived in two groups of one reason each: <code>esc</code>
+      not the same keyboard: the instrument binds twenty-four keys,
+      <code>karakuri-cli</code> binds thirty-nine, and seven letters mean one
+      thing at the panel and something else at the command line. Ten keys
+      agree, and they arrived in three groups of one reason each: <code>esc</code>
       quits on both and <code>0</code> to <code>3</code> select a deck on both,
-      because a deck is a slot number and there was nothing to translate; and
+      because a deck is a slot number and there was nothing to translate;
       <code>b</code>, <code>,</code> and <code>.</code> tap the beat and move
       the grid an octave on both, because those three address the beat tracker
-      and there is one of it. So a
+      and there is one of it; and <code>o</code> and <code>p</code> nudge the
+      latency offset on both, because that is one room's two outputs and the
+      same five milliseconds a press whichever keyboard asks. <strong>The last
+      pair is the only one that arrived by a letter being taken back</strong>
+      &mdash; <code>p</code> was the panel's report until this page's own
+      question was answered, below. So a
       <em>built</em> key badge names a key an
       operator at the panel can press today, for the same reason a
       <em>built</em> panel badge names a control they can reach: both columns
@@ -72,7 +77,7 @@
       second copy of it here would be a list that goes stale.
     </p>
     <p>
-      <strong>64 operations, and 60 of the 272 ways in exist.</strong> Eight of
+      <strong>64 operations, and 61 of the 272 ways in exist.</strong> Eight of
       them are the console's own shape &mdash; moving a boundary, folding a bay
       or a pane, bringing one back, solo, and the three that reset, keep and put
       back an arrangement &mdash; and ten of their thirty-two routes exist: the
@@ -83,29 +88,36 @@
       could, and the pill is it. Resetting is the default case of those two and
       is reached from both &mdash; <code>r</code>, and <em>start a new one</em>
       on the same pill.
-      <strong>Seventeen <em>key</em> badges are designed rather than built, and
+      <strong>Sixteen <em>key</em> badges are designed rather than built, and
       every one of them is a key the command line binds today.</strong> The
-      column is the instrument's keyboard and the instrument binds twenty-three keys,
-      so the seventeen are what the command line reaches and the panel does not; the
-      letters stay because this page is where a key is specified, and seven of
+      column is the instrument's keyboard and the instrument binds twenty-four keys,
+      so the sixteen are what the command line reaches and the panel does not; the
+      letters stay because this page is where a key is specified, and six of
       them are already spoken for at the panel &mdash; <code>f</code> and
       <code>g</code> fold, <code>z</code> brings back what is folded,
-      <code>u</code> unsolos, <code>r</code> resets, <code>p</code> asks the
-      panel to report itself and <code>n</code> changes its colours. Whether the
+      <code>u</code> unsolos, <code>r</code> resets and <code>n</code> changes
+      its colours. Whether the
       instrument takes those letters or the command line gives them up is a
       decision nobody has made, and it is a change to this specification rather
       than a note on it.
-      <strong>One of those seven is now holding a row back rather than merely
-      noted.</strong> <em>Nudge the latency offset</em> is specified as
-      <code>o</code> and <code>p</code>; the instrument opened an audio input
-      and reached the two rows beside it &mdash; <em>Tap the beat</em> on
-      <code>b</code>, <em>Halve or double the grid</em> on <code>,</code> and
-      <code>.</code>, all three of which the command line means the same thing by
-      &mdash; and left this one alone, because <code>p</code> is the panel's
+      <strong>One of them was holding a row back rather than merely noted, and
+      that is the one decision of the seven that has been taken.</strong>
+      <em>Nudge the latency offset</em> is specified as <code>o</code> and
+      <code>p</code>; the instrument opened an audio input and reached the two
+      rows beside it &mdash; <em>Tap the beat</em> on <code>b</code>,
+      <em>Halve or double the grid</em> on <code>,</code> and <code>.</code>
+      &mdash; and left this one alone, because <code>p</code> was the panel's
       report and a badge naming two keys with one of them bound would be a badge
-      that lies. Taking <code>p</code>, moving the report, or specifying a
-      different pair are three changes to this page and one of them has to be
-      made before the row moves. <strong>The twentieth was <code>e</code>, and the panel binds
+      that lies. Of the three changes that could move it &mdash; take
+      <code>p</code>, move the report to another letter, or specify a different
+      pair &mdash; the first was made: <strong>the instrument takes both
+      letters and the report keeps no key at all</strong>, because a panel
+      diagnostic asked what shortcut it needed had no answer worth a letter of
+      a specified pair. The operation is still there and
+      <a href="console.html">the console</a> still performs it; nothing on
+      either keyboard asks for it, and this page never named it, which is the
+      whole reason it was the cheaper of the two to move.
+      <strong>The twentieth was <code>e</code>, and the panel binds
       it now</strong> &mdash; the library's scope row was specified here before either keyboard
       had it, which is the order everything else on this page arrived in, and it is the one
       built key badge in this column that no command line reaches. <strong>Eighteen <em>panel</em> routes are
@@ -223,10 +235,10 @@
       </div>
       <div class="op">
         <div class="op-head"><h3>Nudge the latency offset</h3><span class="op-when ">immediate</span></div>
-        <p>Five milliseconds a press, for the delay between what a room hears and what it sees.</p>
+        <p>Five milliseconds a press, for the delay between what a room hears and what it sees. <code>o</code> steps it down and <code>p</code> steps it up, on both keyboards, and the value is held inside 200&nbsp;ms either way. <strong>It means nothing without an input attached</strong> &mdash; the offset is a term in the lead a beat correction is applied with, so with no room being listened to both keys say so and change nothing, and the <em>audio&#8209;in</em> pill beside it is what says whether there is one. The <em>panel</em> badge stays designed because the pill that would set it outright is not drawn; what exists is the pair of keys.</p>
         <div class="rts">
           <span class="rt plan">panel <b>offset</b></span>
-          <span class="rt plan">key <b>o p</b></span>
+          <span class="rt has">key <b>o p</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt gap">MCP <b>&mdash;</b></span>
         </div>

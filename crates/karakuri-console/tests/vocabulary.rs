@@ -251,6 +251,14 @@ const NO_OP: &[&str] = &[
 /// not cross, which is not the same as three routes nobody has built yet
 /// (ADR-0205).
 ///
+/// **And no surface binds a key to it any more**, since 2026-08-31: `p` was
+/// the window's shortcut for it and `p` is half of the pair
+/// `docs/manual/operations.html` specifies for *Nudge the latency offset*.
+/// That changes nothing here — this file is about which **rows** the page has,
+/// and a key was never one — but it is why the variant's own documentation now
+/// says what still reads it. This entry is unaffected either way: the reply
+/// still cannot be said in the vocabulary's terms, whoever asks.
+///
 /// **[`Op::Reset`] was the other entry and is not one any more.** It is a
 /// change rather than a question, it names no target, and *Reset the
 /// arrangement* is its row (ADR-0208) — so what this file pins about it is now
