@@ -1251,8 +1251,8 @@ whether the values behind it exist anywhere in this workspace.
   **What the load leaves undone is listed at that record** and none of it is a drawing: the listing
   is read once at startup, so a Set saved while the window is up is neither shown nor loadable until
   the next run — closing that wants a *reason* to re-read rather than a timer, which is a decision of
-  its own. **The scopes are drawn now and two of the four answer**, and what is left of the mock's
-  bay waits on something different in each case: the *favourite* is a fact nothing here writes, so
+  its own. **The scopes are drawn, they answer a press, and two of the four have something to list**, and
+  what is left of the mock's bay waits on something different in each case: the *favourite* is a fact nothing here writes, so
   **an operation that sets one is owed**; a folder *scope* is a chip that answers nothing and waits
   on **an operation that can ask a directory for a listing**, `ListSets { holds, layer }` having
   nowhere to put one; the *filters* have that same operation and no index to answer it. **And

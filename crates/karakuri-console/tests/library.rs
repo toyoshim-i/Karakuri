@@ -27,9 +27,9 @@
 
 mod common;
 
-use common::{drawn_once, id_of, near, rect_of, showing, solved, PLAUSIBLE, SMALLEST};
+use common::{drawn_once, id_of, near, rect_of, solved, PLAUSIBLE, SMALLEST};
 use karakuri_console::input::{claim, Claim};
-use karakuri_console::panel::Panel;
+use karakuri_console::panel::{Panel, GRAB};
 use karakuri_console::room::{size, Room};
 use karakuri_console::view::{library, mcp_pill, LibraryBay, Scope, View, DECK_LETTERS};
 use karakuri_layout::{Point, Rect};
@@ -564,26 +564,31 @@ fn a_folded_or_soloed_or_short_bay_lists_nothing() {
 }
 
 // ---------------------------------------------------------------------------
-// Nothing here is a control, and nothing is stored
+// The scope chips are the only controls here, and nothing is stored
 // ---------------------------------------------------------------------------
 
-/// **Nothing in the Library bay answers a pointer**, and for the `load → A`
-/// pill that is the specification rather than a thing not built yet.
+/// **The scope chips answer a press and nothing else in this bay does.**
 ///
 /// The mock draws four scope chips, two filter fields, a `+`, a row cursor and
-/// the pill. Seven of the eight are controls over machinery that does not
-/// exist, which is `view::library`'s own list. **The pill is the one that is
-/// not**: `console.html`'s *How a Set reaches a deck* settles that a load is
-/// *"a cursor and a key with no pointer anywhere in it"*, so the pill names
-/// where a press would land and is never itself pressed — and a drag from a
-/// row onto a strip is *"a second route to the same command, and never the
-/// first"*. So `claim` hands every point of this bay to `egui`, exactly as it
-/// does the transport row's.
+/// the `load → A` pill. **The chips are the one of them that is a control
+/// here**, and the reason is the page rather than the code: `console.html`
+/// puts the affordance on each chip — *"Click to show it; click another scope
+/// to leave it"* — and `docs/manual/operations.html` names the row as *Choose
+/// which scope the library shows*'s home.
+///
+/// **The pill is the one that is deliberately not**, and that is a
+/// specification and not a thing left unbuilt: *How a Set reaches a deck*
+/// settles that a load is *"a cursor and a key with no pointer anywhere in
+/// it"*, and the panel's own route to that row is the drag — *"a second route
+/// to the same command, and never the first"* — which the operations page
+/// still records as not drawn. So the two claims in this file are separate
+/// tests, because they are separate sentences: this one, and
+/// [`a_load_is_a_cursor_and_a_key_with_no_pointer_anywhere_in_it`].
 ///
 /// # The bay's corners do not reach the pill, and the two numbers say why
 ///
 /// The bay's own rectangle inset past [`GRAB`](karakuri_console::panel::GRAB)
-/// is where this test used to stop, and it is **two pixels short of the box
+/// is where the sweep used to stop, and it is **two pixels short of the box
 /// the pill is drawn in**. A `.lib-foot` is `padding: 5px 10px`
 /// ([`size::LIB_FOOT_PAD_X`]) and a flex row whose `.sep { flex: 1 }` pushes
 /// the pill to the far end of it, so the pill's right edge is 10 in from the
@@ -593,27 +598,62 @@ fn a_folded_or_soloed_or_short_bay_lists_nothing() {
 /// and a pill that claimed presses would have gone unasked.
 ///
 /// So the points are taken off [`LibraryBay`]'s own boxes rather than off the
-/// bay's corners: the foot's content box across its middle, and each drawn
-/// row's. That is the same rule the geometry test above is written to — ask
-/// the derivation that draws it — and it is why this file, not `claim`, is
-/// where the reach is stated.
+/// bay's corners — and the view handed to `claim` is one that has been told
+/// what libraries there are, which the sweep this replaces was not: a console
+/// with no scopes has no chip row at all, and asking it whether a chip takes a
+/// press is asking about a control nobody drew.
 #[test]
-fn nothing_in_the_library_is_a_control() {
-    let mut panel = console(PLAUSIBLE);
+fn the_scope_chips_answer_a_press_and_nothing_else_in_the_bay_does() {
+    let (view, mut panel) = showing_mock();
     let ctx = drawn_once();
-    let region = to_egui(rect_of(panel.layout(), "library"));
     let bay = bay(&panel);
-    let strips = Vec::new();
+    let region = to_egui(rect_of(panel.layout(), "library"));
+    let row = bay.scopes.expect("the bay was handed scopes");
 
-    // The four corners inside the bay, and its middle — which between them
-    // are a row, the list, the foot and the head.
+    // **Every chip, asked two pixels in from its own left edge.** Not the
+    // centre: the last chip runs out past the bay and its centre can be
+    // outside the row, which is the clip this row is drawn with and is
+    // [`a_chip_is_pressed_only_where_it_is_drawn`]'s subject.
+    let chips: Vec<(Scope, egui::Rect)> = bay.chips(&ctx, SCOPES).collect();
+    assert_eq!(
+        chips.len(),
+        SCOPES.len(),
+        "the bay was handed {} scopes and laid out {} chips",
+        SCOPES.len(),
+        chips.len()
+    );
+    for (scope, chip) in &chips {
+        let probe = egui::pos2(chip.min.x + 2.0, chip.center().y);
+        assert!(
+            row.contains(probe),
+            "`{}`'s own left edge is outside the scope row, so this test is asking about a \
+             capsule nobody drew",
+            scope.name()
+        );
+        assert!(
+            !matches!(
+                panel.layout().hit(Point::new(probe.x, probe.y), GRAB),
+                karakuri_layout::Hit::Divider { .. }
+            ),
+            "a boundary grabs {probe:?}, which is on the `{}` chip — rule 3 gives it first \
+             refusal and the chip would be dead there",
+            scope.name()
+        );
+        assert_eq!(
+            claim(&mut panel, &ctx, &view, Point::new(probe.x, probe.y)),
+            Claim::Panel,
+            "the console gave `egui` a press on the `{}` chip",
+            scope.name()
+        );
+    }
+
+    // **And every other point of the bay is `egui`'s**: the four corners
+    // inside it and its middle, the ground of the scope row itself, the foot's
+    // content box across its middle, and each drawn row.
     //
     // **Inset past `GRAB`**, because a boundary is claimed for a drag from six
-    // pixels either side of it and three of this bay's four edges are one. That
-    // is the panel taking a *divider*, which is the one thing it takes
-    // anywhere on the console; what this test is about is whether anything
-    // *in* the bay takes a press, and a point on a boundary is not in it.
-    let inset = karakuri_console::panel::GRAB + 2.0;
+    // pixels either side of it and three of this bay's four edges are one.
+    let inset = GRAB + 2.0;
     let mut points = vec![
         egui::pos2(region.min.x + inset, region.min.y + inset),
         egui::pos2(region.max.x - inset, region.min.y + inset),
@@ -621,11 +661,22 @@ fn nothing_in_the_library_is_a_control() {
         egui::pos2(region.max.x - inset, region.max.y - inset),
         region.center(),
     ];
-
-    // **The foot's content box, across its middle** — the count at one end and
-    // the pill at the other, with `.sep` between them. Eleven points at the
-    // foot's centre y, which is 13 off the bay's bottom edge and so clear of
-    // the boundary under it.
+    // **The scope row's own ground**: its left padding, the gap between the
+    // first two chips, and the band above the capsules. `.scope` is a capsule
+    // and not a cell — the row is not a segmented control — so the space
+    // between two of them belongs to nobody.
+    points.push(egui::pos2(
+        row.min.x + size::SCOPES_PAD_X * 0.5,
+        row.center().y,
+    ));
+    points.push(egui::pos2(
+        chips[0].1.max.x + size::SCOPES_GAP * 0.5,
+        row.center().y,
+    ));
+    points.push(egui::pos2(
+        chips[0].1.center().x,
+        row.min.y + size::SCOPES_PAD_Y * 0.5,
+    ));
     let (left, right) = (
         bay.foot.min.x + size::LIB_FOOT_PAD_X,
         bay.foot.max.x - size::LIB_FOOT_PAD_X,
@@ -638,35 +689,385 @@ fn nothing_in_the_library_is_a_control() {
         let t = step as f32 / 10.0;
         points.push(egui::pos2(left + (right - left) * t, bay.foot.center().y));
     }
-
-    // **And each drawn row's own box**, which is where a cursor would be and
-    // where a drag onto a strip would start. The row is the full width of the
-    // list, so its text box is one `LIB_ROW_PAD_X` in from either end.
     for index in 0..bay.rows {
-        let row = bay.row(index);
-        points.push(egui::pos2(row.min.x + size::LIB_ROW_PAD_X, row.center().y));
-        points.push(egui::pos2(row.center().x, row.center().y));
-        points.push(egui::pos2(row.max.x - size::LIB_ROW_PAD_X, row.center().y));
+        let at = bay.row(index);
+        points.push(egui::pos2(at.min.x + size::LIB_ROW_PAD_X, at.center().y));
+        points.push(egui::pos2(at.center().x, at.center().y));
+        points.push(egui::pos2(at.max.x - size::LIB_ROW_PAD_X, at.center().y));
     }
 
     let mut asked = 0;
     for p in &points {
-        let claimed = claim(&mut panel, &ctx, &showing(&strips), Point::new(p.x, p.y));
         assert_eq!(
-            claimed,
+            claim(&mut panel, &ctx, &view, Point::new(p.x, p.y)),
             Claim::Egui,
-            "the console took the pointer at {p:?}, which is inside the Library bay"
+            "the console took the pointer at {p:?}, which is inside the Library bay and is not \
+             on a scope chip"
         );
         asked += 1;
     }
     // A guard, so this cannot pass by testing nothing — and a floor under the
-    // reach, so the foot's sweep and the rows cannot quietly go away.
+    // reach, so the foot's sweep, the scope row's ground and the rows cannot
+    // quietly go away.
     assert_eq!(asked, points.len(), "not every point was asked");
     assert!(
-        points.len() >= 5 + 11 + 3,
-        "only {} points asked: the bay's corners, the foot's box and at least one row are the \
-         floor, and fewer is a sweep that has stopped covering the pill",
+        points.len() >= 5 + 3 + 11 + 3,
+        "only {} points asked: the bay's corners, the scope row's ground, the foot's box and at \
+         least one row are the floor, and fewer is a sweep that has stopped covering the pill",
         points.len()
+    );
+}
+
+/// **A load is a cursor and a key with no pointer anywhere in it.**
+///
+/// `console.html`'s sentence, stated on its own because it is its own
+/// decision. The `load → A` pill is a **readout** — *"what the control owes
+/// instead is to say where it lands before the press"* — and the panel's route
+/// to *Load material into a deck* is the drag from a row onto a strip, which
+/// that page calls *"a second route to the same command, and never the first"*
+/// and the operations page records as not drawn.
+///
+/// **So a pill that does nothing when it is pressed is the specification and
+/// not an oversight**, and what would be the oversight is the opposite: a
+/// press on it would name the deck from the selection, which is exactly what
+/// the *key* does, so it would add a pointer to the one gesture both pages
+/// describe as having none — and it would leave the gesture that *is*
+/// specified still undrawn. This test is what fails the day somebody wires it.
+///
+/// The pill's own box is asked rather than the foot's middle, because the box
+/// is where a press would land: it is measured off the same galley the paint
+/// lays out, so the rectangle asserted here and the capsule drawn are one
+/// statement.
+#[test]
+fn a_load_is_a_cursor_and_a_key_with_no_pointer_anywhere_in_it() {
+    let (mut view, mut panel) = showing_mock();
+    let ctx = drawn_once();
+    let bay = bay(&panel);
+    view.mixer = std::iter::repeat_with(strip).take(4).collect();
+
+    // **The pill, as wide as the words in it** — `load → A` at the console's
+    // own type size inside a `.pill`'s padding either side, which is
+    // `LibraryBay::pill`'s one argument.
+    let words = format!("load \u{2192} {}", DECK_LETTERS[0]);
+    let text = ctx.fonts_mut(|f| {
+        f.layout_no_wrap(
+            words.clone(),
+            egui::FontId::new(size::BASE, egui::FontFamily::Proportional),
+            egui::Color32::PLACEHOLDER,
+        )
+        .size()
+        .x
+    });
+    let pill = bay.pill(text + size::PILL_PAD_X * 2.0);
+    assert!(
+        bay.foot.contains_rect(pill),
+        "the pill at {pill:?} is not inside the foot at {:?}",
+        bay.foot
+    );
+
+    // **Across the pill at the foot's own centre line**, and not its top and
+    // bottom edges: `.lib-foot` is 26 tall and a `.pill` is 16.5, so the
+    // capsule's edges are 4.75 off the foot's — and the foot's bottom edge is
+    // the bay's, which is a boundary. 4.75 against a `GRAB` of 6 means a
+    // boundary would take a press on the capsule's own rim, which is
+    // `input.rs`'s rule 3 rather than anything about this row. **It is also
+    // the plainest evidence this was never meant to be a control**: every
+    // capsule on this console that *is* one clears the grab, and this one does
+    // not.
+    let mut points: Vec<egui::Pos2> = (0..=6)
+        .map(|step| {
+            let t = step as f32 / 6.0;
+            egui::pos2(pill.min.x + pill.width() * t, pill.center().y)
+        })
+        .collect();
+    // **And every row of the list**, which is where a drag onto a strip would
+    // begin — the gesture this row is owed and has not got.
+    for index in 0..bay.rows {
+        let at = bay.row(index);
+        points.push(egui::pos2(at.min.x + size::LIB_ROW_PAD_X, at.center().y));
+        points.push(at.center());
+    }
+    assert!(
+        bay.rows > 0,
+        "the bay drew no rows, so no row was asked about"
+    );
+
+    for p in &points {
+        assert_eq!(
+            claim(&mut panel, &ctx, &view, Point::new(p.x, p.y)),
+            Claim::Egui,
+            "the console took the pointer at {p:?} — a load answers the keyboard and this bay \
+             owes a drag, not a button"
+        );
+    }
+}
+
+/// **A press names the chip it landed on, and never the next one.**
+///
+/// This is the whole of what the pointer adds and it is `e`'s opposite:
+/// `docs/manual/operations.html` binds the key to *step to the next scope and
+/// wrap* because *"a bare press cannot type a name"*, and a pointer press
+/// **can** — it lands on one capsule and on no other. So the chip that was
+/// pressed is the chip that is asked for, which is
+/// [P-0074](../../../docs/principles/0074-an-operation-says-what-it-wants-never-which-way-to-move.md)'s
+/// division met by two surfaces rather than an inconsistency between them.
+///
+/// **The operation beside it still carries `Undecided`**, and that is asserted
+/// rather than left implied: the press knows which chip and the *vocabulary*
+/// does not, because a payload naming one of four would assert that the list
+/// of scopes can be finished. Settling that is a decision about the operations
+/// page and `karakuri-operation`, and this test is what fails the day somebody
+/// takes it — deliberately, so that it is taken on purpose.
+#[test]
+fn a_press_names_the_chip_it_landed_on_and_never_the_next_one() {
+    let (mut view, panel) = showing_mock();
+    let ctx = drawn_once();
+    let bay = bay(&panel);
+    let row = bay.scopes.expect("the bay was handed scopes");
+
+    for (scope, chip) in bay.chips(&ctx, SCOPES) {
+        let probe = egui::pos2(chip.min.x + 2.0, chip.center().y);
+        assert!(
+            row.contains(probe),
+            "`{}`'s left edge is off the row",
+            scope.name()
+        );
+        let chosen = bay
+            .chip(&ctx, SCOPES, Point::new(probe.x, probe.y))
+            .unwrap_or_else(|| panic!("no chip answered a press on `{}`", scope.name()));
+        assert_eq!(
+            chosen.scope,
+            scope,
+            "a press on `{}` asked for `{}`",
+            scope.name(),
+            chosen.scope.name()
+        );
+        assert_eq!(
+            chosen.operation,
+            karakuri_operation::Operation::SelectScope {
+                scope: karakuri_operation::Undecided
+            },
+            "the chip asked for something other than `Choose which scope the library shows`"
+        );
+    }
+
+    // **The chip that is already marked asks for itself**, where the key would
+    // step off it. The two are asked of one console in one state, so this is
+    // the contrast and not two facts side by side.
+    assert!(view.select_scope(Scope::MySets));
+    let (_, chip) = bay
+        .chips(&ctx, SCOPES)
+        .find(|(scope, _)| *scope == Scope::MySets)
+        .expect("`my sets` is on the row");
+    let probe = egui::pos2(chip.min.x + 2.0, chip.center().y);
+    assert_eq!(
+        bay.chip(&ctx, SCOPES, Point::new(probe.x, probe.y))
+            .map(|chosen| chosen.scope),
+        Some(Scope::MySets),
+        "a press on the marked chip stepped somewhere"
+    );
+    assert!(view.step_scope());
+    assert_eq!(
+        view.scope(),
+        Some(Scope::Presets),
+        "the key does not step where the pointer names, so this contrast is measuring nothing"
+    );
+}
+
+/// **A chip is pressed only where it is drawn.**
+///
+/// `.scopes` carries a wrapping flex and this console draws one row of it and
+/// clips, so at the mock's own 218-wide pane the four words are wider than the
+/// bay and the last chip starts inside it and finishes outside. **What is not
+/// drawn is not a target**: the point is held to the row before any chip is
+/// asked about, so the tail hanging over the centre column belongs to whatever
+/// is drawn there and not to a capsule the operator cannot see.
+///
+/// The overrun is asserted rather than assumed, because a pane wide enough to
+/// hold all four would make the rest of this test measure nothing.
+#[test]
+fn a_chip_is_pressed_only_where_it_is_drawn() {
+    let panel = console(PLAUSIBLE);
+    let ctx = drawn_once();
+    let bay = bay(&panel);
+    let row = bay.scopes.expect("the bay was handed scopes");
+
+    let (scope, last) = bay
+        .chips(&ctx, SCOPES)
+        .last()
+        .expect("the row has chips in it");
+    assert!(
+        last.max.x > row.max.x,
+        "`{}` ends at {} and the row ends at {} — the pane is wide enough to hold every chip, \
+         so there is no clipped capsule to ask about",
+        scope.name(),
+        last.max.x,
+        row.max.x
+    );
+    assert!(
+        last.min.x < row.max.x,
+        "`{}` starts outside the row entirely, so it is not the half-drawn chip this is about",
+        scope.name()
+    );
+
+    let over = egui::pos2((last.max.x + row.max.x) * 0.5, last.center().y);
+    assert!(
+        last.contains(over) && !row.contains(over),
+        "{over:?} is not on the part of `{}` that hangs outside the row",
+        scope.name()
+    );
+    assert_eq!(
+        bay.chip(&ctx, SCOPES, Point::new(over.x, over.y)),
+        None,
+        "the console answered a press on the part of `{}` it does not draw",
+        scope.name()
+    );
+
+    // **And the ground of the row answers nothing either** — its left padding
+    // and the gap between two capsules, which is what makes the row a row of
+    // chips rather than a segmented control.
+    for (p, what) in [
+        (
+            egui::pos2(row.min.x + size::SCOPES_PAD_X * 0.5, row.center().y),
+            "the row's left padding",
+        ),
+        (
+            egui::pos2(row.min.x + 1.0, row.min.y + 1.0),
+            "the row's top-left corner",
+        ),
+    ] {
+        assert_eq!(
+            bay.chip(&ctx, SCOPES, Point::new(p.x, p.y)),
+            None,
+            "a chip answered a press on {what}"
+        );
+    }
+}
+
+/// **The capsule a press lands on is the capsule the wash is drawn in.**
+///
+/// One derivation asked twice, which is this crate's rule for every control:
+/// [`LibraryBay::chips`] is what the paint walks and what the hit test walks,
+/// so a chip cannot be pressed anywhere the mark is not drawn. It is worth a
+/// test of its own because a chip is as wide as the word in it — a second
+/// measurement would agree on `favourites` and be wrong about `folder` by the
+/// sum of three words' widths.
+#[test]
+fn the_capsule_a_press_lands_on_is_the_capsule_the_wash_is_drawn_in() {
+    let (mut view, mut panel) = showing_mock();
+    let ctx = drawn_once();
+    let bay = bay(&panel);
+    let row = bay.scopes.expect("the bay was handed scopes");
+
+    for want in Scope::ALL {
+        assert!(view.select_scope(want) || view.scope() == Some(want));
+        let washes: Vec<egui::Rect> = shapes_across(&mut view, &mut panel, row)
+            .iter()
+            .filter_map(|shape| match shape {
+                egui::Shape::Rect(at) => Some(at.rect),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            washes.len(),
+            1,
+            "`{}` is marked and {} chips are washed",
+            want.name(),
+            washes.len()
+        );
+        let (_, chip) = bay
+            .chips(&ctx, SCOPES)
+            .find(|(scope, _)| *scope == want)
+            .expect("the marked scope is on the row");
+        assert!(
+            near(washes[0].min.x, chip.min.x)
+                && near(washes[0].min.y, chip.min.y)
+                && near(washes[0].width(), chip.width())
+                && near(washes[0].height(), chip.height()),
+            "`{}` is washed at {:?} and hit-tested at {chip:?}",
+            want.name(),
+            washes[0]
+        );
+    }
+}
+
+/// **The chips clear every boundary, and the row's own clip is what costs the
+/// last one its tail.**
+///
+/// `input.rs`'s rule 3 gives a boundary first refusal, so a control inside a
+/// grab is dead there — which is why every control on this console owes this
+/// measurement off its own rectangle rather than inheriting one. The scope
+/// row's is a **sum and not a centring**: `.scopes` is drawn under the bay
+/// head, so what holds the chips off the boundary above is `HEAD_H` plus
+/// `SCOPES_PAD_Y` — 27 + 7 = **34** — and down the left it is
+/// `SCOPES_PAD_X`'s **9** off an edge that is the viewport's rather than a
+/// divider's.
+///
+/// **The last chip is the exception and it is the ordinary price**, the same
+/// one the `solo` capsule and a preview cell pay: the row clips at the pane's
+/// edge, the last six pixels of what is drawn are the pane divider's, and
+/// what brings the whole capsule in is widening the pane.
+#[test]
+fn the_chips_clear_every_boundary_but_the_one_the_row_is_clipped_by() {
+    let panel = console(PLAUSIBLE);
+    let ctx = drawn_once();
+    let bay = bay(&panel);
+    let region = to_egui(rect_of(panel.layout(), "library"));
+    let row = bay.scopes.expect("the bay was handed scopes");
+
+    let above = row.min.y + size::SCOPES_PAD_Y - region.min.y;
+    assert!(
+        near(above, size::HEAD_H + size::SCOPES_PAD_Y),
+        "the chips are {above} below the bay's top edge and the bay head plus `.scopes`' padding \
+         is {}",
+        size::HEAD_H + size::SCOPES_PAD_Y
+    );
+    assert!(
+        above > GRAB,
+        "the chips are {above} below the bay's top edge and a boundary grabs {GRAB}"
+    );
+
+    for (scope, chip) in bay.chips(&ctx, SCOPES) {
+        let left = chip.min.x - region.min.x;
+        assert!(
+            left >= size::SCOPES_PAD_X,
+            "`{}` starts {left} in from the bay's left edge and `.scopes`' padding is {}",
+            scope.name(),
+            size::SCOPES_PAD_X
+        );
+        assert!(
+            left > GRAB,
+            "`{}` starts {left} in from the bay's left edge and a boundary grabs {GRAB}",
+            scope.name()
+        );
+        // **Where the chip is drawn, no boundary has it.** The tail of the
+        // last one is outside the row and is nobody's business here.
+        let drawn = chip.intersect(row);
+        if drawn.width() <= 0.0 {
+            continue;
+        }
+        let probe = egui::pos2(drawn.min.x + 1.0, drawn.center().y);
+        assert!(
+            !matches!(
+                panel.layout().hit(Point::new(probe.x, probe.y), GRAB),
+                karakuri_layout::Hit::Divider { .. }
+            ),
+            "a boundary grabs {probe:?}, which is on `{}` where it is drawn",
+            scope.name()
+        );
+    }
+
+    // **And the band at the far end of the row is still a boundary's**, which
+    // is what says the clearances above are clearances rather than the grab
+    // having gone missing.
+    let into = Point::new(row.max.x - 1.0, row.center().y);
+    assert!(
+        matches!(
+            panel.layout().hit(into, GRAB),
+            karakuri_layout::Hit::Divider { .. }
+        ),
+        "the pixel at the far end of the scope row is not the pane divider's, so nothing here \
+         measured a grab"
     );
 }
 

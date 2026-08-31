@@ -279,10 +279,10 @@ use karakuri_console::repaint::{Change, Repaint};
 use karakuri_console::room::Room;
 use karakuri_console::view::{
     self, arrangement as arrangement_pill, audio_in as audio_in_pill, class_at,
-    deck_head as deck_head_row, inspector as inspector_pane, look as look_row,
-    master as master_row, mcp_pill, mixer as mixer_bay, outputs, picture_rect, preview_rects,
-    program_bay, program_head, Ask, AudioAsk, AudioIn, Kind, McpPill, Picture, Scope, View, DECKS,
-    DECK_LETTERS,
+    deck_head as deck_head_row, inspector as inspector_pane, library as library_bay,
+    look as look_row, master as master_row, mcp_pill, mixer as mixer_bay, outputs, picture_rect,
+    preview_rects, program_bay, program_head, Ask, AudioAsk, AudioIn, Chosen, Kind, McpPill,
+    Picture, Scope, View, DECKS, DECK_LETTERS,
 };
 // **How many slots a deck can hold**, which is how many this one has — see
 // [`SLOTS`]. Not re-exported at the crate root, and asked of the module that
@@ -1509,12 +1509,14 @@ impl Readout {
                     did = Acted::Emitted(operation);
                 }
             }
-            // **A press the panel claimed is on one of the nineteen controls
-            // or on the panel itself**, and the controls are asked first for
+            // **A press the panel claimed is on one of the console's
+            // controls or on the panel itself**, and they are asked first for
             // the reason `claim` asked them last: rule 2 has already had its
             // refusal, so a press that got here and is on a control is that
-            // control's. All nineteen are the same calls `claim` made — asked
-            // again, not copied.
+            // control's. Every one of them is the same call `claim` made —
+            // asked again, not copied. How many there are is
+            // `karakuri_console::input::CONTROLS`, which is why this sentence
+            // no longer says a number: it went stale four times.
             //
             // **The bay is derived once and asked four times**, exactly as
             // `claim` does it: a knob, a blend chip, a tally chip and a mask
@@ -1523,7 +1525,7 @@ impl Readout {
             (Pointer::Down, Claim::Panel) => {
                 self.panel.solve();
                 // **The audio-in pill first**, and it and the arrangement pill
-                // are the only two of the nineteen whose order matters: each
+                // are the only two whose order matters: each
                 // draws a card *over* the bays, so while one is down a press
                 // inside it belongs to the card and not to whatever it is
                 // covering. They are asked in the order they are drawn, which
@@ -1557,7 +1559,7 @@ impl Readout {
                 // the card and not to whatever it happens to be covering — and
                 // a press anywhere else is the dismissal, which is why the
                 // `None` below is `Ask::Shut` rather than a press that fell
-                // through. Shut, this is one capsule among nineteen that never
+                // through. Shut, this is one capsule among many that never
                 // overlap and the order is arbitrary.
                 let pill = arrangement_pill(
                     ctx,
@@ -1656,6 +1658,26 @@ impl Readout {
                     .and_then(|bay| bay.preview(self.view.showing, at))
                 {
                     return (claim, Acted::Emitted(Some(operation)));
+                }
+                // **The Library bay's scope chips**, which are the first
+                // controls on this panel whose number is a value rather than a
+                // constant: one per scope the bay was handed. The bay is
+                // derived once and walked once, exactly as `claim` walks it —
+                // a chip is as wide as the word in it, so where the fourth one
+                // is depends on the first three and a second walk would put
+                // the capsule a press lands on somewhere the wash is not.
+                //
+                // **A press names the chip; it does not step.** `e` steps and
+                // wraps because a bare press cannot say *which*, and this one
+                // can — P-0074's division met by two surfaces rather than an
+                // inconsistency between them. What comes back is `Chosen`: the
+                // chip, and `Operation::SelectScope` beside it, because that
+                // operation's payload is `Undecided` and cannot carry a chip.
+                if let Some(chosen) =
+                    library_bay(self.panel.layout(), &self.view.scopes, &self.view.library)
+                        .and_then(|bay| bay.chip(ctx, &self.view.scopes, at))
+                {
+                    return (claim, self.chose(chosen));
                 }
                 let sink =
                     outputs(ctx, self.panel.layout(), self.view.opening).filter(|row| row.hit(at));
@@ -1963,6 +1985,41 @@ impl Readout {
             pill.class.opened_at()
         );
         Acted::Opened
+    }
+
+    /// **A press on a scope chip**, and it is the surface performing its own
+    /// pointer — [`pointed`]'s shape one bay along, done here rather than in
+    /// `performed` for the reason the `e` key's is done at the key.
+    ///
+    /// `Operation::SelectScope`'s payload is `Undecided`, so a performer
+    /// reading the operation could not tell which library was chosen and would
+    /// have to guess. The press *knows*, because a pointer lands on one
+    /// capsule and no other, and [`Chosen`] is what carries the two halves
+    /// together. **So the mark is moved here and the operation is emitted for
+    /// the record it is owed**, which is `Silent(Surface)` — the same shape as
+    /// the key, which steps first and emits afterwards.
+    ///
+    /// **A chip that is already marked is not refused**, and the line says
+    /// which of the two it was. `View::select_scope` answers `false` for it,
+    /// and that is a mark that did not move rather than a press that failed:
+    /// where the key *steps* and would go somewhere else, a press **names**,
+    /// and naming the library you are already reading is asking it again. What
+    /// the caller does with that is re-read the listing, which is where a
+    /// directory read belongs (P-0072) and is not on this side of the seam.
+    ///
+    /// It cannot refuse for the other reason either: the chip came out of
+    /// `View::scopes`, so it is on the row by construction.
+    fn chose(&mut self, chosen: Chosen) -> Acted {
+        let moved = self.view.select_scope(chosen.scope);
+        println!(
+            "scope: `{}` — {}",
+            chosen.scope.name(),
+            match moved {
+                true => "the library this bay reads, and the cursor is back at the top of it",
+                false => "already the library this bay reads, so this asks that one again",
+            }
+        );
+        Acted::Emitted(Some(chosen.operation))
     }
 
     /// A press on the Outputs row's one control. **The dot says what it did**
@@ -2835,7 +2892,9 @@ impl Sources {
     ///
     /// What is this file's business is the two names, because they are this
     /// program's choice of what to open on rather than a property of a preset
-    /// library: any directory of `.kir` files is a library, and these two are
+    /// library: a library is a directory with at least one `.kset` in it
+    /// (`karakuri_environment::places`'s `is_a_library`, which asked for a
+    /// `.kir` until the authoring form landed), and these two are
     /// what the reference workload is measured on — see
     /// `the_capacity_is_the_l1s_own_declaration_and_the_l4_declares_none`,
     /// which pins the L1's capacity because `docs/contributing.md` §1 quotes
@@ -6768,6 +6827,22 @@ impl ApplicationHandler for App {
                 if claim == Claim::Egui {
                     App::to_egui(gfx, &mut self.costs, &event);
                 }
+                // **A press that named a scope is a listing to read**, and
+                // it is read here because this is where the store is: a scope
+                // *is* a listing on this side, and a directory read is not a
+                // thing to do on a frame (P-0072). It is read on **every**
+                // chip press and not only on one that moved the mark, which is
+                // the one place this parts company with `e`: the key steps and
+                // so a press that changed nothing asked for nothing, where a
+                // pointer *names* — and naming the library you are already
+                // reading is asking it again, which is a question this console
+                // had no way to put before.
+                if matches!(acted, Acted::Emitted(Some(Operation::SelectScope { .. }))) {
+                    println!(
+                        "{}",
+                        listing(&mut self.readout.view, &self.store, self.presets.as_ref())
+                    );
+                }
                 // **A press on a control earns its frame from what it did**,
                 // and not from the claim: `Change::Pointer(Claim::Panel)` is
                 // already a frame, but the operation the dot asked for is the
@@ -9839,6 +9914,107 @@ mod tests {
         assert!(
             dot(&mut readout).1,
             "the picture is back and the dot is dark"
+        );
+    }
+
+    /// **A press on a scope chip, through the window loop's own routing** —
+    /// which is what ADR-0213 makes the *panel* badge mean.
+    ///
+    /// `karakuri-console`'s `tests/library.rs` asserts everything up to the
+    /// operation with no window anywhere: that the chips answer a press, that
+    /// a press names the chip it landed on, and that nothing else in the bay
+    /// takes one. **This is the half that badge is actually about** — *"the
+    /// row is claimed the day a person who launched the instrument can perform
+    /// that operation from the panel in front of them"* — and a control
+    /// demonstrated in that crate and never wired here would pass there and be
+    /// a lie this page tells on its own authority.
+    ///
+    /// **What is asserted is the whole press and not the routing alone**: the
+    /// mark moves to the chip that was pressed, the operation that leaves is
+    /// `SelectScope` with the payload it is specified to carry, and the
+    /// library cursor goes back to the top — because the listing under a new
+    /// scope is a listing this cursor has never seen, and a cursor left where
+    /// it was would sit on a Set nobody chose under a pill saying a press will
+    /// load it.
+    ///
+    /// **And the chip that is already marked is pressed too**, because that is
+    /// the case a step cannot reach: `e` would go somewhere else, and a
+    /// pointer names — so the press is answered rather than refused, and the
+    /// mark stays where it is.
+    #[test]
+    fn a_press_on_a_scope_chip_names_the_library_the_bay_reads() {
+        let ctx = drawn_once();
+        let mut readout = Readout::new(1440.0, 900.0);
+        readout.panel.solve();
+        // A console that has been told what libraries there are and handed a
+        // listing for the one it opens on, which is what `resumed` does.
+        readout.view.scopes = Scope::ALL.to_vec();
+        readout.view.library = vec!["drift_night".to_owned(), "lattice_veil".to_owned()];
+        assert!(readout.view.select_scope(Scope::MySets));
+
+        // The capsule, asked of the derivation that draws it rather than
+        // remembered — the rule the whole of `input` is written to.
+        let chip = |readout: &mut Readout, want: Scope| {
+            readout.panel.solve();
+            let bay = library_bay(
+                readout.panel.layout(),
+                &readout.view.scopes,
+                &readout.view.library,
+            )
+            .expect("the bay lists its rows");
+            let (_, at) = bay
+                .chips(&ctx, &readout.view.scopes)
+                .find(|(scope, _)| *scope == want)
+                .expect("the scope is on the row");
+            // Two pixels in from its own left edge: the last chip in the row
+            // is clipped by the pane, so its centre can be off the row.
+            Point::new(at.min.x + 2.0, at.center().y)
+        };
+
+        // **The cursor is somewhere other than the top**, so that the move
+        // back to it is a move and not the state it was already in.
+        assert!(readout.view.walk(1, 2), "the cursor did not move");
+        assert_eq!(readout.view.cursor_row(), 1);
+
+        let at = chip(&mut readout, Scope::Presets);
+        assert_eq!(readout.pointer(&ctx, Pointer::Moved(at)).0, Claim::Panel);
+        let (claim, did) = readout.pointer(&ctx, Pointer::Down);
+        assert_eq!(claim, Claim::Panel);
+        assert_eq!(
+            did,
+            Acted::Emitted(Some(Operation::SelectScope { scope: Undecided })),
+            "the press did not reach the chip"
+        );
+        assert!(
+            !readout.panel.dragging(),
+            "the press took a boundary in hand"
+        );
+        readout.pointer(&ctx, Pointer::Up);
+        assert_eq!(
+            readout.view.scope(),
+            Some(Scope::Presets),
+            "the press was routed and the mark stayed where it was"
+        );
+        assert_eq!(
+            readout.view.cursor_row(),
+            0,
+            "the scope changed and the cursor is still pointing into the listing it left"
+        );
+
+        // **The marked chip, pressed** — answered rather than refused, and the
+        // mark does not step off it the way the key would.
+        let at = chip(&mut readout, Scope::Presets);
+        assert_eq!(readout.pointer(&ctx, Pointer::Moved(at)).0, Claim::Panel);
+        assert_eq!(
+            readout.pointer(&ctx, Pointer::Down).1,
+            Acted::Emitted(Some(Operation::SelectScope { scope: Undecided })),
+            "a press on the chip that is already marked was not answered"
+        );
+        readout.pointer(&ctx, Pointer::Up);
+        assert_eq!(
+            readout.view.scope(),
+            Some(Scope::Presets),
+            "a press on the marked chip stepped somewhere"
         );
     }
 
