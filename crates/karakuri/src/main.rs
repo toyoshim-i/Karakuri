@@ -89,11 +89,42 @@
 //! # The engine here is the shortest path from two files to texels
 //!
 //! Four slots, built from one `.kir` pair the way `karakuri-cli` builds them,
-//! and **no more than that yet**: no audio, no MIDI, no MCP, no replay and no
-//! session. Not one of those is refused — they are unwired, and *yet* is the
-//! whole of what this sentence says about them. The pair is [`Sources`] with a
-//! preset library behind it, and the two positional paths are what this
-//! program takes from the command line beside `--presets` and `--store`. Three things beyond the engine are here.
+//! and no more than that yet. The pair is [`Sources`] with a preset library
+//! behind it, and the two positional paths are what this program takes from
+//! the command line beside `--presets` and `--store`. Three things beyond the
+//! engine are here.
+//!
+//! # What is not wired, and what each would be for
+//!
+//! **This list used to read `no audio, no MIDI, no MCP, no replay and no
+//! session` and that was the whole of it** — five absences and not one purpose,
+//! which is a note that cannot be told from a decision. It was duly read as a
+//! charter twice. Each line below says what the thing would be *for*, so that
+//! whoever reaches one knows what they are reaching for.
+//!
+//! - **Audio.** The beat tracker and the signal bus. Without a device open,
+//!   nothing here has a tempo it did not invent and no `bind` has anything to
+//!   read, so four rows of [the operations page](../../../docs/manual/operations.html)'s
+//!   panel column cannot be reached: *Tap the beat*, *Nudge the latency
+//!   offset*, *Attach a beat source* and *Attach a signal to a parameter*.
+//!   `karakuri_environment::audio` is the wiring and `karakuri-cli` opens it
+//!   already. **Wanted early**, and for a reason that is not the panel column:
+//!   material that moves with the room is what a demo looks like.
+//! - **MIDI.** A control surface, so a hand reaches a fader without a mouse.
+//!   `karakuri-midi` and `examples/surface.map` exist and `--midi-in`
+//!   `--midi-map` drive them. **No operation names attaching one**, so this is
+//!   a hole in the vocabulary before it is a hole here.
+//! - **MCP.** The model's door — the whole reason the instrument is
+//!   AI-native — and `karakuri_environment::mcp` is the server. Same shape as
+//!   MIDI: **no operation names opening it**, and a panel that opened one
+//!   silently would be the opposite of
+//!   [P-0030](../../../docs/principles/0030-an-instrument-says-what-it-did.md).
+//! - **Replay.** Rendering a recorded session back. This is offline work and
+//!   an instrument is not where it belongs; `karakuri-cli --replay` is the
+//!   right home for it and no row asks the panel for it.
+//! - **Session.** Recording the timeline as it happens, which is *Record the
+//!   session* — a `plan` badge with `rec` as its home, so the panel is meant
+//!   to reach this one and the transport already draws the button's place.
 //! **Each slot watches that pair**, which is [`watched`] and is one
 //! `HotSwap::new` over a `karakuri_environment::watch::Watch` — the same
 //! wiring `karakuri-cli` does for `--watch`, and the whole of what puts a row
