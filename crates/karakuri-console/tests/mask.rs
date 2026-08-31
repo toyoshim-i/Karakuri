@@ -44,7 +44,7 @@ use common::{drawn_once, rect_of, showing, PLAUSIBLE};
 use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::{Op, Panel, GRAB};
 use karakuri_console::room::size;
-use karakuri_console::view::{mixer, Level, Mask, Mixer, Strip, Tally};
+use karakuri_console::view::{mixer, program_bay, Level, Mask, Mixer, Strip, Tally};
 use karakuri_layout::{Hit, Point};
 use karakuri_operation::{BlendMode, Operation, WipeKind};
 
@@ -429,6 +429,23 @@ fn a_press_off_the_mini_asks_for_nothing_and_is_not_claimed() {
 /// **Both folds, because they are one question with two ways in** — the mixer
 /// bay itself, and the pane that encloses it. And unfolding puts the control
 /// back, because nothing here is a latch.
+///
+/// # What claims the ground afterwards is not always nothing
+///
+/// This used to assert that the point goes to `egui` once the bay is folded,
+/// and that stopped being true the day the deck preview cells became controls.
+/// Folding the **right pane** gives its width to the centre, which is enough
+/// for the Program bay to put its four cells down the sides of the picture
+/// instead of under it (ADR-0182) — and the right-hand column lands in the
+/// ground the mixer had. So a press where the mini was is the panel's again,
+/// for a control that moved in rather than for the one that went.
+///
+/// **That is a fact about the arrangement and not about this bay**, so it is
+/// derived rather than written down per arm: the expected claim is *panel
+/// where a cell is there and `egui` where none is*, asked of the same
+/// `program_bay` the rule hit-tests. What this test still asserts about the
+/// mini is what it always did, one line above — `mixer` answers `None`, so
+/// there is no mini to press whatever else is on the screen.
 #[test]
 fn a_folded_mixer_bay_has_no_mini_to_press() {
     for enclosing in [false, true] {
@@ -467,11 +484,19 @@ fn a_folded_mixer_bay_has_no_mini_to_press() {
             mixer(&ctx, panel.layout(), &strips).is_none(),
             "a folded mixer bay still laid its strips out (enclosing: {enclosing})"
         );
+        let view = showing(&strips);
+        // Whoever is standing in that ground now, asked of the arrangement
+        // rather than assumed — see this test's own documentation.
+        let cell =
+            program_bay(panel.layout(), view.canvas).and_then(|bay| bay.cell(point(where_it_was)));
         assert_eq!(
-            claim(&mut panel, &ctx, &showing(&strips), point(where_it_was)),
-            Claim::Egui,
-            "where the mini used to be is still claimed with the bay folded away \
-             (enclosing: {enclosing})"
+            claim(&mut panel, &ctx, &view, point(where_it_was)),
+            match cell {
+                Some(_) => Claim::Panel,
+                None => Claim::Egui,
+            },
+            "where the mini used to be is claimed by the wrong thing with the bay folded \
+             away — the cell there is {cell:?} (enclosing: {enclosing})"
         );
 
         // And back, so that the answer above is the fold rather than the
