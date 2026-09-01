@@ -878,9 +878,13 @@ fn a_press_names_the_chip_it_landed_on_and_never_the_next_one() {
 /// hold all four would make the rest of this test measure nothing.
 #[test]
 fn a_chip_is_pressed_only_where_it_is_drawn() {
-    let panel = console(PLAUSIBLE);
+    let mut layout = solved(PLAUSIBLE);
+    let left = id_of(&layout, "left-pane");
+    let split = layout.parent(left).expect("left-pane has a parent split");
+    layout.set_divider(split, 0, 218.0);
+    layout.solve();
     let ctx = drawn_once();
-    let bay = bay(&panel);
+    let bay = library(&layout, SCOPES, &mock()).expect("the library bay lists its rows");
     let row = bay.scopes.expect("the bay was handed scopes");
 
     let (scope, last) = bay

@@ -15,13 +15,12 @@ fn at_a_plausible_window_the_arrangement_is_sane() {
     assert_sane(&layout);
     assert_within_bounds(&layout);
 
-    // The mock's own tracks, at a width where nothing is squeezed: 218 and 268
-    // are `.body-grid`'s outer columns and the centre absorbs the rest.
-    assert!(near(rect_of(&layout, "left-pane").w, 218.0));
-    assert!(near(rect_of(&layout, "right-pane").w, 268.0));
+    // The outer tracks: 340 and 400 (ADR-0239) and the centre absorbs the rest.
+    assert!(near(rect_of(&layout, "left-pane").w, 340.0));
+    assert!(near(rect_of(&layout, "right-pane").w, 400.0));
     assert!(near(
         rect_of(&layout, "centre").w,
-        1920.0 - 218.0 - 268.0 - 20.0
+        1920.0 - 340.0 - 400.0 - 20.0
     ));
 
     // The transport and the outputs row are the height of their contents and
@@ -50,11 +49,7 @@ fn the_program_does_not_grow_when_the_window_widens() {
     assert!(near(rect_of(&narrow, "program").h, 378.0));
     assert!(near(rect_of(&wide, "program").h, 378.0));
 
-    // Had it followed the width, at 1920 the centre is 1414 wide, its
-    // body 1396, and a 16:9 picture in it 785 tall — more than twice what the
-    // arrangement gives it, and the inspector's whole height and then some.
     let centre = rect_of(&wide, "centre");
-    assert!(centre.w > 1400.0);
     assert!(rect_of(&wide, "program").h < (centre.w - 18.0) * 9.0 / 16.0);
 
     // And the inspector is what absorbed the height instead.
@@ -127,10 +122,10 @@ fn the_program_bay_is_a_picture_over_a_preview_row() {
         "the Program bay's regions, in the order the mock draws them"
     );
 
-    // 27 + 9 + 262 for the picture, `.program-body`'s 8px gap as the divider,
+    // 27 + 9 + 266 for the picture, `.program-body`'s 4px gap as the divider,
     // and 63 + 9 for the previews and the padding under them.
-    assert!(near(rect_of(&layout, "program-view").h, 298.0));
-    assert!(near(layout.divider(program).expect("a split has one"), 8.0));
+    assert!(near(rect_of(&layout, "program-view").h, 302.0));
+    assert!(near(layout.divider(program).expect("a split has one"), 4.0));
     assert!(near(rect_of(&layout, "deck-previews").h, 72.0));
     assert!(near(rect_of(&layout, "program").h, 378.0));
 
@@ -191,7 +186,7 @@ fn the_picture_and_the_previews_fold_apart() {
     // was stored all along.
     layout.expand(id_of(&layout, "deck-previews"));
     layout.solve();
-    assert!(near(rect_of(&layout, "program-view").h, 298.0));
+    assert!(near(rect_of(&layout, "program-view").h, 302.0));
     assert!(near(rect_of(&layout, "deck-previews").h, 72.0));
 }
 

@@ -702,6 +702,10 @@ impl Panel {
         &self.layout
     }
 
+    pub fn layout_mut(&mut self) -> &mut Layout {
+        &mut self.layout
+    }
+
     /// The tree, flattened in tree order.
     pub fn nodes(&self) -> &[Node] {
         &self.nodes

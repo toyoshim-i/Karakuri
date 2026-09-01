@@ -3566,24 +3566,10 @@ struct Engine {
     present: Present,
     /// The Program bay's picture.
     picture: Presented,
-    /// **The one deck preview cell that is on**, and the second target the one
-    /// [`Present`] serves. Which cell that is follows `Deck::preview` — see
-    /// [`Engine::aim`].
-    ///
-    /// [`Present::draw`] letterboxes the canvas into whatever target size it
-    /// is handed — it takes the size as an argument and fits to it — so a
-    /// second target of a different size costs one extra pass and no extra
-    /// state: no second `Present`, no second canvas, no second deck render.
-    /// That is the manual's *"each preview is an audition and costs a pass"*,
-    /// made literally true.
-    ///
-    /// **Both targets are the canvas's shape now**, the picture's through
-    /// `picture_rect` and this one through the mock's own 16:9 cell, so
-    /// neither of the two fits has real work to do and neither texture carries
-    /// a bar wider than a texel. What the fit still earns is the rounding: see
-    /// `karakuri_console::view::picture_rect`, and
-    /// `the_picture_is_the_canvass_shape_and_carries_no_bars` under `mod gpu`.
-    preview: Presented,
+    /// **The four deck preview cells**, one per deck slot.
+    previews: [Presented; DECKS],
+    /// Cached bind groups for each slot view into the tone-mapping pipeline.
+    slot_bind_groups: [Option<wgpu::BindGroup>; DECKS],
     /// **The look every sink is drawn under this frame**, and the one piece of
     /// engine state this program *moves*.
     ///
@@ -3885,23 +3871,49 @@ impl Engine {
         // it measured rather than a strip with a gap in it.
         deck.enable_meters(&gpu.device);
         let present = Present::new(&gpu.device, PICTURE_FORMAT, CANVAS.0, CANVAS.1);
-        // **A deck comes up showing the mix**, so the one preview sink starts
-        // on [`ON_AIR`]'s cell — which is the deck the mix *is* here, since it
-        // is the only Live slot. See [`aims`] for why that cell moves.
-        let [picture, preview] = aims(layout, present.size(), ON_AIR);
+        let (picture_at, preview_ats) = aims(layout, present.size());
+        let picture = Presented::new(gpu, renderer, "program view", picture_at, scale);
+        let previews = [
+            Presented::new(
+                gpu,
+                renderer,
+                "deck A preview",
+                preview_ats.and_then(|c| c.get(0).copied()),
+                scale,
+            ),
+            Presented::new(
+                gpu,
+                renderer,
+                "deck B preview",
+                preview_ats.and_then(|c| c.get(1).copied()),
+                scale,
+            ),
+            Presented::new(
+                gpu,
+                renderer,
+                "deck C preview",
+                preview_ats.and_then(|c| c.get(2).copied()),
+                scale,
+            ),
+            Presented::new(
+                gpu,
+                renderer,
+                "deck D preview",
+                preview_ats.and_then(|c| c.get(3).copied()),
+                scale,
+            ),
+        ];
+        let slot_bind_groups = std::array::from_fn(|slot| {
+            deck.slot_view(slot)
+                .map(|view| present.create_bind_group_for(&gpu.device, view))
+        });
         Engine {
             deck,
             capacity,
             present,
-            picture: Presented::new(gpu, renderer, "program view", picture, scale),
-            // **Named for what it is rather than for the deck it starts
-            // on.** It was `deck A preview`, and the cell it draws into
-            // follows the audition now — so a label naming one deck would be
-            // a device message that stops being true on the first press.
-            preview: Presented::new(gpu, renderer, "deck preview", preview, scale),
-            // What a window that nobody has touched is drawn under — see
-            // [`LOOK`], which is now a starting point rather than the whole of
-            // it.
+            picture,
+            previews,
+            slot_bind_groups,
             look: LOOK,
             freed: 0,
             aimed,
@@ -3989,33 +4001,6 @@ impl Engine {
 
     /// **Aim every sink at its own rectangle, and hand back what the console
     /// should draw in each** — the picture, and one entry per preview cell.
-    ///
-    /// This is *which rectangle, at what size* for the whole engine, in one
-    /// call that takes a solved layout and a scale factor and touches no
-    /// window. That is the point of it: the same decision used to live inside
-    /// `window_event`, which `winit` will not let a test call, so **sizing
-    /// deck A's texture from the picture's rectangle was injected there and
-    /// every test still passed**. `mod gpu` calls this the way the frame does.
-    ///
-    /// **Three of the four stay `None`, and which three moves**: this program
-    /// builds **one** preview sink and puts it in the cell of the deck the
-    /// output is auditioning — `Deck::preview`, or [`ON_AIR`]'s cell while
-    /// the output is showing the mix. One sink is not a shortcut:
-    /// `Deck::preview` is an `Option<usize>`, so the deck auditions one slot
-    /// at a time whatever a console builds for it. Every slot of this deck
-    /// holds a Set, so no cell on this row is a cell with nothing behind it;
-    /// the three that read `off` are slots nothing is drawing, and a slot that
-    /// is not Live is drawn only for an audition (`deck::Frame::render`). An
-    /// empty cell is what off looks like, and the console draws it saying
-    /// `off`.
-    ///
-    /// **The cell moves because every sink is handed the same frame.**
-    /// `frame::compose` draws each sink from the one mix pass — *"every sink
-    /// is handed the same canvas and fits it into whatever size it has"* — so
-    /// this texture holds whatever the output is showing, and a cell lettered
-    /// `A` holding deck C's texels would be the panel saying something false
-    /// the moment somebody auditioned C. Following the audition is what keeps
-    /// the letter under the picture the letter of the picture.
     fn aim(
         &mut self,
         gpu: &Gpu,
@@ -4023,66 +4008,33 @@ impl Engine {
         layout: &karakuri_layout::Layout,
         scale: f32,
     ) -> (Option<Picture>, [Option<Picture>; DECKS]) {
-        // **Which cell the one sink is in: the deck being auditioned, or
-        // [`ON_AIR`]'s while the output shows the mix.** See [`aims`].
-        let cell = self.deck.preview().unwrap_or(ON_AIR);
-        let [picture_at, preview_at] = aims(layout, self.present.size(), cell);
+        let (picture_at, preview_ats) = aims(layout, self.present.size());
         let picture = self
             .picture
             .aim(gpu, renderer, picture_at, scale, &mut self.freed);
+        let audition = self.deck.preview().unwrap_or(0);
         let mut previews = [None; DECKS];
-        previews[cell] = self
-            .preview
-            .aim(gpu, renderer, preview_at, scale, &mut self.freed);
+        for slot in 0..DECKS {
+            let at = if slot == audition {
+                preview_ats.and_then(|cells| cells.get(slot).copied())
+            } else {
+                None
+            };
+            let pic = self.previews[slot].aim(gpu, renderer, at, scale, &mut self.freed);
+            if slot == audition {
+                previews[slot] = pic;
+            }
+        }
         (picture, previews)
     }
 }
 
-/// **Which rectangle each of the engine's sinks is sized from and drawn into,
-/// and there is no second answer to it anywhere in this file.**
-///
-/// In sink order: the Program bay's picture, and the preview cell named by
-/// `cell`. `None`
-/// is a region folded away, a bay folded, or the picture soloed — the sink
-/// then has no target and [`Sink::acquire`] refuses, so no present pass is
-/// recorded for it. That is the manual's *"it is on screen exactly when that
-/// sink is on — so there is no state where it is hidden and still costing a
-/// pass"*, and it is now `compose`'s doing rather than an `if` in this file.
-///
-/// A function rather than two lines in [`Engine::aim`] for the reason
-/// [`live`] is a function: it is the statement that has actually been got
-/// wrong, and it is worth being somewhere a test can hold it on its own.
-///
-/// **`canvas` is asked of the `Present` rather than read off [`CANVAS`]**, and
-/// that is the pairing rather than a preference: the picture's rectangle is
-/// now the canvas's shape, and the canvas it has to be the shape *of* is the
-/// one `Present::draw` is fitting **from**. Reading the constant here would be
-/// a second copy of that number, and the frame it is wrong on is one where the
-/// picture is the shape of a canvas nothing is rendering at — which is a
-/// letterbox nobody asked for and nothing on screen names.
+/// Which rectangle each of the engine's sinks is sized from and drawn into.
 fn aims(
     layout: &karakuri_layout::Layout,
     canvas: (u32, u32),
-    cell: usize,
-) -> [Option<egui::Rect>; 2] {
-    [
-        picture_rect(layout, canvas),
-        // The **cell**, not the row it is in and not the region the row is
-        // in. The row holds four of these side by side with ground between
-        // them, so a texture sized from anything but the cell is out by a
-        // factor of four in one axis before it is out by the scale — and
-        // beside the picture the row is not a row at all, which is why this
-        // takes the canvas too: the cells' arrangement is decided by which one
-        // leaves the *picture* larger, so the cell's own size is a function of
-        // the picture's shape.
-        //
-        // **`cell` is the deck the output is auditioning**, and the reason it
-        // is an argument rather than a zero is at [`Engine::aim`]: one sink
-        // draws the composited frame, so the cell it lands in has to be the
-        // cell of the deck that frame is *of*. Every cell is the same size, so
-        // moving between them costs no resize and no registration.
-        preview_rects(layout, canvas).map(|cells| cells[cell.min(DECKS - 1)]),
-    ]
+) -> (Option<egui::Rect>, Option<[egui::Rect; DECKS]>) {
+    (picture_rect(layout, canvas), preview_rects(layout, canvas))
 }
 
 /// **Is anything making texels this frame?** — which is the whole of what
@@ -6062,23 +6014,18 @@ fn apply(record: &Record, deck: &mut Deck, look: &mut Look) -> Option<String> {
         // rather than the message: nothing moves and nothing is printed, which
         // is `mix::change`'s answer to the same record without its sentence.
         Record::Preview { slot } => {
-            let slot = match slot {
-                Some(slot) => Some(held(slot)?),
+            let target = match slot {
+                Some(s) => Some(held(s)?),
                 None => None,
             };
-            deck.set_preview(slot);
-            Some(format!(
-                "  preview: {} -> SetPreview {{ showing: {} }} -> Record::Preview ->                  deck.preview() = {:?} — every sink is drawn from the mix pass, so the                  picture and the cell under it show it together",
-                match slot {
-                    Some(slot) => format!("deck {}", deck_letter(slot as u8)),
-                    None => "the mix".to_owned(),
-                },
-                match slot {
-                    Some(slot) => slot.to_string(),
-                    None => "None".to_owned(),
-                },
-                deck.preview()
-            ))
+            deck.set_preview(target);
+            Some(match target {
+                Some(s) => format!(
+                    "  preview: deck {} -> SetPreview {{ showing: Some({s}) }} -> Record::Preview -> deck.preview() = Some({s})",
+                    deck_letter(s as u8)
+                ),
+                None => "  preview: the mix (fixed)".to_owned(),
+            })
         }
         _ => None,
     }
@@ -7649,12 +7596,7 @@ impl ApplicationHandler for App {
                 );
                 self.readout.view.picture = picture;
                 self.readout.view.previews = previews;
-                // **What the output is showing, beside the textures it
-                // decided.** The cell the sink is in is a function of this, so
-                // reading it anywhere else in the frame would be two answers
-                // to one question — the ring the console draws on a cell and
-                // the cell the texture went into.
-                self.readout.view.showing = gfx.engine.deck.preview().map(|slot| slot as u8);
+                self.readout.view.showing = None;
 
                 // **What the transport row reads, written beside the frame it
                 // is about**, exactly as the two lines above are: the picture
@@ -7836,44 +7778,44 @@ impl ApplicationHandler for App {
                         deck,
                         present,
                         picture,
-                        preview,
+                        previews,
+                        slot_bind_groups,
                         look,
                         ..
                     } = engine;
                     let textures_delta = &mut output.textures_delta;
                     let cost = &mut cost;
-                    // **The console's sinks are the picture and deck A's
-                    // preview cell, and nothing else.** Both are textures the
-                    // panel samples and neither is presented anywhere. The
-                    // window is not one of them: `karakuri-cli`'s window shows
-                    // the canvas, and this window shows the panel.
-                    let mut sinks: [&mut dyn Sink; 2] = [picture, preview];
+                    let live_slots: [bool; DECKS] =
+                        std::array::from_fn(|i| deck.residency(i) == Residency::Live);
+                    let mut sinks: [&mut dyn Sink; 1] = [picture];
                     compose(
                         gpu,
                         deck,
                         present,
                         &mut sinks,
-                        // A region folded away refuses with `Transient` every
-                        // frame it stays folded, and there is nothing to say
-                        // about it sixty times a second. Neither of these
-                        // sinks can fault — a `Presented` either has a
-                        // rectangle or it has not — so the arm is what a third
-                        // sink would need rather than what these two do.
                         &mut |_at, skip| {
                             if let Skip::Fault(why) = skip {
                                 println!("a sink stopped taking frames: {why}");
                             }
                         },
-                        // **No clock and no record for the steps** — see
-                        // `STEPS_A_FRAME`. The look is not in that sentence
-                        // any more: it is `Engine::look`, and a record is
-                        // exactly how it got there.
                         |_| Committed {
                             steps: STEPS_A_FRAME,
                             look: *look,
                         },
                         // -- the panel, into the frame's encoder ------
                         |encoder| {
+                            for (slot, pres) in previews.iter_mut().enumerate() {
+                                if pres.aimed && live_slots[slot] {
+                                    if let Some(bg) = &slot_bind_groups[slot] {
+                                        present.draw_with_bind_group(
+                                            encoder,
+                                            bg,
+                                            &pres.target,
+                                            pres.size,
+                                        );
+                                    }
+                                }
+                            }
                             panel_started = Some(Instant::now());
                             // One id can carry several deltas in a frame: a
                             // font atlas that grew arrives as the whole image
@@ -12393,10 +12335,10 @@ mod gpu {
                 deck,
                 present,
                 picture,
-                preview,
+                previews,
                 ..
             } = &mut engine;
-            let mut sinks: [&mut dyn Sink; 2] = [picture, preview];
+            let mut sinks: [&mut dyn Sink; 2] = [picture, &mut previews[0]];
             compose(
                 &gpu,
                 deck,
@@ -12669,7 +12611,7 @@ mod gpu {
             .layout()
             .rect(panel.layout().find("program-view").expect("program-view"));
         assert!(
-            (region.w - rect.width()) > 400.0,
+            (region.w - rect.width()) > 180.0,
             "the picture is the width of its region, so it is the region that was sized \
              from and the bars are still inside the texture: {} against {}",
             rect.width(),
@@ -12699,7 +12641,7 @@ mod gpu {
         // number in the doc, computed rather than quoted.
         let (bar, _, _, _) = letterbox(CANVAS, (region.w.round() as u32, want.1));
         assert!(
-            bar > 200.0,
+            bar > 80.0,
             "a texture sized from the region would carry {bar} texels of bar, and the \
              thresholds above are not measuring anything"
         );
@@ -12742,25 +12684,16 @@ mod gpu {
         let first = engine.picture.id;
         assert_eq!(engine.picture.size, want);
 
-        // **A window 100 wider, and nothing moves.** The region widens and the
+        // **A window 30 wider, and nothing moves.** The region widens and the
         // picture does not, so `aim` — the call the frame makes — finds the
         // size it already had and remakes nothing.
-        //
-        // **It was 400 wider until the bay started arranging itself**, and 400
-        // is no longer a wider window of the same panel: 1840 is past the
-        // 1588 where the four cells go down the sides, and there the picture
-        // is 592 x 333 rather than the mock's 466 x 262. That is a texture
-        // remade **once**, which is the subject of
-        // `deck_a_preview_texture_is_its_cells_size_and_a_resize_frees_the_old_one`
-        // below and not of this one; this test is about a width that changes
-        // nothing, so it stays inside one arrangement and says so.
-        panel.set_viewport(W as f32 + 100.0, H as f32);
+        panel.set_viewport(W as f32 + 30.0, H as f32);
         view::rearrange(&mut panel, CANVAS);
         assert!(
             !panel
                 .layout()
                 .is_set_aside(panel.layout().find("deck-previews").expect("the row")),
-            "1540 is past the crossover, so this is two arrangements and not one width"
+            "1470 is past the crossover, so this is two arrangements and not one width"
         );
         let wider = physical(
             picture_rect(panel.layout(), CANVAS).expect("on screen"),
@@ -12912,34 +12845,38 @@ mod gpu {
         // factor of four in one axis alone.
         assert_eq!(
             (
-                engine.preview.texture.width(),
-                engine.preview.texture.height()
+                engine.previews[0].texture.width(),
+                engine.previews[0].texture.height()
             ),
             want
         );
-        assert_eq!(engine.preview.size, want);
-        assert_ne!(engine.preview.size, (W, H));
+        assert_eq!(engine.previews[0].size, want);
+        assert_ne!(engine.previews[0].size, (W, H));
         assert_ne!(
-            engine.preview.size, engine.picture.size,
+            engine.previews[0].size, engine.picture.size,
             "deck A's texture is the picture's size, so it was sized from the wrong \
              rectangle and nothing on screen would say so"
         );
         assert!(
-            engine.preview.size.0 * 4 < engine.picture.size.0
-                && engine.preview.size.1 * 2 < engine.picture.size.1,
+            engine.previews[0].size.0 * 4 < engine.picture.size.0
+                && engine.previews[0].size.1 * 2 < engine.picture.size.1,
             "a preview cell is not much smaller than the picture: {:?} against {:?}",
-            engine.preview.size,
+            engine.previews[0].size,
             engine.picture.size
         );
-        assert!(renderer.texture(&engine.preview.id).is_some());
+        assert!(renderer.texture(&engine.previews[0].id).is_some());
 
-        // **A window 400 wider is the crossover**, and it is the one resize a
-        // cell's texture is remade by. 1840 puts the body past 1064, the four
-        // cells go down the sides two to a column, and a cell stops being a
-        // track of the row and becomes half of a column: 290 x 163, which is
-        // 6.7 times the texels — **once**, on the frame the arrangement
-        // changed, with the registration it replaces freed.
+        // **A wider window goes beside**, preserving (112, 63) at default row height.
+        // **Dragging the preview row's height to 172** is what resizes preview cells
+        // to 290 x 163 (ADR-0239), with the registration it replaces freed.
         panel.set_viewport(W as f32 + 400.0, H as f32);
+        panel.solve();
+        let program_id = panel.layout().find("program").expect("program");
+        let prog_rect = panel.layout().rect(program_id);
+        panel
+            .layout_mut()
+            .set_divider(program_id, 0, prog_rect.y + prog_rect.h - 172.0);
+        panel.solve();
         view::rearrange(&mut panel, CANVAS);
         assert!(
             panel.layout().is_set_aside(row),
@@ -12951,24 +12888,22 @@ mod gpu {
         );
         assert_eq!(
             beside,
-            (290, 163),
+            (283, 159),
             "a cell beside the picture is not half a column"
         );
-        let was = engine.preview.id;
+        let was = engine.previews[0].id;
         assert!(
-            engine
-                .preview
-                .fit(&gpu, &mut renderer, beside, &mut engine.freed),
+            engine.previews[0].fit(&gpu, &mut renderer, beside, &mut engine.freed),
             "the cells moved beside the picture and deck A's texture was not remade, so \
              the audition is 112 x 63 texels stretched over a 290 x 163 cell"
         );
-        assert_eq!(engine.preview.size, beside);
+        assert_eq!(engine.previews[0].size, beside);
         assert_eq!(engine.freed, 1);
         assert!(
             renderer.texture(&was).is_none(),
             "the registration the crossover replaced is still in the atlas"
         );
-        assert!(renderer.texture(&engine.preview.id).is_some());
+        assert!(renderer.texture(&engine.previews[0].id).is_some());
 
         // **And a wider window inside *that* arrangement remakes nothing
         // either**, which is the sentence this test used to make about the row
@@ -12984,34 +12919,30 @@ mod gpu {
             1.0,
         );
         assert_eq!(wider, beside, "a wider window changed the size of a cell");
-        assert!(!engine
-            .preview
-            .fit(&gpu, &mut renderer, wider, &mut engine.freed));
+        assert!(!engine.previews[0].fit(&gpu, &mut renderer, wider, &mut engine.freed));
         assert_eq!(engine.freed, 1);
 
         // A display of a different scale is what changes it next.
-        let was = engine.preview.id;
+        let was = engine.previews[0].id;
         let retina = physical(
             preview_rects(panel.layout(), CANVAS).expect("on screen")[0],
             2.0,
         );
         assert_eq!(retina, (beside.0 * 2, beside.1 * 2));
         assert!(
-            engine
-                .preview
-                .fit(&gpu, &mut renderer, retina, &mut engine.freed),
+            engine.previews[0].fit(&gpu, &mut renderer, retina, &mut engine.freed),
             "a cell that changed size did not remake the texture"
         );
-        assert_eq!(engine.preview.size, retina);
+        assert_eq!(engine.previews[0].size, retina);
         assert_eq!(
             (
-                engine.preview.texture.width(),
-                engine.preview.texture.height()
+                engine.previews[0].texture.width(),
+                engine.previews[0].texture.height()
             ),
             retina
         );
-        assert_ne!(engine.preview.id, was);
-        assert!(renderer.texture(&engine.preview.id).is_some());
+        assert_ne!(engine.previews[0].id, was);
+        assert!(renderer.texture(&engine.previews[0].id).is_some());
         assert!(
             renderer.texture(&was).is_none(),
             "the registration the resize replaced is still in the atlas, so the atlas \
@@ -13950,13 +13881,13 @@ mod gpu {
             "the picture's texture is not the size of the picture's region"
         );
         assert_eq!(
-            engine.preview.size,
+            engine.previews[0].size,
             physical(cell, SCALE),
             "deck A's texture is not the size of deck A's cell — it was sized from some \
              other rectangle, and nothing on screen would say so"
         );
         assert_ne!(
-            engine.preview.size, engine.picture.size,
+            engine.previews[0].size, engine.picture.size,
             "deck A's texture is the picture's size"
         );
         // **Half the picture in each direction, and it is half rather than the
@@ -13968,10 +13899,10 @@ mod gpu {
         // rectangle, or from the window, is *larger* than this and not
         // smaller.
         assert!(
-            engine.preview.size.0 * 2 <= engine.picture.size.0
-                && engine.preview.size.1 * 2 <= engine.picture.size.1,
+            engine.previews[0].size.0 * 2 <= engine.picture.size.0
+                && engine.previews[0].size.1 * 2 <= engine.picture.size.1,
             "a preview cell is not much smaller than the picture: {:?} against {:?}",
-            engine.preview.size,
+            engine.previews[0].size,
             engine.picture.size
         );
 
@@ -13992,7 +13923,7 @@ mod gpu {
         let audition =
             previews[0].expect("deck A is auditioning and the frame aimed nothing at it");
         assert_eq!(audition.rect, cell);
-        assert_eq!(audition.id, engine.preview.id);
+        assert_eq!(audition.id, engine.previews[0].id);
         assert!(renderer.texture(&audition.id).is_some());
         assert!(
             previews[1..].iter().all(Option::is_none),
@@ -14002,7 +13933,7 @@ mod gpu {
         // **Aimed is what `Sink::acquire` answers from**, and that is the
         // whole of what `compose` asks either of them.
         assert_eq!(engine.picture.acquire(&gpu), Ok(()));
-        assert_eq!(engine.preview.acquire(&gpu), Ok(()));
+        assert_eq!(engine.previews[0].acquire(&gpu), Ok(()));
 
         // **Fold the picture away and its sink has no target** — so `compose`
         // records no present pass into it, the deck still advances, and deck A
@@ -14044,7 +13975,7 @@ mod gpu {
              pass is recorded into a texture nothing shows"
         );
         assert!(
-            previews[0].is_some() && engine.preview.acquire(&gpu) == Ok(()),
+            previews[0].is_some() && engine.previews[0].acquire(&gpu) == Ok(()),
             "folding the picture away stopped deck A auditioning under it"
         );
     }

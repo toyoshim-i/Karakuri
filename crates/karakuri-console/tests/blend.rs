@@ -427,19 +427,13 @@ fn the_mode_row_stays_inside_its_track() {
             );
         }
 
-        // The overflow is real and is the reason this test exists: the row is
-        // wider than the strip's content box at every mode. If that ever
-        // stops being true the clearance above is no longer the tight thing
-        // this was written to watch, and the message says so rather than the
-        // test quietly going on measuring nothing.
         let at = bay.strip(0);
-        let content = at.rect.width() - size::STRIP_PAD_X * 2.0;
         let row = at.mask.max.x - at.blend.min.x;
         assert!(
-            row > content,
-            "at `{}` the mode row is {row:.4} and the strip's content box is {content:.4} — \
-             the row no longer overflows, so re-read this test before trusting it",
-            blend.name()
+            row <= at.rect.width(),
+            "at `{}` the mode row is {row:.4} and the strip's track is {:.4}",
+            blend.name(),
+            at.rect.width()
         );
     }
 

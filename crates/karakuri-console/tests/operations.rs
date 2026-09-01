@@ -23,7 +23,7 @@ fn folding_the_left_pane_gives_its_width_to_the_centre() {
     // The centre took the pane's width *and* the divider that is no longer
     // drawn beside it. Nothing else moved: the right pane is exactly where and
     // what it was.
-    assert!(near(rect_of(&layout, "centre").w, centre.w + 218.0 + 10.0));
+    assert!(near(rect_of(&layout, "centre").w, centre.w + 340.0 + 10.0));
     assert!(near(rect_of(&layout, "right-pane").w, right.w));
     assert!(near(rect_of(&layout, "right-pane").x, right.x));
     assert!(near(rect_of(&layout, "left-pane").w, 0.0));
@@ -32,7 +32,7 @@ fn folding_the_left_pane_gives_its_width_to_the_centre() {
     // was storing all along.
     layout.expand(id_of(&layout, "left-pane"));
     layout.solve();
-    assert!(near(rect_of(&layout, "left-pane").w, 218.0));
+    assert!(near(rect_of(&layout, "left-pane").w, 340.0));
     assert!(near(rect_of(&layout, "centre").w, centre.w));
 }
 
@@ -48,7 +48,7 @@ fn folding_the_right_pane_gives_its_width_to_the_centre() {
     layout.solve();
     assert_sane(&layout);
 
-    assert!(near(rect_of(&layout, "centre").w, centre.w + 268.0 + 10.0));
+    assert!(near(rect_of(&layout, "centre").w, centre.w + 400.0 + 10.0));
     assert!(near(rect_of(&layout, "left-pane").w, left.w));
 }
 
@@ -148,7 +148,7 @@ fn dragging_a_divider_and_dragging_it_back_reproduces_the_arrangement() {
     assert_sane(&layout);
 
     layout.set_divider(centre, 0, top + program_edge);
-    layout.set_divider(body, 0, 218.0);
+    layout.set_divider(body, 0, 340.0);
     layout.solve();
     assert_eq!(before, rects(&layout));
 }

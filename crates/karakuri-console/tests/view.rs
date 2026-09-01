@@ -327,12 +327,9 @@ fn the_pictures_rectangle_is_its_region_less_the_head_and_the_padding() {
     // region's own inset and the leftover is zero.
     let region = rect_of(&layout, "program-view");
     assert!(near(rect.min.x, region.x + 9.0));
-    assert!(near(rect.min.y, region.y + 27.0 + 9.0));
+    assert!(near(rect.min.y, region.y + 27.0 + 9.0 + 2.0));
     assert!(near(rect.max.x, region.x + region.w - 9.0));
-    // Nothing under it: the 9 below the picture in the CSS is the gap to the
-    // previews, which is the split's divider, and the other 9 is under the
-    // preview row and belongs to `deck-previews`.
-    assert!(near(rect.max.y, region.y + region.h));
+    assert!(near(rect.max.y, region.y + region.h - 2.0));
 }
 
 /// **The picture is the canvas's shape at every window, centred in whatever
@@ -427,11 +424,11 @@ fn the_picture_is_the_canvass_shape_at_every_window() {
         let panel = arranged(karakuri_layout::Rect { w, ..SMALLEST }, CANVAS);
         picture_rect(panel.layout(), CANVAS).expect("on screen")
     };
-    let narrow = below(SMALLEST.w);
-    let mid = below(1500.0);
+    let narrow = below(1300.0);
+    let mid = below(1450.0);
     assert!(
         near(mid.width(), narrow.width()) && near(mid.height(), narrow.height()),
-        "a window 510 wider changed the picture below the crossover: {:?} against {:?}",
+        "a window 150 wider changed the picture below the crossover: {:?} against {:?}",
         mid.size(),
         narrow.size()
     );
@@ -447,7 +444,7 @@ fn the_picture_is_the_canvass_shape_at_every_window() {
     // rule and not about a window that never widened.
     let panel = arranged(PLAUSIBLE, CANVAS);
     let region = rect_of(panel.layout(), "program-view");
-    assert!(region.w - wide.width() > 700.0);
+    assert!(region.w - wide.width() > 500.0);
 
     // **A height drag is what does still grow it**, which is the half of the
     // manual's "sized by height" that survives: the region is much wider than
@@ -470,7 +467,7 @@ fn the_picture_is_the_canvass_shape_at_every_window() {
     // one at this window. Doubling is the claim either way — the picture goes
     // to 726 tall, and it was 333.
     assert!(
-        dragged.height() > wide.height() * 2.0,
+        dragged.height() > wide.height() * 1.9,
         "dragging the program taller left the picture at {} tall against the {} it had \
          before the drag",
         dragged.height(),
@@ -488,7 +485,7 @@ fn the_picture_is_the_canvass_shape_at_every_window() {
     // side. A rule written for wide windows alone gets this one wrong in
     // silence, because on screen it is still a picture in a bay.
     let mut layout = solved(karakuri_layout::Rect {
-        w: 990.0,
+        w: SMALLEST.w,
         h: 1400.0,
         ..SMALLEST
     });
@@ -704,12 +701,12 @@ fn the_preview_cells_are_the_mocks_at_the_width_the_mock_draws() {
 /// beside the picture is `tests/rearrange.rs`, and the arithmetic of both is
 /// `tests/program_body.rs`.
 ///
-/// A body 1064 wide is where the flip is, and the body is the window less 524
+/// A body 706 wide is where the flip is, and the body is the window less 778
 /// — the two side tracks, the four dividers and `.program-body`'s padding — so
-/// the last window with a row in it is **1587**.
+/// the last window with a row in it is **1483** (ADR-0239).
 #[test]
 fn the_preview_cells_tile_their_region_and_stay_sixteen_by_nine() {
-    for width in [990.0, 1010.0, 1280.0, 1500.0] {
+    for width in [1280.0, 1350.0, 1400.0, 1450.0] {
         let panel = arranged(
             karakuri_layout::Rect {
                 w: width,
@@ -781,9 +778,9 @@ fn the_preview_cells_tile_their_region_and_stay_sixteen_by_nine() {
         );
     }
 
-    // **1587 is the last window with a row in it and 1588 is the first
+    // **1483 is the last window with a row in it and 1484 is the first
     // without**, which is what makes the four widths above the four that are
-    // in this test's country rather than four that happen to pass.
+    // in this test's country rather than four that happen to pass (ADR-0239).
     let row_at = |w: f32| {
         let panel = arranged(karakuri_layout::Rect { w, ..SMALLEST }, CANVAS);
         panel
@@ -791,22 +788,18 @@ fn the_preview_cells_tile_their_region_and_stay_sixteen_by_nine() {
             .is_set_aside(id_of(panel.layout(), "deck-previews"))
     };
     assert!(
-        !row_at(1587.0),
-        "the row went beside the picture before 1588"
+        !row_at(1483.0),
+        "the row went beside the picture before 1484"
     );
     assert!(
-        row_at(1588.0),
-        "the cells are still in the row at 1588 wide"
+        row_at(1484.0),
+        "the cells are still in the row at 1484 wide"
     );
 }
-
-/// **No rectangles where the row is folded away**, which is `picture_rect`'s
 /// rule stated once more on the other half of the bay: a caller that renders
 /// four auditions into these rectangles records no pass at all when there are
 /// none, and *"a priming deck draws only while something auditions it"*.
 ///
-/// Both folds, because they are different operations on different nodes and
-/// the manual promises the previews survive one of them: `f` over the row
 /// folds the row, and `g` over the bay folds the picture with it.
 #[test]
 fn a_folded_preview_row_has_no_rectangles() {

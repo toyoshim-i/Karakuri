@@ -131,16 +131,11 @@ const COLUMN_DIVIDER: f32 = 10.0;
 /// Between the bays stacked inside one column: `.col`'s `gap: 10px`.
 const BAY_DIVIDER: f32 = 10.0;
 
-/// Between the Program bay's two regions: `.program-body`'s `gap: 8px`, which
-/// is the gap the mock leaves between the picture and the row of deck
-/// previews under it. The second divider in the console that is not 10, and
-/// like the inspector's it is inside a card rather than in the ground.
-const PROGRAM_DIVIDER: f32 = 8.0;
+/// Between the Program bay's two regions: the console's own 4px divider between
+/// the picture and the row of deck previews under it.
+const PROGRAM_DIVIDER: f32 = 4.0;
 
 /// The console's default arrangement.
-///
-/// A column of three — the transport, the row of three columns, and the
-/// outputs row — where each column holds its own stack of bays. That middle
 /// child is `.body-grid` in the mock, and *the body row* wherever the
 /// comments below have to refer to it.
 ///
@@ -288,10 +283,8 @@ fn left_pane() -> Spec {
         ],
     )
     .named("left-pane")
-    // `.body-grid`'s first track: `218px`.
-    .fixed(218.0)
-    // Minimum: a library row at its narrowest useful — `.lib-list` padding
-    // 3 + 3, `.lib-row` padding 7 + 7 and two 7px gaps, a star, a Set name of
+    // `.body-grid`'s first track: `340px` (ADR-0239).
+    .fixed(340.0)
     // a dozen characters and a duration, at the code face's ~6.6px per
     // character. The mock states no minimum for this track; 160 is chosen, and
     // it is the width at which a row still reads as a name and a time rather
@@ -511,12 +504,10 @@ fn right_pane() -> Spec {
         ],
     )
     .named("right-pane")
-    // `.body-grid`'s third track: `268px`.
-    .fixed(268.0)
+    // `.body-grid`'s third track: `400px` (ADR-0239).
+    .fixed(400.0)
     // Minimum: four mixer strips still side by side, which is the narrowest
     // thing in the pane and the one the manual pins. A `.strip` is 4 + 4 of
-    // padding around a `.fader-col` of `.vfader` 17, a 6px gap and `.vmeter`
-    // 6 — 37 — and four of them with three 4px gaps inside `.mixer-strips`'
     // 6 + 6 padding is 172. The mock states no minimum for this track; this
     // one is read off the strip it has to hold.
     .min(172.0)
