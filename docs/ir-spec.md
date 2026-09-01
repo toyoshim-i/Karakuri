@@ -3641,10 +3641,15 @@ derived name claims the one a written name further down the list asked for. Two 
 names that collide are refused, where two derived ones are told apart — a written name is an
 address somebody chose.
 
-**And `source` is built too, which closes the gap this paragraph recorded.** It used to read
-*"nothing supplies the value a mask would compare, so naming a source and masking on one are
-still different distances away"* — the distance is gone, and the two halves met exactly where
-this section said they would.
+**`source` is half built, and the half that is missing is the value.** The slot type exists
+(`ast::SlotTy::Source`), the checker reads it, and `karakuri-codegen`'s `layout` reserves a
+`u32` per declared Source slot and gives it a key the engine would look it up by
+(`source_slot_key`). Nothing calls that function outside the module that defines it, so no
+engine writes a value into the field. Naming a source and masking on one are still different
+distances away, which is what this paragraph recorded before and still records.
+
+An earlier revision of this paragraph said `source` was built and the gap closed. That was
+true of the declaration and false of the value.
 
 A value nobody can write is a value nobody can mask on: `source == 0x8a3f21c4` is not
 something an author or a model produces. So a source that something wants to point at

@@ -1053,6 +1053,7 @@ the Set model.
 
 Note that imported material is often extremely expensive. Allowing it makes the budget
 governor mandatory rather than advisory.
+
 **A keyboard is mapped and learned the same way a control surface is.** The keys are a `match`
 in `karakuri-cli` today, and there is no reason they should be: the vocabulary is what made a
 MIDI map possible, and a key is another way to name the same operation. The grammar is already
@@ -1095,6 +1096,9 @@ the history, which is what `docs/adr/` is. It also had to carry supersessions in
 layer until a Set could hold two geometries* — which a record's front matter now carries instead.
 
 Nothing was left behind. The one entry that had been held here as unsettled — whether reference
+material handed to a generator belongs in `origin` — is settled in
+[ADR-0133](adr/0133-what-was-fed-to-a-generator-is-a-field-not-an-object.md): the object stays
+rejected, the field does not.
 
 ---
 
