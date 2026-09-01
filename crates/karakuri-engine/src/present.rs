@@ -339,6 +339,43 @@ impl Present {
         target: &wgpu::TextureView,
         target_size: (u32, u32),
     ) {
+        self.draw_with_bind_group(encoder, &self.bind_group, target, target_size);
+    }
+
+    /// Creates a bind group mapping `source` through this tone-mapping pipeline.
+    pub fn create_bind_group_for(
+        &self,
+        device: &wgpu::Device,
+        source: &wgpu::TextureView,
+    ) -> wgpu::BindGroup {
+        device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("present source"),
+            layout: &self.layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(source),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&self.sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: self.tonemap.as_entire_binding(),
+                },
+            ],
+        })
+    }
+
+    /// Draws `bind_group`'s source into `target`, letterboxed to fit `target_size`.
+    pub fn draw_with_bind_group(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        bind_group: &wgpu::BindGroup,
+        target: &wgpu::TextureView,
+        target_size: (u32, u32),
+    ) {
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("present"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -358,7 +395,7 @@ impl Present {
         let (x, y, w, h) = letterbox((self.width, self.height), target_size);
         pass.set_viewport(x, y, w, h, 0.0, 1.0);
         pass.set_pipeline(&self.pipeline);
-        pass.set_bind_group(0, &self.bind_group, &[]);
+        pass.set_bind_group(0, bind_group, &[]);
         pass.draw(0..3, 0..1);
     }
 }
