@@ -8,7 +8,7 @@ milestones that closed are kept whole in [history/](history/). Where a later mil
 earlier code, that is stated under **Demands on earlier work**.
 
 **No count, figure or percentage is written into this file.** Every one that ever was went stale,
-usually within days and usually in silence. *The instrumentation*, below, is the five commands
+usually within days and usually in silence. *The instrumentation*, below, is the four commands
 that answer them, and there is nothing here to keep in step.
 
 ---
@@ -170,106 +170,24 @@ authority belong to no class.
 goes, walking the edit history, *edit the file instead*, and the camera. Where each sits in the
 split is under *The estimate is retired rather than re-cut*, below.
 
-#### The remaining work in working order, and which bays are short a component
-
-**Two axes decide what is next and neither is enough on its own.** *How much does the specification
-want this* is the fifth command under *The instrumentation*, which sorts every `plan` row by how
-much the manual says about it and knows nothing about what is blocked; *can it be built today* is
-the table below. **The command supplies the order and the table supplies the blocker**, and neither
-is transcribed into the other.
-
-**What the list is for is not closing badges.** The maintainer, 2026-09-01: *"you have to get to
-the point where all the bay GUI components are there and assembled, or you cannot even try it
-out."* So the question it answers is which bays are still missing components.
-
-**How to read the two together.** Run the fifth command and read downward: a row the table answers
-with a blocker is not the next piece of work however heavy it is, and the first row the table
-answers *nothing* for is. The ranking orders work inside a bay and not across the page. **A row
-the command prints that the table has no entry for is itself the finding** — nobody has written
-down what that row needs — and **every entry reading *nothing* is a claim** rather than a blank.
-
-| Bay | Row | What it is waiting on |
-|---|---|---|
-| **Transport** | Tap the beat | Nothing. |
-| | Halve or double the grid | Nothing. |
-| | Nudge the latency offset | Nothing. |
-| | Set the free-run tempo | Nothing. |
-| | Find out what a write did | Nothing. |
-| | Record the session | Nothing. |
-| **Mixer** | Choose the wipe shape, the quantum, the length | Nothing — and it is the one to draw first, because the three rows below it convert only once a surface holds what it sets. |
-| | Fade a deck out or in | Nothing. It answers `Owed::NotRead` until the transition settings are handed over, and the surface that holds them is the row above. |
-| | Choose which renderer of a deck is live | Nothing, and the same reading. |
-| | Wipe the next deck in | **Who says the front shape and the soft edge are its.** `written(Wipe)` is `Owed::NotSettled` for exactly those two: the shape is `Operation::SetTransition`'s third setting and nothing has said it is the wipe's to write, and the soft edge is named by no operation anywhere. |
-| **Inspector** | Write a parameter | Nothing. |
-| | Attach a signal to a parameter | Nothing. |
-| | Take a parameter back | Nothing. |
-| | Element capacity, seeds, the camera | Nothing. |
-| | Read one node's source | Nothing. |
-| | Check and write one node's source | Nothing. |
-| | Keep what a deck is playing | Nothing. |
-| | Set a node's authority | **A writer, and a live-session one.** `Set::set_authority` is reached from `swap.rs`'s restatement and from its own test, and from nowhere else — so every node of every Set is `Manual`, and the chip can read while nothing can make it change ([ADR-0216](adr/0216-a-node-nobody-has-spoken-for-is-manual-and-a-request-states-only-what-was-said.md)). |
-| | Composite a deck's renderers | **A setter.** `Set::merge` is `Some` only where `layering == Layering::Composite` at `Set::build`, nothing writes it afterwards, and neither `Set` nor `Deck` offers one — so the operation names a state the engine cannot be moved into while it is running. |
-| **Library** | List what the store holds | Nothing. |
-| | Read what one Set holds and declares | Nothing. |
-| | Load material into a deck | **A drag, and not a machine.** `l` performs the operation ([ADR-0228](adr/0228-a-library-load-re-points-the-slots-source-and-never-installs-a-set.md)); the control the page names is the drag from a row onto a strip, and the page says of it *"and it is not drawn"*. The pill beside it is a readout on purpose, so a press on it would be a third route nobody specified (`view::LibraryBay`). |
-| | Send a Set to somebody, and take one in | **A destination the vocabulary can carry.** The taking-in half is built and reached — a `presets` row taken in and loaded on the one press. `Operation::TransferSet`'s send arm is `SetTransfer::Send { id }`: a Set the store already holds and no path at all, and the one control in this bay that takes letters takes a *name* and not a path. The missing sentence is *where a package goes when no shell redirected it*, and it belongs to the vocabulary rather than to this bay (`view::LibraryBay`). |
-| **Staging** | Keep a candidate | **Four of the six items under *M5.7 — Staging*, below**: a store the build path can write, a `Built` receiver on the render thread, a baseline, and the undecided answer for a build that changes two nodes. `watched()` calls neither `Watch::storing_to` nor `Watch::snapshotting_to`, and its own documentation is where that is said. |
-| | Put a node's previous version back | **The other two**: a reader for the edit history and a history for this program to read. `karakuri_environment::history` is `record`, `seed` and `stamped_id`, and has no lister. |
-| **Master** | Feedback | **An L5 kind, and a decision.** `ast::Kind` is `L1 \| L2 \| L3 \| L4 \| Field`, and which cut of the previous frame this one reads is taken by nobody (below). It is the heaviest row on the page and the one M5 cannot close by drawing. |
-| | Bloom | **An L5 kind**, and `params` is `Undecided`: what its knobs are has never been named. |
-| | RGB shift | The same two. |
-| **Sequencer** | Toggle a step | **A pattern and a step grid**, neither of which anything in this workspace holds, and the payload is `Undecided`. All five rows of this bay wait on that one thing; where a pattern is *kept* is settled ([ADR-0227](adr/0227-a-pattern-and-a-master-chain-setting-are-library-data-in-two-tiers.md)) and is not it. |
-| | Mute a lane | The pattern and the step grid. |
-| | Point a lane at what it drives | The pattern and the step grid. |
-| | Choose a pattern's steps and what a step is worth | The pattern and the step grid. |
-| | Choose which pattern the sequencer plays | The pattern and the step grid. |
-| **Outputs** | Choose where the frame goes | **An identity for an output.** `RouteFrame { output: Undecided }`, and no output has one anywhere in this workspace — deciding what names one is the row's whole content, not a payload it is missing. |
-| **No home on the page** | Narrow the published interface | **A control, named by the manual.** The panel cell reads `—`, so nothing on the console is specified to reach it and there is no drawing to owe. It is upstream of the Inspector: until something publishes, every control that bay will ever draw is a wildcard. |
-| | Wire a procedure's input to a node | The same: a `—` in the panel cell, and a `plan` badge over it. |
-| | Walk the edit history | The same, and then `WalkHistory { step: Undecided }` and the history reader Staging's item 5 names. |
-| **The console's own shape** | Fold a bay away | **A hit test.** Not blocked, and not the vocabulary's route either — it reaches the console as `karakuri_console::panel::Op::Fold`, which is why the fourth command returns it and why `tests/vocabulary.rs` rather than `panel_column.rs` is what checks it. The bay head is painted and never hit-tested, so the only route is still a key. |
-| | Fold a pane away | The same, at the pane edge. |
-| | Size the window | Nothing, and it is the host's rather than either vocabulary's: `crates/karakuri` answers `WindowEvent::Resized` itself, and the `a` the page specifies is bound to nothing. |
-| | Quit | Nothing, and the host's the same way: `WindowEvent::CloseRequested` exits the loop and `esc` reaches it. What is owed is the `close` control on the panel. |
-
-##### Which bays are short a component
-
-**One bay of the nine is complete**: the Program bay carries no `plan` row at all.
-
-**Three are drawn and short a handful of controls, and almost nothing in the three is blocked.**
-Transport is the cheapest bay on the page — six rows and not one blocker. The Library lists,
-scopes and loads, and of what it owes only the sending half of a transfer is blocked. The
-Inspector is the largest and most lopsided: every read it needs answers off a running Set, so
-what is missing is presses and not faces.
-
-**Two are short one or two.** Outputs draws its sinks and hit-tests the dot and owes the
-switchable list, which is the blocked part. Staging draws a row per slot and owes the two verdict
-controls, both standing on the same six prerequisites. **One is short a whole row**: the Mixer's
-strips are drawn and `.xfade`, the transition row beneath them, is drawn nowhere at all, which is
-why it is the row to draw first. **And two are barely bays** — Master is an `out` fader and a head
-over a chain of three rows none of which can be built, and Sequencer is a head and nothing else.
-
-**So the instrument can be tried end to end through Program, Transport, the Library, Staging and
-the Mixer's strips, and not at all through the Master chain or the Sequencer** — the two bays whose
-blockers are machinery rather than drawing. **What stands between here and a console somebody can
-judge is the Transport's six, the Inspector's seven presses, the Library's drag and the Mixer's
-settings row**, every one of them unblocked.
-
 #### How the work below is split
 
 **M5.1 to M5.9 are one sub-milestone per console bay, in the order below.** Each is the same job:
 complete that bay's GUI components and connect them to operations from the mouse and the keyboard.
 MCP, hover tooltips and MIDI cut across every bay, so they are M5.10, M5.11 and M5.12 rather than
 a share of each bay's work. **Each names its rows, its exit condition and what it is blocked on**,
-taken from the table above, which is the one place the ranking and the blockers have been crossed.
+and is the one place those are written down. The maintainer, 2026-09-01: *"you have to get to the
+point where all the bay GUI components are there and assembled, or you cannot even try it out."*
+
+**The order is the order below, and the work goes top to bottom.** If an order needs changing the
+sub-milestones are reordered; if a row needs a note the note goes in the sub-milestone that owns it.
 
 **A sub-milestone's exit condition is a grep over two columns**: no `plan` badge in the **panel**
 or **key** column of that bay's rows on [every operation](manual/operations.html). The MIDI and
-MCP columns are out of scope for M5.1 to M5.9, being M5.12's and M5.10's. **The table counts one
-column and the exit condition counts two** — sixteen rows carry a `plan` key badge and ten of
-those carry no `plan` panel badge, so the table does not name them and each sub-milestone below
-names its own. **ADR-0226 is unchanged by the split**: M5 closes when M5.1 to M5.9 close and the
-two sections at the end of this list close with them.
+MCP columns are out of scope for M5.1 to M5.9, being M5.12's and M5.10's. **A row can carry a
+`plan` key badge and no `plan` panel badge**, so each sub-milestone below names those rows as well
+as the ones the panel column owes. **ADR-0226 is unchanged by the split**: M5 closes when M5.1 to
+M5.9 close and the two sections at the end of this list close with them.
 
 ##### Every bay ends by rewriting its own prose as tooltips
 
@@ -281,6 +199,14 @@ contradictions; the console page's own layout does not work, its sections long a
 sparse with the mock far from the text explaining it; and nobody reads a large manual, so a short
 dialog beside the control has to carry the whole of it — what the control is, what state it is
 in, what a click will do, and its MIDI assignment.
+
+**And a gap gets a note.** The maintainer's reading rule, 2026-08-31: *the mock is not
+exhaustive. A tooltip is something everything should carry in the end, but only the characteristic
+ones are worked out. There will be gaps in the functions too — leave a purposeful note for those,
+aimed at what the thing is for — **and the more detail something is written in, the more important
+it is and the sooner it is wanted.*** **An empty tooltip is not a defect to fill in**; what *is*
+owed where a function is missing is a note saying what it would be for, because a gap with no note
+is indistinguishable from a decision.
 
 **Doing this at the end of each bay means M5.11 starts with its specification already written**,
 and owes only the pointer decision and the drawing.
@@ -321,9 +247,9 @@ column and are in no sub-milestone. The arena's insert and remove is above.
 
 #### M5.1 — Program
 
-**Rows.** None from the table above: the Program bay carries no `plan` panel badge. Two of its rows
-carry a `plan` key badge — *Put a deck on air, prime it, or take it off* at the tally chip, and
-*Choose what the output shows* at the preview.
+**Rows.** No `plan` panel badge at all — the Program bay is the one complete bay on the page. Two
+of its rows carry a `plan` key badge — *Put a deck on air, prime it, or take it off* at the tally
+chip, and *Choose what the output shows* at the preview.
 
 **Exit.** No `plan` badge in the panel or key column of this bay's rows on
 [every operation](manual/operations.html).
@@ -342,17 +268,19 @@ the other three bays take it as it stands.
 
 #### M5.2 — Mixer
 
-**Rows.** From the table: *Choose the wipe shape, the quantum, the length*, *Fade a deck out or in*,
-*Choose which renderer of a deck is live*, *Wipe the next deck in*. Four more carry a `plan` key
-badge and no `plan` panel badge: *Gain*, *Opacity*, *Blend mode*, and *Crossfade to the next deck*,
+**Rows.** Four carry a `plan` panel badge: *Choose the wipe shape, the quantum, the length*, *Fade
+a deck out or in*, *Choose which renderer of a deck is live*, *Wipe the next deck in*. Four more
+carry a `plan` key badge and no `plan` panel badge: *Gain*, *Opacity*, *Blend mode*, and *Crossfade
+to the next deck*,
 whose panel cell is a `gap` and whose only owed route is `x`.
 
 **Exit.** No `plan` badge in the panel or key column of this bay's rows on
 [every operation](manual/operations.html).
 
 **Order inside the bay.** Draw *Choose the wipe shape, the quantum, the length* first. `.xfade`, the
-transition row, is drawn nowhere at all, and the other three table rows convert only once a surface
-holds what that row sets.
+transition row, is drawn nowhere at all, and the other three rows convert only once a surface holds
+what that row sets: *Fade a deck out or in* answers `Owed::NotRead` until the transition settings
+are handed over, and *Choose which renderer of a deck is live* reads the same way.
 
 **Blocked on.** One row of the eight. *Wipe the next deck in* waits on who says the front shape and
 the soft edge are its: the shape is `Operation::SetTransition`'s third setting and nothing has said
@@ -373,17 +301,23 @@ whole transition row carry none, and that row is where the crossfader note has t
 
 #### M5.3 — Library
 
-**Rows.** From the table: *List what the store holds*, *Read what one Set holds and declares*, *Load
-material into a deck*, *Send a Set to somebody, and take one in*.
+**Rows.** Four carry a `plan` panel badge: *List what the store holds*, *Read what one Set holds
+and declares*, *Load material into a deck*, *Send a Set to somebody, and take one in*.
 
 **Exit.** No `plan` badge in the panel or key column of this bay's rows on
 [every operation](manual/operations.html).
 
-**Blocked on.** Half of one row. *Send a Set to somebody, and take one in* waits on a destination the
-vocabulary can carry: the taking-in half is built and reached, and `SetTransfer::Send { id }` names
-a Set the store already holds and no path at all. The missing sentence is where a package goes when
-no shell redirected it, and it belongs to the vocabulary rather than to this bay. *Load material
-into a deck* is not blocked — the drag from a row onto a strip is specified and not drawn.
+**Blocked on.** Half of one row. *Send a Set to somebody, and take one in* waits on a destination
+the vocabulary can carry: the taking-in half is built and reached — a `presets` row taken in and
+loaded on the one press — and `SetTransfer::Send { id }` names a Set the store already holds and no
+path at all, while the one control in this bay that takes letters takes a *name* and not a path.
+The missing sentence is where a package goes when no shell redirected it, and it belongs to the
+vocabulary rather than to this bay (`view::LibraryBay`). *Load material into a deck* is not
+blocked: `l` performs the operation
+([ADR-0228](adr/0228-a-library-load-re-points-the-slots-source-and-never-installs-a-set.md)), and
+the control the page names is the drag from a row onto a strip, of which the page says *"and it is
+not drawn"*. The pill beside it is a readout on purpose, so a press on it would be a third route
+nobody specified (`view::LibraryBay`).
 
 **Also here.** The Set browser's live previews and the thumbnail beside them.
 The bay lists what the store holds already; the previews are what waits, and what a thumbnail is
@@ -403,9 +337,10 @@ than found*, *A Set has two forms, and loading one is packaging it*, and *How a 
 
 #### M5.4 — Transport
 
-**Rows.** From the table: *Tap the beat*, *Halve or double the grid*, *Nudge the latency offset*,
-*Set the free-run tempo*, *Find out what a write did*, *Record the session*. Two more carry a `plan`
-key badge and name the transport as their panel home: *Tone map* and *Exposure*.
+**Rows.** Six carry a `plan` panel badge: *Tap the beat*, *Halve or double the grid*, *Nudge the
+latency offset*, *Set the free-run tempo*, *Find out what a write did*, *Record the session*. Two
+more carry a `plan` key badge and name the transport as their panel home: *Tone map* and
+*Exposure*.
 
 **Exit.** No `plan` badge in the panel or key column of this bay's rows on
 [every operation](manual/operations.html).
@@ -428,11 +363,11 @@ notes against what the tips already say.
 
 #### M5.5 — Inspector
 
-**Rows.** From the table, nine: *Write a parameter*, *Attach a signal to a parameter*, *Take a
-parameter back*, *Element capacity, seeds, the camera*, *Read one node's source*, *Check and write
-one node's source*, *Keep what a deck is playing*, *Set a node's authority*, *Composite a deck's
-renderers*. Two more carry a `plan` key badge only, both at the deck head: *Set a deck's sync mode*
-and *Scrub a deck a quarter beat*.
+**Rows.** Nine carry a `plan` panel badge: *Write a parameter*, *Attach a signal to a parameter*,
+*Take a parameter back*, *Element capacity, seeds, the camera*, *Read one node's source*, *Check
+and write one node's source*, *Keep what a deck is playing*, *Set a node's authority*, *Composite a
+deck's renderers*. Two more carry a `plan` key badge only, both at the deck head: *Set a deck's
+sync mode* and *Scrub a deck a quarter beat*.
 
 **Exit.** No `plan` badge in the panel or key column of this bay's rows on
 [every operation](manual/operations.html).
@@ -445,7 +380,7 @@ else, so every node of every Set is `Manual` and the chip can read while nothing
 `layering == Layering::Composite` at `Set::build`, nothing writes it afterwards, and neither `Set`
 nor `Deck` offers one, so the operation names a state the engine cannot be moved into while running.
 
-The other nine wait on nothing. This is the largest bay of the unblocked ones and the most lopsided:
+The other nine of the eleven wait on nothing. This is the largest bay of the unblocked ones and the most lopsided:
 every read it needs answers off a running Set, so what is missing is presses rather than faces.
 
 **Also here.** Three of the four items with no sub-milestone land in this bay. The **node
@@ -470,7 +405,7 @@ renderer row and *take back* each carry one, and the parameter rows and their fa
 
 #### M5.6 — Outputs
 
-**Rows.** From the table, one: *Choose where the frame goes*.
+**Rows.** One carries a `plan` panel badge: *Choose where the frame goes*.
 
 **Exit.** No `plan` badge in the panel or key column of this bay's rows on
 [every operation](manual/operations.html).
@@ -492,14 +427,14 @@ so this is the smallest of the nine items.
 
 #### M5.7 — Staging
 
-**Rows.** From the table, two: *Keep a candidate*, *Put a node's previous version back*.
+**Rows.** Two carry a `plan` panel badge: *Keep a candidate*, *Put a node's previous version back*.
 
 **Exit.** No `plan` badge in the panel or key column of this bay's rows on
 [every operation](manual/operations.html).
 
-**Blocked on.** Both rows, on six items. Nothing in the list is a drawing — the row the controls
-would hang on is already painted — most of it is wiring `karakuri-cli` already has, and one item
-is a decision nobody has taken.
+**Blocked on.** Both rows, on six items. Nothing in the list is a drawing — the row the two verdict
+controls would hang on is already painted — most of it is wiring `karakuri-cli` already has, and one
+item is a decision nobody has taken.
 
 1. **A store the build path can write.** `watched()` (`crates/karakuri/src/main.rs`) constructs
    each slot's `watch::Watch` and calls neither `Watch::storing_to` nor `Watch::snapshotting_to`,
@@ -550,7 +485,7 @@ so every tip in this bay is written from nothing.
 
 #### M5.8 — Master
 
-**Rows.** From the table, three: *Feedback*, *Bloom*, *RGB shift*.
+**Rows.** Three carry a `plan` panel badge: *Feedback*, *Bloom*, *RGB shift*.
 
 **Exit.** No `plan` badge in the panel or key column of this bay's rows on
 [every operation](manual/operations.html).
@@ -572,9 +507,9 @@ are the rows this bay is blocked on drawing.
 
 #### M5.9 — Sequencer
 
-**Rows.** From the table, all five: *Toggle a step*, *Mute a lane*, *Point a lane at what it
-drives*, *Choose a pattern's steps and what a step is worth*, *Choose which pattern the sequencer
-plays*.
+**Rows.** All five of the bay's rows carry a `plan` panel badge: *Toggle a step*, *Mute a lane*,
+*Point a lane at what it drives*, *Choose a pattern's steps and what a step is worth*, *Choose
+which pattern the sequencer plays*.
 
 **Exit.** No `plan` badge in the panel or key column of this bay's rows on
 [every operation](manual/operations.html).
@@ -666,8 +601,8 @@ and never hit-tested, so the only route is still a key, and they reach the conso
 `karakuri_console::panel::Op::Fold` rather than through the operation vocabulary — which is why
 `tests/vocabulary.rs` rather than `panel_column.rs` is what checks them. **Sizing and quitting are
 the host's**: `crates/karakuri` answers `WindowEvent::Resized` and `WindowEvent::CloseRequested`
-itself. What is owed there is the `a` binding, which is bound to nothing, and the `close` control on
-the panel.
+itself, and `esc` reaches the second. What is owed there is the `a` binding, which is bound to
+nothing, and the `close` control on the panel.
 
 Nothing in this section is blocked.
 
@@ -796,11 +731,11 @@ panel badge at all — it is the one complete bay on the page. What is left is t
 bay's two tooltip notes. Nothing is blocked. **One decision sits inside this bay**: what the deck
 A preview cell is showing now that there are four channels, the second of the four below.
 
-**The order after M5.1 is the section above.** The table under *The remaining work in working
-order* supplies each bay's blockers and the fifth command supplies the order inside a bay. Run
-the fourth command beside both: a `plan` badge does not distinguish a drawing that is owed from a
-machine that is missing, and a row has already been picked up as the first while being the
-second. **Master and Sequencer stay last for machinery rather than for drawing.**
+**The order after M5.1 is the section above.** Work the sub-milestones top to bottom; each one
+names its own rows, its exit condition and its blockers. Run the fourth command beside them: a
+`plan` badge does not distinguish a drawing that is owed from a machine that is missing, and a row
+has already been picked up as the first while being the second. **Master and Sequencer stay last
+for machinery rather than for drawing.**
 
 ### The decisions nobody has taken
 
@@ -849,7 +784,7 @@ M6's and is open there.
 
 ## The instrumentation
 
-**These five commands are the only source of the numbers in this project, and they are not to be
+**These four commands are the only source of the numbers in this project, and they are not to be
 summarised or transcribed into prose.** Every figure ever written into this file went stale — the
 meter four times, the vocabulary count six, the panel's allocation figure twice, the program's own
 startup legend five ways at once — so the numbers are gone rather than corrected.
@@ -890,49 +825,16 @@ sed -n '/^operations! {/,/^}$/p' crates/karakuri-operation/src/lib.rs |
   done
 ```
 
-```sh
-# how much the manual says about each thing it is still owed — the priority signal
-python3 -c '
-import re, pathlib
-s = pathlib.Path("docs/manual/operations.html").read_text()
-out = []
-for chunk in re.split(r"<h3", s)[1:]:
-    title = re.sub(r"<[^>]*>", "", chunk.split("</h3>")[0]).strip().lstrip(">")
-    m = re.search(r"class=\"rt (\w+)\">panel", chunk)
-    if not m or m.group(1) != "plan":
-        continue
-    body = chunk.split("</h3>", 1)[1].split("class=\"rt ")[0]
-    out.append((len(" ".join(re.sub(r"<[^>]*>", " ", body).split())), title))
-for n, t in sorted(out, reverse=True):
-    print(f"{n:5d}  {t}")
-'
-```
-
 **The fourth answers a question the badges cannot.** A `plan` badge says a surface is meant to
 reach an operation and does not yet; it says nothing about *why*, and an operation nothing
 constructs is one nobody can route to at all. Two cuts make it honest, both the ones
 `karakuri-console/tests/panel_column.rs` already makes: the record crate is excluded because it
 would answer *constructed* for every operation, and each line is truncated at its first `//`,
-because a doc comment naming an operation is not a call site. Nine of what it returns are
-expected — the console's own shape reaches its rows through `karakuri_console::panel::Op`.
-
-**The fifth does not currently measure what it says it measures, and it is left as it stands
-rather than guessed at.** It takes a row's body as the text between `</h3>` and the first
-`class="rt "`, and on the page as it is now the badge row follows the heading immediately — so
-every `plan` row reads 15 to 17 characters and the ranking is flat. The prose it means to weigh
-is in each row's `data-tip` and in what follows the badges. **Until that is fixed the order below
-is not a priority**, and the table under *The remaining work in working order* is the whole of the
-signal.
-
-**What it is for is the maintainer's reading rule, given on 2026-08-31:** *the
-mock is not exhaustive. A tooltip is something everything should carry in the end, but only the
-characteristic ones are worked out. There will be gaps in the functions too — leave a purposeful
-note for those, aimed at what the thing is for — **and the more detail something is written in,
-the more important it is and the sooner it is wanted.*** So the length of what the page says about
-a row is meant to sort the board by what the specification cares about rather than by where a
-control happens to live. **An empty tooltip is not a defect to fill in**; what *is* owed where a function is
-missing is a note saying what it would be for, because a gap with no note is indistinguishable
-from a decision.
+because a doc comment naming an operation is not a call site. Seven of what it returns are
+expected. Five of those are the console's own shape, which reaches its rows through
+`karakuri_console::panel::Op` — moving a boundary, folding a bay, folding a pane, bringing one
+back, and resetting the arrangement. The other two, sizing the window and quitting, are the
+host's `winit` events.
 
 **The panel measures itself rather than being measured here.** `crates/karakuri` installs a
 counting `#[global_allocator]` and holds each run against its own `WRITTEN_ALLOCS`, saying so
