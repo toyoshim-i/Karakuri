@@ -39,104 +39,177 @@
 //! materialised here, edited by a hand or a model, and saved back with
 //! `--save-set`. Saving worked already; reading one back to edit it did not.
 //!
-//! # Sharing is preserved, deliberately
+//! # A slot runs from its own copy, and the name carries the slot
 //!
-//! Two slots naming one file share it — [`crate::watch`] documents that as
-//! supported, and a write through MCP reports the other slots it reached. Copying
-//! per-slot would quietly end that: the same file in two slots would become two
-//! files, an edit would land in one, and the surface's report would be wrong
-//! rather than merely different. So the copy is keyed by **source path**, and
-//! two slots that shared a source still share a scratch file.
+//! **One copy per slot, named `A0-drift_shell.kir`** — the deck letter, the
+//! node's place in that slot, and the material's own name ([`node_name`]). The
+//! same preset in four slots is four files, and that is the requirement rather
+//! than the price of meeting it: a slot is the unit that gets replaced —
+//! [`crate::watch`]'s *"that is what it means for each slot to own its own
+//! `HotSwap`"* — so a slot whose material is also somebody else's is a slot
+//! that is not a channel.
+//!
+//! **This replaces the opposite rule**, which stood here until 2026-09-01.
+//! It is quoted rather than deleted because it was argued rather than assumed,
+//! and somebody will re-propose it:
+//!
+//! > Two slots naming one file share it — `watch` documents that as supported,
+//! > and a write through MCP reports the other slots it reached. Copying
+//! > per-slot would quietly end that.
+//!
+//! Three things are wrong with it.
+//!
+//! 1. **It is circular.** The report it defends — *this file is also slot 1* —
+//!    exists only to describe the sharing. End the sharing and that sentence is
+//!    not made untrue, it is made **empty**, which is what it should say. What
+//!    is lost is a warning about an accident, not something an operator asked
+//!    for.
+//! 2. **It contradicts the naming rule in the same directory.** [`place`] has
+//!    written `A0-drift.kir` since ADR-0228, whose argument is that
+//!    `<store>/scratch/<name>.kir` **overwrites** what is there, so two decks
+//!    whose material shares a name *"would silently become one file — the
+//!    second load moving the first deck on its watcher's next poll, with
+//!    nothing to say why"*. A copy named after its source alone put that exact
+//!    failure back into the one module written to stop it, and a run with
+//!    `--load-set --watch` used both rules at once, in one directory.
+//! 3. **It costs the thing the slots are for.** Four decks opened on one
+//!    preset are four simulations to be driven apart; one shared file means
+//!    the first edit moves all four and no one of them can be moved alone. In
+//!    `crates/karakuri` it also meant one save rebuilt four slots, four
+//!    candidates entered the Staging lane, and the three that are parked never
+//!    reach a verdict — a lane that fills on the first save and stays full for
+//!    the rest of the run.
+//!
+//! **What survives is the obligation to speak, not the shared file.** An
+//! operator who gave one preset to four decks had an edit reach all four, and
+//! will expect it to. So the surface that writes says what its write reached:
+//! [`crate::mcp`] still scans the other slots for the path it wrote — a scan
+//! that is normally empty now, and empty *because* of this rule rather than
+//! because nobody shares — and both programs print the per-deck file list at
+//! startup, so the operator opens the file belonging to the deck they mean.
 
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 /// The subdirectory of the store this lives in.
 pub const DIR: &str = "scratch";
 
-/// Copy every distinct source in `sets` into the scratch and rewrite `sets` to
+/// Copy every node of every slot into the scratch and rewrite the paths to
 /// point at the copies. Returns the directory, for printing.
 ///
-/// **Call this only when the run can be edited** — `--watch` or `--mcp`. A run
-/// with neither writes no `.kir` at all, so there is nothing to protect the
-/// originals from, and copying would leave a directory behind for a render that
-/// is supposed to be a function of its arguments.
+/// **Call this only when the run can be edited** — `--watch`, `--mcp`, or a
+/// surface that is permanently both. A run with none of those writes no `.kir`
+/// at all, so there is nothing to protect the originals from, and copying would
+/// leave a directory behind for a render that is supposed to be a function of
+/// its arguments.
 ///
 /// Existing scratch files are overwritten and the rest of the directory is left
 /// alone. Not cleared: an operator may have put something here, and deleting a
 /// directory whose name we chose is a bad way to find that out.
-/// **Takes the paths rather than the slots**, because what a slot is has grown a
-/// name beside each path and this module has no business knowing that. Every
-/// path in every slot, in any order — the dedup is keyed by the source path, so
-/// order decides only which of two identical sources keeps the plain basename.
-pub fn materialise<'a>(
-    store_root: &Path,
-    paths: impl Iterator<Item = &'a mut PathBuf>,
-) -> Result<PathBuf, String> {
+///
+/// **Takes the slots rather than a flat list of paths**, which is the change
+/// this function exists to carry: the name of a copy is [`node_name`]'s, and
+/// that name is the slot and the node's place in it. A flat list could not
+/// spell one. What is *not* taken is what a slot is — the caller hands over
+/// each slot's paths in node order and keeps the names beside them, because a
+/// node name is the Set file's business and not this module's.
+///
+/// **No dedup, and that is the rule rather than an omission.** The same source
+/// given to four slots becomes four files. See this module's header for why the
+/// opposite rule was there and why it went; the short of it is that a slot is
+/// the unit that gets replaced, so a slot whose file is also somebody else's
+/// cannot be moved on its own.
+pub fn materialise<'a, S, N>(store_root: &Path, slots: S) -> Result<PathBuf, String>
+where
+    S: IntoIterator<Item = N>,
+    N: IntoIterator<Item = &'a mut PathBuf>,
+{
     let dir = store_root.join(DIR);
     std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
 
-    // Keyed by the source path, so two slots that shared a file still do.
-    let mut copied: HashMap<PathBuf, PathBuf> = HashMap::new();
-    // Basenames already handed out, so two different sources called `field.kir`
-    // do not become one file. A collision here would silently merge two slots'
-    // material, which is the one failure this whole module exists to prevent.
-    let mut taken: Vec<String> = Vec::new();
-
-    {
-        for path in paths {
+    for (slot, nodes) in slots.into_iter().enumerate() {
+        for (at, path) in nodes.into_iter().enumerate() {
             // Already the working copy — a Set loaded from the store, placed
-            // here by `place` before this ran. Copying it onto itself would at
-            // best be a no-op and at worst rename it out from under the deck
-            // when its basename collided with something else's.
+            // here by `place` before this ran, under a name that already
+            // carries this slot. Copying it onto itself would at best be a
+            // no-op and at worst rewrite it from itself mid-run.
             if path.starts_with(&dir) {
-                if let Some(name) = path.file_name().map(|n| n.to_string_lossy().to_string()) {
-                    taken.push(name);
-                }
                 continue;
             }
-            if let Some(existing) = copied.get(path.as_path()) {
-                *path = existing.clone();
-                continue;
-            }
-            let name = unique_name(path, &mut taken);
-            let target = dir.join(&name);
+            // **Every file in this directory is a `<letter><at>-<name>.kir`**,
+            // which is the rule `place` has always followed and is now the
+            // whole directory's: one spelling, so an operator reading a
+            // listing of it is reading one kind of thing. A source named
+            // something else keeps its name and gains the extension its
+            // content already had.
+            let target = dir.join(format!("{}.kir", node_name(slot, at, &stem_of(path))));
             let source =
                 std::fs::read(path.as_path()).map_err(|e| format!("{}: {e}", path.display()))?;
             std::fs::write(&target, &source).map_err(|e| format!("{}: {e}", target.display()))?;
-            copied.insert(path.clone(), target.clone());
             *path = target;
         }
     }
     Ok(dir)
 }
 
-/// A file name for `source` that no other source in this run has taken.
+/// **The name one node of one slot is filed under**, and the one rule: the deck
+/// letter, the node's place in that slot, and the material's own name —
+/// `A0-drift_shell`. [`place`] appends the `.kir`.
 ///
-/// The basename, because the operator has to be able to find it — a scratch of
-/// hashes is a scratch nobody opens in an editor. Disambiguated by a counter
-/// only when two different sources really do share one.
-fn unique_name(source: &Path, taken: &mut Vec<String>) -> String {
-    let base = source
-        .file_name()
+/// This is ADR-0228's spelling, made the whole directory's rather than the
+/// library load's. That record's argument is the one that generalises: `place`
+/// *"writes `<store>/scratch/<name>.kir` and overwrites what is there, so two
+/// decks loading Sets whose procedures happen to share a name would silently
+/// become one file — the second load moving the first deck on its watcher's
+/// next poll, with nothing to say why."* Nothing in that sentence is about a
+/// *load*: it is about two decks and one directory, which is every run.
+///
+/// **The material's own name is kept**, disambiguated by the prefix rather than
+/// replaced by it, for the reason the counter it replaces gave: *"a scratch of
+/// hashes is a scratch nobody opens in an editor."* An operator has to be able
+/// to see which file is which deck **and** what is in it, and the two questions
+/// are answered by the two halves of this name.
+///
+/// **No counter and no collision list.** `<letter><at>` is unique by
+/// construction — a slot index and a node index — so two different sources can
+/// no longer land on one file however they are named, which is what the
+/// `unique_name` this replaces was scanning for.
+pub fn node_name(slot: usize, at: usize, name: &str) -> String {
+    format!("{}{at}-{}", deck_letter(slot), sanitize(name))
+}
+
+/// **The letter the deck is drawn with**, `A` for slot 0.
+///
+/// `karakuri_console::view::DECK_LETTERS` is `["A", "B", "C", "D"]` and is the
+/// answer everywhere a surface *says* which deck; this crate cannot name it —
+/// `karakuri-console` is not a dependency of this package and is not becoming
+/// one for four strings, since that crate takes no device and this one is
+/// nothing but doors. So the letters are counted from `A`, which agrees with
+/// that list on every slot a `Deck` has: `karakuri_engine::deck::MAX_SLOTS` is
+/// 4, and `the_deck_letters_are_the_ones_the_preview_cells_carry` asserts the
+/// agreement rather than assuming it.
+///
+/// Past the twenty-sixth slot it is `S26`, which no deck can reach and which is
+/// still a legal, unique path component — the one thing this function must not
+/// do is hand back a name two slots share.
+fn deck_letter(slot: usize) -> String {
+    match u8::try_from(slot) {
+        Ok(n) if n < 26 => char::from(b'A' + n).to_string(),
+        _ => format!("S{slot}"),
+    }
+}
+
+/// The material's own name, out of the path the operator gave, without the
+/// extension — [`materialise`] puts `.kir` back on, so the copy is the one kind
+/// of file this directory holds.
+///
+/// A path with no file name at all is `procedure`, which is [`sanitize`]'s
+/// fallback said again at the one place that can reach it: `materialise` has
+/// already read the file, so whatever it is, it is not a directory.
+fn stem_of(source: &Path) -> String {
+    source
+        .file_stem()
         .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_else(|| "procedure.kir".to_string());
-    if !taken.contains(&base) {
-        taken.push(base.clone());
-        return base;
-    }
-    let (stem, ext) = match base.rsplit_once('.') {
-        Some((stem, ext)) => (stem.to_string(), format!(".{ext}")),
-        None => (base.clone(), String::new()),
-    };
-    for n in 2.. {
-        let candidate = format!("{stem}-{n}{ext}");
-        if !taken.contains(&candidate) {
-            taken.push(candidate.clone());
-            return candidate;
-        }
-    }
-    unreachable!("the loop returns")
+        .unwrap_or_else(|| "procedure".to_string())
 }
 
 /// Write a procedure that has no file of its own into the scratch, and return
@@ -184,6 +257,12 @@ mod tests {
         path
     }
 
+    /// Every slot's paths, in node order, as [`materialise`] wants them.
+    fn nodes(sets: &mut [(PathBuf, Vec<PathBuf>)]) -> impl Iterator<Item = Vec<&mut PathBuf>> {
+        sets.iter_mut()
+            .map(|(l1, l4s)| std::iter::once(l1).chain(l4s.iter_mut()).collect())
+    }
+
     /// The claim the module exists for: after this, nothing the deck holds
     /// points at the file the operator named.
     #[test]
@@ -194,12 +273,7 @@ mod tests {
         let l4 = write(&tmp.path().join("presets"), "draw.kir", "original l4");
         let mut sets = [(l1.clone(), vec![l4.clone()])];
 
-        let dir = materialise(
-            &store,
-            sets.iter_mut()
-                .flat_map(|(l1, l4s)| std::iter::once(l1).chain(l4s.iter_mut())),
-        )
-        .expect("materialise");
+        let dir = materialise(&store, nodes(&mut sets)).expect("materialise");
 
         assert!(
             sets[0].0.starts_with(&dir),
@@ -222,31 +296,115 @@ mod tests {
         assert_eq!(std::fs::read_to_string(&l1).expect("read"), "original l1");
     }
 
-    /// Two slots naming one file still name one file. [`crate::watch`]
-    /// supports that and [`crate::mcp`] reports it; per-slot copies would have
-    /// ended both quietly.
+    /// **The requirement, and the one test this whole change is about.**
+    ///
+    /// The same preset in two slots, edited in one place, moves one deck. Under
+    /// the rule this replaces the two slots shared one file, so the edit below
+    /// moved both — silently, with nothing in the program able to say which
+    /// deck the operator had meant. A slot is the unit that gets replaced;
+    /// a slot that cannot be moved on its own is not one.
     #[test]
-    fn two_slots_sharing_a_source_still_share_one_scratch_file() {
+    fn the_same_preset_in_two_slots_is_two_files_and_an_edit_moves_one_deck() {
         let tmp = tempfile::tempdir().expect("tempdir");
         let store = tmp.path().join("store");
-        let l1 = write(tmp.path(), "field.kir", "l1");
-        let a = write(tmp.path(), "a.kir", "a");
-        let b = write(tmp.path(), "b.kir", "b");
-        let mut sets = [(l1.clone(), vec![a]), (l1.clone(), vec![b])];
+        let l1 = write(
+            &tmp.path().join("presets"),
+            "drift_shell.kir",
+            "the geometry",
+        );
+        let l4 = write(
+            &tmp.path().join("presets"),
+            "soft_points.kir",
+            "the renderer",
+        );
+        // One pair, in both slots — which is exactly what `crates/karakuri`
+        // opens on, in four.
+        let mut sets = [
+            (l1.clone(), vec![l4.clone()]),
+            (l1.clone(), vec![l4.clone()]),
+        ];
 
-        materialise(
-            &store,
-            sets.iter_mut()
-                .flat_map(|(l1, l4s)| std::iter::once(l1).chain(l4s.iter_mut())),
-        )
-        .expect("materialise");
+        materialise(&store, nodes(&mut sets)).expect("materialise");
 
-        assert_eq!(sets[0].0, sets[1].0, "the shared L1 became two files");
-        assert_ne!(sets[0].1, sets[1].1, "two different L4s became one file");
+        assert_ne!(
+            sets[0].0, sets[1].0,
+            "the two slots share one L1, so an edit cannot reach one of them"
+        );
+        assert_ne!(
+            sets[0].1[0], sets[1].1[0],
+            "the two slots share one L4, so an edit cannot reach one of them"
+        );
+
+        // The edit the operator makes, through deck A's own file.
+        std::fs::write(&sets[0].0, "deck A only").expect("write");
+
+        assert_eq!(
+            std::fs::read_to_string(&sets[0].0).expect("read"),
+            "deck A only",
+            "the edit did not land on the deck it was made on"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&sets[1].0).expect("read"),
+            "the geometry",
+            "the edit moved deck B as well, which is the failure this rule exists to stop"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&l1).expect("read"),
+            "the geometry",
+            "the edit reached the preset the operator named"
+        );
+    }
+
+    /// **The name carries the deck and the node's place**, ADR-0228's
+    /// `A0-drift.kir`, because `<store>/scratch/<name>.kir` overwrites what is
+    /// there: a name that carried neither would put two decks on one file.
+    #[test]
+    fn a_scratch_name_carries_the_deck_and_the_nodes_place() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let store = tmp.path().join("store");
+        let l1 = write(tmp.path(), "drift_shell.kir", "geometry");
+        let l4 = write(tmp.path(), "soft_points.kir", "renderer");
+        let mut sets = [
+            (l1.clone(), vec![l4.clone()]),
+            (l1.clone(), vec![l4.clone()]),
+        ];
+
+        materialise(&store, nodes(&mut sets)).expect("materialise");
+
+        let named = |path: &PathBuf| {
+            path.file_name()
+                .and_then(|n| n.to_str())
+                .expect("a file name")
+                .to_owned()
+        };
+        assert_eq!(named(&sets[0].0), "A0-drift_shell.kir");
+        assert_eq!(named(&sets[0].1[0]), "A1-soft_points.kir");
+        assert_eq!(named(&sets[1].0), "B0-drift_shell.kir");
+        assert_eq!(named(&sets[1].1[0]), "B1-soft_points.kir");
+    }
+
+    /// **The letters are the ones the preview cells carry.** This crate cannot
+    /// name `karakuri_console::view::DECK_LETTERS`, so the agreement is
+    /// asserted here over every slot a `Deck` can have rather than assumed by
+    /// two lists that would drift apart in silence.
+    #[test]
+    fn the_deck_letters_are_the_ones_the_preview_cells_carry() {
+        let drawn = ["A", "B", "C", "D"];
+        assert_eq!(
+            drawn.len(),
+            karakuri_engine::deck::MAX_SLOTS,
+            "a deck holds {} slots and the console draws {} letters",
+            karakuri_engine::deck::MAX_SLOTS,
+            drawn.len()
+        );
+        for (slot, letter) in drawn.iter().enumerate() {
+            assert_eq!(&deck_letter(slot), letter, "slot {slot}");
+        }
     }
 
     /// Two *different* sources with one basename must not collide — that would
     /// merge two slots' material into one file, which is worse than any name.
+    /// The prefix is what answers now, and it answers by construction.
     #[test]
     fn different_sources_with_the_same_basename_get_different_scratch_files() {
         let tmp = tempfile::tempdir().expect("tempdir");
@@ -256,12 +414,7 @@ mod tests {
         let l4 = write(tmp.path(), "draw.kir", "l4");
         let mut sets = [(one, vec![l4.clone()]), (two, vec![l4])];
 
-        materialise(
-            &store,
-            sets.iter_mut()
-                .flat_map(|(l1, l4s)| std::iter::once(l1).chain(l4s.iter_mut())),
-        )
-        .expect("materialise");
+        materialise(&store, nodes(&mut sets)).expect("materialise");
 
         assert_ne!(
             sets[0].0, sets[1].0,
@@ -278,10 +431,15 @@ mod tests {
     fn a_procedure_from_the_store_gets_a_readable_file() {
         let tmp = tempfile::tempdir().expect("tempdir");
         let store = tmp.path().join("store");
-        let path = place(&store, "beat_strands", "proc beat_strands {}").expect("place");
+        let path = place(
+            &store,
+            &node_name(0, 0, "beat_strands"),
+            "proc beat_strands {}",
+        )
+        .expect("place");
 
         assert!(path.starts_with(store.join(DIR)), "{}", path.display());
-        assert_eq!(path.file_name().expect("name"), "beat_strands.kir");
+        assert_eq!(path.file_name().expect("name"), "A0-beat_strands.kir");
         assert_eq!(
             std::fs::read_to_string(&path).expect("read"),
             "proc beat_strands {}"
@@ -293,7 +451,7 @@ mod tests {
     fn a_placed_name_cannot_escape_the_scratch() {
         let tmp = tempfile::tempdir().expect("tempdir");
         let store = tmp.path().join("store");
-        let path = place(&store, "../../etc/passwd", "x").expect("place");
+        let path = place(&store, &node_name(0, 0, "../../etc/passwd"), "x").expect("place");
 
         assert!(
             path.starts_with(store.join(DIR)),
@@ -310,16 +468,11 @@ mod tests {
     fn a_path_already_in_the_scratch_is_not_copied_again() {
         let tmp = tempfile::tempdir().expect("tempdir");
         let store = tmp.path().join("store");
-        let placed = place(&store, "loaded", "from the store").expect("place");
+        let placed = place(&store, &node_name(0, 0, "loaded"), "from the store").expect("place");
         let l4 = write(tmp.path(), "draw.kir", "l4");
         let mut sets = [(placed.clone(), vec![l4])];
 
-        materialise(
-            &store,
-            sets.iter_mut()
-                .flat_map(|(l1, l4s)| std::iter::once(l1).chain(l4s.iter_mut())),
-        )
-        .expect("materialise");
+        materialise(&store, nodes(&mut sets)).expect("materialise");
 
         assert_eq!(sets[0].0, placed, "the placed procedure was moved");
         assert_eq!(
@@ -339,12 +492,7 @@ mod tests {
         let l4 = write(tmp.path(), "draw.kir", "l4");
         let mut sets = [(missing, vec![l4])];
 
-        let err = materialise(
-            &store,
-            sets.iter_mut()
-                .flat_map(|(l1, l4s)| std::iter::once(l1).chain(l4s.iter_mut())),
-        )
-        .expect_err("the source is not there");
+        let err = materialise(&store, nodes(&mut sets)).expect_err("the source is not there");
         assert!(err.contains("nope.kir"), "{err}");
     }
 }

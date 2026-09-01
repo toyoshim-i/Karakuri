@@ -48,8 +48,8 @@ cargo run -p karakuri-cli -- examples/spark_fountain.kir examples/soft_points.ki
 cargo run -p karakuri-cli -- --watch
 ```
 
-Edit either `.kir` and save — **the copies under `.karakuri/scratch/`, whose path is printed
-at startup**, not the files you named on the command line. A run that can be edited never
+Edit either `.kir` and save — **the copies under `.karakuri/scratch/`, whose path and
+per-slot file names are printed at startup**, not the files you named on the command line. A run that can be edited never
 writes to those; see [Where your work lives](#where-your-work-lives). The new procedure is
 compiled on a worker thread and swapped in between two frames. Then it is **judged**: eight warmup frames, thirty measured ones, and if
 the median frame interval over those thirty is over the budget the candidate is dropped and
@@ -248,9 +248,11 @@ Six things worth knowing before you rely on it:
 - **A model that writes something too expensive is caught by the same machinery that catches
   you** — thirty measured frames, then the previous procedure comes back at the time it was
   parked at.
-- **A write cannot reach the files you named.** It reaches the scratch copy, and every
-  version that compiles is kept under `<store>/history/` — including the one the run started
-  with. See [Where your work lives](#where-your-work-lives). Before that existed, a model
+- **A write cannot reach the files you named.** It reaches the scratch copy of **the slot
+  it was addressed to**, and every version that compiles is kept under `<store>/history/` —
+  including the one the run started with. Slots have their own copies, so a write to slot 0
+  leaves slot 1 alone even where both were opened on the same file.
+  See [Where your work lives](#where-your-work-lives). Before that existed, a model
   replaced three of this repository's own shipped examples in one session, and what saved
   them was that they happened to be in version control.
 - **There is still no undo *tool*.** The versions are on disk and nothing walks them for you
@@ -638,16 +640,27 @@ Three places, and only one of them is written to.
 **A run that can be edited copies its material into the scratch and runs from
 the copy.** So `karakuri-cli --watch examples/drift_shell.kir examples/soft_points.kir`
 never writes to `examples/`, and neither does a model over MCP. The path is
-printed at startup — **that is the file to open in your editor**, not the one you
-named on the command line:
+printed at startup, with a line per slot — **those are the files to open in your
+editor**, not the ones you named on the command line:
 
 ```
-scratch: .karakuri/scratch — the deck runs from copies here, so the files you
-         named are not written to. Point an editor at these
+scratch: .karakuri/scratch — every slot runs from its own copy here, so the files
+         you named are not written to. Point an editor at these
+  slot 0: A0-drift_shell.kir + A1-soft_points.kir
+  slot 1: B0-drift_shell.kir + B1-soft_points.kir
 ```
 
-Two slots naming one file still share one scratch file, so an edit to it moves
-both, exactly as before.
+**Every slot gets its own copy, and the name says whose it is** — the deck
+letter, the node's place in that slot, and the file's own name. Give one preset
+to four slots and you get four files. That is the point rather than a
+duplication: a slot is the unit that gets rebuilt and swapped, so an edit moves
+**the slot whose file it is and no other**, and one save puts one candidate up
+for judgement instead of four.
+
+It used to be the other way — two slots naming one file shared one scratch file,
+so an edit to it moved both. If that is what you want, the way to say it now is
+to make the same edit in each slot's file, which is also the only way to say the
+other thing.
 
 A run that *cannot* be edited — `--render`, `--seq`, `--replay`, or a window with
 neither `--watch` nor `--mcp` — copies nothing and creates no directory. It opens
@@ -663,8 +676,9 @@ lives in it.) `--record-session` is the other writer: a session has to be
 replayable, so it puts every slot's starting material in the store before the
 first frame, whether or not anything is ever saved.
 
-**A Set loaded with `--load-set` is materialised here too**, under its procedures'
-own names, even though it has no `.kir` anywhere — it names them by hash and the
+**A Set loaded with `--load-set` is materialised here too**, under the same
+`A0-<procedure>.kir` naming as everything else — it fills slot 0 — even though it
+has no `.kir` anywhere — it names them by hash and the
 sources come out of the store. So a saved Set can be watched, edited and driven
 over MCP like any other material:
 

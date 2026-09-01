@@ -1497,20 +1497,42 @@
           resting slot's trial is frozen, on the rule that a slot nobody is
           looking at is not paying for the frames it would be judged on, so a
           build that lands there has a verdict outstanding for as long as the
-          slot stays off air and its row never leaves. The program that hosts
-          this panel opens deck A live and the other three parked, and every
-          slot watches the same pair of files &mdash; so one save rebuilds all
-          four, deck A's row clears when its thirty measured frames come in
-          under budget, and <strong>three rows stay in the lane for the rest
-          of the run</strong>. That is a reading and not a stall: those three
-          builds really do have a verdict outstanding, and saying so is the
-          lane working. <strong>And it is the strongest argument for
-          <em>keep</em> there is.</strong> The taste-against-cost paragraph
-          above says the substitution answers the wrong question; this says
-          that on three slots out of four it does not answer at all. In the
-          ordinary run of this program the only thing that could take those
-          rows off the lane is a person saying they are done with them, and
-          that person has no control to say it with.
+          slot stays off air and its row never leaves.
+        </p>
+        <p>
+          <strong>What this page said next was a lane defect, and it was not
+          one.</strong> It said that the program hosting this panel opens deck
+          A live and the other three parked, that <em>every slot watches the
+          same pair of files</em>, and that one save therefore rebuilds all
+          four &mdash; deck A's row clearing on its thirty measured frames and
+          three rows staying in the lane for the rest of the run. The first and
+          the last of those were true. The middle one was a
+          <strong>defect in the program, not a reading of the lane</strong>:
+          every deck was handed the two paths typed on the command line, so
+          four watchers polled two files. <strong>Each deck runs from its own
+          copy now</strong> &mdash; see
+          <em>Every deck runs from its own copy</em> below &mdash; so a save
+          reaches the one deck whose file it is, and an ordinary run puts
+          <strong>one</strong> candidate in this lane and clears it on the
+          budget's verdict. The lane was reporting the fault correctly the
+          whole time.
+        </p>
+        <p>
+          <strong>The reading it was reporting is still reachable, and it is
+          still worth having.</strong> Load a Set into a parked deck with
+          <code>l</code>, or edit deck C's own scratch file, and a build lands
+          on a slot that is not being drawn: its trial is frozen, its verdict
+          is outstanding, and its row stays until that deck goes on air.
+          <strong>That is now something an operator did on purpose</strong>
+          rather than the by-product of every save, and the row is the only
+          thing in this instrument that says so. <strong>It is still an
+          argument for <em>keep</em></strong>, and a narrower one than this
+          page used to make: the taste-against-cost paragraph above says the
+          watchdog's substitution answers the wrong question, and this says
+          that on a deck nobody is looking at it does not answer at all. The
+          only thing that can take such a row off the lane is a person saying
+          they are done with it &mdash; or putting that deck on air &mdash; and
+          the first of those has no control yet.
         </p>
         <p>
           <strong>A candidate that was rolled back is the row this lane most
@@ -1777,6 +1799,67 @@
           preset library and so is not there either, and that is refused loudly
           &mdash; naming the flag, and saying the two paths may be given instead
           &mdash; rather than opening a window onto nothing.
+        </p>
+      </div>
+
+      <div class="note">
+        <h3>Every deck runs from its own copy</h3>
+        <p>
+          <strong>The two paths on the command line are not what any deck is
+          watching.</strong> Before the window opens, this program copies that
+          pair once per deck into <code>&lt;store&gt;/scratch/</code> and points
+          each deck's watcher at its own copy. The directory and a line per deck
+          are printed at startup, and <strong>those are the files to open in an
+          editor</strong> &mdash; the line says the directory, then
+          <code>deck A: A0-drift_shell.kir + A1-soft_points.kir</code>,
+          <code>deck B: B0-drift_shell.kir + B1-soft_points.kir</code>, and so
+          on for C and D. Editing the two paths you named on the command line
+          moves nothing.
+        </p>
+        <p>
+          <strong>The name carries the deck and the node's place</strong> &mdash;
+          the letter the preview cells are drawn with, the node's index in that
+          deck's Set, and the file's own name. A library load writes into the
+          same directory under the same spelling, which is where this rule was
+          written down first: <code>&lt;store&gt;/scratch/&lt;name&gt;.kir</code>
+          overwrites what is there, so two decks whose material happens to share
+          a name would silently become one file and the second load would move
+          the first deck on its watcher's next poll.
+        </p>
+        <p>
+          <strong>Four decks on one preset are four files, and that is the
+          requirement rather than the price of it.</strong> A slot is the unit
+          that gets rebuilt, judged and swapped &mdash; that is what it means for
+          each deck to have its own hot-swap &mdash; so a deck whose file is also
+          another deck's cannot be moved on its own. Sharing one file meant one
+          save rebuilt all four decks, put four candidates in the Staging lane,
+          and left the three parked ones with a verdict that could never arrive.
+          It also meant the four decks this instrument opens with, which exist to
+          be driven apart, could not be.
+        </p>
+        <p>
+          <strong>Why a panel copies at all</strong> is the same reason the
+          command-line player does: before there was a scratch, an editing
+          surface was given write access to whatever path the material came from,
+          and <strong>three shipped presets were replaced in one session</strong>
+          &mdash; recoverable only because they happened to be in version
+          control, which is not a property of this program. Nothing is ever
+          written where the presets are.
+        </p>
+        <p>
+          <strong>This program has no read-only run</strong>, which is why the
+          copies are made unconditionally rather than behind a flag. The
+          command-line player copies only for <code>--watch</code> or
+          <code>--mcp</code>, because an offscreen render should be a function of
+          its arguments and must not leave a directory behind. Every deck here is
+          built over a file watcher, changing material <em>is</em> editing a file
+          and letting the worker build it, and <code>l</code> writes into this
+          same directory on a key press. So the store directory exists from
+          startup on a run that saves nothing &mdash; the same cost
+          <code>karakuri-cli --watch</code> already pays. It is not the cost the
+          Library bay declines: that bay refuses to <em>create</em> a store in
+          order to <em>list</em> one, and this is a run that has already decided
+          to write.
         </p>
       </div>
 

@@ -2162,9 +2162,10 @@ impl Readout {
         }
         println!(
             "store: {} — where the Library bay below reads Sets from, where this panel's \
-             arrangements are filed, and what `--store` moves. `karakuri-cli --store` names \
-             the same directory and the default is the same constant, which it now is rather \
-             than looks like: both ask `karakuri_environment::places::STORE`.",
+             arrangements are filed, where each deck's working copy was written before this \
+             window opened, and what `--store` moves. `karakuri-cli --store` names the same \
+             directory and the default is the same constant, which it now is rather than \
+             looks like: both ask `karakuri_environment::places::STORE`.",
             store.display()
         );
         // **The cells, and this sentence has been wrong twice.** It said C
@@ -2870,7 +2871,24 @@ const ASKED_TO_PRIME: usize = 1;
 /// ADR-0214 names it as the one class of surprise a move of this kind produces.
 /// Nothing consumes this type today, and writing the version that would break
 /// is not cheaper than writing the one that would not.
-#[derive(Debug)]
+///
+/// # It is what the operator named, and no longer what a deck runs from
+///
+/// **The shape is unchanged and it is still the right one**, which is a
+/// conclusion rather than an omission: a Set is an L1 and an L4, the command
+/// line is one pair, and the strip's [`Sources::material`] is that pair's two
+/// names. What changed is the *number* of them a run holds. Every slot runs
+/// from its own working copy ([`working_copies`]), so the deck is built from
+/// **[`SLOTS`] of these** — [`Engine::new`] takes a slice, indexed by slot —
+/// and the one the command line produced is kept beside them for the two
+/// questions that are still about what the operator asked for: what the strips
+/// are called, and what a refusal names.
+///
+/// A single `Sources` widened to carry four pairs would have been the wrong
+/// answer to the same fact: the pair is a Set's shape and a Set is what a slot
+/// holds, so four slots are four values of this type and not one value with a
+/// slot index in it.
+#[derive(Debug, Clone)]
 struct Sources {
     l1: std::path::PathBuf,
     l4: std::path::PathBuf,
@@ -2936,6 +2954,112 @@ impl Sources {
     }
 }
 
+/// **The working copy each deck runs from**, one pair per slot, made before the
+/// window opens.
+///
+/// # Why a panel copies at all
+///
+/// `karakuri_environment::scratch` names three places and says only one of them
+/// is written to, because before it existed a surface was given write access to
+/// whatever path the material came from and **three shipped presets were
+/// replaced in one session**. This program had none of it: every slot watched
+/// the two paths the operator typed, so the file an editor opened was the
+/// preset itself, and a run started with no paths at all watched `examples/`.
+///
+/// # And the panel is not `--render`
+///
+/// `scratch.rs` gates copying on *a run that can be edited*, because creating a
+/// directory as a side effect of a pure render *"would make a function of its
+/// arguments into one that leaves a mark"*. The gate is a question about this
+/// program rather than about a flag, and the answer is that **this program is a
+/// `--watch` run that cannot be turned off**: every slot is built over a
+/// `watch::Watch` ([`watched`]), the deck's whole way of changing material is an
+/// edit picked up by a poll, and `l` over the Library bay writes into this same
+/// directory on a key press ([`loading`]). There is no run of this binary that
+/// opens a file read-only, so the condition is not *checked* here — it is
+/// **true**, and the copies are made once, before the first frame, rather than
+/// on the first press.
+///
+/// What that costs is the store directory existing on a run that saves nothing,
+/// which is the cost `karakuri-cli --watch` already pays and the manual already
+/// states: *"a run with `--watch` or `--mcp` opens the store at startup either
+/// way — the scratch lives in it."* It is not the cost [`arrangements`] and
+/// [`library`] decline — those two decline to **create** a store in order to
+/// *list* it, and a listing that made a directory would be a read with a side
+/// effect. This is a run that has already decided to write.
+///
+/// # One preset in four slots is four files
+///
+/// [`SLOTS`] copies of the one pair, and `scratch::materialise` names each one
+/// for the slot it belongs to — `A0-drift_shell.kir`. That is the requirement
+/// rather than a consequence of it: a slot is the unit that gets replaced, so a
+/// deck whose file is also another deck's cannot be moved on its own, and one
+/// save would rebuild all four. See `scratch.rs`'s header for the rule this
+/// replaced and why it went.
+///
+/// The `Err` is a sentence naming the path that would not be read or written,
+/// which is [`materialise`](karakuri_environment::scratch::materialise)'s own.
+fn working_copies(
+    store: &std::path::Path,
+    sources: &Sources,
+    slots: usize,
+) -> Result<(std::path::PathBuf, Vec<Sources>), String> {
+    let mut copies: Vec<Sources> = std::iter::repeat_n(sources.clone(), slots).collect();
+    let dir = karakuri_environment::scratch::materialise(
+        store,
+        // Two distinct fields of one value, which is why this is an array
+        // literal rather than a chain: a slot is an L1 and an L4 in node
+        // order, and that order is what puts the L1 at `A0` and the renderer
+        // at `A1`.
+        copies.iter_mut().map(|pair| [&mut pair.l1, &mut pair.l4]),
+    )?;
+    Ok((dir, copies))
+}
+
+/// **What the operator opens, deck by deck**, said once at startup.
+///
+/// `karakuri-cli` prints one line of this — *"the deck runs from copies here,
+/// so the files you named are not written to"* — and one line is not enough
+/// here. Four decks on one preset are four files whose names an operator cannot
+/// guess and cannot tell apart by content, since at startup they are identical;
+/// what makes a file deck B's is its **name**, and the name is this program's
+/// choice. So the directory, then a line per deck.
+///
+/// **Printed rather than drawn.** The panel has no place for a file path: the
+/// mixer strip names *material* and would be naming the same thing four times
+/// with four spellings, and the Inspector addresses nodes rather than files.
+/// The startup print is where this program already says what it resolved — the
+/// preset library, the store, the room — and this belongs with those three.
+///
+/// A free function over the copies so it can be asserted without a window; see
+/// `the_startup_print_names_one_file_per_deck`.
+fn running_from(dir: &std::path::Path, copies: &[Sources]) -> String {
+    let mut said = format!(
+        "scratch: {} — every deck runs from its OWN copy here, so the two paths you named \
+         are not written to and editing them moves nothing. Point an editor at these:",
+        dir.display()
+    );
+    for (slot, pair) in copies.iter().enumerate() {
+        let name = |path: &std::path::Path| {
+            path.file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_else(|| path.display().to_string())
+        };
+        said.push_str(&format!(
+            "\n  deck {}: {} + {}",
+            deck_letter(slot as u8),
+            name(&pair.l1),
+            name(&pair.l4)
+        ));
+    }
+    said.push_str(
+        "\nthe same pair in every slot is one file per deck per node, and that is the point \
+         rather than a duplicate: an edit moves the deck whose file it is and no other, so \
+         one save puts one candidate in the Staging lane.",
+    );
+    said
+}
+
 /// **How this program is called**, printed for `--help` and for anything it
 /// cannot read as a pair.
 ///
@@ -2957,8 +3081,9 @@ usage: karakuri [--presets DIR] [--store DIR] [GEOMETRY.kir RENDERER.kir]
                   the workspace this binary was compiled in. Which one answered
                   is printed at startup. With none, there is no default pair
                   and the two paths have to be given.
-  --store DIR     where the Library bay reads Sets and arrangements from, and
-                  where a save goes. Defaults to .karakuri beside the session.
+  --store DIR     where the Library bay reads Sets and arrangements from, where
+                  a save goes, and where the scratch each deck runs from is
+                  written. Defaults to .karakuri beside the session.
 
   Either flag may be given before or after the pair.
 
@@ -3629,36 +3754,62 @@ impl Engine {
     fn new(
         gpu: &Gpu,
         renderer: &mut egui_wgpu::Renderer,
-        sources: &Sources,
+        slots: &[Sources],
         layout: &karakuri_layout::Layout,
         scale: f32,
     ) -> Engine {
-        let l1 = checked(&sources.l1);
-        let l4 = checked(&sources.l4);
+        assert!(
+            slots.len() == SLOTS,
+            "a deck of {SLOTS} slots was handed {} pairs to run from",
+            slots.len()
+        );
+        // **Parsed once and built [`SLOTS`] times, and that is a fact rather
+        // than an assumption now.** Every entry in `slots` is a copy of the
+        // one pair the command line settled ([`working_copies`]), so the four
+        // files hold the same bytes at startup and one `Checked` is the same
+        // answer four times. What is *not* the same is the path each slot's
+        // watcher polls, which is the whole of what per-slot copies buy and is
+        // read off `slots[slot]` in the loop below.
+        let l1 = checked(&slots[ON_AIR].l1);
+        let l4 = checked(&slots[ON_AIR].l4);
         let capacity = capacity_of(&l1);
-        // **The same pair in every slot, and the salt is the only
-        // difference.** A slot cannot hold *nothing*: `HotSwap::new` takes a
-        // live `Set` and `Deck::new` takes one `HotSwap` per slot, so an empty
-        // slot is not a state this engine has and the nearest thing to it is a
-        // slot holding material nobody has asked for. What this program has to
-        // give them is one pair — [`Sources`] is the whole command line — so
-        // each gets it at its own salt ([`slot_salt`]): four slots of one
-        // procedure at four seeds are four simulations, and four slots at one
-        // seed would be one picture drawn four times, which is not a mixer
-        // either. Building three of them from other `.kir` files would be this
-        // program choosing material for the operator, which is the library's
-        // job and not a constructor's
+        // **The same material in every slot, at its own salt and in its own
+        // file.** A slot cannot hold *nothing*: `HotSwap::new` takes a live
+        // `Set` and `Deck::new` takes one `HotSwap` per slot, so an empty slot
+        // is not a state this engine has and the nearest thing to it is a slot
+        // holding material nobody has asked for. What this program has to give
+        // them is one pair — [`Sources`] is the whole command line — so each
+        // gets it at its own salt ([`slot_salt`]): four slots of one procedure
+        // at four seeds are four simulations, and four slots at one seed would
+        // be one picture drawn four times, which is not a mixer either.
+        // Building three of them from other `.kir` files would be this program
+        // choosing material for the operator, which is the library's job and
+        // not a constructor's
         // ([ADR-0228](../../../docs/adr/0228-a-library-load-re-points-the-slots-source-and-never-installs-a-set.md)).
+        //
+        // **The salt is no longer the only difference, and that is the fix.**
+        // Each slot runs from its own copy of that pair ([`working_copies`]),
+        // so the four are the same *material* and four different *files* — an
+        // edit reaches the deck whose file it is.
         let built = |salt| {
             Set::build(&gpu.device, &gpu.queue, &l1, &l4, capacity, salt)
                 .expect("the pair builds a Set")
         };
         // **A watcher per slot, over that slot's own two files**, which is
         // `karakuri-cli`'s wiring and not a second one — one `HotSwap::new`
-        // over a `watch::Watch`, at the engine's own default budget. Every
-        // slot here is spelled with the *same* pair, and `watch`'s module
-        // documentation says what that means: *"Two slots given the same files
-        // both rebuild, which is right: the same edit reached both of them."*
+        // over a `watch::Watch`, at the engine's own default budget.
+        //
+        // **`slots[slot]` and not one pair repeated**, which is the sentence
+        // this comment used to be the other way round. It said every slot was
+        // spelled with the same pair and quoted `watch`'s *"Two slots given
+        // the same files both rebuild, which is right: the same edit reached
+        // both of them"* — true of that module, and the wrong thing for this
+        // program to be doing, because it made one save rebuild four slots and
+        // fill the Staging lane with three rows that can never leave (a parked
+        // slot's trial is frozen, so it reaches no verdict). Each watcher now
+        // polls the copy made for its own slot, and no watcher can see
+        // another's file at all, which is what `watch`'s *"a slot is the unit
+        // that gets replaced"* asks for.
         //
         // **This is the Staging lane's producer**, and it is the whole of what
         // it took. `HotSwap::fixed` keeps a `Receiver` whose `Sender` was
@@ -3676,9 +3827,9 @@ impl Engine {
         // strips and the preview cells are.
         let mut swaps = Vec::with_capacity(SLOTS);
         let mut aimed = Vec::with_capacity(SLOTS);
-        for slot in 0..SLOTS {
+        for (slot, running) in slots.iter().enumerate().take(SLOTS) {
             let salt = slot_salt(slot);
-            let (swap, aim) = watched(gpu, sources, built(salt), slot, salt);
+            let (swap, aim) = watched(gpu, running, built(salt), slot, salt);
             swaps.push(swap);
             aimed.push(aim);
         }
@@ -4429,7 +4580,7 @@ fn preset_press(deck: u8, taken: TakenIn) -> [Operation; 2] {
 /// which is where this file already reads a directory (`arrangement`), and
 /// never on a frame (P-0072). The compile is the worker's.
 ///
-/// # The scratch name carries the slot, and that is not decoration
+/// # The scratch name carries the slot, and it is the directory's rule now
 ///
 /// `scratch::place` writes `<store>/scratch/<name>.kir` and overwrites what is
 /// there, so two decks loading two Sets whose procedures happen to share a
@@ -4438,8 +4589,12 @@ fn preset_press(deck: u8, taken: TakenIn) -> [Operation; 2] {
 /// therefore `A0-drift.kir` — the deck letter, the node's place in the Set,
 /// and the procedure's own name — which is unique per slot **and** per node,
 /// stays readable in an editor, and says which deck an open file belongs to.
-/// `--load-set` does not need this because it fills one slot before the run
-/// starts.
+///
+/// **It is `scratch::node_name` rather than a `format!` here**, because that
+/// argument was never about loading. It is about two decks and one directory,
+/// which is every run: every slot is materialised under the same spelling at
+/// startup ([`working_copies`]), so a load writes into a directory already
+/// laid out this way and a second spelling would be a second answer.
 ///
 /// # What the aim states, and why all of it
 ///
@@ -4479,7 +4634,14 @@ fn loading(
     for (at, ((checked, src), name)) in loaded.nodes().zip(loaded.node_names()).enumerate() {
         let path = karakuri_environment::scratch::place(
             root,
-            &format!("{letter}{at}-{}", checked.name),
+            // **The directory's one naming rule, asked rather than spelled
+            // again.** It was written out here when this was the only thing in
+            // this program that wrote into the scratch; every slot is
+            // materialised at startup now, so a second spelling of
+            // `A0-drift.kir` would be a second answer to what a scratch file
+            // is called — and the two would disagree on the day one of them
+            // moved.
+            &karakuri_environment::scratch::node_name(slot, at, &checked.name),
             src,
         )?;
         // **The Set file's node name and not the procedure's**, which is
@@ -6293,7 +6455,21 @@ struct App {
     /// **What the command line asked for**, read before the event loop starts
     /// and used once, in `resumed`. It is here rather than in [`Gfx`] because
     /// it is known before there is a device and outlives every remake of one.
+    ///
+    /// **The pair the operator named, and not what any deck runs from** — see
+    /// [`running`](App::running). What this answers is the strips' name, which
+    /// is a question about what was asked for: four decks opened on one preset
+    /// are playing that preset, whatever their four files are called.
     sources: Sources,
+    /// **The working copy each deck runs from**, one pair per slot, in slot
+    /// order — [`working_copies`], made in [`main`] before the window.
+    ///
+    /// Beside `sources` rather than replacing it because the two answer
+    /// different questions and always have: this is what a watcher polls and
+    /// what an editor opens, and `sources` is what the operator said. They were
+    /// one field while every slot watched the typed paths, which is the defect
+    /// this pair of fields exists to end.
+    running: Vec<Sources>,
     /// **Where the library is** — see [`Launch::store`]. Here for `sources`'
     /// reason, and copied onto [`Gfx::store`] for the readers that are handed
     /// only a device.
@@ -6341,10 +6517,11 @@ struct App {
 }
 
 impl App {
-    fn new(launch: Launch) -> App {
+    fn new(launch: Launch, running: Vec<Sources>) -> App {
         App {
             gfx: None,
             sources: launch.sources,
+            running,
             store: launch.store,
             presets: launch.presets,
             faulted: false,
@@ -6650,7 +6827,7 @@ impl ApplicationHandler for App {
         let mut engine = Engine::new(
             &gpu,
             &mut renderer,
-            &self.sources,
+            &self.running,
             self.readout.panel.layout(),
             self.scale as f32,
         );
@@ -8313,6 +8490,25 @@ fn main() {
             std::process::exit(2)
         }
     };
+    // **Before the window and before a device**, which is where a failure can
+    // still be a sentence on a terminal: this reads two files and writes four
+    // pairs, and everything after it is inside a `winit` callback where a
+    // panic aborts without a message (see `resumed`). It is also the honest
+    // place for it — the copies depend on the command line and on nothing
+    // else.
+    let (scratch, running) = match working_copies(&launch.store, &launch.sources, SLOTS) {
+        Ok(made) => made,
+        Err(why) => {
+            eprintln!("{why}");
+            eprintln!();
+            eprintln!(
+                "that is the material this run was told to play, and the deck runs from \
+                 copies of it — so nothing was built and nothing was written."
+            );
+            std::process::exit(1)
+        }
+    };
+    println!("{}", running_from(&scratch, &running));
     let event_loop = EventLoop::new().expect("event loop");
     // **The loop sleeps.** A frame is drawn when something changed it or when
     // `egui` asked for one after a delay it named, and on no other occasion —
@@ -8320,7 +8516,9 @@ fn main() {
     // the rule actually lives. This is the state it starts in so that the
     // window between here and the first `about_to_wait` is not a spin either.
     event_loop.set_control_flow(ControlFlow::Wait);
-    event_loop.run_app(&mut App::new(launch)).expect("run");
+    event_loop
+        .run_app(&mut App::new(launch, running))
+        .expect("run");
 }
 
 // ---------------------------------------------------------------------------
@@ -9246,6 +9444,164 @@ mod tests {
         assert!(
             rx.try_recv().is_err(),
             "a load that failed aimed the slot anyway"
+        );
+
+        std::fs::remove_dir_all(&root).expect("clean up");
+    }
+
+    /// **The requirement this program was failing**: the same preset loaded
+    /// into every slot, and each deck watching its own separate copy in its own
+    /// place.
+    ///
+    /// Every slot used to be handed [`Sources`] itself — the two paths the
+    /// operator typed — so four watchers polled two files. One save rebuilt
+    /// four slots, and since a parked slot's trial never reaches a verdict,
+    /// three of the four rows it put in the Staging lane stayed there for the
+    /// rest of the run. That symptom is this defect's, not the lane's.
+    ///
+    /// **Four things, and the third is the one the requirement is about.** The
+    /// copies are under the scratch and not where the operator pointed; the
+    /// four decks hold eight distinct files rather than two shared ones; an
+    /// edit made through deck B's L1 moves deck B and **no other deck**; and
+    /// the file the operator named is not written to at all.
+    ///
+    /// A CPU test: a scratch is a directory and nothing here takes a device.
+    #[test]
+    fn every_deck_runs_from_its_own_copy_and_an_edit_moves_one_deck() {
+        let root = scratch_dir("own-copy");
+        let named = shipped();
+        let (dir, running) =
+            working_copies(&root, &named, SLOTS).unwrap_or_else(|e| panic!("no copies: {e}"));
+
+        assert_eq!(
+            running.len(),
+            SLOTS,
+            "a deck of {SLOTS} slots got {running:?}"
+        );
+        assert_eq!(dir, root.join(karakuri_environment::scratch::DIR));
+
+        // 1. Nothing a deck holds points at what the operator typed.
+        for (slot, pair) in running.iter().enumerate() {
+            for path in [&pair.l1, &pair.l4] {
+                assert!(
+                    path.starts_with(&dir),
+                    "deck {} still runs from {}",
+                    deck_letter(slot as u8),
+                    path.display()
+                );
+            }
+        }
+
+        // 2. Eight files and not two, and each says which deck it belongs to.
+        let mut every: Vec<&std::path::PathBuf> =
+            running.iter().flat_map(|p| [&p.l1, &p.l4]).collect();
+        let held = every.len();
+        every.sort();
+        every.dedup();
+        assert_eq!(
+            every.len(),
+            held,
+            "{SLOTS} decks on one pair share a file, so an edit cannot reach one of them"
+        );
+        for (slot, pair) in running.iter().enumerate() {
+            let letter = deck_letter(slot as u8);
+            for (at, path) in [&pair.l1, &pair.l4].into_iter().enumerate() {
+                let name = path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .expect("a file name");
+                assert!(
+                    name.starts_with(&format!("{letter}{at}-")),
+                    "`{name}` carries neither the deck nor the node's place"
+                );
+            }
+        }
+
+        // 3. **The claim.** An edit in one place moves one deck.
+        let before = std::fs::read_to_string(&running[ON_AIR].l1).expect("deck A's L1");
+        std::fs::write(&running[ASKED_TO_PRIME].l1, "deck B only").expect("edit deck B");
+        assert_eq!(
+            std::fs::read_to_string(&running[ASKED_TO_PRIME].l1).expect("read"),
+            "deck B only"
+        );
+        for (slot, deck) in running.iter().enumerate().take(SLOTS) {
+            if slot == ASKED_TO_PRIME {
+                continue;
+            }
+            assert_eq!(
+                std::fs::read_to_string(&deck.l1).expect("read"),
+                before,
+                "editing deck B moved deck {} as well",
+                deck_letter(slot as u8)
+            );
+        }
+
+        // 4. And the preset is what it was, which is the whole reason the
+        // scratch exists: three shipped presets were replaced in one session.
+        assert_eq!(
+            std::fs::read_to_string(&named.l1).expect("the preset"),
+            before,
+            "the file the operator named was written to"
+        );
+
+        std::fs::remove_dir_all(&root).expect("clean up");
+    }
+
+    /// **The program has to say it.** Four decks on one preset are four files
+    /// whose names an operator cannot guess and cannot tell apart by content —
+    /// at startup they hold the same bytes — so the startup print names the
+    /// directory and then one file pair per deck.
+    #[test]
+    fn the_startup_print_names_one_file_per_deck() {
+        let root = scratch_dir("own-copy-said");
+        let (dir, running) = working_copies(&root, &shipped(), SLOTS).expect("copies");
+        let said = running_from(&dir, &running);
+
+        assert!(
+            said.contains(&dir.display().to_string()),
+            "the print does not say where: {said}"
+        );
+        for (slot, pair) in running.iter().enumerate() {
+            let letter = deck_letter(slot as u8);
+            assert!(
+                said.contains(&format!("deck {letter}:")),
+                "deck {letter} is not in the print: {said}"
+            );
+            for path in [&pair.l1, &pair.l4] {
+                let name = path.file_name().and_then(|n| n.to_str()).expect("a name");
+                assert!(
+                    said.contains(name),
+                    "`{name}` is a file the deck runs from and the print does not name it: \
+                     {said}"
+                );
+            }
+        }
+        // **And the four lines are four different answers.** A print that
+        // named the same two files under all four decks would be a print an
+        // operator cannot act on — which is exactly what this program said
+        // while every deck watched the pair that was typed.
+        let lines: Vec<&str> = said
+            .lines()
+            .filter(|line| line.trim_start().starts_with("deck "))
+            .collect();
+        assert_eq!(lines.len(), SLOTS, "one line per deck, and got {lines:?}");
+        let named: Vec<&str> = lines
+            .iter()
+            .map(|line| line.split_once(':').expect("`deck A: files`").1)
+            .collect();
+        let mut distinct = named.clone();
+        distinct.sort_unstable();
+        distinct.dedup();
+        assert_eq!(
+            distinct.len(),
+            named.len(),
+            "two decks were told to open the same file: {named:?}"
+        );
+
+        // And it says the thing an operator will otherwise read as a bug.
+        assert!(
+            said.contains("not written to"),
+            "the print does not say the named paths are left alone: {said}"
         );
 
         std::fs::remove_dir_all(&root).expect("clean up");
@@ -11207,6 +11563,20 @@ fn shipped() -> Sources {
     Sources::under(&presets.dir)
 }
 
+/// **The shipped pair in every slot**, for the tests that build an [`Engine`].
+///
+/// A *run* may not do this — [`working_copies`] is what a run calls, and its
+/// whole point is that no two slots watch one file — and this helper is not a
+/// way back to that. It is legal here for the reason the copies exist: nothing
+/// in these tests edits a `.kir`, no watcher of theirs ever sees a change, and
+/// a test that materialised into a temporary store would be asserting the
+/// copies rather than the thing it is about. The one test that *is* about the
+/// copies calls `working_copies` and is named after the claim.
+#[cfg(test)]
+fn shipped_slots() -> Vec<Sources> {
+    std::iter::repeat_n(shipped(), SLOTS).collect()
+}
+
 #[cfg(test)]
 mod key_column {
     //! **The key column of the manual, against the keys this window binds.**
@@ -11826,7 +12196,7 @@ mod gpu {
         let mut panel = Panel::new(1440.0, 900.0);
         view::rearrange(&mut panel, CANVAS);
         let sources = shipped();
-        let engine = Engine::new(&gpu, &mut renderer, &sources, panel.layout(), 1.0);
+        let engine = Engine::new(&gpu, &mut renderer, &shipped_slots(), panel.layout(), 1.0);
         // One name per slot, which is what `Gfx::material` is: every slot
         // opens on the same pair, and a load is what makes them differ.
         let material = vec![sources.material(); engine.deck.slot_count()];
@@ -11949,7 +12319,7 @@ mod gpu {
         panel.solve();
         let rect = picture_rect(panel.layout(), CANVAS).expect("the picture is on screen");
         let cells = preview_rects(panel.layout(), CANVAS).expect("the preview row is on screen");
-        let mut engine = Engine::new(&gpu, &mut renderer, &shipped(), panel.layout(), 1.0);
+        let mut engine = Engine::new(&gpu, &mut renderer, &shipped_slots(), panel.layout(), 1.0);
         // **Built at what the file declares**, which is the other half of
         // `the_capacity_is_the_l1s_own_declaration_and_the_l4_declares_none`:
         // that one says what the `.kir` says, and this one says the deck was
@@ -12276,7 +12646,7 @@ mod gpu {
         panel.solve();
         let rect = picture_rect(panel.layout(), CANVAS).expect("on screen");
         let want = physical(rect, 1.0);
-        let engine = Engine::new(&gpu, &mut renderer, &shipped(), panel.layout(), 1.0);
+        let engine = Engine::new(&gpu, &mut renderer, &shipped_slots(), panel.layout(), 1.0);
 
         // The picture's, in both axes, and **neither of them is the window's**
         // — the picture is narrower than the window by both panes and taller
@@ -12368,7 +12738,7 @@ mod gpu {
             picture_rect(panel.layout(), CANVAS).expect("on screen"),
             1.0,
         );
-        let mut engine = Engine::new(&gpu, &mut renderer, &shipped(), panel.layout(), 1.0);
+        let mut engine = Engine::new(&gpu, &mut renderer, &shipped_slots(), panel.layout(), 1.0);
         let first = engine.picture.id;
         assert_eq!(engine.picture.size, want);
 
@@ -12534,7 +12904,7 @@ mod gpu {
             (112, 63),
             "the mock's own cell, at the mock's own width"
         );
-        let mut engine = Engine::new(&gpu, &mut renderer, &shipped(), panel.layout(), 1.0);
+        let mut engine = Engine::new(&gpu, &mut renderer, &shipped_slots(), panel.layout(), 1.0);
 
         // **The cell's, in both axes** — not the row's, not the picture's and
         // not the window's. The row holds four of these side by side with
@@ -12691,7 +13061,7 @@ mod gpu {
             egui_wgpu::Renderer::new(&gpu.device, FORMAT, egui_wgpu::RendererOptions::default());
         let mut panel = Panel::new(W as f32, H as f32);
         panel.solve();
-        let mut engine = Engine::new(&gpu, &mut renderer, &shipped(), panel.layout(), 1.0);
+        let mut engine = Engine::new(&gpu, &mut renderer, &shipped_slots(), panel.layout(), 1.0);
 
         // The strips, written the way the frame writes them.
         let material = vec![shipped().material(); engine.deck.slot_count()];
@@ -12778,7 +13148,7 @@ mod gpu {
             egui_wgpu::Renderer::new(&gpu.device, FORMAT, egui_wgpu::RendererOptions::default());
         let mut panel = Panel::new(1440.0, 900.0);
         panel.solve();
-        let engine = Engine::new(&gpu, &mut renderer, &shipped(), panel.layout(), 1.0);
+        let engine = Engine::new(&gpu, &mut renderer, &shipped_slots(), panel.layout(), 1.0);
 
         assert_eq!(
             engine.deck.slot_count(),
@@ -12844,7 +13214,7 @@ mod gpu {
             egui_wgpu::Renderer::new(&gpu.device, FORMAT, egui_wgpu::RendererOptions::default());
         let mut panel = Panel::new(W as f32, H as f32);
         panel.solve();
-        let mut engine = Engine::new(&gpu, &mut renderer, &shipped(), panel.layout(), 1.0);
+        let mut engine = Engine::new(&gpu, &mut renderer, &shipped_slots(), panel.layout(), 1.0);
         let material = vec![shipped().material(); engine.deck.slot_count()];
 
         // **Before the pass, and this is the deck this program opens with.**
@@ -13046,7 +13416,7 @@ mod gpu {
             egui_wgpu::Renderer::new(&gpu.device, FORMAT, egui_wgpu::RendererOptions::default());
         let mut panel = Panel::new(W as f32, H as f32);
         panel.solve();
-        let mut engine = Engine::new(&gpu, &mut renderer, &shipped(), panel.layout(), 1.0);
+        let mut engine = Engine::new(&gpu, &mut renderer, &shipped_slots(), panel.layout(), 1.0);
         let material = vec![shipped().material(); engine.deck.slot_count()];
 
         // The state, produced by the governor and not written here.
@@ -13224,7 +13594,7 @@ mod gpu {
             egui_wgpu::Renderer::new(&gpu.device, FORMAT, egui_wgpu::RendererOptions::default());
         let mut panel = Panel::new(W as f32, H as f32);
         panel.solve();
-        let mut engine = Engine::new(&gpu, &mut renderer, &shipped(), panel.layout(), 1.0);
+        let mut engine = Engine::new(&gpu, &mut renderer, &shipped_slots(), panel.layout(), 1.0);
         let material = vec![shipped().material(); engine.deck.slot_count()];
 
         // A wipe in progress on the deck that is on air: a straight front,
@@ -13381,7 +13751,7 @@ mod gpu {
             egui_wgpu::Renderer::new(&gpu.device, FORMAT, egui_wgpu::RendererOptions::default());
         let mut panel = Panel::new(W as f32, H as f32);
         panel.solve();
-        let mut engine = Engine::new(&gpu, &mut renderer, &shipped(), panel.layout(), 1.0);
+        let mut engine = Engine::new(&gpu, &mut renderer, &shipped_slots(), panel.layout(), 1.0);
         engine.look = STARTS_AT;
 
         // What the console reads this frame, off the look the engine holds.
@@ -13553,7 +13923,7 @@ mod gpu {
 
         let mut panel = Panel::new(W as f32, H as f32);
         panel.solve();
-        let mut engine = Engine::new(&gpu, &mut renderer, &shipped(), panel.layout(), 1.0);
+        let mut engine = Engine::new(&gpu, &mut renderer, &shipped_slots(), panel.layout(), 1.0);
 
         // A different window on a different display, so nothing asserted below
         // can be what construction happened to leave in place — and at 1760
@@ -13721,7 +14091,7 @@ mod gpu {
             egui_wgpu::Renderer::new(&gpu.device, FORMAT, egui_wgpu::RendererOptions::default());
         let mut panel = Panel::new(W as f32, H as f32);
         panel.solve();
-        let mut engine = Engine::new(&gpu, &mut renderer, &shipped(), panel.layout(), 1.0);
+        let mut engine = Engine::new(&gpu, &mut renderer, &shipped_slots(), panel.layout(), 1.0);
         assert_eq!(
             engine.deck.preview(),
             None,

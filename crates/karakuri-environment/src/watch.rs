@@ -11,6 +11,15 @@
 //! that no watcher can see another slot's files at all. Two slots given the
 //! same files both rebuild, which is right: the same edit reached both of them.
 //!
+//! **And no run gives two slots the same files any more.** That sentence is a
+//! statement about this type, which is handed paths and believes them; it was
+//! read for a while as a licence, and both programs spent it — every slot of
+//! `crates/karakuri` watched the two paths the operator typed, so one save
+//! rebuilt four slots. [`crate::scratch`] now copies per slot, and its header
+//! carries the argument. What is left here is what was always true: given one
+//! file twice, this rebuilds twice, and the unit that gets replaced is still
+//! the slot.
+//!
 //! ## Polling, not `notify`
 //!
 //! The worker is a poll loop already: it has to wake regularly to free Sets
