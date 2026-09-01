@@ -699,32 +699,63 @@
 
   /* ── the operations reference ─────────────────────────────────────── */
 
+  /* One row per operation: its name, when it happens, and one badge per
+     surface. The five badge columns are the row's own grid tracks — `.rts` is
+     `display: contents`, so each badge is a cell of the row rather than an
+     item in a list — which is what lets a reader run a column straight down
+     the page. A row with no flag has an empty cell in the CLI column: the
+     page has never claimed a flag it does not have, and an absent badge is
+     not a `gap`, which says a surface cannot reach the operation at all. */
   .opgroup { display: flex; flex-direction: column; gap: 0; }
   .op {
-    display: flex; flex-direction: column; gap: 0.55rem;
-    padding: 1.1rem 0; border-top: 1px solid var(--line);
+    display: grid;
+    grid-template-columns: minmax(10rem, 1.35fr) 6.2rem repeat(5, minmax(0, 1fr));
+    align-items: center; column-gap: 0.45rem;
+    padding: 0.5rem 0; border-top: 1px solid var(--line);
   }
   .opgroup .op:last-child { border-bottom: 1px solid var(--line); }
+
+  /* The name is the tip's handle, and the tip is where the prose went. It is
+     focusable because a tooltip only a pointer can open is one a keyboard
+     cannot reach at all. */
+  .op-name { padding: 0.15rem 0.5rem 0.15rem 0; border-radius: 8px; }
+  .op-name:hover h3, .op-name:focus-visible h3 { color: var(--lav); }
+  .op-name:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
+  .op-name[data-tip]::after {
+    width: max-content; min-width: 20rem; max-width: min(34rem, 60vw);
+    font-family: var(--f-round); font-size: 0.84rem; line-height: 1.6;
+    padding: 0.7rem 0.9rem; border-radius: 10px;
+    background: var(--surface); border: 1px solid var(--line); color: var(--dim);
+    box-shadow: 0 10px 30px rgba(43,48,80,0.18);
+  }
+  .op-name:focus-visible[data-tip]::after { display: block; }
   .op-head { display: flex; align-items: baseline; gap: 0.8rem; flex-wrap: wrap; }
   .op-head h3 {
-    font-family: var(--f-round); font-size: 1.02rem; font-weight: 700;
+    font-family: var(--f-round); font-size: 0.95rem; font-weight: 700;
     text-transform: none; letter-spacing: -0.005em; color: var(--ink); margin: 0;
   }
   .op-when {
-    font-family: var(--f-code); font-size: 0.7rem; text-transform: uppercase;
-    letter-spacing: 0.12em; padding: 0.1rem 0.6rem; border-radius: 999px;
+    font-family: var(--f-code); font-size: 0.68rem; text-transform: uppercase;
+    letter-spacing: 0.1em; padding: 0.1rem 0.5rem; border-radius: 999px;
     color: var(--dim); background: var(--ground);
+    justify-self: start; white-space: nowrap;
   }
   .op-when.grid { color: var(--lav); background: color-mix(in srgb, var(--lav) 14%, transparent); }
   .op-when.launch { color: var(--sun); background: color-mix(in srgb, var(--sun) 18%, transparent); }
-  .op p { font-size: 0.94rem; color: var(--dim); }
 
-  .rts { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+  /* The four when words, and the three badge colours, as the legend draws
+     them. */
+  .whens { display: flex; flex-wrap: wrap; gap: 1.2rem; font-size: 0.86rem; color: var(--dim); margin-top: 0.9rem; }
+  .whens span { display: flex; align-items: baseline; gap: 0.45rem; }
+  .whens b { font-weight: 400; }
+
+  .rts { display: contents; }
   .rt {
-    font-family: var(--f-code); font-size: 0.75rem; line-height: 1.5;
-    border-radius: 999px; padding: 0.16rem 0.7rem;
+    font-family: var(--f-code); font-size: 0.72rem; line-height: 1.45;
+    border-radius: 999px; padding: 0.16rem 0.6rem;
     background: var(--surface); color: var(--dim);
     box-shadow: inset 0 0 0 1px var(--line);
+    min-width: 0; overflow-wrap: anywhere;
   }
   .rt b { font-weight: 700; color: var(--ink); }
   .rt.has { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mint) 55%, transparent); }
@@ -733,6 +764,18 @@
   .rt.plan b { color: var(--lav); }
   .rt.gap { background: transparent; color: var(--faint); box-shadow: inset 0 0 0 1px var(--line); }
   .rt.gap b { color: var(--faint); font-weight: 400; }
+  /* The CLI cell of a row that has no flag. It holds the column open and says
+     nothing, which is the difference between a surface that cannot reach an
+     operation and a surface that was never a way into it. */
+  .rt-none { display: block; }
+
+  /* Below the width the seven columns need, the row stacks: the name and the
+     when word on one line, the badges wrapping under them. */
+  @media (max-width: 900px) {
+    .op { display: flex; flex-direction: column; align-items: start; gap: 0.5rem; padding: 0.9rem 0; }
+    .rts { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+    .op-name[data-tip]::after { min-width: 0; max-width: min(34rem, 86vw); }
+  }
 
   .legend { display: flex; flex-wrap: wrap; gap: 1.4rem; font-size: 0.86rem; color: var(--dim); }
   .legend span { display: flex; align-items: center; gap: 0.45rem; }

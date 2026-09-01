@@ -59,8 +59,8 @@ use karakuri_operation::Operation;
 const PAGE: &str = "docs/manual/operations.html";
 
 /// **What marks an operation on that page.** Every row opens with this div and
-/// nothing else on the page uses it; sections are `<h2>` and the legend is a
-/// paragraph. Matching the marker rather than the heading is what lets
+/// nothing else on the page uses it; sections are `<h2>` and the legend is
+/// neither. Matching the marker rather than the heading is what lets
 /// [`headings`] tell an operation from a heading somebody added for looks —
 /// see [`every_heading_on_the_page_is_an_operation`].
 const ROW: &str = r#"<div class="op-head">"#;

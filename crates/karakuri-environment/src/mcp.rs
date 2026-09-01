@@ -463,6 +463,13 @@ const LAYERS: [Kind; 5] = [Kind::L1, Kind::L2, Kind::L3, Kind::L4, Kind::Field];
 /// Case-folded because `l1` is what a model tends to type and refusing it
 /// teaches nobody anything. `Field` is spelled as `--param` and `--bind` spell
 /// it, which is as the `kind` line does.
+///
+/// **This name exists twice in this library**, here and as
+/// [`crate::setfile::layer_named`], which is exact rather than case-folded.
+/// Both moved in from separate binaries under ADR-0215 and the collision was
+/// left visible rather than fixed: merging them is a redesign — deciding which
+/// spellings the one function accepts — and not a boundary move. P-0031 (a name
+/// means one thing across the system) is the question to answer.
 fn layer_named(name: &str) -> Option<Kind> {
     Some(match name.to_ascii_uppercase().as_str() {
         "L1" => Kind::L1,
@@ -6254,7 +6261,7 @@ mod tests {
 
     /// **What marks an operation on that page.** Every row opens with this div
     /// and nothing else on the page uses it; sections are `<h2>` and the legend
-    /// is a paragraph. The same marker both other tests match, for their
+    /// is neither. The same marker both other tests match, for their
     /// reason.
     const ROW: &str = r#"<div class="op-head">"#;
 

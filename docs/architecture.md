@@ -129,7 +129,7 @@ docs/
                       words, the console region by region, every operation
   plugins.md          out-of-process helpers, and why they are out of process
   principles/         the rules in force, one per file — current only
-  roadmap.md          where this goes after V1
+  roadmap.md          the milestones, their status, and the handover
 examples/             app presets: seven L1, four L2, one L3, one Field,
                       nine L4, and a control-surface map to copy
 .karakuri/            the store: artifacts, sets, sessions, scratch and the
@@ -145,7 +145,7 @@ once here so that a term means the same thing in the roadmap, the manual and the
 |---|---|
 | Procedure | Code that runs every frame on the GPU, written in the IR |
 | Artifact | A saved procedure. Content-addressed and immutable |
-| Slot | Two things, and it is worth knowing which. A **layer slot** is a position within a Set (L1/L2/L3/L4). A **deck slot** is a position within the deck, holding a whole Set. [roadmap.md](roadmap.md) says *member* for the second; the code says `Deck::slot`, and that disagreement is recorded rather than resolved — renaming either is churn until something depends on telling them apart |
+| Slot | Three things, and it is worth knowing which. A **layer slot** is a position within a Set (L1/L2/L3/L4); a **deck slot** is a position within the deck, holding a whole Set; an **input slot** is a declared input on a node. The three are set out under [Words that carry more than one sense](#words-that-carry-more-than-one-sense), and the clash is recorded rather than resolved (ADR-0049) — renaming either of the first two is churn until something depends on telling them apart |
 | Deck | Where prepared-but-not-showing material lives, at Set granularity. Up to four slots; one to four of them Live and composited, the rest resident |
 | Residency | How ready a deck slot is, over three levels: **Live** (composited), **Priming** (stepped, and drawn only if it is being auditioned), **Allocated** (compiled, buffers held, not stepping, keeping its state; drawn only if it is being auditioned). It is **two facts, not one** — what the operator *requested*, which only they change, and what the engine is *effectively* doing, which the governor recomputes each pass |
 | Parked | Requested Priming, effective Allocated: waiting for budget, **not cancelled**. It resumes by itself when there is room, because the request is never overwritten — every pass recomputes the effective level from it |
@@ -156,6 +156,108 @@ once here so that a term means the same thing in the roadmap, the manual and the
 | Record stream | The path engine state is mutated through, so that a session replays. ndjson. **Everything an operator moves goes through it, and so does the material** — see [P-0028](principles/0028-every-control-ends-in-the-same-record.md) |
 | Set file | A Set's state projection. No time in it |
 | Session stream | The timeline. A Set file followed by `tick` records and the edits between them |
+
+### The Layer Model
+
+Six positions, `L0` through `L5`. **This is not the IR's list of five `kind`s**, and the two
+lists overlap on four: `L1` through `L4` are in both, `Field` is a `kind` with no position
+here, and `L0` and `L5` have a position here and no `kind` file at all — [ir-spec.md](ir-spec.md)
+says outright there is no `kind L5`, because compositing has no code to lower.
+
+| Position | Role |
+|---|---|
+| L0 | Signal bus. Audio, tempo, MIDI and synthesized values |
+| L1 | Geometry generation. Vertices, particles, SDF builtins used inline |
+| L2 | Deformation and motion. Time-axis modulation, physics |
+| L3 | Camera and space. Viewpoint, motion grammars |
+| L4 | Render and material. Raster, raymarch, splatting |
+| L5 | Composite. Set mixing, transitions, post, output routing |
+
+*Layer* in this column is the model position and nothing else. The other two senses of the
+word are under [Words that carry more than one sense](#words-that-carry-more-than-one-sense).
+
+The signatures the five `kind`s have as an algebra, what breaks L2's endomorphism, how
+several sources or several renderers compose within one position, and how a consumer's
+missing attribute is synthesised are all [ir-spec.md](ir-spec.md)'s. They are not restated
+here.
+
+**L5 has no writable form, and giving it one is not an extension of the algebra.**
+`karakuri-engine/src/node/merge.rs` already writes the signature: `[Texture] -> Texture`. A
+master effect is that with one input and the mixer is the same with several, so admitting
+frame effects means adding `L5` to `Kind::ALL` — whose one stated reason for excluding it, no
+code to lower, lapses the moment an L5 is authored. Fan-in is already solved by `uses` plus
+`edge`; a per-deck effect and a master effect become one node at different points; and the
+deck count stops being a system constant, since how many inputs an L5 folds becomes a property
+of the procedure rather than of one built-in shader. **Feedback is the exception**: reading the
+previous frame is a cycle, and which cut it reads is undecided — see [roadmap.md](roadmap.md).
+
+Two things sit orthogonal to the positions: the **control plane** — agents, director, mix
+agent, generation worker — and the **library** — search, genealogy, embeddings, thumbnails —
+on top of the content addressing. Where each stands is [roadmap.md](roadmap.md)'s.
+
+### Three Clocks
+
+The single most load-bearing idea in the design. These must never collapse into each other.
+
+| Clock | Period | What happens |
+|---|---|---|
+| Frame | 8–16 ms | GPU execution and parameter evaluation only. No allocation, no compilation |
+| Beat / bar | 0.5–4 s | Variant switching, parameter morphs, transitions. Selection among precompiled options only |
+| Generation | seconds to minutes | LLM writes IR, validation, shader compilation. Background worker |
+
+The consequence is that **AI works ahead of time and the runtime only selects**. An agent
+reacting to music chooses from a pool it prepared earlier and queues generation for material
+it expects to need later. No LLM call is ever on a path a frame waits for.
+
+### Words that carry more than one sense
+
+Three words each carry more than one sense. They are listed here because a decision written
+in a word that means two things cannot be recorded —
+[P-0031](principles/0031-a-name-means-one-thing-across-the-system.md) asks that names be
+disjoint by name and not merely disjoint in practice.
+
+**`layer` carries three senses.**
+
+- **A kind** — what a procedure lowers to: `L1`, `L2`, `L3`, `L4`, `Field`. This is the
+  `layer` field on a `slot`, `capacity`, `param`, `bind` and `procedure` record, the
+  `karakuri_store::record::Layer` type and `karakuri_operation::Layer`. There are five. A
+  bare *layer* in [ir-spec.md](ir-spec.md) means this.
+- **A position in the architecture model** — the six rows above. Overlaps the kinds on four.
+- **What one deck slot contributes to the mix**, stacked in deck slot order. **Never written
+  bare**: it is *a deck slot's layer* or *a deck's layer*, with its owner attached.
+  [Concepts](manual/concepts.html) disowns the loose reading — *"A deck is not a layer in an
+  image editor"* — because a deck is running material with its own time, which is why it has
+  a residency rather than a visibility.
+
+Three sentences in the manual still write the third sense bare: *"what a layer covers"* and
+*"a layer that has to disappear"* on [the operations page](manual/operations.html), and
+*"touches what a layer covers"* on [the console page](manual/console.html). Ordinary-English
+uses of the word are not this vocabulary and are left alone.
+
+**`authority` carries two senses, and both are in force.**
+
+- **Where a rule lives** —
+  [P-0076](principles/0076-a-surface-owns-the-affordance-never-the-authority.md). A constraint
+  on what the instrument will accept lives where the record is applied, so every surface meets
+  the same wall. This sense is about code.
+- **Who may move a control** — `man / sug / auto`, rule 06 of
+  [the seven rules](manual/index.html). This sense is about an operator and an agent, and it
+  is set per node of a Set
+  ([ADR-0211](adr/0211-authority-is-set-per-node-and-the-record-is-the-sessions.md)).
+
+They are not the same word twice by accident. P-0076 is why the second cannot be built as a
+lock one surface holds: a rule that binds one surface binds none.
+
+**`slot` carries three senses.** The first two are
+[ADR-0049](adr/0049-slot-means-two-things-and-the-clash-is-recorded.md), which recorded the
+clash rather than resolving it.
+
+- **A node of a Set.** `Record::Slot`, and the `slot` lines in a Set file — a procedure at a
+  `(layer, index)` address. Say *a node of a Set*.
+- **A member of the deck.** The `slot: u8` field on every session record, and the deck's own
+  indexing. Say *a deck slot*.
+- **A declared input on a node.** `Record::Edge`'s `slot: String` — what `uses far : Geometry`
+  names. Say *an input slot*. This one is not in ADR-0049.
 
 ---
 
@@ -237,6 +339,12 @@ sequenceDiagram
 ### 4.5 karakuri-store
 
 - **Purpose**: Content-addressed artifact storage keyed by SHA-256 of `.kir` source text, `.kbset` Set files, and `.ndjson` session recordings. **A Set has two forms and the store holds one of them**: `.kset` is the authoring form, naming its parts by relative path beside them, and `.kbset` is the resolved form the store holds and the form that travels, so nothing is left to work out at the frame boundary a load lands on (ADR-0229, ADR-0231).
+- **What a Set file cannot carry is named rather than dropped, and printed on load.** A `param`
+  may be a vector where the engine's map holds `f32`, and a `camera` record carries two of
+  `Orbit`'s six fields, so the other four come back as defaults. Both are real disagreements
+  between the format and the engine rather than omissions in the loader, and each is reported
+  at the site in `karakuri-environment/src/setfile.rs`. A Set file that half-applied in silence
+  is the failure this repository refuses.
 
 ### 4.6 karakuri-cli
 
@@ -313,7 +421,23 @@ graph LR
 3. **Testing**:
    - Add an end-to-end test in `karakuri-codegen/tests/naga_test.rs` to verify Naga validation passes.
 
-### 6.2 Adding a New Tone Mapper / Composite Mode
+### 6.2 Measuring a Crate Seam
+
+Before moving code across a package boundary, measure what it reaches. Each of these three
+commands finds what the one before it cannot, which is why all three are kept:
+
+```sh
+sed 's|//.*||' <file> | grep -o 'crate::[A-Za-z_][A-Za-z0-9_]*' | sort -u   # code
+grep -o 'crate::[A-Za-z_][A-Za-z0-9_]*' <file> | sort -u                    # and doc links
+grep -o 'crate::{[^}]*}' <file> | sort -u                                   # and brace groups
+```
+
+Intra-doc links are the ones that rot in silence: a binary crate gets no rustdoc run, so a
+trait method named as an inherent one fails nothing until the code is in a library. Two such
+links in `karakuri-cli` had been broken from the day they were written and were found only by
+the move to `karakuri-environment`.
+
+### 6.3 Adding a New Tone Mapper / Composite Mode
 
 1. **`karakuri-engine`**:
    - Add variant to `TonemapOp` or `Blend` in `src/present.rs` / `src/deck.rs`.
@@ -329,5 +453,5 @@ graph LR
 - [principles/](principles/): The rules in force, one per file — current only
 - [adr/](adr/): Every decision, with the alternatives that lost — append-only
 - [ir-spec.md](ir-spec.md): `.kir` DSL language specification
-- [roadmap.md](roadmap.md): Architectural vision and implementation roadmap
+- [roadmap.md](roadmap.md): The milestones, what each is waiting on, and the handover
 - [manual.md](manual.md): VJ operator manual
