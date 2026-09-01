@@ -1565,14 +1565,14 @@ pub struct Body {
 ///
 /// There is no third: the columns sit against the body's own edges, which are
 /// already `.program-body`'s padding in from the card, and the cells are
-/// centred in their tracks by [`fitted`] rather than pushed to an edge.
 pub fn program_body(body: Rect, canvas: (u32, u32)) -> Option<Body> {
-    // Both, every time, and then one comparison. Two fits and six divisions is
-    // not a cost worth a cached answer — and a cached answer is the state the
-    // paragraph above refuses.
-    match (below(body, canvas), beside(body, canvas)) {
+    program_body_with_row_h(body, canvas, size::PREVIEW_ROW_H)
+}
+
+/// Dynamic row height version of program_body
+pub fn program_body_with_row_h(body: Rect, canvas: (u32, u32), row_h: f32) -> Option<Body> {
+    match (below(body, canvas, row_h), beside(body, canvas, row_h)) {
         (Some(below), Some(beside)) if area(beside.picture) > area(below.picture) => Some(beside),
-        // The tie, and every case where beside cannot be drawn.
         (Some(below), _) => Some(below),
         (None, beside) => beside,
     }
@@ -1592,15 +1592,13 @@ fn area(rect: Rect) -> f32 {
 /// **The mock's arrangement**: the picture across the top, the four cells in a
 /// row along the bottom.
 ///
-/// The row is [`size::PREVIEW_ROW_H`] tall — the 63 the arrangement pins
-/// `deck-previews` at, less the padding under it — and it keeps that height at
-/// every width, exactly as the arrangement does. The picture takes what is left
-/// above it, less one `PROGRAM_DIVIDER`.
-fn below(body: Rect, canvas: (u32, u32)) -> Option<Body> {
-    let row = Rect::from_min_max(
-        Pos2::new(body.min.x, body.max.y - size::PREVIEW_ROW_H),
-        body.max,
-    );
+/// The row is `row_h` tall, along `.program-body`'s bottom edge;
+/// the picture takes what is left above it, less one `PROGRAM_DIVIDER`.
+fn below(body: Rect, canvas: (u32, u32), row_h: f32) -> Option<Body> {
+    if body.height() <= row_h + crate::PROGRAM_DIVIDER {
+        return None;
+    }
+    let row = Rect::from_min_max(Pos2::new(body.min.x, body.max.y - row_h), body.max);
     let picture = fitted(
         Rect::from_min_max(
             body.min,
@@ -1614,18 +1612,22 @@ fn below(body: Rect, canvas: (u32, u32)) -> Option<Body> {
 /// **The other arrangement**: two cells down the left, two down the right, and
 /// the picture in the middle.
 ///
-/// The column's width is the whole of the rule — see [`program_body`], where it
-/// is argued and checked — and everything else here is [`track`] and
-/// [`fitted`], the same two calls the row goes through.
-fn beside(body: Rect, canvas: (u32, u32)) -> Option<Body> {
+/// Preserves the preview cell size from the row arrangement (ADR-0239).
+fn beside(body: Rect, canvas: (u32, u32), row_h: f32) -> Option<Body> {
     let (aw, ah) = (
         PREVIEW_ASPECT.0.max(1) as f32,
         PREVIEW_ASPECT.1.max(1) as f32,
     );
-    // **The body's height, and never its width.** Two cells stacked with one
-    // gap between them, and the column is one of them lying at its aspect.
-    let cell = (body.height() - size::PREVIEW_GAP * (PER_COLUMN - 1) as f32) / PER_COLUMN as f32;
-    let column = cell * aw / ah;
+    let cell_h = row_h.min(body.height());
+    let cell_w = (cell_h * aw / ah).round();
+    let column = cell_w;
+
+    let min_w = column * 2.0 + crate::PROGRAM_DIVIDER * 2.0;
+    let total_cells_h = cell_h * PER_COLUMN as f32 + size::PREVIEW_GAP * (PER_COLUMN - 1) as f32;
+    if body.width() <= min_w || body.height() < total_cells_h {
+        return None;
+    }
+
     let picture = fitted(
         Rect::from_min_max(
             Pos2::new(body.min.x + column + crate::PROGRAM_DIVIDER, body.min.y),
@@ -1633,24 +1635,17 @@ fn beside(body: Rect, canvas: (u32, u32)) -> Option<Body> {
         ),
         canvas,
     );
+
+    let top_offset = ((body.height() - total_cells_h) / 2.0).max(0.0).round();
     let cells = std::array::from_fn(|deck| {
-        // A and B down the left, C and D down the right: the deck's index
-        // decides which side and which of the two tracks, and nothing else
-        // does.
-        let side = match deck < PER_COLUMN {
-            true => Rect::from_min_max(body.min, Pos2::new(body.min.x + column, body.max.y)),
-            false => Rect::from_min_max(Pos2::new(body.max.x - column, body.min.y), body.max),
+        let col_idx = deck / PER_COLUMN; // 0 for left (A, B), 1 for right (C, D)
+        let row_idx = deck % PER_COLUMN; // 0 for top (A, C), 1 for bottom (B, D)
+        let x = match col_idx {
+            0 => body.min.x,
+            _ => body.max.x - column,
         };
-        fitted(
-            track(
-                side,
-                PER_COLUMN,
-                deck % PER_COLUMN,
-                size::PREVIEW_GAP,
-                Axis::Column,
-            ),
-            PREVIEW_ASPECT,
-        )
+        let y = body.min.y + top_offset + row_idx as f32 * (cell_h + size::PREVIEW_GAP);
+        Rect::from_min_size(Pos2::new(x, y), egui::vec2(cell_w, cell_h))
     });
     drawable(Placement::Beside, picture, cells)
 }
@@ -1840,12 +1835,48 @@ pub fn program_bay(layout: &karakuri_layout::Layout, canvas: (u32, u32)) -> Opti
     let picture = layout.find("program-view")?;
     let row = layout.find("deck-previews")?;
     let body = bay_body(to_egui(layout.rect(bay)));
+    let row_h = match layout.sizing(row) {
+        karakuri_layout::Sizing::Fixed(h) => (h - size::PROGRAM_BODY_PAD).max(size::PREVIEW_ROW_H),
+        _ => size::PREVIEW_ROW_H,
+    };
     match (!layout.is_collapsed(picture), !layout.is_collapsed(row)) {
         // Both halves on screen, and this is the arrangement ADR-0182 decides.
-        (true, true) => program_body(body, canvas).map(|arranged| ProgramBay {
-            placement: arranged.placement,
-            picture: Some(arranged.picture),
-            cells: Some(arranged.cells),
+        (true, true) => program_body_with_row_h(body, canvas, row_h).and_then(|arranged| {
+            match arranged.placement {
+                Placement::Beside => Some(ProgramBay {
+                    placement: Placement::Beside,
+                    picture: Some(arranged.picture),
+                    cells: Some(arranged.cells),
+                }),
+                Placement::Below => {
+                    let pic_rect = to_egui(layout.rect(picture));
+                    let pic_area = Rect::from_min_max(
+                        Pos2::new(
+                            pic_rect.min.x + size::PROGRAM_BODY_PAD,
+                            pic_rect.min.y + size::HEAD_H + size::PROGRAM_BODY_PAD,
+                        ),
+                        Pos2::new(pic_rect.max.x - size::PROGRAM_BODY_PAD, pic_rect.max.y),
+                    );
+                    let row_rect = to_egui(layout.rect(row));
+                    let row_area = Rect::from_min_max(
+                        Pos2::new(row_rect.min.x + size::PROGRAM_BODY_PAD, row_rect.min.y),
+                        Pos2::new(
+                            row_rect.max.x - size::PROGRAM_BODY_PAD,
+                            row_rect.max.y - size::PROGRAM_BODY_PAD,
+                        ),
+                    );
+                    drawable(
+                        Placement::Below,
+                        fitted(pic_area, canvas),
+                        preview_row(row_area),
+                    )
+                    .map(|b| ProgramBay {
+                        placement: Placement::Below,
+                        picture: Some(b.picture),
+                        cells: Some(b.cells),
+                    })
+                }
+            }
         }),
         // The row is folded: nothing to arrange around, so the picture has the
         // body whole — the same `fitted` the two arrangements end in.

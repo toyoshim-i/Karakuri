@@ -4,8 +4,7 @@ title: The Program bay's body arranges itself for the larger picture
 status: accepted
 date: 2026-08-25
 supersedes: []
-superseded_by: []
-principles: []
+superseded_by: [0239]
 tags: [ui]
 ---
 
