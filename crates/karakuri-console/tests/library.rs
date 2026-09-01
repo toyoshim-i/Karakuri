@@ -745,20 +745,11 @@ fn a_load_is_a_cursor_and_a_key_with_no_pointer_anywhere_in_it() {
     let bay = bay(&panel);
     view.mixer = std::iter::repeat_with(strip).take(4).collect();
 
-    // **The pill, as wide as the words in it** — `load → A` at the console's
-    // own type size inside a `.pill`'s padding either side, which is
-    // `LibraryBay::pill`'s one argument.
-    let words = format!("load \u{2192} {}", DECK_LETTERS[0]);
-    let text = ctx.fonts_mut(|f| {
-        f.layout_no_wrap(
-            words.clone(),
-            egui::FontId::new(size::BASE, egui::FontFamily::Proportional),
-            egui::Color32::PLACEHOLDER,
-        )
-        .size()
-        .x
-    });
-    let pill = bay.pill(text + size::PILL_PAD_X * 2.0);
+    // **The pill, as wide as what is in it** — the word, the arrow's box and
+    // the letter, inside a `.pill`'s padding either side. Asked of
+    // `LibraryBay::load`, which is the derivation the paint uses, so the box
+    // swept here is the capsule drawn.
+    let pill = bay.load(&ctx, DECK_LETTERS[0]).pill;
     assert!(
         bay.foot.contains_rect(pill),
         "the pill at {pill:?} is not inside the foot at {:?}",
@@ -1420,9 +1411,14 @@ fn the_cursor_stays_inside_the_rows_that_are_listed() {
 ///
 /// `console.html`: *"The letter on the pill is the whole warning … What the
 /// control owes instead is to say where it lands before the press."* So this
-/// asserts the words rather than a rectangle, and asserts them again after the
-/// selection moves — a pill that read `load → A` whatever was selected would
-/// pass the first half and be a lie for the other three decks.
+/// asserts what is painted rather than a rectangle, and asserts it again after
+/// the selection moves — a pill that read `load → A` whatever was selected
+/// would pass the first half and be a lie for the other three decks.
+///
+/// **The letter is its own galley now**, because the arrow between the word
+/// and it is drawn rather than typed — see
+/// [`the_foots_arrow_is_drawn_rather_than_typed`]. So the reading this asserts
+/// is the letter alone, which is the half of the pill that moves.
 #[test]
 fn the_foot_says_which_deck_a_press_would_land_on() {
     let (mut view, mut panel) = showing_mock();
@@ -1436,16 +1432,81 @@ fn the_foot_says_which_deck_a_press_would_land_on() {
             view.select(deck) || deck == 0,
             "deck {deck} could not be selected with four strips"
         );
-        let want = format!("load \u{2192} {}", DECK_LETTERS[usize::from(deck)]);
+        let want = DECK_LETTERS[usize::from(deck)];
         let drawn = shapes_inside(&mut view, &mut panel, bay.foot);
         assert!(
             drawn.iter().any(|shape| matches!(
                 shape,
                 egui::Shape::Text(at) if at.galley.text() == want
             )),
-            "the selection is deck {deck} and the foot does not read `{want}`: {drawn:#?}"
+            "the selection is deck {deck} and the foot's pill does not read `{want}`: {drawn:#?}"
+        );
+        // **And the word is still beside it**, so a letter drawn alone in an
+        // empty capsule cannot pass this.
+        assert!(
+            drawn.iter().any(|shape| matches!(
+                shape,
+                egui::Shape::Text(at) if at.galley.text() == "load"
+            )),
+            "the foot's pill does not say `load`: {drawn:#?}"
         );
     }
+}
+
+/// **The foot's arrow is drawn rather than typed, because `egui`'s default
+/// face has no U+2192.**
+///
+/// The pill was `"load \u{2192} "` with the deck's letter appended, and the
+/// panel drew `load □ A`: a readout of *where a press would land* with a tofu
+/// where the arrow was. `CHEVRON_W` three bays along records the answer for
+/// this whole class of question — whether a glyph is in the default face has
+/// no good answer, so the mark is drawn — and this is that answer applied
+/// here.
+///
+/// # What it asserts
+///
+/// 1. **Nothing painted in the foot carries U+2192**, which is the defect
+///    itself and is asserted over every galley rather than over the constant:
+///    a character typed back into the word would fail here.
+/// 2. **A triangle is painted in the arrow's box**, so the mark did not simply
+///    go away — a pill reading `load A` says nothing about where the letter
+///    stands to the word.
+/// 3. **The box is between the word and the letter**, which is what makes the
+///    three one reading rather than a mark parked at one end.
+#[test]
+fn the_foots_arrow_is_drawn_rather_than_typed() {
+    let (mut view, mut panel) = showing_mock();
+    let ctx = drawn_once();
+    let bay = bay(&panel);
+    let at = bay.load(&ctx, DECK_LETTERS[0]);
+
+    assert!(
+        at.text.max.x <= at.arrow.min.x && at.arrow.max.x <= at.letter.min.x,
+        "the arrow at {:?} is not between the word at {:?} and the letter at {:?}",
+        at.arrow,
+        at.text,
+        at.letter
+    );
+
+    let drawn = shapes_inside(&mut view, &mut panel, bay.foot);
+    for shape in &drawn {
+        if let egui::Shape::Text(text) = shape {
+            assert!(
+                !text.galley.text().contains('\u{2192}'),
+                "the foot types U+2192 in `{}`, which the default face draws as a tofu",
+                text.galley.text()
+            );
+        }
+    }
+    assert!(
+        drawn.iter().any(|shape| matches!(
+            shape,
+            egui::Shape::Path(path) if path.points.len() == 3
+                && at.arrow.expand(1.0).contains_rect(path.visual_bounding_rect())
+        )),
+        "no triangle is painted in the arrow's box at {:?}: {drawn:#?}",
+        at.arrow
+    );
 }
 
 /// **A strip, as far as this bay cares**: something for a deck to be selected

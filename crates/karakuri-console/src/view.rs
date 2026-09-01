@@ -7611,15 +7611,32 @@ fn master_into(ui: &Ui, pal: &Palette, row: &MasterRow) {
 /// the source.
 const LIBRARY_TITLE: &str = "Library";
 
-/// **What the foot's pill says before the deck's letter**, which is the mock's
-/// own `load &rarr; A` with the arrow as the character `egui`'s default face
-/// draws it as.
+/// **The word the foot's pill starts with**, which is the first half of the
+/// mock's own `load &rarr; A`.
 ///
-/// The letter is not here: it is [`View::selection`], appended at the one
-/// place both marks are read. A word and an arrow written once, so the pill
-/// and any test that asks what it reads are the same string — [`DECK_LETTERS`]
-/// on a bay instead of on a preview cell.
-const LOAD_PILL: &str = "load \u{2192} ";
+/// **The arrow is not here, and that is the change**: it was typed, as
+/// `\u{2192}`, and `egui`'s default face has no rightwards arrow — so the
+/// panel drew `load □ A` and the pill's one job, saying where a press would
+/// land, was done through a tofu. Whether a glyph is in the default face is a
+/// question with no good answer ([`CHEVRON_W`], three bays along, and
+/// [`arrow_mark`] one bay along), so the mark is **drawn** and an arrow is the
+/// same arrow either way — see [`LOAD_ARROW`].
+///
+/// The letter is not here either: it is [`View::selection`]'s, read at the one
+/// place both marks are, and [`LibraryBay::load`] is where the word, the mark
+/// and the letter are measured together — so the pill that is painted and the
+/// pill a test asks about are one statement.
+const LOAD_PILL: &str = "load";
+
+/// **The `→` between the word and the letter, drawn rather than typed** —
+/// [`CHEVRON_W`]'s reason and [`arrow_mark`]'s shape, which is what the two
+/// scrub arrows in the Inspector already are.
+///
+/// Half the type it sits beside, which is [`CHEVRON_W`]'s own rule and is
+/// about what the glyph's ink measures at [`size::BASE`]. It is square rather
+/// than [`CHEVRON_W`]'s 2:1, for the reason [`arrow_mark`] gives: the ink of a
+/// right-pointing small triangle is about as wide as it is tall.
+const LOAD_ARROW: f32 = size::BASE * 0.5;
 
 /// **One chip in the Library bay's scope row**, and it names *which library is
 /// being read* rather than a place a Set can be.
@@ -7970,6 +7987,29 @@ pub struct LibraryBay {
     pub foot: Rect,
 }
 
+/// **The foot's `load → A` pill, laid out**: the capsule, the word in it, the
+/// arrow's box and the letter.
+///
+/// [`AudioInPill`]'s shape two bays along and for the same reason — one
+/// derivation, so that what [`library_into`] paints and what a test asks about
+/// are the same rectangles. **It is not a control**: nothing in
+/// [`crate::input::claim`] hit-tests any of these, because a load is a cursor
+/// and a key with no pointer in it, and `tests/library.rs` is what fails the
+/// day one of them takes a press.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LoadPill {
+    /// **The capsule**, [`size::PILL_H`] tall at the far end of the foot.
+    pub pill: Rect,
+    /// Where [`LOAD_PILL`]'s word is painted, inside the capsule's padding.
+    pub text: Rect,
+    /// **The arrow's box**, [`LOAD_ARROW`] square between the word and the
+    /// letter. Drawn rather than typed — see [`LOAD_ARROW`], and
+    /// [`arrow_mark`], which draws it.
+    pub arrow: Rect,
+    /// Where the deck's letter is painted, at the far end of the capsule.
+    pub letter: Rect,
+}
+
 impl LibraryBay {
     /// The `index`th row's rectangle, counting from the top of the list.
     ///
@@ -8014,6 +8054,61 @@ impl LibraryBay {
             ),
             egui::vec2(width, size::PILL_H),
         )
+    }
+
+    /// **The foot's pill, measured and laid out**: the word, the arrow's box
+    /// and the letter, inside the capsule [`LibraryBay::pill`] places.
+    ///
+    /// **One derivation for the paint and for a test**, which is
+    /// [`ArrangementPill`]'s arrangement one bay along: the capsule is as wide
+    /// as what is in it, and two measurements would be a pill drawn in one box
+    /// and asserted in another. [`library_into`] paints from this and
+    /// `tests/library.rs` asks it where the capsule is.
+    ///
+    /// **Why it takes the context**: a word's width is `egui`'s to answer and
+    /// nobody else's, which is [`pill_width`]'s reason and [`mixer`]'s. Before
+    /// the first pass there are no fonts, and a zero-width word makes a pill
+    /// of the padding and the mark — which is what a console that has drawn
+    /// nothing has.
+    ///
+    /// `letter` is [`DECK_LETTERS`]', handed in rather than indexed here
+    /// because which deck is selected is [`View`]'s and this is a box.
+    pub fn load(&self, ctx: &egui::Context, letter: &str) -> LoadPill {
+        let run = |text: &str| {
+            ctx.fonts_mut(|f| {
+                f.layout_no_wrap(
+                    text.to_owned(),
+                    FontId::new(size::BASE, FontFamily::Proportional),
+                    Color32::PLACEHOLDER,
+                )
+                .size()
+            })
+        };
+        let (word, mark) = (run(LOAD_PILL), run(letter));
+        // **The gap either side of the mark is the console's gap between a
+        // word and a drawn mark**, which is what the two menu pills already
+        // put between their text and their chevron and what a sink puts
+        // between its dot and its name.
+        let width = word.x + size::SINK_GAP + LOAD_ARROW + size::SINK_GAP + mark.x;
+        let pill = self.pill(width + size::PILL_PAD_X * 2.0);
+        let mid = pill.center().y;
+        let text = Rect::from_min_size(
+            Pos2::new(pill.min.x + size::PILL_PAD_X, mid - word.y * 0.5),
+            word,
+        );
+        let arrow = Rect::from_center_size(
+            Pos2::new(text.max.x + size::SINK_GAP + LOAD_ARROW * 0.5, mid),
+            egui::vec2(LOAD_ARROW, LOAD_ARROW),
+        );
+        LoadPill {
+            pill,
+            text,
+            arrow,
+            letter: Rect::from_min_size(
+                Pos2::new(pill.max.x - size::PILL_PAD_X - mark.x, mid - mark.y * 0.5),
+                mark,
+            ),
+        }
     }
 
     /// **Every scope chip and its box**, left to right in the order the row
@@ -8263,7 +8358,7 @@ fn library_into(
     bay: &LibraryBay,
     sets: &[String],
     cursor: usize,
-    load: &str,
+    letter: &str,
 ) {
     let painter = ui.painter().with_clip_rect(bay.list);
     for (index, name) in sets.iter().take(bay.rows).enumerate() {
@@ -8322,26 +8417,31 @@ fn library_into(
     // the point — this one is a *readout of where a press lands*, so it is
     // drawn in the colour the selection ring on the strip is drawn in and a
     // reader can follow the letter to the deck.
-    let galley = painter.layout_no_wrap(
-        load.to_owned(),
-        FontId::new(size::BASE, FontFamily::Proportional),
-        pal.lav,
-    );
-    let pill = bay.pill(galley.size().x + size::PILL_PAD_X * 2.0);
+    //
+    // **The arrow between the word and the letter is drawn**, which is the
+    // whole of what [`LOAD_ARROW`] is: the mock's `&rarr;` was typed here and
+    // `egui`'s default face has no U+2192, so the pill read `load □ A` — a
+    // readout of where a press lands, with a tofu where the *lands* was.
+    // Where each of the three goes is [`LibraryBay::load`]'s answer, so this
+    // paints and derives nothing.
+    let at = bay.load(ui.ctx(), letter);
     painter.rect_filled(
-        pill,
+        at.pill,
         // `border-radius: 999px` on a box this short is a capsule.
         CornerRadius::same((size::PILL_H * 0.5) as u8),
         tint(pal.lav, 15),
     );
-    painter.galley(
-        Pos2::new(
-            pill.min.x + size::PILL_PAD_X,
-            pill.center().y - galley.size().y * 0.5,
-        ),
-        galley,
-        pal.lav,
-    );
+    let word = |rect: Rect, text: &str| {
+        let galley = painter.layout_no_wrap(
+            text.to_owned(),
+            FontId::new(size::BASE, FontFamily::Proportional),
+            pal.lav,
+        );
+        painter.galley(rect.min, galley, pal.lav);
+    };
+    word(at.text, LOAD_PILL);
+    arrow_mark(&painter, at.arrow.center(), LOAD_ARROW, pal.lav, false);
+    word(at.letter, letter);
 }
 
 /// **The scope row, painted**: the chips left to right, the marked one washed,
@@ -9855,22 +9955,28 @@ fn deck_head_into(ui: &Ui, pal: &Palette, at: &DeckHead, pane: &Pane) {
             Stroke::new(size::HAIRLINE, edge),
             StrokeKind::Inside,
         );
-        arrow_mark(&painter, rect.center(), ink, back);
+        arrow_mark(&painter, rect.center(), size::SCRUB_SIZE, ink, back);
     }
 
     word(at.composite, COMPOSITE_LABEL, pane.composite);
 }
 
-/// **One scrub arrow's mark**, drawn rather than typed — a triangle with its
-/// point to the left when `back`, to the right when not.
+/// **An arrow's mark**, drawn rather than typed — a triangle with its point to
+/// the left when `back`, to the right when not.
 ///
-/// [`size::SCRUB_SIZE`] across and the same tall, which is [`Mask`]'s rule for
-/// a mark that stands in for a glyph: the box is the size the glyph would have
-/// been. It is not [`CHEVRON_W`]'s 2:1, because the ink of a left-pointing
-/// small triangle is about as wide as it is tall where a down-pointing one is
-/// wider than it is deep.
-fn arrow_mark(painter: &egui::Painter, centre: Pos2, colour: Color32, back: bool) {
-    let r = size::SCRUB_SIZE * 0.5;
+/// `across` wide and the same tall, which is [`Mask`]'s rule for a mark that
+/// stands in for a glyph: the box is the size the glyph would have been. It is
+/// not [`CHEVRON_W`]'s 2:1, because the ink of a left-pointing small triangle
+/// is about as wide as it is tall where a down-pointing one is wider than it
+/// is deep.
+///
+/// **The size is an argument and not [`size::SCRUB_SIZE`]**, because the same
+/// mark is drawn at two sizes now: the Inspector's two scrub arrows, at the
+/// size of the chip they sit in, and the Library foot's `→`, at [`LOAD_ARROW`]
+/// beside the type it stands between. One triangle, so an arrow this console
+/// draws is the same arrow wherever it is drawn.
+fn arrow_mark(painter: &egui::Painter, centre: Pos2, across: f32, colour: Color32, back: bool) {
+    let r = across * 0.5;
     let point = match back {
         true => centre.x - r,
         false => centre.x + r,
@@ -10974,10 +11080,14 @@ impl View {
         // reason: which chip is marked is a position in the row this frame is
         // drawing, and a scope past its end is the last chip there is.
         let scope = self.marked();
-        // **The load pill's words, built here rather than in the paint**: it
+        // **The load pill's letter, read here rather than in the paint**: it
         // is a readout of `selection` and the bay is what draws it, so the one
         // place the letter is chosen is the one place the ring's slot is read.
-        let load = format!("{LOAD_PILL}{}", DECK_LETTERS[usize::from(selection)]);
+        // **The word and the arrow are not built with it any more** — the
+        // arrow is a mark rather than a character (`LOAD_ARROW`), so there is
+        // no string for the three of them to be, and `LibraryBay::load` is
+        // where they are laid out together.
+        let load = DECK_LETTERS[usize::from(selection)];
         let waiting = self.staging.as_slice();
         let panes = self.inspector.as_slice();
         let phase = self.phase;
@@ -11085,7 +11195,7 @@ impl View {
                             // where everything under it is what that library
                             // holds.
                             scopes_into(ui, &pal, &bay, scopes, scope);
-                            library_into(ui, &pal, &bay, sets, cursor_row, &load);
+                            library_into(ui, &pal, &bay, sets, cursor_row, load);
                         }
                     }
                     // **The fourth bay with something in its body**, and it is
