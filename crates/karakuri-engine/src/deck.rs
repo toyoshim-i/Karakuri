@@ -1125,6 +1125,11 @@ impl Deck {
         &self.slots[slot].swap
     }
 
+    /// The linear HDR render target for one slot.
+    pub fn slot_view(&self, slot: usize) -> Option<&wgpu::TextureView> {
+        self.slots.get(slot).map(|s| &s.view)
+    }
+
     /// Everything that has happened to one slot since this was last called.
     /// Draining is the only mutation a caller gets on a `HotSwap` through the
     /// deck, and it cannot change which Set is live.
