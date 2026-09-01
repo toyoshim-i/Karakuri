@@ -590,9 +590,9 @@ throws the expand away with nothing said. Nothing in the console reaches that st
 
 **This is the handover. Read it before anything else in this file if you are picking the work
 up.** It says, in the order somebody arriving needs them: *what state the milestone is in*, *what
-the next piece of work is*, and *what every remaining piece is waiting on*. Everything after the
-third heading is the detail behind the third question; nothing in it needs to be read before
-starting.
+the next piece of work is*, *the order the rest of it is done in*, and *what every remaining piece is
+waiting on*. Everything after the fourth heading is the detail behind the fourth question; nothing in
+it needs to be read before starting.
 
 #### 1. What state the milestone is in
 
@@ -730,11 +730,11 @@ front of whoever picks this up is item 2.
    arrangement name. The Library's head has drawn a breadcrumb two levels deep for as long as it has
    drawn the bay, and ADR-0229 part 6 settles that this is the store's own shape rather than a folder
    scope browsing somebody else's disk. **A decision of its own, not a refactor.**
-3. **Then the remaining bays, on the board's own grouping** — the second of the four commands below,
-   which arrives already grouped by where each control lives and already ordered by weight, so there
-   is no list here to keep in step. **Run the fourth beside it.** A `plan` badge does not distinguish
-   a drawing that is owed from a machine that is missing, and the *Load material into a deck* row was
-   taken up as drawing work on 2026-08-30 and was the second kind.
+3. **Then the remaining bays, and which one to be in is the next heading's** — the ranking the fifth
+   command prints crossed with the blocker table under it, so there is no list here to keep in step.
+   **Run the fourth beside both.** A `plan` badge does not distinguish a drawing that is owed from a
+   machine that is missing, and the *Load material into a deck* row was taken up as drawing work on
+   2026-08-30 and was the second kind.
 
 **Master and Sequencer stay last, for machinery rather than for drawing.** The three master effects
 need an L5 kind the IR does not have — `ast::Kind` is `L1 | L2 | L3 | L4 | Field` — and one of the
@@ -744,7 +744,119 @@ exists is settled
 ([ADR-0227](adr/0227-a-pattern-and-a-master-chain-setting-are-library-data-in-two-tiers.md)), and
 that is not the machinery.
 
-#### 3. What each remaining piece is waiting on
+#### 3. The remaining work in working order, and which bays are short a component
+
+**Two axes decide what is next and neither is enough on its own.** *How much does the specification
+want this* is the fifth of the commands under *The meter is one column*, below — it sorts every
+`plan` row by how much the manual says about it, which is the maintainer's priority rule, and it
+knows nothing about what is blocked, so the heaviest row on the page is a master effect that cannot
+be built at all. *Can it be built today* is prose and no command derives it. **They have been
+crossed by hand every time this file was picked up and written down nowhere.** This section is
+where they are crossed once: **the command supplies the order and the table supplies the blocker**,
+and neither is transcribed into the other.
+
+**What the list is for is not closing badges.** The maintainer, 2026-09-01: *"you have to get to the
+point where all the bay GUI components are there and assembled, or you cannot even try it out."* An
+instrument nobody can exercise cannot be judged, so the question this answers is **which bays are
+still missing components**. The badge count is how that is measured and not what it is for, and the
+grouping under the table is the part of the answer the ranking cannot give.
+
+**How to read the two together.** Run the fifth command; read its output downward; a row the table
+answers with a blocker is not the next piece of work however heavy it is, and the first row the
+table answers *nothing* for is. **The ranking orders work inside a bay and not across the page** —
+being short one component and being short nine are different states of a bay, and weight cannot tell
+them apart.
+
+**A row the command prints that the table has no entry for is itself the finding**: nobody has
+written down what that row needs. That is what makes the pairing self-checking rather than a second
+list to keep in step — the page gains a row, the command prints it, and the silence shows up on the
+next reading instead of at the next audit. So **every entry reading *nothing* is a claim** and not a
+blank, and it is the half a reader needs in order to start: those rows are work and nothing stands
+in front of them. **Whether such a row is a drawing that is owed or a machine that is missing is the
+fourth command's answer and deliberately not a column here** — it is derived, and a derived thing in
+a table is a figure waiting to go stale.
+
+| Bay | Row | What it is waiting on |
+|---|---|---|
+| **Transport** | Tap the beat | Nothing. |
+| | Halve or double the grid | Nothing. |
+| | Nudge the latency offset | Nothing. |
+| | Set the free-run tempo | Nothing. |
+| | Find out what a write did | Nothing. |
+| | Record the session | Nothing. |
+| **Mixer** | Choose the wipe shape, the quantum, the length | Nothing — and it is the one to draw first, because the three rows below it convert only once a surface holds what it sets. |
+| | Fade a deck out or in | Nothing. It answers `Owed::NotRead` until the transition settings are handed over, and the surface that holds them is the row above. |
+| | Choose which renderer of a deck is live | Nothing, and the same reading. |
+| | Wipe the next deck in | **Who says the front shape and the soft edge are its.** `written(Wipe)` is `Owed::NotSettled` for exactly those two: the shape is `Operation::SetTransition`'s third setting and nothing has said it is the wipe's to write, and the soft edge is named by no operation anywhere. |
+| **Inspector** | Write a parameter | Nothing. |
+| | Attach a signal to a parameter | Nothing. |
+| | Take a parameter back | Nothing. |
+| | Element capacity, seeds, the camera | Nothing. |
+| | Read one node's source | Nothing. |
+| | Check and write one node's source | Nothing. |
+| | Keep what a deck is playing | Nothing. |
+| | Set a node's authority | **A writer, and a live-session one.** `Set::set_authority` is reached from `swap.rs`'s restatement and from its own test, and from nowhere else — so every node of every Set is `Manual`, and the chip can read while nothing can make it change ([ADR-0216](adr/0216-a-node-nobody-has-spoken-for-is-manual-and-a-request-states-only-what-was-said.md)). |
+| | Composite a deck's renderers | **A setter.** `Set::merge` is `Some` only where `layering == Layering::Composite` at `Set::build`, nothing writes it afterwards, and neither `Set` nor `Deck` offers one — so the operation names a state the engine cannot be moved into while it is running. |
+| **Library** | List what the store holds | Nothing. |
+| | Read what one Set holds and declares | Nothing. |
+| | Load material into a deck | **A drag, and not a machine.** `l` performs the operation ([ADR-0228](adr/0228-a-library-load-re-points-the-slots-source-and-never-installs-a-set.md)); the control the page names is the drag from a row onto a strip, and the page says of it *"and it is not drawn"*. The pill beside it is a readout on purpose, so a press on it would be a third route nobody specified (`view::LibraryBay`). |
+| | Send a Set to somebody, and take one in | **A destination the vocabulary can carry.** The taking-in half is built and reached — a `presets` row taken in and loaded on the one press. `Operation::TransferSet`'s send arm is `SetTransfer::Send { id }`: a Set the store already holds and no path at all, and the one control in this bay that takes letters takes a *name* and not a path. The missing sentence is *where a package goes when no shell redirected it*, and it belongs to the vocabulary rather than to this bay (`view::LibraryBay`). |
+| **Staging** | Keep a candidate | **Items 1–4 of the six under *Staging*, below**: a store the build path can write, a `Built` receiver on the render thread, a baseline, and the undecided answer for a build that changes two nodes. `watched()` calls neither `Watch::storing_to` nor `Watch::snapshotting_to`, and its own documentation is where that is said. |
+| | Put a node's previous version back | **Items 5 and 6**: a reader for the edit history and a history for this program to read. `karakuri_environment::history` is `record`, `seed` and `stamped_id`, and has no lister. |
+| **Master** | Feedback | **An L5 kind, and a decision.** `ast::Kind` is `L1 \| L2 \| L3 \| L4 \| Field`, and which cut of the previous frame this one reads is taken by nobody (below). It is the heaviest row on the page and the one M5 cannot close by drawing. |
+| | Bloom | **An L5 kind**, and `params` is `Undecided`: what its knobs are has never been named. |
+| | RGB shift | The same two. |
+| **Sequencer** | Toggle a step | **A pattern and a step grid**, neither of which anything in this workspace holds, and the payload is `Undecided`. All five rows of this bay wait on that one thing; where a pattern is *kept* is settled ([ADR-0227](adr/0227-a-pattern-and-a-master-chain-setting-are-library-data-in-two-tiers.md)) and is not it. |
+| | Mute a lane | The pattern and the step grid. |
+| | Point a lane at what it drives | The pattern and the step grid. |
+| | Choose a pattern's steps and what a step is worth | The pattern and the step grid. |
+| | Choose which pattern the sequencer plays | The pattern and the step grid. |
+| **Outputs** | Choose where the frame goes | **An identity for an output.** `RouteFrame { output: Undecided }`, and no output has one anywhere in this workspace — deciding what names one is the row's whole content, not a payload it is missing. |
+| **No home on the page** | Narrow the published interface | **A control, named by the manual.** The panel cell reads `—`, so nothing on the console is specified to reach it and there is no drawing to owe. It is upstream of the Inspector: until something publishes, every control that bay will ever draw is a wildcard. |
+| | Wire a procedure's input to a node | The same: a `—` in the panel cell, and a `plan` badge over it. |
+| | Walk the edit history | The same, and then `WalkHistory { step: Undecided }` and the history reader Staging's item 5 names. |
+| **The console's own shape** | Fold a bay away | **A hit test.** Not blocked, and not the vocabulary's route either — it reaches the console as `karakuri_console::panel::Op::Fold`, which is why the fourth command returns it and why `tests/vocabulary.rs` rather than `panel_column.rs` is what checks it. The bay head is painted and never hit-tested, so the only route is still a key. |
+| | Fold a pane away | The same, at the pane edge. |
+| | Size the window | Nothing, and it is the host's rather than either vocabulary's: `crates/karakuri` answers `WindowEvent::Resized` itself, and the `a` the page specifies is bound to nothing. |
+| | Quit | Nothing, and the host's the same way: `WindowEvent::CloseRequested` exits the loop and `esc` reaches it. What is owed is the `close` control on the panel. |
+
+##### Which bays are short a component, which is what the list is for
+
+**One bay of the nine is complete**: the Program bay carries no `plan` row at all. The picture, the
+four preview cells, the deck selection and its MCP pill are drawn and every one of them reaches
+something. Nothing else on the console can be said that way, and it is the only place an operator
+can exercise a bay rather than a control in it.
+
+**Three are drawn and short a handful of controls, and almost nothing in the three is blocked.** The
+Transport row is the cheapest bay on the page — six rows and not one blocker, all of them controls
+beside readouts the row already draws. The **Library** lists, scopes and loads, and of what it still
+owes only the sending half of a transfer is blocked. The **Inspector** is the largest of the three
+and the most lopsided: every read it needs answers off a running Set, so what is missing there is
+**presses and not faces** — nine rows, of which the authority chip and the compositing control are
+the only two standing on something.
+
+**Two are short one or two, and both draw what they have.** Outputs draws its sinks and hit-tests
+the dot; what it owes is the switchable list, which is the blocked part of it. Staging draws a row
+per slot and owes the two verdict controls, and both of those stand on the same six prerequisites.
+
+**One is short a whole row.** The Mixer's strips are drawn; `.xfade`, the transition row beneath
+them, is drawn nowhere at all, and `view::mixer` says why — *"nothing here holds what is armed, and
+`go` would fire nothing."* So three of that bay's four rows have no surface to hang on until the
+settings row exists, which is the reason to draw that one first.
+
+**And two are barely bays.** **Master** is an `out` fader and a head: the fader is built end to end,
+and the chain the bay is named for is three rows none of which can be built at all. **Sequencer** is a head and nothing
+else, and all five of its rows wait on the one absent thing.
+
+**So the instrument can be tried end to end today through Program, Transport, the Library, Staging
+and the Mixer's strips, and cannot be tried at all through the Master chain or the Sequencer** — and
+those two are exactly the bays whose blockers are machinery rather than drawing, which is why they
+stay last for a reason that has nothing to do with their weight on the page. **What stands
+between here and a console somebody can judge is the Transport's six, the Inspector's seven presses,
+the Library's drag and the Mixer's settings row** — every one of them unblocked, and not one waiting
+on anything that has to be decided first.
+
+#### 4. What each remaining piece is waiting on
 
 **What *left* means is decided, and it is not a list of additions.** M5 closes when everything the
 manual describes is implemented — **no `plan` badge left in the panel column of
