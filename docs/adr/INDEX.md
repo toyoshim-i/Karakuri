@@ -262,6 +262,7 @@ number; new records continue from the end.
 | [ADR-0234](0234-carrying-a-show-through-is-a-principle-not-a-property-of-the-finished-instrument.md) | Carrying a show through is a principle, not a property of the finished instrument | 2026-08-31 | accepted |
 | [ADR-0235](0235-mcp-reaches-every-operation-and-what-could-stop-the-show-is-refused-until-the-operator-opens-it.md) | MCP reaches every operation, and what could stop the show is refused until the operator opens it | 2026-08-31 | accepted |
 | [ADR-0236](0236-a-map-is-the-layer-between-a-surface-and-the-vocabulary-and-the-audit-is-one-of-the-things-it-does.md) | A map is the layer between a surface and the vocabulary, and the audit is one of the things it does | 2026-08-31 | accepted |
+| [ADR-0237](0237-a-deck-slot-runs-from-its-own-copy-and-one-preset-in-four-slots-is-four-files.md) | A deck slot runs from its own copy, and one preset in four slots is four files | 2026-09-01 | accepted |
 
 ## Retired numbers
 

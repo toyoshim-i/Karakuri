@@ -4,7 +4,7 @@ title: What ships, what you saved, and what you are editing are three places
 status: accepted
 date: 2026-08-15
 supersedes: []
-superseded_by: []
+superseded_by: [0237]
 principles: [0048]
 tags: [store, mcp]
 ---
