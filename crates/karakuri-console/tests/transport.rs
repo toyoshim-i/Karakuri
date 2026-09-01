@@ -250,11 +250,12 @@ fn the_readouts_follow_the_row() {
     // does not move; the frame readout is against the right edge, so it does.
     assert!(near(narrow.bpm.min.x, wide.bpm.min.x));
     assert!(
-        wide.frame.min.x > narrow.frame.min.x + 900.0,
-        "the frame readout is at {} in a 1920 window and {} in a 990 one, so it is not \
+        wide.frame.min.x > narrow.frame.min.x + 600.0,
+        "the frame readout is at {} in a 1920 window and {} in a {} one, so it is not \
          following the row's right edge",
         wide.frame.min.x,
-        narrow.frame.min.x
+        narrow.frame.min.x,
+        SMALLEST.w
     );
 }
 

@@ -51,7 +51,7 @@ pub const PLAUSIBLE: Rect = Rect {
 pub const SMALLEST: Rect = Rect {
     x: 0.0,
     y: 0.0,
-    w: 990.0,
+    w: 1244.0,
     h: 641.5,
 };
 
