@@ -2636,6 +2636,28 @@ split says how that column is reached and in what order. M5 closes when M5.1 to 
 two sections at the end of this list — the rows with no home and the console's own shape — close
 with them.
 
+##### Every bay ends by rewriting its own prose as tooltips
+
+**The last item of M5.1 to M5.9 is the same job**: the notes about that bay in
+[the console page](manual/console.html), condensed into the `data-tip` of the controls the mock
+draws. The reasons are the same for all nine and are written here once rather than in each.
+
+**The same prose is in three places.** This file, [the console page](manual/console.html) and
+[every operation](manual/operations.html) explain the same controls. Duplication produces gaps and
+contradictions.
+
+**The console page's layout does not work.** Some of its sections are long and the columns are
+sparse, and the mock is far from the text that explains it, so the two are read separately or not at
+all.
+
+**Nobody reads a large manual.** A short dialog beside the control has to explain the whole of it,
+which is what a tooltip is for, and the console page's prose is the material for it. The page
+already says what one has to carry: what the control is, what state it is in, what a click will do,
+and its MIDI assignment (*Every icon explains itself*).
+
+**Doing this at the end of each bay means M5.11 starts with its specification already written.** The
+hover-tooltip sub-milestone is then the pointer decision and the drawing, and not the text.
+
 ##### What the *Adds* list and the estimate carried that no sub-milestone owns
 
 Four things. Each is real work and none of it closes a badge, so no exit condition above measures
@@ -2685,6 +2707,15 @@ M5.9.
 **Blocked on.** Nothing. The picture, the four preview cells, the deck selection and its MCP pill
 are drawn and each reaches something. What is left is two key bindings.
 
+**The bay's prose, as tooltips.** Two notes. *Program, sized by height* is the height drag and the
+letterbox, the picture being the `program view` sink and on screen exactly when that sink is on, and
+why the picture carries no label of its own. *What a model is refused, and where a class opens* is
+the `mcp` pill: what a shut class refuses, that the call is answered rather than hidden, and that
+the pill says the word and is drawn armed. The mock tips `solo`, `mcp · shut` and `previews 2 of 4`
+already; the size pill, the picture and the four preview cells carry none. That second note also
+covers the pills in the Mixer's, the Master's and the Outputs' heads, so it is written here once and
+the other three bays take it as it stands.
+
 #### M5.2 — Mixer
 
 **Rows.** From the table: *Choose the wipe shape, the quantum, the length*, *Fade a deck out or in*,
@@ -2709,6 +2740,14 @@ condition. It is the mixer's under-draw, named in
 [ADR-0206](adr/0206-a-fader-marks-where-it-is-going-and-keeps-reaching-for-it.md), and whatever
 surface gives the mask's front a position closes it.
 
+**The bay's prose, as tooltips.** Two notes and half of a third. *Mixer* is the four strips, the
+paged list whose length is a number, the residency chip that rolls toward what was asked for and
+never lands, and the three things a fader with a fade scheduled on it says. *The mixer has no
+crossfader* is why `x` stays a key. And the selection half of *Two focuses, and they do not look
+alike* says why the strip is the one thing in the bay with no capsule of its own to press. The mock
+tips the three tallies, the two blend chips and the priming fader; the trims, the meters and the
+whole transition row carry none, and that row is where the crossfader note has to land.
+
 #### M5.3 — Library
 
 **Rows.** From the table: *List what the store holds*, *Read what one Set holds and declares*, *Load
@@ -2732,6 +2771,14 @@ exit condition.
 The scope row is done and the mock puts one shape over it: the list already carries **presets**
 beside favourites and a folder, and says the scope list is itself extensible.
 
+**The bay's prose, as tooltips.** The library half of *Library, and staging under it*, and five
+notes under it: *A folder scope reads Sets, and a bundle is not a third thing*, *What keeps a
+favourite, and where it does not travel*, *Where the presets come from, and why it is told rather
+than found*, *A Set has two forms, and loading one is packaging it*, and *How a Set reaches a deck*.
+*Every deck runs from its own copy* is here too, because a library load is what writes into
+`<store>/scratch/`. The mock tips four of the five scope chips, two stars and the `load → A` pill;
+`my sets`, the path, the two filters and the rows carry none.
+
 #### M5.4 — Transport
 
 **Rows.** From the table: *Tap the beat*, *Halve or double the grid*, *Nudge the latency offset*,
@@ -2749,6 +2796,14 @@ One thing to know before drawing the first two. *Tap the beat* and *Halve or dou
 `karakuri_environment::audio` directly rather than going through `written`, because `written(TapBeat)`
 and `written(ScaleGrid)` both answer `Owed(NotSettled)`. That is a gap in `karakuri-operation-record`
 and not in the panel, and it does not stop either control.
+
+**The bay's prose, as tooltips.** Six notes: *The beat moves, always*, *The octave is a person's,
+and only one half of it is ever live*, *Health, in the transport*, *The latency offset, and which
+offset it is*, *The arrangement is a file, and the reset is one of them*, and *The look is two
+controls, and they sit where a frame leaves* — the tone map and the exposure track, drawn in this
+row and belonging to the master chain. This is the bay the mock has already tipped: every control
+here but `tap` and the tempo figure carries a `data-tip`. The item is those two, and reading the six
+notes against what the tips already say.
 
 #### M5.5 — Inspector
 
@@ -2784,6 +2839,14 @@ which is otherwise done — two of the three sync modes are conditional rather t
 the chip has to be able to say, and a one-off scrub shows a price rather than a disabled control
 ("8 bars back — 340 ms").
 
+**The bay's prose, as tooltips.** Eight notes: *Inspector*, *A control that names no one node*,
+*The deck head, and why it is in the inspector*, *Who is holding a control*, *A knob is bound to a
+deck, not to a Set*, *Two focuses, and they do not look alike*, *Authority is per node*, and *The
+camera is a node, and it is the one with nothing to turn*. Only the focus half of *Two focuses* is
+this bay's; the selection half is the mixer's, above. This is the largest body of prose on the page
+and the bay the mock has tipped most: the deck head, the wildcard group, the authority chips, the
+renderer row and *take back* each carry one, and the parameter rows and their faders do not.
+
 #### M5.6 — Outputs
 
 **Rows.** From the table, one: *Choose where the frame goes*.
@@ -2800,6 +2863,12 @@ the switchable list, which is the blocked part.
 **Also here.** A second `Sink`, which the estimate excluded from its range. The fan-out is built
 ([ADR-0171](adr/0171-the-deck-advances-and-each-sink-either-gets-the-frame-or-misses-it.md)) and
 nothing has been written to put in the slice. A projector window is the one this repository owns.
+
+**The bay's prose, as tooltips.** One note, *Outputs*: every place a frame goes as one switchable
+list, which sinks live in this repository and which appear only with a plugin, that the Program
+picture is the first row of the list, and that all of them may be off. The mock tips the four sinks
+and the `mcp` pill, and `+ add output` carries none. One short note is all the prose this bay has,
+so this is the smallest of the nine items.
 
 #### M5.7 — Staging
 
@@ -2820,6 +2889,12 @@ to read — `karakuri_environment::history` is `record`, `seed` and `stamped_id`
 producer it was gated on is wired. What the lane still omits is the node address, `origin`, the
 timestamp and the head's count, each named at the code and none of them a row on the page.
 
+**The bay's prose, as tooltips.** The staging half of *Library, and staging under it* — a candidate
+waits whether it came from you or from an agent, and a rejected one costs nothing — and *The staging
+lane, and the sense in which a candidate waits*, which is the longest note on the page and is where
+the absence of a *regenerate* is argued. The mock draws the lane with no `data-tip` anywhere in it,
+so every tip in this bay is written from nothing.
+
 #### M5.8 — Master
 
 **Rows.** From the table, three: *Feedback*, *Bloom*, *RGB shift*.
@@ -2836,6 +2911,12 @@ are has never been named.
 
 The bay is an `out` fader and a head. The fader is built end to end, and the chain the bay is named
 for is these three rows.
+
+**The bay's prose, as tooltips.** One note, *Master, and the two levels that are not one level*:
+what `out` is the level of, what the tone mapper's `exposure` is the level of, that the chain
+between them is what makes them two, and that with nothing in that chain they are today the same
+number. The mock tips the `out` fader and the `mcp` pill. The three chain rows carry none, and they
+are the rows this bay is blocked on drawing.
 
 #### M5.9 — Sequencer
 
@@ -2856,6 +2937,13 @@ not the machinery. The bay draws nothing but its head.
 This is the estimate's excluded item — the sequencer's producer — and it is why this bay is last
 rather than because of its weight on the page.
 
+**The bay's prose, as tooltips.** One note, *Sequencer*: a row per lane under the mixer strip it
+drives, a lane as a fifth route into the vocabulary rather than a binding, and the step grid as the
+beat clock subdivided rather than a fourth clock. The mock tips the four lane labels and nothing
+else — the pattern pills, the step controls, the ruler and the cells carry none. This is the thinnest
+prose of the nine against the most undrawn bay, so most of what this bay ends up drawing has no note
+behind it yet, and writing its tip is where that is found.
+
 #### M5.10 — MCP
 
 **Rows.** The MCP column of every row, which M5.1 to M5.9 leave out. Seven of the page's rows have
@@ -2875,8 +2963,9 @@ exit condition is not a grep.
 
 **What it is.** Every compact control explains itself on hover. The console draws no tooltip
 anywhere and has not half-drawn one: a tooltip needs `egui` to own a widget, and this console
-paints. The four mixer controls that carry a `data-tip` in the mock get none, and neither does the
-Outputs row.
+paints. The text is not what is missing. The mock carries about sixty-three `data-tip` attributes
+already, and M5.1 to M5.9 each end by rewriting their bay's prose into more of them, so this
+sub-milestone starts with its specification written and owes only the drawing.
 
 **Blocked on.** A decision rather than work: who owns the pointer — whether the panel gains `egui`
 widgets, or paints its own hover layer.
