@@ -4,13 +4,27 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Every Operation</title>
-<meta name="description" content="Every operation Karakuri can perform, and which of the four surfaces reaches it.">
+<meta name="description" content="Every operation Karakuri can perform, and which of the five surfaces reaches it.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=M+PLUS+1+Code:wght@400;500;700&family=M+PLUS+Rounded+1c:wght@400;500;700;800&display=swap">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+
+<!--
+  The shape of a row, and why it is this shape.
+
+  Six things read this page: karakuri-operation/tests/the_manual_and_the_vocabulary_agree.rs,
+  karakuri-console/tests/panel_column.rs and tests/vocabulary.rs, the test
+  modules in crates/karakuri/src/main.rs and karakuri-environment/src/mcp.rs,
+  and the commands under *The meter is one column* in docs/roadmap.md. All of
+  them find a row by the op-head div and read its title out of a bare h3
+  element, so both are left exactly as they were, spelled the way they always
+  were. The tip hangs on the op-name cell around them rather than on either,
+  and the CLI cell of a row with no flag is an empty rt-none span, which is
+  not a badge and is counted as none.
+-->
 
 <div class="topbar">
   <div class="topbar-in">
@@ -32,9 +46,9 @@
     <p class="lede">
       The first rule says every operation is reachable from the panel, from the
       keyboard alone, from a mapped MIDI control, and from a model over MCP.
-      This page is that rule written out one operation at a time &mdash; which
-      makes it two things at once: what the instrument can do, and where it does
-      not yet hold.
+      Every operation is a row, every surface is a column, and the badge says
+      whether that surface reaches it. Hover or focus an operation's name for
+      what it does.
     </p>
   </header>
 
@@ -45,228 +59,87 @@
       <span><i class="plan"></i> designed &mdash; this surface is meant to reach it and does not yet</span>
       <span><i class="gap"></i> nothing &mdash; this surface cannot reach it at all</span>
     </div>
-    <p>
-      <strong>The <em>key</em> column is the instrument's keyboard</strong>
-      &mdash; the keys <code>cargo run -p karakuri</code> binds, and no other
-      program's. Two programs in this repository have a keyboard and they are
-      not the same keyboard: the instrument binds twenty-four keys,
-      <code>karakuri-cli</code> binds thirty-nine, and seven letters mean one
-      thing at the panel and something else at the command line. Ten keys
-      agree, and they arrived in three groups of one reason each: <code>esc</code>
-      quits on both and <code>0</code> to <code>3</code> select a deck on both,
-      because a deck is a slot number and there was nothing to translate;
-      <code>b</code>, <code>,</code> and <code>.</code> tap the beat and move
-      the grid an octave on both, because those three address the beat tracker
-      and there is one of it; and <code>o</code> and <code>p</code> nudge the
-      latency offset on both, because that is one room's two outputs and the
-      same five milliseconds a press whichever keyboard asks. <strong>The last
-      pair is the only one that arrived by a letter being taken back</strong>
-      &mdash; <code>p</code> was the panel's report until this page's own
-      question was answered, below. So a
-      <em>built</em> key badge names a key an
-      operator at the panel can press today, for the same reason a
-      <em>built</em> panel badge names a control they can reach: both columns
-      are about the one program a player launches, and a badge that mixed the
-      two would tell a reader to press a letter that does something else in
-      front of them. A <em>designed</em> key badge names the key this page has
-      specified &mdash; <a href="console.html">the console</a> defers to it,
-      because which keys exist is this page's to say &mdash; and the instrument
-      does not bind it yet. The command line's own keyboard is printed by
-      <code>cargo run -p karakuri-cli -- --help</code>, which is derived from
-      its key handler and checked against it; it is not this column, and a
-      second copy of it here would be a list that goes stale.
-    </p>
-    <p>
-      <strong>64 operations, and 62 of the 272 ways in exist.</strong> Eight of
-      them are the console's own shape &mdash; moving a boundary, folding a bay
-      or a pane, bringing one back, solo, and the three that reset, keep and put
-      back an arrangement &mdash; and ten of their thirty-two routes exist: the
-      drag, a key on each of five, the transport row's arrangement pill on
-      three, and the Program bay head's <em>solo</em>. <strong>Every row of that section has a route now</strong>, and the
-      two that carry a name were the last: a key press cannot type one, so
-      keeping an arrangement and putting one back waited on a control that
-      could, and the pill is it. Resetting is the default case of those two and
-      is reached from both &mdash; <code>r</code>, and <em>start a new one</em>
-      on the same pill.
-      <strong>Sixteen <em>key</em> badges are designed rather than built, and
-      every one of them is a key the command line binds today.</strong> The
-      column is the instrument's keyboard and the instrument binds twenty-four keys,
-      so the sixteen are what the command line reaches and the panel does not; the
-      letters stay because this page is where a key is specified, and six of
-      them are already spoken for at the panel &mdash; <code>f</code> and
-      <code>g</code> fold, <code>z</code> brings back what is folded,
-      <code>u</code> unsolos, <code>r</code> resets and <code>n</code> changes
-      its colours. Whether the
-      instrument takes those letters or the command line gives them up is a
-      decision nobody has made, and it is a change to this specification rather
-      than a note on it.
-      <strong>One of them was holding a row back rather than merely noted, and
-      that is the one decision of the seven that has been taken.</strong>
-      <em>Nudge the latency offset</em> is specified as <code>o</code> and
-      <code>p</code>; the instrument opened an audio input and reached the two
-      rows beside it &mdash; <em>Tap the beat</em> on <code>b</code>,
-      <em>Halve or double the grid</em> on <code>,</code> and <code>.</code>
-      &mdash; and left this one alone, because <code>p</code> was the panel's
-      report and a badge naming two keys with one of them bound would be a badge
-      that lies. Of the three changes that could move it &mdash; take
-      <code>p</code>, move the report to another letter, or specify a different
-      pair &mdash; the first was made: <strong>the instrument takes both
-      letters and the report keeps no key at all</strong>, because a panel
-      diagnostic asked what shortcut it needed had no answer worth a letter of
-      a specified pair. The operation is still there and
-      <a href="console.html">the console</a> still performs it; nothing on
-      either keyboard asks for it, and this page never named it, which is the
-      whole reason it was the cheaper of the two to move.
-      <strong>The twentieth was <code>e</code>, and the panel binds
-      it now</strong> &mdash; the library's scope row was specified here before either keyboard
-      had it, which is the order everything else on this page arrived in, and it is the one
-      built key badge in this column that no command line reaches. <strong>Nineteen <em>panel</em> routes are
-      marked built</strong>, and they are the whole of that column: the Mixer
-      bay's six &mdash; the strip trim, the strip fader, the strip button, the
-      tally chip, the strip mask mini and the strip itself, which is where a
-      deck is selected &mdash; every divider on the panel,
-      which drags; the transport row's tone map capsule, its exposure track,
-      the arrangement pill's three rows and the <em>audio&#8209;in</em> pill,
-      whose card lists this machine's inputs and opens the one you pick; the
-      deck head's sync chip and its
-      scrub; the Master bay's out; and the Program bay's two &mdash; the
-      <em>solo</em> pill in its head, and the four deck preview cells under the
-      picture, which are one row however many cells name it; and the Library
-      bay's scope row, whose chips say which library is being read. The Mixer's first five already emitted
-      these operations while the console was an example; what changed is that
-      <code>cargo run -p karakuri</code> puts them in front of a player, which is
-      what a <em>panel</em> badge claims and what no program did until it existed.
-      The sixth is the newest and is not a control at all but the strip's own
-      body: a press anywhere on it that no knob claimed selects that deck, which
-      is the one route this bay had for a value nothing on the panel kept.
-      The one that is not a control is the console's own shape: a press on a gap
-      takes the boundary in hand, and the moves and the release after it are the
-      panel's rather than the interface's over it. <strong>The Outputs dot is drawn and
-      pressable and its badge stays designed</strong>, which is a distinction
-      this page owes rather than an oversight: the dot folds the program view
-      away and brings it back, and this row names choosing where the frame goes
-      across a switchable list of sinks. One entry of that list is not the list,
-      so the control performs part of what the row names and the badge would be
-      an over-claim.
-      <strong>The Program bay's two are the first controls outside a bay's own
-      body</strong>, and they are the two halves of what that bay is: the pill
-      is the console's own shape, reached from a capsule rather than from the
-      pointer, and a cell is what the output is showing. Neither clears every
-      boundary's grab, which nothing on this panel had failed to do before &mdash;
-      the pill sits 5.25 into a 27-tall bay head whose top edge is the body
-      row's, and a cell's top edge is its region's &mdash; so a boundary keeps
-      the sliver of each that falls inside its band, deterministically and with
-      nothing ambiguous about it, and the rest is the control's. That is the
-      geometry <a href="console.html">the console</a> draws meeting the grab the
-      panel needs, and it is written here because moving either of them is a
-      change to this specification.
-      Beyond those nineteen, 41 more are designed and out of reach, most of them in
-      bays nothing draws yet, and four the panel cannot reach at all. Where a badge names a
-      region, that is where the control lives in
-      <a href="console.html">the console</a>; three name none yet, and naming one
-      is a change to this specification rather than a note on it.
-      <strong>Three of them are named here for the first time</strong>: the
-      arrangement family &mdash; reset it, save it, put one back &mdash; lives in
-      the <em>transport</em> row, beside the pill that names the MIDI map in use.
-      That pill is already the shape this family needs and the reason the row is
-      the right one: a named file, with <em>save</em>, <em>load</em> and
-      <em>start a new one</em> under a single control, and <em>a new one</em> is
-      exactly what the reset is. <strong>All three are built now, and the order
-      they were built in is the order this repository works in</strong>: these
-      badges specified a control that did not exist, the page that owns the
-      console's words drew it next, and the panel was built to that. Nothing was
-      designed at the keyboard.
-      <strong>The Master bay's <em>out</em> is the fourteenth and it arrived by
-      the same order read from the other end</strong>: the console page has
-      drawn that fader since before anything could move it, the engine gained
-      the level and the one multiply next
-      (<a href="console.html">the console</a>'s <em>Master, and the two levels
-      that are not one level</em>), and this row is the last of the three
-      rather than the first. Its other three columns are empty and that is the
-      state rather than an omission &mdash; no key is bound to it, no map target
-      names it and no tool publishes it.
-      <strong>Eight rows are new and nothing reaches any of them yet</strong>:
-      the master chain's three effects, and the five things an operator does to
-      a pattern. They are the two bays <a href="console.html">the console</a>
-      draws and this page named no operation for at all, which is the one way a
-      bay can be missing from a count of badges &mdash; a bay with no rows
-      cannot have a <em>designed</em> one, so it read as finished by not being
-      asked. Each names where its control lives and carries nothing in the
-      other three columns, and what they wait on is not the same thing:
-      <em>Feedback</em> waits on which cut of the previous frame it reads, the
-      sequencer's five on a pattern, which nothing in this program holds, and
-      the other two effects on the chain that would run them.
-      The counts
-      here are read off the code rather than estimated, and they are what the
-      Interface milestone is for.
-    </p>
-    <p>
-      A <strong>launch</strong> badge means the only way in is a flag, before
-      the run, and nothing can change it afterwards. <strong>On the grid</strong>
-      means the change is scheduled and lands on a musical instant rather than
-      when you asked for it.
-    </p>
+    <div class="whens">
+      <span><b class="op-when">immediate</b> it lands when you ask for it</span>
+      <span><b class="op-when grid">grid</b> it is scheduled and lands on a musical instant</span>
+      <span><b class="op-when launch">launch</b> the only way in is a flag, before the run</span>
+      <span><b class="op-when">on a worker</b> it is built off the render thread and lands when it is ready</span>
+    </div>
   </section>
 
   <section>
     <h2>Transport and tempo</h2>
-    <p class="lede">The beat grid everything else is scheduled against.</p>
     <div class="opgroup">
       <div class="op">
-        <div class="op-head"><h3>Tap the beat</h3><span class="op-when ">immediate</span></div>
-        <p>Three taps or more set the tempo; any tap sets the phase. Refused without an audio input
-          attached &mdash; and the refusal says where to open one rather than doing nothing, because
-          a key that declines and a key that is not bound are the same experience.</p>
+        <div class="op-name" tabindex="0" data-tip="Three taps or more set the tempo; any tap sets the phase. Refused without an audio input attached, and the refusal says where to open one rather than doing nothing, because a key that declines and a key that is not bound are the same experience.">
+          <div class="op-head"><h3>Tap the beat</h3></div>
+        </div>
+        <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt plan">panel <b>tap</b></span>
           <span class="rt has">key <b>b</b></span>
           <span class="rt has">MIDI <b>note &rarr; tap</b></span>
           <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Halve or double the grid</h3><span class="op-when ">immediate</span></div>
-        <p>Moves the tracker's octave window with it, and is refused if it would leave the trackable range.</p>
+        <div class="op-name" tabindex="0" data-tip="Moves the tracker's octave window with it, and is refused if it would leave the trackable range.">
+          <div class="op-head"><h3>Halve or double the grid</h3></div>
+        </div>
+        <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt plan">panel <b>&frac12; &times;2</b></span>
           <span class="rt has">key <b>, .</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Nudge the latency offset</h3><span class="op-when ">immediate</span></div>
-        <p>Five milliseconds a press, for the delay between what a room hears and what it sees. <code>o</code> steps it down and <code>p</code> steps it up, on both keyboards, and the value is held inside 200&nbsp;ms either way. <strong>It means nothing without an input attached</strong> &mdash; the offset is a term in the lead a beat correction is applied with, so with no room being listened to both keys say so and change nothing, and the <em>audio&#8209;in</em> pill beside it is what says whether there is one. The <em>panel</em> badge stays designed because the pill that would set it outright is not drawn; what exists is the pair of keys.</p>
+        <div class="op-name" tabindex="0" data-tip="Five milliseconds a press, for the delay between what a room hears and what it sees; o steps it down and p steps it up, held inside 200 ms either way. It means nothing without an input attached &mdash; the offset is a term in the lead a beat correction is applied with, and the audio-in pill beside it says whether there is one. The panel badge stays designed because the pill that would set it outright is not drawn.">
+          <div class="op-head"><h3>Nudge the latency offset</h3></div>
+        </div>
+        <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt plan">panel <b>offset</b></span>
           <span class="rt has">key <b>o p</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Set a deck's sync mode</h3><span class="op-when ">immediate</span></div>
-        <p>Free, tempo-synced, or beat-synced &mdash; and a mode a deck's material cannot honour is skipped with a reason. <strong>Naming the mode a deck is already in re-anchors it</strong> at the session tempo, which is what an operator wants after the room has drifted &mdash; so every route that can name a mode outright gets re-anchoring for nothing: a pad, an MCP call, a press on the anchor itself. A control that can only cycle cannot offer it, because a cycle asks for the <em>next</em> mode and never for the one it is standing on.</p>
+        <div class="op-name" tabindex="0" data-tip="Free, tempo-synced or beat-synced, and a mode a deck's material cannot honour is skipped with a reason. Naming the mode a deck is already in re-anchors it at the session tempo, so every route that can name a mode outright gets re-anchoring for nothing. A control that can only cycle cannot offer it: a cycle asks for the next mode and never for the one it is standing on.">
+          <div class="op-head"><h3>Set a deck's sync mode</h3></div>
+        </div>
+        <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt has">panel <b>deck head</b></span>
           <span class="rt plan">key <b>y</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Scrub a deck a quarter beat</h3><span class="op-when ">immediate</span></div>
-        <p>Only where the deck is beat-synced: closed-form material can be moved to a position, accumulating material cannot.</p>
+        <div class="op-name" tabindex="0" data-tip="Only where the deck is beat-synced: closed-form material can be moved to a position, accumulating material cannot.">
+          <div class="op-head"><h3>Scrub a deck a quarter beat</h3></div>
+        </div>
+        <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt has">panel <b>deck head</b></span>
           <span class="rt plan">key <b>u i</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Set the free-run tempo</h3><span class="op-when launch">launch</span></div>
-        <p>What the grid runs at with nothing driving it.</p>
+        <div class="op-name" tabindex="0" data-tip="What the grid runs at with nothing driving it.">
+          <div class="op-head"><h3>Set the free-run tempo</h3></div>
+        </div>
+        <span class="op-when launch">launch</span>
         <div class="rts">
           <span class="rt plan">panel <b>transport</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
@@ -276,15 +149,10 @@
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Attach a beat source</h3><span class="op-when ">immediate</span></div>
-        <p>An audio input to track, or an external process to follow. Four keys are refused without one.
-          <strong>The audio half stopped being launch-only when the panel got a control for
-          it</strong>: the transport row's <em>audio&#8209;in</em> pill lists the inputs the machine
-          has and opens the one you pick, read at the press rather than at startup &mdash; so an
-          interface plugged in during a set is attached during that set, and one that has gone in
-          the meantime is refused out loud with the list as it is then. <strong>A process is still a
-          flag before the run</strong>: nothing on the panel starts one, and there is no list to
-          offer of processes that do not exist yet.</p>
+        <div class="op-name" tabindex="0" data-tip="An audio input to track, or an external process to follow. Four keys are refused without one. The transport row's audio-in pill lists the inputs the machine has and opens the one you pick, read at the press rather than at startup, so an interface plugged in during a set is attached during that set. A process is still a flag before the run: nothing on the panel starts one.">
+          <div class="op-head"><h3>Attach a beat source</h3></div>
+        </div>
+        <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt has">panel <b>transport</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
@@ -298,31 +166,38 @@
 
   <section>
     <h2>Decks</h2>
-    <p class="lede">What is resident, what is on air, and what material is in each.</p>
     <div class="opgroup">
       <div class="op">
-        <div class="op-head"><h3>Select a deck</h3><span class="op-when ">immediate</span></div>
-        <p>Which deck the keys are addressed to. A console pointer &mdash; it writes no record, and it is not the same as keyboard focus. The panel draws it as the solid ring round a mixer strip, and the one other control that names a deck without being pointed at one reads it: the <em>load</em> pill's letter is this selection. The four keys are the command line's four, which is the one thing the two keyboards agree on besides <code>esc</code> &mdash; a deck is a slot number, so nothing had to be translated for the panel to mean what the shell already meant.</p>
+        <div class="op-name" tabindex="0" data-tip="Which deck the keys are addressed to. A console pointer &mdash; it writes no record, and it is not keyboard focus. The panel draws it as the solid ring round a mixer strip, and the load pill's letter reads it. The four keys are the command line's four, because a deck is a slot number and nothing had to be translated.">
+          <div class="op-head"><h3>Select a deck</h3></div>
+        </div>
+        <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt has">panel <b>click a strip</b></span>
           <span class="rt has">key <b>0 1 2 3</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Put a deck on air, prime it, or take it off</h3><span class="op-when ">immediate; priming is a request</span></div>
-        <p>Three states, not two switches: <b>live</b> is stepped and composited, <b>priming</b> is stepped out of sight and adds nothing to the mix, <b>allocated</b> is held &mdash; compiled, buffers kept, its <i>t</i> where it stopped, so a deck taken off and brought back resumes rather than restarts. Live is honoured: nothing demotes a deck that is on air. Priming is a request the governor reconsiders every pass, and a deck asked to prime with no room is <b>parked</b> &mdash; the request stands and takes effect when there is room, so what the console shows is the residency the deck reports, not the one it was asked for. MIDI names the deck <em>and the state</em>, so it needs no selection and no notion of which way to flip &mdash; a pad per state, and a key acts on the selected deck.</p>
+        <div class="op-name" tabindex="0" data-tip="Three states, not two switches: live is stepped and composited, priming is stepped out of sight and adds nothing to the mix, allocated is held &mdash; so a deck taken off and brought back resumes rather than restarts. Priming is a request the governor reconsiders every pass, and a deck asked to prime with no room is parked until there is. MIDI names the deck and the state; a key acts on the selected deck.">
+          <div class="op-head"><h3>Put a deck on air, prime it, or take it off</h3></div>
+        </div>
+        <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt has">panel <b>tally chip</b></span>
           <span class="rt plan">key <b>space, w</b></span>
           <span class="rt has">MIDI <b>note &rarr; residency N live|priming|allocated</b></span>
           <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Load material into a deck</h3><span class="op-when ">on a worker</span></div>
-        <p><strong>A load re-points the slot's source; it does not hand a built Set to a slot.</strong> That was the whole of what this row was blocked on, and it was smaller than it read: <code>Deck::install</code> is still the one function that puts a Set in a slot and is still deliberately unreachable from a key or a surface, because a live run changes its material by letting the worker build it &mdash; which is what the budget watchdog is attached to. So <code>l</code> writes the library Set's procedures out where the slot's watcher is already looking, and everything after that is the path an edit already takes: polled, compiled off the render thread, swapped at a frame boundary, judged for thirty frames against the budget, and rolled back on its own if it costs too much. A Set that cannot hold the frame does not take the room down with it, and the staging lane says so on the deck it landed on. <strong>The two operands are on screen before the press</strong>: the cursor in the library says which Set, the deck selection says which deck, and the pill in the library's foot reads <code>load &rarr; A</code> so the letter warns you where it lands. The panel badge is the drag from a row onto a strip &mdash; a second route to the same command, naming both operands in one gesture &mdash; and it is not drawn. <strong>MIDI is empty for a reason of its own</strong>: every target a map can name carries a slot, a range or a word from a closed list, and a Set id is none of the three.</p>
+        <div class="op-name" tabindex="0" data-tip="A load re-points the slot's source; it does not hand a built Set to a slot. The key writes the library Set's procedures where the slot's watcher is already looking, so it takes the path an edit takes: built off the render thread, swapped at a frame boundary, and rolled back on its own if it costs too much. Both operands are on screen before the press. MIDI is empty because a Set id is not a slot, a range or a word from a closed list.">
+          <div class="op-head"><h3>Load material into a deck</h3></div>
+        </div>
+        <span class="op-when">on a worker</span>
         <div class="rts">
           <span class="rt plan">panel <b>library &rarr; deck</b></span>
           <span class="rt has">key <b>l</b></span>
@@ -332,8 +207,10 @@
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Composite a deck's renderers</h3><span class="op-when launch">launch</span></div>
-        <p>Rather than overdrawing them. The flag can only turn it on; a saved Set brings its own answer.</p>
+        <div class="op-name" tabindex="0" data-tip="Rather than overdrawing them. The flag can only turn it on; a saved Set brings its own answer.">
+          <div class="op-head"><h3>Composite a deck's renderers</h3></div>
+        </div>
+        <span class="op-when launch">launch</span>
         <div class="rts">
           <span class="rt plan">panel <b>deck head</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
@@ -347,197 +224,207 @@
 
   <section>
     <h2>Mixing</h2>
-    <p class="lede">How much of each deck reaches the screen, and how the change lands.</p>
     <div class="opgroup">
       <div class="op">
-        <div class="op-head"><h3>Gain</h3><span class="op-when ">immediate</span></div>
-        <p>The trim: the level material arrives at, colour only. A key steps it; a MIDI control sets it outright.</p>
+        <div class="op-name" tabindex="0" data-tip="The trim: the level material arrives at, colour only. A key steps it; a MIDI control sets it outright.">
+          <div class="op-head"><h3>Gain</h3></div>
+        </div>
+        <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt has">panel <b>strip trim</b></span>
           <span class="rt plan">key <b>[ ] \\</b></span>
           <span class="rt has">MIDI <b>cc &rarr; gain N</b></span>
           <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Opacity</h3><span class="op-when ">immediate</span></div>
-        <p>The fader across the blend, and the only one of the two that touches what a layer covers.</p>
+        <div class="op-name" tabindex="0" data-tip="The fader across the blend, and the only one of the two that touches what a layer covers.">
+          <div class="op-head"><h3>Opacity</h3></div>
+        </div>
+        <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt has">panel <b>strip fader</b></span>
           <span class="rt plan">key <b>; '</b></span>
           <span class="rt has">MIDI <b>cc &rarr; opacity N</b></span>
           <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Blend mode</h3><span class="op-when ">immediate</span></div>
-        <p>How a deck meets the ones under it in the fold. The key cycles the three; a map names the one it wants, which is why a pad is per mode rather than per deck.</p>
+        <div class="op-name" tabindex="0" data-tip="How a deck meets the ones under it in the fold. The key cycles the three; a map names the one it wants, which is why a pad is per mode rather than per deck.">
+          <div class="op-head"><h3>Blend mode</h3></div>
+        </div>
+        <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt has">panel <b>strip button</b></span>
           <span class="rt plan">key <b>m</b></span>
           <span class="rt has">MIDI <b>note &rarr; blend N add|over|max</b></span>
           <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Fade a deck out or in</h3><span class="op-when grid">on the grid</span></div>
-        <p>Starts at the current quantum and lasts the current length. Opacity only &mdash; a gain fade exists in the record vocabulary and has no control.</p>
+        <div class="op-name" tabindex="0" data-tip="Starts at the current quantum and lasts the current length. Opacity only &mdash; a gain fade exists in the record vocabulary and has no control.">
+          <div class="op-head"><h3>Fade a deck out or in</h3></div>
+        </div>
+        <span class="op-when grid">grid</span>
         <div class="rts">
           <span class="rt plan">panel <b>strip</b></span>
           <span class="rt plan">key <b>f g</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Crossfade to the next deck</h3><span class="op-when grid">on the grid</span></div>
-        <p>One gesture, four records: the incoming deck is silenced and put on air at once, and the two fades land on the grid. The mixer has no crossfader and is not getting one &mdash; <a href="console.html">the console</a> settles why &mdash; so this is asked for at the keyboard and nowhere else.</p>
+        <div class="op-name" tabindex="0" data-tip="One gesture, four records: the incoming deck is silenced and put on air at once, and the two fades land on the grid. The mixer has no crossfader and is not getting one, so this is asked for at the keyboard and nowhere else.">
+          <div class="op-head"><h3>Crossfade to the next deck</h3></div>
+        </div>
+        <span class="op-when grid">grid</span>
         <div class="rts">
           <span class="rt gap">panel <b>&mdash;</b></span>
           <span class="rt plan">key <b>x</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Wipe the next deck in</h3><span class="op-when grid">on the grid</span></div>
-        <p>Mask, opacity, blend and residency land immediately; the mask's travel is scheduled. Refused with no shape chosen.</p>
+        <div class="op-name" tabindex="0" data-tip="Mask, opacity, blend and residency land immediately; the mask's travel is scheduled. Refused with no shape chosen.">
+          <div class="op-head"><h3>Wipe the next deck in</h3></div>
+        </div>
+        <span class="op-when grid">grid</span>
         <div class="rts">
           <span class="rt plan">panel <b>transition row</b></span>
           <span class="rt plan">key <b>c</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Set a deck's mask shape</h3><span class="op-when ">immediate</span></div>
-        <p>What shape of the frame a deck's layer reaches &mdash; none, a straight front at an angle, or an iris &mdash; and it leaves the front where it is. Not the row <b>z</b> presses: that one chooses what the <em>next</em> wipe will be, where this one changes the mask a deck has now. A pad would name a shape the way it names a blend mode; the angle it could not name at all, because a map line has no way to write a bare number. <strong>The badge is empty on purpose rather than pending.</strong> Teaching the map a bare number would be teaching it the one kind of value it can check against nothing, and taking the angle off this row would hand it to a default. So this waits for a control that <em>shows</em> an angle, which is what would say what a map ought to write &mdash; and until then the front is the half of the mask a knob reaches.</p>
+        <div class="op-name" tabindex="0" data-tip="What shape of the frame a deck's layer reaches &mdash; none, a straight front at an angle, or an iris &mdash; and it leaves the front where it is. Not the row the transition settings press: that one chooses what the next wipe will be. The MIDI badge is empty on purpose rather than pending, because a map line cannot write a bare number: a pad could name the shape and never the angle, so this waits for a control that shows one.">
+          <div class="op-head"><h3>Set a deck's mask shape</h3></div>
+        </div>
+        <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt has">panel <b>strip mask mini</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Set a deck's mask position</h3><span class="op-when ">immediate</span></div>
-        <p>How far the front has travelled: 0 reveals nothing, 1 reveals everything. The number a wipe's scheduled move is writing, so a hand here stops the move &mdash; which is the whole reason the mask is two rows and not one, since a control change carries a position and can only set. Both ends of the fader are exact, because a wipe that has to finish depends on the top of the travel and a layer that has to disappear depends on the bottom.</p>
+        <div class="op-name" tabindex="0" data-tip="How far the front has travelled: 0 reveals nothing, 1 reveals everything. The number a wipe's scheduled move is writing, so a hand here stops the move &mdash; which is why the mask is two rows and not one, since a control change carries a position and can only set. Both ends of the fader are exact.">
+          <div class="op-head"><h3>Set a deck's mask position</h3></div>
+        </div>
+        <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt gap">panel <b>&mdash;</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
           <span class="rt has">MIDI <b>cc &rarr; mask-position N</b></span>
           <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Choose the wipe shape, the quantum, the length</h3><span class="op-when ">console setting</span></div>
-        <p>These change nothing you can see and write nothing to the stream. They decide what the <em>next</em> fade, crossfade or wipe means.</p>
+        <div class="op-name" tabindex="0" data-tip="These change nothing you can see and write nothing to the stream. They decide what the next fade, crossfade or wipe means.">
+          <div class="op-head"><h3>Choose the wipe shape, the quantum, the length</h3></div>
+        </div>
+        <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt plan">panel <b>transition row</b></span>
           <span class="rt plan">key <b>z n j</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Choose which renderer of a deck is live</h3><span class="op-when grid">on the grid</span></div>
-        <p>Only where the deck composites and holds two or more. One-way: no position in the cycle folds them all back in.</p>
+        <div class="op-name" tabindex="0" data-tip="Only where the deck composites and holds two or more. One-way: no position in the cycle folds them all back in.">
+          <div class="op-head"><h3>Choose which renderer of a deck is live</h3></div>
+        </div>
+        <span class="op-when grid">grid</span>
         <div class="rts">
           <span class="rt plan">panel <b>renderer chips</b></span>
           <span class="rt plan">key <b>r</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Choose what the output shows</h3><span class="op-when ">immediate</span></div>
-        <p>The mix, or one deck auditioned. MIDI can name a deck or the mix directly. <strong>The panel's control is the four deck preview cells</strong>, and a press on one names its own deck &mdash; except on the cell the output is already showing, which asks for the mix, because ending an audition is the other half of what this row can say and a cell is the only thing on the console naming a deck. The cell that is on the output wears its inset ring in the colour the Outputs dot lights in; the mix is no cell wearing it, exactly as the operation's own <code>None</code> is.</p>
+        <div class="op-name" tabindex="0" data-tip="The mix, or one deck auditioned. The panel's control is the four deck preview cells, and a press on one names its own deck &mdash; except on the cell the output is already showing, which asks for the mix, because ending an audition is the other half of what this row says. MIDI can name a deck or the mix directly.">
+          <div class="op-head"><h3>Choose what the output shows</h3></div>
+        </div>
+        <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt has">panel <b>preview</b></span>
           <span class="rt plan">key <b>v</b></span>
           <span class="rt has">MIDI <b>note &rarr; preview N|mix</b></span>
           <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Master out</h3><span class="op-when ">immediate</span></div>
-        <p>One level on the composited frame, at the entry to the master chain &mdash; the whole fold rather than one deck of it, which is why this is the row in the group that names no deck. <strong>It is not the exposure below it.</strong> That is a second level at the far end of the same chain, and what makes them two is where each multiplies: this one is applied where the mix writes the frame, the exposure where the present pass reads it, and feedback, bloom and rgb shift go between them. A frame effect reads what it is handed, so which side of it a level sits on is the picture &mdash; a feedback trail fed at half the level decays from half. <strong>With the chain empty they are indistinguishable in every frame this program can draw</strong>, and that cost was taken deliberately rather than met later: <a href="console.html">the console page</a>'s <em>Master, and the two levels that are not one level</em> is the argument. Unbounded above 1.0 and floored at zero, on the trim's terms &mdash; the pipeline is linear HDR and nothing has tone mapped it yet. Nothing can schedule a move on it: a transition is per deck and this is the deck's own output, so there is no fade for a hand on it to cancel.</p>
+        <div class="op-name" tabindex="0" data-tip="One level on the composited frame, at the entry to the master chain &mdash; the whole fold rather than one deck of it, which is why this row names no deck. It is not the exposure below it: that is a second level at the far end of the same chain, and what makes them two is where each multiplies. Unbounded above 1.0 and floored at zero. Nothing can schedule a move on it.">
+          <div class="op-head"><h3>Master out</h3></div>
+        </div>
+        <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt has">panel <b>master out</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Feedback</h3><span class="op-when ">immediate</span></div>
-        <p><strong>The chain is fixed, and that decides what these three rows are.</strong> The
-        master chain is presets, all of them loaded, in the order
-        <a href="console.html">the console</a> draws them &mdash; feedback, then bloom, then rgb
-        shift, between the <em>Master out</em> above and the <em>Exposure</em> below. Nothing here
-        edits the chain, switches one effect off or adds an effect somebody wrote: those are
-        controls the panel does not draw and decisions nobody has taken. What each of the three
-        names is <strong>the operator moving that effect's parameters</strong> &mdash; the figure
-        the bay draws beside its name &mdash; and a finer surface than that is not this
-        milestone's. Where a chain an operator has set up is <em>kept</em> is settled and is not a
-        row here: it is library data in two tiers, on the same shape as a saved arrangement, with
-        the presets shipping beside the material and the operator's own under the store. What such
-        a file <em>contains</em> cannot be written down while the chain does not exist, which is
-        why no row here lists a parameter.</p>
-        <p><strong>Feedback is the exception, and what it waits on is an answer rather than a
-        control.</strong> Reading the previous frame is a cycle, and <strong>the previous frame is
-        not one thing</strong>: it could be a Set's output, the raw frame the mix wrote before
-        anything downstream touched it, or the frame as it stands after some effect in this chain.
-        So a feedback procedure has to <em>name which cut it reads</em>, and nothing in the
-        vocabulary can say that. <strong>A cut that is read has to be held</strong>, which is a
-        frame-sized target and a copy per frame &mdash; and holding every cut against the chance
-        that something reads one is the cost nobody would pay, so what this points at is the
-        selection <strong>recomposing the pipeline</strong>: a cut nothing reads is not retained,
-        and naming one adds the retention to the graph the way an edge adds a pass. Nothing builds
-        a graph that way today. This row is here because the bay draws the effect, and it is the
-        one row in the group whose badge is empty for a question rather than for want of work.</p>
+        <div class="op-name" tabindex="0" data-tip="The chain is fixed: the master chain is presets, all of them loaded, in the order feedback, bloom, rgb shift, and what this row names is the operator moving that effect's parameters. Feedback waits on an answer rather than on a control &mdash; the previous frame is not one thing, so a procedure has to name which cut it reads, and nothing in the vocabulary can say that.">
+          <div class="op-head"><h3>Feedback</h3></div>
+        </div>
+        <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt plan">panel <b>master chain</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Bloom</h3><span class="op-when ">immediate</span></div>
-        <p>The frame's bright parts spreading into what is beside them, on the terms the
-        <em>Feedback</em> row states: a preset, always present, and what this row names is the
-        operator moving its parameters. <strong>It runs in linear HDR, before the one tone
-        map</strong>, and that is the whole reason it sits on this side of the transfer &mdash;
-        what it blooms from is unbounded light, where the same effect after the tone mapper would
-        bloom from a displayable approximation of it. It reads what it is handed, so the level it
-        blooms from is the <em>Master out</em>'s and not the exposure's, which is what makes those
-        two levels two.</p>
+        <div class="op-name" tabindex="0" data-tip="The frame's bright parts spreading into what is beside them, on the Feedback row's terms: a preset, always present, and what this row names is the operator moving its parameters. It runs in linear HDR, before the one tone map, so what it blooms from is unbounded light &mdash; and the level it blooms from is the master out's, not the exposure's.">
+          <div class="op-head"><h3>Bloom</h3></div>
+        </div>
+        <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt plan">panel <b>master chain</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>RGB shift</h3><span class="op-when ">immediate</span></div>
-        <p>The three channels sampled apart, so an edge fringes. On the <em>Feedback</em> row's
-        terms again, and it is the last of the three, so it is the one the other two are seen
-        through. <strong>The console draws its figure as a dash where the other two carry a
-        number, and that is an effect nobody has given a value rather than a fourth
-        state</strong>: the chain is every preset, always, so there is no per-effect switch here
-        for a dash to be the off position of.</p>
+        <div class="op-name" tabindex="0" data-tip="The three channels sampled apart, so an edge fringes. On the Feedback row's terms again, and the last of the three, so it is the one the other two are seen through. The console draws its figure as a dash: an effect nobody has given a value, not a fourth state, because there is no per-effect switch for a dash to be the off position of.">
+          <div class="op-head"><h3>RGB shift</h3></div>
+        </div>
+        <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt plan">panel <b>master chain</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Tone map</h3><span class="op-when ">immediate</span></div>
-        <p>The transfer from unbounded linear HDR to something displayable &mdash; clamp, Reinhard, ACES or AgX. The key cycles the four; a map or a model would name the one it wants.</p>
+        <div class="op-name" tabindex="0" data-tip="The transfer from unbounded linear HDR to something displayable &mdash; clamp, Reinhard, ACES or AgX. The key cycles the four; a map or a model would name the one it wants.">
+          <div class="op-head"><h3>Tone map</h3></div>
+        </div>
+        <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt has">panel <b>transport</b></span>
           <span class="rt plan">key <b>t</b></span>
@@ -547,8 +434,10 @@
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Exposure</h3><span class="op-when ">immediate</span></div>
-        <p>The level going into that transfer. A key steps it in stops and returns it to 1.0; a MIDI control sets it outright. The record it lands in names the operator beside it, and whoever writes that record fills the operator in from the look that is running &mdash; a control turning exposure alone does not have to know one.</p>
+        <div class="op-name" tabindex="0" data-tip="The level going into that transfer. A key steps it in stops and returns it to 1.0; a MIDI control sets it outright. The record it lands in names the operator beside it, filled in from the look that is running.">
+          <div class="op-head"><h3>Exposure</h3></div>
+        </div>
+        <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt has">panel <b>transport</b></span>
           <span class="rt plan">key <b>- = `</b></span>
@@ -562,107 +451,70 @@
 
   <section>
     <h2>The sequencer</h2>
-    <p class="lede">What an operator does to a pattern. What a lane does to a deck is already on this page.</p>
     <div class="opgroup">
       <div class="op">
-        <div class="op-head"><h3>Toggle a step</h3><span class="op-when ">immediate</span></div>
-        <p><strong>A lane is a fifth route into this page and not a binding</strong>, and that is
-        why this section is as short as it is. A lane emits operations on the beat the way the
-        pointer, the keys, a map and a model emit them &mdash; so the three lanes
-        <a href="console.html">the console</a> draws first are deck faders emitting
-        <em>Opacity</em>, which the mixer already constructs, and the fourth writes a Set
-        parameter, which is <em>Write a parameter</em>. <strong>A lane needs no new operation to
-        drive anything.</strong> What needed naming is the other half, and it is these five rows:
-        what a hand does to the pattern.</p>
-        <p>This one is the cell grid &mdash; a step of one lane is on or it is off, and the change
-        is heard the next time the playhead reaches that step rather than when you asked for it.
-        <strong>What it waits on is a pattern</strong>, which nothing in this program holds; that
-        is why the bay draws nothing below its head. Where a pattern is kept is settled &mdash;
-        library data in two tiers, presets shipping beside the material and the operator's own
-        under the store, on the same shape as a saved arrangement &mdash; and what a pattern
-        <em>is</em> is not, so this row names a step and cannot yet say what it is a step of.
-        <strong>The grid under it is no new clock</strong>: a step is the beat clock subdivided
-        and a pure function of the beat, so correcting the tempo changes the rate from now on
-        without moving a beat that has already happened.</p>
+        <div class="op-name" tabindex="0" data-tip="A step of one lane is on or it is off, and the change is heard the next time the playhead reaches that step. What it waits on is a pattern, which nothing in this program holds: where a pattern is kept is settled and what one is is not. The grid under it is no new clock &mdash; a step is the beat clock subdivided, so correcting the tempo changes the rate from now on without moving a beat that has already happened.">
+          <div class="op-head"><h3>Toggle a step</h3></div>
+        </div>
+        <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt plan">panel <b>sequencer lane</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Mute a lane</h3><span class="op-when ">immediate</span></div>
-        <p>The pattern is kept and drives nothing, and the control is the lane's own label &mdash;
-        so silencing a lane costs the row no width and the pattern nothing. <strong>It is not
-        <em>Take a parameter back</em></strong>, and the resemblance is worth refusing where
-        somebody would otherwise reach for it: that operation stops a signal driving a knob and it
-        names a deck and a parameter <em>inside that deck's Set</em>, where three of the four
-        lanes drawn are deck faders, which are no Set's. It could name the fourth lane and not the
-        other three, and an operation that reaches one lane in four is not this row. So the mute
-        is a lane's, addressed the way a lane is addressed, and what that spelling is waits on the
-        same pattern the row above waits on.</p>
+        <div class="op-name" tabindex="0" data-tip="The pattern is kept and drives nothing, and the control is the lane's own label, so silencing a lane costs the row no width and the pattern nothing. It is not Take a parameter back: that stops a signal driving a knob inside a deck's Set, and three of the four lanes drawn are deck faders, which are no Set's. The spelling waits on the same pattern the row above waits on.">
+          <div class="op-head"><h3>Mute a lane</h3></div>
+        </div>
+        <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt plan">panel <b>lane label</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Point a lane at what it drives</h3><span class="op-when ">immediate</span></div>
-        <p>The foot's <code>+ lane</code>, and <strong>the target is the whole of what is being
-        added</strong>: a lane with nothing to drive emits nothing, so there is no moment at which
-        a lane exists and its target does not. What a target may <em>be</em> is answered by this
-        page rather than by this bay &mdash; anything on it a lane can emit &mdash; which is why
-        the console draws three faders and a Set parameter side by side and calls all four lanes.
-        <strong>What a target is spelled as is not answered</strong>: a deck fader is a slot
-        number and a Set parameter is a node address, and nothing here spells both. The panel
-        draws no control for re-pointing a lane that already exists, so this row is where a target
-        is chosen; if it turns out to be two operations it will be because a control was drawn for
-        the second, which is the order everything else on this page arrived in.</p>
+        <div class="op-name" tabindex="0" data-tip="The foot's add-a-lane control, and the target is the whole of what is being added: a lane with nothing to drive emits nothing. What a target may be is answered by this page &mdash; anything on it a lane can emit. What a target is spelled as is not: a deck fader is a slot number, a Set parameter is a node address, and nothing here spells both.">
+          <div class="op-head"><h3>Point a lane at what it drives</h3></div>
+        </div>
+        <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt plan">panel <b>+ lane</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Choose a pattern's steps and what a step is worth</h3><span class="op-when ">immediate</span></div>
-        <p>The head's three pills &mdash; <code>16</code>, <code>1/8</code>, <code>2 bars</code>
-        &mdash; and <strong>they are not three settings</strong>. Sixteen steps of an eighth apiece
-        <em>is</em> two bars, so any two of the three fix the third, and the panel shows all three
-        because an operator reads a pattern in whichever of them they are counting in. Which two a
-        hand sets is a decision about the control rather than about the operation: a length and a
-        subdivision is what it carries either way. <strong>An eighth at 128 BPM is 234
-        milliseconds</strong>, which is faster than the band the beat clock's rule was written for
-        &mdash; written here because it is this row's property and not the sequencer's in general,
-        and because a subdivision this row can choose is where it would first be felt.</p>
+        <div class="op-name" tabindex="0" data-tip="The head's three pills &mdash; 16, 1/8, 2 bars &mdash; and they are not three settings: sixteen steps of an eighth is two bars, so any two fix the third, and all three are shown because an operator reads a pattern in whichever they are counting in. A length and a subdivision is what it carries either way. An eighth at 128 BPM is 234 ms, faster than the band the beat clock's rule was written for.">
+          <div class="op-head"><h3>Choose a pattern's steps and what a step is worth</h3></div>
+        </div>
+        <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt plan">panel <b>sequencer head</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Choose which pattern the sequencer plays</h3><span class="op-when ">immediate</span></div>
-        <p>The bay head's <code>seq 1 &middot; seq 2 &middot; +</code>: which pattern the lanes
-        are reading. <strong>The <code>+</code> is this same choice landing on an empty one</strong>
-        rather than a second operation &mdash; the arrangement pill's <em>start a new one</em> is
-        the same shape, and it is why <em>Reset the arrangement</em> is the special case of putting
-        a saved one back rather than a control of its own. <strong>Keeping a pattern and putting a
-        saved one back are not rows here</strong>, and that is the state rather than an omission:
-        the console draws no control that saves one, and while where a pattern lives is settled,
-        what its file holds is not. They will arrive the way the arrangement's two did &mdash;
-        specified on this page, drawn on <a href="console.html">the console</a>, built after
-        that.</p>
+        <div class="op-name" tabindex="0" data-tip="Which pattern the lanes are reading. The plus is this same choice landing on an empty one rather than a second operation. Keeping a pattern and putting a saved one back are not rows here: the console draws no control that saves one, and while where a pattern lives is settled, what its file holds is not.">
+          <div class="op-head"><h3>Choose which pattern the sequencer plays</h3></div>
+        </div>
+        <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt plan">panel <b>bank pills</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt-none"></span>
         </div>
       </div>
     </div>
@@ -670,11 +522,12 @@
 
   <section>
     <h2>Inside a Set</h2>
-    <p class="lede">Everything about what a deck <em>is</em>. Almost none of it is reachable while running.</p>
     <div class="opgroup">
       <div class="op">
-        <div class="op-head"><h3>Write a parameter</h3><span class="op-when launch">launch</span></div>
-        <p>The sharpest gap here: a model can rewrite a whole procedure and cannot yet turn one knob &mdash; a gap in the build now rather than a scope, and this is one of the rows a model is refused on until an operator opens the class from the Program bay. Moving a value today means editing the source and letting a hot swap rebuild it, which is a cold start rather than a uniform write. A bare name is one control per key and writes <em>every</em> node that declares it, so it is <strong>refused where those nodes are not under one authority</strong>, naming each of them and what it is under &mdash; one control spanning a node you kept and a node an agent acts on would hand over the first through the second. An address is never refused: it says which node it means. Nothing grants an authority yet, so nothing can meet this today.</p>
+        <div class="op-name" tabindex="0" data-tip="Moving a value today means editing the source and letting a hot swap rebuild it, which is a cold start rather than a uniform write. A bare name is one control per key and writes every node that declares it, so it is refused where those nodes are not under one authority, naming each of them and what it is under. An address is never refused: it says which node it means.">
+          <div class="op-head"><h3>Write a parameter</h3></div>
+        </div>
+        <span class="op-when launch">launch</span>
         <div class="rts">
           <span class="rt plan">panel <b>inspector</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
@@ -684,8 +537,10 @@
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Attach a signal to a parameter</h3><span class="op-when launch">launch</span></div>
-        <p>A source, a curve and a range &mdash; which is the whole of what &ldquo;how hard it reacts&rdquo; means.</p>
+        <div class="op-name" tabindex="0" data-tip="A source, a curve and a range &mdash; which is the whole of what how hard it reacts means.">
+          <div class="op-head"><h3>Attach a signal to a parameter</h3></div>
+        </div>
+        <span class="op-when launch">launch</span>
         <div class="rts">
           <span class="rt plan">panel <b>sensitivity row</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
@@ -695,22 +550,23 @@
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Take a parameter back</h3><span class="op-when ">immediate</span></div>
-        <p>Stop a signal driving a knob without losing the binding. Nothing does this today; it is the second rule's other half.</p>
+        <div class="op-name" tabindex="0" data-tip="Stop a signal driving a knob without losing the binding. Nothing does this today; it is the second rule's other half.">
+          <div class="op-head"><h3>Take a parameter back</h3></div>
+        </div>
+        <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt plan">panel <b>take back</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Wire a procedure's input to a node</h3><span class="op-when ">on a worker</span></div>
-        <p>An unbound declared input is refused where the Set is built rather than guessed at. A model
-        can write one during a run, because the language it writes has a `uses` in it and a surface
-        that could declare an input and not bind it was refusing a sentence of its own vocabulary.
-        Writing an edge replaces whatever bound that input and leaves every other edge alone; taking
-        one back has no operation yet, so an edge outlives the declaration that needed it.</p>
+        <div class="op-name" tabindex="0" data-tip="An unbound declared input is refused where the Set is built rather than guessed at. A model can write one during a run, because the language it writes has a uses in it. Writing an edge replaces whatever bound that input and leaves every other edge alone; taking one back has no operation yet, so an edge outlives the declaration that needed it.">
+          <div class="op-head"><h3>Wire a procedure's input to a node</h3></div>
+        </div>
+        <span class="op-when">on a worker</span>
         <div class="rts">
           <span class="rt plan">panel <b>&mdash;</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
@@ -720,8 +576,10 @@
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Narrow the published interface</h3><span class="op-when launch">launch</span></div>
-        <p>What the console shows, and &mdash; since a knob binds to a position in it &mdash; what a MIDI control counts.</p>
+        <div class="op-name" tabindex="0" data-tip="What the console shows, and &mdash; since a knob binds to a position in it &mdash; what a MIDI control counts.">
+          <div class="op-head"><h3>Narrow the published interface</h3></div>
+        </div>
+        <span class="op-when launch">launch</span>
         <div class="rts">
           <span class="rt plan">panel <b>&mdash;</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
@@ -731,8 +589,10 @@
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Element capacity, seeds, the camera</h3><span class="op-when launch">launch</span></div>
-        <p>Each comes from a Set file or a declared default. There is no flag for a seed and none for a camera.</p>
+        <div class="op-name" tabindex="0" data-tip="Each comes from a Set file or a declared default. There is no flag for a seed and none for a camera.">
+          <div class="op-head"><h3>Element capacity, seeds, the camera</h3></div>
+        </div>
+        <span class="op-when launch">launch</span>
         <div class="rts">
           <span class="rt plan">panel <b>inspector</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
@@ -742,24 +602,16 @@
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Set a node's authority</h3><span class="op-when ">immediate</span></div>
-        <p>Manual, suggesting or automatic, on one node of one deck's Set. It is a
-        permission granted forward &mdash; what an agent may move from here on
-        &mdash; and never a record of who moved something last, which is the source
-        a driven parameter already shows beside its <em>take back</em>. Per node,
-        never a global mode, because the useful arrangement is almost always
-        partial. Every node a Set can address takes one, a <code>kind Field</code>
-        node included: it draws nothing and its parameters are still an operator's
-        to ride. The merge that folds a deck's renderers is the one node with no
-        address, so it takes none. <strong>Nothing writes one yet</strong>, and what
-        that means has changed: a deck carries authorities across a rebuild now,
-        so the one thing missing is somebody to set one. Until then every node of
-        every Set is manual, which is what a node nobody has spoken for is.</p>
+        <div class="op-name" tabindex="0" data-tip="Manual, suggesting or automatic, on one node of one deck's Set. A permission granted forward &mdash; what an agent may move from here on &mdash; and never a record of who moved something last. Per node, never a global mode. Every node a Set can address takes one; the merge that folds a deck's renderers has no address, so it takes none. A deck carries authorities across a rebuild now, so what is missing is a writer.">
+          <div class="op-head"><h3>Set a node's authority</h3></div>
+        </div>
+        <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt plan">panel <b>node head</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt-none"></span>
         </div>
       </div>
     </div>
@@ -767,21 +619,25 @@
 
   <section>
     <h2>The library</h2>
-    <p class="lede">What is kept, and how it is found.</p>
     <div class="opgroup">
       <div class="op">
-        <div class="op-head"><h3>Keep what a deck is playing</h3><span class="op-when ">asynchronous</span></div>
-        <p>Writes the material <em>on screen</em> &mdash; the versions running, with their parameters, capacities, salts, layering and fold &mdash; not what any file on disk says. The tool waits for the disk and reports; the key does not.</p>
+        <div class="op-name" tabindex="0" data-tip="Writes the material on screen &mdash; the versions running, with their parameters, capacities, salts, layering and fold &mdash; not what any file on disk says. The tool waits for the disk and reports; the key does not.">
+          <div class="op-head"><h3>Keep what a deck is playing</h3></div>
+        </div>
+        <span class="op-when">on a worker</span>
         <div class="rts">
           <span class="rt plan">panel <b>keep</b></span>
           <span class="rt plan">key <b>k</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt has">MCP <b>save_set</b></span>
+          <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>List what the store holds</h3><span class="op-when ">immediate</span></div>
-        <p>Most recent first, narrowed by what a node is called or by which layer a Set uses, and it says how many it did not show.</p>
+        <div class="op-name" tabindex="0" data-tip="Most recent first, narrowed by what a node is called or by which layer a Set uses, and it says how many it did not show. It has nowhere to put a directory, which is what the library's folder scope waits on.">
+          <div class="op-head"><h3>List what the store holds</h3></div>
+        </div>
+        <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt plan">panel <b>library</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
@@ -791,81 +647,36 @@
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Choose which scope the library shows</h3><span class="op-when ">immediate</span></div>
-        <p><strong>One operation, and the scope is what it names</strong> &mdash; not a row for
-        each chip, because the row of chips is not a list this page can finish. A scope is added
-        while the program is running, so a vocabulary carrying one operation per scope would go
-        short the moment an operator points the bay at a directory. <strong>Nor are the four
-        <a href="console.html">the console</a> draws four different acts.</strong>
-        <em>Favourites</em> is that page's own words for <em>this library filtered rather than a
-        fifth place a Set can be</em>, so choosing it and choosing <em>my sets</em> differ in the
-        question asked and not in what is asked. <em>Presets</em> is a second root, and one the
-        program is <em>told</em> &mdash; <code>--presets DIR</code>, or whatever the packaging put
-        beside the binary &mdash; rather than one it works out, so nothing has to be built for it
-        to be shown that is not there at startup. And <em>folder</em> is a root somebody names
-        during the run, which is the only one of the four short of anything at all: what it waits
-        on is an operation that can ask a directory for its listing, and that is <em>List what the
-        store holds</em>'s gap &mdash; that row has nowhere to put a directory &mdash; rather than
-        this row's. <strong>Choosing which library is being read is one act whichever of them is
-        chosen</strong>, and what differs between them is what the listing after it costs.</p>
-        <p><strong>The two empty columns are empty for two different reasons, and neither is want
-        of a control.</strong> A map line carries a slot number, a word from a closed list or a
-        range, and this list is the one thing about the library that is not closed: it grows when
-        a directory is added, and a map belongs to the hardware in the room where the scopes
-        belong to the store &mdash; the same refusal <em>Load material into a deck</em> meets over
-        a Set id. A model has no chip to press and no listing in front of it to point at: what it
-        wants of this row it gets by naming the library in the listing it asks for.
-        <strong>The key is <code>e</code>, and it steps to the next scope and wraps.</strong> A
-        bare press cannot type a name and here it does not have to &mdash; the scopes are a short
-        row of chips in front of you, so stepping says <em>which</em> by showing you, and a list
-        that grows is still reached by stepping through it. The letter is the one letter of
-        <em>scope</em> neither keyboard has spent: <code>s</code> solos at the panel and prints
-        the status at the command line, and <code>c</code>, <code>o</code> and <code>p</code> are
-        the command line's. So the letter is free on both keyboards &mdash; which is what
-        <code>l</code> was chosen for one row up &mdash; and this is the one built key badge on
-        this page that is not a key the command line already binds. <strong>The panel binds it
-        now</strong>, and the two empty columns beside it are still empty for the two reasons
-        above.</p>
+        <div class="op-name" tabindex="0" data-tip="One operation, and the scope is what it names &mdash; not a row for each chip, because a scope is added while the program is running and a vocabulary carrying one operation per scope would go short the moment an operator points the bay at a directory. The key steps to the next scope and wraps, which says which by showing you. MIDI is empty because this list is the one thing about the library that is not closed.">
+          <div class="op-head"><h3>Choose which scope the library shows</h3></div>
+        </div>
+        <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt has">panel <b>library scopes</b></span>
           <span class="rt has">key <b>e</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Read what one Set holds and declares</h3><span class="op-when ">immediate</span></div>
-        <p>Every knob with its range and default, the element count, the attributes emitted &mdash; without fetching a source or compiling it.</p>
+        <div class="op-name" tabindex="0" data-tip="Every knob with its range and default, the element count, the attributes emitted &mdash; without fetching a source or compiling it.">
+          <div class="op-head"><h3>Read what one Set holds and declares</h3></div>
+        </div>
+        <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt plan">panel <b>library</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt has">MCP <b>read_set</b></span>
+          <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Send a Set to somebody, and take one in</h3><span class="op-when ">not a run</span></div>
-        <p>Every inlined source must hash to the address its slot names before anything is stored,
-        and an id already taken is refused rather than overwritten. <strong>The way in takes both
-        spellings</strong>: a <code>.kbset</code> that arrived whole, and a <code>.kset</code> that
-        names its parts by relative path, whose parts are read off the disk beside it and filed
-        under the address of their own bytes before anything reaches the store &mdash; and a part
-        named from outside that file's own directory is refused, out loud, because a Set somebody
-        handed you is not a way of asking this machine for its files.</p>
-        <p><strong>Taking one in is not a second row, and a preset is what shows why.</strong>
-        Packaging is one operation at two moments &mdash; ahead of time when you are sending, and
-        at the press when you are not &mdash; so loading a Set out of <em>presets</em> or out of a
-        <em>folder</em> is this row performed at the second of them, and
-        <a href="console.html">the console</a> reaches the same answer from its own side: a
-        <code>.kset</code> resolved into the store is the work this row does, which is why
-        <em>my sets</em> gains a row you did not make every time you open a preset.
-        <strong>Which is where this row's panel column stands.</strong> The taking-in half has a
-        specified control already and it is not one the library still owes: it is a row under
-        <em>presets</em> or <em>folder</em>, loaded, which is <em>Load material into a deck</em>'s
-        route and is drawn on the console today. What nothing anywhere draws is the sending
-        &mdash; writing one out to hand somebody &mdash; so the badge stays designed and names the
-        bay rather than a control, for the reason the Outputs dot's does: a control that performs
-        half of what a row names would make the badge an over-claim.</p>
+        <div class="op-name" tabindex="0" data-tip="Every inlined source must hash to the address its slot names before anything is stored, and an id already taken is refused rather than overwritten. The way in takes both spellings: a .kbset that arrived whole, and a .kset that names its parts by relative path and is refused, out loud, for a part named from outside its own directory. Taking one in is not a second row &mdash; opening a preset is this row &mdash; and what nothing draws is the sending.">
+          <div class="op-head"><h3>Send a Set to somebody, and take one in</h3></div>
+        </div>
+        <span class="op-when launch">launch</span>
         <div class="rts">
           <span class="rt plan">panel <b>library</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
@@ -875,13 +686,16 @@
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Walk the edit history</h3><span class="op-when ">&mdash;</span></div>
-        <p>Every compile writes into the store's history and <strong>nothing reads it</strong>. Undo is a surface over these files, and the surface is a later milestone.</p>
+        <div class="op-name" tabindex="0" data-tip="Every compile writes into the store's history and nothing reads it. Undo is a surface over these files, and the surface is a later milestone. When it happens is not settled because nothing performs it.">
+          <div class="op-head"><h3>Walk the edit history</h3></div>
+        </div>
+        <span class="op-when">&mdash;</span>
         <div class="rts">
           <span class="rt plan">panel <b>&mdash;</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt-none"></span>
         </div>
       </div>
     </div>
@@ -889,31 +703,38 @@
 
   <section>
     <h2>Procedures</h2>
-    <p class="lede">Reading, writing and swapping the material itself.</p>
     <div class="opgroup">
       <div class="op">
-        <div class="op-head"><h3>Read one node's source</h3><span class="op-when ">immediate</span></div>
-        <p>Addressed by deck, layer and index. Read before writing: the edit is usually small, and what is there is the best guide to the language.</p>
+        <div class="op-name" tabindex="0" data-tip="Addressed by deck, layer and index. Read before writing: the edit is usually small, and what is there is the best guide to the language.">
+          <div class="op-head"><h3>Read one node's source</h3></div>
+        </div>
+        <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt plan">panel <b>inspector</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt has">MCP <b>read_procedure</b></span>
+          <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Check and write one node's source</h3><span class="op-when ">on a worker</span></div>
-        <p>Checked as you write it; built on a worker and swapped at a frame boundary. If it does not compile, what comes back is the checker's diagnostics against the source.</p>
+        <div class="op-name" tabindex="0" data-tip="Checked as you write it; built on a worker and swapped at a frame boundary. If it does not compile, what comes back is the checker's diagnostics against the source.">
+          <div class="op-head"><h3>Check and write one node's source</h3></div>
+        </div>
+        <span class="op-when">on a worker</span>
         <div class="rts">
           <span class="rt plan">panel <b>inspector</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt has">MCP <b>write_procedure</b></span>
+          <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Edit the file instead</h3><span class="op-when ">on a worker</span></div>
-        <p>The same swap, reached from any editor. Polled, debounced, and compared by content rather than by timestamp.</p>
+        <div class="op-name" tabindex="0" data-tip="The same swap, reached from any editor. Polled, debounced, and compared by content rather than by timestamp.">
+          <div class="op-head"><h3>Edit the file instead</h3></div>
+        </div>
+        <span class="op-when">on a worker</span>
         <div class="rts">
           <span class="rt gap">panel <b>&mdash;</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
@@ -923,64 +744,42 @@
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Find out what a write did</h3><span class="op-when ">after the fact</span></div>
-        <p>Landed, rolled back for costing too much, or failed to build. A write returning cleanly means it compiled, not that it is on screen.</p>
+        <div class="op-name" tabindex="0" data-tip="Landed, rolled back for costing too much, or failed to build. A write returning cleanly means it compiled, not that it is on screen.">
+          <div class="op-head"><h3>Find out what a write did</h3></div>
+        </div>
+        <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt plan">panel <b>health readout</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt has">MCP <b>swap_outcome</b></span>
+          <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Keep a candidate</h3><span class="op-when ">immediate</span></div>
-        <p>The operator's verdict on a version, and it is not the watchdog's. A
-        version is on screen because it compiled and then held the frame budget
-        over thirty measured frames &mdash; that is a judgement about cost, and
-        whether it is the one to keep is a judgement about taste that nothing in
-        this instrument can take. Keeping it settles the node and clears its row
-        from <a href="console.html">the staging lane</a>; nothing about the
-        picture changes, because a write does not wait to land and the candidate
-        is already what the deck is playing. <strong>It writes no record</strong>
-        &mdash; the procedure change was recorded where the swap landed &mdash;
-        which is why the words here are not the engine's <em>accepted</em>,
-        <em>rejected</em> and <em>rolled back</em>: those name a build's cost
-        verdict, and the lane is the one place both verdicts are read at once.
-        <strong>The lane draws its row now and this control is not on it</strong>:
-        the row is addressed by the deck a build landed on, because that is what
-        a swap event carries, and this names a node &mdash; which is a
-        derivation nobody has written. Until it exists, what clears a row is the
-        watchdog saying the version held its budget.</p>
+        <div class="op-name" tabindex="0" data-tip="The operator's verdict on a version, and not the watchdog's: a version is on screen because it compiled and held the frame budget, which is a judgement about cost, and whether it is the one to keep is a judgement about taste. It settles the node and clears its row from the staging lane, changes nothing about the picture, and writes no record. The lane's row is addressed by a deck and this names a node, which is why it is not on it.">
+          <div class="op-head"><h3>Keep a candidate</h3></div>
+        </div>
+        <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt plan">panel <b>staging</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Put a node's previous version back</h3><span class="op-when ">on a worker</span></div>
-        <p>What <em>a rejected candidate costs nothing</em> is made of. Every
-        version that compiled is kept under the store's edit history &mdash;
-        gated on compiling rather than on landing, so a real attempt that was
-        rolled back for cost is exactly the one still there &mdash; and this
-        puts the one before the current version back through the same check,
-        build and frame-boundary swap any other write takes. <strong>One
-        step</strong>, never a cursor: choosing among older versions is
-        <em>walk the edit history</em>, which has no address anybody has
-        settled. It names a node and not a source, because a lane can say
-        <em>not this one</em> and cannot say four kilobytes of IR &mdash; the
-        surface says the part it can say and whoever performs it reads the file.
-        <strong>It does write a record</strong>, at the swap, like every other
-        procedure change. <strong>The row it belongs on is drawn and this act is
-        not offered on it</strong>, for the reason above and for one more: the
-        versions it would put back are the store's edit history, and the program
-        that draws this panel keeps none.</p>
+        <div class="op-name" tabindex="0" data-tip="Every version that compiled is kept under the store's edit history &mdash; gated on compiling rather than on landing &mdash; and this puts the one before the current version back through the same check, build and frame-boundary swap any other write takes. One step, never a cursor. It names a node and not a source, and it does write a record, at the swap. The program that draws the panel keeps no edit history.">
+          <div class="op-head"><h3>Put a node's previous version back</h3></div>
+        </div>
+        <span class="op-when">on a worker</span>
         <div class="rts">
           <span class="rt plan">panel <b>staging</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt-none"></span>
         </div>
       </div>
     </div>
@@ -988,86 +787,109 @@
 
   <section>
     <h2>Arranging the console</h2>
-    <p class="lede">The panel's own shape, which is the operator's and not the layout's.</p>
     <div class="opgroup">
       <div class="op">
-        <div class="op-head"><h3>Move a boundary</h3><span class="op-when ">immediate</span></div>
-        <p>Every divider drags, and stops where the regions either side say they will go no further. A window dragged too small to hold everything gives everything less and forgets nothing: widen it again and the arrangement comes back exactly.</p>
+        <div class="op-name" tabindex="0" data-tip="Every divider drags, and stops where the regions either side say they will go no further. A window dragged too small to hold everything gives everything less and forgets nothing: widen it again and the arrangement comes back exactly. The one row here with no route but the pointer's &mdash; setting a divider takes a viewport pixel, a key press cannot mean one, and the vocabulary carries this as undecided.">
+          <div class="op-head"><h3>Move a boundary</h3></div>
+        </div>
+        <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt has">panel <b>drag</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Fold a bay away</h3><span class="op-when ">immediate</span></div>
-        <p>A folded bay takes no space at all and no divider is drawn beside it; what it had goes to the bay that takes height back in that pane. Its size is remembered, so bringing it back puts it where it was.</p>
+        <div class="op-name" tabindex="0" data-tip="A folded bay takes no space at all and no divider is drawn beside it; what it had goes to the bay that takes height back in that pane. Its size is remembered, so bringing it back puts it where it was.">
+          <div class="op-head"><h3>Fold a bay away</h3></div>
+        </div>
+        <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt plan">panel <b>bay head</b></span>
           <span class="rt has">key <b>f g</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Fold a pane away</h3><span class="op-when ">immediate</span></div>
-        <p>The whole left or right pane, with everything in it, and the centre takes the width. The centre is not a third pane and does not fold &mdash; what you want there is solo.</p>
+        <div class="op-name" tabindex="0" data-tip="The whole left or right pane, with everything in it, and the centre takes the width. The centre is not a third pane and does not fold &mdash; what you want there is solo.">
+          <div class="op-head"><h3>Fold a pane away</h3></div>
+        </div>
+        <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt plan">panel <b>pane edge</b></span>
           <span class="rt has">key <b>f g</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Bring back what is folded</h3><span class="op-when ">immediate</span></div>
-        <p><strong>A folded region has no rectangle, so a pointer cannot reach it.</strong> That makes this the one operation here that a mouse cannot be the only way into &mdash; folding is one-way for a pointer, and something else has to undo it. <code>z</code> is that something else, and it brings back everything folded rather than one region, because a region a pointer cannot reach is a region a key has no way to name either.</p>
+        <div class="op-name" tabindex="0" data-tip="A folded region has no rectangle, so a pointer cannot reach it, which makes this the one operation here a mouse cannot be the only way into. The key brings back everything folded rather than one region, because a region a pointer cannot reach is a region a key has no way to name either.">
+          <div class="op-head"><h3>Bring back what is folded</h3></div>
+        </div>
+        <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt gap">panel <b>&mdash;</b></span>
           <span class="rt has">key <b>z</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Solo a region</h3><span class="op-when ">immediate</span></div>
-        <p>Everything that is not this region, on the way to it, or inside it folds away, and it holds the window. On the program that is the panel folding away and only the picture left, which is also how you capture this window. Undoing it restores what was folded before, including whatever was already folded. <strong>The panel's control is the <em>solo</em> pill in the Program bay's head</strong> and it names the picture rather than the pointer &mdash; the one region on the console this pill is drawn for, and the one <a href="console.html">the console</a> says it is for. A press with a solo in force undoes it, so the pill is both directions of the row and the pointer needs no way of naming a region it cannot see.</p>
+        <div class="op-name" tabindex="0" data-tip="Everything that is not this region, on the way to it, or inside it folds away, and it holds the window. On the program that is the panel folding away and only the picture left, which is also how you capture this window. Undoing it restores what was folded before, including whatever was already folded. The pill names the picture rather than the pointer, and a press with a solo in force undoes it.">
+          <div class="op-head"><h3>Solo a region</h3></div>
+        </div>
+        <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt has">panel <b>solo</b></span>
           <span class="rt has">key <b>s u</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Reset the arrangement</h3><span class="op-when ">immediate</span></div>
-        <p>The default arrangement back, in the window you already have. <strong>It is the one operation here that forgets</strong>, and what it forgets is what the rest of this section promises to keep: every fold, every boundary you have dragged, the solo, and the remembered sizes a folded bay and a window dragged too small are both holding for you. This is the special case of putting a saved arrangement back, and the two rows under it are the rest of that family: <strong>the default is one arrangement among the ones you could name</strong>, and it is the one that came with the program. It reaches code rather than a file, so there is no name it answers to and nothing you save can shadow it. A pad could name it: it addresses nothing, where every other row here needs a region a map line has no way to spell. None does yet.</p>
+        <div class="op-name" tabindex="0" data-tip="The default arrangement back, in the window you already have. It is the one operation here that forgets, and what it forgets is what the rest of this section keeps: every fold, every boundary you have dragged, the solo and the remembered sizes. It is the special case of putting a saved arrangement back, and the default reaches code rather than a file, so nothing you save can shadow it. A pad could name it, since it addresses nothing.">
+          <div class="op-head"><h3>Reset the arrangement</h3></div>
+        </div>
+        <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt has">panel <b>transport</b></span>
           <span class="rt has">key <b>r</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Save the arrangement</h3><span class="op-when ">immediate</span></div>
-        <p>The console as it stands &mdash; every fold, every boundary you have dragged, the solo and both sets of remembered sizes &mdash; filed under a name you pick, and saving over that name again is what you mean by saving it again. It goes beside your Sets rather than beside the program: <code>arrangements/</code> under the store, so it travels with the library it was arranged around and nothing you save can reach what ships. <strong>The name is the whole of the handle</strong>, which is why you type one rather than being given a number: a slot moves when you delete the slot above it, and a name does not. The window it was saved at is not part of it.</p>
+        <div class="op-name" tabindex="0" data-tip="The console as it stands &mdash; every fold, every boundary you have dragged, the solo and both sets of remembered sizes &mdash; filed under a name you pick, and saving over that name again is what you mean by saving it again. The name is the whole of the handle, which is why you type one: a slot moves when you delete the slot above it, and a name does not. A key press cannot type a name and a map line carries none.">
+          <div class="op-head"><h3>Save the arrangement</h3></div>
+        </div>
+        <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt has">panel <b>transport</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Put a saved arrangement back</h3><span class="op-when ">immediate</span></div>
-        <p>The arrangement you kept under that name, in the window you already have &mdash; the same sentence as the reset with a name in it, which is what makes the reset the special case rather than a convenience. <strong>The window is not restored.</strong> An arrangement carries the viewport it was saved at and comes back at the one you are looking at now, so a console arranged on a laptop opens on a projector without a margin round it. Two things are refused rather than guessed: a name nothing is filed under is said back to you and your console does not move, and an arrangement that disagrees with itself is refused whole rather than repaired into something you did not save.</p>
+        <div class="op-name" tabindex="0" data-tip="The arrangement you kept under that name, in the window you already have. The window is not restored: an arrangement carries the viewport it was saved at and comes back at the one you are looking at now. Two things are refused rather than guessed: a name nothing is filed under, and an arrangement that disagrees with itself, which is refused whole rather than repaired. Nothing at a key press says which one, and a map line carries no name.">
+          <div class="op-head"><h3>Put a saved arrangement back</h3></div>
+        </div>
+        <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt has">panel <b>transport</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt-none"></span>
         </div>
       </div>
     </div>
@@ -1075,11 +897,12 @@
 
   <section>
     <h2>Output and recording</h2>
-    <p class="lede">Where the frame goes, and what is kept of the performance.</p>
     <div class="opgroup">
       <div class="op">
-        <div class="op-head"><h3>Size the window</h3><span class="op-when ">immediate</span></div>
-        <p>The window is a preview and has no say in what is drawn: the canvas is fixed for the run, and the window fits it with the leftover black.</p>
+        <div class="op-name" tabindex="0" data-tip="The window is a preview and has no say in what is drawn: the canvas is fixed for the run, and the window fits it with the leftover black.">
+          <div class="op-head"><h3>Size the window</h3></div>
+        </div>
+        <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt plan">panel <b>drag</b></span>
           <span class="rt plan">key <b>a</b></span>
@@ -1089,18 +912,23 @@
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Choose where the frame goes</h3><span class="op-when ">immediate</span></div>
-        <p>The picture in the Program bay, a projector window, and the plugin sinks &mdash; one switchable list, and the program view is a row in it like any other. All of them may be off: the deck previews are auditions rather than outputs and keep running, so nothing is refused here.</p>
+        <div class="op-name" tabindex="0" data-tip="The picture in the Program bay, a projector window, and the plugin sinks &mdash; one switchable list, and the program view is a row in it like any other. All of them may be off: the deck previews are auditions rather than outputs and keep running, so nothing is refused here. The Outputs dot folds the program view away, which is one entry of the list rather than the list, so the badge stays designed.">
+          <div class="op-head"><h3>Choose where the frame goes</h3></div>
+        </div>
+        <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt plan">panel <b>outputs</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Record the session</h3><span class="op-when launch">launch</span></div>
-        <p>The timeline as it happens, replayable frame for frame. There is no way to start or stop one while running.</p>
+        <div class="op-name" tabindex="0" data-tip="The timeline as it happens, replayable frame for frame. There is no way to start or stop one while running.">
+          <div class="op-head"><h3>Record the session</h3></div>
+        </div>
+        <span class="op-when launch">launch</span>
         <div class="rts">
           <span class="rt plan">panel <b>rec</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
@@ -1110,232 +938,19 @@
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Quit</h3><span class="op-when ">immediate</span></div>
-        <p>Waits up to five seconds for a save still being written, then says how many it left behind rather than letting a hung disk hold the quit.</p>
+        <div class="op-name" tabindex="0" data-tip="Waits up to five seconds for a save still being written, then says how many it left behind rather than letting a hung disk hold the quit.">
+          <div class="op-head"><h3>Quit</h3></div>
+        </div>
+        <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt plan">panel <b>close</b></span>
           <span class="rt has">key <b>esc</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt-none"></span>
         </div>
       </div>
     </div>
-  </section>
-
-  <section class="cap">
-    <h2>What the gaps say</h2>
-    <p>
-      <strong>MIDI is the narrowest by a wide margin</strong> &mdash; narrowest
-      in what it can ever address, which is a different question from which
-      column has the fewest badges built and is now the sharper of the two,
-      since the MCP column has nothing marked out of reach at all. It reaches
-      eight of these 64 operations, and it cannot express a node
-      address, a parameter name or an id &mdash; nor a bare number, which is
-      why it reaches one half of the mask and not the other. A map line carries
-      a slot number, a word out of a value list, or a range, and an angle is
-      none of the three; a pad naming a shape alone would have to invent the
-      angle beside it, and the map reads nothing back to invent it from. So the
-      front has a fader and <em>Set a deck's mask shape</em> stays empty here
-      rather than being given a route that guesses. <strong>That is settled and
-      not outstanding</strong>: the two ways to fill the badge in are a number the
-      format cannot check and an angle somebody defaults, and the thing that would
-      decide between them is a control that shows an angle, which does not exist
-      yet. It no
-      longer has a vocabulary of its
-      own, though: a map line names one of the operations on this page, and it
-      names it outright &mdash; which state, which mode &mdash; rather than
-      saying <em>step it</em>. It also has no idea of a selected deck &mdash;
-      it names the deck in the message &mdash; where the command line's keys
-      have nothing but the selected deck. The same operation is addressed two
-      different ways on two surfaces.
-    </p>
-    <p>
-      <strong>Nineteen of the keyboard's twenty designed rows are one program's
-      keys waiting for another's.</strong> This column is the instrument's keyboard, and
-      nineteen rows on it &mdash; across the transport, the decks, the mixer, the
-      library and the window &mdash; are reached by pressing a key today, in
-      <code>karakuri-cli</code>, which is not the program the panel is in. That
-      is a gap of a kind none of the others here are: nothing is undecided,
-      nothing is unspellable, and no control is unbuilt. The keys exist, they
-      are specified on this page, and the window a player opens does not read
-      them yet. <strong>The twentieth row is not one of them</strong>: <code>e</code> steps the
-      library's scope and neither program binds it, so it is a key waiting on both rather than on
-      one. What it waits on is the work of putting those operations behind
-      the panel's own keyboard, and one decision beside it: which of the two
-      keyboards keeps the seven letters they both want.
-    </p>
-    <p>
-      <strong>A model is connected to every row on this page, and forty-one of
-      them are refused until an operator opens the class they belong to.</strong>
-      What was written here until today &mdash; that a model can rewrite a whole
-      procedure and cannot turn one knob &mdash; is right as a statement of what
-      is open by default and wrong as a statement of what a model may ever do.
-      The narrowness was a scope and it is now a default. Open by default is what a rewrite already was: MCP
-      edits material, wires what that material declares, reports swaps, reads the
-      library and arranges the console. Closed by default is anything that could
-      stop a performance &mdash; what a deck that is live is drawing, the mix
-      faders, the master effects, and the routing and enabling of inputs and
-      outputs, with the clock, the sequencer's lanes, <em>Quit</em>, the deck
-      selection and rule 06's authority falling on the same side under the same
-      question. A closed row is <strong>connected and refused</strong> rather than
-      absent: the tool list never shortens, the call arrives, and the answer says
-      the class is shut, which class it is, and that an operator can open it. That
-      is why every badge in this column reads <em>designed</em> and none reads
-      <em>nothing</em> &mdash; a refusal is a route that was built, and a route
-      nobody has built yet is the same backlog the other three columns carry.
-    </p>
-    <p>
-      <strong>The default falls where it does because of what an operation does
-      at its worst on the frame it goes wrong.</strong> A rewrite is priced before
-      it is built, lands at a frame boundary, and rolls back on its own if it
-      costs too much &mdash; so the worst case is the picture it replaced, coming
-      back. A gain write has none of those: it is unpriced, it lands at once, and
-      nothing undoes it. That test still decides which class a row is in; what it
-      no longer decides is whether a class can be reached at all, because the
-      three answers ask what a mechanism does <em>with nobody watching</em>, and
-      an operator who has just opened a class is watching. This paragraph used to
-      end by naming the day it would be wrong &mdash; <em>the day a mix write is
-      priced and reversible</em> &mdash; and it was wrong before that day came and
-      for a different reason: no mix write became priced or reversible, and the
-      line stopped being a line. It became a default, and a default is the
-      operator's to move. <strong>The opening is an indicator and a toggle in the
-      head of the bay each class belongs to</strong> &mdash; Mixer for the faders,
-      Master for the effects, Outputs for the routing, and Program for what a live
-      deck is drawing &mdash; and it is not a sixty-fifth row here: it configures
-      the map a surface reaches this vocabulary through, and a setting that
-      decides whether a surface may reach a class of operations cannot be one of
-      those operations without being reachable from the surface it governs.
-      <a href="console.html">The console</a> is where the four are drawn. Whether
-      one press covers a whole class or one operation of it, whether an opening
-      survives a restart, and whether an open class shuts itself after a while are
-      open questions rather than things this page is being coy about &mdash; and
-      until they are answered a <em>designed</em> badge here names no tool at
-      all, which is where this column differs from the other three: a tool's
-      name is the server's to publish, and naming fifty-seven that nobody can
-      call would be this page promising calls rather than specifying
-      operations.
-    </p>
-    <p>
-      <strong>Four switches do not cover forty-one rows, and twenty-seven is
-      where they stop.</strong> The clock's six, the sequencer's five,
-      <em>Quit</em>, <em>Select a deck</em> and rule 06's authority are closed on
-      the same question as the rest and belong to none of the four classes, so
-      <strong>nothing on the console opens them and nothing is going to
-      today</strong>. That is not an oversight being tidied away here: it is the
-      safe half of a question nobody has answered, and it is written down because
-      a row that cannot be opened and a row whose switch has not been drawn look
-      identical from a badge. The refusal a model gets for those fourteen says so
-      in as many words &mdash; that which class it belongs to is not settled
-      &mdash; rather than pointing at a bay that would not help. Authority is the
-      one of the fourteen that is settled: a permission an actor can grant itself
-      is not a permission, so rule 06's row stays shut whatever the other
-      thirteen turn out to be.
-    </p>
-    <p>
-      <strong>And the narrow half is not the weak half.</strong> Rewriting a
-      procedure while it is on screen is something no key, no fader and no pad can
-      do, and it is the thing this instrument exists for. What is withheld by
-      default is the mixer, which a hand is better at anyway. The asymmetry runs
-      both ways and is worth saying once &mdash; but it is no longer what this
-      column looks like from the outside. Seven of its badges are built and the
-      other fifty-seven are designed, which makes it the only one of the four with
-      nothing marked out of reach at all, and the thing a reader should take from
-      that is a surface nobody has finished rather than a surface somebody decided
-      to stop.
-    </p>
-    <p>
-      <strong>Authority is named here and reachable from nothing</strong>, and it
-      is short of something none of the other empty rows are. It is not waiting on
-      a decision: rule 06 settled the address, and it is per node. It is not
-      waiting on a control either &mdash; the node head it belongs on is specified
-      on <a href="console.html">the console page</a>, like every other panel route
-      on this page. <strong>What it waited on was the deck, and the deck
-      arrived.</strong> A node's authority has to survive every rebuild, the way
-      that node's parameters and bindings already do, and a rebuild that let it be
-      worked out afresh would hand a node back to an agent an operator had taken it
-      from, saying nothing. A rebuild restates them now. <strong>What is missing is
-      a writer</strong> &mdash; nothing sets one, so nothing has to survive yet, and
-      the row is a word the instrument can keep and has never been told. That is a
-      shorter list than the one this paragraph used to name, and naming the old
-      blocker after it closed is how a row stays unbuilt for a reason nobody
-      rechecks.
-    </p>
-    <p>
-      <strong>Arranging the console is reached from the keyboard</strong>, and
-      until the instrument existed it was reachable from a pointer and nothing
-      else &mdash; which is what this paragraph said, and it called it the first
-      rule broken by the surface the first rule is about. Five of its eight rows
-      are built in the <em>key</em> column and five in the <em>panel</em>
-      column: <code>f</code> and <code>g</code> fold whatever the pointer is
-      over, <code>z</code> brings everything back, <code>s</code> and
-      <code>u</code> solo and unsolo, <code>r</code> resets, and the pointer
-      has the drag, the arrangement pill's three and the <em>solo</em> pill in
-      the Program bay's head. <strong>How a region is unfolded without a mouse is decided, and
-      <code>z</code> is the answer</strong>: a folded region still has no
-      rectangle, so a pointer still cannot reach it to undo itself, and it no
-      longer has to. <strong>What is still short is the boundary.</strong> A
-      divider is dragged and nothing else, because
-      <code>Layout::set_divider</code> takes a viewport pixel and a key press
-      cannot mean one &mdash; the vocabulary carries <em>Move a boundary</em> as
-      undecided for exactly that reason. It is the one row here with no route but
-      the pointer's, and it is what is left of the first rule being broken by the
-      surface the first rule is about. <em>Reset the arrangement</em> is no
-      longer waiting on the family it is the default case of in order to be
-      reached at all &mdash; <code>r</code> performs it &mdash; but MIDI is still
-      empty: it names no region, so a pad could reach it the way a pad reaches
-      <em>tap</em>, and none does.
-    </p>
-    <p>
-      <strong>The two rows that carry a name were empty in every column, and a
-      name is why.</strong> Keeping an arrangement and putting one back each
-      carry a name the operator picked, and for as long as no surface could say
-      one, no surface could reach them. <strong>The panel can say one now</strong>
-      &mdash; it is the only one of the four that can &mdash; and the other three
-      columns are still empty for the reasons below rather than for want of a
-      control. A bare key press cannot type a name and there is nowhere on this
-      console to show the operator a name it picked for them, so a keyboard route
-      would file arrangements under stamps nobody could ask for again &mdash; and
-      putting one back could not be bound at all, because nothing at a key press
-      says <em>which</em>. A map line carries a slot number, a word from a closed
-      list or a range, and a name is none of the three, which is the same refusal
-      <em>Load material into a deck</em> meets over a Set id. MCP is the one
-      surface whose grammar has no objection: it already spells a Set id, an
-      arrangement name is the same shape, and the tools are simply not published.
-      <strong>What these two waited on was one control, and it is built.</strong>
-      The <em>panel</em> badges said where it went &mdash; the transport row,
-      beside the map pill, which is already a named file with <em>save</em>,
-      <em>load</em> and <em>start a new one</em> on it &mdash; the console page
-      drew it, and the panel reaches all three rows now. It typed the name, which
-      is what the other three surfaces still cannot do, so those columns are
-      unchanged and empty for the reason above rather than for want of a control.
-    </p>
-    <p>
-      <strong>Two bays are drawn and reach nothing, and their rows are the
-      newest on this page.</strong> The master chain and the sequencer are
-      specified here for the first time, which is the order this repository
-      works in rather than an admission: a control is named on this page, drawn
-      on <a href="console.html">the console</a>, and built after that. What
-      separates these eight from the other unbuilt rows is that
-      <strong>none of them is waiting on a control</strong>. The chain's three
-      effects wait on the chain &mdash; <em>giving L5 a writable form</em> is
-      the console's phrase for what would have to exist, and nothing in the
-      engine folds one. The sequencer's five wait on a pattern, which is
-      authored state nothing in this program holds; where one is kept is
-      settled and what one holds is not. And <strong>feedback is the sharpest
-      of the eight</strong>, because it is not short of work at all: until
-      somebody says which cut of the previous frame it reads, and what holding
-      that cut costs, there is nothing to build, and a row drawn in this
-      specification and absent from the panel is what the milestone this page
-      meters cannot close over.
-    </p>
-    <p>
-      <strong>The command line is the only way into most of what a Set is</strong>
-      &mdash; parameters, bindings, edges, the published interface, capacity
-      &mdash; and it is only open before the run starts. Reachable from nothing
-      at all while running: parameter writes, binding changes, edge rewiring, the
-      camera, seeds, capacity, canvas size, un-compositing a deck, folding every
-      renderer back in, a gain fade, and starting or stopping a recording.
-    </p>
   </section>
 
   <footer>
