@@ -17,7 +17,8 @@ offscreen render should be a function of its arguments and must not leave a dire
 a version rolled back for budget never enters the session stream and is often the one you want back.
 Seed the launch version, or the first edit has nowhere to return to.
 
-**Where it holds.** `scratch.rs` and `history.rs` in [karakuri-cli](../../crates/karakuri-cli);
+**Where it holds.** `scratch.rs` and `history.rs` in
+[karakuri-environment](../../crates/karakuri-environment);
 [manual.md](../manual.md). Decided in
 [ADR-0088](../adr/0088-what-ships-what-you-saved-and-what-you-are-editing.md) and
 [ADR-0089](../adr/0089-history-is-gated-on-compiling-not-on-landing.md).
