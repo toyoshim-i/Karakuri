@@ -3385,9 +3385,17 @@ fn main() {
             // Every node the file named, in node order — which starts with the
             // geometries, so the first path is the L1 the pair below wants and
             // the rest are sorted by their own `kind` like any `--set` list.
+            // **Slot 0's own names**, because the pair below is inserted at
+            // the head of `args.sets` and a scratch file carries the slot it
+            // belongs to — the same `A0-drift.kir` `materialise` writes a few
+            // lines down and `crates/karakuri`'s `loading` writes on a library
+            // load. One rule for one directory: `scratch::node_name`.
             let written: Result<Vec<PathBuf>, String> = loaded
                 .nodes()
-                .map(|(checked, src)| scratch::place(&root, &checked.name, src))
+                .enumerate()
+                .map(|(at, (checked, src))| {
+                    scratch::place(&root, &scratch::node_name(0, at, &checked.name), src)
+                })
                 .collect();
             match written {
                 // **Each path keeps the name the file gave that node**, so a
@@ -3409,18 +3417,38 @@ fn main() {
                 }
             }
         }
+        // **Slot by slot rather than one flat list**, because the name of a
+        // copy carries the slot it belongs to: the same file given to two
+        // slots becomes two files, so an edit moves the slot whose file it is
+        // and no other. See `scratch.rs`'s header for the rule this replaced.
         match scratch::materialise(
             &root,
-            args.sets
-                .iter_mut()
-                .flat_map(|(l1, l4s)| std::iter::once(l1).chain(l4s.iter_mut()))
-                .map(|n| &mut n.path),
+            args.sets.iter_mut().map(|(l1, l4s)| {
+                std::iter::once(&mut l1.path).chain(l4s.iter_mut().map(|n| &mut n.path))
+            }),
         ) {
-            Ok(dir) => eprintln!(
-                "scratch: {} — the deck runs from copies here, so the files you named are \
-                 not written to. Point an editor at these",
-                dir.display()
-            ),
+            Ok(dir) => {
+                eprintln!(
+                    "scratch: {} — every slot runs from its own copy here, so the files you \
+                     named are not written to. Point an editor at these",
+                    dir.display()
+                );
+                // **What each slot is actually watching, named.** One preset
+                // given to four slots is four files now, which is the point
+                // and is also the thing an operator cannot guess: the line
+                // above says where, and this says which is whose.
+                for (slot, (l1, l4s)) in args.sets.iter().enumerate() {
+                    let names: Vec<String> = std::iter::once(&l1.path)
+                        .chain(l4s.iter().map(|n| &n.path))
+                        .map(|p| {
+                            p.file_name()
+                                .map(|n| n.to_string_lossy().into_owned())
+                                .unwrap_or_else(|| p.display().to_string())
+                        })
+                        .collect();
+                    eprintln!("  slot {slot}: {}", names.join(" + "));
+                }
+            }
             Err(e) => {
                 eprintln!("karakuri-cli: {e}");
                 std::process::exit(1);

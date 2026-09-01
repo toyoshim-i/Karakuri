@@ -1339,23 +1339,30 @@ whether the values behind it exist anywhere in this workspace.
      is not the same wiring as item 1: `storing_to` puts a build's sources under a content address,
      `snapshotting_to` keeps every version that compiled. A restore owes both.
 
-  **And one hazard, recorded because it is the kind that is found late.** `scratch::place` is called
-  from exactly one place in `crates/karakuri` — `loading()`, on a library load — so a run given
-  `.kir` paths on the command line, which is every default run, **watches those paths in place**. A
-  restore that wrote a file in such a run would overwrite the operator's own source at the path they
-  typed, which is precisely the destruction `scratch.rs` was created to stop: *"three shipped presets
-  were replaced in one session."* So *Put a node's previous version back* owes a decision about
-  **where it writes** before it owes any code, and placing it in the scratch is not obviously the
-  answer — that would move the slot off the file the operator has open.
+  **And the hazard that stood here is closed, which changes what the restore owes.** It read: 
+  `scratch::place` is called from exactly one place in `crates/karakuri` — `loading()`, on a library
+  load — so a run given `.kir` paths on the command line, which is every default run, *watches those
+  paths in place*, and a restore that wrote a file would overwrite the operator's own source at the
+  path they typed. That was true and it was the defect rather than a hazard of the restore:
+  `working_copies()` now materialises **one copy per slot** before the window opens, so every deck
+  watches a file under `<store>/scratch/` and the paths the operator typed are not written to by
+  anything. *Put a node's previous version back* therefore has its where-it-writes answer for free —
+  the scratch copy of that deck, which is both the file the watcher polls and the file the operator
+  has open, so a restore moves the deck and the editor's buffer names the same file. What it still
+  owes is items 5 and 6: something that lists the history, and a history for this program to list.
 
   **Which of the two to start, if either.** **`Keep a candidate` needs items 1–4 and neither 5 nor
   6**, and it has no hazard: it writes nothing, its record question is settled
-  (`Written::Silent(Silent::Surface)`), and what it changes is the lane. **The restore needs all six
-  plus the where-it-writes decision** (`Written::Silent(Silent::OnLanding)`). And the argument for
-  the first of them is stronger than this entry has ever made it: with the budget verdict clearing
-  only the drawn deck's row, a lane with no *keep* does fill up and stay full in an ordinary run, so
-  *keep* is not a nicety over the watchdog's substitution — it is the only way three of the four rows
-  can ever leave.
+  (`Written::Silent(Silent::Surface)`), and what it changes is the lane. **The restore needs 5 and 6**
+  (`Written::Silent(Silent::OnLanding)`), its where-it-writes question having been answered by the
+  per-slot scratch above. And the argument for the first of them is **weaker than this entry used to
+  make it, and still an argument**: it said a lane with no *keep* fills up and stays full in an
+  ordinary run, which was true only because every deck watched one pair of files and a single save
+  put four candidates up. One save is one candidate now, cleared by the budget's verdict on the deck
+  that is being drawn. What survives is the narrow case, and it is the one *keep* was always for: a
+  build that lands on a **parked** deck — a library load into deck B, or an edit to deck C's own
+  scratch file — has a frozen trial and a verdict that never arrives, and nothing but a person can
+  take that row off the lane.
 
   **`origin` is a record rather than a drawing**: the prompt, the model and the seed are specified in
   [ir-spec.md](ir-spec.md) and **produced by nothing**, so `you, 14:41` against `agent` cannot be told

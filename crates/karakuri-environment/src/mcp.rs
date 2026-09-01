@@ -1938,10 +1938,20 @@ fn write_procedure(deck: u8, node: NodeAt, source: &str, state: &State) -> Resul
         ));
     }
 
-    // **What else this write reaches.** `watch.rs` documents two slots sharing a
-    // pair as supported, and the manual's own example gives one `soft_points.kir`
-    // to three slots — so naming one slot was reporting a third of what
-    // happened. Anything skipped or widened is said with a count.
+    // **What else this write reaches**, which is normally nothing now and is
+    // still asked. `scratch::materialise` gives every slot its own copy, so two
+    // slots of a run cannot hold one path however the operator spelled the
+    // command line, and this scan comes back empty *because of that rule*
+    // rather than because nobody happens to share. It is kept, and kept as a
+    // scan rather than replaced by the constant it usually equals: `Slots` is a
+    // list of paths this module is handed, the sentence is true of whatever it
+    // is handed, and a `Vec::new()` written here would be this module asserting
+    // something about its caller.
+    //
+    // It was load-bearing under the rule that went: `watch.rs` documents two
+    // slots sharing a pair as supported, and the manual's own example gave one
+    // `soft_points.kir` to three slots — so naming one slot was reporting a
+    // third of what happened. Anything skipped or widened is said with a count.
     //
     // **Every node of every other slot**, whatever layer it is on: the scan
     // walked an L1 and a list of renderers, which is the shape a slot had

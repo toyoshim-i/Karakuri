@@ -7913,7 +7913,6 @@ fn chip_width(ctx: &egui::Context, name: &str) -> f32 {
 /// reason one control along: it is a decision about the vocabulary, and the
 /// first control that happened to want it is not where it is taken.
 ///
-
 /// **The pill's letter is [`View::selection`]**, which this console now keeps
 /// — ADR-0219 recorded it as living *"in the specification and not in
 /// `karakuri-console`'s code"*, and that is the sentence this bay's letter
