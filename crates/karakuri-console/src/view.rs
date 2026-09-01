@@ -7867,6 +7867,53 @@ fn chip_width(ctx: &egui::Context, name: &str) -> f32 {
 /// drag is the control this page names for this row and it is not drawn, so
 /// the badge stays *designed* and says so.
 ///
+/// # Nothing here writes a Set out, and what is missing is a destination
+///
+/// `docs/manual/operations.html`'s *Send a Set to somebody, and take one in*
+/// names two directions and this bay is the home of both — *"the badge …
+/// names the bay rather than a control"*. **One of them is reached from here
+/// today and the other is not a drawing.** The taking-in half is *"a row under
+/// presets or folder, loaded"*, which is the load route above: a press on a
+/// `presets` row packages the `.kset` into the store and then loads it, which
+/// is *"this row performed at the second of them"*. The sending half —
+/// writing one out to hand somebody — is drawn nowhere, and this is the note
+/// that says why rather than leaving a gap indistinguishable from a decision.
+///
+/// **It is not that a panel has no file dialog.** The taking-in half needs one
+/// and does not have one either: what names the file there is **this listing**,
+/// which is a picker the bay already draws. The asymmetry is that taking in
+/// names a file that exists and sending names one that does not yet — and no
+/// listing can point at a file nobody has written.
+///
+/// **So the missing half is a destination, and the vocabulary has nowhere to
+/// put one.** `Operation::TransferSet`'s send arm is
+/// `SetTransfer::Send { id }`: a Set the store already holds, and no path at
+/// all. `karakuri-cli` answers the question outside the operation, with the
+/// shell — `--package night01 > night01.kbset` — and its own `packaged_set`
+/// says why the answer is not simply *the store*: *"a store directory would
+/// need a naming rule of its own for it, and a second copy of a Set sitting
+/// beside the Set is a second answer to which of them is the file."* A panel
+/// has no redirection to stand in for that.
+///
+/// **And the one control here that asks for letters cannot spell a path.**
+/// [`Menu::Naming`] is it, and what it takes is a **name** — ADR-0221's *one
+/// path component of letters, digits, `-` and `_`*. ADR-0229 says in as many
+/// words why that rule does not stretch: *"an include is a relative path and
+/// has separators in it by construction, so the rule cannot be copied."* A
+/// second letter-taking flow that admitted separators would be this bay
+/// inventing a wall, which is the half of that record that says walls are not
+/// added afterwards.
+///
+/// **What it would be for, when somebody settles it**: a row of *my sets*,
+/// packaged and written out, so that a Set which has never left this store can
+/// be handed to somebody who has never held its material. What it waits on is
+/// one sentence nobody has written — *where does a package go when no shell
+/// redirected it* — and that sentence belongs on
+/// `docs/manual/operations.html` and in `karakuri-operation`, for [`Chosen`]'s
+/// reason one control along: it is a decision about the vocabulary, and the
+/// first control that happened to want it is not where it is taken.
+///
+
 /// **The pill's letter is [`View::selection`]**, which this console now keeps
 /// — ADR-0219 recorded it as living *"in the specification and not in
 /// `karakuri-console`'s code"*, and that is the sentence this bay's letter

@@ -302,7 +302,7 @@ use karakuri_environment::{audio, mix, watch, Opening};
 use karakuri_ir::Kind as Layer;
 use karakuri_layout::{Axis, Hit, Layout, NodeId, Point};
 use karakuri_operation::gate::{Class, Open};
-use karakuri_operation::{BeatSource, BlendMode, GridScale, Operation, Undecided};
+use karakuri_operation::{BeatSource, BlendMode, GridScale, Operation, SetTransfer, Undecided};
 use karakuri_operation_record::{written, Current, Written};
 use karakuri_store::record::Record;
 use karakuri_store::store::Store;
@@ -4247,6 +4247,25 @@ fn listing(
     }
 }
 
+/// **What a take-in did**: the file it read, the id that file filed itself
+/// under, and the sentence `setfile::unbundle` reported.
+///
+/// **Three fields because the press has three callers for them and each is a
+/// different question.** The `said` is what the operator reads. The `id` is
+/// what the load that follows names, and it is the file's own rather than the
+/// row's word. The `file` is what the *operation* names —
+/// `Operation::TransferSet`'s `SetTransfer::Take { file }` carries a path,
+/// *"because a file is what the only existing route takes"* — so it is
+/// returned rather than re-derived: the listing is asked once, on the press,
+/// and asking it a second time to name what was already taken in would be two
+/// answers to *which file was this* with a directory read between them.
+#[derive(Debug)]
+struct TakenIn {
+    file: std::path::PathBuf,
+    id: String,
+    said: String,
+}
+
 /// **A preset row, taken into this store**, and the id it landed under.
 ///
 /// # Taking it in is not a second operation, and it is what gives it a name
@@ -4298,7 +4317,7 @@ fn taking_in(
     root: &std::path::Path,
     presets: Option<&karakuri_environment::places::Presets>,
     row: &str,
-) -> Result<(String, String), String> {
+) -> Result<TakenIn, String> {
     // **Asked again rather than kept**, which is [`listing`]'s shape: the rows
     // crossed into the console as words, and the file behind a word is found
     // by asking the library again on the press. A second copy of the listing
@@ -4327,7 +4346,64 @@ fn taking_in(
             )
         })?;
     let said = karakuri_environment::setfile::unbundle(&store, &lines)?;
-    Ok((id, said))
+    Ok(TakenIn {
+        file: found.path,
+        id,
+        said,
+    })
+}
+
+/// **The two rows of the vocabulary one press on a `presets` row performs**,
+/// in the order they happen.
+///
+/// # Two operations because they are two rows of the page, and one press
+///
+/// `docs/manual/operations.html`'s *Send a Set to somebody, and take one in*:
+/// packaging is *"one operation at two moments — ahead of time when you are
+/// sending, and at the press when you are not"*, so *"loading a Set out of
+/// presets or out of a folder is this row performed at the second of them"*.
+/// The load after it is *Load material into a deck*, which is a different row
+/// with a different operation. **One press, two rows** — `console.html` says
+/// why it is one press: *"A row here is taken into the store and then loaded,
+/// which is one press because taking it in is what gives it a name."*
+///
+/// So the press emits both. Emitting only the load would be a press that
+/// performs two of the page's rows and names one, and the row it dropped would
+/// be the one **nothing in this workspace constructs**.
+///
+/// # Naming what a surface performed is `e`'s rule, not a new one
+///
+/// The scope key steps the mark itself and emits `Operation::SelectScope`
+/// anyway, *"so that the press is recorded as `Silent(Surface)` rather than as
+/// nothing at all"*. This is that, one key along: `written` answers
+/// `Silent(NoRecord)` for a transfer, nothing in [`App::performed`] performs
+/// one, and the emission is the naming.
+///
+/// # And it is not the key badge
+///
+/// `key_column::ROWS` maps `l` to *Load material into a deck* alone, and that
+/// stays true: what an operator reaches from the keyboard is a load, and the
+/// taking-in is what a load off `presets` does on the way. ADR-0213's
+/// distinction is between an operator **reaching** an operation and something
+/// **happening**, and constructing an operation is neither — which is
+/// `panel_column.rs`'s own sentence, *"construction is not reachability, and
+/// reachability is the definition."*
+///
+/// The transfer names the **file**, because that is what
+/// `SetTransfer::Take` carries — *"a path because a file is what the only
+/// existing route takes"* — and the load names the **id**, which is the file's
+/// own `set` record rather than the row's word. They are the two halves of
+/// [`TakenIn`] and neither is derived from the other here.
+fn preset_press(deck: u8, taken: TakenIn) -> [Operation; 2] {
+    [
+        Operation::TransferSet {
+            transfer: SetTransfer::Take { file: taken.file },
+        },
+        Operation::LoadSet {
+            deck,
+            set: taken.id,
+        },
+    ]
 }
 
 /// **Put a library Set on a running deck**, which is the whole of what
@@ -7069,6 +7145,12 @@ impl ApplicationHandler for App {
                         let deck = self.readout.view.selection();
                         let at = self.readout.view.cursor_row();
                         let row = self.readout.view.library.get(at).cloned();
+                        // **What the take-in half of this press asked for**,
+                        // where a press that took nothing in leaves it
+                        // `Repaint::Never` — see the preset arm below for why
+                        // one press emits two operations and why they cannot
+                        // be one `Acted`.
+                        let mut took = Repaint::Never;
                         let acted = match (self.readout.view.scope(), row) {
                             // **A preset row is taken in and then loaded**,
                             // which is one press because taking it in is what
@@ -7080,9 +7162,49 @@ impl ApplicationHandler for App {
                             // loud so that nobody meets it as a surprise.
                             (Some(Scope::Presets), Some(row)) => {
                                 match taking_in(&self.store, self.presets.as_ref(), &row) {
-                                    Ok((id, said)) => {
-                                        println!("  take in: {said}");
-                                        Acted::Emitted(Some(Operation::LoadSet { deck, set: id }))
+                                    Ok(taken) => {
+                                        println!("  take in: {}", taken.said);
+                                        // **The take-in is named as well as
+                                        // performed, and that is `e`'s rule
+                                        // one key along**: the scope step
+                                        // emits `SelectScope` *"so that the
+                                        // press is recorded as `Silent` rather
+                                        // than as nothing at all"*, and this
+                                        // press has just performed a whole row
+                                        // of the vocabulary —
+                                        // `docs/manual/operations.html`'s
+                                        // *Send a Set to somebody, and take
+                                        // one in*, *"this row performed at the
+                                        // second of them"*. Emitting only the
+                                        // load would be a press that does two
+                                        // of the page's rows and names one.
+                                        //
+                                        // **Two emissions rather than one**,
+                                        // because they are two rows: taking in
+                                        // is what gives the Set the id, and
+                                        // the load names that id. `Acted`
+                                        // carries one operation — a fader
+                                        // drag, a chip, a key each emit
+                                        // exactly one — so the pair is two
+                                        // trips through `App::performed`
+                                        // rather than a shape invented here
+                                        // for the one press that has two.
+                                        //
+                                        // **In the order they happened.**
+                                        // `written` answers
+                                        // `Silent(NoRecord)` for the transfer,
+                                        // so nothing in `performed` performs
+                                        // it and the emission is the naming;
+                                        // the load after it is what re-points
+                                        // the slot.
+                                        let [take, load] = preset_press(deck, taken);
+                                        took = App::performed(
+                                            gfx,
+                                            &mut self.readout,
+                                            &Acted::Emitted(Some(take)),
+                                            Repaint::Never,
+                                        );
+                                        Acted::Emitted(Some(load))
                                     }
                                     // **Which of the two acts failed is the
                                     // whole of what this sentence adds.**
@@ -7134,8 +7256,16 @@ impl ApplicationHandler for App {
                                 Acted::Nothing
                             }
                         };
+                        // **One frame asked for, however many operations the
+                        // press emitted.** `App::wants` counts a frame against
+                        // the run's costs and asks the window for a redraw, so
+                        // calling it twice for one press would ask for two
+                        // frames where one is drawn. `Repaint::soonest` is
+                        // what combines them, and its own rule is why it is
+                        // safe: it can only bring a frame forward.
                         let repaint =
-                            App::performed(gfx, &mut self.readout, &acted, Repaint::Never);
+                            App::performed(gfx, &mut self.readout, &acted, Repaint::Never)
+                                .soonest(took);
                         App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
                         return;
                     }
@@ -8687,15 +8817,16 @@ mod tests {
             library(&root).is_empty(),
             "a fresh store lists something under `my sets`"
         );
-        let (id, said) = taking_in(&root, Some(&presets), "beat_cloud")
+        let taken = taking_in(&root, Some(&presets), "beat_cloud")
             .unwrap_or_else(|e| panic!("`beat_cloud` was not taken in: {e}"));
         assert_eq!(
-            id, "beat_cloud",
+            taken.id, "beat_cloud",
             "the id is the file's own `set` record and not the row's word"
         );
         assert!(
-            said.contains("took `beat_cloud` in"),
-            "the report the operator reads is `{said}`"
+            taken.said.contains("took `beat_cloud` in"),
+            "the report the operator reads is `{}`",
+            taken.said
         );
         assert_eq!(
             library(&root),
@@ -8710,6 +8841,138 @@ mod tests {
             .expect("the Set that was just taken in cannot be read back");
 
         std::fs::remove_dir_all(&root).expect("clean up");
+    }
+
+    /// **A take-in names the file it read, because that is what the operation
+    /// carries** — `SetTransfer::Take`'s own sentence, *"a path because a file
+    /// is what the only existing route takes"*.
+    ///
+    /// The id and the file are two different answers and the row needs both:
+    /// the load after the press names the id, and the transfer names the file.
+    /// The claim here is that the file is the row's own `.kset` in the preset
+    /// library and not something re-derived afterwards — asking the listing a
+    /// second time to name what was already taken in would be two answers to
+    /// *which file was this* with a directory read between them.
+    ///
+    /// A CPU test, for the test above's reason.
+    #[test]
+    fn a_take_in_names_the_file_it_read_because_that_is_what_the_operation_carries() {
+        let root = scratch_dir("preset-take-in-file");
+        let presets = shipped_presets();
+        Store::open(&root).expect("a store to take a preset into");
+
+        let taken = taking_in(&root, Some(&presets), "beat_cloud")
+            .unwrap_or_else(|e| panic!("`beat_cloud` was not taken in: {e}"));
+        assert_eq!(
+            taken.file.file_name().and_then(|n| n.to_str()),
+            Some("beat_cloud.kset"),
+            "the take-in named `{}`, which is not the row's own authoring file",
+            taken.file.display()
+        );
+        assert!(
+            taken.file.starts_with(&presets.dir),
+            "the take-in named `{}`, which is outside the preset library at `{}`",
+            taken.file.display(),
+            presets.dir.display()
+        );
+        assert!(
+            taken.file.is_file(),
+            "the take-in named `{}` and there is no file there",
+            taken.file.display()
+        );
+
+        std::fs::remove_dir_all(&root).expect("clean up");
+    }
+
+    /// **A press on a `presets` row is *Send a Set to somebody, and take one
+    /// in* performed at the second of its two moments, and then the load** —
+    /// so it emits both, in that order.
+    ///
+    /// `docs/manual/operations.html`: *"loading a Set out of presets or out of
+    /// a folder is this row performed at the second of them"*, and
+    /// `console.html`: *"A row here is taken into the store and then loaded,
+    /// which is one press because taking it in is what gives it a name."*
+    /// **Two rows of the page and one press**, and what this defends is that
+    /// the press names both of them: emitting only the load would be a press
+    /// that performs two rows and names one, and the row it dropped is the one
+    /// nothing else in this workspace constructs.
+    ///
+    /// The titles are asked of [`Operation::title`] rather than written out
+    /// here, so a heading that moves on the page moves in one place.
+    ///
+    /// A CPU test: it builds two values.
+    #[test]
+    fn a_press_on_a_preset_row_names_the_take_in_and_then_the_load() {
+        let root = scratch_dir("preset-press");
+        let presets = shipped_presets();
+        Store::open(&root).expect("a store to take a preset into");
+
+        let taken = taking_in(&root, Some(&presets), "beat_cloud")
+            .unwrap_or_else(|e| panic!("`beat_cloud` was not taken in: {e}"));
+        let file = taken.file.clone();
+        let [take, load] = preset_press(2, taken);
+
+        assert_eq!(
+            take,
+            Operation::TransferSet {
+                transfer: SetTransfer::Take { file }
+            },
+            "the first of the two is not the take-in, or it does not name the file it read"
+        );
+        assert_eq!(
+            take.title(),
+            "Send a Set to somebody, and take one in",
+            "the first of the two does not name the row the press performed"
+        );
+        assert_eq!(
+            load,
+            Operation::LoadSet {
+                deck: 2,
+                set: "beat_cloud".to_owned()
+            },
+            "the second of the two is not the load, or it does not name the id the file filed \
+             itself under"
+        );
+        assert_eq!(
+            load.title(),
+            "Load material into a deck",
+            "the second of the two does not name the row the press performed"
+        );
+
+        std::fs::remove_dir_all(&root).expect("clean up");
+    }
+
+    /// **The take-in the press names writes no record, and that is settled** —
+    /// which is why emitting it is a naming rather than a second route into
+    /// anything.
+    ///
+    /// `karakuri-operation-record` answers `Silent(NoRecord)` for a transfer:
+    /// nothing in the session vocabulary carries a Set arriving from
+    /// somewhere else. So [`App::performed`] performs nothing for it, exactly
+    /// as it performs nothing for the scope step `e` emits, and
+    /// [`unwritten`] is what an operator reads. **If that ever became
+    /// `Owed`**, the press would be emitting a gap rather than a settled
+    /// silence and this file would be the place to say so.
+    ///
+    /// A CPU test: it is a `match` on an operation.
+    #[test]
+    fn the_take_in_the_press_names_writes_no_record_and_that_is_settled() {
+        let take = Operation::TransferSet {
+            transfer: SetTransfer::Take {
+                file: std::path::PathBuf::from("night01.kset"),
+            },
+        };
+        assert_eq!(
+            written(&take, &Current::default()),
+            Written::Silent(Silent::NoRecord),
+            "a transfer the press emits no longer writes a settled nothing"
+        );
+        let said = unwritten(&take, &written(&take, &Current::default()))
+            .expect("a press that wrote no record says so");
+        assert!(
+            said.contains("no record, and that is settled"),
+            "what the operator reads is `{said}`"
+        );
     }
 
     /// **An id this store already holds is refused rather than overwritten,
@@ -11175,6 +11438,17 @@ mod key_column {
         // is what the load does on the way, which is exactly the distinction
         // ADR-0213 draws between reaching an operation and something
         // happening.
+        //
+        // **The press does now emit that second row**, and it stays out of
+        // this entry all the same: `super::preset_press` builds
+        // `Operation::TransferSet` beside the load so that a press names both
+        // rows it performs, and *constructing* an operation is neither
+        // reaching it nor a badge —
+        // `karakuri-console/tests/panel_column.rs`'s own sentence,
+        // *"construction is not reachability, and reachability is the
+        // definition."* A key badge here would claim an operator can ask for a
+        // transfer from the keyboard, and they cannot: the only way to that
+        // emission is a load off a row of `presets`.
         ("l", &["Load material into a deck"]),
         // **The scope, and it is the one key here whose row the page marks
         // `plan` in every other column.** The chips are drawn by
