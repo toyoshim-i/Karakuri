@@ -110,7 +110,9 @@ running rather than by a promise:
   and the one `Op` that has no row.
 - `crates/karakuri-console/tests/page_totals.rs` — the page's own summary against its own badges,
   written because *"three times in three days a badge moved and a sentence about how many badges
-  there are did not."*
+  there are did not."* **Deleted on 2026-09-01.** The page became a matrix and states no count in
+  prose, so the drift this test caught cannot occur; what it guarded is now read by the commands
+  under *The meter is one column*. The other two above still exist and still read the page.
 
 So a claim that the milestone is over is a claim about a file that a suite already refuses to let
 drift. That is what the alternatives below cannot offer.
