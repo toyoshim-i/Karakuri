@@ -39,9 +39,9 @@ use karakuri_layout::Rect;
 const CANVAS: (u32, u32) = (1280, 720);
 
 /// The last window whose Program bay is the mock's arrangement, and the first
-/// whose is not — the module header is where the 524 comes from.
-const BELOW: f32 = 1587.0;
-const BESIDE: f32 = 1588.0;
+/// whose is not — 778 is the sum of side tracks and padding (ADR-0239).
+const BELOW: f32 = 1483.0;
+const BESIDE: f32 = 1484.0;
 
 /// A console at `width`, arranged the way a frame arranges it.
 fn at(width: f32) -> Panel {
@@ -127,9 +127,8 @@ fn the_bay_rearranges_at_the_crossover() {
     assert!(cells[1].min.y > cells[0].max.y);
     assert!(cells[2].min.x > cells[0].max.x);
     assert!(
-        cells[0].height() > 160.0,
-        "a cell beside the picture is {} tall and the row gave it 63",
-        cells[0].height()
+        near(cells[0].height(), 63.0),
+        "a cell beside the picture preserves its 63 height (ADR-0239)",
     );
     assert_sane(panel.layout());
     assert_within_bounds(panel.layout());
@@ -143,12 +142,12 @@ fn the_bay_rearranges_at_the_crossover() {
     let below = picture_rect(at(BELOW).layout(), CANVAS).expect("on screen");
     let beside = picture_rect(at(BESIDE).layout(), CANVAS).expect("on screen");
     assert!(
-        near(below.width(), 466.0) && near(below.height(), 262.0),
+        near(below.width(), 473.0) && near(below.height(), 266.0),
         "{:?}",
         below.size()
     );
     assert!(
-        near(beside.width(), 466.0) && near(beside.height(), 263.0),
+        near(beside.width(), 474.0) && near(beside.height(), 267.0),
         "{:?}",
         beside.size()
     );
@@ -170,7 +169,7 @@ fn the_bay_rearranges_at_the_crossover() {
         "{:?}",
         wide.size()
     );
-    assert!(wide.width() * wide.height() > below.width() * below.height() * 1.6);
+    assert!(wide.width() * wide.height() > below.width() * below.height() * 1.5);
 
     // **The picture is inside the region it is clipped to**, in both. Beside,
     // that region is the whole bay — the row is not in the layout to divide it

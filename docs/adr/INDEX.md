@@ -207,7 +207,7 @@ number; new records continue from the end.
 | [ADR-0179](0179-a-transcribed-number-cites-the-rule-it-was-copied-from.md) | A transcribed number cites the rule it was copied from, and the citation is checked | 2026-08-25 | accepted |
 | [ADR-0180](0180-the-operation-vocabulary-is-a-crate-with-no-dependencies.md) | The operation vocabulary is a crate with no dependencies, and the manual is its specification | 2026-08-25 | accepted |
 | [ADR-0181](0181-the-picture-is-the-canvass-shape-and-the-leftover-is-the-consoles.md) | The picture is the canvas's shape, and the leftover is the console's | 2026-08-25 | accepted |
-| [ADR-0182](0182-the-program-bays-body-arranges-itself-for-the-larger-picture.md) | The Program bay's body arranges itself for the larger picture | 2026-08-25 | accepted |
+| [ADR-0182](0182-the-program-bays-body-arranges-itself-for-the-larger-picture.md) | The Program bay's body arranges itself for the larger picture | 2026-08-25 | **superseded by ADR-0239** |
 | [ADR-0183](0183-a-node-is-out-of-the-layout-for-two-reasons-and-they-are-two-bits.md) | A node is out of the layout for two reasons, and they are two bits | 2026-08-26 | accepted |
 | [ADR-0184](0184-the-program-bay-rearranges-itself-and-a-still-frame-does-not.md) | The Program bay rearranges itself, and a still frame does not | 2026-08-26 | accepted |
 | [ADR-0185](0185-a-fader-translates-a-drag-into-an-operation-and-applies-nothing.md) | A fader translates a drag into an operation and applies nothing | 2026-08-26 | accepted |
@@ -264,6 +264,7 @@ number; new records continue from the end.
 | [ADR-0236](0236-a-map-is-the-layer-between-a-surface-and-the-vocabulary-and-the-audit-is-one-of-the-things-it-does.md) | A map is the layer between a surface and the vocabulary, and the audit is one of the things it does | 2026-08-31 | accepted |
 | [ADR-0237](0237-a-deck-slot-runs-from-its-own-copy-and-one-preset-in-four-slots-is-four-files.md) | A deck slot runs from its own copy, and one preset in four slots is four files | 2026-09-01 | accepted |
 | [ADR-0238](0238-which-cut-of-the-previous-frame-a-feedback-effect-reads-is-open-and-naming-one-recomposes-the-pipeline.md) | Which cut of the previous frame a feedback effect reads is open, and naming one recomposes the pipeline — records a question, takes no decision | 2026-09-01 | accepted |
+| [ADR-0239](0239-the-program-bay-preserves-preview-size-when-arranging-beside.md) | The Program bay preserves preview cell size when arranging beside | 2026-09-02 | accepted |
 
 ## Retired numbers
 
