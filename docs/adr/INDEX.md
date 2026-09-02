@@ -269,7 +269,8 @@ number; new records continue from the end.
 | [ADR-0241](0241-auditioning-survives-the-control-that-was-retired-and-is-re-recorded-as-a-property.md) | Auditioning survives the control that was retired, and is re-recorded as a property | 2026-09-02 | accepted |
 | [ADR-0242](0242-the-command-line-is-test-tooling-and-the-instruments-principles-do-not-bind-it.md) | The command line is test tooling, and the instrument's principles do not bind it | 2026-09-02 | accepted |
 | [ADR-0243](0243-the-program-picture-is-an-output-and-the-four-cells-are-monitors.md) | The Program picture is an output and the four cells are monitors | 2026-09-02 | accepted |
-| [ADR-0244](0244-a-sub-pixel-primitive-is-drawn-at-one-pixel-and-compensated-in-the-alpha.md) | A sub-pixel primitive is drawn at one pixel and compensated in the alpha | 2026-09-02 | accepted |
+| [ADR-0244](0244-a-sub-pixel-primitive-is-drawn-at-one-pixel-and-compensated-in-the-alpha.md) | A sub-pixel primitive is drawn at one pixel and compensated in the alpha | 2026-09-02 | **superseded by ADR-0245** |
+| [ADR-0245](0245-the-sub-pixel-compensation-is-paid-in-the-colour-because-alpha-is-coverage.md) | The sub-pixel compensation is paid in the colour, because alpha is coverage | 2026-09-02 | accepted |
 
 ## Retired numbers
 

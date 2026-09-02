@@ -850,8 +850,9 @@ canvas it can come out narrower than a pixel — and a thing narrower than a pix
 drawn or dropped depending on where it happened to land. What you got was not a dimmer
 picture but a sparser and arbitrary one, thinning out as the canvas shrank. It is now drawn
 at one pixel and dimmed by the coverage it lost, so a small canvas shows the same picture
-darker in the places it had to round up. Exact under `blend additive`; under a mix's `over`
-it is an approximation, and a dense cloud of sub-pixel sprites will read slightly light.
+darker in the places it had to round up. Exact under `blend additive`. Under a mix's `over`
+it is an approximation in one direction you can see: what got rounded up covers a whole
+pixel, so it hides a little more of the deck beneath it than it should.
 
 ### There is no fullscreen and no display picker
 
