@@ -141,15 +141,20 @@ liveness signal is a budget that is over, and *over budget* is the report, not a
 the console: what must be live during a performance is named, and each named thing declares what it
 costs and how stale it may get, ahead of the frame that pays.
 
-**Where it loses.** [P-0070](0070-auditioning-is-a-prerequisite-not-a-convenience.md) is the case,
+**Where it loses.**
+[P-0080](0080-an-operator-can-see-a-slots-own-material-without-putting-it-on-air.md) is the case,
 and it is a real loss rather than a technicality: an audition adds a draw that is not in the budget
-and falls inside the watchdog's judging window, so **auditioning a heavy slot can roll back an
+and falls inside the watchdog's judging window, so **watching a heavy slot can roll back an
 unrelated slot's build**. That is unbudgeted risk added to the live path, knowingly, and this rule
-does not get to remove the control or hide it behind a flag. It loses because choosing between
+does not get to remove the look or hide it behind a flag. It loses because choosing between
 candidates cannot be done blind, and a rule that protects a performance cannot be used to remove
 what the performance is played with. The bill is paid and written down
 ([ADR-0072](../adr/0072-auditioning-adds-a-draw-and-never-a-step.md);
-[P-0058](0058-before-v1-compatibility-is-a-bill-not-an-argument.md) is the form of the answer).
+[P-0058](0058-before-v1-compatibility-is-a-bill-not-an-argument.md) is the form of the answer). This
+case was P-0070 until 2026-09-02, which named one output switched away from the mix; the mechanism
+was retired and the requirement re-recorded as the property, and what this rule loses to is the
+requirement
+([ADR-0241](../adr/0241-auditioning-survives-the-control-that-was-retired-and-is-re-recorded-as-a-property.md)).
 
 **And a fourth answer that looks like a violation.** `Frame::render` checks its sizes and **panics**
 (P-0027) — stopping, which is the thing this rule is named against. The distinction is what the
@@ -209,7 +214,7 @@ clause in [P-0033](0033-the-governor-never-takes-a-live-slot-off-air.md),
 [P-0052](0052-publishing-is-a-choice-of-attention-not-of-authority.md),
 [P-0076](0076-a-surface-owns-the-affordance-never-the-authority.md) and
 [P-0078](0078-the-operator-wins-and-an-automatic-writer-yields-to-a-hand.md); and the boundary in
-[P-0070](0070-auditioning-is-a-prerequisite-not-a-convenience.md).
+[P-0080](0080-an-operator-can-see-a-slots-own-material-without-putting-it-on-air.md).
 
 In code the three answers are `karakuri-ir`'s check pass and `cost::estimate` (refuse),
 [swap.rs](../../crates/karakuri-engine/src/swap.rs) and

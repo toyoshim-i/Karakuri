@@ -23,6 +23,21 @@ tags: [process, docs, live, mcp]
 > a conclusion with no reason attached — is untouched, and P-0079 is what the decision was argued
 > against.
 
+> **Annotated 2026-09-02.** The principle this record cites as the case where P-0079 loses —
+> P-0070, *Auditioning is a prerequisite, not a convenience* — was retired that day and
+> re-recorded as
+> [P-0080](../principles/0080-an-operator-can-see-a-slots-own-material-without-putting-it-on-air.md),
+> *An operator can see a slot's own material without putting it on air*
+> ([ADR-0241](0241-auditioning-survives-the-control-that-was-retired-and-is-re-recorded-as-a-property.md)).
+> **The argument below is untouched and read it as written**: what P-0079 loses to is the
+> requirement, which did not move; only the mechanism P-0070 had named as *where it holds* did.
+> The sentence *"the first time this one is cited to delete a control is the argument it has to
+> already have answered"* was tested within two days —
+> [ADR-0240](0240-the-output-shows-the-mix-and-residency-keys-belong-to-the-mixer.md) deleted the
+> control, on the ground that four continuous preview cells serve the requirement better than one
+> switched output, rather than on the ground that the audition was unsafe. That is the argument
+> this record said had to be met, met.
+
 ## Context
 
 The maintainer, on 2026-08-31, confirming why the MCP surface is deliberately narrow — not every

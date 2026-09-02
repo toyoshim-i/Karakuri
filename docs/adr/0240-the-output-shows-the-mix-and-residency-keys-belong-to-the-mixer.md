@@ -5,11 +5,25 @@ status: accepted
 date: 2026-09-02
 supersedes: []
 superseded_by: []
-principles: [0060, 0070]
+principles: [0060, 0080]
 tags: [operations, ui]
 ---
 
 # The output shows the mix, and residency keys belong to the mixer
+
+> **Annotated 2026-09-02, later the same day.** This record rested on P-0070, *Auditioning is a
+> prerequisite, not a convenience* — and the decision below made that file false as written: its
+> rule was *one slot on the output in place of the mix*, and its *Where it holds* named
+> `Deck::set_preview` and the `v` key. P-0070 is retired and the requirement re-recorded as the
+> property,
+> [P-0080](../principles/0080-an-operator-can-see-a-slots-own-material-without-putting-it-on-air.md),
+> *An operator can see a slot's own material without putting it on air*
+> ([ADR-0241](0241-auditioning-survives-the-control-that-was-retired-and-is-re-recorded-as-a-property.md)).
+> The front matter above is re-pointed to it, which is metadata rather than a change to what this
+> record decided ([ADR-0059](0059-a-records-pointer-into-the-principles-registry-is-metadata.md)).
+> P-0080 also records what this decision leaves owed: `karakuri-cli` can no longer audition a slot
+> at all, and the four cells draw only Live decks, so an off-air candidate is visible on no
+> surface.
 
 ## Context
 

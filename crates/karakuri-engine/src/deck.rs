@@ -24,8 +24,9 @@
 //! while `add` was the only mode, because addition does not care who went
 //! first. It stops working at [`Blend::Over`], which is a question about one
 //! source against the accumulated rest, and a mix that has already been summed
-//! cannot be taken apart again. Auditioning one slot ([`Deck::set_preview`])
-//! wants the same thing.
+//! cannot be taken apart again. Auditioning one slot — drawing it on its own,
+//! away from the mix — wants the same thing, and it is also what lets the
+//! console's four deck preview cells each present their own slot.
 //!
 //! The bill for that, stated so it is on the record rather than rediscovered:
 //! **four targets at 1280x720 `Rgba16Float` is 8 bytes a texel, 7.03 MB each,
@@ -202,19 +203,29 @@
 //! says which instant is the right one, and the first cannot see it.
 //!
 //! What Priming is *not* is a preview. Seeing a slot before it goes on air is
-//! an audition ([`Deck::set_preview`]) and wants a target and a draw; this
-//! is the warming, and the two are separate features that a single "render
-//! hidden" would have conflated. Both are built now and they compose in exactly
-//! the way keeping them separate allowed: priming gives a parked candidate
-//! something to show, and an audition shows it, and neither had to learn about
-//! the other.
+//! an audition and wants a target and a draw; this is the warming, and the two
+//! are separate features that a single "render hidden" would have conflated.
+//! Both are built and they compose in exactly the way keeping them separate
+//! allowed: priming gives a parked candidate something to show, and an audition
+//! shows it, and neither had to learn about the other.
 //!
 //! ## Preview
 //!
-//! [`Deck::set_preview`] auditions one slot instead of the mix, and the rule is
-//! one line: **an audition adds a draw and never a step.** The argument, what
-//! it deliberately ignores, and the three things it costs are all there rather
-//! than here, because every one of them is a consequence of that line.
+//! A deck can draw one slot on its own instead of the mix, and the rule is one
+//! line: **an audition adds a draw and never a step.** `Frame::render` carries
+//! it — an `auditioned` slot is drawn whatever its residency, nothing here
+//! advances its clock, and the composite folds it as a single term at unity.
+//!
+//! **Nothing can switch it on.** `Deck::set_preview` was the only writer of
+//! `preview` and it is gone: `docs/adr/0240-the-output-shows-the-mix-and-residency-keys-belong-to-the-mixer.md`
+//! retired the operator-facing control, because the Program bay's four cells
+//! each present their own slot continuously and the picture is the master mix.
+//! The draw path is kept rather than deleted, and what it is kept *for* is
+//! written down: those cells draw only Live slots, so the requirement that an
+//! operator can see an off-air candidate is currently met by no surface —
+//! `docs/principles/0080-an-operator-can-see-a-slots-own-material-without-putting-it-on-air.md`,
+//! *Where it is not met*. Read every `auditioned` branch below as unreachable
+//! until something writes `preview` again.
 //!
 //! ## Determinism
 //!
@@ -346,8 +357,10 @@
 //! installs a cold Set and a rollback restores a parked one, and either way the
 //! next frame's image has nothing to do with the last one's — and **either end
 //! of an audition**, which is what starts or stops an off-air slot being drawn
-//! at all. All four are handled where they happen: [`Deck::set_residency`],
-//! [`Deck::resize`], [`Deck::begin_frame`] and [`Deck::set_preview`].
+//! at all. Three are handled where they happen: [`Deck::set_residency`],
+//! [`Deck::resize`] and [`Deck::begin_frame`]. The fourth was `set_preview`,
+//! which is gone with the control (ADR-0240) — nothing starts or stops an
+//! audition any more, so nothing has to retire a meter for one.
 
 use crate::binding::Signals;
 use crate::governor::{Governor, Report, SlotState};
@@ -647,9 +660,10 @@ impl Blend {
     ///
     /// `opacity` at zero is silence under every mode, and it is the escape
     /// that always works — **except while the slot is being auditioned**, where
-    /// the preview forces both faders to unity and this is not consulted at
-    /// all. See [`Deck::set_preview`]: an audition is meant to show what the
-    /// material does, including going NaN. `gain` at zero is silence under `add` and `max`,
+    /// the audition forces both faders to unity and this is not consulted at
+    /// all, because an audition is meant to show what the material does,
+    /// including going NaN. Nothing can start one today (ADR-0240), so the
+    /// exception is dormant rather than gone. `gain` at zero is silence under `add` and `max`,
     /// where a slot contributing nothing is a slot contributing nothing —
     /// and is **not** silence under `over`, where zero gain is a black card
     /// and a black card covers. That asymmetry is real rather than an
@@ -778,8 +792,12 @@ pub struct Deck {
     /// The compute budget priming is decided against. Holds no per-slot state;
     /// [`Deck::govern`] is a pure function of the slots plus this.
     governor: Governor,
-    /// **Which slot is being auditioned**, or `None` for the mix. See
-    /// [`Deck::set_preview`].
+    /// **Which slot is being auditioned**, or `None` for the mix.
+    ///
+    /// **Always `None` today.** `Deck::set_preview` was its only writer and
+    /// ADR-0240 retired it with the control; the draw path in `Frame::render`
+    /// that reads this is kept for the gap named in P-0080's *Where it is not
+    /// met* and is unreachable until something writes here again.
     preview: Option<usize>,
     /// Scheduled moves, at most one per `(slot, control)` — see
     /// [`Deck::schedule`]. A `Vec` rather than a map because there are eight
@@ -1524,107 +1542,10 @@ impl Deck {
     /// folds, not what happens to the fold: the master out applies to an
     /// auditioned frame exactly as the tone mapper and its exposure do, and for
     /// the same reason — the audition is injected into the master chain rather
-    /// than routed around it. See [`Deck::set_preview`], which is about the
-    /// edges.
+    /// than routed around it. That is about the edges rather than about the
+    /// fold, and it holds whether or not anything can start an audition.
     pub fn set_out(&mut self, out: f32) {
         self.out = clamp_gain(out);
-    }
-
-    pub fn preview(&self) -> Option<usize> {
-        self.preview
-    }
-
-    /// **Audition one slot instead of the mix**, or `None` for the mix.
-    ///
-    /// A live preview of any slot's output, and a prerequisite rather than a
-    /// convenience: choosing between candidates is the basic workflow and it
-    /// cannot be done blind — see
-    /// `docs/principles/0070-auditioning-is-a-prerequisite-not-a-convenience.md`.
-    ///
-    /// **It adds a draw and never a step.** A previewed slot is rendered
-    /// whatever its residency, so an Allocated one shows the still it holds and
-    /// a Priming one shows what it is warming into — but nothing here advances
-    /// a clock. Stepping a slot because somebody looked at it would break the
-    /// property the whole of `Residency` rests on: `t` moves through
-    /// [`Set::prepare`](crate::set::Set::prepare) and nowhere else, so a slot
-    /// taken off air and put back resumes where it stopped. An audition that
-    /// quietly ran the simulation forward would be an audition that changed
-    /// what it was auditioning.
-    ///
-    /// It is **not** a second composite. The mix pass runs as it always does,
-    /// with the previewed slot's terms forced to unity and every other slot
-    /// skipped, so what reaches the target is that slot's own texels — `0.0 +
-    /// 1.0 * src` is `src` exactly, which is the same arithmetic that makes a
-    /// deck of one a bare Set and carries the same one caveat: exact in colour,
-    /// and in alpha for material whose coverage is in range. See [`Blend::Add`].
-    /// Everything downstream is therefore unchanged:
-    /// the tone mapper, the present pass, `--render`, a session recording. An
-    /// operator judges the material through the transfer curve it will be shown
-    /// through, which is the only judgement worth making.
-    ///
-    /// **An audition is unfiltered, and that costs the fader's escape while it
-    /// is up.** Forcing the previewed slot's terms to unity bypasses
-    /// [`Blend::silent_at`], so material that has gone NaN reaches the output
-    /// and pulling `opacity` to zero does not stop it — the one place the
-    /// "a fader at zero means zero" property does not hold. That is the right
-    /// trade for what an audition is *for*: a candidate that renders NaN is
-    /// exactly what an operator needs to find out, and a preview that showed
-    /// black instead would hide the thing it was opened to check. The way out
-    /// of an audition is to end it.
-    ///
-    /// **A Set that has never been stepped draws nothing**, and that follows
-    /// from the same rule rather than qualifying it: L1 owns every piece of
-    /// per-element state and it is written by the element pass, so a slot that
-    /// has never run has no positions to draw. Auditioning a candidate that
-    /// arrived into an off-air slot therefore shows black — and the answer is
-    /// the level that exists for exactly this, [`Residency::Priming`], which
-    /// steps it out of sight. Park it, prime it, look at it: the two compose,
-    /// and neither had to learn about the other.
-    ///
-    /// **Auditioning a warming slot shows it at its own grid position, which is
-    /// behind the room's.** A Priming slot reads the session's grid held back
-    /// by the steps it has not taken, and that was invisible while priming did
-    /// not draw — `Set::prepare_warming` says as much, and says the split is
-    /// safe because "the frame before was not drawn". An audition is the case
-    /// where it is. So material that reads `beats`, or carries a binding, moves
-    /// when it goes on air, by however far behind the governor's rate had it.
-    /// Named rather than fixed: reading the session's grid instead would make
-    /// the priming *rate* decide what the slot warms into, which is the defect
-    /// that split cost a repair to close.
-    ///
-    /// **The extra pass is not budgeted.** [`crate::governor`] charges an
-    /// Allocated slot nothing and a Priming one a fraction, and an audition
-    /// makes both pay a full L4 pass every frame against that. It also lands
-    /// inside the frame interval `swap.rs`'s watchdog judges candidates on, so
-    /// auditioning something heavy can roll back an unrelated slot's build.
-    /// Left to the operator, who asked for it and can see the frame rate,
-    /// rather than given a budget line the governor would have to guess at.
-    ///
-    /// Today the preview *is* the output. When output routing gives this deck a
-    /// second one, this becomes the monitor's choice and stops being the
-    /// programme's — and that is the moment its record stops belonging in a
-    /// session stream.
-    pub fn set_preview(&mut self, slot: Option<usize>) {
-        assert!(
-            slot.is_none_or(|s| s < self.slots.len()),
-            "no slot {slot:?}: this deck holds slots 0-{}",
-            self.slots.len() - 1
-        );
-        if self.preview == slot {
-            return;
-        }
-        // Both ends of the change, because both change what a slot's target is
-        // showing and therefore what a measurement of it means. A slot that
-        // stops being previewed is off the draw, so its target goes stale on
-        // exactly the terms `set_effective` retires an off-air one for.
-        for retired in [self.preview, slot].into_iter().flatten() {
-            if self.slots[retired].effective != Residency::Live {
-                if let Some(meters) = &mut self.meters {
-                    meters.retire(retired);
-                }
-            }
-        }
-        self.preview = slot;
     }
 
     pub fn blend(&self, slot: usize) -> Blend {
@@ -1947,7 +1868,10 @@ impl Frame<'_> {
         for (i, slot) in self.deck.slots.iter_mut().enumerate() {
             // **An audition adds a draw and never a step**, so it is decided
             // here and used inside the two branches that are not already
-            // drawing. See `Deck::set_preview`.
+            // drawing. See "Preview" in the module doc: nothing writes
+            // `preview` since ADR-0240, so this is `false` on every frame and
+            // the branches below are unreachable — kept for the gap in
+            // `docs/principles/0080-an-operator-can-see-a-slots-own-material-without-putting-it-on-air.md`.
             //
             // Three things turn on it and they have to agree: whether the
             // render pass runs, whether the meter has an image of this frame to
