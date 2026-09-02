@@ -1508,6 +1508,41 @@ procedure to be authored against it and then be wrong everywhere else. Convertin
 `.kir` written in pixels is a division by the height that file was authored against, which
 is a fact about that file.
 
+#### A sprite smaller than a pixel is drawn at one pixel and dimmed to compensate
+
+**Below a pixel a sprite is not faint, it is absent.** A sprite of side `s` pixels — which is
+`point_rate` times the target's height — produces no fragment at all unless its quad happens
+to cover a pixel centre. So a rate that is right at 1280x720 drops most of its material at
+128x72, and what is left is not a dimmer version of the same picture but a sparser and
+arbitrary one, with which sprites survived decided by where they landed.
+
+**One pixel is the floor, and the fragment carries what the size lost.** Where `s` is below 1
+the quad is drawn at one pixel and the fragment's alpha is multiplied by the coverage the
+sprite should have had: `s²` for a sprite, and `s` for a stroke, which is one-dimensional and
+short of coverage across its width only. What is preserved is the *integrated* contribution
+rather than the peak — the material stays as bright in total as it was, spread over the
+smallest area anything can be drawn in.
+
+**The alpha channel rather than the colour, because that is the channel both blend modes
+scale a contribution by.** `additive` adds `color.rgb * color.a`, and `weighted` weights by
+`color.a`; multiplying the colour as well would apply the factor twice and make the
+compensation `s⁴`.
+
+**Exact under `additive`, approximate under `over`.** Adding light commutes with scaling it,
+so a dimmed one-pixel sprite adds exactly what the sub-pixel one would have. Compositing does
+not: two sub-pixel sprites landing in one pixel are composed as though each covered the whole
+pixel at a reduced alpha, which is the ordinary coverage-as-alpha assumption and is wrong by
+however much the two actually overlap.
+
+**A `point_rate` of zero or less draws nothing**, which is now a rule rather than an accident.
+Zero always did, a zero-extent quad having no area. A negative rate used to draw a sprite of
+`|s|` with its `point_coord` mirrored, which nothing asked for and no procedure could rely on;
+`point_rate` is a size, and below zero there is no size to draw.
+
+**Nothing changes at or above a pixel.** Both the floor and the factor are inert once `s` is 1
+or more, so material authored at a resolution where it was never sub-pixel renders exactly as
+it did.
+
 ### How an L4 says what it draws
 
 By assigning `clip_b`, or by not assigning it — and, for the whole frame, by
@@ -1852,9 +1887,12 @@ disc_point(float, float) -> vec2
   six vertices per instance, the corner in `@builtin(vertex_index)` and the element in
   `@builtin(instance_index)`. `point_rate` scales the quad in clip space so a sprite keeps
   its size relative to the frame at any depth, and `point_coord` falls out of the corner.
-  The vertical offset is the rate itself, because NDC spans the target's height exactly; the
-  horizontal one carries the aspect ratio on top of it, which is what makes the sprite square
-  in pixels rather than square in NDC
+  The rate is turned into a side in pixels first — `point_rate * viewport.y` — and the offset
+  in each axis is that side over that axis's extent, which is what makes the sprite square in
+  pixels rather than square in NDC. The side is floored at one pixel, and the coverage the
+  floor took away — `(side / max(side, 1))²`, one at or above a pixel — travels to the
+  fragment stage as a flat varying and multiplies the alpha there. See *A sprite smaller than
+  a pixel is drawn at one pixel and dimmed to compensate*
 - **`topology lines` does not lower to `PrimitiveTopology::LineList` either**, and for the
   same reason: a line primitive is one pixel wide. It is the *same quad*, laid along the
   segment instead of around a point — six vertices per instance, one instance per element,
@@ -1866,7 +1904,9 @@ disc_point(float, float) -> vec2
   divided through by `w`, the offset is computed there, and the result is multiplied by `w`
   again so the rasterizer's own divide returns the position computed here. `point_rate` is
   turned into pixels first, by multiplying by the target's height. That last multiply is what
-  keeps the stroke straight on screen at any depth. Each of the six vertices belongs to one
+  keeps the stroke straight on screen at any depth. The width is floored at one pixel like a
+  sprite's side, and the compensating factor is the width itself rather than its square,
+  because a stroke is short of coverage across one axis only. Each of the six vertices belongs to one
   end of the segment and carries that end's `w` and that end's divided `z`; nothing is
   interpolated in the vertex stage, because the rasterizer is what interpolates.
 
@@ -3517,7 +3557,10 @@ under the unknown-key rule stated above.
 
 **L4 is a measurement at reference conditions.** Point sprite cost is dominated by fill
 rate: `point_rate` and resolution decide the overdraw, so it is not linear in element count
-and a per-element figure would be a fiction.
+and a per-element figure would be a fiction. It becomes linear at the bottom, where the
+one-pixel floor holds every sprite to a single fragment — a floor is exactly the shape a
+per-element figure would have, and it is the one regime a reference measurement must not be
+taken in.
 
 ```ndjson
 {"t":"perf","kind":"L4","res":"1920x1080","capacity":262144,"params":"default","ms":2.4}

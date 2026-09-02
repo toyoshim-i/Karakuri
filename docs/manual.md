@@ -843,6 +843,16 @@ of one, reporting what it skipped. Closing that is a format change.
 Changing it would reallocate every slot's target, and the frame path does not allocate. Set
 `--canvas` before you start. Resizing the window is free and changes nothing that is drawn.
 
+### A small canvas keeps its material
+
+A sprite is a fraction of the canvas' height rather than a count of pixels, so at a small
+canvas it can come out narrower than a pixel — and a thing narrower than a pixel used to be
+drawn or dropped depending on where it happened to land. What you got was not a dimmer
+picture but a sparser and arbitrary one, thinning out as the canvas shrank. It is now drawn
+at one pixel and dimmed by the coverage it lost, so a small canvas shows the same picture
+darker in the places it had to round up. Exact under `blend additive`; under a mix's `over`
+it is an approximation, and a dense cloud of sub-pixel sprites will read slightly light.
+
 ### There is no fullscreen and no display picker
 
 The window is a preview, and an OBS capture of it covers the ordinary case — press `a`

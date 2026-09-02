@@ -515,47 +515,102 @@ proc sprite {{
         );
     }
 
-    /// **A sprite smaller than a texel produces no fragment, and that is the
-    /// rasterizer rather than the expansion.**
+    /// **A sprite smaller than a texel is drawn at one texel and dimmed to
+    /// compensate.** This is the sub-pixel rule where it reaches pixels.
     ///
     /// This is a quad pair and not a GL point, so no hardware minimum point size
     /// applies, and without MSAA a fragment exists only where the quad covers a
     /// pixel *centre*. `examples/soft_points.kir`'s default rate is 4/720; at
-    /// 1280x720 that is the four-pixel sprite it was authored as, and at a
-    /// tenth of that it is 0.4 pixels across and lands between centres.
+    /// 1280x720 that is the four-pixel sprite it was authored as, and at a tenth
+    /// of that it is 0.4 pixels across.
+    ///
+    /// **This test asserted the absence, and the absence was the defect.** It
+    /// read the empty cell as the rasterizer behaving and concluded that a
+    /// preview cell has to be filled by downsampling — see `tests/deck.rs`,
+    /// where that conclusion was cited. What the two numbers actually said is
+    /// that a low-resolution *output* loses the same material, which no
+    /// downsample rescues. The quad is now floored at one pixel and the
+    /// fragment's alpha carries `s²`, the coverage the floor took.
     ///
     /// **128x72 rather than the console's own 112x63 cell**, because a readback
     /// needs its row length to be a multiple of 256 bytes and 112 texels at
     /// eight bytes is 896. Same tenth-scale, same conclusion, and the cell is
     /// smaller still.
     ///
-    /// **Recorded because the absence is the correct behaviour and reads like a
-    /// bug.** The reflex on seeing an empty cell is to suspect the expansion;
-    /// the two numbers here say the expansion is doing exactly what a fraction
-    /// of the height means, and that a preview cell has to be filled by
-    /// downsampling the slot's own full-size target rather than by re-rendering
-    /// into the cell. Re-rendering became the *cheaper* of the two when the
-    /// unit changed — `tests/deck.rs` measures both — and this is why cheaper
-    /// does not make it the right answer.
+    /// **Red carries the factor**, because this file's fixture writes
+    /// `color = vec4(1.0, …, 1.0)` into a `SrcAlpha, One` blend: what lands in
+    /// red is the source alpha, and the alpha is the channel the compensation is
+    /// applied to. 0.4 across is 0.16 of a texel's area.
+    ///
+    /// **Both halves are the claim.** Sixteen texels at full brightness on the
+    /// canvas says the mechanism is inert at or above a pixel; one dimmed texel
+    /// in the cell says it is not inert below one.
     #[test]
-    fn a_sprite_below_a_texel_drops_out_rather_than_being_drawn_small() {
+    fn a_sprite_below_a_texel_is_drawn_at_one_texel_and_dimmed_to_compensate() {
         let gpu = Gpu::headless().expect("no GPU available");
         // The rate `examples/soft_points.kir` carries, spelled as the division
         // it came from rather than as the decimal it rounds to.
         let l4 = sprite_rate_l4(0.0, 0.0, 4.0 / 720.0);
 
-        let canvas = covered_wide(&draw_at(&gpu, L1, &l4, 1280, 720), 1280);
-        let cell = covered_wide(&draw_at(&gpu, L1, &l4, 128, 72), 128);
+        let canvas_px = draw_at(&gpu, L1, &l4, 1280, 720);
+        let canvas = covered_wide(&canvas_px, 1280);
+        let cell_px = draw_at(&gpu, L1, &l4, 128, 72);
+        let cell = covered_wide(&cell_px, 128);
 
         assert_eq!(
             canvas.len(),
             16,
             "four pixels square is not sixteen texels at 1280x720"
         );
-        assert!(
-            cell.is_empty(),
-            "a 0.4-pixel sprite lit {} texels in a 128x72 cell",
-            cell.len()
+        for &(x, y) in &canvas {
+            let red = canvas_px[(y * 1280 + x) as usize][0];
+            assert!(
+                (red - 1.0).abs() < 1e-3,
+                "a four-pixel sprite was compensated at all: texel ({x}, {y}) carries {red}"
+            );
+        }
+
+        assert_eq!(
+            cell.len(),
+            1,
+            "a 0.4-pixel sprite did not land on exactly one texel in a 128x72 cell, but on {:?}",
+            cell
         );
+        let (x, y) = cell[0];
+        let red = cell_px[(y * 128 + x) as usize][0];
+        assert!(
+            (red - 0.16).abs() < 1e-3,
+            "a 0.4-pixel sprite carries {red} rather than 0.4 squared"
+        );
+    }
+
+    /// **A stroke thinner than a texel is compensated by its width and not by
+    /// the square of it** — the one place the two topologies part company under
+    /// the floor. A segment is short of coverage across its width and along none
+    /// of its length, so squaring the factor would dim a thin stroke twice.
+    ///
+    /// The same rate and the same target as its sprite counterpart above, so the
+    /// two numbers can be read against each other: 0.4 here, 0.16 there.
+    ///
+    /// The row count is asserted alongside the value, because a factor of 0.4
+    /// applied to a stroke two rows tall would put the same light on screen and
+    /// mean something else entirely.
+    #[test]
+    fn a_stroke_thinner_than_a_texel_is_compensated_by_its_width_rather_than_its_square() {
+        let gpu = Gpu::headless().expect("no GPU available");
+        let l4 = segment_rate_l4(-0.5, 0.5, 0.0, 4.0 / 720.0, 1.0, 1.0);
+
+        let px = draw_at(&gpu, L1, &l4, 128, 72);
+        let cells = covered_wide(&px, 128);
+
+        let (_, _, y0, y1) = bounds(&cells);
+        assert_eq!(y0, y1, "a one-texel stroke covered rows {y0}..={y1}");
+        for &(x, y) in &cells {
+            let red = px[(y * 128 + x) as usize][0];
+            assert!(
+                (red - 0.4).abs() < 1e-3,
+                "texel ({x}, {y}) carries {red} rather than the stroke's 0.4 of a texel"
+            );
+        }
     }
 }

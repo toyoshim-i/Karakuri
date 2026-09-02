@@ -3274,14 +3274,18 @@ proc wash {
     /// not a box filter — and it does not read the 1.8 MB the source occupies:
     /// 7056 output texels at four taps is 28k taps, scattered.
     ///
-    /// **`point_rate` is a fraction of the target's height, so the small target
-    /// does have fewer fragments**, and this is the paragraph that used to say
-    /// the opposite. `karakuri-codegen`'s L4 expansion scales the quad by the
-    /// rate rather than by a pixel count, so a sprite is the same share of the
-    /// frame at every size and a 112x63 render rasterises roughly `(63/720)²`
-    /// of the fragments a 1280x720 one does. That is what turned the sweep
-    /// around: it used to climb as the target shrank and now climbs as the
-    /// target grows.
+    /// **`point_rate` is a fraction of the target's height, so a small target
+    /// has fewer fragments per sprite — until a sprite reaches a pixel.**
+    /// `karakuri-codegen`'s L4 expansion scales the quad by the rate rather than
+    /// by a pixel count, so a sprite is the same share of the frame at every
+    /// size. This paragraph read that a 112x63 render therefore rasterises
+    /// roughly `(63/720)²` of the fragments a 1280x720 one does, and that is no
+    /// longer true at the bottom of the sweep: a quad below a pixel is floored
+    /// at one pixel and dimmed rather than dropped (ADR-0244), so a `Points`
+    /// procedure's fragment count bottoms out at one per element
+    /// instead of falling with the area. At 112x63 this material's sprites are
+    /// about a third of a pixel across, so the cell render sits entirely in that
+    /// floored regime.
     ///
     /// **The sweep's lit-texel column is not the check for that**, and reading
     /// it as one would be a mistake. At capacity 262144 the coverage saturates —
@@ -3327,20 +3331,43 @@ proc wash {
     /// stride costs almost nothing — 0.883 ms against 0.805 ms for the same
     /// present with no scaling at all.
     ///
-    /// **The cost order reversed when `point_size` became `point_rate`.**
-    /// Re-rendering into the cell was 17.5 ms against 9.3 ms for the whole
-    /// 1280x720 frame; it is now 7.6 ms against 10.5 ms, and the sweep climbs
-    /// with the target rather than against it — 7.6, 8.4, 9.7, 10.1, 10.5 ms
-    /// across 112x63, 224x126, 448x252, 640x360 and 1280x720. The 1280x720
-    /// figure barely moved, which is what says the reversal is the semantics
-    /// and not the machine.
+    /// **The cost order has reversed twice, and the second time it reversed
+    /// back.** Under the old pixel-size semantics, re-rendering into the cell
+    /// was 17.5 ms against 9.3 ms for the whole 1280x720 frame. `point_rate`
+    /// turned that around — 7.6 ms against 10.5 ms, the sweep climbing with the
+    /// target — and the one-pixel floor turned it back. Measured here as a
+    /// **pair**, one machine and one sitting, with the floor removed and
+    /// restored, because the older figures are another machine's and a
+    /// difference between them would be unreadable:
     ///
-    /// **It is still the wrong way to fill a cell, for a different reason.** At
-    /// 112x63 this material's sprites are about a third of a pixel across and
-    /// most of them cover no pixel centre at all — see
-    /// `tests/lines.rs::a_sprite_below_a_texel_drops_out_rather_than_being_drawn_small`.
-    /// A cell has to be filled by downsampling the slot's own full-size target.
-    /// Cheaper and wrong is still wrong.
+    /// | target | no floor | floored |
+    /// |---|---|---|
+    /// | 112x63 | 7.338 ms | 10.573 ms |
+    /// | 224x126 | 8.209 ms | 10.700 ms |
+    /// | 448x252 | 10.239 ms | 10.036 ms |
+    /// | 640x360 | 10.693 ms | 9.860 ms |
+    /// | 1280x720 | 11.687 ms | 10.014 ms |
+    ///
+    /// The draw-only halves say it without the compute in them: 4.797 ms against
+    /// 8.103 ms at 112x63, and 7.48 ms either way at 1280x720. **Rendering at
+    /// cell size went from 0.6x the whole 720p frame to 1.1x of it**, which is
+    /// what a floor of one fragment per element does to a target of 7056 texels
+    /// holding 262144 elements.
+    ///
+    /// **The 1280x720 row is the control, and it moved 1.7 ms.** The floor is
+    /// inert there — this material is 1.4 to 4 pixels across at that size — so
+    /// that gap is this machine's run-to-run agreement rather than an effect of
+    /// anything. Read the shape of the sweep and not the rows.
+    ///
+    /// **It is still not the way to fill a cell, and the reason has changed.**
+    /// The reason used to be that most of this material's sprites cover no pixel
+    /// centre at 112x63 and vanish — which was a defect in the renderer rather
+    /// than a fact about cells, and ADR-0244 is where it went. What stands in its
+    /// place is the plain cost: the full-size target is rendered anyway, so
+    /// downsampling costs line 2 alone, 0.489 ms net of the floor, against a
+    /// second 10.573 ms pass. **What fills a cell is open again** in the sense
+    /// that the correctness argument is spent; the cost argument now points the
+    /// same way, and the panel downsamples today.
     ///
     /// All of that is a claim about point sprites and not about every L4 — a
     /// fullscreen node such as `examples/field_march.kir` has a fragment count
