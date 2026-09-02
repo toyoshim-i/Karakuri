@@ -285,40 +285,67 @@ pub mod size {
     /// `.previews`'s `gap: 6px`: between two deck preview cells, and the only
     /// gap in that row — the CSS grid is `repeat(4, 1fr)` with this between
     /// the tracks and nothing outside them, so the padding either end is
-    /// [`PROGRAM_BODY_PAD`] and not this. The Program bay's 378 is written
+    /// [`PROGRAM_BODY_PAD`] and not this. The Program bay's 395 is written
     /// from the same 6 (`(466 - three 6px gaps) / 4 = 112`), so a cell is 112
     /// wide in both places or in neither.
     pub const PREVIEW_GAP: f32 = 6.0;
 
-    /// **How tall the row of deck preview cells is**, which is the 63 in the
-    /// arrangement's 72 for `deck-previews` — the row of cells, and
-    /// [`PROGRAM_BODY_PAD`] under them.
+    /// **How tall a deck preview cell's image is** — `.preview` alone, with
+    /// nothing of the `.caption` under it.
+    ///
+    /// **A cell is `.cell`, the image and the caption together**, which is
+    /// [`PREVIEW_ROW_H`]. That is not what `preview_rects` answers — its
+    /// rectangles are the images, because a texture is sized from one — and
+    /// the two-meanings clash is named at `caption_of` rather than renamed
+    /// here.
     ///
     /// **Derived rather than transcribed, because the mock states no height
     /// for the row at all.** `.previews` is
     /// `grid-template-columns: repeat(4, 1fr)` with [`PREVIEW_GAP`] between
-    /// the tracks, and a cell carries `.preview`'s `aspect-ratio: 16/9`, so
-    /// the row's height falls out of the width it has at the narrowest console
+    /// the tracks, and an image carries `.preview`'s `aspect-ratio: 16/9`, so
+    /// the height falls out of the width it has at the narrowest console
     /// the mock will draw. That width is 466 — `.console`'s
     /// `min-width: 1010px` less its own `padding: 10px` either side, less
     /// `.body-grid`'s two fixed tracks and the two gaps between the three,
     /// less `.program-body`'s padding either side — and `lib.rs` writes that
-    /// derivation out where the Program bay's 378 is built from it. A track is
+    /// derivation out where the Program bay's 395 is built from it. A track is
     /// (466 - three gaps) / 4 = 112, and 112 at that aspect is **63**.
-    pub const PREVIEW_ROW_H: f32 = (466.0 - PREVIEW_GAP * 3.0) / 4.0 * 9.0 / 16.0;
+    pub const PREVIEW_IMAGE_H: f32 = (466.0 - PREVIEW_GAP * 3.0) / 4.0 * 9.0 / 16.0;
+
+    /// `.cell`'s `gap: 4px`: between a cell's image and the caption under it,
+    /// and the only gap inside a cell — `.cell` is a two-child column, so
+    /// there is one of these and never two.
+    pub const PREVIEW_CAPTION_GAP: f32 = 4.0;
+
+    /// `.caption`'s `height: 13px`: the strip under a cell's image that
+    /// carries the letter, the state word and the risk badge. Stated in the
+    /// stylesheet rather than left to the line box, because the row's height
+    /// is the arrangement's and a height that follows a font is not a number
+    /// [`PREVIEW_ROW_H`] can be written from.
+    pub const PREVIEW_CAPTION_H: f32 = 13.0;
+
+    /// **How tall the row of deck preview cells is**, which is the 80 in the
+    /// arrangement's 89 for `deck-previews` — the row of cells, and
+    /// [`PROGRAM_BODY_PAD`] under them.
+    ///
+    /// A cell is its image, one [`PREVIEW_CAPTION_GAP`], and one
+    /// [`PREVIEW_CAPTION_H`] of caption: `.cell` read top to bottom. The row
+    /// grew by those two when the caption moved out of the image, and the
+    /// image kept its 63 — see `lib.rs`, where the bay's height is built from
+    /// this and the argument for growing rather than shrinking is written out.
+    pub const PREVIEW_ROW_H: f32 = PREVIEW_IMAGE_H + PREVIEW_CAPTION_GAP + PREVIEW_CAPTION_H;
 
     /// `.preview`'s `border-radius: 7px`, one shade tighter than the bay's
     /// [`BAY_RADIUS`] because the cell is inside it.
     pub const PREVIEW_RADIUS: f32 = 7.0;
 
-    /// `.preview`'s `font-size: 9px`: the deck's letter, which is the only
-    /// type in the cell.
+    /// `.caption`'s `font-size: 9px`: the deck's letter and the state word,
+    /// which are the only type a cell carries — and they are under the image
+    /// rather than on it.
     pub const PREVIEW_SIZE: f32 = 9.0;
 
-    /// `.preview`'s `padding: 3px 5px`, the box the letter sits in at the
-    /// bottom-left corner of a cell (`align-items: flex-end`).
-    pub const PREVIEW_PAD_X: f32 = 5.0;
-    pub const PREVIEW_PAD_Y: f32 = 3.0;
+    /// `.caption`'s `gap: 5px`, between the letter and the word beside it.
+    pub const PREVIEW_CAPTION_GAP_X: f32 = 5.0;
 
     /// `.transport`'s `padding: 9px 12px`. The 9 is the same 9 the
     /// arrangement's 48 was written from (`lib.rs`: 9 + 30 + 9), so the row's

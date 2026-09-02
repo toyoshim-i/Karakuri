@@ -46,14 +46,14 @@ fn the_program_does_not_grow_when_the_window_widens() {
     let narrow = solved(SMALLEST);
     let wide = solved(PLAUSIBLE);
 
-    assert!(near(rect_of(&narrow, "program").h, 378.0));
-    assert!(near(rect_of(&wide, "program").h, 378.0));
+    assert!(near(rect_of(&narrow, "program").h, 395.0));
+    assert!(near(rect_of(&wide, "program").h, 395.0));
 
     let centre = rect_of(&wide, "centre");
     assert!(rect_of(&wide, "program").h < (centre.w - 18.0) * 9.0 / 16.0);
 
     // And the inspector is what absorbed the height instead.
-    assert!(near(rect_of(&wide, "inspector").h, centre.h - 378.0 - 10.0));
+    assert!(near(rect_of(&wide, "inspector").h, centre.h - 395.0 - 10.0));
 }
 
 /// The panel is usable on a small screen, and `SMALLEST` says which one and
@@ -92,15 +92,17 @@ fn the_panel_is_usable_at_the_smallest_window_it_claims() {
     assert!(implied_min(&layout, root, Axis::Row) <= SMALLEST.w);
 }
 
-/// **The Program bay is two regions, and the split is the bay's own 378 read
+/// **The Program bay is two regions, and the split is the bay's own 395 read
 /// out loud.**
 ///
-/// *"The bay is two regions and they fold apart."* — `console.html`. The
-/// number the bay is checked against has not changed and neither has the way
-/// it was derived: bay head 27, padding 9 + 9, picture 262, gap 8, previews
-/// 63. What changed is that three of those terms are now one region, one is
-/// the divider, and two are the other — so this asserts the sum term by term
-/// rather than asserting 378 twice.
+/// *"The bay is two regions and they fold apart."* — `console.html`. The way
+/// the number is derived has not changed: bay head 27, padding 9 + 9, picture
+/// 262, gap 8, previews 80. The previews term is the one that moved — a cell
+/// is its 63 of image, `.cell`'s 4px gap and `.caption`'s 13px under it — and
+/// `lib.rs` is where growing the row rather than shrinking the cells is
+/// argued. Three of those terms are one region, one is the divider, and two
+/// are the other, so this asserts the sum term by term rather than asserting
+/// 395 twice.
 #[test]
 fn the_program_bay_is_a_picture_over_a_preview_row() {
     let layout = solved(SMALLEST);
@@ -123,11 +125,11 @@ fn the_program_bay_is_a_picture_over_a_preview_row() {
     );
 
     // 27 + 9 + 266 for the picture, `.program-body`'s 4px gap as the divider,
-    // and 63 + 9 for the previews and the padding under them.
+    // and 80 + 9 for the previews and the padding under them.
     assert!(near(rect_of(&layout, "program-view").h, 302.0));
     assert!(near(layout.divider(program).expect("a split has one"), 4.0));
-    assert!(near(rect_of(&layout, "deck-previews").h, 72.0));
-    assert!(near(rect_of(&layout, "program").h, 378.0));
+    assert!(near(rect_of(&layout, "deck-previews").h, 89.0));
+    assert!(near(rect_of(&layout, "program").h, 395.0));
 
     // The picture is what absorbs the bay's height, and the preview row is
     // content-height: drag the program's bottom edge down and every pixel of
@@ -138,8 +140,8 @@ fn the_program_bay_is_a_picture_over_a_preview_row() {
     wider.set_divider(centre, 0, rect_of(&wider, "program").y + 600.0);
     wider.solve();
     assert_sane(&wider);
-    assert!(near(rect_of(&wider, "deck-previews").h, 72.0));
-    assert!(near(rect_of(&wider, "program-view").h, was + 222.0));
+    assert!(near(rect_of(&wider, "deck-previews").h, 89.0));
+    assert!(near(rect_of(&wider, "program-view").h, was + 205.0));
 }
 
 /// **Both parts are addressable, and they fold independently** — which is the
@@ -154,9 +156,9 @@ fn the_program_bay_is_a_picture_over_a_preview_row() {
 #[test]
 fn the_picture_and_the_previews_fold_apart() {
     // The picture off: the previews stay, and they are what is left in the
-    // bay — at the 72 they are, not swollen to the height the picture was
+    // bay — at the 89 they are, not swollen to the height the picture was
     // holding. The bay claims what its visible content can use, which is the
-    // preview row and nothing else, so the bay is 72 too. That the 306 it gave
+    // preview row and nothing else, so the bay is 89 too. That the 306 it gave
     // up goes to the inspector is the sink's own sentence and is asserted in
     // the test below; what is asserted here is what the fold does — the row
     // survives it, at its own size.
@@ -169,8 +171,8 @@ fn the_picture_and_the_previews_fold_apart() {
         layout.visible(id_of(&layout, "deck-previews")),
         "the previews went with the picture; they are auditions of their own"
     );
-    assert!(near(rect_of(&layout, "deck-previews").h, 72.0));
-    assert!(near(rect_of(&layout, "program").h, 72.0));
+    assert!(near(rect_of(&layout, "deck-previews").h, 89.0));
+    assert!(near(rect_of(&layout, "program").h, 89.0));
 
     // And the other way round, which is what says the first half is about the
     // two folding apart rather than about the picture.
@@ -180,26 +182,26 @@ fn the_picture_and_the_previews_fold_apart() {
     assert_sane(&layout);
     assert!(!layout.visible(id_of(&layout, "deck-previews")));
     assert!(layout.visible(id_of(&layout, "program-view")));
-    assert!(near(rect_of(&layout, "program-view").h, 378.0));
+    assert!(near(rect_of(&layout, "program-view").h, 395.0));
 
     // Neither fold touched the bay around them, and unfolding restores what
     // was stored all along.
     layout.expand(id_of(&layout, "deck-previews"));
     layout.solve();
     assert!(near(rect_of(&layout, "program-view").h, 302.0));
-    assert!(near(rect_of(&layout, "deck-previews").h, 72.0));
+    assert!(near(rect_of(&layout, "deck-previews").h, 89.0));
 }
 
 /// **The sink's own sentence, as an assertion.**
 ///
 /// *"The picture is a sink, listed in Outputs as program view ... Turn it off
 /// and that picture goes, giving its height to the inspector."* —
-/// `console.html`. The bay is `Fixed(378)` and the solve is top-down, so for
+/// `console.html`. The bay is `Fixed(395)` and the solve is top-down, so for
 /// as long as the bay claimed its stored size whatever was left inside it, the
 /// height went to the preview row instead and the manual's sentence was a
 /// sentence about nothing. What makes it true is the bay claiming what its
 /// visible content can use: with the picture folded that is the preview row's
-/// 72, and the flexible child of the same column — the inspector — takes the
+/// 89, and the flexible child of the same column — the inspector — takes the
 /// 306 the bay gave up.
 #[test]
 fn folding_the_picture_gives_the_bays_height_to_the_inspector() {
@@ -207,7 +209,7 @@ fn folding_the_picture_gives_the_bays_height_to_the_inspector() {
         let mut layout = solved(viewport);
         let program = rect_of(&layout, "program").h;
         let inspector = rect_of(&layout, "inspector").h;
-        assert!(near(program, 378.0));
+        assert!(near(program, 395.0));
 
         layout.collapse(id_of(&layout, "program-view"));
         layout.solve();
@@ -215,30 +217,30 @@ fn folding_the_picture_gives_the_bays_height_to_the_inspector() {
 
         // The bay claims the preview row and the preview row alone.
         assert!(
-            near(rect_of(&layout, "program").h, 72.0),
-            "the bay is {} rather than the 72 its content can use",
+            near(rect_of(&layout, "program").h, 89.0),
+            "the bay is {} rather than the 89 its content can use",
             rect_of(&layout, "program").h
         );
         // And the row is still its own size rather than swollen into the
         // space the picture left — it is an audition, not a picture.
         assert!(
-            near(rect_of(&layout, "deck-previews").h, 72.0),
+            near(rect_of(&layout, "deck-previews").h, 89.0),
             "the preview row swelled to {}",
             rect_of(&layout, "deck-previews").h
         );
-        // Every pixel of the difference, to the inspector: 378 - 72 = 306.
+        // Every pixel of the difference, to the inspector: 395 - 89 = 306.
         assert!(
-            near(rect_of(&layout, "inspector").h, inspector + program - 72.0),
+            near(rect_of(&layout, "inspector").h, inspector + program - 89.0),
             "the inspector is {} rather than {}",
             rect_of(&layout, "inspector").h,
-            inspector + program - 72.0
+            inspector + program - 89.0
         );
 
-        // The bay declares a minimum of 200, and it does not hold it here: 200
-        // is what the bay needs while the picture is in it. Nothing was
-        // written back, so unfolding the sink restores the 378 and the
+        // The bay declares a minimum of 217, and it does not hold it here:
+        // 217 is what the bay needs while the picture is in it. Nothing was
+        // written back, so unfolding the sink restores the 395 and the
         // inspector gives the 306 straight back.
-        assert_eq!(layout.bounds(id_of(&layout, "program")).0, 200.0);
+        assert_eq!(layout.bounds(id_of(&layout, "program")).0, 217.0);
         layout.expand(id_of(&layout, "program-view"));
         layout.solve();
         assert_sane(&layout);

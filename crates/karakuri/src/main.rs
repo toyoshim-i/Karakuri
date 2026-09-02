@@ -14962,9 +14962,9 @@ mod gpu {
     ///
     /// - **112 x 63 in the row**, which is the cell and not the row, the
     ///   region, the picture or the window.
-    /// - **290 x 163 beside the picture**, which is the same rule read off a
-    ///   column instead of a track — 47,270 texels against 7,056, which is
-    ///   **6.7x**, **remade once** at the crossover and not once per frame of
+    /// - **252 x 142 beside the picture**, which is the same rule read off a
+    ///   column instead of a track — 35,784 texels against 7,056, which is
+    ///   **5.1x**, **remade once** at the crossover and not once per frame of
     ///   the drag that crossed it.
     /// - **and the scale**, which is the display it is dragged onto rather
     ///   than the window it is in: `ScaleFactorChanged`, and
@@ -15038,8 +15038,14 @@ mod gpu {
         assert!(renderer.texture(&engine.previews[0].id).is_some());
 
         // **A wider window goes beside**, preserving (112, 63) at default row height.
-        // **Dragging the preview row's height to 172** is what resizes preview cells
-        // to 290 x 163 (ADR-0239), with the registration it replaces freed.
+        // **Dragging the preview row's boundary 172 up from the bay's bottom**
+        // leaves the row 168 tall — the 4 of `PROGRAM_DIVIDER` is above the
+        // boundary — and that is 159 of cell once `.program-body`'s 9 comes
+        // off. A cell is its image and the caption band under it now, so the
+        // image is 159 - 17 = **142**, and 142 at 16:9 is **252** (ADR-0239 for
+        // the preserved size, and `room::size::PREVIEW_CAPTION_H` for the band
+        // that was not there when this read 283 x 159). The registration it
+        // replaces is freed.
         panel.set_viewport(W as f32 + 400.0, H as f32);
         panel.solve();
         let program_id = panel.layout().find("program").expect("program");
@@ -15059,14 +15065,14 @@ mod gpu {
         );
         assert_eq!(
             beside,
-            (283, 159),
-            "a cell beside the picture is not half a column"
+            (252, 142),
+            "a cell beside the picture is not the row's image height"
         );
         let was = engine.previews[0].id;
         assert!(
             engine.previews[0].fit(&gpu, &mut renderer, beside, &mut engine.freed),
             "the cells moved beside the picture and deck A's texture was not remade, so \
-             the audition is 112 x 63 texels stretched over a 290 x 163 cell"
+             the audition is 112 x 63 texels stretched over a 252 x 142 cell"
         );
         assert_eq!(engine.previews[0].size, beside);
         assert_eq!(engine.freed, 1);

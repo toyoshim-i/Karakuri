@@ -38,12 +38,16 @@ pub const PLAUSIBLE: Rect = Rect {
 /// 8px gaps, 22 of padding — 207 before the fader) fits in an inspector pane.
 /// At 990 the centre track is 484 and each inspector pane is 237.
 ///
-/// **632 high** is the sum of the column-axis minima: the transport's 48, the
-/// body row's 530 — the row of three columns — the outputs row's 34 and the
-/// two 10px dividers. The body row's 530 is the right pane's: a mixer that
-/// cannot lose a strip (316), a master chain of one effect (94), a sequencer
-/// of one lane (100) and two dividers. `arrangement.rs` recomputes both
-/// numbers from the tree, so this is a claim rather than a copy.
+/// **658.5 high** is the sum of the column-axis minima: the transport's 48,
+/// the body row's 556.5 — the row of three columns — the outputs row's 34 and
+/// the two 10px dividers. The body row's 556.5 is the **centre's**: the
+/// Program bay at the 395 the mock draws it, the divider's 10 and the
+/// inspector's 151.5. It was the right pane's 530 — a mixer that cannot lose a
+/// strip (316), a master chain of one effect (94), a sequencer of one lane
+/// (100) and two dividers — until the manual gave the inspector a deck head,
+/// and it grew again by the 17 the preview captions added to the Program bay.
+/// `arrangement.rs` recomputes both numbers from the tree, so this is a claim
+/// rather than a copy.
 ///
 /// Not smaller, because below either figure the solve stops honouring minima
 /// and scales everything down together — which is the right behaviour and is
@@ -52,7 +56,7 @@ pub const SMALLEST: Rect = Rect {
     x: 0.0,
     y: 0.0,
     w: 1244.0,
-    h: 641.5,
+    h: 658.5,
 };
 
 /// **An `egui` context that has drawn once.**

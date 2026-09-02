@@ -13,7 +13,7 @@ use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::Panel;
 use karakuri_console::room::{Palette, Room};
 use karakuri_console::view::{
-    picture_rect, plan_into, preview_rects, region, Kind, Placed, DECKS, REGIONS,
+    caption_of, picture_rect, plan_into, preview_rects, region, Kind, Placed, DECKS, REGIONS,
 };
 use karakuri_layout::{NodeId, Point};
 
@@ -464,10 +464,13 @@ fn the_picture_is_the_canvass_shape_at_every_window() {
     // than the 400 pixels this used to add: `wide` is the picture *beside* the
     // cells now, 592 x 333 rather than the mock's 466 x 262, so the margin it
     // was compared against was measured on a rectangle that is no longer the
-    // one at this window. Doubling is the claim either way — the picture goes
-    // to 726 tall, and it was 333.
+    // one at this window. Doubling was the claim while the bay was 378; with
+    // the preview captions in it the picture beside is 350 rather than 333, so
+    // what a full-height drag buys is 642 against 350 — under twice, and the
+    // ratio is written as what it measures rather than rounded up to a claim
+    // the rectangle no longer supports.
     assert!(
-        dragged.height() > wide.height() * 1.9,
+        dragged.height() > wide.height() * 1.8,
         "dragging the program taller left the picture at {} tall against the {} it had \
          before the drag",
         dragged.height(),
@@ -609,10 +612,11 @@ fn a_folded_picture_has_no_rectangle() {
 /// Every figure here is `lib.rs`'s Program bay derivation read from the other
 /// end. At `SMALLEST` the centre track is 484, `.program-body`'s 9px padding
 /// either side leaves 466, and 466 less three 6px gaps over four tracks is
-/// **112** — which at 16:9 is **63**, which is exactly the 63 the arrangement
-/// gave `deck-previews` before its 9px of padding underneath. The sum the bay
-/// was built from and the rectangles it solves to are the same numbers or the
-/// bay is wrong.
+/// **112** — which at 16:9 is **63**, the image's height. A cell is that image
+/// and the caption band under it, `.cell`'s 4 and `.caption`'s 13, so the row
+/// is 80 and the arrangement gave `deck-previews` that plus its 9px of padding
+/// underneath. The sum the bay was built from and the rectangles it solves to
+/// are the same numbers or the bay is wrong.
 ///
 /// The insets are three of the four on purpose: nothing at the top, because
 /// the 9 above the cells in the CSS is the split's 8px divider plus
@@ -642,10 +646,19 @@ fn the_preview_cells_are_the_mocks_at_the_width_the_mock_draws() {
             cell.min.y,
             region.y
         );
+        // The **image** ends where the caption band starts, and the caption
+        // ends where `.program-body`'s padding does — so the row fills the
+        // region less that pad, and the image is one term of the row.
         assert!(
-            near(cell.max.y, region.y + region.h - 9.0),
-            "cell {deck} ends at {} and the region's padding leaves {}",
+            near(cell.max.y, region.y + region.h - 9.0 - 17.0),
+            "cell {deck} ends at {} and the caption band starts at {}",
             cell.max.y,
+            region.y + region.h - 9.0 - 17.0
+        );
+        assert!(
+            near(caption_of(*cell).max.y, region.y + region.h - 9.0),
+            "cell {deck}'s caption ends at {} and the region's padding leaves {}",
+            caption_of(*cell).max.y,
             region.y + region.h - 9.0
         );
     }

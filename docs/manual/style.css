@@ -33,6 +33,11 @@
     --c-glowp:  rgba(238,91,156,0.30);
     --c-shadow: 0 1px 0 rgba(43,48,80,0.04), 0 4px 14px rgba(43,48,80,0.07);
     --c-tint:   rgba(43,48,80,0.05);
+    --c-band-green:  #2c9e63;
+    --c-band-blue:   #3a7bd5;
+    --c-band-yellow: #d39a1c;
+    --c-band-red:    #d24b46;
+    --c-band-purple: #7d5bd6;
 
     --f-round: "M PLUS Rounded 1c", ui-rounded, system-ui, sans-serif;
     --f-code:  "M PLUS 1 Code", ui-monospace, Menlo, monospace;
@@ -72,6 +77,11 @@
       --c-glowp:  rgba(255,143,198,0.42);
       --c-shadow: 0 2px 18px rgba(0,0,0,0.5);
       --c-tint:   rgba(231,227,247,0.06);
+      --c-band-green:  #4fd68f;
+      --c-band-blue:   #6fa8ff;
+      --c-band-yellow: #ffcf6b;
+      --c-band-red:    #ff7a72;
+      --c-band-purple: #b492ff;
     }
   }
 
@@ -104,6 +114,11 @@
     --c-glowp:  rgba(255,143,198,0.42);
     --c-shadow: 0 2px 18px rgba(0,0,0,0.5);
     --c-tint:   rgba(231,227,247,0.06);
+    --c-band-green:  #4fd68f;
+    --c-band-blue:   #6fa8ff;
+    --c-band-yellow: #ffcf6b;
+    --c-band-red:    #ff7a72;
+    --c-band-purple: #b492ff;
   }
 
   * { box-sizing: border-box; }
@@ -165,6 +180,11 @@
     --c-glowp:  rgba(255,143,198,0.42);
     --c-shadow: 0 2px 18px rgba(0,0,0,0.5);
     --c-tint:   rgba(231,227,247,0.06);
+    --c-band-green:  #4fd68f;
+    --c-band-blue:   #6fa8ff;
+    --c-band-yellow: #ffcf6b;
+    --c-band-red:    #ff7a72;
+    --c-band-purple: #b492ff;
   }
   .console.day {
     --c-ground: #e6eff7;
@@ -183,6 +203,11 @@
     --c-glowp:  rgba(238,91,156,0.30);
     --c-shadow: 0 1px 0 rgba(43,48,80,0.04), 0 4px 14px rgba(43,48,80,0.07);
     --c-tint:   rgba(43,48,80,0.05);
+    --c-band-green:  #2c9e63;
+    --c-band-blue:   #3a7bd5;
+    --c-band-yellow: #d39a1c;
+    --c-band-red:    #d24b46;
+    --c-band-purple: #7d5bd6;
   }
 
   .roomswitch { display: flex; gap: 6px; align-items: center; font-family: var(--f-code); font-size: 0.78rem; color: var(--dim); }
@@ -364,13 +389,32 @@
     font-size: 9px; font-weight: 700; letter-spacing: 0.2em; color: rgba(255,255,255,0.62);
   }
   .previews { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  /* A cell is the image and the caption under it. The image carries nothing
+     but material, because the material is what it is for: a letter laid over
+     a live deck is unreadable against whatever the deck happens to be making
+     that second, and it is unreadable in the one direction that matters, on
+     the deck that is on air. */
+  .cell { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
   .preview {
     aspect-ratio: 16/9; border-radius: 7px; background: var(--c-well);
-    display: flex; align-items: flex-end; padding: 3px 5px; font-size: 9px;
-    color: var(--c-faint); box-shadow: inset 0 0 0 1px var(--c-hair);
+    box-shadow: inset 0 0 0 1px var(--c-hair);
   }
-  .preview.a { background: radial-gradient(ellipse at 42% 46%, rgba(95,239,228,0.5), #1b1630 70%); color: rgba(255,255,255,0.7); }
-  .preview.b { background: radial-gradient(ellipse at 56% 54%, rgba(255,143,198,0.42), #1b1630 70%); color: rgba(255,255,255,0.7); }
+  .preview.a { background: radial-gradient(ellipse at 42% 46%, rgba(95,239,228,0.5), #1b1630 70%); }
+  .preview.b { background: radial-gradient(ellipse at 56% 54%, rgba(255,143,198,0.42), #1b1630 70%); }
+  .caption {
+    display: flex; align-items: center; gap: 5px; height: 13px;
+    font-size: 9px; color: var(--c-faint);
+  }
+  .caption b { color: var(--c-dim); font-weight: 700; }
+  /* The estimated cost of the slot, in bands, pushed to the far end of the
+     caption so the four badges line up down the row and can be read as a
+     column without reading a word. */
+  .risk { width: 6px; height: 6px; border-radius: 999px; margin-left: auto; }
+  .risk.green  { background: var(--c-band-green); }
+  .risk.blue   { background: var(--c-band-blue); }
+  .risk.yellow { background: var(--c-band-yellow); }
+  .risk.red    { background: var(--c-band-red); }
+  .risk.purple { background: var(--c-band-purple); }
 
   /* inspector */
   .insp-split { display: grid; grid-template-columns: 1fr 9px 1fr; align-items: stretch; }
