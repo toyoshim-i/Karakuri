@@ -847,25 +847,47 @@ machine and recorded in that file. And a `Points` procedure's fragment count no 
 the target's area all the way down: it bottoms out at one fragment per element, which is what the
 *preparation slot is the measurement* extrapolation below has to be read against.
 
-**What it did not touch is the resolution model**, which is still the largest thing nobody has
-decided — below.
+**What it did not touch is the canvas**, and looking for what it was waiting on is what found that
+the resolution model is not missing — it is ADR-0077's, and the panel is the surface that never got
+it. See *The decisions nobody has taken*, below, where that bullet is corrected.
 
 ### The decisions nobody has taken
 
 Four, each with what it blocks. Every one was found by building the thing next to it.
 *What the deck A preview cell is showing* was one and is answered in the M5.1 paragraph above.
 
-- **The instrument has no resolution model, and this is the denominator every budget number
-  depends on.** `crates/karakuri/src/main.rs` renders at `const CANVAS: (u32, u32) = (1280, 720)` —
-  a constant, unrelated to the window and to any output. `karakuri-cli` has `--canvas`; the panel has
-  no way to say it at all. No output has an identity anywhere in the workspace either, which is why
-  `Operation::RouteFrame` carries `output: Undecided` and why the console page's own mock draws a
-  size pill reading `1920×1080` over a program that renders 1280x720. **Every cost figure in this
-  file was measured at that constant**, and the maintainer has said 720p is an unrealistically low
-  resolution for a venue — so every band, budget and refusal in this project is calibrated against a
-  number nobody chose. **What it blocks**: the risk badge's five bands, the whole-frame budget below,
-  and M5.6, which cannot name an output without saying what an output is. It is not blocked on
-  anything itself.
+- **What names an output — and the panel's canvas, which is a different question that was filed
+  as the same one.** *Corrected 2026-09-02.* This bullet read **the instrument has no resolution
+  model**. It has one, and it is four weeks old:
+  [ADR-0077](adr/0077-the-canvas-belongs-to-the-session-and-the-window-gets-no-vote.md) makes the
+  canvas a **session control** that defaults to 1920×1080 and flows as a record, so a replay draws
+  at the size it was performed at and the window gets no vote — P-0028's *every control ends in the
+  same record*, applied to the drawing size. `karakuri-cli` implements all of it, down to refusing
+  `--size` as a way to say it and refusing a canvas the GPU cannot make a texture of, by name. What
+  is actually open splits in two, and only the second half is a decision.
+
+  **The panel never inherited it, and its own doc says why.**
+  `crates/karakuri/src/main.rs` renders at `const CANVAS: (u32, u32) = (1280, 720)` with no flag to
+  change it, because that is the workspace's reference workload and a number taken in the panel can
+  then be put beside every other number in this repository. That is a measuring harness's reason
+  living inside the instrument, and it is why the console page's mock draws a `1920×1080` size pill
+  over a program that renders 1280x720 — a disagreement the manual wins, since the manual is what
+  changes last. **Every cost figure in this file was measured at that constant**, and the maintainer
+  has said 720p is an unrealistically low resolution for a venue. What is owed is ADR-0077 reaching
+  the panel, with `--canvas 1280x720` typed by whoever wants the reference workload: **a surface
+  that is missing a decision rather than a decision that is missing**, and not blocked on anything.
+  The one judgement inside it is whether the panel's default moves to 1920×1080 with the rest of
+  ADR-0077, which changes what every panel measurement costs.
+
+  **No output has an identity, and that half is genuinely undecided.** `Operation::RouteFrame`
+  carries `output: Undecided`, and the console page's Outputs row already sketches what the
+  identities look like — *program view*, *projector · DELL U2720Q*, *Syphon*, *NDI · no plugin*, and
+  `+ add output` — without saying what a payload holds for each, or what distinguishes a sink this
+  repository owns from one a plugin brings.
+  [ADR-0243](adr/0243-the-program-picture-is-an-output-and-the-four-cells-are-monitors.md) is the one
+  constraint on record: the picture is in the set that needs naming and a preview cell is not.
+  **What it blocks**: M5.6, which cannot name an output without saying what an output is. The risk
+  badge's five bands and the whole-frame budget below wait on the canvas half, not on this one.
 
 - **Which cut of the previous frame a feedback effect reads, and what holding it costs.** The
   previous frame is not one thing. It could be a Set's output, the raw frame the mix wrote before
