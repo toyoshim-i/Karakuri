@@ -102,7 +102,7 @@ number; new records continue from the end.
 | [ADR-0074](0074-a-plugin-boundary-is-drawn-by-the-deterministic-path.md) | A plugin boundary is drawn by the deterministic path, not by the platform | 2026-08-11 | accepted |
 | [ADR-0075](0075-the-plugin-abi-passes-a-handle-and-only-what-crosses-a-process.md) | The plugin ABI passes a native handle, and only what can cross a process | 2026-08-11 | accepted |
 | [ADR-0076](0076-commit-a-manifest-not-a-binary.md) | Commit a manifest, not a binary, and never fetch from build.rs | 2026-08-11 | accepted |
-| [ADR-0077](0077-the-canvas-belongs-to-the-session-and-the-window-gets-no-vote.md) | The canvas belongs to the session; the window gets no vote | 2026-08-11 | accepted |
+| [ADR-0077](0077-the-canvas-belongs-to-the-session-and-the-window-gets-no-vote.md) | The canvas belongs to the session; the window gets no vote | 2026-08-11 | **superseded by ADR-0246** |
 | [ADR-0078](0078-a-frame-that-is-discarded-must-not-already-have-been-recorded.md) | A frame that is discarded must not already have been recorded | 2026-08-11 | accepted |
 | [ADR-0079](0079-the-status-line-is-a-display-not-a-log.md) | The status line is a display, not a log | 2026-08-11 | accepted |
 | [ADR-0080](0080-the-gpl-boundary-is-a-process-and-the-protocol-is-generic.md) | The GPL boundary is a process, and the protocol is generic | 2026-08-11 | accepted |
@@ -271,6 +271,7 @@ number; new records continue from the end.
 | [ADR-0243](0243-the-program-picture-is-an-output-and-the-four-cells-are-monitors.md) | The Program picture is an output and the four cells are monitors | 2026-09-02 | accepted |
 | [ADR-0244](0244-a-sub-pixel-primitive-is-drawn-at-one-pixel-and-compensated-in-the-alpha.md) | A sub-pixel primitive is drawn at one pixel and compensated in the alpha | 2026-09-02 | **superseded by ADR-0245** |
 | [ADR-0245](0245-the-sub-pixel-compensation-is-paid-in-the-colour-because-alpha-is-coverage.md) | The sub-pixel compensation is paid in the colour, because alpha is coverage | 2026-09-02 | accepted |
+| [ADR-0246](0246-the-render-size-belongs-to-the-output-and-the-sessions-canvas-is-only-its-default.md) | The render size belongs to the output, and the session's canvas is only its default | 2026-09-02 | accepted |
 
 ## Retired numbers
 

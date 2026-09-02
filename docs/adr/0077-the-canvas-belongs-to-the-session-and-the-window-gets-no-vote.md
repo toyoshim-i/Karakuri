@@ -1,15 +1,30 @@
 ---
 id: 0077
 title: The canvas belongs to the session; the window gets no vote
-status: accepted
+status: superseded
 date: 2026-08-11
 supersedes: []
-superseded_by: []
+superseded_by: [0246]
 principles: [0028]
 tags: [engine, format, ui]
 ---
 
 # The canvas belongs to the session; the window gets no vote
+
+> **Superseded 2026-09-02 by
+> [ADR-0246](0246-the-render-size-belongs-to-the-output-and-the-sessions-canvas-is-only-its-default.md).**
+> **The premise below was removed rather than argued with.** *The window gets no vote* was the right
+> answer while the render size changed the picture, and on 2026-08-11 it did: `point_size` was a
+> count of pixels, so the same Set at a small target drew fatter sprites over a smaller frame. It is
+> `point_rate`, a fraction of the target's height, since 96c9cc7, and a primitive below a pixel is
+> drawn at one pixel and dimmed rather than dropped
+> ([ADR-0245](0245-the-sub-pixel-compensation-is-paid-in-the-colour-because-alpha-is-coverage.md)).
+> With the picture no longer depending on the size, the size belongs to the output and the
+> destination window may set it. What survives here is everything else: `--canvas` and its spelling,
+> `--size` refused as a way to say the canvas, the `canvas` record, the letterboxed preview and the
+> 1:1 snap key. The record keeps its authority only as a **default and a reference** — see ADR-0246,
+> and [P-0081](../principles/0081-the-render-size-is-not-part-of-the-picture.md), which is the rule
+> that made the reversal safe.
 
 ## Context
 
