@@ -583,9 +583,8 @@ proc wash {
             }
             if silence == Residency::Live {
                 // The faded slot is only interesting if its target really does
-                // hold a NaN. (Parked, it renders nothing at all, so its target is
-                // the transparent black it was cleared to and there is nothing to
-                // check.)
+                // hold a NaN. (Parked, it has never stepped, so what it draws is
+                // its zeroed element state and there is no NaN in it to check.)
                 let own = readback(&gpu, deck.slot_target(1));
                 assert!(
                     decode(&own).iter().any(|v| v.is_nan()),
@@ -2477,6 +2476,343 @@ proc wash {
         assert_eq!(deck.live_slots(), 2);
     }
 
+    // ---------------------------------------------------------------------------
+    // P-0080: an operator can see a slot's own material without putting it on air
+    //
+    // Three tests, one per case the requirement names, each asserting on the
+    // slot's own target — `Deck::slot_target` — because that is the texture a
+    // console cell samples through `Deck::slot_view`. What the mix does with the
+    // slot is a separate question and is asserted separately in each.
+    // ---------------------------------------------------------------------------
+
+    /// **A running slot's own target holds its own texels, with no fader on
+    /// them.**
+    ///
+    /// The first of P-0080's three clauses, and the one that decides where a
+    /// monitor may sample from. `gain`, `opacity`, `blend` and `mask` are edge
+    /// properties applied in `Composite`, so a slot's target is upstream of all
+    /// four — which is what lets a cell show *the level the material arrives at*
+    /// rather than the level the operator has already set.
+    ///
+    /// Asserted as bit equality between a slot faded to silence and the same slot
+    /// at unity, in the same deck on the same ticks. It is exact because nothing
+    /// between `Set::draw` and the readback rounds; "close enough" here would
+    /// tolerate a fader that had leaked upstream by a hair.
+    ///
+    /// **And the mix is checked to differ**, or the whole thing would pass with
+    /// the fader deleted: two identical slot targets prove nothing if the fader
+    /// was never applied anywhere.
+    #[test]
+    fn a_running_slot_shows_its_own_texels_with_no_fader_on_them() {
+        let gpu = Gpu::headless().expect("no GPU available");
+
+        let run = |gain: f32, opacity: f32, mask: Mask| -> (Vec<u16>, Vec<u16>) {
+            let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
+            let mut deck = deck_of(&gpu, &[SEED_A, SEED_B]);
+            deck.set_gain(1, gain);
+            deck.set_opacity(1, opacity);
+            deck.set_mask(1, mask);
+            for _ in 0..8 {
+                frame(&gpu, &mut deck, &present, 1);
+            }
+            (
+                readback(&gpu, deck.slot_target(1)),
+                readback(&gpu, present.hdr_texture()),
+            )
+        };
+
+        let (open, open_mix) = run(1.0, 1.0, Mask::default());
+        assert!(
+            lit(&open) > 100,
+            "the slot drew nothing, so this test is asserting nothing"
+        );
+
+        for (gain, opacity, mask, what) in [
+            (0.0, 1.0, Mask::default(), "gain at silence"),
+            (1.0, 0.0, Mask::default(), "opacity at silence"),
+            (0.25, 0.5, Mask::default(), "both faders part way down"),
+            (
+                1.0,
+                1.0,
+                Mask::new(MaskKind::Linear, 0.0, 0.5, 0.0),
+                "a linear mask half across",
+            ),
+        ] {
+            let (own, mix) = run(gain, opacity, mask);
+            assert_eq!(
+                own, open,
+                "{what} changed what the slot drew into its own target — a fader is an \
+                 edge property and belongs in the composite, and a cell sampling this \
+                 texture would be showing the operator the level they already set"
+            );
+            assert_ne!(
+                mix, open_mix,
+                "{what} left the mix unchanged, so the comparison above is between two \
+                 settings neither of which does anything"
+            );
+        }
+    }
+
+    /// **An off-air slot is drawn into its own target every frame, and never
+    /// stepped.**
+    ///
+    /// P-0080's second and third clauses together: *whatever its residency*, and
+    /// *without changing it*. The slot an operator most needs to look at is the
+    /// one that is not on air yet, and the look may not move it
+    /// ([P-0041](../../../docs/principles/0041-observing-must-not-advance-what-is-observed.md)).
+    ///
+    /// **The resize is what makes this a test of *this* frame's draw.** A slot
+    /// target persists, so a parked slot that was Live a moment ago keeps the last
+    /// picture in it and "the target is lit" would pass with the draw deleted —
+    /// that is ADR-0072's own correction to itself, made after it shipped the
+    /// wrong reason. `Deck::resize` reallocates every target, so the frame after
+    /// one is the only frame on which the target's contents can only have come
+    /// from a draw recorded on it.
+    ///
+    /// Both off-air levels are covered, because they are two branches:
+    /// `Allocated` draws and never steps, `Priming` steps on the governor's rate
+    /// and draws on every frame regardless.
+    #[test]
+    fn an_off_air_slot_is_drawn_every_frame_and_never_stepped() {
+        let gpu = Gpu::headless().expect("no GPU available");
+
+        for residency in [Residency::Allocated, Residency::Priming] {
+            let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
+            let mut deck = deck_of(&gpu, &[SEED_A, SEED_B]);
+
+            // Live first, so the slot has element state to draw. A Set that has
+            // never stepped draws black, which is the case the next test is
+            // about and would make this one unable to tell a draw from no draw.
+            for _ in 0..8 {
+                frame(&gpu, &mut deck, &present, 1);
+            }
+            deck.set_residency(1, residency);
+            // One in a thousand, so that across the frames below the Priming
+            // slot steps on the first and on none of the rest — the draw has to
+            // be there on the frames it does not step.
+            deck.set_prime_one_in(1, 1000);
+            for _ in 0..4 {
+                frame(&gpu, &mut deck, &present, 1);
+            }
+            let parked_at = steps_taken(deck.slot(1).set());
+
+            // **The target is thrown away and remade**, so nothing in it can be
+            // left over from when the slot was Live.
+            deck.resize(&gpu.device, WIDTH / 2, HEIGHT / 2);
+            let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH / 2, HEIGHT / 2);
+            assert_eq!(
+                lit(&readback(&gpu, deck.slot_target(1))),
+                0,
+                "the reallocated target came back with something in it, so the assertion \
+                 below cannot tell a fresh draw from a stale one"
+            );
+
+            frame(&gpu, &mut deck, &present, 1);
+            assert!(
+                lit(&readback(&gpu, deck.slot_target(1))) > 100,
+                "a slot at {residency:?} drew nothing into its own target on the frame \
+                 after a resize, so its console cell is dark at exactly the moment an \
+                 operator is deciding whether to bring the slot up (P-0080)"
+            );
+
+            // And the look did not move it. `Allocated` may not have stepped at
+            // all; `Priming` may have stepped only on the frames the governor's
+            // rate allows, which at one in a thousand is the frame it entered
+            // Priming and no other.
+            let after = steps_taken(deck.slot(1).set());
+            match residency {
+                Residency::Allocated => assert_eq!(
+                    after, parked_at,
+                    "drawing an Allocated slot advanced it — observing must not advance \
+                     what is observed (P-0041)"
+                ),
+                _ => assert_eq!(
+                    after, parked_at,
+                    "a Priming slot stepped on a frame its rate did not allow, so the \
+                     draw is stepping it"
+                ),
+            }
+
+            // The mix is still only the Live slot's, which is the other half:
+            // drawn is not mixed.
+            let mixed = readback(&gpu, present.hdr_texture());
+            let solo_present =
+                Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH / 2, HEIGHT / 2);
+            let mut solo = deck_of_at(&gpu, &[SEED_A], WIDTH / 2, HEIGHT / 2);
+            for _ in 0..13 {
+                frame(&gpu, &mut solo, &solo_present, 1);
+            }
+            assert_eq!(
+                mixed,
+                readback(&gpu, solo_present.hdr_texture()),
+                "a slot at {residency:?} reached the mix — being drawn is not being mixed"
+            );
+        }
+    }
+
+    /// **A slot whose build was rejected shows what is still running, and a slot
+    /// with nothing behind the draw shows black.**
+    ///
+    /// The two failure cases P-0080 has to answer honestly, and the answer is not
+    /// the same for both because the states are not the same.
+    ///
+    /// **A rejected build changes nothing** — `swap.rs` is explicit that the
+    /// running Set keeps running, with its `t` and its live count untouched — so
+    /// the honest picture is the material that is still there, and it is drawn on
+    /// the frame after the rejection exactly as on the frame before. Anything else
+    /// would be the cell inventing a state the deck is not in. What says a build
+    /// was refused is `Event::Rejected`, which the Staging lane draws; the cell's
+    /// job is the picture.
+    ///
+    /// **A Set that has never stepped has no element state**, so its draw is a
+    /// pass over zeroed buffers: every element at the origin, which comes out as
+    /// a handful of texels in the middle of an otherwise black frame. Near-black
+    /// rather than exactly black, and the number is asserted against the Live
+    /// neighbour on the same frame rather than against a constant, because what
+    /// matters is that it carries no material. That is the cold end of a slot and
+    /// it is why priming exists — take a candidate down, warm it, look at it.
+    ///
+    /// **Black-because-drawn and black-because-nothing-drew are told apart by the
+    /// resize.** `Deck::resize` reallocates the target and wgpu hands it back
+    /// zeroed, so the count is checked at zero *before* the frame and above zero
+    /// after it: the pass ran, and what it put there is the cold Set's own answer
+    /// rather than a leftover.
+    #[test]
+    fn a_rejected_build_shows_what_is_still_running_and_a_cold_slot_shows_black() {
+        let gpu = Gpu::headless().expect("no GPU available");
+        let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
+
+        // Slot 1 takes builds and is off air; slot 0 is the Live neighbour that
+        // proves a frame was recorded at all.
+        let _ = present;
+        let (tx, rx) = mpsc::channel();
+        let mut deck = Deck::new(
+            &gpu.device,
+            vec![
+                HotSwap::fixed(build(&gpu, SEED_A, CAPACITY)),
+                HotSwap::new(
+                    &gpu.device,
+                    &gpu.queue,
+                    build(&gpu, SEED_B, CAPACITY),
+                    GENEROUS_MS,
+                    Box::new(rx),
+                ),
+            ],
+            WIDTH,
+            HEIGHT,
+        );
+
+        // --- the cold slot -------------------------------------------------
+        // Off air from the first frame, so it has never stepped.
+        deck.set_residency(1, Residency::Allocated);
+        deck.resize(&gpu.device, WIDTH / 2, HEIGHT / 2);
+        let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH / 2, HEIGHT / 2);
+        assert_eq!(
+            lit(&readback(&gpu, deck.slot_target(1))),
+            0,
+            "the reallocated target came back with something in it, so nothing below \
+             can tell a fresh draw from a stale one"
+        );
+        frame(&gpu, &mut deck, &present, 1);
+        assert_eq!(
+            steps_taken(deck.slot(1).set()),
+            0,
+            "the cold slot stepped, so it is not cold and this half asserts nothing"
+        );
+        let cold = lit(&readback(&gpu, deck.slot_target(1)));
+        let neighbour = lit(&readback(&gpu, deck.slot_target(0)));
+        assert!(
+            neighbour > 100,
+            "the Live neighbour is dark too, so the frame recorded nothing at all and \
+             nothing below is the cold slot's own answer"
+        );
+        assert!(
+            cold > 0,
+            "no pass was recorded for the cold slot: its target is exactly what the \
+             resize left, so its cell would be showing a reallocation rather than a Set"
+        );
+        assert!(
+            cold * 50 < neighbour,
+            "a Set that has never stepped drew {cold} lit texels against the neighbour's \
+             {neighbour}: it has no element state, so anything approaching material here \
+             did not come from the material"
+        );
+
+        // --- the rejected build --------------------------------------------
+        // Warm the slot first, so there is a picture for a rejection to leave
+        // alone: `Priming` steps it out of the room.
+        deck.set_residency(1, Residency::Priming);
+        for _ in 0..8 {
+            frame(&gpu, &mut deck, &present, 1);
+        }
+        let warmed = steps_taken(deck.slot(1).set());
+        assert!(
+            warmed > 0,
+            "the slot did not warm, so there is nothing to keep"
+        );
+        deck.set_residency(1, Residency::Allocated);
+        frame(&gpu, &mut deck, &present, 1);
+        let before = readback(&gpu, deck.slot_target(1));
+        assert!(lit(&before) > 100, "the warmed slot drew nothing");
+
+        // A capacity outside the L1's declared range: the worker builds it and
+        // `Set::build` refuses, which is `Event::Rejected` and not a swap.
+        const REFUSED: u32 = 1;
+        tx.send(Request {
+            names: karakuri_engine::swap::RequestNames::default(),
+            edges: Vec::new(),
+            id: 1,
+            l1s: vec![(compile(L1), REFUSED)],
+            l2s: Vec::new(),
+            l3s: Vec::new(),
+            fields: Vec::new(),
+            layering: karakuri_engine::set::Layering::Overdraw,
+            live: None,
+            published: Vec::new(),
+            l4s: vec![compile(L4)],
+            seed_salt: SEED_B,
+            camera: karakuri_engine::camera::Orbit::default(),
+            salts: Vec::new(),
+            params: Vec::new(),
+            bindings: Vec::new(),
+            authorities: Vec::new(),
+            label: "slot 1, refused".to_string(),
+        })
+        .expect("worker alive");
+
+        let started = Instant::now();
+        let mut rejected = false;
+        while !rejected {
+            frame(&gpu, &mut deck, &present, 1);
+            for event in deck.events(1) {
+                match event {
+                    Event::Rejected { .. } => rejected = true,
+                    other => panic!("the refused build did not come back as a rejection: {other}"),
+                }
+            }
+            assert!(
+                started.elapsed() < PATIENCE,
+                "waited {PATIENCE:?} for the rejection and it never arrived"
+            );
+        }
+
+        assert_eq!(
+            steps_taken(deck.slot(1).set()),
+            warmed,
+            "the rejected build moved the running Set's clock"
+        );
+        // The target is thrown away, so what comes back can only be this
+        // frame's draw of the Set that survived the rejection.
+        deck.resize(&gpu.device, WIDTH, HEIGHT);
+        let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
+        frame(&gpu, &mut deck, &present, 1);
+        assert!(
+            lit(&readback(&gpu, deck.slot_target(1))) > 100,
+            "a slot whose build was refused went dark, so the cell says the material is \
+             gone when nothing changed at all — the running Set is still running"
+        );
+    }
+
     /// **The same tick sequence and the same seeds composite to the same pixels.**
     ///
     /// The ticks are deliberately uneven. A run of identical steps would pass even
@@ -2762,13 +3098,26 @@ proc wash {
     /// repository: coarse, biased high, and real. Run with
     /// `cargo test -p karakuri-engine --test deck -- --nocapture --ignored`.
     ///
-    /// Three configurations at the CLI's own defaults, so the numbers are
+    /// Five configurations at the CLI's own defaults, so the numbers are
     /// comparable with the other host-clock figures in this repository rather
     /// than being a measurement of
-    /// a toy: a bare Set, a deck of one, and a deck of four. Bare against deck-of-
-    /// one isolates the composite pass, since the simulation either side of it is
-    /// identical. Deck-of-one against deck-of-four is what a slot costs, which is
-    /// dominated by the Set and not by the mix.
+    /// a toy: a bare Set, a deck of one, a deck of four, and a deck of four with
+    /// one slot Live — with and without the three off-air draws. Bare against
+    /// deck-of-one isolates the composite pass, since the simulation either side
+    /// of it is identical. Deck-of-one against deck-of-four is what a slot costs,
+    /// which is dominated by the Set and not by the mix.
+    ///
+    /// **The last pair is what P-0080 costs**, and it is why it is measured here
+    /// rather than argued in a comment. Every slot is drawn on every frame so
+    /// that its console cell has something in it, which on the panel's own deck
+    /// is one Live slot and three off-air draws. `Residency::Allocated` is the
+    /// after; `Residency::Priming` at one step in a very large number is the
+    /// before, since the governor's rate makes it step on no frame in the window
+    /// and the branch is otherwise the same — no, it is not: it draws too. So the
+    /// before is **a deck of one**, which is exactly what a four-slot deck with
+    /// three dark slots used to cost on the frame path: three slots that neither
+    /// stepped, drew, nor reached the composite. The difference between that line
+    /// and the four-slots-one-Live line is the whole of the bill.
     ///
     /// `#[ignore]`d because four simulations at capacity 262144 is a real
     /// workload, and `cargo test` should not be one.
@@ -2845,6 +3194,43 @@ proc wash {
         };
         let one = deck_ms(&[SEED_A]);
         let four = deck_ms(&[SEED_A, SEED_B, SEED_A + 1, SEED_B + 1]);
+        let one_live = {
+            let seeds = [SEED_A, SEED_B, SEED_A + 1, SEED_B + 1];
+            let swaps = seeds
+                .iter()
+                .map(|&seed| {
+                    let mut set = Set::build(
+                        &gpu.device,
+                        &gpu.queue,
+                        &compile(L1),
+                        &compile(L4),
+                        CAP,
+                        seed,
+                    )
+                    .expect("the pair is compatible");
+                    set.resize(&gpu.device, W, H);
+                    HotSwap::fixed(set)
+                })
+                .collect();
+            let mut deck = Deck::new(&gpu.device, swaps, W, H);
+            // Warmed on air first, then parked: three slots with material in
+            // them, drawn and not stepped, which is the panel's own state.
+            for _ in 0..8 {
+                frame(&gpu, &mut deck, &present, 1);
+            }
+            for slot in 1..4 {
+                deck.set_residency(slot, Residency::Allocated);
+            }
+            let mut out = Vec::new();
+            for i in 0..WARMUP + MEASURED {
+                let at = Instant::now();
+                frame(&gpu, &mut deck, &present, 1);
+                if i >= WARMUP {
+                    out.push(at.elapsed().as_secs_f32() * 1_000.0);
+                }
+            }
+            out
+        };
 
         let deck_mb = 4.0 * f64::from(W) * f64::from(H) * 8.0 / 1_048_576.0;
         eprintln!(
@@ -2854,6 +3240,10 @@ proc wash {
         summarize("bare Set, no deck", bare_ms);
         summarize("deck of one", one);
         summarize("deck of four", four);
+        summarize("four, one Live", one_live);
+        eprintln!(
+            "  `deck of one` is what `four, one Live` cost before every slot was drawn: \n               the three off-air slots did nothing at all on the frame path. The gap between \n               those two lines is what P-0080 costs on this machine."
+        );
         eprintln!();
     }
 

@@ -8,10 +8,12 @@
 //!
 //! **With several Sets this renders the mix**, for that reason and no other: it
 //! is what the window shows. A flag that rendered each slot to its own file
-//! would be a different feature — auditioning one candidate on its own is what
-//! `Deck::set_preview` already does on screen, and the deck keeps every slot's
-//! target separate, so a per-slot file can be added without changing anything
-//! here. What the mix must not become is
+//! would be a different feature — looking at one candidate on its own is what
+//! the console's four deck preview cells do on screen, and the deck draws every
+//! slot into a target of its own on every frame whatever its residency
+//! (`docs/principles/0080-an-operator-can-see-a-slots-own-material-without-putting-it-on-air.md`),
+//! so a per-slot file is `Deck::slot_target` and a second present pass and
+//! changes nothing here. What the mix must not become is
 //! a fourth definition of "the output"; there is one, and this is it.
 
 use std::path::Path;

@@ -10262,7 +10262,15 @@ pub struct View {
     /// rather than kept.
     pub picture: Option<Picture>,
     /// **What to draw in each of the four deck preview cells this frame**, in
-    /// slot order, or `None` for a cell whose deck is off.
+    /// slot order, or `None` for a cell with no deck slot behind it.
+    ///
+    /// **`None` is not "that deck is off air".** A cell shows its slot's own
+    /// material whatever the slot's residency — a parked deck's still and a
+    /// warming deck's picture are the two an operator most needs to see, which
+    /// is
+    /// [P-0080](../../../docs/principles/0080-an-operator-can-see-a-slots-own-material-without-putting-it-on-air.md).
+    /// `None` is a cell with nothing to sample at all: a deck of fewer slots
+    /// than there are cells, or a console with no engine behind it.
     ///
     /// **The same seam as [`View::picture`], four times over**: registering a
     /// texture takes a device, this crate has none, so whoever owns the device
@@ -11312,9 +11320,15 @@ impl View {
 /// **One deck preview cell**: the mock's `.preview`, with whatever is behind
 /// it and the letter that says which deck it is.
 ///
-/// Painted the same whether a deck is running in it or not, because *off* is a
-/// state an operator chooses rather than a thing not built yet — the module
+/// Painted the same whether there is a deck slot behind it or not, because
+/// *off* is a state rather than a thing not built yet — the module
 /// documentation is where that argument is written out.
+///
+/// **A cell is not off because its deck is off air.** Every slot is drawn into
+/// its own target on every frame, so a parked or warming deck has a picture
+/// here exactly as a Live one does; what the residency decides is whether that
+/// slot reaches the *mix*, which is the picture above and the mixer strip
+/// beside. A cell reads `off` only when there is no slot behind it.
 ///
 /// Term for term from `.preview` in `style.css`:
 ///
@@ -11339,8 +11353,8 @@ impl View {
 ///   It follows the room, which is the one thing the mock's literal white
 ///   cannot do.
 /// - **Nothing behind it:** `.preview`'s own `color: var(--c-faint)`, which is
-///   `pal.faint` — *"a heading, and anything switched off"*, and this cell is
-///   switched off.
+///   `pal.faint` — *"a heading, and anything switched off"*, and this cell has
+///   no slot to switch on.
 ///
 /// And the word follows the colour: the mock writes `C &middot; off` in a cell
 /// with nothing in it, so a cell that is off says `off` rather than leaving
