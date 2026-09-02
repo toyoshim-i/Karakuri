@@ -1189,7 +1189,6 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
             // hand the node over on every load. See `Record::Authority`.
             | Record::Authority { .. }
             | Record::Transport { .. }
-            | Record::Preview { .. }
             | Record::Transition { .. }
             // A `select` names a renderer of a *deck slot* and schedules it at
             // an instant, and nothing in a session says which slot's Set

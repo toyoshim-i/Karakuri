@@ -17,8 +17,7 @@
 //!   note 36 -> residency 0 live
 //!   note 40 -> residency 1 priming
 //!   note 44 -> blend 0 over
-//!   note 48 -> preview 0
-//!   note 52 -> preview mix
+//!   note 48 -> residency 2 allocated
 //!   note 56 -> tap
 //! ```
 //!
@@ -32,12 +31,16 @@
 //! *over* is one pad, and a mini that cycles the three is an affordance
 //! whoever draws it builds over three lines of this file.
 //!
-//! `preview N | mix` had the shape already. `on-air N`, `prime N` and a bare
-//! `blend N` were the three that did not, and **a file still holding one is
-//! refused on that line with the line to write instead** — never loaded and
-//! silently re-read, because `on-air 0` means *flip it* in a file written last
-//! month and would mean *put it live* today
+//! `on-air N`, `prime N` and a bare `blend N` were the three that did not have
+//! the shape, and **a file still holding one is refused on that line with the
+//! line to write instead** — never loaded and silently re-read, because
+//! `on-air 0` means *flip it* in a file written last month and would mean *put
+//! it live* today
 //! ([ADR-0196](../../../docs/adr/0196-a-map-line-names-a-state-and-an-old-line-is-refused.md)).
+//! **`preview N | mix` had the shape and is gone**: ADR-0240 retired *Choose
+//! what the output shows*, so `preview` is not a control at all any more and
+//! is refused by the arm every unknown word is — the line is reported with its
+//! number and the rest of the map loads.
 //!
 //! ## Half the mask, because half of it can be said here
 //!
@@ -118,7 +121,6 @@ enum Target {
     MaskPosition { slot: u8, range: [f32; 2] },
     Residency { slot: u8, residency: Residency },
     Blend { slot: u8, blend: BlendMode },
-    Preview { slot: Option<u8> },
     Tap,
 }
 
@@ -284,7 +286,6 @@ impl Map {
             (Target::Blend { slot, blend }, None) => {
                 Some(Operation::SetBlendMode { deck: slot, blend })
             }
-            (Target::Preview { slot }, None) => Some(Operation::SetPreview { showing: slot }),
             (Target::Tap, None) => Some(Operation::TapBeat),
             _ => None,
         }
@@ -512,16 +513,6 @@ fn parse_target(to: &str) -> Result<Target, String> {
                 )?,
             }
         }
-        "preview" => match words.next() {
-            Some("mix") => Target::Preview { slot: None },
-            Some(n) => Target::Preview {
-                slot: Some(
-                    n.parse()
-                        .map_err(|_| format!("`preview {n}`: expected a slot number or `mix`"))?,
-                ),
-            },
-            None => return Err("`preview` needs a slot number or `mix`".to_string()),
-        },
         "tap" => Target::Tap,
         // **The two words that were affordances, refused by name.** A file
         // holding one is a file written against the old grammar, where
@@ -545,7 +536,7 @@ fn parse_target(to: &str) -> Result<Target, String> {
         other => {
             return Err(format!(
                 "`{other}` is not a control — expected gain, opacity, exposure, \
-                 mask-position, residency, blend, preview or tap"
+                 mask-position, residency, blend or tap"
             ))
         }
     };
@@ -911,10 +902,8 @@ mod tests {
              cc 4 -> mask-position 2\n\
              note 36 -> residency 1 live\n\
              note 37 -> blend 3 over\n\
-             note 39 -> preview 1\n\
-             note 40 -> preview mix\n\
              note 41 -> tap");
-        assert_eq!(m.len(), 9);
+        assert_eq!(m.len(), 7);
         assert!(matches!(
             m.operation(cc(1, 127)),
             Some(Operation::SetGain { deck: 2, .. })
@@ -947,14 +936,6 @@ mod tests {
                 deck: 3,
                 blend: BlendMode::Over
             })
-        );
-        assert_eq!(
-            m.operation(note(39)),
-            Some(Operation::SetPreview { showing: Some(1) })
-        );
-        assert_eq!(
-            m.operation(note(40)),
-            Some(Operation::SetPreview { showing: None })
         );
         assert_eq!(m.operation(note(41)), Some(Operation::TapBeat));
     }
@@ -1193,13 +1174,13 @@ mod tests {
     fn a_fader_moves_a_continuous_control_and_a_pad_does_not() {
         let m = map(
             "cc 1 -> gain 0\ncc 2 -> opacity 0\ncc 3 -> exposure\ncc 4 -> mask-position 0\n\
-             note 36 -> residency 0 live\nnote 37 -> blend 0 over\nnote 38 -> preview 1\n\
-             note 39 -> tap",
+             note 36 -> residency 0 live\nnote 37 -> blend 0 over\n\
+             note 38 -> tap",
         );
         for controller in 1..=4 {
             assert!(m.is_continuous(cc(controller, 0)), "cc {controller}");
         }
-        for n in 36..=39 {
+        for n in 36..=38 {
             assert!(!m.is_continuous(note(n)), "note {n}");
         }
         // Unmapped is not continuous: there is nothing to coalesce, and the

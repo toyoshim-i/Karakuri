@@ -175,7 +175,6 @@ fn key_for(record: &Record, ordinal: usize) -> Option<Key> {
         // next loaded. See `Record::Authority`.
         | Record::Authority { .. }
         | Record::Transport { .. }
-        | Record::Preview { .. }
         | Record::Transition { .. }
         // **An event, like the `transition` above it, and still dropped — but
         // no longer for the reason it used to be.** The layering *is* a Set

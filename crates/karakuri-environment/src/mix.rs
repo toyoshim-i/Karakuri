@@ -12,8 +12,7 @@
 //!   a key press ─→ Record::Gain      ─┐
 //!                  Record::Opacity    │
 //!                  Record::Blend      │
-//!                  Record::Preview    ┼→ Change ─→ Deck / Present
-//!                  Record::Residency  │
+//!                  Record::Residency  ┼→ Change ─→ Deck / Present
 //!                  Record::Look      ─┘
 //! ```
 //!
@@ -80,10 +79,13 @@
 //!
 //! **`gain_record` and `preview_record` are gone**, and they are gone rather
 //! than deprecated: their whole content was `Record::Gain { slot, value }` and
-//! `Record::Preview { slot }`, which is now what
-//! `karakuri_operation_record::written` answers for `Operation::SetGain` and
-//! `Operation::SetPreview`. Two derivations of one record is the drift this
-//! module was written to end, in miniature, so the second one went.
+//! a `preview` record, and the first is now what
+//! `karakuri_operation_record::written` answers for `Operation::SetGain`. Two
+//! derivations of one record is the drift this module was written to end, in
+//! miniature, so the second one went. **The preview half went further**:
+//! ADR-0240 retired *Choose what the output shows* and the record with it —
+//! switching a preview is a bay-internal move rather than an engine one, so
+//! there is nothing to record and no `Change` to decode into.
 //!
 //! **`opacity_record`, `blend_record` and `residency_record` went the same way,
 //! and what moved was not a conversion but a reading of what a gesture is made
@@ -181,12 +183,6 @@ pub enum Change {
     Mask {
         slot: usize,
         mask: Mask,
-    },
-    /// Which slot the output is showing, or `None` for the mix. Not a mix
-    /// control; see [`Record::Preview`] for why it is in the stream anyway and
-    /// for when it will stop being.
-    Preview {
-        slot: Option<usize>,
     },
     /// A scheduled move. Carried as its parts rather than as a
     /// `karakuri_engine::Transition`, because building one needs the value the
@@ -706,9 +702,6 @@ pub fn change(record: &Record, slot_count: usize) -> Result<Option<Change>, Stri
                 start: *start,
             }))
         }
-        Record::Preview { slot } => Ok(Some(Change::Preview {
-            slot: slot.map(in_range).transpose()?,
-        })),
         Record::Residency { slot, level } => {
             let slot = in_range(*slot)?;
             let level = parse_residency(level).ok_or_else(|| {
@@ -1324,14 +1317,6 @@ mod tests {
                 },
             ),
             (
-                Record::Preview { slot: Some(2) },
-                Change::Preview { slot: Some(2) },
-            ),
-            (
-                Record::Preview { slot: None },
-                Change::Preview { slot: None },
-            ),
-            (
                 from_operation(karakuri_operation::Operation::SetBlendMode {
                     deck: 3,
                     blend: blend_mode(Blend::Over),
@@ -1689,22 +1674,6 @@ mod tests {
         let message = change(&unknown_mode, 4).expect_err("`screen` is not a mode here");
         assert!(message.contains("screen"), "{message}");
         assert!(message.contains("over"), "{message}");
-    }
-
-    /// **`None` is the mix and is not a slot**, so it survives the range check
-    /// that every other slot-bearing record goes through rather than being
-    /// caught by it. A sentinel index would have made "the mix" and "slot 255"
-    /// the same line on the wire.
-    #[test]
-    fn a_preview_of_the_mix_is_not_a_slot_out_of_range() {
-        assert_eq!(
-            change(&Record::Preview { slot: None }, 1).expect("the mix is always available"),
-            Some(Change::Preview { slot: None })
-        );
-        // And a real slot past the deck still is, in the one sentence.
-        let message =
-            change(&Record::Preview { slot: Some(4) }, 4).expect_err("slot 4 of a deck of 4");
-        assert_eq!(message, crate::no_such_slot(4, 4));
     }
 
     /// **A slot the deck does not have is caught in the decode**, where there

@@ -405,7 +405,6 @@ pressed it. See the keys below.
 | `0`–`3` | focus a slot |
 | `space` | focused slot on air / off air, keeping its `t` |
 | `w` | ask for the focused slot to warm off air, or withdraw the request |
-| `v` | cycle what the output shows: the mix, then each slot |
 
 **The mix**
 
@@ -554,18 +553,21 @@ stream never says which slot held which Set.
 Under `add` the two faders are the same dial twice; under `over` one dims a layer and the
 other stops it hiding what is beneath, and an `over` layer at zero *gain* is a black card
 that still covers. Opacity is the one that silences under every mode, so it is the one to
-pull when material has gone bad — **except while that slot is being auditioned**, where both
-faders are ignored on purpose and the way out is to end the audition.
+pull when material has gone bad.
 
 `t` cycles the tone map operator live, which is the only way to compare two of them on
 moving material.
 
 ### Auditioning a slot
 
-`v` cycles what the output shows — the mix, then each slot in turn. Auditioning an off-air
-slot draws it without stepping it, so looking at material never moves it; a slot that has
-never run has nothing to draw, and priming is what gives it something. The status line says
-`PVW<n>` while the output is one slot rather than the mix.
+**There is no key for this any more.** `v` cycled what the output showed — the mix, then
+each slot in turn — and
+[ADR-0240](adr/0240-the-output-shows-the-mix-and-residency-keys-belong-to-the-mixer.md)
+retired the operation behind it: the output is the mix, and per-slot auditioning is the
+console's four deck preview cells, which draw every live deck's own material continuously
+beside the picture. This program has one window and no cells, so what it shows is the mix.
+Taking one slot out of the mix to see the others without it is `f` on its fader, and `g`
+brings it back.
 
 ### Syncing a slot to the room
 
@@ -601,9 +603,8 @@ is up and an absent blend means `add`.
 | `o` | opacity, when it is not 1.0 |
 | `over` `max` | blend mode, when it is not `add` |
 | `T` `B` | tempo or beat sync with the anchor bpm, and for `B` any scrub offset |
-| `m` `p` | the slot's mean and peak level. `m---- p----` means nothing of this frame's was drawn — off air and not being auditioned |
+| `m` `p` | the slot's mean and peak level. `m---- p----` means nothing of this frame's was drawn — the slot is off air |
 | `x` | non-finite texels in that slot this frame — see below |
-| `PVW` | which slot is being auditioned, when one is |
 | `e` `on` `c` | energy, onset, and how much of the audio to believe |
 | `lock` / `free` | whether the beat grid has locked |
 | `heard` `err` | what the tracker last estimated, and how far the grid is from it |

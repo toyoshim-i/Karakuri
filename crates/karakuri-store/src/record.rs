@@ -30,7 +30,7 @@
 //! [`Record::Slot`] is **a node of a Set** — a procedure at a `(layer, index)` address,
 //! optionally with a name. The `slot: u8` field on [`Record::Gain`], [`Record::Opacity`],
 //! [`Record::Blend`], [`Record::Residency`], [`Record::Procedure`], [`Record::Mask`],
-//! [`Record::Transition`], [`Record::Select`], [`Record::Preview`], [`Record::Transport`]
+//! [`Record::Transition`], [`Record::Select`], [`Record::Transport`]
 //! and [`Record::Save`] is **a member of the deck** — an index into the mixer, and nothing
 //! about the Set in it. [`Record::Edge`]'s `slot: String` is the third: **an input a node
 //! declares**, which is what `uses far : Geometry` names.
@@ -53,16 +53,18 @@
 //!
 //! **The one collision there was is settled, and it is the metadata name that
 //! moved.** `docs/ir-spec.md` listed a metadata `preview` carrying a `path`
-//! beside [`Record::Preview`], the deck's record for which slot is being
-//! auditioned. Two shapes under one `t`, and silently so: the deck record's
-//! `slot` is an `Option`, so the specified line decoded as
-//! `Preview { slot: None }` with its `path` dropped and nothing said — the one
-//! record for which "an unknown `t` is ignored" protected nothing, because the
-//! `t` was not unknown. The library asset is spelled `thumbnail` now, which is
-//! the word the library already used for it — see
-//! `docs/adr/0134-the-metadata-preview-becomes-thumbnail.md`. The deck record could not be
-//! the one to move: it is written into session streams that exist on disk,
-//! where nothing has ever written the metadata one.
+//! beside a deck record `preview` carrying an `Option<u8>` slot — which slot
+//! was being auditioned. Two shapes under one `t`, and silently so: the deck
+//! record's `slot` was an `Option`, so the specified line decoded as the deck
+//! record with its `path` dropped and nothing said — the one record for which
+//! "an unknown `t` is ignored" protected nothing, because the `t` was not
+//! unknown. The library asset is spelled `thumbnail` now, which is the word
+//! the library already used for it — see
+//! `docs/adr/0134-the-metadata-preview-becomes-thumbnail.md`. **The deck
+//! record is gone**: `docs/adr/0240-the-output-shows-the-mix-and-residency-keys-belong-to-the-mixer.md`
+//! retired the operation behind it, and switching a preview turned out to be a
+//! bay-internal move rather than an engine one, so there is nothing to record.
+//! The name is free and is not being reused: `thumbnail` is the word.
 
 use serde::{Deserialize, Serialize};
 
@@ -854,26 +856,6 @@ pub enum Record {
         /// The musical instant it lands on, in beats.
         start: f64,
     },
-    /// **Which deck slot is being auditioned**, or none of them for the mix.
-    ///
-    /// Not a mix control — it changes nothing about how the Sets are combined,
-    /// only which of them the output is showing — but it is session state and it
-    /// is in the stream for one reason: **today the preview is the output**.
-    /// A replay that ignored it would show the mix where the operator was
-    /// looking at one deck slot, which is replaying a different picture than the one
-    /// that happened.
-    ///
-    /// That reason has an expiry date. When output routing gives the deck a
-    /// second output, this becomes the monitor's choice and stops being the
-    /// programme's, and the record stops belonging in a session stream — where
-    /// `gain` and `blend` will still belong. Recorded here as a fact about what
-    /// was shown, not as a claim that auditioning is part of a performance.
-    ///
-    /// `slot` is `None` for the mix rather than a sentinel index, so a deck of
-    /// a different size cannot read one as the other.
-    Preview {
-        slot: Option<u8>,
-    },
     /// **What a deck slot's clock does with the session's** — `free`, `tempo`
     /// or `beat`, with the two numbers that make the mode mean something.
     ///
@@ -1043,16 +1025,18 @@ pub enum Record {
     //
     // **The one name that was not disjoint is the one that moved.** The
     // specification's ninth record was a metadata `preview` carrying a `path`,
-    // against [`Record::Preview`] above, which is the deck's and carries a
-    // `slot` — and sharing one enum made that collision *silent*, because the
-    // deck record's `slot` is an `Option` and the specified line decoded as
-    // `Preview { slot: None }` with `path` dropped. It is `thumbnail` now.
-    // Renaming the deck record instead was the alternative and is worse: it is
-    // written into session streams that exist on disk, so moving it would break
-    // reading them, where nothing has ever written the metadata one. A suffix —
-    // `preview_path` — was the other, and it would say these are two versions
-    // of one concept, which is what `param_decl` beside `param` legitimately is
-    // and what a stored asset beside a live audition is not.
+    // against a deck `preview` carrying an `Option<u8>` slot — and sharing one
+    // enum made that collision *silent*, because the deck record's `slot` was
+    // an `Option` and the specified line decoded as the deck record with
+    // `path` dropped. It is `thumbnail` now. Renaming the deck record instead
+    // was the alternative and was worse at the time: it was written into
+    // session streams, so moving it would break reading them, where nothing
+    // has ever written the metadata one. A suffix — `preview_path` — was the
+    // other, and it would say these are two versions of one concept, which is
+    // what `param_decl` beside `param` legitimately is and what a stored asset
+    // beside a live audition is not. **The deck record has since been retired
+    // outright** (ADR-0240), which frees the name and changes nothing here:
+    // `thumbnail` is the word the library already used.
     //
     // Four of the nine records the specification lists, because four is what a
     // compile pass can produce. `perf` is a measurement and wants a probe;
@@ -1209,7 +1193,7 @@ impl Record {
     ///   [`Record::Residency`], [`Record::Look`], [`Record::Canvas`],
     ///   [`Record::Procedure`], [`Record::Authority`],
     ///   [`Record::Transport`],
-    ///   [`Record::Preview`], [`Record::Mask`], [`Record::Transition`] and
+    ///   [`Record::Mask`], [`Record::Transition`] and
     ///   [`Record::Select`] are
     ///   the **session's**
     ///   rather than any Set's. The last two are the ones that are not durable
@@ -1347,7 +1331,6 @@ impl Record {
             | Record::Procedure { .. }
             | Record::Authority { .. }
             | Record::Transport { .. }
-            | Record::Preview { .. }
             | Record::Transition { .. }
             | Record::Select { .. }
             | Record::Mask { .. }
@@ -1380,16 +1363,18 @@ impl Record {
     /// it; it cannot be forgotten on the way, because a variant with no arm
     /// does not compile.
     ///
-    /// **`thumbnail` is the fifth name because `preview` was taken**, by
-    /// [`Record::Preview`] — the deck's, for which slot is being auditioned.
-    /// The specification called the library asset `preview` too, and one `t`
-    /// cannot carry two shapes: the deck record's `slot` is an `Option`, so the
-    /// specified line decoded as `Preview { slot: None }` and lost its `path`
-    /// without a word. The metadata name moved rather than the deck's, which is
-    /// written into session streams that exist on disk. Nothing here has a
-    /// `Thumbnail` variant, because nothing renders one yet — it joins
-    /// `origin`, `parent`, `perf` and `tag` on the list of records the
-    /// specification describes and nothing writes.
+    /// **`thumbnail` is the fifth name because `preview` was taken**, by the
+    /// deck's record for which slot was being auditioned. The specification
+    /// called the library asset `preview` too, and one `t` cannot carry two
+    /// shapes: the deck record's `slot` was an `Option`, so the specified line
+    /// decoded as the deck record and lost its `path` without a word. The
+    /// metadata name moved rather than the deck's, which was written into
+    /// session streams (ADR-0134); the deck's record has since been retired
+    /// outright (ADR-0240) and the name is free, but `thumbnail` is the word
+    /// the library already used and it stays. Nothing here has a `Thumbnail`
+    /// variant, because nothing renders one yet — it joins `origin`, `parent`,
+    /// `perf` and `tag` on the list of records the specification describes and
+    /// nothing writes.
     pub fn is_metadata(&self) -> bool {
         matches!(self.vocabulary(), Vocabulary::Metadata)
     }
