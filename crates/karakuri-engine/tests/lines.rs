@@ -537,10 +537,13 @@ proc sprite {{
     /// eight bytes is 896. Same tenth-scale, same conclusion, and the cell is
     /// smaller still.
     ///
-    /// **Red carries the factor**, because this file's fixture writes
-    /// `color = vec4(1.0, …, 1.0)` into a `SrcAlpha, One` blend: what lands in
-    /// red is the source alpha, and the alpha is the channel the compensation is
-    /// applied to. 0.4 across is 0.16 of a texel's area.
+    /// **Red carries the factor and alpha must not.** This file's fixture writes
+    /// `color = vec4(1.0, …, 1.0)` into a `SrcAlpha, One` colour blend and a
+    /// `One, OneMinusSrcAlpha` alpha blend, so red comes out as the compensated
+    /// colour and alpha comes out as the coverage the sprite claimed. 0.4 across
+    /// is 0.16 of a texel's area, and the coverage stays 1.0 — the compensation
+    /// is paid in the light and not in the channel the mix's `over` hides
+    /// behind. That is the whole of ADR-0245 in two numbers off one texel.
     ///
     /// **Both halves are the claim.** Sixteen texels at full brightness on the
     /// canvas says the mechanism is inert at or above a pixel; one dimmed texel
@@ -577,10 +580,16 @@ proc sprite {{
             cell
         );
         let (x, y) = cell[0];
-        let red = cell_px[(y * 128 + x) as usize][0];
+        let texel = cell_px[(y * 128 + x) as usize];
         assert!(
-            (red - 0.16).abs() < 1e-3,
-            "a 0.4-pixel sprite carries {red} rather than 0.4 squared"
+            (texel[0] - 0.16).abs() < 1e-3,
+            "a 0.4-pixel sprite carries {} rather than 0.4 squared",
+            texel[0]
+        );
+        assert!(
+            (texel[3] - 1.0).abs() < 1e-3,
+            "the compensation reached the coverage channel: alpha is {} rather than 1.0",
+            texel[3]
         );
     }
 
@@ -606,10 +615,16 @@ proc sprite {{
         let (_, _, y0, y1) = bounds(&cells);
         assert_eq!(y0, y1, "a one-texel stroke covered rows {y0}..={y1}");
         for &(x, y) in &cells {
-            let red = px[(y * 128 + x) as usize][0];
+            let texel = px[(y * 128 + x) as usize];
             assert!(
-                (red - 0.4).abs() < 1e-3,
-                "texel ({x}, {y}) carries {red} rather than the stroke's 0.4 of a texel"
+                (texel[0] - 0.4).abs() < 1e-3,
+                "texel ({x}, {y}) carries {} rather than the stroke's 0.4 of a texel",
+                texel[0]
+            );
+            assert!(
+                (texel[3] - 1.0).abs() < 1e-3,
+                "texel ({x}, {y}) has coverage {} rather than 1.0, so the factor reached alpha",
+                texel[3]
             );
         }
     }

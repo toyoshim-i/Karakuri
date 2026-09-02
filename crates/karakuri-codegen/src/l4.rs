@@ -447,7 +447,7 @@ fn write_vsout_struct(out: &mut String, id: Identity, attrs_used: &[Attr], depth
     }
     // **What the one-pixel floor took, so the fragment stage can give it
     // back.** A primitive smaller than a pixel is drawn at one pixel and its
-    // alpha multiplied by the coverage it should have had; the size is known
+    // colour multiplied by the coverage it should have had; the size is known
     // here and the colour is written there, so the factor has to travel. Flat,
     // because it is one number per element — all six corners computed it from
     // the same `point_rate` — and 1.0 at or above a pixel, which is what makes
@@ -802,13 +802,30 @@ fn fragment_entry(id: Identity, attrs_used: &[Attr], body: &str, weighted: bool)
     }
     out.push_str("    var _color: vec4<f32>;\n");
     out.push_str(body);
-    // **The alpha, not the colour**, and the difference is not cosmetic: an
-    // `additive` pipeline adds `color.rgb * color.a` and `weighted` weights by
-    // `color.a`, so the alpha is the channel both modes scale a contribution
-    // by. Scaling the colour as well would apply the factor twice and dim a
-    // sub-pixel sprite by `s⁴`. Above a pixel `coverage` is 1.0 and this line
-    // is arithmetic that changes nothing. See [`write_vsout_struct`].
-    out.push_str("    _color.a = _color.a * in.coverage;\n");
+    // **The colour, and the alpha is left alone.** Both are exact for the
+    // light: `additive` blends with `SrcAlpha, One`, so what reaches the slot
+    // target is `rgb * a` either way, and `weighted` divides its accumulation
+    // back through `a` in the resolve. They differ in what else moves.
+    //
+    // A slot target's alpha is **coverage** — `1 - prod(1 - a_i)`, what
+    // `composite.wgsl`'s `over` hides behind, what survives the mix into the
+    // master chain, and the only thing anything outside the present pass can
+    // key on. Paying the compensation there would put a size-rounding
+    // correction into a channel that means *there is material at this texel*,
+    // and every later consumer of it would inherit that silently. Under
+    // `weighted` it would not even stay a coverage claim: `_a` also builds the
+    // depth weight in [`WEIGHTED_FS_EPILOGUE`], so a rounded-up sprite would
+    // lose weight against its neighbours at the same depth.
+    //
+    // **What that costs is stated rather than avoided**: the coverage is the
+    // one a full pixel would have claimed, so under `over` a sub-pixel sprite
+    // hides what is behind it as though it filled the texel. Its own colour is
+    // right; its occlusion is a texel's worth.
+    //
+    // Above a pixel `coverage` is 1.0 and this line changes nothing. Written as
+    // a whole-vector assignment because WGSL has no assignable multi-component
+    // swizzle. See [`write_vsout_struct`].
+    out.push_str("    _color = vec4<f32>(_color.rgb * in.coverage, _color.a);\n");
     if weighted {
         out.push_str(WEIGHTED_DEPTH);
         out.push_str(WEIGHTED_FS_EPILOGUE);

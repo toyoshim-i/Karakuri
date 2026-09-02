@@ -3281,7 +3281,7 @@ proc wash {
     /// size. This paragraph read that a 112x63 render therefore rasterises
     /// roughly `(63/720)²` of the fragments a 1280x720 one does, and that is no
     /// longer true at the bottom of the sweep: a quad below a pixel is floored
-    /// at one pixel and dimmed rather than dropped (ADR-0244), so a `Points`
+    /// at one pixel and dimmed rather than dropped (ADR-0245), so a `Points`
     /// procedure's fragment count bottoms out at one per element
     /// instead of falling with the area. At 112x63 this material's sprites are
     /// about a third of a pixel across, so the cell render sits entirely in that
@@ -3362,7 +3362,7 @@ proc wash {
     /// **It is still not the way to fill a cell, and the reason has changed.**
     /// The reason used to be that most of this material's sprites cover no pixel
     /// centre at 112x63 and vanish — which was a defect in the renderer rather
-    /// than a fact about cells, and ADR-0244 is where it went. What stands in its
+    /// than a fact about cells, and ADR-0245 is where it went. What stands in its
     /// place is the plain cost: the full-size target is rendered anyway, so
     /// downsampling costs line 2 alone, 0.489 ms net of the floor, against a
     /// second 10.573 ms pass. **What fills a cell is open again** in the sense

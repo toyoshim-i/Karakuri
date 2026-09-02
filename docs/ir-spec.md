@@ -1517,22 +1517,29 @@ to cover a pixel centre. So a rate that is right at 1280x720 drops most of its m
 arbitrary one, with which sprites survived decided by where they landed.
 
 **One pixel is the floor, and the fragment carries what the size lost.** Where `s` is below 1
-the quad is drawn at one pixel and the fragment's alpha is multiplied by the coverage the
+the quad is drawn at one pixel and the fragment's **colour** is multiplied by the coverage the
 sprite should have had: `s²` for a sprite, and `s` for a stroke, which is one-dimensional and
 short of coverage across its width only. What is preserved is the *integrated* contribution
 rather than the peak — the material stays as bright in total as it was, spread over the
 smallest area anything can be drawn in.
 
-**The alpha channel rather than the colour, because that is the channel both blend modes
-scale a contribution by.** `additive` adds `color.rgb * color.a`, and `weighted` weights by
-`color.a`; multiplying the colour as well would apply the factor twice and make the
-compensation `s⁴`.
+**The colour rather than the alpha, because alpha is coverage and coverage is a different
+claim.** For the light the two are the same: `additive` blends with `SrcAlpha, One`, so
+`color.rgb * color.a` is what reaches the target whichever of the two the factor sits in. But
+a render target's alpha is `1 - prod(1 - a_i)` — *there is material at this texel* — and it is
+what the mix's `over` hides behind, what leaves the mix into the master chain, and the only
+thing anything handed the frame outside the present pass can key on. A size that had to be
+rounded up is not a statement about coverage, and paying the compensation there would make
+every later reader of that channel inherit one.
+
+**What that costs is the occlusion, and it is stated rather than avoided.** A rounded-up
+primitive claims the coverage a whole pixel would have claimed, so under `over` it hides what
+is behind it as though it filled the texel. Its own colour is right; a texel's worth of
+occlusion is not.
 
 **Exact under `additive`, approximate under `over`.** Adding light commutes with scaling it,
-so a dimmed one-pixel sprite adds exactly what the sub-pixel one would have. Compositing does
-not: two sub-pixel sprites landing in one pixel are composed as though each covered the whole
-pixel at a reduced alpha, which is the ordinary coverage-as-alpha assumption and is wrong by
-however much the two actually overlap.
+so a dimmed one-pixel sprite adds exactly what the sub-pixel one would have added.
+Compositing does not, for the reason directly above.
 
 **A `point_rate` of zero or less draws nothing**, which is now a rule rather than an accident.
 Zero always did, a zero-extent quad having no area. A negative rate used to draw a sprite of
@@ -1891,8 +1898,9 @@ disc_point(float, float) -> vec2
   in each axis is that side over that axis's extent, which is what makes the sprite square in
   pixels rather than square in NDC. The side is floored at one pixel, and the coverage the
   floor took away — `(side / max(side, 1))²`, one at or above a pixel — travels to the
-  fragment stage as a flat varying and multiplies the alpha there. See *A sprite smaller than
-  a pixel is drawn at one pixel and dimmed to compensate*
+  fragment stage as a flat varying and multiplies the colour there, leaving the alpha, which
+  is coverage, alone. See *A sprite smaller than a pixel is drawn at one pixel and dimmed to
+  compensate*
 - **`topology lines` does not lower to `PrimitiveTopology::LineList` either**, and for the
   same reason: a line primitive is one pixel wide. It is the *same quad*, laid along the
   segment instead of around a point — six vertices per instance, one instance per element,

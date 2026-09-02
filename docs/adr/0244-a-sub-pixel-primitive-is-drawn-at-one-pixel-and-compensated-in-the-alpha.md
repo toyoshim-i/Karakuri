@@ -1,15 +1,30 @@
 ---
 id: 0244
 title: A sub-pixel primitive is drawn at one pixel and compensated in the alpha
-status: accepted
+status: superseded
 date: 2026-09-02
 supersedes: []
-superseded_by: []
+superseded_by: [0245]
 principles: []
 tags: [renderer, codegen, ir]
 ---
 
 # A sub-pixel primitive is drawn at one pixel and compensated in the alpha
+
+> **Superseded 2026-09-02, later the same day, by
+> [ADR-0245](0245-the-sub-pixel-compensation-is-paid-in-the-colour-because-alpha-is-coverage.md).**
+> **One clause below reversed and the rest of it stands.** The floor at one pixel, `s²` for a
+> sprite and `s` for a stroke, the flat varying, the non-positive rule, and every alternative
+> rejected under *Leave it*, *MSAA* and *Clamp in the check pass* are all carried forward
+> unchanged. What reversed is the channel: this record put the factor in the alpha and rejected
+> the colour, and the maintainer's objection is that a render target's alpha is **coverage** —
+> it survives the mix into the master chain
+> ([ADR-0224](0224-out-and-exposure-are-two-levels-that-multiply-in-different-places.md)) and is
+> the one thing anything outside the present pass keys on, so a size that had to be rounded up
+> does not belong in it. The reasoning below for preferring alpha is wrong in one step, which
+> ADR-0245 names: `additive` blends with `SrcAlpha, One`, so the light is exact from either
+> channel and there was never a factor applied twice to weigh against the coverage. Read
+> ADR-0245 for the decision in force; this record is kept for the argument it got wrong.
 
 ## Context
 

@@ -828,14 +828,17 @@ machinery rather than for drawing.**
 ### Built: a sub-pixel primitive is floored at one pixel and compensated in the alpha
 
 **This was the *Decided and not built* item and it is built**
-([ADR-0244](adr/0244-a-sub-pixel-primitive-is-drawn-at-one-pixel-and-compensated-in-the-alpha.md)).
+([ADR-0245](adr/0245-the-sub-pixel-compensation-is-paid-in-the-colour-because-alpha-is-coverage.md),
+which supersedes [ADR-0244](adr/0244-a-sub-pixel-primitive-is-drawn-at-one-pixel-and-compensated-in-the-alpha.md)).
 A sprite of side `s` pixels with `s < 1` produced no fragment unless its quad happened to cover a
 pixel centre, so a small target lost most of its material and lost it *arbitrarily* — measured,
 one sprite at the shipped default covered sixteen texels at 1280x720 and none at 128x72. It is now
-drawn at one pixel with the fragment's alpha multiplied by the coverage the floor took: `s²` for a
-sprite, `s` for a stroke, carried from the vertex stage as a flat varying. Exact under `additive`,
-approximate under `over`, and inert at or above a pixel — so no host-clock figure in this file was
-taken on material it touches.
+drawn at one pixel with the fragment's **colour** multiplied by the coverage the floor took: `s²`
+for a sprite, `s` for a stroke, carried from the vertex stage as a flat varying. The alpha is left
+alone because alpha is coverage — what the mix's `over` hides behind and what leaves the mix into
+the master chain — so the price is that a rounded-up primitive occludes as though it filled the
+texel. Exact under `additive`, approximate under `over`, and inert at or above a pixel — so no
+host-clock figure in this file was taken on material it touches.
 
 **Two things it changed that are not the renderer.** `tests/deck.rs` argued that re-rendering into
 a preview cell is *cheaper and wrong*; the *wrong* was this defect, and the cost has moved with it
@@ -1035,7 +1038,7 @@ work, so it does not. `Lines` is unmeasured and its scaling is not known. (The m
 *segments*; the enum says `Lines`.)
 
 **The small draw has a floor under it now**, which cuts both ways for this.
-[ADR-0244](adr/0244-a-sub-pixel-primitive-is-drawn-at-one-pixel-and-compensated-in-the-alpha.md)
+[ADR-0245](adr/0245-the-sub-pixel-compensation-is-paid-in-the-colour-because-alpha-is-coverage.md)
 holds a sub-pixel primitive to one fragment rather than dropping it, so a small target's picture is
 the same picture and the measurement is of the same material — which is the whole premise of
 measuring there. It also puts a floor under the *cost*: below the size at which sprites reach a
