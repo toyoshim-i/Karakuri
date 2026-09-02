@@ -723,10 +723,12 @@ data lives, and with neither given a four-candidate search runs (ADR-0230). `exa
 `.kset` files a fresh clone opens on; `my sets` is empty until something is saved.
 
 **M5.1 is the current sub-milestone and it is nearly closed.** The Program bay carries no `plan`
-panel badge at all — it is the one complete bay on the page. What is left is two key bindings,
-*Put a deck on air, prime it, or take it off* and *Choose what the output shows*, and then the
-bay's two tooltip notes. Nothing is blocked. **One decision sits inside this bay**: what the deck
-A preview cell is showing now that there are four channels, the second of the four below.
+panel badge at all — it is the one complete bay on the page. The decision on preview sizing and
+arrangement was resolved by ADR-0239 (preserving operator preview size across arrangements, pure
+area comparison at crossover 706px, and widening default outer panes to 340px / 400px so standard
+windows open in Below mode; see [docs/history/m5.md](history/m5.md)). What is left is two key
+bindings (*Put a deck on air, prime it, or take it off* and *Choose what the output shows*), and
+then the bay's two tooltip notes. Nothing is blocked.
 
 **The order after M5.1 is the section above.** Work the sub-milestones top to bottom; each one
 names its own rows, its exit condition and its blockers. Run the fourth command beside them: a
