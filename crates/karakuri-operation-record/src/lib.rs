@@ -544,7 +544,6 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
             slot: *deck,
             level: residency.name().to_string(),
         }),
-        Operation::SetPreview { showing } => one(Record::Preview { slot: *showing }),
         // **One value across, and it is the arm that says the master out is
         // not per slot.** Every reading in [`Current`] is a completion — the
         // two thirds of a look a press did not name, the half of a mask, the

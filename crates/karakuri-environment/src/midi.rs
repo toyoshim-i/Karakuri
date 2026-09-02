@@ -299,7 +299,6 @@ fn deck_of(operation: &Operation) -> Option<usize> {
         | Operation::SetResidency { deck, .. }
         | Operation::SetBlendMode { deck, .. }
         | Operation::SetMaskPosition { deck, .. } => Some(usize::from(*deck)),
-        Operation::SetPreview { showing } => showing.map(usize::from),
         _ => None,
     }
 }
@@ -457,7 +456,7 @@ mod tests {
     /// ones route at all. The seam this file exists for, end to end.
     #[test]
     fn a_mapped_message_becomes_its_operation_and_an_unmapped_one_becomes_nothing() {
-        let mut r = router("cc 1 -> gain 2\nnote 36 -> preview 1\nnote 37 -> tap");
+        let mut r = router("cc 1 -> gain 2\nnote 36 -> residency 1 live\nnote 37 -> tap");
         let out = routed(
             &mut r,
             &[cc(1, 127), cc(9, 64), note(36), note(99), note(37)],
@@ -467,7 +466,10 @@ mod tests {
             out,
             vec![
                 Operation::SetGain { deck: 2, gain: 1.0 },
-                Operation::SetPreview { showing: Some(1) },
+                Operation::SetResidency {
+                    deck: 1,
+                    residency: karakuri_operation::Residency::Live
+                },
                 Operation::TapBeat,
             ]
         );
@@ -574,7 +576,7 @@ mod tests {
         );
         // And the same pad twice, which is a press repeated rather than a
         // value repeated: both are hits.
-        let mut r = router("note 36 -> preview 1");
+        let mut r = router("note 36 -> residency 1 live");
         assert_eq!(routed(&mut r, &[note(36), note(36)], 4).len(), 2);
     }
 
@@ -632,13 +634,16 @@ mod tests {
     /// are applied in.
     #[test]
     fn a_press_between_two_fader_messages_keeps_its_order() {
-        let mut r = router("cc 1 -> gain 0\nnote 36 -> preview 1");
+        let mut r = router("cc 1 -> gain 0\nnote 36 -> residency 1 live");
         let out = routed(&mut r, &[cc(1, 0), note(36), cc(1, 127)], 4);
         assert_eq!(
             out,
             vec![
                 Operation::SetGain { deck: 0, gain: 1.0 },
-                Operation::SetPreview { showing: Some(1) },
+                Operation::SetResidency {
+                    deck: 1,
+                    residency: karakuri_operation::Residency::Live
+                },
             ]
         );
     }

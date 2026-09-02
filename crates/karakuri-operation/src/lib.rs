@@ -38,7 +38,7 @@
 //! **Four surfaces name their operations here, and they do not all route the
 //! same way.** `karakuri-console`'s mixer faders were the first customer;
 //! `karakuri-cli`'s mix controls are the second — gain, opacity, blend,
-//! residency, preview, the tone map, the exposure and the scrub each name an
+//! residency, the tone map, the exposure and the scrub each name an
 //! operation and hand it to `karakuri-operation-record`; `karakuri-midi`'s map
 //! is the third, which took `Action` away with it
 //! (`docs/adr/0196-a-map-line-names-a-state-and-an-old-line-is-refused.md`);
@@ -932,14 +932,6 @@ operations! {
         /// a `select` record use.
         renderer: u32,
     } => "Choose which renderer of a deck is live",
-
-    /// The mix, or one deck auditioned.
-    ///
-    /// `None` is the mix. Direct rather than a cycle, which is the one place
-    /// `karakuri-midi`'s map already had the right shape: *"a surface
-    /// has a pad per slot and reaching slot 3 through three presses is a
-    /// keyboard's compromise, not a surface's."*
-    SetPreview { showing: Option<u8> } => "Choose what the output shows",
 
     /// **One level on the composited frame, at the entry to the master
     /// chain** — the whole fold rather than one deck of it.

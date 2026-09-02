@@ -249,12 +249,25 @@ const DEMO_LOOP_SECONDS: f32 = 27.0;
 /// **The two topologies, over geometry that does not change**, as a list of
 /// `(seconds, key)` on the same terms as [`DEMO_SCRIPT`].
 ///
-/// `v` cycles what the output shows — the mix, then each slot alone — and this
-/// script does nothing else, because there is nothing else to do: the deck
-/// holds one L1 file paired with a sprite renderer in slot 0 and a stroke
-/// renderer in slot 1, so cycling the preview *is* the demonstration. What a
-/// watcher sees is the same cloud, in the same places, at the same instant,
-/// drawn two ways.
+/// The deck holds one L1 file paired with a sprite renderer in slot 0 and a
+/// stroke renderer in slot 1, so **showing each slot without the other is the
+/// demonstration**. What a watcher sees is the same cloud, in the same places,
+/// at the same instant, drawn two ways.
+///
+/// **It fades a slot out rather than auditioning the other one, and that is
+/// the one thing here that changed.** This script pressed `v` three times —
+/// the mix, each slot alone, the mix again — until ADR-0240 retired *Choose
+/// what the output shows*. The output is the mix now and always, so the way to
+/// see one slot without the other is to take the other out of the mix: `f` on
+/// the focused slot's fader, `g` to bring it back, with a digit before each to
+/// say which slot. That is `Operation::FadeDeck` where it used to be
+/// `SetPreview`, and it isolates a **slot** exactly as the audition did.
+///
+/// **What it costs is that a fade is scheduled and an audition was not.** A
+/// press lands on the current grid rather than in the frame it arrives, so the
+/// picture changes a beat or two after the entry that asked for it — which is
+/// the same gap [`DEMO_SCRIPT`]'s `f` and `g` already have and say is worth
+/// watching for. The seconds below leave room for it.
 ///
 /// The mix comes first and last on purpose. Both slots composited is the state
 /// that shows they are the same geometry — the strokes lie along the dots —
@@ -262,14 +275,21 @@ const DEMO_LOOP_SECONDS: f32 = 27.0;
 /// is not there to anchor it.
 ///
 /// **Nothing here presses a key that only means something to someone who was
-/// told what to expect.** Each `v` produces a visibly different frame on its
+/// told what to expect.** Each fade produces a visibly different frame on its
 /// own, which is the property [`DEMO_SCRIPT`]'s first entry deliberately does
 /// not have and has to say so.
 const DEMO_LINES_SCRIPT: &[(f32, char)] = &[
-    // Five seconds of the mix: strokes and sprites over each other.
-    (5.0, 'v'),  // slot 0 alone — sprites *and* strokes, from one simulation
-    (10.0, 'v'), // slot 1 alone — strokes, the same elements
-    (15.0, 'v'), // back to the mix
+    // Five seconds of the mix: strokes and sprites over each other. Then slot
+    // 1's fader out, leaving slot 0 alone — sprites *and* strokes, from one
+    // simulation.
+    (5.0, '1'),
+    (5.0, 'f'),
+    // Slot 1 back, slot 0 out: strokes alone, the same elements.
+    (10.0, 'g'),
+    (10.0, '0'),
+    (10.0, 'f'),
+    // And back to the mix.
+    (15.0, 'g'),
 ];
 
 /// One pass through [`DEMO_LINES_SCRIPT`], with five seconds of the mix after
@@ -318,21 +338,21 @@ impl Demo {
     ///
     /// **A demonstration that requires the operator to assemble the scene is
     /// not one.** `--demo lines` is about two renderers over one geometry, and
-    /// a watcher handed a one-slot deck sees the script cycle a preview between
-    /// the mix and the only thing in it. Overridden the moment any `--set` is
-    /// given, so this supplies a scene rather than imposing one.
+    /// a watcher handed a one-slot deck sees the script fade the only thing in
+    /// the mix out and back. Overridden the moment any `--set` is given, so
+    /// this supplies a scene rather than imposing one.
     fn deck(self) -> Vec<(Named, Vec<Named>)> {
         match self {
             Demo::Transport => Vec::new(),
             // **Two slots, and it has to stay two.** A stack — one slot with
             // both renderers over one simulation — is what several renderers
             // over one geometry now costs, and it is the wrong shape *here*:
-            // `DEMO_LINES_SCRIPT` presses the preview key three times to reach
-            // the mix, each slot alone, and the mix again, and a preview
-            // isolates a **slot**. A one-slot deck has nothing to cycle to, so
-            // the script would show the same picture twice and the
-            // demonstration would run, look like it worked, and demonstrate
-            // nothing — which is the defect the doc above already names.
+            // `DEMO_LINES_SCRIPT` fades one slot's fader out at a time so the
+            // other is seen alone, and a fader is per **slot**. A one-slot
+            // deck has nothing to take away, so the script would show the same
+            // picture and then an empty frame, and the demonstration would
+            // run, look like it worked, and demonstrate nothing — which is the
+            // defect the doc above already names.
             //
             // Slot 0 carries the stack anyway, so what the demonstration shows
             // is the mix, then one simulation drawn both ways, then strokes
@@ -506,8 +526,7 @@ options:
                           cc 5      -> opacity 0     note 32 -> residency 0 live
                           note 36 -> residency 0 priming
                           note 40 -> residency 0 allocated
-                          note 44 -> blend 0 over    note 48 -> preview 0
-                          note 52 -> preview mix     note 53 -> tap
+                          note 44 -> blend 0 over    note 48 -> tap
                         A pad names a state, never a step, so a state is a pad:
                         `residency N live|priming|allocated`, `blend N
                         add|over|max`. A file written against the older
@@ -580,9 +599,9 @@ options:
                                       back, held, then run forward past where
                                       it was
                           lines       one L1 drawn as sprites and as strokes,
-                                      cycling the preview between them. Brings
-                                      its own two-slot deck unless --set says
-                                      otherwise
+                                      each slot faded out in turn so the other
+                                      is seen alone. Brings its own two-slot
+                                      deck unless --set says otherwise
   --watch               recompile and swap the slot whose files changed
   --budget-ms MS        frame budget a swapped-in Set is held to
   -h, --help            this
@@ -636,14 +655,6 @@ keys:
              the Set file as the merge's `live`
   n          cycle where a fade starts: the next bar, the next beat, now
   j          cycle how long a fade lasts: 4, 2, 8 beats, or 0 for a cut
-  v          cycle what the output shows: the mix, then each slot, then the
-             mix again. Auditioning — an off-air slot is drawn while it is
-             being looked at, so an allocated one shows the still it stopped
-             at and a priming one shows what it is warming into. It is never
-             stepped by being looked at, so nothing moves that would not have
-             moved anyway, and the previewed slot is metered so its level can
-             be read before it goes on air. Shown at unity, ignoring its
-             faders: what is being judged is the material, not the setting
   m          cycle the focused slot's blend mode: add, over, max. `over` is
              the only one in which a layer hides the ones under it, and what
              it hides with is the coverage its own sprites drew — thin
@@ -2395,7 +2406,6 @@ fn apply_replayed(deck: &mut Deck, look: &mut Look, record: &karakuri_store::rec
         Ok(Some(mix::Change::Gain { slot, value })) => deck.set_gain(slot, value),
         Ok(Some(mix::Change::Opacity { slot, value })) => deck.set_opacity(slot, value),
         Ok(Some(mix::Change::Blend { slot, mode })) => deck.set_blend(slot, mode),
-        Ok(Some(mix::Change::Preview { slot })) => deck.set_preview(slot),
         Ok(Some(mix::Change::Mask { slot, mask })) => deck.set_mask(slot, mask),
         Ok(Some(mix::Change::Transition {
             slot,
@@ -5572,7 +5582,7 @@ impl Live {
     ///
     /// - **Its record converts, so it goes through [`Live::operate`].**
     ///   `space` and `w` (`SetResidency`), `[`, `]` and `\` (`SetGain`),
-    ///   `;` and `'` (`SetOpacity`), `m` (`SetBlendMode`), `v` (`SetPreview`),
+    ///   `;` and `'` (`SetOpacity`), `m` (`SetBlendMode`),
     ///   `t` (`SetTonemap`), `-`, `=` and the backquote (`SetExposure`), `u`
     ///   and `i` (`ScrubDeck`), `y` (`SetSync`), `f` and `g` (`FadeDeck`),
     ///   `x` (`Crossfade`), `r` (`SelectRenderer`). A key and a mapped pad
@@ -5637,7 +5647,6 @@ impl Live {
                 ';' => self.nudge_opacity(-OPACITY_STEP),
                 '\'' => self.nudge_opacity(OPACITY_STEP),
                 'm' => self.cycle_blend(self.focus),
-                'v' => self.cycle_preview(),
                 'f' => self.fade(0.0),
                 'g' => self.fade(1.0),
                 'x' => self.crossfade(),
@@ -6556,8 +6565,9 @@ impl Live {
     /// named, which is the other way to start — and the first press leaves that
     /// state for good, which is what "makes one live and the rest not" costs
     /// when the record names one renderer. Restoring the fold is a different
-    /// statement and wants its own vocabulary — `Record::Preview` carries
-    /// `null` for "the mix" and is the shape it would take.
+    /// statement and wants its own vocabulary — an `Option` carrying `null`
+    /// for "all of them" is the shape it would take, which is the shape the
+    /// retired `preview` record had.
     ///
     /// **What it chooses is kept.** A live save reads the fold off the Set —
     /// see `playing_values` — so `k` after a press writes `{"t":"merge",
@@ -6661,55 +6671,6 @@ impl Live {
             .find(|(q, _)| *q == self.quantum)
             .map(|(_, name)| *name)
             .unwrap_or("now")
-    }
-
-    /// **Cycle what the output is showing**: the mix, then each slot in turn,
-    /// then the mix again.
-    ///
-    /// Auditioning is a prerequisite rather than a convenience — choosing
-    /// between candidates cannot be done blind, and see
-    /// `docs/principles/0070-auditioning-is-a-prerequisite-not-a-convenience.md`
-    /// for what that rules out. Every
-    /// slot is offered whatever its residency, because an off-air slot is
-    /// exactly the one worth looking at: an Allocated one shows the still it
-    /// stopped at and a Priming one shows what it is warming into.
-    ///
-    /// The printed line says what is being shown *and* what the mix is doing
-    /// without it, because the one thing an operator can lose track of here is
-    /// which of the two they are looking at — a previewed slot that happens to
-    /// be Live and alone in the mix is the same picture either way.
-    fn cycle_preview(&mut self) {
-        let count = self.deck.slot_count();
-        let next = match self.deck.preview() {
-            None => Some(0),
-            Some(slot) if slot + 1 < count => Some(slot + 1),
-            Some(_) => None,
-        };
-        self.show(next);
-    }
-
-    /// Show one slot, or the mix. Split from the cycle because the cycle is
-    /// the key's compromise and not the operation: a surface has a pad per
-    /// slot, and reaching slot 3 through three presses is a keyboard's
-    /// answer to having one key. A map line says `preview 3` and arrives at
-    /// `SetPreview` directly, which is the shape this crate's map had before
-    /// the vocabulary existed.
-    fn show(&mut self, slot: Option<usize>) {
-        self.operate(&Operation::SetPreview {
-            showing: slot.map(|slot| slot as u8),
-        });
-        match self.deck.preview() {
-            Some(slot) => eprintln!(
-                "preview slot {slot} — {}, gain {:.2}, t {:.2}s (the mix is not being shown)",
-                residency_name(self.deck.residency(slot), self.deck.is_parked(slot)),
-                self.deck.gain(slot),
-                self.deck.slot(slot).set().time()
-            ),
-            None => eprintln!(
-                "preview off — showing the mix of {} live",
-                self.deck.live_slots()
-            ),
-        }
     }
 
     /// Cycle the focused slot's blend mode. No refusals here — unlike sync,
@@ -6907,7 +6868,6 @@ impl Live {
             mix::Change::Gain { slot, value } => self.deck.set_gain(slot, value),
             mix::Change::Opacity { slot, value } => self.deck.set_opacity(slot, value),
             mix::Change::Blend { slot, mode } => self.deck.set_blend(slot, mode),
-            mix::Change::Preview { slot } => self.deck.set_preview(slot),
             mix::Change::Mask { slot, mask } => self.deck.set_mask(slot, mask),
             mix::Change::Transition {
                 slot,
@@ -7159,13 +7119,6 @@ impl Live {
         self.frames_since_status = 0;
 
         self.status.clear();
-        // **What the output is showing, when it is not the mix.** First on the
-        // line and not tucked in a column, because it is the one piece of state
-        // that changes what every other number on the line is *about*: the
-        // levels below are still per slot, but the picture is one of them.
-        if let Some(slot) = self.deck.preview() {
-            let _ = write!(self.status, "PVW{slot} ");
-        }
         for slot in 0..self.deck.slot_count() {
             let _ = write!(
                 self.status,
@@ -8368,18 +8321,18 @@ proc points {
         );
     }
 
-    /// **A demonstration brings the scene it is about.** `--demo lines` cycles
-    /// the preview between the mix and each slot, and on a one-slot deck that
-    /// shows the same picture twice — the demonstration would run, look like it
-    /// worked, and demonstrate nothing.
+    /// **A demonstration brings the scene it is about.** `--demo lines` fades
+    /// each slot out in turn so the other is seen alone, and on a one-slot deck
+    /// that shows the picture and then an empty frame — the demonstration would
+    /// run, look like it worked, and demonstrate nothing.
     ///
     /// **Two slots, therefore, even though a stack would fit in one.** This was
     /// briefly rewritten to a single slot holding both renderers, on the
     /// grounds that it is the shape the milestone made possible — which broke
-    /// it, because `DEMO_LINES_SCRIPT` presses the preview key three times and
-    /// a preview isolates a slot rather than a renderer. Slot 0 carries the
-    /// stack, which is what the milestone actually buys here: the same two
-    /// draws, over one simulation instead of two.
+    /// it, because the script takes one slot at a time out of the mix and a
+    /// fader is per slot rather than per renderer. Slot 0 carries the stack,
+    /// which is what the milestone actually buys here: the same two draws, over
+    /// one simulation instead of two.
     #[test]
     fn the_lines_demo_supplies_its_own_two_slot_deck() {
         let args = parse(&["--demo", "lines"]).expect("should parse");
@@ -8398,13 +8351,30 @@ proc points {
                     vec![Named::bare("examples/drift_streaks.kir")],
                 ),
             ],
-            "the preview has to have more than one slot to cycle between"
+            "there has to be more than one slot for taking one away to show anything"
         );
+        // **Three moments, one per slot plus the return to the mix**, and each
+        // moment is the keys it takes: a digit to focus the slot and `f` to
+        // fade it out, `g` to bring the previous one back. A deck of a
+        // different size leaves the script out of phase, which is what this
+        // counts.
+        let fades = DEMO_LINES_SCRIPT.iter().filter(|(_, k)| *k == 'f').count();
+        let restores = DEMO_LINES_SCRIPT.iter().filter(|(_, k)| *k == 'g').count();
         assert_eq!(
-            DEMO_LINES_SCRIPT.len(),
-            args.sets.len() + 1,
-            "the script presses the preview key once per slot and once to return \
-             to the mix; a deck of a different size leaves it out of phase"
+            (fades, restores),
+            (args.sets.len(), args.sets.len()),
+            "the script fades one slot out per slot in the deck and brings each back; \
+             a deck of a different size leaves it out of phase"
+        );
+        let focused: Vec<char> = DEMO_LINES_SCRIPT
+            .iter()
+            .filter(|(_, k)| k.is_ascii_digit())
+            .map(|(_, k)| *k)
+            .collect();
+        assert_eq!(
+            focused,
+            vec!['1', '0'],
+            "a fade acts on the focused slot, so every `f` needs the digit that says which"
         );
     }
 
@@ -10536,7 +10506,7 @@ mod live_save_tests {
         }
 
         // Floors, not counts. They are what `Live::key` actually holds today —
-        // 33 characters, one range, two named keys — rather than a round number
+        // 32 characters, one range, two named keys — rather than a round number
         // under them, because a control surface is small enough that losing one
         // key is news and the scan going quiet is the thing being guarded
         // against. Three of them because they fail apart: a signature change
@@ -10544,8 +10514,13 @@ mod live_save_tests {
         // characters, and a `NamedKey` renamed away gives characters and no
         // named ones. Raise them when a key is added; lowering one is a claim
         // that a control was deliberately removed.
+        //
+        // **It was 33 and is 32**, and that is the claim being made: ADR-0240
+        // retired *Choose what the output shows*, so `v` is not a key any
+        // more. The floor came down with the control rather than the control
+        // being kept alive to hold a number up.
         assert!(
-            chars >= 33,
+            chars >= 32,
             "only {chars} character keys read out of `Live::key` — the scan is not \
              seeing the match arms"
         );

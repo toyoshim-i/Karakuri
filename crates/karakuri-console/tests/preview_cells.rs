@@ -1,19 +1,22 @@
-//! **The four deck preview cells: the console's route into *Choose what the
-//! output shows*.**
+//! **The four deck preview cells: where they are, and that they are the
+//! panel's.**
 //!
-//! `docs/manual/operations.html` says the row is *"the mix, or one deck
-//! auditioned"* and names `preview` in the panel column; the cells are the
-//! only thing on this console called that and the only thing naming a deck —
-//! *"The A–D under it keep their letters, which are outside anything you would
-//! capture and are the only thing naming a deck."*
+//! **A press on a cell asks for nothing, and there is no test here that it
+//! does.** The cells were this console's route into *Choose what the output
+//! shows*; ADR-0240 retired that operation, deleted its row from
+//! `docs/manual/operations.html`, and left the picture as the master mix and
+//! every cell as its own deck's continuous monitor. Two tests went with it —
+//! one for a press naming its cell's deck and one for a second press naming
+//! the mix — because their whole subject was the operation.
+//!
+//! **What is left is the half that never depended on it**: a cell is a
+//! rectangle, an operator drags the boundary above it, and the panel has to
+//! get the press either way. That is the geometry below, and it is the reason
+//! the cells stay controls with nothing to ask for.
 //!
 //! # What this file is for
 //!
-//! - **A press on a cell names that cell's deck**, and a press on the cell the
-//!   output is already showing names the mix — which is how one row of four
-//!   cells reaches all five values `Operation::SetPreview` can carry. The
-//!   manual does not say which gesture asks for the mix and
-//!   `ProgramBay::preview` is where that decision and its argument are.
+//! - **Which cell a point is on**, over four rectangles the bay derived once.
 //! - **The cells are the ones the bay drew**, in both of its arrangements, so
 //!   a press lands on the cell an operator is looking at whichever way round
 //!   the Program bay put itself (ADR-0182).
@@ -31,7 +34,6 @@ use karakuri_console::panel::{Op, Panel, GRAB};
 use karakuri_console::room::size;
 use karakuri_console::view::{program_bay, Placement, DECKS, DECK_LETTERS, MOCK_CANVAS};
 use karakuri_layout::{Hit, Point};
-use karakuri_operation::Operation;
 
 fn console(viewport: karakuri_layout::Rect) -> (Panel, egui::Context) {
     (arranged(viewport, MOCK_CANVAS), drawn_once())
@@ -51,11 +53,11 @@ fn cells(panel: &Panel) -> (Placement, [egui::Rect; DECKS]) {
 // What a press asks for
 // ---------------------------------------------------------------------------
 
-/// **A press on a cell names that cell's deck**, and never the deck the
-/// pointer happens to have selected: a cell is the one thing on this console
-/// that carries a letter, so what it can say is its own.
+/// **Which cell a point is on is the cell at its own rectangle**, and never
+/// the deck the pointer happens to have selected: a cell is the one thing on
+/// this console that carries a letter, so what it answers for is its own.
 #[test]
-fn a_press_on_a_cell_names_that_cells_deck() {
+fn a_cell_is_the_cell_at_its_own_rectangle() {
     for viewport in [SMALLEST, PLAUSIBLE] {
         let (panel, _) = console(viewport);
         let bay = program_bay(panel.layout(), MOCK_CANVAS).expect("the bay");
@@ -67,48 +69,7 @@ fn a_press_on_a_cell_names_that_cells_deck() {
                 "the cell lettered {} is not the cell at its own rectangle",
                 DECK_LETTERS[deck]
             );
-            // With the mix showing, every cell names its own deck.
-            assert_eq!(
-                bay.preview(None, point(cell.center())),
-                Some(Operation::SetPreview {
-                    showing: Some(deck as u8)
-                }),
-                "a press on cell {} did not ask for that deck",
-                DECK_LETTERS[deck]
-            );
-            // And with some *other* deck on the output it still does, which
-            // is what makes the mix the second press rather than a mode.
-            let other = ((deck + 1) % DECKS) as u8;
-            assert_eq!(
-                bay.preview(Some(other), point(cell.center())),
-                Some(Operation::SetPreview {
-                    showing: Some(deck as u8)
-                })
-            );
         }
-    }
-}
-
-/// **A press on the cell the output is already showing asks for the mix**,
-/// which is the other half of what the row can say and the only gesture on
-/// this panel that reaches it.
-///
-/// `Deck::set_preview` is where the argument is — *"The way out of an audition
-/// is to end it"* — and the operation says the value rather than the direction:
-/// `showing: None` is the mix, named outright, and *the one that is showing*
-/// is this surface's translation and not the operation's (P-0074).
-#[test]
-fn a_press_on_the_cell_the_output_is_showing_asks_for_the_mix() {
-    let (panel, _) = console(SMALLEST);
-    let bay = program_bay(panel.layout(), MOCK_CANVAS).expect("the bay");
-    let (_, cells) = cells(&panel);
-    for (deck, cell) in cells.into_iter().enumerate() {
-        assert_eq!(
-            bay.preview(Some(deck as u8), point(cell.center())),
-            Some(Operation::SetPreview { showing: None }),
-            "a second press on cell {} did not end the audition",
-            DECK_LETTERS[deck]
-        );
     }
 }
 
@@ -131,7 +92,11 @@ fn a_press_between_two_cells_asks_for_nothing_and_is_not_claimed() {
         "the cells claim the {}px gap between two of them",
         size::PREVIEW_GAP
     );
-    assert_eq!(bay.preview(None, point(gap)), None);
+    assert_eq!(
+        bay.cell(point(gap)),
+        None,
+        "the gap between two cells answers as one of them"
+    );
     assert_eq!(
         claim(&mut panel, &ctx, &showing(&[]), point(gap)),
         Claim::Egui,

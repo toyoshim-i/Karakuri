@@ -732,7 +732,12 @@ at crossover 706px, and widening outer panes to 340px / 400px so standard window
 placement). The two remaining key badges were resolved: *Put a deck on air* retired its shortcut
 in favor of mixer controls, and *Choose what the output shows* was retired as redundant with independent
 preview cells ([ADR-0240](adr/0240-the-output-shows-the-mix-and-residency-keys-belong-to-the-mixer.md);
-see [docs/history/m5.md](history/m5.md)). What remains for M5.1 exit is condensing the
+see [docs/history/m5.md](history/m5.md)). **That answered what the deck A preview cell shows**, which
+was one of the decisions nobody had taken: the panel aims **a sink per cell**, each presented from
+`Deck::slot_view` for the slot it is lettered for and aimed while that deck is Live, so no cell can
+show another deck's material under the wrong letter. `Deck::set_preview` and `Deck::preview` are
+still in `karakuri-engine` and no longer have a caller in this workspace — whether the engine keeps
+them is a question for whoever next touches `deck.rs`. What remains for M5.1 exit is condensing the
 bay's two tooltip notes. Nothing is blocked.
 
 **The order after M5.1 is the section above.** Work the sub-milestones top to bottom; each one
@@ -743,7 +748,9 @@ for machinery rather than for drawing.**
 
 ### The decisions nobody has taken
 
-Four, each with what it blocks. Every one was found by building the thing next to it.
+Three, each with what it blocks. Every one was found by building the thing next to it.
+There were four: *what the deck A preview cell is showing* is answered in the M5.1
+paragraph and is no longer one of them.
 
 - **Which cut of the previous frame a feedback effect reads, and what holding it costs.** The
   previous frame is not one thing. It could be a Set's output, the raw frame the mix wrote before
@@ -756,15 +763,6 @@ Four, each with what it blocks. Every one was found by building the thing next t
   in `karakuri-engine` does that — the render graph is built from a Set's nodes and the fold is
   fixed. **What it blocks is M5.8, and M5 itself**: the operations page carries a `plan` row for
   `feedback`, so M5 cannot close without either taking this or changing the manual.
-
-- **What the deck A preview cell is showing, now that there are four channels.** The cell is the
-  mix and not an audition: `compose` renders the deck once and hands every acquired sink the same
-  canvas, `crates/karakuri` builds one preview sink aimed at the picture's other rectangle, and
-  nothing in that program calls `Deck::set_preview`. `karakuri-cli` does, from
-  `mix::Change::Preview`, so the engine's half is built and unused here. It was harmless while one
-  slot was Live and the mix *was* deck A. **What it blocks is the preview row's four cells**, and
-  the question is whether the panel aims a sink per cell, cycles the one audition the deck has
-  (`Deck::preview` is an `Option<usize>`), or says outright that the cell is the mix.
 
 - **Whether loading a shipped preset should write into the operator's own library.** ADR-0229
   makes a load a packaging step that stores the bundle, so opening a shipped Set adds an entry to

@@ -1708,60 +1708,21 @@ impl ProgramBay {
             .map(|deck| deck as u8)
     }
 
-    /// **What a press on a cell asks for**: `Operation::SetPreview`, naming
-    /// the deck the cell is, or the mix.
+    /// **A press on a cell asks for nothing, and that is the decision rather
+    /// than a gap.**
     ///
-    /// `showing` is what the output is showing this frame -- `None` for the
-    /// mix -- and it is handed in because this crate has no deck (ADR-0156).
-    ///
-    /// # Pressing the cell that is on the output asks for the mix
-    ///
-    /// The row on `docs/manual/operations.html` is *"the mix, or one deck
-    /// auditioned"*, so both are the operation's to name and a control that
-    /// reached only the four decks would perform part of what the row says --
-    /// which is the Outputs dot's situation one bay along, and the reason that
-    /// badge is still `plan`. **The manual does not say which gesture asks for
-    /// the mix**, so this is decided here and the argument is the engine's own
-    /// sentence at `Deck::set_preview`: *"The way out of an audition is to end
-    /// it."* Ending it is therefore the second press on the cell that started
-    /// it, and every other cell names its own deck.
-    ///
-    /// # What a boundary keeps of a cell, and it is six pixels of one edge
-    ///
-    /// **Under the picture, a cell's top edge is the `deck-previews` region's
-    /// own.** The arrangement writes that region as *"63 + 9: the row of
-    /// previews and the padding under it"*, so the padding is below the cells
-    /// and nothing holds them off the boundary between the picture and the
-    /// row — which grabs [`crate::panel::GRAB`] = 6 past it. Beside the
-    /// picture there is no such boundary at all: the row is set aside and the
-    /// cells sit inside [`size::PROGRAM_BODY_PAD`] = 9 of the bay's padding,
-    /// which beats 6 on every side.
-    ///
-    /// So in one of the two arrangements a boundary keeps the top 6 of a cell
-    /// that is [`size::PREVIEW_ROW_H`] tall. [`crate::input`]'s rule 3 decides
-    /// that the same way every time — the boundary gets first refusal, and the
-    /// hazard that rule was written for does not arise — and what is lost is
-    /// the strip along the top. `tests/preview_cells.rs` states both halves
-    /// and fails if the sliver grows; the geometry is
-    /// `docs/manual/console.html`'s and the grab is the rule's, so changing
-    /// either is a decision somewhere else.
-    ///
-    /// **It computes the destination and names it**, which is
-    /// [P-0074](../../../docs/principles/0074-an-operation-says-what-it-wants-never-which-way-to-move.md):
-    /// the operation carries the value, and *the one that is showing* is this
-    /// surface's translation of it and not the operation's -- the same
-    /// arrangement the tally chip's *next residency* and the blend chip's
-    /// *next mode* already have.
-    pub fn preview(&self, showing: Option<u8>, p: karakuri_layout::Point) -> Option<Operation> {
-        let deck = self.cell(p)?;
-        Some(Operation::SetPreview {
-            showing: match showing == Some(deck) {
-                true => None,
-                false => Some(deck),
-            },
-        })
-    }
-
+    /// This used to answer `Operation::SetPreview` — the cell's deck, or the
+    /// mix where the press was on the cell the output was already showing.
+    /// [ADR-0240](../../../docs/adr/0240-the-output-shows-the-mix-and-residency-keys-belong-to-the-mixer.md)
+    /// retired that operation: the Program Picture always presents the master
+    /// mix and the four cells always audition their own decks, drawn from
+    /// `karakuri_engine::deck::Deck::slot_view` every frame, so there is
+    /// nothing left for a press to swap. **The cells are still the panel's**
+    /// — [`ProgramBay::owns`] and [`ProgramBay::cell`] are unchanged and
+    /// `tests/preview_cells.rs` still holds the boundary arithmetic — because
+    /// what a control claims is what it is drawn over, and a cell an operator
+    /// can drag the row's boundary off has to be claimed whether or not a
+    /// press on the middle of it asks for anything.
     /// Whether `p` is on any of the cells -- the union of the four, for
     /// [`crate::input`]'s rule 4.
     pub fn owns(&self, p: karakuri_layout::Point) -> bool {
@@ -10316,23 +10277,6 @@ pub struct View {
     /// module documentation, and [`preview_rects`] for where the rectangles
     /// come from.
     pub previews: [Option<Picture>; DECKS],
-    /// **Which deck the output is auditioning this frame**, or `None` for the
-    /// mix — `karakuri_engine::deck::Deck::preview`, handed in.
-    ///
-    /// **The same seam as [`View::previews`] and it is not the same fact.**
-    /// That field is what is *behind* each of the four cells; this is what the
-    /// composited frame is showing, which is one answer for the whole output
-    /// and is the deck's own state. A console with no deck behind it shows the
-    /// mix, which is every test in this crate that does not say otherwise.
-    ///
-    /// **It is a reading and not a pointer**, unlike [`View::selection`] three
-    /// fields down: `Operation::SetPreview` writes `Record::Preview` and the
-    /// deck is the model of record for it, so a copy kept here would be this
-    /// crate holding somebody else's state (ADR-0156). It is read for two
-    /// things — the ring [`preview`] draws on the cell that is on the output,
-    /// and the destination [`ProgramBay::preview`] names, which is the mix
-    /// when the press is on the cell already showing.
-    pub showing: Option<u8>,
     /// **What the transport row reads this frame**, or `None` for a console
     /// with no engine behind it — which is every test in this crate, and what
     /// the row draws then is nothing at all.
@@ -10644,9 +10588,6 @@ impl View {
             room,
             picture: None,
             previews: [None; DECKS],
-            // The mix, which is what a deck comes up showing and what a
-            // console with no deck behind it can only be showing.
-            showing: None,
             transport: None,
             // The default arrangement, nothing filed and the menu shut, which
             // is every test in this crate and is a console with no store
@@ -11086,10 +11027,6 @@ impl View {
         let cells = program_bay(panel.layout(), self.canvas).and_then(|bay| bay.cells);
         let picture = self.picture;
         let previews = self.previews;
-        // **What the output is showing, read once for the frame** beside the
-        // pictures it is drawn against — the same reason the two pointers
-        // below are.
-        let showing = self.showing;
         let values = self.transport;
         let arr = &self.arrangement;
         // **Read once for the frame beside the arrangement**, and for the same
@@ -11288,14 +11225,7 @@ impl View {
             // argument is.
             if let Some(cells) = cells {
                 for (deck, cell) in cells.into_iter().enumerate() {
-                    preview(
-                        ui,
-                        &pal,
-                        cell,
-                        deck,
-                        previews[deck],
-                        showing == Some(deck as u8),
-                    );
+                    preview(ui, &pal, cell, deck, previews[deck]);
                 }
             }
 
@@ -11415,14 +11345,7 @@ impl View {
 /// And the word follows the colour: the mock writes `C &middot; off` in a cell
 /// with nothing in it, so a cell that is off says `off` rather than leaving
 /// the reader to tell a dark thumbnail from an empty well.
-fn preview(
-    ui: &Ui,
-    pal: &Palette,
-    cell: Rect,
-    deck: usize,
-    picture: Option<Picture>,
-    showing: bool,
-) {
+fn preview(ui: &Ui, pal: &Palette, cell: Rect, deck: usize, picture: Option<Picture>) {
     let radius = CornerRadius::same(size::PREVIEW_RADIUS as u8);
     // Clipped to the cell for the reason the picture is clipped to its region:
     // the rectangle in `picture` came from outside, and a stale one is a
@@ -11433,32 +11356,18 @@ fn preview(
     if let Some(picture) = picture {
         painter.image(picture.id, picture.rect, WHOLE_TEXTURE, Color32::WHITE);
     }
+    // **One stroke, `pal.hair`, on every cell.** A cell used to wear a
+    // `--c-mint` ring when the output was auditioning the deck it is drawn
+    // for, and the ring went with the operation: ADR-0240 makes the picture
+    // the master mix always and every cell its own deck's monitor always, so
+    // there is no longer a fifth fact for a mark to carry and no cell that is
+    // more *on* than the other three. That is the mock's own state restored —
+    // `style.css` gives `.preview` one `inset 0 0 0 1px var(--c-hair)` and no
+    // second colour.
     painter.rect_stroke(
         cell,
         radius,
-        // **The cell the output is auditioning wears its inset shadow in
-        // `--c-mint`**, which is this console's colour for *on* — the Outputs
-        // row's lit dot and its halo are the same green, and nothing else on
-        // the panel uses it.
-        //
-        // **The mock has no state for this and it is owed one.** Its four
-        // cells say which decks are *running*; what the output is showing is a
-        // fifth fact, and with the audition on the deck the cell is drawn for,
-        // a picture in the cell and a picture in the cell say the same thing —
-        // so *deck C auditioned* and *the mix, which happens to be deck C* are
-        // indistinguishable without a mark. The mix is the absence of one,
-        // exactly as `Operation::SetPreview`'s `showing: None` is.
-        //
-        // **A ring rather than a word**, and rather than the lavender ring the
-        // Mixer bay puts round the selected strip: `console.html` is explicit
-        // that two marks meaning two things must not look alike — *"drawing
-        // them the same erases which of the two a reader is looking at"* — so
-        // this is the colour that already means on, on the stroke the cell
-        // already has.
-        match showing {
-            true => Stroke::new(size::HAIRLINE, pal.mint),
-            false => Stroke::new(size::HAIRLINE, pal.hair),
-        },
+        Stroke::new(size::HAIRLINE, pal.hair),
         StrokeKind::Inside,
     );
 

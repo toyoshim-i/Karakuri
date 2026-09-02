@@ -333,13 +333,17 @@
 //! dot's arrangement exactly, two operations and no toggle, on the console's
 //! own shape rather than on the mix.
 //!
-//! **So are the four deck preview cells**, and they are the mixer bay's
-//! arrangement rather than the dot's: [`crate::view::ProgramBay`] is derived
-//! once and asked whether a point is on a cell and what that press asks for —
-//! `SetPreview` naming the deck the cell is, or the mix where the press is on
-//! the cell the output is already showing. Which cell is showing is handed in
-//! per frame like every other reading here, because the deck is the model of
-//! record for it.
+//! **So are the four deck preview cells**, and they are the one place in this
+//! file where *is this a control* and *what does a press on it ask for* have
+//! come apart: [`crate::view::ProgramBay`] is derived once and asked whether a
+//! point is on a cell, and the answer to the second question is now nothing at
+//! all. A press used to name `SetPreview` — the deck the cell is, or the mix
+//! where the press was on the cell the output was already showing — and
+//! ADR-0240 retired that operation, leaving the picture as the master mix and
+//! every cell as its own deck's monitor. **The cells are still claimed**,
+//! because a control claims what it is drawn over: the row's top edge is a
+//! boundary an operator drags, and a cell that stopped answering this rule
+//! would hand `egui` a press on the panel's own face.
 //!
 //! **And so are the four class pills** — [`crate::view::mcp_pill`], one per
 //! class of operations a model may be refused, three of them in a bay head

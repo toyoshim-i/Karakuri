@@ -281,8 +281,8 @@ use karakuri_console::view::{
     self, arrangement as arrangement_pill, audio_in as audio_in_pill, class_at,
     deck_head as deck_head_row, inspector as inspector_pane, library as library_bay,
     look as look_row, master as master_row, mcp_pill, mixer as mixer_bay, outputs, picture_rect,
-    preview_rects, program_bay, program_head, Ask, AudioAsk, AudioIn, Chosen, Kind, McpPill,
-    Picture, Scope, View, DECKS, DECK_LETTERS,
+    preview_rects, program_head, Ask, AudioAsk, AudioIn, Chosen, Kind, McpPill, Picture, Scope,
+    View, DECKS, DECK_LETTERS,
 };
 // **How many slots a deck can hold**, which is how many this one has — see
 // [`SLOTS`]. Not re-exported at the crate root, and asked of the module that
@@ -1647,18 +1647,6 @@ impl Readout {
                 }) {
                     return (claim, self.opened(&pill));
                 }
-                // **The four deck preview cells.** A press names a deck or
-                // the mix, and it goes down the path every emitted operation
-                // takes: `Operation::SetPreview`, `Record::Preview`, the
-                // deck. Asked before the mixer because a cell is in the
-                // Program bay and a strip is not — the two cannot overlap and
-                // the order is arbitrary, but the cells' answer is the
-                // cheaper one and there is no type to lay out for it.
-                if let Some(operation) = program_bay(self.panel.layout(), self.view.canvas)
-                    .and_then(|bay| bay.preview(self.view.showing, at))
-                {
-                    return (claim, Acted::Emitted(Some(operation)));
-                }
                 // **The Library bay's scope chips**, which are the first
                 // controls on this panel whose number is a value rather than a
                 // constant: one per scope the bay was handed. The bay is
@@ -2168,38 +2156,55 @@ impl Readout {
              looks like: both ask `karakuri_environment::places::STORE`.",
             store.display()
         );
-        // **The cells, and this sentence has been wrong twice.** It said C
-        // and D had nothing behind them and named the number — *a deck of TWO
+        // **The cells, and this sentence has been wrong three times.** It said
+        // C and D had nothing behind them and named the number — *a deck of TWO
         // slots* — which was true of the deck that shipped before this one.
         // Then it said the one sink was an audition, and it was not: nothing
         // called `Deck::set_preview`, so the sink was a second copy of the
         // picture and the word was a claim about a control that did not exist.
-        // **The cells are a control now** and the word is true, so the cell it
-        // names is read off the deck rather than written here.
-        // Which cell the sink is in, read the way `Engine::aim` reads it.
-        let showing = self.view.showing.map(usize::from).unwrap_or(ON_AIR);
+        // Then it said the cells were a control an operator pressed to move the
+        // audition, and ADR-0240 retired that control. **Every sentence here is
+        // read off the deck**, which is the only way this legend stops being
+        // rewritten each time: the number that is on is counted, not written.
+        let live: Vec<usize> = (0..DECKS)
+            .filter(|slot| {
+                self.view
+                    .mixer
+                    .get(*slot)
+                    .is_some_and(|strip| strip.tally == view::Tally::Live)
+            })
+            .collect();
         println!(
-            "deck {}'s cell is the only one that is ON, and which cell that is follows what \
-             the output is showing: this program builds ONE preview sink and puts it in the \
-             auditioned deck's cell. {} — press another cell and the sink goes there, press \
-             the one that is on and the mix comes back. every slot of this deck holds a Set \
+            "{} — a cell is on because its deck is LIVE, and it draws that deck's own \
+             material rather than a copy of the output: each cell is presented from \
+             `Deck::slot_view` for the slot it is lettered for, so no cell can be showing \
+             another deck under the wrong letter. the picture above them is the mix, \
+             always — there is no control that swaps it for one deck, and the cells are \
+             why there does not need to be (ADR-0240). every slot of this deck holds a Set \
              — there are {} of them and the mixer draws a strip for each — so no cell on \
-             this row is a cell with nothing behind it. the other {} read `off` because \
-             nothing is drawing those slots: a slot that is not LIVE is drawn only for an \
-             audition, and this program auditions one at a time. cells saying off are what \
-             this program is rather than something left unfinished, and each cell that is \
-             on costs a present pass of its own.",
-            deck_letter(showing as u8),
-            match self.view.showing {
-                Some(deck) => format!("deck {} is auditioned", deck_letter(deck)),
-                None => format!(
-                    "the output is showing the MIX, so the sink is in deck {}'s cell — the \
-                     only LIVE slot, and therefore the deck the mix is",
-                    deck_letter(ON_AIR as u8)
+             this row is a cell with nothing behind it. the {} that read `off` are decks \
+             nothing is drawing: a slot that is not LIVE is not stepping and has no new \
+             frame to show, and an operator brings one up by cycling its tally chip or \
+             loading material into it. cells saying off are what this program is rather \
+             than something left unfinished, and each cell that is on costs a present \
+             pass of its own.",
+            match live.as_slice() {
+                [] => "no cell is ON — nothing on this deck is LIVE".to_owned(),
+                [one] => format!(
+                    "deck {}'s cell is the only one that is ON",
+                    deck_letter(*one as u8)
+                ),
+                many => format!(
+                    "{} cells are ON — {}",
+                    many.len(),
+                    many.iter()
+                        .map(|slot| format!("deck {}", deck_letter(*slot as u8)))
+                        .collect::<Vec<_>>()
+                        .join(", ")
                 ),
             },
             self.view.mixer.len(),
-            DECKS - 1
+            DECKS - live.len()
         );
         println!(
             "the transport row reads the session's own oscillator — the tempo, the beat \
@@ -2407,22 +2412,23 @@ impl Readout {
                     Kind::Outputs => "row, one sink: program view".to_owned(),
                     Kind::Pane => "pane, inside a bay".to_owned(),
                     Kind::Picture => "the picture, a sink".to_owned(),
-                    // Four cells, and this file knows which of them is on:
-                    // one preview sink, in the cell of the deck the output is
-                    // auditioning. **Read off the view rather than off
-                    // `ON_AIR`**, because a press on a cell moves it — a
-                    // constant here is exactly the legend naming a control's
-                    // state from before the control existed.
-                    Kind::Previews => match self.view.showing {
-                        Some(deck) => {
-                            format!("{DECKS} previews, deck {} auditioning", deck_letter(deck))
-                        }
-                        None => format!(
-                            "{DECKS} previews, the mix on the output and deck {}'s cell \
-                             showing it",
-                            deck_letter(ON_AIR as u8)
-                        ),
-                    },
+                    // Four cells, and which of them is on is counted rather
+                    // than written: a cell is on because its deck is LIVE, and
+                    // an operator brings a deck up at any time. A constant here
+                    // is exactly the legend naming a control's state from
+                    // before the control existed, which this row has been twice
+                    // already.
+                    Kind::Previews => {
+                        let on = (0..DECKS)
+                            .filter(|slot| {
+                                self.view
+                                    .mixer
+                                    .get(*slot)
+                                    .is_some_and(|strip| strip.tally == view::Tally::Live)
+                            })
+                            .count();
+                        format!("{DECKS} previews, {on} of them monitoring a LIVE deck")
+                    }
                     // A bay like the other five: a row of chips saying which
                     // library is being read, and then a row per Set that one
                     // holds — as many as the bay has room for, and the foot
@@ -3878,7 +3884,7 @@ impl Engine {
                 gpu,
                 renderer,
                 "deck A preview",
-                preview_ats.and_then(|c| c.get(0).copied()),
+                preview_ats.and_then(|c| c.first().copied()),
                 scale,
             ),
             Presented::new(
@@ -4001,6 +4007,28 @@ impl Engine {
 
     /// **Aim every sink at its own rectangle, and hand back what the console
     /// should draw in each** — the picture, and one entry per preview cell.
+    ///
+    /// # A cell is aimed because its deck is Live, and not because it is being
+    /// auditioned
+    ///
+    /// This read `Deck::preview` and aimed the one preview sink at the cell of
+    /// the deck the output was auditioning: the sinks all took the same
+    /// composited frame, so a sink left in deck A's cell would have drawn deck
+    /// C's material under the letter `A` the moment somebody auditioned C.
+    /// ADR-0240 retired the audition — the picture is the master mix and every
+    /// cell is its own deck's monitor — and the sinks stopped taking the
+    /// composited frame: each cell is drawn from `Deck::slot_view` for the slot
+    /// it is lettered for, which is a texture that cannot be of the wrong deck.
+    ///
+    /// So what is left to decide is which cells are *worth* a pass, and the
+    /// answer is already written one screen down: the draw is gated on
+    /// `deck.residency(slot) == Residency::Live`, because a slot that is not
+    /// Live is not stepping and has nothing new in its view. **The aim asks the
+    /// same question**, so the two cannot disagree — a cell aimed but not drawn
+    /// would be a texture from an earlier frame held under a live letter, and a
+    /// cell drawn but not aimed is a pass into nothing. A constant here would
+    /// be the older defect: deck B's cell would stay dark for good the moment
+    /// an operator brought B up.
     fn aim(
         &mut self,
         gpu: &Gpu,
@@ -4012,17 +4040,27 @@ impl Engine {
         let picture = self
             .picture
             .aim(gpu, renderer, picture_at, scale, &mut self.freed);
-        let audition = self.deck.preview().unwrap_or(0);
+        // Which decks are Live, read once for the frame: the loop below both
+        // aims and reports off the same answer, so a residency that changed
+        // between the two would leave a cell aimed at a rectangle it is not
+        // reported in.
+        let live: [bool; DECKS] =
+            std::array::from_fn(|slot| self.deck.residency(slot) == Residency::Live);
         let mut previews = [None; DECKS];
-        for slot in 0..DECKS {
-            let at = if slot == audition {
-                preview_ats.and_then(|cells| cells.get(slot).copied())
-            } else {
-                None
+        let freed = &mut self.freed;
+        for (slot, (sink, out)) in self
+            .previews
+            .iter_mut()
+            .zip(previews.iter_mut())
+            .enumerate()
+        {
+            let at = match live[slot] {
+                true => preview_ats.and_then(|cells| cells.get(slot).copied()),
+                false => None,
             };
-            let pic = self.previews[slot].aim(gpu, renderer, at, scale, &mut self.freed);
-            if slot == audition {
-                previews[slot] = pic;
+            let pic = sink.aim(gpu, renderer, at, scale, freed);
+            if live[slot] {
+                *out = pic;
             }
         }
         (picture, previews)
@@ -5996,37 +6034,6 @@ fn apply(record: &Record, deck: &mut Deck, look: &mut Look) -> Option<String> {
                 deck.transport(slot).scrub_beats()
             ))
         }
-        // **The one record here whose slot is an `Option`, and the option is
-        // the whole point.** `Record::Preview` carries `None` for the mix
-        // *"rather than a sentinel index, so a deck of a different size cannot
-        // read one as the other"*, and `Deck::set_preview` takes the same
-        // `Option` at the other end — so this arm is one `map` and no
-        // arithmetic.
-        //
-        // **The guard is `held` again, and here it has something to catch.**
-        // Every other slot on this panel comes off the deck's own count; a
-        // preview cell does not. The row of cells is `DECKS` wide whatever the
-        // deck holds, because the manual's four letters are the only thing
-        // naming a deck — so on a deck of fewer slots a press on the last cell
-        // names a slot that is not there, and `Deck::set_preview` **asserts**
-        // on one. A panic inside a `winit` callback aborts this process on
-        // macOS (see the module documentation), so the refusal is the guard
-        // rather than the message: nothing moves and nothing is printed, which
-        // is `mix::change`'s answer to the same record without its sentence.
-        Record::Preview { slot } => {
-            let target = match slot {
-                Some(s) => Some(held(s)?),
-                None => None,
-            };
-            deck.set_preview(target);
-            Some(match target {
-                Some(s) => format!(
-                    "  preview: deck {} -> SetPreview {{ showing: Some({s}) }} -> Record::Preview -> deck.preview() = Some({s})",
-                    deck_letter(s as u8)
-                ),
-                None => "  preview: the mix (fixed)".to_owned(),
-            })
-        }
         _ => None,
     }
 }
@@ -7596,7 +7603,6 @@ impl ApplicationHandler for App {
                 );
                 self.readout.view.picture = picture;
                 self.readout.view.previews = previews;
-                self.readout.view.showing = None;
 
                 // **What the transport row reads, written beside the frame it
                 // is about**, exactly as the two lines above are: the picture
@@ -10297,7 +10303,9 @@ mod tests {
             "`SetGain` is no longer in the class this test is about"
         );
         // And one from another class, to hold the press to one class below.
-        let elsewhere = Operation::SetPreview { showing: None };
+        let elsewhere = Operation::RecordSession {
+            recording: karakuri_operation::Recording::Stop,
+        };
         assert_eq!(
             standing(&elsewhere, Running::unread()),
             Standing::Closed(Class::InputsAndOutputs)
@@ -10662,59 +10670,6 @@ mod tests {
             "undoing the solo left the library folded"
         );
     }
-
-    /// **A press on a deck preview cell, through the window loop's own
-    /// routing** — and the second press on the same cell asks for the mix.
-    ///
-    /// The console's `tests/preview_cells.rs` asserts what a cell asks for
-    /// with no window anywhere; this is the half that says an operator reaches
-    /// it. What it adds beyond the claim is the **loop back through the
-    /// view**: the first press names a deck, this file writes that deck into
-    /// `View::showing` the way a frame does, and the second press on the same
-    /// cell then names the mix. A program that never wrote `showing` would
-    /// pass the console's test and give an operator a cell that could only
-    /// ever start an audition.
-    #[test]
-    fn a_press_on_a_preview_cell_names_that_deck_and_then_the_mix() {
-        const DECK: u8 = 2;
-        let ctx = drawn_once();
-        let mut readout = Readout::new(1440.0, 900.0);
-        // What a frame does before it reads a rectangle, and what the cells'
-        // arrangement is decided by.
-        view::rearrange(&mut readout.panel, readout.view.canvas);
-
-        let cells = preview_rects(readout.panel.layout(), readout.view.canvas)
-            .expect("the Program bay draws its cells");
-        let cell = cells[usize::from(DECK)].center();
-        let at = Point::new(cell.x, cell.y);
-
-        assert_eq!(readout.pointer(&ctx, Pointer::Moved(at)).0, Claim::Panel);
-        let (claim, did) = readout.pointer(&ctx, Pointer::Down);
-        assert_eq!(claim, Claim::Panel);
-        assert_eq!(
-            did,
-            Acted::Emitted(Some(Operation::SetPreview {
-                showing: Some(DECK)
-            })),
-            "the press on deck {}'s cell did not ask for that deck",
-            deck_letter(DECK)
-        );
-        assert!(
-            !readout.panel.dragging(),
-            "the press took a boundary in hand"
-        );
-        readout.pointer(&ctx, Pointer::Up);
-
-        // The frame that followed the press read the deck back and wrote it
-        // here — which is what makes the next press mean the other thing.
-        readout.view.showing = Some(DECK);
-        assert_eq!(
-            readout.pointer(&ctx, Pointer::Down).1,
-            Acted::Emitted(Some(Operation::SetPreview { showing: None })),
-            "a second press on the cell the output is showing did not end the audition"
-        );
-    }
-
     /// **A control's operation becomes the record every other surface's
     /// control ends in**, and this is the half of that which needs no device.
     ///
@@ -13977,145 +13932,6 @@ mod gpu {
         assert!(
             previews[0].is_some() && engine.previews[0].acquire(&gpu) == Ok(()),
             "folding the picture away stopped deck A auditioning under it"
-        );
-    }
-
-    /// **The whole loop, closed on the audition: a press on a preview cell
-    /// moves what the output is showing, and the one sink follows it into that
-    /// cell.**
-    ///
-    /// `karakuri-console`'s `tests/preview_cells.rs` asserts everything up to
-    /// the operation with no engine anywhere, and `mod tests` asserts that the
-    /// window loop's routing reaches it. This is the other end and it needs a
-    /// device, because what moves is `Deck::preview` and because the second
-    /// half of the claim is about a **texture**.
-    ///
-    /// **Two things, and the second is the one worth the device.**
-    ///
-    /// - The press becomes `Record::Preview` and the record moves the deck,
-    ///   which is P-0028 on this control: it ends in the same record a MIDI
-    ///   pad's `note -> preview N` writes, rather than reaching
-    ///   `Deck::set_preview` by a second route.
-    /// - **The one preview sink moves into the auditioned deck's cell.**
-    ///   `frame::compose` hands every sink the same composited frame, so this
-    ///   texture holds whatever the output is showing — and with the sink left
-    ///   in deck A's cell, auditioning C would draw C's material in a cell
-    ///   lettered `A`. That is the panel saying something false, it is
-    ///   invisible to every test that does not look at which cell was aimed,
-    ///   and it is what this asserts against.
-    ///
-    /// **The middle step is checked too**, as the look's and the mask's are:
-    /// between the press and the record the deck must not have moved, or the
-    /// console would be applying what it is only supposed to ask for.
-    #[test]
-    fn a_press_on_a_preview_cell_moves_what_the_output_shows_and_the_sink_follows() {
-        const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
-        const W: u32 = 1440;
-        const H: u32 = 900;
-        /// Not [`ON_AIR`], so a sink that stayed where construction put it is
-        /// visible, and not slot 1 either — a wrong cell one along is the
-        /// likelier accident.
-        const AUDITION: u8 = 2;
-
-        let gpu = Gpu::headless().expect("no GPU");
-        let mut renderer =
-            egui_wgpu::Renderer::new(&gpu.device, FORMAT, egui_wgpu::RendererOptions::default());
-        let mut panel = Panel::new(W as f32, H as f32);
-        panel.solve();
-        let mut engine = Engine::new(&gpu, &mut renderer, &shipped_slots(), panel.layout(), 1.0);
-        assert_eq!(
-            engine.deck.preview(),
-            None,
-            "a deck this program has just built is showing something other than the mix"
-        );
-
-        // What a frame does before it reads a rectangle.
-        view::rearrange(&mut panel, CANVAS);
-        let bay = view::program_bay(panel.layout(), CANVAS).expect("the Program bay is laid out");
-        let cell = bay.cells.expect("the bay draws its cells")[usize::from(AUDITION)].center();
-
-        // ---- the press ----------------------------------------------------
-        let operation = bay
-            .preview(None, Point::new(cell.x, cell.y))
-            .expect("a press on a preview cell");
-        assert_eq!(
-            operation,
-            Operation::SetPreview {
-                showing: Some(AUDITION)
-            },
-            "a press on deck {}'s cell did not ask for that deck",
-            deck_letter(AUDITION)
-        );
-        // **Nothing has been told anything yet.**
-        assert_eq!(
-            engine.deck.preview(),
-            None,
-            "the deck moved before the record did"
-        );
-
-        // ---- the record ---------------------------------------------------
-        let chosen = written(&operation, &reading(&operation, &engine.deck, &engine.look));
-        let Written::Records(records) = &chosen else {
-            panic!("a press on a preview cell wrote no record: {chosen:?}")
-        };
-        assert_eq!(
-            records.as_slice(),
-            [Record::Preview {
-                slot: Some(AUDITION)
-            }],
-            "the record is not the one a MIDI pad's `note -> preview N` writes"
-        );
-        assert!(
-            apply(&records[0], &mut engine.deck, &mut engine.look).is_some(),
-            "the record reached no setter"
-        );
-        assert_eq!(
-            engine.deck.preview(),
-            Some(usize::from(AUDITION)),
-            "the audition did not land on the deck"
-        );
-
-        // ---- the sink follows --------------------------------------------
-        let (_, previews) = engine.aim(&gpu, &mut renderer, panel.layout(), 1.0);
-        assert!(
-            previews[usize::from(AUDITION)].is_some(),
-            "the output is auditioning deck {} and its cell is empty",
-            deck_letter(AUDITION)
-        );
-        assert!(
-            previews
-                .iter()
-                .enumerate()
-                .all(|(deck, at)| at.is_some() == (deck == usize::from(AUDITION))),
-            "more than one cell was aimed at, or the wrong one was — this program builds one              preview sink and it belongs in the cell of the deck the frame is of"
-        );
-        let cells = preview_rects(panel.layout(), CANVAS).expect("the cells are on screen");
-        assert_eq!(
-            previews[usize::from(AUDITION)].expect("just asserted").rect,
-            cells[usize::from(AUDITION)],
-            "the texture is drawn somewhere other than the cell it was aimed at"
-        );
-
-        // ---- and the way back ---------------------------------------------
-        let back = bay
-            .preview(Some(AUDITION), Point::new(cell.x, cell.y))
-            .expect("a second press on the same cell");
-        assert_eq!(back, Operation::SetPreview { showing: None });
-        let chosen = written(&back, &reading(&back, &engine.deck, &engine.look));
-        let Written::Records(records) = &chosen else {
-            panic!("ending an audition wrote no record: {chosen:?}")
-        };
-        assert!(apply(&records[0], &mut engine.deck, &mut engine.look).is_some());
-        assert_eq!(
-            engine.deck.preview(),
-            None,
-            "the second press did not put the mix back on the output"
-        );
-        let (_, previews) = engine.aim(&gpu, &mut renderer, panel.layout(), 1.0);
-        assert!(
-            previews[ON_AIR].is_some() && previews[usize::from(AUDITION)].is_none(),
-            "with the mix back on the output the sink is not in {}'s cell",
-            deck_letter(ON_AIR as u8)
         );
     }
 

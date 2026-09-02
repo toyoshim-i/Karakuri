@@ -397,8 +397,8 @@ fn because(operation: &Operation, class: Class) -> String {
 /// `karakuri_operation_record::written`'s discipline and its reason.
 ///
 /// The counts ADR-0235 states, and which
-/// `the_classification_is_the_split_adr_0235_states` holds this to: **41
-/// closed, 23 open, 64 total.**
+/// `the_classification_is_the_split_adr_0235_states` holds this to: **40
+/// closed, 23 open, 63 total.**
 pub fn standing(operation: &Operation, running: Running<'_>) -> Standing {
     match operation {
         // ----- The clock ---------------------------------------------------
@@ -417,9 +417,9 @@ pub fn standing(operation: &Operation, running: Running<'_>) -> Standing {
         //
         // *"None of them has a bounded worst case and all four are the show's
         // plumbing rather than its picture, which is exactly why they are easy
-        // to forget."*
+        // to forget."* ADR-0235 named four; `SetPreview` was retired by
+        // ADR-0240 and the remaining three keep the class and the rule.
         Operation::AttachBeatSource { .. } => Standing::Closed(Class::InputsAndOutputs),
-        Operation::SetPreview { .. } => Standing::Closed(Class::InputsAndOutputs),
         Operation::RouteFrame { .. } => Standing::Closed(Class::InputsAndOutputs),
         Operation::RecordSession { .. } => Standing::Closed(Class::InputsAndOutputs),
 
@@ -635,7 +635,6 @@ mod tests {
                 deck: 0,
                 renderer: 0,
             },
-            Operation::SetPreview { showing: None },
             Operation::SetMasterOut { out: 1.0 },
             Operation::SetFeedback { params: Undecided },
             Operation::SetBloom { params: Undecided },
@@ -801,22 +800,25 @@ mod tests {
             assert!(
                 !(line.starts_with("_ =>") || line.starts_with("_ if")),
                 "`standing` has a wildcard arm: `{line}`. The classification is exhaustive \
-                 over the vocabulary on purpose — a wildcard is how a sixty-fifth operation \
+                 over the vocabulary on purpose — a wildcard is how a sixty-fourth operation \
                  gets a class nobody chose"
             );
         }
     }
 
-    /// **41 closed, 23 open, 64 total** — ADR-0235's own count, which is the
-    /// one number that says the classification was applied to the whole
-    /// vocabulary rather than to the rows somebody remembered.
+    /// **40 closed, 23 open, 63 total** — ADR-0235's count less the one row
+    /// ADR-0240 retired. It is still the one number that says the
+    /// classification was applied to the whole vocabulary rather than to the
+    /// rows somebody remembered: the record read 41, 23, 64, and
+    /// *Choose what the output shows* leaving the vocabulary takes one off the
+    /// closed side and off the total.
     ///
     /// **Counted with the deck `LoadSet` names live**, because that is how the
     /// record counts it: the row is listed under *what a live deck is drawing*
-    /// and the 41 includes it. It is the one row whose standing is not a
+    /// and the 40 includes it. It is the one row whose standing is not a
     /// function of the operation alone, so the split is a split *given a
-    /// reading* — and the reading that makes it 41 is the one the class was
-    /// drawn for. With nothing live it is 40 and 24, which is the same
+    /// reading* — and the reading that makes it 40 is the one the class was
+    /// drawn for. With nothing live it is 39 and 24, which is the same
     /// classification and not a second one.
     #[test]
     fn the_classification_is_the_split_adr_0235_states() {
@@ -831,7 +833,7 @@ mod tests {
                 }
             }
         }
-        assert_eq!((closed, open, closed + open), (41, 23, 64));
+        assert_eq!((closed, open, closed + open), (40, 23, 63));
     }
 
     fn members(class: Class) -> Vec<&'static str> {
@@ -908,7 +910,6 @@ mod tests {
             members(Class::InputsAndOutputs),
             vec![
                 "Attach a beat source",
-                "Choose what the output shows",
                 "Choose where the frame goes",
                 "Record the session",
             ]

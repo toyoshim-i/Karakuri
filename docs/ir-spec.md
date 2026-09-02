@@ -2114,7 +2114,7 @@ without either appearing in the file.
   both records now carry the way `procedure` does — `--param L4:1:exposure=2.0`,
   `--bind index=1`.
 - Unknown `t` values are ignored, for forward compatibility.
-- **`gain`, `opacity`, `blend`, `mask`, `transition`, `select`, `preview`, `residency`,
+- **`gain`, `opacity`, `blend`, `mask`, `transition`, `select`, `residency`,
   `look`, `master_out`, `canvas`, `procedure`, `authority` and `transport` are not in this list and must never be.** They are the session's
   rather than any Set's — see the session stream format. `canvas` is the sharpest case: a
   Set renders at whatever size it is handed, so a Set file that carried one would resize
@@ -2158,7 +2158,7 @@ that held one of each per Set. The engine caught up: params are per *node*, the 
 *source*, and each source runs at its own capacity.
 
 The *session* records are further along: `audio` and `tempo` per frame, and `gain`,
-`opacity`, `blend`, `preview`, `residency`, `look`, `master_out` and `transport` per key press, are each
+`opacity`, `blend`, `residency`, `look`, `master_out` and `transport` per key press, are each
 built by the CLI, decoded back,
 and only then applied — and `karakuri-cli`'s `--record-session` writes them to a session
 stream as they happen, `--replay` reading it back. The path the engine is driven through is
@@ -2459,17 +2459,16 @@ session tempo, which **v0.2 had no record for**.
 Neither is state, so neither appears in a Set file: both are what a frame *saw* or
 *decided*, and the tempo belongs to the session rather than to any one Set.
 
-### The mix in the stream — `gain`, `opacity`, `blend`, `mask`, `transition`, `select`, `preview`, `residency`, `look`, `master_out`, `canvas`, `procedure`, `authority` and `transport`
+### The mix in the stream — `gain`, `opacity`, `blend`, `mask`, `transition`, `select`, `residency`, `look`, `master_out`, `canvas`, `procedure`, `authority` and `transport`
 
 A session that carried the material and not the performance would replay the same Sets, on
 the same beat, all at whatever gain they happened to start at, with nothing ever going on
-or off air. Thirteen records carry what an operator moves — eleven states and two events:
+or off air. Twelve records carry what an operator moves — ten states and two events:
 
 ```ndjson
 {"t":"gain","slot":0,"value":0.75}
 {"t":"opacity","slot":0,"value":0.5}
 {"t":"blend","slot":1,"mode":"over"}
-{"t":"preview","slot":2}
 {"t":"mask","slot":1,"kind":"linear","angle":0.0,"position":0.0,"softness":0.02}
 {"t":"transition","slot":1,"control":"mask","to":1.0,"start":64.0,"beats":8.0,"curve":"smooth"}
 {"t":"select","slot":0,"renderer":1,"start":64.0}
@@ -2591,20 +2590,24 @@ What is deliberately not here is a mask read from a **texture** — an arbitrary
 another deck slot's luminance. That needs somewhere for the shape to come from, and the answer
 is a [`Field`](#the-field-block) rather than a third `kind`.
 
-**`preview` is which slot the output is showing**, or `null` for the mix. It is not a mix
-control — it changes nothing about how the Sets are combined — and it is in the stream for
-one reason: today the preview *is* the output, so a replay that ignored it would show the
-mix where the operator was looking at one slot. That reason expires. When output routing
-gives the deck a second output this becomes the monitor's choice and stops being the
-programme's, and the record stops belonging in a session stream where `gain` and `blend`
-still will. `null` rather than a sentinel index, so a deck of a different size cannot read
-one as the other.
+**There was a `preview` record and it has been removed.** It carried which slot the output
+was showing — `{"t":"preview","slot":2}`, `null` for the mix — and it was in the stream for
+one reason: the preview *was* the output, so a replay that ignored it would have shown the
+mix where the operator was looking at one slot. That reason expired, and this section said
+it would. Switching a preview turned out to be a **bay-internal** move rather than an engine
+one: the Program bay's picture is the master mix and its four deck preview cells monitor
+every live deck continuously, so nothing about a performance changes when one is looked at
+and there is nothing to record
+([ADR-0240](adr/0240-the-output-shows-the-mix-and-residency-keys-belong-to-the-mixer.md)).
+A stream written before this holds `preview` lines; they are an unknown `t` now and are
+passed over by the rule above, which is what that rule is for. **The name is not reused**
+— `thumbnail` is the library asset, and that stays (see the metadata file format below).
 
 **What no record says is what the deck held.** Every record above names a slot, and the
 format has no way to say that a session ran on four slots or what was in them — a Set file
 describes one Set. So `--replay` builds a deck of one and reports every record naming
 another slot rather than obeying it. That is a gap in this format, not in the replay driver,
-and it is the same gap for `gain`, `blend`, `residency` and `preview` alike. It is also the
+and it is the same gap for `gain`, `blend` and `residency` alike. It is also the
 one place "a session replays what happened" is currently short of true, and the cost grew
 the moment a control surface arrived: a map is written per slot, so a four-slot surface
 produces a session three quarters of whose moves are skipped on the way back.
@@ -3170,7 +3173,7 @@ opts in by naming what they want rather than by hiding twenty-four things.
 
 The mix controls — `gain`, `opacity`, `blend`, `mask` — belong to the **edge into an L5**,
 not to the Set on the other end of it, so they are there whatever a Set publishes and even if
-it publishes nothing. Same for `residency`, `transport` and `preview`, which are about a Set
+it publishes nothing. Same for `residency` and `transport`, which are about a Set
 being *played*. A Set that publishes nothing is still mixable; it just has no material
 controls of its own.
 
@@ -3231,7 +3234,7 @@ unselectable, since a `select` needs an L5 to be about.
 **Which separates the mix from the deck**, and the separation is worth having because today
 they are one type. `gain`, `opacity`, `blend` and `mask` are properties of an *edge into an
 L5* and travel with it wherever it is nested. `residency`, `priming`, hot swap, budget
-governance, `transport`, `preview` and metering are properties of **a Set being played** and
+governance, `transport` and metering are properties of **a Set being played** and
 have nothing to do with mixing; they sit beside the top-level L5 in `Deck` because that is
 where a performance happens, not because they belong to L5.
 
@@ -3390,8 +3393,9 @@ compiler and should not grow one
 default that does not fold writes the key absent rather than the record absent, because a
 missing record says *no such parameter*
 ([ADR-0137](adr/0137-an-unfoldable-default-writes-the-key-absent-not-the-record-absent.md)).
-And `thumbnail` is not called `preview` because that name was already a deck record with a
-different shape ([ADR-0134](adr/0134-the-metadata-preview-becomes-thumbnail.md)).
+And `thumbnail` is not called `preview` because that name was a deck record with a
+different shape ([ADR-0134](adr/0134-the-metadata-preview-becomes-thumbnail.md)); the deck
+record has since been retired outright (ADR-0240) and the name stays `thumbnail` anyway.
 
 **One `t` means one shape, across every file.** A metadata file describes what an artifact
 *declares*; a Set file records what a value *is*. Those are different records, so they get
@@ -3400,21 +3404,24 @@ alternative, reusing a `t` for two different shapes in two different files, cann
 by a decoder that dispatches on `t` alone, which every ndjson reader does. It is not enough
 for the two vocabularies to be disjoint in practice; they have to be disjoint by name.
 
-**The library asset is `thumbnail` and not `preview`, because the deck already has a
-`preview`.** This list carried `{"t":"preview","path":…}` while the session vocabulary above
-carries `{"t":"preview","slot":2}` — two shapes under one `t`, which is what the rule
-immediately above forbids, and a *silent* collision rather than a loud one: the deck
-record's `slot` is optional, so a decoder holding one vocabulary reads the metadata line as
-the deck's and drops the `path` without a word. `thumbnail` is the name the stored asset
-carries everywhere else — the store keeps one under `thumbnails/` — and it draws the
-distinction the collision was hiding: the deck's `preview` renders a running instance, a
-thumbnail is a stored asset. They were two words for two things everywhere but here.
+**The library asset is `thumbnail` and not `preview`, because the deck had a `preview`.**
+This list carried `{"t":"preview","path":…}` while the session vocabulary carried
+`{"t":"preview","slot":2}` — two shapes under one `t`, which is what the rule immediately
+above forbids, and a *silent* collision rather than a loud one: the deck record's `slot` was
+optional, so a decoder holding one vocabulary read the metadata line as the deck's and
+dropped the `path` without a word. `thumbnail` is the name the stored asset carries
+everywhere else — the store keeps one under `thumbnails/` — and it drew the distinction the
+collision was hiding: the deck's `preview` rendered a running instance, a thumbnail is a
+stored asset. They were two words for two things everywhere but here.
 **The metadata name is the one that moved**, because
-nothing writes or reads it and no file anywhere holds that line, where the deck's `preview`
-is written into session streams that exist on disk and renaming *that* would break reading
-them. A suffix — `preview_path` — was the other candidate and was rejected: a suffix says
-two versions of one concept, which is what `param_decl` beside `param` and `capacity_decl`
+nothing wrote or read it and no file anywhere held that line, where the deck's `preview`
+was written into session streams and renaming *that* would have broken reading them. A
+suffix — `preview_path` — was the other candidate and was rejected: a suffix says two
+versions of one concept, which is what `param_decl` beside `param` and `capacity_decl`
 beside `capacity` are, and a stored asset beside a live audition is not that.
+**The deck's record is gone now** (ADR-0240) and `preview` names nothing, which changes none
+of this: the rename already happened, `thumbnail` is the right word on its own terms, and
+reusing a freed name would put a third meaning on it.
 
 **Unknown `t` values are ignored, and so is an unknown key inside a record whose `t` is
 known.** The Set file section above states the first rule for its own vocabulary; this is a
@@ -3425,7 +3432,7 @@ with the Set and session vocabularies, because that is what lets a `param_decl` 
 file be **recognised and refused** rather than passed over as a `t` nobody knows. The rule
 this section states — one `t`, one shape, across every file — is a rule about names, and the
 names are disjoint across all three vocabularies: `param_decl` beside `param`,
-`capacity_decl` beside `capacity`, `thumbnail` beside the deck's `preview`. The second half
+`capacity_decl` beside `capacity`, `thumbnail` beside what was the deck's `preview`. The second half
 is the one a *removed* key needs — `perf` carried a `bytes_per_element` and does not any
 more, and a reader meeting one in a file written before that should pass over it exactly as
 it passes over a `t` it does not recognise. Ignoring

@@ -282,14 +282,6 @@ fn sample(variant: &str) -> Operation {
         // performs it is the surface, which is why the badge it demands is a
         // *panel* badge and there is nothing on the deck to check afterwards.
         "SelectDeck" => Operation::SelectDeck { deck: 0 },
-        // **The Program bay's four deck preview cells**, which are the first
-        // control on this console outside a bay's own body — the picture's row
-        // rather than a strip, a chip or a row of the transport. One operation
-        // over four cells, and `showing: None` is the mix: a press on the cell
-        // the output is already showing asks for it, which is the whole of how
-        // the panel reaches both halves of the row's *"the mix, or one deck
-        // auditioned"*.
-        "SetPreview" => Operation::SetPreview { showing: Some(0) },
         // **The transport row's audio-in pill**, whose card lists the inputs
         // the machine has and whose rows are the picking. One operation over
         // however many inputs there are, and the string is the description the

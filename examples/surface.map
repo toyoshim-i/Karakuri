@@ -95,15 +95,10 @@ note 55 -> blend 3 max
 
 # -- auditioning ------------------------------------------------------------
 #
-# One pad per slot rather than a cycle: a surface has the buttons, and reaching
-# slot 3 through three presses is a keyboard's compromise. `preview mix` is the
-# way back.
-
-note 56 -> preview 0
-note 57 -> preview 1
-note 58 -> preview 2
-note 59 -> preview 3
-note 60 -> preview mix
+# There is no line here, and there is nothing missing. This file mapped five
+# pads to `preview 0`..`preview 3` and `preview mix`; ADR-0240 retired the
+# operation behind them, so the output always shows the mix and every deck is
+# auditioned continuously in its own preview cell. Notes 56-60 are free.
 
 # -- the room ---------------------------------------------------------------
 #
