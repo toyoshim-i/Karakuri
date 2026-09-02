@@ -3992,8 +3992,8 @@ impl Set {
     /// binding moves the moment it goes on air, by however far behind the
     /// governor's rate had it. Named rather than closed, because the close is
     /// to read the session's grid instead — which is the defect this split cost
-    /// a repair to fix. See
-    /// [`Deck::set_preview`](crate::deck::Deck::set_preview).
+    /// a repair to fix. See "Preview" in [`crate::deck`], which also records
+    /// that nothing can start an audition today.
     pub fn prepare_warming(&mut self, queue: &wgpu::Queue, steps: u8, signals: &Signals) {
         self.prepare_on(queue, steps, signals, Clock::Local);
     }
@@ -4601,8 +4601,7 @@ impl Set {
     ///
     /// Nothing here touches `t`, `steps_taken` or the simulation's parity. That
     /// is what lets an operator look at an `Allocated` slot without the act of
-    /// looking moving it — see
-    /// [`Deck::set_preview`](crate::deck::Deck::set_preview).
+    /// looking moving it — see "Preview" in [`crate::deck`].
     ///
     /// **What a Set decides is the order and which one clears**, not how any of
     /// them draws. The renderers run in list order over the one attachment, the

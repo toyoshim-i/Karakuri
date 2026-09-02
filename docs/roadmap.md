@@ -736,9 +736,16 @@ see [docs/history/m5.md](history/m5.md)). **That answered what the deck A previe
 was one of the decisions nobody had taken: the panel aims **a sink per cell**, each presented from
 `Deck::slot_view` for the slot it is lettered for and aimed while that deck is Live, so no cell can
 show another deck's material under the wrong letter. `Deck::set_preview` and `Deck::preview` are
-still in `karakuri-engine` and no longer have a caller in this workspace — whether the engine keeps
-them is a question for whoever next touches `deck.rs`. What remains for M5.1 exit is condensing the
-bay's two tooltip notes. Nothing is blocked.
+**deleted** — that question is answered, in
+[ADR-0241](adr/0241-auditioning-survives-the-control-that-was-retired-and-is-re-recorded-as-a-property.md),
+which also retired P-0070 and re-recorded the requirement as
+[P-0080](principles/0080-an-operator-can-see-a-slots-own-material-without-putting-it-on-air.md),
+*An operator can see a slot's own material without putting it on air*. **It leaves two gaps and they
+are owed rather than decided**: `karakuri-cli` has one window and no cells, so it can no longer
+audition a slot at all; and a cell is aimed only while its deck is Live, so an operator still cannot
+look at a warming or parked candidate on any surface. Both are written into P-0080's *Where it is not
+met*, and the engine's draw path for an off-air slot is kept, unreachable, for whoever closes the
+second. Neither blocks M5.1: what remains for its exit is condensing the bay's two tooltip notes.
 
 **The order after M5.1 is the section above.** Work the sub-milestones top to bottom; each one
 names its own rows, its exit condition and its blockers. Run the fourth command beside them: a

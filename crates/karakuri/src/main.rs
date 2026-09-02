@@ -193,18 +193,18 @@
 //! cycling its tally or by loading a Set into it.
 //!
 //! **Three of the four preview cells are off at a time**, and for one reason:
-//! this program builds one preview sink, and it puts it in the cell of the
-//! deck the output is auditioning — which a press on a cell moves. `off` is a
-//! state an operator chooses rather than a thing not built yet, and all three
-//! are the truth about this program rather than a gap in it.
+//! only [`ON_AIR`] is Live, and a cell is drawn only for a Live deck. `off` is
+//! a state an operator changes by bringing a deck up rather than a thing not
+//! built yet, and all three are the truth about this program rather than a gap
+//! in it.
 //!
-//! **The cell moves because every sink is handed the same frame.** There is
-//! one composited frame and `frame::compose` draws each sink from it, so the
-//! texture in that cell holds whatever the *output* is showing. A sink left in
-//! deck A's cell would draw deck C's material under the letter `A` the moment
-//! somebody auditioned C, which is the panel saying something false — so the
-//! cell follows the audition, and with the mix on the output it is
-//! [`ON_AIR`]'s, which is the deck the mix is here.
+//! **Each cell is its own deck's monitor and cannot be another's.** A cell is
+//! presented from `Deck::slot_view` for the slot it is lettered for — that
+//! deck's own target rather than a cut of the composite — so no cell can draw
+//! deck C's material under the letter `A`. This paragraph used to say the
+//! opposite, because the sinks all took the one composited frame and the cell
+//! followed whichever deck the output was auditioning; ADR-0240 retired that
+//! control, and [`Engine::aim`] carries the reasoning.
 //!
 //! # This file owns none of the model, and none of the view
 //!
@@ -3558,10 +3558,13 @@ impl Sink for Presented {
 /// three more slots did not change that.
 ///
 /// **Three of the four preview cells are off at a time, and for one reason.**
-/// This program builds one preview sink and puts it in the cell of the deck
-/// the output is auditioning; every slot has a Set behind it, and the three
-/// that are not being drawn have nothing to audition. Three cells reading
-/// `off` are the truth about this program rather than a gap in it.
+/// A cell is drawn only while its deck is `Residency::Live` ([`Engine::aim`]),
+/// and this program brings up one; every slot has a Set behind it, and the
+/// three that are not Live are not stepping and have nothing new to show.
+/// Three cells reading `off` are the truth about this program rather than a
+/// gap in it — and the case an operator would want them for, looking at a
+/// candidate *before* it goes on air, is the gap named in P-0080's *Where it
+/// is not met*.
 struct Engine {
     deck: Deck,
     /// **Elements per geometry, read off the L1's own `capacity` declaration**

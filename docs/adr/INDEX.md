@@ -266,6 +266,7 @@ number; new records continue from the end.
 | [ADR-0238](0238-which-cut-of-the-previous-frame-a-feedback-effect-reads-is-open-and-naming-one-recomposes-the-pipeline.md) | Which cut of the previous frame a feedback effect reads is open, and naming one recomposes the pipeline — records a question, takes no decision | 2026-09-01 | accepted |
 | [ADR-0239](0239-the-program-bay-preserves-preview-size-when-arranging-beside.md) | The Program bay preserves preview cell size when arranging beside | 2026-09-02 | accepted |
 | [ADR-0240](0240-the-output-shows-the-mix-and-residency-keys-belong-to-the-mixer.md) | The output shows the mix, and residency keys belong to the mixer | 2026-09-02 | accepted |
+| [ADR-0241](0241-auditioning-survives-the-control-that-was-retired-and-is-re-recorded-as-a-property.md) | Auditioning survives the control that was retired, and is re-recorded as a property | 2026-09-02 | accepted |
 
 ## Retired numbers
 
@@ -277,6 +278,7 @@ never reused.
 | --- | --- | --- | --- |
 | P-0015 | One record tag is one record shape | [P-0031](../principles/0031-a-name-means-one-thing-across-the-system.md) | The same rule holds for any name, not only a record tag — found when `"noise"` meant two things at two confidences |
 | P-0022 | Closed-form material needs no warming | [P-0032](../principles/0032-closed-form-means-scrubbable.md) | Not needing warming is the smaller half; the larger one is being scrubbable |
+| P-0070 | Auditioning is a prerequisite, not a convenience | [P-0080](../principles/0080-an-operator-can-see-a-slots-own-material-without-putting-it-on-air.md) | It named a mechanism — one slot put on the output in place of the mix — and [ADR-0240](0240-the-output-shows-the-mix-and-residency-keys-belong-to-the-mixer.md) retired that mechanism. The requirement did not move, so it is re-recorded as the property ([ADR-0241](0241-auditioning-survives-the-control-that-was-retired-and-is-re-recorded-as-a-property.md)) |
 
 Re-pointing the records that cited a retired principle is permitted, and why, is
 [ADR-0059](0059-a-records-pointer-into-the-principles-registry-is-metadata.md).
@@ -289,4 +291,3 @@ A principle with no ADR is one whose reasoning is still only in the code and the
 - [P-0067](../principles/0067-the-language-is-bounded-so-a-procedure-can-be-priced-before-it-runs.md) — The language is bounded, so a procedure can be priced before it runs. It predates the recovered history; the reasoning is in `ir-spec.md` and the check pass
 - [P-0065](../principles/0065-the-signal-bus-is-not-readable-from-ir.md) — The signal bus is not readable from IR. It predates the recovered history and has no decision to record. **Renumbered from 0061 on 2026-08-23**, which two writers had reached for within three hours of each other; the earlier file keeps the number, and 0061 is [a refusal a person can reach from two surfaces is one sentence](../principles/0061-a-refusal-a-person-can-reach-from-two-surfaces-is-one-sentence.md)
 - [P-0069](../principles/0069-the-three-clocks-never-collapse-into-each-other.md) — The three clocks never collapse into each other. Part of the design skeleton rather than a decision taken against an alternative: it was written down before there was an engine to test it against, and the frame path, the transport, the transitions and the build worker were all arranged around it
-- [P-0070](../principles/0070-auditioning-is-a-prerequisite-not-a-convenience.md) — Auditioning is a prerequisite, not a convenience. The requirement was stated when the instrument was first described and the control was built to it; nothing was decided against an alternative. [ADR-0072](0072-auditioning-adds-a-draw-and-never-a-step.md) records how an audition behaves, not whether the control exists
