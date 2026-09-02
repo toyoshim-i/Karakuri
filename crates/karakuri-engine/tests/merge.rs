@@ -62,7 +62,7 @@ proc {name} {{
 
   vertex {{
     clip       = camera * vec4(position, 1.0);
-    point_size = 6.0;
+    point_rate = 0.09375;
   }}
 
   fragment {{

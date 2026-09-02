@@ -68,12 +68,12 @@ proc soft_points {
 
   consumes position
 
-  param point_scale : float [0.5, 40.0] = 8.0
+  param point_scale : float [0.0039, 0.3125] = 0.0625
   param hue         : float [0.0, 1.0]  = 0.6
 
   vertex {
     clip       = camera * vec4(position, 1.0);
-    point_size = point_scale;
+    point_rate = point_scale;
   }
 
   fragment {
@@ -95,12 +95,12 @@ proc soft_points {
 
   consumes position
 
-  param point_scale : float [0.5, 40.0] = 8.0
+  param point_scale : float [0.0039, 0.3125] = 0.0625
   param radius      : float [0.1, 8.0]  = 7.5
 
   vertex {
     clip       = camera * vec4(position, 1.0);
-    point_size = point_scale * radius;
+    point_rate = point_scale * radius;
   }
 
   fragment {
@@ -909,7 +909,7 @@ mod gpu {
             "a bare name must move both"
         );
         assert_eq!(
-            set.set_param("point_scale", 9.0),
+            set.set_param("point_scale", 0.07),
             1,
             "only the L4 declares it"
         );

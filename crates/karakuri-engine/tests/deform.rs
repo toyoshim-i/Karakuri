@@ -111,7 +111,7 @@ proc dots {
 
   vertex {
     clip       = camera * vec4(position, 1.0);
-    point_size = 5.0;
+    point_rate = 0.078125;
   }
 
   fragment {
@@ -383,7 +383,7 @@ proc tinted_dots {
   consumes position, tint
   vertex {
     clip       = camera * vec4(position, 1.0);
-    point_size = 5.0;
+    point_rate = 0.078125;
   }
   fragment {
     color = vec4(tint, 1.0);
@@ -613,7 +613,7 @@ proc tinted_dots {
   consumes position, tint
   vertex {
     clip       = camera * vec4(position, 1.0);
-    point_size = 5.0;
+    point_rate = 0.078125;
   }
   fragment {
     color = vec4(tint, 1.0);
@@ -716,7 +716,7 @@ proc tinted_dots {
   consumes position, tint
   vertex {
     clip       = camera * vec4(position, 1.0);
-    point_size = 5.0;
+    point_rate = 0.078125;
   }
   fragment {
     color = vec4(tint, 1.0);

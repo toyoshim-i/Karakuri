@@ -29,13 +29,13 @@ proc speed_lines {
 
   consumes position, velocity
 
-  // Stroke width in pixels, uniform along the segment. The default is set
-  // against the reference workload rather than against the look: a quarter of a
-  // million segments is fill before it is anything else, and 1.0 with the
-  // `streak` below is what keeps the pass inside the frame budget there.
-  // `warp_tunnel`'s own default capacity is half that, where both can be ridden
-  // up.
-  param width    : float [0.5, 24.0] = 1.0
+  // Stroke width as a fraction of the frame's height, uniform along the
+  // segment. The default is set against the reference workload rather than
+  // against the look: a quarter of a million segments is fill before it is
+  // anything else, and 0.00139 — one pixel at 720 rows — with the `streak`
+  // below is what keeps the pass inside the frame budget there. `warp_tunnel`'s
+  // own default capacity is half that, where both can be ridden up.
+  param width    : float [0.00069, 0.0333] = 0.00139
 
   // Seconds of travel drawn behind each element. The range starts above zero
   // because a segment whose two ends coincide is zero-area and draws nothing:
@@ -75,7 +75,7 @@ proc speed_lines {
     // is the whole of that declaration.
     clip_b = camera * vec4(position - velocity * streak, 1.0);
 
-    point_size = width;
+    point_rate = width;
   }
 
   fragment {

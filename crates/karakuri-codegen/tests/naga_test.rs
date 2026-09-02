@@ -285,7 +285,7 @@ fn soft_points() -> Checked {
         vec![speed_term, lit_f(0.0), lit_f(1.0)],
         Ty::Float,
     );
-    let point_size = bin(
+    let point_rate = bin(
         BinOp::Mul,
         param("point_scale", Ty::Float),
         bin(
@@ -301,7 +301,7 @@ fn soft_points() -> Checked {
         span: span(),
         stmts: vec![
             assign_output(Output::Clip, clip),
-            assign_output(Output::PointSize, point_size),
+            assign_output(Output::PointRate, point_rate),
         ],
     };
 
@@ -580,7 +580,7 @@ fn shadowing_locals_l4() -> Checked {
         ),
     ));
     vertex_stmts.push(assign_output(
-        Output::PointSize,
+        Output::PointRate,
         param("point_scale", Ty::Float),
     ));
     let vertex = TBlock {
@@ -839,7 +839,7 @@ fn reordered_subset_l4() -> Checked {
         stmts: vec![
             assign_output(Output::Clip, clip),
             assign_output(
-                Output::PointSize,
+                Output::PointRate,
                 bin(BinOp::Add, attr(Attr::Age), lit_f(1.0), Ty::Float),
             ),
         ],
@@ -896,7 +896,7 @@ fn consumes_nothing_l4() -> Checked {
                     vec![lit_f(0.0), lit_f(0.0), lit_f(0.0), lit_f(1.0)],
                 ),
             ),
-            assign_output(Output::PointSize, lit_f(4.0)),
+            assign_output(Output::PointRate, lit_f(4.0)),
         ],
     };
     let fragment = TBlock {
@@ -1042,7 +1042,7 @@ fn l4_consuming_every_attribute_compiles_and_validates() {
         span: span(),
         stmts: vec![
             assign_output(Output::Clip, clip),
-            assign_output(Output::PointSize, lit_f(1.0)),
+            assign_output(Output::PointRate, lit_f(1.0)),
         ],
     };
     let fragment = TBlock {
@@ -1769,7 +1769,7 @@ proc tinted {
 
   vertex {
     clip       = camera * vec4(position, 1.0);
-    point_size = 4.0;
+    point_rate = 0.016;
   }
 
   fragment {
@@ -1815,7 +1815,7 @@ proc tinted {
 
   vertex {
     clip       = camera * vec4(position, 1.0);
-    point_size = 4.0;
+    point_rate = 0.016;
   }
 
   fragment {
@@ -1972,7 +1972,7 @@ proc dots {
 
   vertex {
     clip       = camera * vec4(position, 1.0);
-    point_size = 2.0 + shape(position) * 0.0;
+    point_rate = 0.008 + shape(position) * 0.0;
   }
 
   fragment {
@@ -2019,7 +2019,7 @@ proc plain {
 
   vertex {
     clip       = camera * vec4(position, 1.0);
-    point_size = 2.0;
+    point_rate = 0.008;
   }
 
   fragment {
@@ -2395,7 +2395,7 @@ proc lit {
 
   vertex {
     clip       = camera * vec4(position, 1.0);
-    point_size = 4.0;
+    point_rate = 0.016;
   }
 
   fragment {
@@ -2456,7 +2456,7 @@ proc plain {
 
   vertex {
     clip       = camera * vec4(position, 1.0);
-    point_size = 4.0;
+    point_rate = 0.016;
   }
 
   fragment { color = vec4(float(source % 3u) * 0.3, 0.0, 0.0, 1.0); }

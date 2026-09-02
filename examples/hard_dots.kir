@@ -33,10 +33,11 @@ proc hard_dots {
 
   consumes position, size
 
-  // Pixels per unit of the `size` attribute. Large by the standards of this
-  // library because there are two orders of magnitude fewer elements here than
-  // in a shell — sparse material has to be big to be material at all.
-  param dot_scale : float [0.5, 60.0] = 9.0
+  // Fractions of the frame's height per unit of the `size` attribute. Large by
+  // the standards of this library because there are two orders of magnitude
+  // fewer elements here than in a shell — sparse material has to be big to be
+  // material at all.
+  param dot_scale : float [0.00069, 0.0833] = 0.0125
 
   // 0 is a disc, 1 is a square, and the interesting settings are near neither.
   param square    : float [0.0, 1.0] = 1.0
@@ -74,7 +75,7 @@ proc hard_dots {
     // read as marks on the frame rather than as objects at a distance, and a
     // dot that grew as it came forward would be the second thing in the picture
     // that moves.
-    point_size = dot_scale * size;
+    point_rate = dot_scale * size;
   }
 
   fragment {

@@ -33,7 +33,7 @@ proc plain_points {
 
   vertex {
     clip       = camera * vec4(position, 1.0);
-    point_size = 3.0;
+    point_rate = 0.0234375;
   }
 
   fragment {
@@ -305,7 +305,7 @@ proc plain {
   kind  L4
   blend additive
   consumes position
-  vertex   { clip = camera * vec4(position, 1.0); point_size = 2.0; }
+  vertex   { clip = camera * vec4(position, 1.0); point_rate = 0.015625; }
   fragment { color = vec4(1.0, 1.0, 1.0, 1.0); }
 }
 "#;
@@ -482,7 +482,7 @@ proc plain {
   kind  L4
   blend additive
   consumes position
-  vertex   { clip = camera * vec4(position, 1.0); point_size = 2.0; }
+  vertex   { clip = camera * vec4(position, 1.0); point_rate = 0.015625; }
   fragment { color = vec4(1.0, 1.0, 1.0, 1.0); }
 }
 "#;
@@ -678,7 +678,7 @@ proc plain {
   kind  L4
   blend additive
   consumes position
-  vertex   { clip = camera * vec4(position, 1.0); point_size = 2.0; }
+  vertex   { clip = camera * vec4(position, 1.0); point_rate = 0.015625; }
   fragment { color = vec4(1.0, 1.0, 1.0, 1.0); }
 }
 "#;

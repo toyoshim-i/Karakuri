@@ -48,8 +48,10 @@ proc beat_bloom {
   consumes position, velocity, age
 
   // Wide and soft: the blur radius and the blur kernel. The width is a
-  // *maximum* — what each element gets is this times how bright it is.
-  param width       : float [0.5, 24.0] = 10.0
+  // *maximum* — what each element gets is this times how bright it is. A
+  // fraction of the frame's height, like every width in this language, so the
+  // halo is the same share of the picture at any target size.
+  param width       : float [0.00069, 0.0333] = 0.0139
   param falloff     : float [0.5, 8.0]  = 0.8
   param exposure    : float [0.0, 8.0]  = 0.22
 
@@ -100,7 +102,7 @@ proc beat_bloom {
       let behind = fract(s - beats * 0.25 * chase - hash1(strand + 17u));
       let spill  = pow(pow(1.0 - behind, tail_len), threshold);
 
-      point_size = width * max(spill, age * glitch_glow);
+      point_rate = width * max(spill, age * glitch_glow);
     } else {
       let sp = seed - 65536u;
 
@@ -111,7 +113,7 @@ proc beat_bloom {
       let fly   = clamp(local * 4.0, 0.0, 1.0);
       let life  = pow(max(0.0, 1.0 - fly), 1.6);
 
-      point_size = width * spark_wide * max(life, age * glitch_glow);
+      point_rate = width * spark_wide * max(life, age * glitch_glow);
     }
   }
 

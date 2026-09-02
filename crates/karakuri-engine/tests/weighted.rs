@@ -69,7 +69,7 @@ proc flat_sprite {{
 
   vertex {{
     clip       = camera * vec4(position, 1.0);
-    point_size = 40.0;
+    point_rate = 0.625;
   }}
 
   fragment {{
@@ -544,7 +544,7 @@ proc flat_strand {{
   vertex {{
     clip       = camera * vec4(position, 1.0);
     clip_b     = camera * vec4(position + velocity, 1.0);
-    point_size = 12.0;
+    point_rate = 0.1875;
   }}
 
   fragment {{

@@ -4,14 +4,14 @@ proc soft_points {
 
   consumes position, velocity, age
 
-  param point_scale : float [0.5, 40.0] = 6.0
+  param point_scale : float [0.00069, 0.0556] = 0.00833
   param hue         : float [0.0, 1.0]  = 0.6
   param exposure    : float [0.0, 8.0]  = 1.4
   param falloff     : float [0.5, 8.0]  = 2.0
 
   vertex {
     clip       = camera * vec4(position, 1.0);
-    point_size = point_scale * (0.3 + 0.7 * clamp(length(velocity) * 0.2, 0.0, 1.0));
+    point_rate = point_scale * (0.3 + 0.7 * clamp(length(velocity) * 0.2, 0.0, 1.0));
   }
 
   fragment {

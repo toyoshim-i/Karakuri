@@ -15,11 +15,11 @@ proc flat {
   consumes position
 
   param level : float [0.0, 4.0] = 0.35
-  param dot   : float [0.5, 40.0] = 6.0
+  param dot   : float [0.00069, 0.0556] = 0.00833
 
   vertex {
     clip = camera * vec4(position, 1.0);
-    point_size = dot;
+    point_rate = dot;
   }
 
   fragment {

@@ -1175,8 +1175,9 @@ thing you want: two slots have their own faders, their own blend into the mix, a
 residency. They also cost **two simulations** of the same procedure. Reach for a stack when
 you want one cloud shown two ways; reach for two slots when you want to mix between them.
 
-Three things worth knowing before you ask for strokes. `point_size` becomes the stroke's
-**width in pixels**. `point_coord` runs **along** the segment in x and **across** it in y,
+Three things worth knowing before you ask for strokes. `point_rate` becomes the stroke's
+**width**, in the same unit it gives a sprite's extent: a fraction of the render target's
+height, not a count of pixels. `point_coord` runs **along** the segment in x and **across** it in y,
 so a soft edge is `abs(point_coord.y * 2 - 1)` where a sprite would use
 `length(point_coord * 2 - 1)`. And a stroke covers far more texels than the sprite it
 replaces, so **the same exposure is much brighter** — `drift_streaks` sits a factor of ten

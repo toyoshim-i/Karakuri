@@ -381,7 +381,7 @@ pub struct Cost {
     /// than the per-frame figure rather than a share of it.
     pub ops_per_spawn: u64,
     /// Per rasterised fragment, not per element. Zero for L1. Point sprite cost
-    /// is fill-rate bound — `point_size` and resolution decide the overdraw —
+    /// is fill-rate bound — `point_rate` and resolution decide the overdraw —
     /// which is exactly why an L4 artifact publishes a measurement at reference
     /// conditions instead of a per-element number.
     pub ops_per_fragment: u64,

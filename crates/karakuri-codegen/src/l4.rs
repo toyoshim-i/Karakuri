@@ -5,9 +5,10 @@
 //! WebGPU has no point size — `PrimitiveTopology::PointList` always
 //! rasterizes a single pixel — so every element becomes a quad: six
 //! vertices per instance (`@builtin(vertex_index)` 0..6, the corner) times
-//! one instance per element (`@builtin(instance_index)`). `point_size`
-//! scales the quad in clip space so a sprite keeps its pixel size at any
-//! depth, and `point_coord` falls out of the corner directly. This is not a
+//! one instance per element (`@builtin(instance_index)`). `point_rate`
+//! scales the quad in clip space so a sprite keeps its size relative to the
+//! frame at any depth and at any target size, and `point_coord` falls out of
+//! the corner directly. This is not a
 //! decision this crate made; it is `crates/karakuri-engine/src/shaders/points.wgsl`,
 //! which this module follows structurally (`corner_of`, the six-corner
 //! winding, the `viewport`-based clip-space offset).
@@ -212,7 +213,7 @@ fn output_local(o: Output) -> &'static str {
     match o {
         Output::Clip => "_clip",
         Output::ClipB => "_clip_b",
-        Output::PointSize => "_point_size",
+        Output::PointRate => "_point_rate",
         Output::Color => "_color",
         // The camera's six. Unreachable here: `Output::block()` puts them in a
         // `camera` block and the checker refuses one in an L4, so a `Checked`
@@ -489,13 +490,28 @@ fn vertex_entry(
     if topology == Topology::Lines {
         out.push_str("    var _clip_b: vec4<f32>;\n");
     }
-    out.push_str("    var _point_size: f32;\n");
+    out.push_str("    var _point_rate: f32;\n");
     out.push_str(body);
     out.push_str("    var out: VsOut;\n");
     match topology {
         Topology::Points => {
             out.push_str("    let corner = corner_of(corner_idx) * 2.0 - 1.0;\n");
-            out.push_str("    let ndc_offset = corner * _point_size / u.viewport * _clip.w;\n");
+            // **A fraction of the height, in both axes.** `corner` spans
+            // 2.0, and NDC spans 2.0 over the whole target, so multiplying
+            // the corner by `_point_rate` alone makes the quad's vertical
+            // extent exactly `_point_rate` of the target's height whatever
+            // that height is. The horizontal term carries `viewport.y /
+            // viewport.x` on top of that, which is the same number of pixels
+            // expressed against the other axis — so the sprite is square in
+            // pixels, and a change of aspect ratio moves the frame's edges
+            // rather than the sprite's. The `* _clip.w` is untouched and does
+            // what it always did: cancel the rasterizer's perspective divide,
+            // so the extent is a fraction of the *frame* rather than of
+            // anything in the world.
+            out.push_str(
+                "    let _rate_ndc = _point_rate * vec2<f32>(u.viewport.y / u.viewport.x, 1.0);\n",
+            );
+            out.push_str("    let ndc_offset = corner * _rate_ndc * _clip.w;\n");
             out.push_str("    out.clip = vec4<f32>(_clip.xy + ndc_offset, _clip.zw);\n");
             out.push_str("    out.point_coord = corner_of(corner_idx);\n");
             // The whole sprite is at one depth, because a billboard is: all six
@@ -593,12 +609,20 @@ const FULLSCREEN_RAY: &str =
 /// The quad expansion for [`Topology::Lines`]: the same six corners, laid over
 /// the segment from `_clip` to `_clip_b` instead of around a point.
 ///
-/// **The work happens in pixels**, because that is the space `point_size` is
-/// given in — the direction of the segment and the perpendicular the width is
-/// laid along are both properties of the projected picture, not of the world,
-/// so both ends are divided through by `w` first. What goes back out is
-/// multiplied by `w` again, which is what makes the rasterizer's own divide
-/// land on the pixel position computed here.
+/// **The work happens in pixels**, because the direction of the segment and
+/// the perpendicular the width is laid along are both properties of the
+/// projected picture, not of the world, so both ends are divided through by
+/// `w` first. What goes back out is multiplied by `w` again, which is what
+/// makes the rasterizer's own divide land on the pixel position computed here.
+///
+/// **`point_rate` is a fraction of the target's height, so it is turned into
+/// pixels here** — `_point_rate * u.viewport.y` — and only then laid across
+/// the segment. That one multiply is the whole difference from the pixel
+/// width this expansion used to be given, and it is what makes a stroke the
+/// same fraction of the frame at any target size. Height rather than the
+/// segment's own axis, so that a change of aspect ratio does not change a
+/// stroke's width, and so that a sprite and a stroke still mean the same
+/// number in the same unit.
 ///
 /// **Nothing here interpolates**, and an earlier version of this comment said
 /// it did. `corner_of` returns 0.0 or 1.0 in each component, so every `mix`
@@ -615,7 +639,7 @@ const FULLSCREEN_RAY: &str =
 /// Doing it properly means intersecting the segment with the near plane and
 /// moving the endpoint there, which is real work; the rasterizer would have
 /// done it for free had the divide not already happened here, and the divide
-/// is what makes a width in pixels expressible at all. The honest failure is a
+/// is what makes a width measured on the screen expressible at all. The honest failure is a
 /// missing stroke rather than one drawn through the camera.
 ///
 /// **A zero-length segment needs no guard, and draws nothing.** Both ends land
@@ -639,7 +663,7 @@ const SEGMENT_EXPANSION: &str = "\
     let b_px = _clip_b.xy / _clip_b.w * half_vp;
     let seg = b_px - a_px;
     let dir = seg / max(length(seg), 1e-6);
-    let across = vec2<f32>(-dir.y, dir.x) * (_point_size * 0.5) * (corner.y * 2.0 - 1.0);
+    let across = vec2<f32>(-dir.y, dir.x) * (_point_rate * u.viewport.y * 0.5) * (corner.y * 2.0 - 1.0);
     let p_px = mix(a_px, b_px, corner.x) + across;
     let w = mix(_clip.w, _clip_b.w, corner.x);
     let z = mix(_clip.z / _clip.w, _clip_b.z / _clip_b.w, corner.x);
@@ -816,10 +840,12 @@ pub fn generate_l4(
     for slot in checked.source_slots() {
         b.source_slot_field(slot);
     }
-    // Not an IR ambient: converting `point_size` (pixels) into a clip-space
-    // offset needs the render target's dimensions, which is engine state,
-    // not a value any procedure computes. Present in `points.wgsl` today
-    // for the same reason.
+    // Not an IR ambient: converting `point_rate` (a fraction of the target's
+    // height) into a clip-space offset needs the render target's dimensions,
+    // which is engine state, not a value any procedure computes. The rate
+    // needs them for a second reason the old pixel size did not — the two
+    // axes are scaled differently, so a sprite stays square whatever the
+    // aspect ratio is. Present in `points.wgsl` today for the same reason.
     b.field("viewport", "vec2<f32>");
     for p in &checked.params {
         b.param_field(p.name.clone(), wgsl_ty(p.ty));

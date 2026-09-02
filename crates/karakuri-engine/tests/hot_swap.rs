@@ -93,7 +93,7 @@ proc soft_points {
 
   vertex {
     clip       = camera * vec4(position, 1.0);
-    point_size = 4.0;
+    point_rate = 0.015625;
   }
 
   fragment {
@@ -125,7 +125,7 @@ proc wants_normal {
 
   vertex {
     clip       = camera * vec4(position + normal, 1.0);
-    point_size = 4.0;
+    point_rate = 0.015625;
   }
 
   fragment {
@@ -163,7 +163,7 @@ proc wide_points {
 
   vertex {
     clip       = camera * vec4(position, 1.0);
-    point_size = 11.0;
+    point_rate = 0.04296875;
   }
 
   fragment {

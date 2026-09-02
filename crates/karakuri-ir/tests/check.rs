@@ -150,7 +150,7 @@ fn soft_points_checks_clean_with_expected_shape() {
     }
     match &vertex.stmts[1] {
         TStmt::Assign { target, value, .. } => {
-            assert_eq!(*target, Target::Output(Output::PointSize));
+            assert_eq!(*target, Target::Output(Output::PointRate));
             assert_eq!(value.ty, Ty::Float);
         }
         other => panic!("expected an assignment, got {other:?}"),
@@ -341,7 +341,7 @@ proc bad {
 
   vertex {
     clip       = vec4(position, 1.0);
-    point_size = 1.0;
+    point_rate = 0.004;
   }
 
   fragment {
@@ -368,7 +368,7 @@ proc bad {
 
   vertex {
     clip       = vec4(position, 1.0);
-    point_size = 1.0;
+    point_rate = 0.004;
     kill();
   }
 
@@ -576,7 +576,7 @@ proc bad {
 
   vertex {
     clip       = vec4(normal, 1.0);
-    point_size = 1.0;
+    point_rate = 0.004;
   }
 
   fragment {
@@ -1017,7 +1017,7 @@ proc odd_l4 {
 
   vertex {
     clip       = camera * vec4(position, 1.0);
-    point_size = 4.0;
+    point_rate = 0.016;
   }
 
   fragment {
@@ -1054,7 +1054,7 @@ proc streaks {
   vertex {
     clip       = camera * vec4(position, 1.0);
     clip_b     = camera * vec4(position - velocity, 1.0);
-    point_size = 2.0;
+    point_rate = 0.008;
   }
 
   fragment {
@@ -1084,7 +1084,7 @@ proc sprites {
 
   vertex {
     clip       = camera * vec4(position, 1.0);
-    point_size = 2.0;
+    point_rate = 0.008;
   }
 
   fragment {
@@ -1110,7 +1110,7 @@ proc sometimes {
 
   vertex {
     clip       = camera * vec4(position, 1.0);
-    point_size = 2.0;
+    point_rate = 0.008;
     if length(velocity) > 0.5 {
       clip_b = camera * vec4(position - velocity, 1.0);
     }
@@ -1144,7 +1144,7 @@ proc misplaced {
 
   vertex {
     clip       = camera * vec4(position, 1.0);
-    point_size = 2.0;
+    point_rate = 0.008;
   }
 
   fragment {
@@ -1176,7 +1176,7 @@ proc declared {
   vertex {
     clip       = camera * vec4(position, 1.0);
     clip_b     = camera * vec4(position, 1.0);
-    point_size = 2.0;
+    point_rate = 0.008;
   }
 
   fragment {
@@ -1350,7 +1350,7 @@ proc dots {
 
   vertex {
     clip       = vec4(position, 1.0);
-    point_size = 4.0;
+    point_rate = 0.016;
   }
 
   fragment {
@@ -1524,7 +1524,7 @@ proc sprite {{
 
   vertex {{
     clip       = vec4(position, 1.0);
-    point_size = 4.0;
+    point_rate = 0.016;
   }}
 
   fragment {{
@@ -1549,7 +1549,7 @@ proc misplaced {
 
   vertex {
     clip       = vec4(ray, 1.0);
-    point_size = 1.0;
+    point_rate = 0.004;
   }
 
   fragment {
@@ -1601,7 +1601,7 @@ proc sprites {
 
   vertex {
     clip       = vec4(0.0, 0.0, 0.0, 1.0);
-    point_size = 2.0;
+    point_rate = 0.008;
   }
 
   fragment {
@@ -2219,7 +2219,7 @@ proc confused {{
   consumes position
   vertex {{
     clip       = camera * vec4(position, 1.0);
-    point_size = 4.0;
+    point_rate = 0.016;
   }}
   fragment {{
     color = vec4({name}, 1.0);
@@ -3050,7 +3050,7 @@ proc dots {
 
   vertex {
     clip       = camera * vec4(position, 1.0);
-    point_size = 4.0;
+    point_rate = 0.016;
   }
 
   fragment { color = vec4(1.0, 1.0, 1.0, 1.0); }
@@ -3463,7 +3463,7 @@ proc through {
 
   vertex {
     clip       = view.clip * vec4(position, 1.0);
-    point_size = 3.0;
+    point_rate = 0.012;
   }
 
   fragment {
@@ -3631,7 +3631,7 @@ proc twice {
 
   vertex {
     clip       = left.clip * vec4(position, 1.0);
-    point_size = 3.0;
+    point_rate = 0.012;
   }
 
   fragment { color = vec4(1.0, 1.0, 1.0, 1.0); }
@@ -3790,7 +3790,7 @@ proc lit
 
   vertex {
     clip       = camera * vec4(position, 1.0);
-    point_size = float(source % 3u) + 1.0;
+    point_rate = float(source % 3u) + 1.0;
   }
 
   fragment {
@@ -4098,7 +4098,7 @@ proc lit {
 
   vertex {
     clip       = camera * vec4(position, 1.0);
-    point_size = 4.0;
+    point_rate = 0.016;
   }
 
   fragment {
@@ -4185,5 +4185,129 @@ proc march {
         errs.iter()
             .any(|e| e.message.contains("`seed` is per element")),
         "expected `seed` to stay refused in a fullscreen procedure: {errs:?}"
+    );
+}
+
+/// A `.kir` still writing `point_size` is refused by name, and the refusal says
+/// what to write instead.
+///
+/// The rename is the whole reason this test exists. `point_size` is not a
+/// declared name and not an output any more, so without a case of its own it
+/// would fall out of `resolve_target` as "assigning to `point_size`, which was
+/// never declared" — a sentence that is true and useless. Every `.kir` written
+/// before the rename hits this line, and each of them needs the same two facts:
+/// the new spelling, and that the number is no longer a pixel count.
+#[test]
+fn a_file_still_writing_point_size_is_refused_with_the_new_spelling() {
+    let src = r#"
+proc stale {
+  kind  L4
+  blend additive
+
+  consumes position
+
+  vertex {
+    clip       = vec4(position, 1.0);
+    point_size = 4.0;
+  }
+
+  fragment {
+    color = vec4(1.0, 1.0, 1.0, 1.0);
+  }
+}
+"#;
+    let errs = check_err(src);
+    let hit = errs
+        .iter()
+        .find(|e| e.message.contains("point_size"))
+        .unwrap_or_else(|| panic!("no refusal named `point_size`: {errs:?}"));
+    assert!(
+        hit.message.contains("point_rate"),
+        "the refusal does not name the new spelling: {}",
+        hit.message
+    );
+    assert!(
+        !hit.message.contains("never declared"),
+        "the rename was reported as an undeclared name: {}",
+        hit.message
+    );
+    let hint = hit
+        .hint
+        .as_deref()
+        .unwrap_or_else(|| panic!("the refusal carries no hint: {hit:?}"));
+    assert!(
+        hint.contains("fraction") && hint.contains("height"),
+        "the hint does not say what the unit became: {hint}"
+    );
+    // **No reference resolution in the hint.** The division is a fact about the
+    // file being migrated, not about the language, and a number here would
+    // become an anchor authors write against.
+    assert!(
+        !hint.contains("720"),
+        "the hint anchors the unit to a resolution: {hint}"
+    );
+}
+
+/// The same name met in an expression is refused the same way.
+///
+/// Reading a stage output was never allowed under either spelling, so the
+/// interesting half is which sentence comes back: "does not resolve to a local,
+/// a param, an attribute, or an ambient value" would send the author looking
+/// for a typo in a name that is not a typo.
+#[test]
+fn reading_point_size_is_also_refused_with_the_new_spelling() {
+    let src = r#"
+proc stale_read {
+  kind  L4
+  blend additive
+
+  consumes position
+
+  vertex {
+    clip       = vec4(position, 1.0);
+    point_rate = 0.004;
+  }
+
+  fragment {
+    color = vec4(point_size, 1.0, 1.0, 1.0);
+  }
+}
+"#;
+    let errs = check_err(src);
+    assert!(
+        errs.iter()
+            .any(|e| e.message.contains("point_size") && e.message.contains("point_rate")),
+        "expected the rename refusal on a read as well: {errs:?}"
+    );
+}
+
+/// `point_rate` is the required vertex output, under that name.
+///
+/// The coverage rule did not change with the rename, and this is what says so:
+/// a `vertex` block that writes only `clip` is refused, and the diagnostic
+/// names `point_rate` rather than the spelling it replaced.
+#[test]
+fn a_vertex_block_without_point_rate_is_refused_and_the_refusal_names_point_rate() {
+    let src = r#"
+proc no_rate {
+  kind  L4
+  blend additive
+
+  consumes position
+
+  vertex {
+    clip = vec4(position, 1.0);
+  }
+
+  fragment {
+    color = vec4(1.0, 1.0, 1.0, 1.0);
+  }
+}
+"#;
+    let errs = check_err(src);
+    assert!(
+        errs.iter()
+            .any(|e| e.message.contains("point_rate") && e.message.contains("every path")),
+        "expected a coverage diagnostic naming `point_rate`, got: {errs:?}"
     );
 }

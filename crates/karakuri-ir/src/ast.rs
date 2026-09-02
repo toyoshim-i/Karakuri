@@ -359,9 +359,18 @@ pub enum Output {
     /// twice. Assigning it on *some* paths is an error: a procedure either
     /// draws segments or it does not.
     ClipB,
-    /// vertex: point sprite size in pixels. Under [`Topology::Lines`], the
-    /// width of the stroke, uniform along the segment.
-    PointSize,
+    /// vertex: point sprite size, **as a fraction of the render target's
+    /// height**. Under [`Topology::Lines`], the width of the stroke, uniform
+    /// along the segment, in the same unit.
+    ///
+    /// **Not pixels, and the name says so.** In shader work `point_rate` on a
+    /// point sprite means pixels, and a shader would normally adjust it for the
+    /// screen itself. This language keeps the render size away from a
+    /// procedure, so the spelling has to say the number is not a pixel count.
+    ///
+    /// **A fraction of the height rather than of the width**, so that a change
+    /// of aspect ratio does not resize a sprite. Width would.
+    PointRate,
     /// fragment: linear RGB, straight alpha.
     Color,
 
@@ -417,7 +426,7 @@ impl Output {
     pub const ALL: [Output; 12] = [
         Output::Clip,
         Output::ClipB,
-        Output::PointSize,
+        Output::PointRate,
         Output::Color,
         Output::Eye,
         Output::Target,
@@ -433,7 +442,7 @@ impl Output {
         match self {
             Output::Clip => "clip",
             Output::ClipB => "clip_b",
-            Output::PointSize => "point_size",
+            Output::PointRate => "point_rate",
             Output::Color => "color",
             Output::Eye => "eye",
             Output::Target => "target",
@@ -453,7 +462,7 @@ impl Output {
     pub fn ty(self) -> Ty {
         match self {
             Output::Clip | Output::ClipB | Output::Color => Ty::Vec4,
-            Output::PointSize
+            Output::PointRate
             | Output::FovY
             | Output::Near
             | Output::Far
@@ -465,7 +474,7 @@ impl Output {
 
     pub fn block(self) -> BlockKind {
         match self {
-            Output::Clip | Output::ClipB | Output::PointSize => BlockKind::Vertex,
+            Output::Clip | Output::ClipB | Output::PointRate => BlockKind::Vertex,
             Output::Color => BlockKind::Fragment,
             Output::Eye
             | Output::Target

@@ -51,7 +51,7 @@ proc sprite {
 
   vertex {
     clip       = vec4(position, 1.0);
-    point_size = 2.0;
+    point_rate = 0.03125;
   }
 
   fragment {

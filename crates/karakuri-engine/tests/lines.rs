@@ -40,15 +40,27 @@ proc one_element {
 }
 "#;
 
-    /// A segment from `(x0, y)` to `(x1, y)` in NDC, `width` pixels across, with
-    /// each endpoint scaled by its own `w` so the same picture can be asked for at
-    /// more than one clip-space depth — and so one end can be put behind the eye
-    /// while the other stays in front of it.
+    /// A segment from `(x0, y)` to `(x1, y)` in NDC, `width_px` pixels across,
+    /// with each endpoint scaled by its own `w` so the same picture can be asked
+    /// for at more than one clip-space depth — and so one end can be put behind
+    /// the eye while the other stays in front of it.
     ///
     /// Dividing by `w` is what makes the projected position independent of it:
     /// every `w` here describes the *same* NDC segment, which is what lets a depth
     /// be varied without varying anything else.
-    fn segment_l4(x0: f32, x1: f32, y: f32, width: f32, w: f32, w_b: f32) -> String {
+    ///
+    /// **The width is given here in pixels and divided by [`H`] on the way in**,
+    /// because `point_rate` is a fraction of the target's height and every claim
+    /// below is about texels. The division belongs at this one boundary rather
+    /// than at each of the eight call sites, and it is what lets those call sites
+    /// keep saying "eight pixels" where "eight pixels" is the assertion.
+    fn segment_l4(x0: f32, x1: f32, y: f32, width_px: f32, w: f32, w_b: f32) -> String {
+        segment_rate_l4(x0, x1, y, width_px / H as f32, w, w_b)
+    }
+
+    /// The same, given the rate itself — for the one claim that draws a single
+    /// number at two target sizes. See [`sprite_rate_l4`].
+    fn segment_rate_l4(x0: f32, x1: f32, y: f32, width: f32, w: f32, w_b: f32) -> String {
         format!(
             r#"
 proc segment {{
@@ -62,7 +74,7 @@ proc segment {{
     // the element buffer is bound and read, exactly as in a real procedure.
     clip       = vec4({x0:?} * {w:?} + position.x, {y:?} * {w:?}, 0.0, {w:?});
     clip_b     = vec4({x1:?} * {w_b:?}, {y:?} * {w_b:?}, 0.0, {w_b:?});
-    point_size = {width:?};
+    point_rate = {width:?};
   }}
 
   fragment {{
@@ -75,7 +87,19 @@ proc segment {{
 
     /// The same procedure with the second endpoint removed: a sprite, not a
     /// segment. The control for every claim below that names the lines path.
-    fn sprite_l4(x0: f32, y: f32, width: f32) -> String {
+    /// `width_px` converts the same way [`segment_l4`]'s does.
+    fn sprite_l4(x0: f32, y: f32, width_px: f32) -> String {
+        sprite_rate_l4(x0, y, width_px / H as f32)
+    }
+
+    /// The same, given the rate itself rather than a pixel count.
+    ///
+    /// The three claims about what a rate *is* — that it is a share of the
+    /// height, that the share survives a resize, and that widening the frame
+    /// does not widen the sprite — are all about drawing one number at more than
+    /// one target size, so none of them can go through a helper that divides by
+    /// a fixed [`H`].
+    fn sprite_rate_l4(x0: f32, y: f32, width: f32) -> String {
         format!(
             r#"
 proc sprite {{
@@ -86,7 +110,7 @@ proc sprite {{
 
   vertex {{
     clip       = vec4({x0:?} + position.x, {y:?}, 0.0, 1.0);
-    point_size = {width:?};
+    point_rate = {width:?};
   }}
 
   fragment {{
@@ -112,23 +136,34 @@ proc sprite {{
             .join("\n")
     }
 
-    /// RGBA f32 per texel, row-major, after one step of `l1` drawn by `l4`.
+    /// RGBA f32 per texel, row-major, after one step of `l1` drawn by `l4`, at
+    /// this file's own [`W`] x [`H`].
     fn draw(gpu: &Gpu, l1: &str, l4: &str) -> Vec<[f32; 4]> {
+        draw_at(gpu, l1, l4, W, H)
+    }
+
+    /// The same, at a target size the caller picks.
+    ///
+    /// Separate from [`draw`] because two claims here are about what changes
+    /// when the target does — that a sprite keeps its share of the frame's
+    /// height, and that a wider frame does not widen it — and neither can be
+    /// asked at one size.
+    fn draw_at(gpu: &Gpu, l1: &str, l4: &str, w: u32, h: u32) -> Vec<[f32; 4]> {
         let l1 = compile(l1);
         let l4 = compile(l4);
         let mut set =
             Set::build(&gpu.device, &gpu.queue, &l1, &l4, 1, 7).expect("a compatible pair");
-        // Without this the viewport uniform is 1x1 and every width in pixels is
+        // Without this the viewport uniform is 1x1 and every extent on screen is
         // meaningless — the one piece of engine state the expansion depends on.
-        set.resize(&gpu.device, W, H);
+        set.resize(&gpu.device, w, h);
 
-        let present = Present::new(&gpu.device, wgpu::TextureFormat::Rgba16Float, W, H);
+        let present = Present::new(&gpu.device, wgpu::TextureFormat::Rgba16Float, w, h);
         set.prepare(&gpu.queue, 1, &Signals::default());
 
-        let bytes_per_row = W * 8;
+        let bytes_per_row = w * 8;
         let readback = gpu.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("readback"),
-            size: u64::from(bytes_per_row * H),
+            size: u64::from(bytes_per_row * h),
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
             mapped_at_creation: false,
         });
@@ -141,12 +176,12 @@ proc sprite {{
                 layout: wgpu::TexelCopyBufferLayout {
                     offset: 0,
                     bytes_per_row: Some(bytes_per_row),
-                    rows_per_image: Some(H),
+                    rows_per_image: Some(h),
                 },
             },
             wgpu::Extent3d {
-                width: W,
-                height: H,
+                width: w,
+                height: h,
                 depth_or_array_layers: 1,
             },
         );
@@ -193,10 +228,15 @@ proc sprite {{
     /// ran and the target clears to zero, so this is coverage rather than a
     /// brightness threshold.
     fn covered(px: &[[f32; 4]]) -> Vec<(u32, u32)> {
+        covered_wide(px, W)
+    }
+
+    /// The same, for a readback whose row length is not [`W`].
+    fn covered_wide(px: &[[f32; 4]], w: u32) -> Vec<(u32, u32)> {
         px.iter()
             .enumerate()
             .filter(|(_, t)| t[0] > 0.0)
-            .map(|(i, _)| (i as u32 % W, i as u32 / W))
+            .map(|(i, _)| (i as u32 % w, i as u32 / w))
             .collect()
     }
 
@@ -212,7 +252,8 @@ proc sprite {{
     }
 
     /// The load-bearing claim: a segment covers the rectangle its endpoints and
-    /// its `point_size` say it covers, to the texel.
+    /// its `point_rate` say it covers, to the texel. `point_rate` is a fraction
+    /// of the target's height, so eight pixels on a 256-row target is `8 / 256`.
     ///
     /// NDC -0.5 and 0.5 are pixel columns 64 and 192 on a 256-wide target, and a
     /// pixel is covered when its *centre* is, so the columns run 64..=191 — 128 of
@@ -232,15 +273,15 @@ proc sprite {{
         assert_eq!(cells.len(), 128 * 8, "the rectangle has holes or spills");
     }
 
-    /// `point_size` is a width in pixels, and the number means what it says: the
-    /// paired run at twice the width covers twice the rows and exactly the same
-    /// columns.
+    /// `point_rate` is a width across the segment and nothing along it, and the
+    /// number means what it says: the paired run at twice the width covers twice
+    /// the rows and exactly the same columns.
     ///
-    /// The pairing is the point. A single run cannot distinguish "eight pixels
-    /// wide" from "a width the expansion happened to produce"; two runs whose only
-    /// difference is the number pin the scale as well as the value.
+    /// The pairing is the point. A single run cannot distinguish "a thirty-second
+    /// of the height" from "a width the expansion happened to produce"; two runs
+    /// whose only difference is the number pin the scale as well as the value.
     #[test]
-    fn width_is_pixels_across_the_segment_and_nothing_along_it() {
+    fn width_is_across_the_segment_and_nothing_along_it() {
         let gpu = Gpu::headless().expect("no GPU available");
         let thin = bounds(&covered(&draw(
             &gpu,
@@ -374,8 +415,147 @@ proc sprite {{
         assert_eq!(
             bounds(&cells),
             (124, 131, 124, 131),
-            "a sprite is no longer its point_size square"
+            "a sprite is no longer `point_rate * H` pixels square"
         );
         assert_eq!(cells.len(), 8 * 8, "the sprite is not solid");
+    }
+
+    /// **A sprite covers the same fraction of the frame's height at any target
+    /// size.** That is what `point_rate` means, and it is the whole reason the
+    /// output stopped being a pixel count.
+    ///
+    /// One rate, 1/8, drawn at 256x256 and at 128x128. Thirty-two rows against
+    /// sixteen: half the target, half the pixels, the same eighth of the frame.
+    /// The bounds are exact rather than approximate because the quad's edges
+    /// land on texel boundaries at both sizes — a sprite centred on NDC zero
+    /// with a half-extent of 1/16 of the frame covers rows 112..=143 of 256 and
+    /// 56..=71 of 128.
+    ///
+    /// **Both axes are asserted**, because the horizontal one is the axis that
+    /// carries the aspect term and is therefore the one an arithmetic slip
+    /// would break. The target is square here, so square in pixels and square
+    /// in NDC agree; `a_wider_frame_does_not_widen_a_sprite` is what separates
+    /// them.
+    #[test]
+    fn a_sprite_is_the_same_fraction_of_the_frames_height_at_any_target_size() {
+        let gpu = Gpu::headless().expect("no GPU available");
+        let l4 = sprite_rate_l4(0.0, 0.0, 0.125);
+
+        let big = bounds(&covered_wide(&draw_at(&gpu, L1, &l4, 256, 256), 256));
+        let small = bounds(&covered_wide(&draw_at(&gpu, L1, &l4, 128, 128), 128));
+
+        assert_eq!(
+            big,
+            (112, 143, 112, 143),
+            "an eighth of 256 is not 32 texels"
+        );
+        assert_eq!(small, (56, 71, 56, 71), "an eighth of 128 is not 16 texels");
+
+        let share = |b: (u32, u32, u32, u32), h: u32| f64::from(b.3 - b.2 + 1) / f64::from(h);
+        assert_eq!(
+            share(big, 256),
+            share(small, 128),
+            "the sprite is not the same share of the frame at the two sizes"
+        );
+    }
+
+    /// **A wider frame does not widen a sprite.** The rate is a fraction of the
+    /// *height*, and that choice is exactly what this asserts: 256x256 against
+    /// 512x256 puts the same 32x32 sprite in the middle of a frame that is twice
+    /// as wide.
+    ///
+    /// Against the width instead, the same file at 21:9 would draw fatter
+    /// material than at 16:9 — a second, unasked-for change to the picture every
+    /// time somebody changed the canvas shape.
+    #[test]
+    fn a_wider_frame_does_not_widen_a_sprite() {
+        let gpu = Gpu::headless().expect("no GPU available");
+        let l4 = sprite_rate_l4(0.0, 0.0, 0.125);
+
+        let square = bounds(&covered_wide(&draw_at(&gpu, L1, &l4, 256, 256), 256));
+        let wide = bounds(&covered_wide(&draw_at(&gpu, L1, &l4, 512, 256), 512));
+
+        assert_eq!(
+            (square.1 - square.0, square.3 - square.2),
+            (wide.1 - wide.0, wide.3 - wide.2),
+            "doubling the width changed the sprite's size in texels"
+        );
+        assert_eq!(
+            (wide.0, wide.1, wide.2, wide.3),
+            (240, 271, 112, 143),
+            "the sprite is not 32 texels square in the middle of the wide frame"
+        );
+    }
+
+    /// **A stroke's width is the same fraction of the frame's height at any
+    /// target size**, which is the same claim as the sprite's and a different
+    /// piece of arithmetic: the segment expansion works in pixels and multiplies
+    /// the rate by the target's height to get there.
+    ///
+    /// The length is asserted alongside the width so that a change to the one
+    /// cannot be read as a change to the other: the segment runs NDC -0.5 to
+    /// 0.5, which is half the frame's width whatever the frame is.
+    #[test]
+    fn a_strokes_width_is_the_same_fraction_of_the_frames_height_at_any_target_size() {
+        let gpu = Gpu::headless().expect("no GPU available");
+        let l4 = segment_rate_l4(-0.5, 0.5, 0.0, 0.125, 1.0, 1.0);
+
+        let big = bounds(&covered_wide(&draw_at(&gpu, L1, &l4, 256, 256), 256));
+        let small = bounds(&covered_wide(&draw_at(&gpu, L1, &l4, 128, 128), 128));
+
+        assert_eq!(
+            (big.3 - big.2 + 1, small.3 - small.2 + 1),
+            (32, 16),
+            "the stroke's width is not an eighth of the height at both sizes"
+        );
+        assert_eq!(
+            (big.1 - big.0 + 1, small.1 - small.0 + 1),
+            (128, 64),
+            "the stroke's length is not half the frame's width at both sizes"
+        );
+    }
+
+    /// **A sprite smaller than a texel produces no fragment, and that is the
+    /// rasterizer rather than the expansion.**
+    ///
+    /// This is a quad pair and not a GL point, so no hardware minimum point size
+    /// applies, and without MSAA a fragment exists only where the quad covers a
+    /// pixel *centre*. `examples/soft_points.kir`'s default rate is 4/720; at
+    /// 1280x720 that is the four-pixel sprite it was authored as, and at a
+    /// tenth of that it is 0.4 pixels across and lands between centres.
+    ///
+    /// **128x72 rather than the console's own 112x63 cell**, because a readback
+    /// needs its row length to be a multiple of 256 bytes and 112 texels at
+    /// eight bytes is 896. Same tenth-scale, same conclusion, and the cell is
+    /// smaller still.
+    ///
+    /// **Recorded because the absence is the correct behaviour and reads like a
+    /// bug.** The reflex on seeing an empty cell is to suspect the expansion;
+    /// the two numbers here say the expansion is doing exactly what a fraction
+    /// of the height means, and that a preview cell has to be filled by
+    /// downsampling the slot's own full-size target rather than by re-rendering
+    /// into the cell. Re-rendering became the *cheaper* of the two when the
+    /// unit changed — `tests/deck.rs` measures both — and this is why cheaper
+    /// does not make it the right answer.
+    #[test]
+    fn a_sprite_below_a_texel_drops_out_rather_than_being_drawn_small() {
+        let gpu = Gpu::headless().expect("no GPU available");
+        // The rate `examples/soft_points.kir` carries, spelled as the division
+        // it came from rather than as the decimal it rounds to.
+        let l4 = sprite_rate_l4(0.0, 0.0, 4.0 / 720.0);
+
+        let canvas = covered_wide(&draw_at(&gpu, L1, &l4, 1280, 720), 1280);
+        let cell = covered_wide(&draw_at(&gpu, L1, &l4, 128, 72), 128);
+
+        assert_eq!(
+            canvas.len(),
+            16,
+            "four pixels square is not sixteen texels at 1280x720"
+        );
+        assert!(
+            cell.is_empty(),
+            "a 0.4-pixel sprite lit {} texels in a 128x72 cell",
+            cell.len()
+        );
     }
 }

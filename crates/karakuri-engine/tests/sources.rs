@@ -57,7 +57,7 @@ proc dots {
 
   vertex {
     clip       = camera * vec4(position, 1.0);
-    point_size = 2.0;
+    point_rate = 0.03125;
   }
 
   fragment {
@@ -477,7 +477,7 @@ proc halo {
 
   vertex {
     clip       = camera * vec4(position, 1.0);
-    point_size = 5.0;
+    point_rate = 0.078125;
   }
 
   fragment {
@@ -501,7 +501,7 @@ proc lit {
 
   vertex {
     clip       = camera * vec4(position, 1.0);
-    point_size = 2.0;
+    point_rate = 0.03125;
   }
 
   fragment {

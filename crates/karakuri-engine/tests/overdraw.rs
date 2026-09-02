@@ -85,8 +85,12 @@ proc creep {
     /// one name at two values.** With both at 1.0 a Set that handed every renderer
     /// the *first* one's parameter map would draw an identical frame, and every test
     /// here would pass through it — which is what happened to the first draft.
+    /// `scale` is given in pixels and divided by [`H`] here, because
+    /// `point_rate` is a fraction of the target's height and every claim in this
+    /// file is about how many texels a sprite lands on.
     fn sprite(name: &str, rgb: (f32, f32, f32), scale: f32, exposure: f32) -> String {
         let (r, g, b) = rgb;
+        let scale = scale / H as f32;
         format!(
             r#"
 proc {name} {{
@@ -99,7 +103,7 @@ proc {name} {{
 
   vertex {{
     clip       = camera * vec4(position, 1.0);
-    point_size = {scale:?};
+    point_rate = {scale:?};
   }}
 
   fragment {{
@@ -527,8 +531,10 @@ proc {name} {{
     /// An opaque, flat sprite under `blend weighted`. Its resolve composites `over`
     /// what is under it rather than replacing a clear, which is the whole of what a
     /// weighted node in a stack has to get right.
+    /// `scale` converts the same way [`sprite`]'s does.
     fn weighted_sprite(name: &str, rgb: (f32, f32, f32), scale: f32, alpha: f32) -> String {
         let (r, g, b) = rgb;
+        let scale = scale / H as f32;
         format!(
             r#"
 proc {name} {{
@@ -539,7 +545,7 @@ proc {name} {{
 
   vertex {{
     clip       = camera * vec4(position, 1.0);
-    point_size = {scale:?};
+    point_rate = {scale:?};
   }}
 
   fragment {{

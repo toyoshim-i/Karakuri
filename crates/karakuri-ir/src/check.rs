@@ -42,7 +42,7 @@
 //!   attribute, or an ambient is reported as an attempted signal-bus read
 //!   with the `bind` hint — that is the only diagnosis available once the
 //!   closed categories are exhausted, and it is also what the spec asks for.
-//! - **`point_size` is required unconditionally in an L4 `vertex` block.**
+//! - **`point_rate` is required unconditionally in an L4 `vertex` block.**
 //!   The rule as stated ("required when the source topology is points") is a
 //!   property of the *paired* L1 procedure's `topology`, which an L4 file
 //!   never declares and this pass never sees. It stays unconditional now that
@@ -68,7 +68,7 @@
 //!   it. This pass applies the same rule symmetrically to L1.
 //! - **Shadowing also covers stage outputs.** The spec's shadowing rule lists
 //!   params, attributes, and ambients; it does not mention `clip`/
-//!   `point_size`/`color`. Leaving them unprotected would let a param or
+//!   `point_rate`/`color`. Leaving them unprotected would let a param or
 //!   local named `color` silently steal precedence over the output in an
 //!   assignment target, which is exactly the class of bug the documented
 //!   shadowing rule exists to prevent, so this pass extends it to outputs
@@ -113,6 +113,27 @@ use crate::builtin::{Builtin, Domain, Shape};
 use crate::error::{IrError, IrResult, Stage};
 use crate::span::Span;
 use crate::typed::{Checked, Slot, TBlock, TExpr, TExprKind, TStmt, Target};
+
+/// The spelling [`Output::PointRate`] had before its unit stopped being pixels.
+///
+/// Kept as a name this pass still recognises so that a `.kir` written against
+/// the old language is refused with the new spelling rather than with "never
+/// declared". It is not a reserved word: nothing stops an author declaring a
+/// local or a param called `point_size`, and if one does the declaration wins
+/// — this only catches the name when nothing else claims it.
+const OLD_POINT_SIZE: &str = "point_size";
+
+/// What to do about it, in one sentence.
+///
+/// **The division is deliberately not given a number.** `point_rate` is a
+/// fraction of the render target's height, and which height a file's old pixel
+/// values were authored against is a fact about that file rather than about
+/// the language. Naming one here would make it an anchor.
+const POINT_RATE_HINT: &str = concat!(
+    "the output is now `point_rate`, a fraction of the render target's height ",
+    "rather than a count of pixels — rename it and divide the old pixel value ",
+    "by the height it was authored against"
+);
 
 /// Resolve names, type every expression, and enforce the contracts.
 pub fn check(proc: &Proc) -> IrResult<Checked> {
@@ -1556,7 +1577,7 @@ fn required_keys(block: BlockKind, emit: &HashSet<Attr>, draws_lines: bool) -> V
         // beside it — a field that assigned nothing would be a function with no
         // return value.
         BlockKind::Field => vec![CovKey::Output(Output::Distance)],
-        // `point_size` is required unconditionally here — see the module
+        // `point_rate` is required unconditionally here — see the module
         // docs on why the literal "when the topology is points" condition
         // cannot be evaluated from an L4 file alone. It stays required now
         // that `lines` exists, because a segment has a width for the same
@@ -1564,7 +1585,7 @@ fn required_keys(block: BlockKind, emit: &HashSet<Attr>, draws_lines: bool) -> V
         BlockKind::Vertex => {
             let mut keys = vec![
                 CovKey::Output(Output::Clip),
-                CovKey::Output(Output::PointSize),
+                CovKey::Output(Output::PointRate),
             ];
             if draws_lines {
                 keys.push(CovKey::Output(Output::ClipB));
@@ -2069,6 +2090,21 @@ impl<'a> Checker<'a> {
                 return TargetRes::Invalid;
             }
             return TargetRes::Output(output);
+        }
+        // **The renamed output gets its own refusal rather than the generic
+        // one.** `point_rate` was the spelling until the unit changed from
+        // pixels to a fraction of the target's height, and a file still
+        // written against the old one is not a typo and not an undeclared
+        // name: it is a file that needs one edit and one division. Reporting
+        // it as "never declared" would leave the author guessing at both.
+        if name == OLD_POINT_SIZE {
+            self.err_hint(
+                Stage::Contract,
+                span,
+                format!("`{OLD_POINT_SIZE}` is now spelled `point_rate`"),
+                POINT_RATE_HINT.to_string(),
+            );
+            return TargetRes::Invalid;
         }
         self.err_hint(
             Stage::Type,
@@ -2614,6 +2650,18 @@ impl<'a> Checker<'a> {
                 span,
                 format!("reading `{name}` is not allowed; stage outputs are write-only"),
                 "bind a `let` to the value you need before writing it, and read the `let` instead",
+            );
+            return None;
+        }
+        // The same rename, met in an expression rather than as a target. It is
+        // still a stale spelling and still needs the same sentence, even
+        // though reading the output was never allowed under either name.
+        if name == OLD_POINT_SIZE {
+            self.err_hint(
+                Stage::Contract,
+                span,
+                format!("`{OLD_POINT_SIZE}` is now spelled `point_rate`"),
+                POINT_RATE_HINT.to_string(),
             );
             return None;
         }
