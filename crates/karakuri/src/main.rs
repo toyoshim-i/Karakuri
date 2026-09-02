@@ -188,15 +188,16 @@
 //! holds this program's one pair at its own salt, since a `HotSwap` cannot
 //! hold nothing and this program has no second pair to give one. Deck A is
 //! Live; the other three rest at `Residency::Allocated`, which is what a
-//! channel nobody has asked anything of is: not stepping, not drawn, no
-//! contribution to the mix, and no frame time. An operator brings one up by
-//! cycling its tally or by loading a Set into it.
+//! channel nobody has asked anything of is: not stepping and contributing
+//! nothing to the mix. An operator brings one up by cycling its tally or by
+//! loading a Set into it.
 //!
-//! **Three of the four preview cells are off at a time**, and for one reason:
-//! only [`ON_AIR`] is Live, and a cell is drawn only for a Live deck. `off` is
-//! a state an operator changes by bringing a deck up rather than a thing not
-//! built yet, and all three are the truth about this program rather than a gap
-//! in it.
+//! **Every cell draws, whatever its slot's residency.** An off-air slot is
+//! drawn into its own target and never stepped, because the slot nobody is
+//! watching is the candidate and the cell is what it is judged from
+//! ([P-0080](../../../docs/principles/0080-an-operator-can-see-a-slots-own-material-without-putting-it-on-air.md)).
+//! It costs a draw per slot and that draw is outside the governor's
+//! arithmetic; the roadmap's *Performance discipline* carries what is owed.
 //!
 //! **Each cell is its own deck's monitor and cannot be another's.** A cell is
 //! presented from `Deck::slot_view` for the slot it is lettered for — that
@@ -1222,12 +1223,10 @@ struct Readout {
     /// snapshot taken at startup. `View::opening` is this handle read once a
     /// frame; this is the model of record.
     ///
-    /// **Nothing in this process serves MCP yet**, and that is said out loud
-    /// rather than left to be discovered: this program's own header lists MCP
-    /// among what is not wired. So today the four pills write a value only this
-    /// program and its tests read back — and the wiring that makes it matter is
-    /// one `serve` call, not another control. What would be far harder to add
-    /// afterwards is the thing that is built: a surface that can say *open*.
+    /// **This process serves MCP when `--mcp` names a port**, and the server
+    /// is handed this same handle rather than a copy, so the four pills and the
+    /// audit read one value. Without the flag the pills still write it and only
+    /// this program and its tests read it back.
     opening: Opening,
 }
 
@@ -2831,7 +2830,8 @@ const SLOTS: usize = MAX_SLOTS;
 /// **Which slot this program opens on air, and which one it asks to warm.**
 ///
 /// Two of [`SLOTS`], named because this file has something to say about each.
-/// Deck A is Live and is the whole of what the Program bay draws. Deck B is
+/// Deck A is Live and is the whole of what the picture draws; every cell draws
+/// its own slot whatever its residency. Deck B is
 /// asked to prime and is parked by the budget — see [`Engine::ask_to_prime`]
 /// — which is the one state on this panel where a slot's two residencies
 /// disagree, and nothing reaches it without somebody asking.
@@ -3655,13 +3655,16 @@ impl Sink for Presented {
 /// has every slot a `Deck` can hold, because a strip is a slot and a mixer is
 /// its channels; what is *in* them is this program's one pair at four salts,
 /// which is what a slot nobody has loaded anything into holds ([`Engine::new`]).
-/// [`ON_AIR`] is Live and is everything on screen. Every other slot rests at
-/// `Residency::Allocated` — not stepping, not drawn, contributing nothing —
+/// [`ON_AIR`] is Live and is the whole of the picture. Every other slot rests
+/// at `Residency::Allocated` — not stepping and contributing nothing, though
+/// each is still drawn into its own cell —
 /// and [`ASKED_TO_PRIME`] is additionally asked to warm up and parked by the
 /// budget in [`Engine::ask_to_prime`], which is what puts a pending request on
-/// this panel for the mixer's tally to draw. **None of the three costs a frame
-/// anything**: the reading [`Costs::say`] prints is still one Set stepping, and
-/// three more slots did not change that.
+/// this panel for the mixer's tally to draw. **The three cost a draw each and
+/// no step**: measured on 2026-09-02, four slots at 262144 elements were about
+/// 10 ms a frame against one slot's 5.9, and none of it reaches the governor,
+/// which reads a per-Set cost. This sentence used to say the three cost
+/// nothing, which was true only while an off-air slot was not drawn.
 ///
 /// **All four preview cells are on, whatever the decks are doing.** A cell is
 /// drawn because there is a slot behind it ([`Engine::aim`]), and this deck is
