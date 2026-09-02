@@ -466,13 +466,36 @@ the tree. Check each clause against the file it names.
 
 ---
 
-## 6. Verification Checklist for Code Changes
+## 6. Carrying Out a Decision That Is Not an Operation
+
+§5 is the common case. This is the rule behind it, for a decision that changes something else —
+a file format, a layout constant, where a thing is kept, what a refusal says.
+
+**Take stock before you change anything.** A decision that removes something is a sweep rather
+than an edit. Find every place the thing exists first and write the list down. Deleting the most
+obvious site and discovering the rest one test failure at a time is how a half-done change gets
+committed.
+
+**Whatever states the rule moves first.** For an operation that is the manual. For a file format
+it is `docs/ir-spec.md`; for a layout constant it is the mock; for a rule in force it is
+`docs/principles/`. The code follows the thing that specifies it, and the tests are what check
+the two agree.
+
+**Do not mark it done on a red suite.** The failing test names what is missing. If the message is
+not the one you expected, the decision has a consequence you have not found yet.
+
+**Say only what happened.** An ADR's Consequences are read as a description of the tree. Write
+that section after the work and check each clause against the file it names.
+
+---
+
+## 7. Verification Checklist for Code Changes
 
 Before marking a task or pull request as complete, ensure the following checklist is satisfied:
 
 - [ ] **A decision with a losing alternative has a record**: see §4. If nothing was decided, nothing is owed.
 - [ ] **An operation that changed landed in all nine places**: see §5, which lists them and the
-      order. A record claiming a deletion that did not happen is worse than no record.
+      order; §6 for a decision that is not an operation. A record claiming a deletion that did not happen is worse than no record.
 - [ ] **All workspace tests pass**: `cargo test --workspace` returns 0 — it costs about a minute, see §3.
 - [ ] **Formatting and lints pass**: `cargo fmt --all -- --check` and `cargo clippy --workspace --all-targets -- -D warnings`. The push hook enforces both, so a checklist without them is one you can satisfy and still be refused.
 - [ ] **Naga validation passes**: Any modifications to `karakuri-codegen` MUST be verified against `naga_test.rs` to guarantee generated WGSL text parses and validates cleanly.
@@ -482,7 +505,7 @@ Before marking a task or pull request as complete, ensure the following checklis
 
 ---
 
-## 7. Related Architecture & Specification Reference
+## 8. Related Architecture & Specification Reference
 
 - [architecture.md](architecture.md): Source code structure, multi-crate map, pipeline, and threading model
 - [ir-spec.md](ir-spec.md): `.kir` DSL specification and language invariants
