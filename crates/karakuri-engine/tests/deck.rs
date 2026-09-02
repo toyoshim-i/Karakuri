@@ -3268,26 +3268,61 @@ proc wash {
     /// with `mip_level_count: 1`, so there is no mip chain to fall back on and
     /// a fragment reads a 2x2 neighbourhood, not an 11x11 box. The downsample
     /// therefore *undersamples* — it is bilinear point-picking with aliasing,
-    /// not a box filter — and it does not read the 1.8 MB the source occupies.
+    /// not a box filter — and it does not read the 1.8 MB the source occupies:
+    /// 7056 output texels at four taps is 28k taps, scattered.
     ///
     /// **`point_size` is in pixels, so the small target does not have fewer
     /// fragments either.** `karakuri-codegen`'s L4 expansion computes
     /// `corner * _point_size / u.viewport * _clip.w`, which keeps a sprite the
     /// same size in texels at any viewport. A 112x63 render of this material
     /// rasterises about as many fragments as a 1280x720 one; what changes is
-    /// that they land in 56 KB of framebuffer instead of 7.4 MB. So the
-    /// small-target render is not a clean "everything that does not depend on
-    /// pixel count" — it is that plus a framebuffer that fits in cache. The
-    /// step-only and draw-only lines below are what actually splits it.
+    /// that they all land in 56 KB of framebuffer instead of 7.4 MB, blending
+    /// additively over each other. The size sweep at the end of the report is
+    /// there because that turned out to be the whole story.
     ///
     /// Same method as its neighbour
     /// [`the_cost_of_a_slot_and_of_the_composite_are_measured_and_reported`]:
     /// host clock around submit-and-wait, the same 60-frame warm-up and
-    /// 120-frame window, medians and worst rather than means, and a Set built
-    /// fresh per configuration so that two lines are the same simulation at the
-    /// same step and not one Set at two ages.
+    /// 120-frame window, medians and worst rather than means. Two departures,
+    /// both because this compares configurations against each other rather
+    /// than reporting them one at a time:
     ///
-    /// `#[ignore]`d for the same reason it is: capacity 262144, seven windows.
+    /// - **the configurations are interleaved, one frame each per round, and
+    ///   the order rotates.** Run as blocks, the first block measured a cold
+    ///   GPU and the last a hot one: 1280x720 came out 9.3 ms as the first
+    ///   block and 7.3 ms as the last, which is a quarter of the number and
+    ///   none of it the configuration.
+    /// - **each present writes into its own cell texture**, so "did this pass
+    ///   write anything" can still be asked of each of them at the end. A
+    ///   target that persists between frames is the hazard the pixel tests
+    ///   above defeat by resizing; here every destination is blackened before
+    ///   the loop and counted after it.
+    ///
+    /// One configuration is **nothing at all** — an empty command buffer,
+    /// submitted and waited on. A host clock around submit-and-wait pays for a
+    /// round trip whether or not there is work in it, and the present passes
+    /// here are small enough that the round trip is most of what is timed:
+    /// 0.13 ms of the 0.49 ms. Every present figure worth quoting is net of
+    /// that line.
+    ///
+    /// **Run it alone.** `cargo test` runs the two benchmarks in this file on
+    /// two threads and one GPU, and every number in both comes out about 40%
+    /// high; `--test-threads=1`, or a name filter, is part of the method.
+    ///
+    /// **What it found, so that the next reader need not run it**: the
+    /// downsample is a third of a millisecond and the stride costs nothing
+    /// measurable — 0.365 ms against 0.349 ms for the same present with no
+    /// scaling at all. Re-rendering into the cell is **dearer than rendering
+    /// the whole 1280x720 frame**, 17.5 ms against 9.3 ms, and the sweep says
+    /// why: the cost climbs monotonically as the target shrinks, because the
+    /// fragment count is fixed by `point_size` and a smaller target only means
+    /// more of them blending into each texel. That is a claim about point
+    /// sprites and not about every L4 — a fullscreen node such as
+    /// `examples/field_march.kir` has a fragment count that *is* the pixel
+    /// count, and nothing here measures one.
+    ///
+    /// `#[ignore]`d for the same reason its neighbour is: capacity 262144,
+    /// eleven configurations.
     #[test]
     #[ignore = "a measurement, not a check; run with --ignored --nocapture"]
     fn the_cost_of_filling_a_preview_cell_is_measured_and_reported() {
@@ -3304,11 +3339,33 @@ proc wash {
         const WARMUP: usize = 60;
         const MEASURED: usize = 120;
 
+        /// The sizes between the cell and the canvas, for the sweep. The two
+        /// ends of it are configurations 0 and 2 and are not repeated here.
+        const BETWEEN: [(u32, u32); 3] = [(224, 126), (448, 252), (640, 360)];
+
+        const LABELS: [&str; 11] = [
+            "1  render 1280x720",
+            "2  present 1280x720 -> cell",
+            "3  render 112x63",
+            "4  present cell -> cell 1:1",
+            "1b draw only, 1280x720",
+            "1c step only, no draw",
+            "3b draw only, 112x63",
+            "   render 224x126",
+            "   render 448x252",
+            "   render 640x360",
+            "0  empty submit + poll",
+        ];
+
         let gpu = Gpu::headless().expect("no GPU available");
 
-        let summarize = |label: &str, xs: &[f32]| {
+        let sorted = |xs: &[f32]| {
             let mut xs = xs.to_vec();
             xs.sort_by(|a, b| a.partial_cmp(b).expect("finite"));
+            xs
+        };
+        let summarize = |label: &str, xs: &[f32]| {
+            let xs = sorted(xs);
             eprintln!(
                 "  {label:<30} n={:<4} median {:.3} ms   worst {:.3} ms",
                 xs.len(),
@@ -3316,11 +3373,7 @@ proc wash {
                 xs[xs.len() - 1]
             );
         };
-        let median = |xs: &[f32]| {
-            let mut xs = xs.to_vec();
-            xs.sort_by(|a, b| a.partial_cmp(b).expect("finite"));
-            xs[xs.len() / 2]
-        };
+        let median = |xs: &[f32]| sorted(xs)[xs.len() / 2];
 
         let make_set = |width: u32, height: u32| -> Set {
             let mut set = Set::build(
@@ -3336,30 +3389,27 @@ proc wash {
             set
         };
 
-        // The slot's own target, a target the size of one cell, and the cell
-        // itself. All three `Rgba16Float`, because a monitor cell in the bay is
-        // a texture something else samples and not a surface.
-        let canvas = Present::new(&gpu.device, Present::HDR_FORMAT, W, H);
-        let cell_canvas = Present::new(&gpu.device, Present::HDR_FORMAT, CELL_W, CELL_H);
-        let cell = gpu.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("preview cell"),
-            size: wgpu::Extent3d {
-                width: CELL_W,
-                height: CELL_H,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: Present::HDR_FORMAT,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
-            view_formats: &[],
-        });
-        let cell_view = cell.create_view(&Default::default());
+        let make_cell = |label: &'static str| -> (wgpu::Texture, wgpu::TextureView) {
+            let texture = gpu.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some(label),
+                size: wgpu::Extent3d {
+                    width: CELL_W,
+                    height: CELL_H,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: Present::HDR_FORMAT,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+                view_formats: &[],
+            });
+            let view = texture.create_view(&Default::default());
+            (texture, view)
+        };
 
-        // Black, so that "this loop wrote something" can be told from "the
-        // previous loop's picture is still in there" — the persistence the
-        // pixel tests above defeat by resizing.
+        // Black, so that "this pass wrote something" can be told from "the
+        // texture still holds what something else put there".
         let blacken = |view: &wgpu::TextureView| {
             let mut encoder = gpu.device.create_command_encoder(&Default::default());
             drop(encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -3387,10 +3437,9 @@ proc wash {
         // [`readback`] above requires a 256-aligned row and a 112-wide
         // `Rgba16Float` row is 896 bytes, so this pads the pitch and walks the
         // padding back off. Counting lit texels is all it is for.
-        let lit_texels = |texture: &wgpu::Texture| -> usize {
+        let lit_texels = |texture: &wgpu::Texture| -> u32 {
             let (width, height) = (texture.width(), texture.height());
-            let row = width * 8;
-            let pitch = row.div_ceil(256) * 256;
+            let pitch = (width * 8).div_ceil(256) * 256;
             let buffer = gpu.device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("cell readback"),
                 size: u64::from(pitch * height),
@@ -3425,8 +3474,8 @@ proc wash {
             for y in 0..height as usize {
                 for x in 0..width as usize {
                     let at = y * pitch as usize + x * 8;
-                    // The three colour channels; alpha is written 1.0 by the
-                    // present pass and would count every texel.
+                    // The three colour channels only: the present pass writes
+                    // alpha 1.0 everywhere and would count every texel.
                     if data[at..at + 6].iter().any(|&b| b != 0) {
                         lit += 1;
                     }
@@ -3437,17 +3486,34 @@ proc wash {
             lit
         };
 
-        let measure = |body: &mut dyn FnMut()| -> Vec<f32> {
-            let mut out = Vec::with_capacity(MEASURED);
-            for i in 0..WARMUP + MEASURED {
-                let at = Instant::now();
-                body();
-                if i >= WARMUP {
-                    out.push(at.elapsed().as_secs_f32() * 1_000.0);
-                }
-            }
-            out
-        };
+        let canvas = Present::new(&gpu.device, Present::HDR_FORMAT, W, H);
+        let cell_canvas = Present::new(&gpu.device, Present::HDR_FORMAT, CELL_W, CELL_H);
+        let (down_cell, down_view) = make_cell("downsampled cell");
+        let (flat_cell, flat_view) = make_cell("1:1 cell");
+
+        let mut big = make_set(W, H);
+        let mut small = make_set(CELL_W, CELL_H);
+        let mut between: Vec<(Present, Set)> = BETWEEN
+            .iter()
+            .map(|&(w, h)| {
+                (
+                    Present::new(&gpu.device, Present::HDR_FORMAT, w, h),
+                    make_set(w, h),
+                )
+            })
+            .collect();
+
+        for view in [
+            canvas.hdr_view(),
+            cell_canvas.hdr_view(),
+            &down_view,
+            &flat_view,
+        ] {
+            blacken(view);
+        }
+        for (target, _) in &between {
+            blacken(target.hdr_view());
+        }
 
         let submit = |encoder: wgpu::CommandEncoder| {
             gpu.queue.submit([encoder.finish()]);
@@ -3456,101 +3522,149 @@ proc wash {
                 .expect("poll");
         };
 
-        // 1. The slot at the deck's canvas: the baseline, and the same path as
-        //    `bare_frame`.
-        let mut big = make_set(W, H);
-        blacken(canvas.hdr_view());
-        let render_720 = measure(&mut || {
-            big.prepare(&gpu.queue, 1, &Signals::default());
+        // One frame of one configuration, submitted and waited on. All ten in
+        // one closure because several of them share a Set and cannot each hold
+        // their own mutable borrow of it.
+        let mut run = |cfg: usize| {
             let mut encoder = gpu.device.create_command_encoder(&Default::default());
-            big.render(&mut encoder, canvas.hdr_view(), 1);
+            match cfg {
+                // The slot at the deck's canvas: the baseline, and the same
+                // path `bare_frame` takes.
+                0 => {
+                    big.prepare(&gpu.queue, 1, &Signals::default());
+                    big.render(&mut encoder, canvas.hdr_view(), 1);
+                }
+                // The downsample. The canvas holds a real picture from
+                // configuration 0, so this is not sampling a texture that has
+                // only ever been fast-cleared.
+                1 => canvas.draw(&mut encoder, &down_view, (CELL_W, CELL_H)),
+                // The same Set rendered straight into a cell-sized target.
+                2 => {
+                    small.prepare(&gpu.queue, 1, &Signals::default());
+                    small.render(&mut encoder, cell_canvas.hdr_view(), 1);
+                }
+                // A present that is not a downsample: 112x63 into 112x63,
+                // viewport 1:1, so the difference from configuration 1 is what
+                // the 11.4-texel stride costs and nothing else.
+                3 => cell_canvas.draw(&mut encoder, &flat_view, (CELL_W, CELL_H)),
+                // The raster half alone — an off-air slot's own path, drawn
+                // every frame and never stepped.
+                4 => big.draw(&mut encoder, canvas.hdr_view()),
+                // The compute half alone: no target, no draw.
+                5 => {
+                    big.prepare(&gpu.queue, 1, &Signals::default());
+                    big.step(&mut encoder, 1);
+                }
+                6 => small.draw(&mut encoder, cell_canvas.hdr_view()),
+                // The sweep: everything held fixed but the target size.
+                7..=9 => {
+                    let (target, set) = &mut between[cfg - 7];
+                    set.prepare(&gpu.queue, 1, &Signals::default());
+                    set.render(&mut encoder, target.hdr_view(), 1);
+                }
+                // Nothing at all, submitted and waited on: the floor this
+                // harness can measure. A present pass costing "tens of
+                // microseconds" is unreadable here unless it is read against
+                // this line, because a host clock around submit-and-wait is
+                // paying for a round trip either way.
+                _ => {}
+            }
             submit(encoder);
-        });
-        let lit_720 = lit_texels(canvas.hdr_texture());
+        };
 
-        // 1b. The raster half alone, on a Set left warm by the loop above and
-        //     never stepped again — which is exactly what an off-air slot does.
-        let draw_720 = measure(&mut || {
-            let mut encoder = gpu.device.create_command_encoder(&Default::default());
-            big.draw(&mut encoder, canvas.hdr_view());
-            submit(encoder);
-        });
-
-        // 1c. The compute half alone: no target, no draw. What is left of the
-        //     baseline once both the fragments and the point expansion are gone.
-        let step_only = measure(&mut || {
-            big.prepare(&gpu.queue, 1, &Signals::default());
-            let mut encoder = gpu.device.create_command_encoder(&Default::default());
-            big.step(&mut encoder, 1);
-            submit(encoder);
-        });
-
-        // 2. The downsample: 1280x720 through the present pipeline into the
-        //    cell. The canvas holds a real picture from step 1, so this is not
-        //    sampling a texture that has only ever been fast-cleared.
-        blacken(&cell_view);
-        let present_down = measure(&mut || {
-            let mut encoder = gpu.device.create_command_encoder(&Default::default());
-            canvas.draw(&mut encoder, &cell_view, (CELL_W, CELL_H));
-            submit(encoder);
-        });
-        let lit_down = lit_texels(&cell);
-
-        // 3. The same Set rendered straight into a cell-sized target.
-        let mut small = make_set(CELL_W, CELL_H);
-        blacken(cell_canvas.hdr_view());
-        let render_cell = measure(&mut || {
-            small.prepare(&gpu.queue, 1, &Signals::default());
-            let mut encoder = gpu.device.create_command_encoder(&Default::default());
-            small.render(&mut encoder, cell_canvas.hdr_view(), 1);
-            submit(encoder);
-        });
-        let lit_cell = lit_texels(cell_canvas.hdr_texture());
-
-        // 3b. Its raster half alone, on the same terms as 1b.
-        let draw_cell = measure(&mut || {
-            let mut encoder = gpu.device.create_command_encoder(&Default::default());
-            small.draw(&mut encoder, cell_canvas.hdr_view());
-            submit(encoder);
-        });
-
-        // 4. A present that is not a downsample: 112x63 into 112x63, viewport
-        //    1:1. The present pass's own fixed cost, so the difference from
-        //    line 2 is what the 11.4-texel stride costs and nothing else.
-        blacken(&cell_view);
-        let present_flat = measure(&mut || {
-            let mut encoder = gpu.device.create_command_encoder(&Default::default());
-            cell_canvas.draw(&mut encoder, &cell_view, (CELL_W, CELL_H));
-            submit(encoder);
-        });
-        let lit_flat = lit_texels(&cell);
+        let mut times: Vec<Vec<f32>> = vec![Vec::with_capacity(MEASURED); LABELS.len()];
+        for i in 0..WARMUP + MEASURED {
+            // Rotated, so no configuration is permanently the one that follows
+            // the heaviest.
+            for j in 0..LABELS.len() {
+                let cfg = (j + i) % LABELS.len();
+                let at = Instant::now();
+                run(cfg);
+                if i >= WARMUP {
+                    times[cfg].push(at.elapsed().as_secs_f32() * 1_000.0);
+                }
+            }
+        }
 
         eprintln!(
             "\nfilling one {CELL_W}x{CELL_H} preview cell from a {W}x{H} slot, \
              capacity {CAP}, `examples/drift_shell.kir` + `examples/soft_points.kir`,\n\
-             host clock around submit-and-wait, {WARMUP} frames warm-up discarded:"
+             host clock around submit-and-wait, interleaved, \
+             {WARMUP} rounds of warm-up discarded:"
         );
-        summarize("1  render 1280x720", &render_720);
-        summarize("2  present 1280x720 -> cell", &present_down);
-        summarize("3  render 112x63", &render_cell);
-        summarize("4  present cell -> cell 1:1", &present_flat);
+        summarize(LABELS[10], &times[10]);
+        for cfg in 0..4 {
+            summarize(LABELS[cfg], &times[cfg]);
+        }
         eprintln!("  and, to split line 1:");
-        summarize("1b draw only, 1280x720", &draw_720);
-        summarize("1c step only, no draw", &step_only);
-        summarize("3b draw only, 112x63", &draw_cell);
+        for cfg in 4..7 {
+            summarize(LABELS[cfg], &times[cfg]);
+        }
         eprintln!(
-            "  lit texels: {lit_720} of {} at 720p, {lit_down} of {} downsampled, \
-             {lit_cell} rendered at cell size, {lit_flat} presented 1:1 \
-             (zero anywhere means a loop measured a pass that wrote nothing)",
-            W * H,
+            "  the compute half is {:.3} ms of line 1's {:.3} ms and the raster half \
+             {:.3} ms;\n               rendering at cell size leaves {:.3} ms, which is \
+             {:.1}x the whole 720p frame.",
+            median(&times[5]),
+            median(&times[0]),
+            median(&times[4]),
+            median(&times[2]),
+            median(&times[2]) / median(&times[0]),
+        );
+
+        eprintln!(
+            "  the same Set and the same {CAP} points, target size swept — \
+             a smaller target is *dearer*:"
+        );
+        let sweep = [
+            (
+                CELL_W,
+                CELL_H,
+                median(&times[2]),
+                lit_texels(cell_canvas.hdr_texture()),
+            ),
+            (
+                BETWEEN[0].0,
+                BETWEEN[0].1,
+                median(&times[7]),
+                lit_texels(between[0].0.hdr_texture()),
+            ),
+            (
+                BETWEEN[1].0,
+                BETWEEN[1].1,
+                median(&times[8]),
+                lit_texels(between[1].0.hdr_texture()),
+            ),
+            (
+                BETWEEN[2].0,
+                BETWEEN[2].1,
+                median(&times[9]),
+                lit_texels(between[2].0.hdr_texture()),
+            ),
+            (W, H, median(&times[0]), lit_texels(canvas.hdr_texture())),
+        ];
+        for (w, h, ms, lit) in sweep {
+            eprintln!(
+                "    {w:>4}x{h:<4} {ms:>7.3} ms   {lit} lit of {} — {:.0} points per lit texel",
+                w * h,
+                f64::from(CAP) / f64::from(lit.max(1)),
+            );
+        }
+
+        eprintln!(
+            "  net of the floor, the downsample is {:.3} ms and the 1:1 present {:.3} ms.",
+            median(&times[1]) - median(&times[10]),
+            median(&times[3]) - median(&times[10]),
+        );
+
+        let (down_lit, flat_lit) = (lit_texels(&down_cell), lit_texels(&flat_cell));
+        eprintln!(
+            "  the two cells came back {down_lit} and {flat_lit} lit of {}; \
+             zero would mean a present pass wrote nothing and was timed anyway.",
             CELL_W * CELL_H
         );
-        eprintln!(
-            "  fragment-dependent part of line 1: {:.3} ms of {:.3} ms; \
-             what survives at cell size: {:.3} ms",
-            median(&render_720) - median(&render_cell),
-            median(&render_720),
-            median(&render_cell)
+        assert!(
+            down_lit > 0 && flat_lit > 0,
+            "a present pass wrote nothing, so its timing is not a timing of the present"
         );
         eprintln!();
     }
