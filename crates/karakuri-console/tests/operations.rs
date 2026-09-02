@@ -104,7 +104,7 @@ fn the_program_height_drags_from_small_to_large() {
     layout.set_divider(centre, 0, top);
     layout.solve();
     assert_sane(&layout);
-    assert!(near(rect_of(&layout, "program").h, 200.0));
+    assert!(near(rect_of(&layout, "program").h, 217.0));
 
     // A strong one: aim past the bottom of the window and land against the
     // inspector's minimum, with everything still inside the viewport.
@@ -140,11 +140,11 @@ fn dragging_a_divider_and_dragging_it_back_reproduces_the_arrangement() {
     assert!(near(rect_of(&layout, "left-pane").w, 300.0));
 
     let top = before[0].y;
-    let program_edge = 48.0 + 10.0 + 378.0;
+    let program_edge = 48.0 + 10.0 + 395.0;
     let landed = layout.set_divider(centre, 0, top + program_edge + 160.0);
     layout.solve();
     assert!(near(landed, top + program_edge + 160.0));
-    assert!(near(rect_of(&layout, "program").h, 538.0));
+    assert!(near(rect_of(&layout, "program").h, 555.0));
     assert_sane(&layout);
 
     layout.set_divider(centre, 0, top + program_edge);

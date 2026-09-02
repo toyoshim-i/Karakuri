@@ -79,7 +79,7 @@ fn set_aside(panel: &Panel) -> bool {
 /// Three things have to happen together and each fails on its own: the cells
 /// move, the row's node stops taking height, and the picture takes what the
 /// row gave up. The defect this exists for is any one of the three without the
-/// others — cells drawn down the sides with the row still 72 tall underneath
+/// others — cells drawn down the sides with the row still 89 tall underneath
 /// them is a bay with a strip of ground where a row used to be and four
 /// thumbnails over the picture, and nothing in `program_body` can see it,
 /// because `program_body` is not told what the layout did with its answer.
@@ -94,8 +94,8 @@ fn the_bay_rearranges_at_the_crossover() {
     );
     let row = rect_of(panel.layout(), "deck-previews");
     assert!(
-        near(row.h, 72.0),
-        "the row is {} tall and not its 72",
+        near(row.h, 89.0),
+        "the row is {} tall and not its 89",
         row.h
     );
     let cells = preview_rects(panel.layout(), CANVAS).expect("the cells are on screen");
@@ -159,13 +159,16 @@ fn the_bay_rearranges_at_the_crossover() {
     );
 
     // **And the width past it is what the arrangement is for**: at a 1920
-    // window the body is 1396 x 333, the picture beside the cells is
-    // **592 x 333**, and the same bay with the cells under it would have the
-    // mock's 466 x 262 — 61% more picture, which is ADR-0182's motivating
+    // window the body is 1396 x 350, the picture beside the cells is
+    // **622 x 350**, and the same bay with the cells under it would have the
+    // mock's 466 x 262 — 78% more picture, which is ADR-0182's motivating
     // number reached through the console rather than through the arithmetic.
+    // The body is 17 taller than it was because the preview captions grew the
+    // bay by that much, and beside is the arrangement that spends a bay's
+    // height on the picture rather than on the row.
     let wide = picture_rect(at(PLAUSIBLE.w).layout(), CANVAS).expect("on screen");
     assert!(
-        near(wide.width(), 592.0) && near(wide.height(), 333.0),
+        near(wide.width(), 622.0) && near(wide.height(), 350.0),
         "{:?}",
         wide.size()
     );
@@ -197,7 +200,7 @@ fn the_bay_rearranges_at_the_crossover() {
 /// round trip with a second bit in it, and the failure it is written against is
 /// hysteresis: a stored mode, a remembered placement, a `set_aside` cleared
 /// somewhere other than where it was written, and the panel comes back with the
-/// row 72 tall inside a bay that no longer has room for it.
+/// row 89 tall inside a bay that no longer has room for it.
 ///
 /// **Every rectangle in the arena**, not the two the bay draws: a bit that was
 /// left set on the way back moves the inspector under it as well.
@@ -244,7 +247,7 @@ fn a_window_dragged_out_and_back_comes_back_to_the_same_rectangles() {
 /// re-enters the solve*.
 ///
 /// The bit is derived from the bay's rectangle and the bay's rectangle does not
-/// depend on the bit — `program` is `Fixed(378)` over a flexible `program-view`,
+/// depend on the bit — `program` is `Fixed(395)` over a flexible `program-view`,
 /// so what it can use is unbounded either way. That makes one write a fixed
 /// point rather than the first step of a chase, and the failure if it were not
 /// is a panel that alternates between two arrangements for as long as anything
@@ -278,7 +281,7 @@ fn the_second_ask_finds_nothing_to_do() {
 /// as many words: the deck previews *"are auditions of their own, so they stay
 /// when it goes"*.
 ///
-/// So this asserts the bay is still there, still 72 tall, and still drawing
+/// So this asserts the bay is still there, still 89 tall, and still drawing
 /// four cells — at widths either side of the crossover, because the defect is a
 /// rule that only bites past it.
 #[test]
@@ -299,16 +302,16 @@ fn a_folded_picture_keeps_the_row_below_it_at_every_width() {
         );
         assert_eq!(placement(&panel), Placement::Below);
 
-        // **The bay is the row's 72 and not zero**, which is ADR-0174's answer
+        // **The bay is the row's 89 and not zero**, which is ADR-0174's answer
         // unchanged: the picture gave its height to the inspector and the row
         // kept its own.
         let bay = rect_of(panel.layout(), "program");
         assert!(
-            near(bay.h, 72.0),
+            near(bay.h, 89.0),
             "at {width} wide the Program bay is {} tall with the picture folded",
             bay.h
         );
-        assert!(near(rect_of(panel.layout(), "deck-previews").h, 72.0));
+        assert!(near(rect_of(panel.layout(), "deck-previews").h, 89.0));
         assert_eq!(picture_rect(panel.layout(), CANVAS), None);
         assert!(
             preview_rects(panel.layout(), CANVAS).is_some(),
@@ -356,7 +359,7 @@ fn folding_the_picture_beside_the_cells_brings_the_row_back() {
     assert!(!set_aside(&panel));
     let bay = rect_of(panel.layout(), "program");
     assert!(
-        near(bay.h, 72.0),
+        near(bay.h, 89.0),
         "the Program bay is {} tall, so folding the picture beside the cells took the \
          whole bay off the panel",
         bay.h

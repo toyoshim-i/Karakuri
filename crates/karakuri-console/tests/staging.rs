@@ -225,7 +225,7 @@ fn a_full_console_stages_nothing() {
 ///
 /// The mock's Staging head reads `2 waiting` and this one reads nothing, for
 /// the reason `view::staging` gives: a bay head's pills are the mock's
-/// *controls* — every readout in a head is undrawn, `previews 2 of 4`
+/// *controls* — every readout in a head is undrawn, `previews 3 of 4`
 /// included — and the number would say what the rows already say, this lane
 /// having no truncation to report where the Library's foot has.
 ///

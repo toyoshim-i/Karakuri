@@ -629,7 +629,7 @@ fn the_bay_folded_around_the_picture_comes_back_with_one_press() {
             .on
     );
     // And the picture has its height back, which is what *on screen* means.
-    assert!(near(rect_of(panel.layout(), "program").h, 378.0));
+    assert!(near(rect_of(panel.layout(), "program").h, 395.0));
 }
 
 /// **A solo that is hiding the picture is dropped by the dot, and one that is

@@ -26,15 +26,16 @@
 //! [`View::draw`] paints four cells whether or not a deck is running in any of
 //! them, and that is **not** the scaffolding the paragraph above forbids. A greyed-out control is a placeholder for a control that does not
 //! exist yet; a preview cell is not a placeholder for anything, it is the
-//! region's own face. The mock's `.preview` is a well with a letter in it
-//! before it is a picture — three of its four cells hold no texels at all —
-//! and the Program bay's head reads *previews 2 of 4*, which is an operator's
-//! ordinary choice and not a state waiting to be finished. **An empty cell is
-//! what off looks like, not a stand-in for a full one**, and the label says
-//! so: `A` where there is a picture and `C · off` where there is not.
+//! region's own face. The mock's `.preview` is a bare well before it is a
+//! picture — one of its four cells holds no texels at all — and the Program
+//! bay's head reads *previews 3 of 4*, which is an operator's ordinary choice
+//! and not a state waiting to be finished. **A cell with nothing behind it is
+//! what that state looks like, not a stand-in for a full one**, and the
+//! caption under it says which nothing: `material` where there is a picture
+//! and `no slot` where there is not.
 //!
 //! So the two rules are one rule. Nothing is drawn that claims something
-//! exists which does not; a cell that is off exists and says it is off.
+//! exists which does not; a cell with no slot behind it exists and says so.
 //! See [`DECKS`], [`preview_rects`] and [`View::previews`], and
 //! [ADR-0170](../../../docs/adr/0170-a-deck-preview-cell-is-drawn-whether-or-not-a-deck-is-behind-it.md)
 //! for the alternative that lost and for what would reopen it.
@@ -191,7 +192,7 @@
 //! there is, and a page of this bay has [`DECKS`] tracks whatever that number
 //! is, so a track with no strip in it draws nothing at all rather than an
 //! empty strip. **That is not the deck previews' rule read backwards.** A
-//! preview cell is the region's own face and says `off`; a strip is six
+//! preview cell is the region's own face and says `no slot`; a strip is six
 //! readings, and an empty one is six readings nobody took — the row of zeroes
 //! ADR-0177 refuses, with a different glyph. See [`mixer`] and [`Strip`], and
 //! [`Meter`] for why a meter is not a [`Fader`].
@@ -301,7 +302,7 @@ const WHOLE_TEXTURE: Rect = Rect {
 /// ever be at once, and a fifth cell would be a cell no deck can ever fill.
 /// The mock agrees from the other end: `.previews` is
 /// `grid-template-columns: repeat(4, 1fr)` with four `.preview` cells in it,
-/// and the Program bay's head reads *previews 2 of 4*. Two readings, one
+/// and the Program bay's head reads *previews 3 of 4*. Two readings, one
 /// number.
 ///
 /// `karakuri-engine` is not a dependency of this crate and is not becoming one
@@ -776,7 +777,7 @@ const _: () = {
 ///
 /// **The class pill is last, which is rightmost.** [`head_pills`] lays a head
 /// out right to left, and `docs/manual/console.html` draws the Program bay's
-/// head as `1920×1080`, `solo`, `mcp · shut`, `previews 2 of 4` — so the
+/// head as `1920×1080`, `solo`, `mcp · shut`, `previews 3 of 4` — so the
 /// opening sits to the right of `solo`. That is read off the page rather than
 /// chosen here, and it is why `solo`'s own capsule moves when a class is
 /// opened: the two words are not the same width, and one derivation answering
@@ -1350,12 +1351,68 @@ fn preview_row(row: Rect) -> [Rect; DECKS] {
     // centred — which is `fitted`, the same call `picture_rect` makes. The
     // aspect passed is the mock's rather than the canvas's, and the constant
     // is where that difference is argued.
+    //
+    // **The caption band comes off the track before the image is fitted**, so
+    // what this answers is the image and never the image plus its label — see
+    // [`caption_band`] and [`caption_of`].
     std::array::from_fn(|deck| {
         fitted(
-            track(row, DECKS, deck, size::PREVIEW_GAP, Axis::Row),
+            above_caption(track(row, DECKS, deck, size::PREVIEW_GAP, Axis::Row)),
             PREVIEW_ASPECT,
         )
     })
+}
+
+/// **How much of a cell the caption takes**: `.cell`'s gap and `.caption`'s
+/// own height, which is the band under every image and is never inside one.
+///
+/// One function rather than the sum written three times — [`preview_row`],
+/// [`beside`] and [`caption_of`] all need it and a second copy of it is where
+/// a caption would land over the picture it labels.
+fn caption_band() -> f32 {
+    size::PREVIEW_CAPTION_GAP + size::PREVIEW_CAPTION_H
+}
+
+/// `slot` with the caption band taken off the bottom, which is the box an
+/// image is fitted into.
+fn above_caption(slot: Rect) -> Rect {
+    Rect::from_min_max(slot.min, Pos2::new(slot.max.x, slot.max.y - caption_band()))
+}
+
+/// **Where a cell's caption goes**: directly under the image, the image's own
+/// width, one [`size::PREVIEW_CAPTION_GAP`] below it and
+/// [`size::PREVIEW_CAPTION_H`] tall.
+///
+/// Derived from the image rather than carried beside it in [`ProgramBay`], for
+/// the reason [`Body`] gives about the picture and the cells: the two are one
+/// statement. A caption that could be handed in separately is a caption that
+/// could be handed in stale, and this way there is one rectangle in the world
+/// and the label is a function of it. It is also what keeps
+/// [`preview_rects`]'s answer the **image** — the engine sizes a texture from
+/// that rectangle, and a cell rectangle that quietly included the caption
+/// would put texels over the letter.
+///
+/// The image's width and not the track's: the image is centred in its track
+/// ([ADR-0170](../../../docs/adr/0170-a-deck-preview-cell-is-drawn-whether-or-not-a-deck-is-behind-it.md)),
+/// and a caption starting at the track's left edge would sit off under the
+/// ground beside the cell it names.
+///
+/// # *Cell* means two things here, and it is named rather than renamed
+///
+/// The mock's `.cell` is the image **and** the caption — that is what
+/// [`size::PREVIEW_ROW_H`] measures — while [`ProgramBay::cells`] and
+/// [`preview_rects`] answer the **images**, because a texture is sized from
+/// one and a rectangle that quietly included the caption would put texels over
+/// the letter. Renaming the field is a ripple through six test files and the
+/// program's frame path, so the clash is written down here instead
+/// ([P-0031](../../../docs/principles/0031-a-name-means-one-thing-across-the-system.md)
+/// is the rule it is in tension with, and this is the report rather than the
+/// fix).
+pub fn caption_of(image: Rect) -> Rect {
+    Rect::from_min_max(
+        Pos2::new(image.min.x, image.max.y + size::PREVIEW_CAPTION_GAP),
+        Pos2::new(image.max.x, image.max.y + caption_band()),
+    )
 }
 
 /// **One of `count` equal tracks laid along `axis` inside `strip`**, with `gap`
@@ -1538,13 +1595,13 @@ pub struct Body {
 /// rather than somewhere new.
 ///
 /// **With fewer than four decks running nothing fills and nothing shifts.**
-/// The mock's head reads *previews 2 of 4* and
+/// The mock's head reads *previews 3 of 4* and
 /// [ADR-0170](../../../docs/adr/0170-a-deck-preview-cell-is-drawn-whether-or-not-a-deck-is-behind-it.md)
 /// is the answer: a cell is drawn whether or not a deck is behind it, because
 /// *an empty cell is what off looks like, not a stand-in for a full one*. So
 /// the question *does the left column fill first, or do they alternate* has a
 /// third answer, and it is the one that keeps the letters meaning something:
-/// **a cell's place is its deck's, not its turn's.** `C · off` sits at the top
+/// **a cell's place is its deck's, not its turn's.** `C · no slot` sits at the top
 /// of the right column whether or not C is running, and turning B off does not
 /// slide C into B's place — the letter is the only thing naming a deck, and a
 /// label that moves when a neighbour stops is a label an operator cannot point
@@ -1618,12 +1675,18 @@ fn beside(body: Rect, canvas: (u32, u32), row_h: f32) -> Option<Body> {
         PREVIEW_ASPECT.0.max(1) as f32,
         PREVIEW_ASPECT.1.max(1) as f32,
     );
-    let cell_h = row_h.min(body.height());
+    // `row_h` is a whole cell — the image and the caption band under it — so
+    // the image is what is left when the band comes off, exactly as it is in
+    // the row. A cell beside the picture carries its caption too: the letter
+    // is the only thing naming a deck and it does not stop naming one because
+    // the bay went wide.
+    let cell_h = (row_h - caption_band()).min(body.height());
     let cell_w = (cell_h * aw / ah).round();
     let column = cell_w;
 
     let min_w = column * 2.0 + crate::PROGRAM_DIVIDER * 2.0;
-    let total_cells_h = cell_h * PER_COLUMN as f32 + size::PREVIEW_GAP * (PER_COLUMN - 1) as f32;
+    let total_cells_h =
+        (cell_h + caption_band()) * PER_COLUMN as f32 + size::PREVIEW_GAP * (PER_COLUMN - 1) as f32;
     if body.width() <= min_w || body.height() < total_cells_h {
         return None;
     }
@@ -1644,7 +1707,9 @@ fn beside(body: Rect, canvas: (u32, u32), row_h: f32) -> Option<Body> {
             0 => body.min.x,
             _ => body.max.x - column,
         };
-        let y = body.min.y + top_offset + row_idx as f32 * (cell_h + size::PREVIEW_GAP);
+        let y = body.min.y
+            + top_offset
+            + row_idx as f32 * (cell_h + caption_band() + size::PREVIEW_GAP);
         Rect::from_min_size(Pos2::new(x, y), egui::vec2(cell_w, cell_h))
     });
     drawable(Placement::Beside, picture, cells)
@@ -2808,7 +2873,7 @@ const AUDIO_LABEL: &str = "audio-in";
 
 /// **What the pill says with no input open**, and it is a word for a state
 /// rather than a name — [`NO_ARRANGEMENT`] one pill to the left, and the
-/// preview cell's `C · off` one bay down.
+/// preview cell's `C · no slot` one bay down.
 ///
 /// **It is not the same statement as silence**, which is the whole of
 /// [P-0034](../../../docs/principles/0034-a-quiet-room-is-not-a-missing-microphone.md):
@@ -3389,7 +3454,7 @@ const ARRANGEMENT_LABEL: &str = "arr";
 /// A space is what makes it safe as well as honest: a name is one path
 /// component of letters, digits, `-` and `_`, so `the default` is not a name
 /// anything can be filed under and no save can make this line ambiguous. It is
-/// the preview cell's `C · off` one row up — a word for a state, where a name
+/// the preview cell's `C · no slot` one row up — a word for a state, where a name
 /// would be a reading invented for a console that has none.
 const NO_ARRANGEMENT: &str = "the default";
 
@@ -6281,16 +6346,16 @@ impl<'a> Mixer<'a> {
 /// that minimum every time a slot was installed.
 ///
 /// So a track with no strip in it **draws nothing at all** — not an empty
-/// strip. That is the opposite of what [`preview`] does with a cell that is
-/// off, and the two are not in tension: a preview cell is the region's
-/// own face and says `off`, where a strip is six readings and an empty one is
-/// six readings nobody took. The mock draws such a strip — `.strip.empty`,
+/// strip. That is the opposite of what [`preview`] does with a cell that has
+/// no slot behind it, and the two are not in tension: a preview cell is the
+/// region's own face and its caption says `no slot`, where a strip is six
+/// readings and an empty one is six readings nobody took. The mock draws such a strip — `.strip.empty`,
 /// with `—` for a name, `empty` for a tally and both tracks bare — and
 /// inventing one is ADR-0177's row of zeroes with a different glyph.
 ///
 /// **The example's deck has one slot, so it draws one strip**, and that is the
 /// example rather than a gap in it — exactly as three of its preview cells
-/// read `off`.
+/// read `no slot`.
 ///
 /// # What is in the mock's bay and is deliberately not here
 ///
@@ -8673,7 +8738,7 @@ pub struct Candidate {
 ///   it would be the *same* decision the Library is waiting on, taken twice.
 /// - **The head's `2 waiting`.** [`Kind::Bay`]'s pills are static words and
 ///   are the mock's *controls* only — every readout in a bay head is undrawn
-///   for that reason, `previews 2 of 4` included. And the number would say
+///   for that reason, `previews 3 of 4` included. And the number would say
 ///   what the rows already say: this lane has no truncation to report, where
 ///   the Library's foot has (`n of m`), so a count over the rows would be one
 ///   readout of two values against another of the same one.
@@ -10279,11 +10344,14 @@ pub struct View {
     /// leaves every entry `None`, which is what `cargo test -p
     /// karakuri-console` sees and is a console with no engine behind it.
     ///
-    /// **All `None` is a state, not an absence.** The manual's *previews 2 of
-    /// 4* is an operator choosing how many decks audition, so a cell with
-    /// nothing in it is a cell that is off and it is drawn saying so — see the
-    /// module documentation, and [`preview_rects`] for where the rectangles
-    /// come from.
+    /// **All `None` is a state, not an absence**, and the caption is where it
+    /// is said: a cell with nothing behind it reads [`PREVIEW_NO_SLOT`] under
+    /// its letter rather than going blank. It is deliberately not the manual's
+    /// *empty* — a slot that exists with nothing loaded into it is a state the
+    /// engine cannot be in — and deliberately not *off*, which was residency
+    /// and has not gated a cell since ADR-0240. See [`state_word`], the module
+    /// documentation, and [`preview_rects`] for where the rectangles come
+    /// from.
     pub previews: [Option<Picture>; DECKS],
     /// **What the transport row reads this frame**, or `None` for a console
     /// with no engine behind it — which is every test in this crate, and what
@@ -11233,7 +11301,8 @@ impl View {
             // argument is.
             if let Some(cells) = cells {
                 for (deck, cell) in cells.into_iter().enumerate() {
-                    preview(ui, &pal, cell, deck, previews[deck]);
+                    preview(ui, &pal, cell, previews[deck]);
+                    caption_into(ui, &pal, cell, deck, previews[deck]);
                 }
             }
 
@@ -11317,18 +11386,25 @@ impl View {
     }
 }
 
-/// **One deck preview cell**: the mock's `.preview`, with whatever is behind
-/// it and the letter that says which deck it is.
+/// **One deck preview cell's image**: the mock's `.preview`, and whatever is
+/// behind it.
 ///
-/// Painted the same whether there is a deck slot behind it or not, because
-/// *off* is a state rather than a thing not built yet — the module
+/// **Nothing is written on it.** The letter and the state word are the
+/// caption's, under the image — [`caption_into`] — and the reason is the one
+/// the mock states beside the rule: a letter laid over the material is
+/// unreadable exactly when the deck is live and the material is bright, which
+/// is the one moment the row is read fastest. The image carries material or it
+/// carries the bare well, and either way it carries nothing this crate wrote.
+///
+/// The cell is painted whether or not a texture was handed in, because *no
+/// slot behind it* is a state rather than a thing not built yet — the module
 /// documentation is where that argument is written out.
 ///
-/// **A cell is not off because its deck is off air.** Every slot is drawn into
-/// its own target on every frame, so a parked or warming deck has a picture
-/// here exactly as a Live one does; what the residency decides is whether that
-/// slot reaches the *mix*, which is the picture above and the mixer strip
-/// beside. A cell reads `off` only when there is no slot behind it.
+/// **A cell is not dark because its deck is off air.** Every slot is drawn
+/// into its own target on every frame, so a parked or warming deck has a
+/// picture here exactly as a Live one does; what the residency decides is
+/// whether that slot reaches the *mix*, which is the picture above and the
+/// mixer strip beside.
 ///
 /// Term for term from `.preview` in `style.css`:
 ///
@@ -11339,27 +11415,7 @@ impl View {
 /// - `box-shadow: inset 0 0 0 1px var(--c-hair)` — a 1px stroke on the
 ///   **inside** of the box in `pal.hair`, drawn last so it sits over the
 ///   texture exactly as an inset shadow sits over a background image.
-/// - `display: flex; align-items: flex-end; padding: 3px 5px;
-///   font-size: 9px` — the letter in the bottom-left corner, inside that
-///   padding, at [`size::PREVIEW_SIZE`].
-///
-/// # The two colours the label takes, and what each is standing for
-///
-/// - **A picture behind it:** `.preview.a` and `.preview.b` set
-///   `color: rgba(255,255,255,0.7)`, which is white because the mock's cell is
-///   always a dark gradient. The console's cell holds real texels of unknown
-///   brightness in either room, and there is no *white at 70%* in the palette
-///   — so this is `pal.text`, `--c-text`, the mock's own colour for a value.
-///   It follows the room, which is the one thing the mock's literal white
-///   cannot do.
-/// - **Nothing behind it:** `.preview`'s own `color: var(--c-faint)`, which is
-///   `pal.faint` — *"a heading, and anything switched off"*, and this cell has
-///   no slot to switch on.
-///
-/// And the word follows the colour: the mock writes `C &middot; off` in a cell
-/// with nothing in it, so a cell that is off says `off` rather than leaving
-/// the reader to tell a dark thumbnail from an empty well.
-fn preview(ui: &Ui, pal: &Palette, cell: Rect, deck: usize, picture: Option<Picture>) {
+fn preview(ui: &Ui, pal: &Palette, cell: Rect, picture: Option<Picture>) {
     let radius = CornerRadius::same(size::PREVIEW_RADIUS as u8);
     // Clipped to the cell for the reason the picture is clipped to its region:
     // the rectangle in `picture` came from outside, and a stale one is a
@@ -11384,24 +11440,101 @@ fn preview(ui: &Ui, pal: &Palette, cell: Rect, deck: usize, picture: Option<Pict
         Stroke::new(size::HAIRLINE, pal.hair),
         StrokeKind::Inside,
     );
+}
 
-    let letter = DECK_LETTERS[deck];
-    let (label, colour) = match picture {
-        Some(_) => (letter.to_owned(), pal.text),
-        None => (format!("{letter} · off"), pal.faint),
-    };
-    let galley = painter.layout_no_wrap(
-        label,
-        FontId::new(size::PREVIEW_SIZE, FontFamily::Proportional),
-        colour,
+/// **The word a cell's caption gives for what the cell is showing.**
+///
+/// Two, because two is what [`View::previews`] distinguishes and drawing a
+/// third would be drawing a state the program cannot be in.
+///
+/// - [`PREVIEW_MATERIAL`] — there is a deck slot behind this cell and the
+///   image is that slot's own target. It says nothing about residency: a
+///   parked deck's still and a live deck's frame are the same word, which is
+///   [P-0080](../../../docs/principles/0080-an-operator-can-see-a-slots-own-material-without-putting-it-on-air.md).
+/// - [`PREVIEW_NO_SLOT`] — there is no slot behind this cell at all: a deck of
+///   fewer slots than there are cells, or a console with no engine behind it.
+///
+/// **Not `empty` and not `off`, and both of those are worth naming.** The
+/// mock's D cell said `D · off` when
+/// [ADR-0170](../../../docs/adr/0170-a-deck-preview-cell-is-drawn-whether-or-not-a-deck-is-behind-it.md)
+/// landed and this function's ancestor copied the word; the page has since
+/// moved and neither word is what the cell distinguishes. *Off* was residency,
+/// and residency has not gated a cell since ADR-0240. *Empty* is a slot that
+/// exists with nothing loaded into it — the manual names it and the engine
+/// cannot be in it, because `Deck::new` builds a slot per `HotSwap` and
+/// `slot_view` is `None` only past `slot_count`. Writing either here would
+/// assert a reading nobody took, which is ADR-0200's rule and ADR-0191's
+/// before it.
+fn state_word(picture: Option<Picture>) -> &'static str {
+    match picture {
+        Some(_) => PREVIEW_MATERIAL,
+        None => PREVIEW_NO_SLOT,
+    }
+}
+
+/// A cell showing its slot's own material. See [`state_word`].
+pub const PREVIEW_MATERIAL: &str = "material";
+
+/// A cell with no deck slot behind it. See [`state_word`].
+pub const PREVIEW_NO_SLOT: &str = "no slot";
+
+/// **One deck preview cell's caption**: the mock's `.caption`, under the
+/// image and never on it.
+///
+/// Term for term from `style.css`:
+///
+/// - `.cell`'s `gap: 4px` and `.caption`'s `height: 13px` — [`caption_of`],
+///   which is where the rectangle comes from.
+/// - `.caption`'s `font-size: 9px` — [`size::PREVIEW_SIZE`], for both the
+///   letter and the word.
+/// - `.caption`'s `gap: 5px` — [`size::PREVIEW_CAPTION_GAP_X`], between the
+///   two.
+/// - `align-items: center` — both galleys centred on the caption's own middle,
+///   which is what puts a 9px letter and a 9px word on one baseline in a 13px
+///   strip.
+///
+/// # The two colours, and what each is standing for
+///
+/// - **The letter** is `.caption b`'s `var(--c-dim)`, `pal.dim` — *"a label
+///   beside"* a value, which is what a letter welded to a cell is. It is one
+///   colour in both states, because the letter is not a state: `A` is `A`
+///   whether or not anything is behind it, and a letter that dimmed when the
+///   slot went away would be the cell's state said twice.
+/// - **The word** is `.caption`'s own `var(--c-faint)`, `pal.faint`.
+///
+/// # No badge
+///
+/// The mock's `.risk` dot is the estimated cost of the slot in five bands, and
+/// **nothing in this workspace estimates what a slot costs**. So it is not
+/// drawn — not hollow, not grey, not green by default, which would each assert
+/// a reading nobody took. That is
+/// [ADR-0200](../../../docs/adr/0200-a-bays-first-pass-draws-the-values-that-exist-and-omits-the-rest.md):
+/// draw the values that exist and omit the rest. The bands are specified on
+/// the mock's caption tooltip and in *What a deck preview cell shows, and
+/// when*, and the one worth carrying here is the last: **purple stops the cell
+/// drawing.** A slot over budget is stopped rather than shown harder, so the
+/// day this badge is drawn it is the one band that is also a behaviour.
+fn caption_into(ui: &Ui, pal: &Palette, image: Rect, deck: usize, picture: Option<Picture>) {
+    let at = caption_of(image);
+    let painter = ui.painter().with_clip_rect(at);
+    let font = FontId::new(size::PREVIEW_SIZE, FontFamily::Proportional);
+
+    let letter = painter.layout_no_wrap(DECK_LETTERS[deck].to_owned(), font.clone(), pal.dim);
+    let width = letter.size().x;
+    painter.galley(
+        Pos2::new(at.min.x, at.center().y - letter.size().y * 0.5),
+        letter,
+        pal.dim,
     );
+
+    let word = painter.layout_no_wrap(state_word(picture).to_owned(), font, pal.faint);
     painter.galley(
         Pos2::new(
-            cell.min.x + size::PREVIEW_PAD_X,
-            cell.max.y - size::PREVIEW_PAD_Y - galley.size().y,
+            at.min.x + width + size::PREVIEW_CAPTION_GAP_X,
+            at.center().y - word.size().y * 0.5,
         ),
-        galley,
-        colour,
+        word,
+        pal.faint,
     );
 }
 

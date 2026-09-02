@@ -217,8 +217,13 @@ pub fn arrangement() -> Spec {
                 // The body row's minimum height is the tallest of the
                 // three columns'. **It changed hands on 2026-08-29**: it was
                 // the right pane's 530 until the manual gave the inspector a
-                // deck head, and the centre is now the taller at 539.5 —
-                // `program` 378, the divider 10, and `inspector` 151.5.
+                // deck head, and the centre is now the taller at 556.5 —
+                // `program` 395, the divider 10, and `inspector` 151.5. The
+                // program's term is its *fixed* height and not its own
+                // minimum, because a window that cannot show the Program bay
+                // at the size the mock draws it is not a window this console
+                // is claimed to work at; it grew by 17 when the preview cells
+                // got their captions.
                 // **The model does not derive this**: a split's minimum is a
                 // number it is given, not a function of its children's, so
                 // the sum is written here and `tests/arrangement.rs`
@@ -226,7 +231,7 @@ pub fn arrangement() -> Spec {
                 // That guard is what caught the 9.5 px, and the console's
                 // claimed smallest window was short by exactly that from the
                 // moment the row was specified.
-                .min(539.5),
+                .min(556.5),
             // `.outputs`: 8px of padding above and below a `.sink` row, which
             // is 11px at line-height 1.5 plus its 1px border top and bottom —
             // 8 + 18.5 + 8, rounded. Fixed for the same reason the transport
@@ -322,7 +327,7 @@ fn centre() -> Spec {
 /// on a node — so the picture has to *be* a node, and so does the row that
 /// outlives it.
 ///
-/// # The bay is still 378, and the split is that 378 read out loud
+/// # The bay is 395, and the split is that 395 read out loud
 ///
 /// The number is the height the mock's own program bay has at the narrowest
 /// console the mock will draw: `.console`'s `min-width: 1010px` less its 10px
@@ -332,35 +337,70 @@ fn centre() -> Spec {
 /// the whole pixel the mock rasterises it at, **262** — so the picture's
 /// region is 16:9 to a quarter of a pixel rather than exactly, which is a
 /// difference `view::picture_rect` is the one place that has to care about;
-/// the four `.preview` cells
-/// are (466 - three 6px gaps) / 4 = 112 wide and so 63 tall. **Bay head 27,
-/// padding 9 + 9, picture 262, gap 8, previews 63 = 378** — and that sum is
-/// the split, term for term, with the 8 as the divider:
+/// the four `.preview` images
+/// are (466 - three 6px gaps) / 4 = 112 wide and so 63 tall, and each carries
+/// a `.cell`'s 4px gap and a `.caption`'s 13px under it, which is **80** for
+/// the row. **Bay head 27, padding 9 + 9, picture 262, gap 8, previews 80 =
+/// 395** — and that sum is the split, term for term, with the 8 as the
+/// divider:
 ///
 /// - `program-view` is 27 + 9 + 262 = **298**. The bay head is inside it
 ///   because a bay's head is painted over the top of whatever tiles the bay —
 ///   which is what the inspector's two panes already do — and the top 9 is
 ///   `.program-body`'s padding above the picture.
-/// - `deck-previews` is 63 + 9 = **72**: the row of previews and the padding
+/// - `deck-previews` is 80 + 9 = **89**: the row of previews and the padding
 ///   under it.
 ///
-/// 298 + 8 + 72 = 378, so nothing about the bay's height changed and the
-/// tests that assert 378 are asserting the same thing they were.
+/// 298 + 8 + 89 = 395.
+///
+/// **The 8 in that sum is the mock's `.program-body` gap and
+/// [`PROGRAM_DIVIDER`] is 4**, which is a four-pixel difference this
+/// derivation has carried since the divider was halved and the prose was not.
+/// It is not a gap in the bay: `program-view` is the flexible child, so the
+/// four pixels the divider gives back land in the picture's region and the
+/// bay's total is the number it declares either way. Named here rather than
+/// quietly reconciled, because the two are one derivation or neither and
+/// whoever wants them to agree has to decide which of the two moves.
+///
+/// # The row grew rather than the cells shrinking, and that is a decision
+///
+/// The caption under a cell is 17 pixels the row did not have — a
+/// `.cell` gap and a `.caption` — and there were two places to take them
+/// from. **The cells could have kept the row at 72 and got shorter**, which
+/// costs nothing anywhere else in the arrangement and is wrong twice over. An
+/// image is 16:9 and centred in its track
+/// ([ADR-0170](../../../docs/adr/0170-a-deck-preview-cell-is-drawn-whether-or-not-a-deck-is-behind-it.md)),
+/// so 17 off its height takes 30 off its width as well: a cell 112 x 63 would
+/// become 82 x 46, and the row would lose a quarter of the thing it exists to
+/// show in order to make room for a label about it. And the 63 is not this
+/// crate's to spend — it is a **reading of the mock**, `.preview`'s
+/// `aspect-ratio` at the width the mock's own narrowest console gives the row,
+/// so shrinking it would be inventing a number the stylesheet does not carry
+/// and the transcription guard would have nothing to hold it against.
+///
+/// The mock's bay is a flow and its height is the sum of its parts, so the
+/// mock's bay grew by the same 17 the moment the caption was added to it.
+/// **395 is that sum read out loud, exactly as 378 was.** The row is also the
+/// one the operator sizes — the divider above it is what
+/// `view::program_bay` reads back through `Layout::sizing` — so what grew is
+/// the row's *default*, and a row's default is what its content needs
+/// ([ADR-0174](../../../docs/adr/0174-a-node-claims-only-what-its-visible-content-can-use.md)).
+/// The content grew.
 ///
 /// What "fixed" buys is the whole argument: widen the window and this stays
-/// 378 instead of following the width up to the 763 the manual works out for a
+/// 395 instead of following the width up to the 763 the manual works out for a
 /// 1900-wide window. The picture letterboxes into the width it has, which is
 /// the program view's job.
 ///
 /// # The minimum splits the same way
 ///
-/// The bay's chrome at that width is 27 + 18 + 63 + 8 = 116, so the stated 200
+/// The bay's chrome at that width is 27 + 18 + 80 + 8 = 133, so the stated 217
 /// leaves 84 for the picture — small on purpose, because a preview's size is a
 /// machine's answer and a weak machine's answer is small rather than absent.
 /// Term for term again: `program-view` at 27 + 9 + 84 = **120**, the divider's
-/// 8, and `deck-previews` at **72**, which is its size — a row of four cells
+/// 8, and `deck-previews` at **89**, which is its size — a row of four cells
 /// at a fixed type size has nothing in it that gets smaller, exactly as the
-/// mixer's strips have not. 120 + 8 + 72 = 200, so the bay's own minimum is
+/// mixer's strips have not. 120 + 8 + 89 = 217, so the bay's own minimum is
 /// still the one it declares rather than a number its children now imply.
 ///
 /// # No maximum anywhere in here
@@ -387,14 +427,14 @@ fn program() -> Spec {
             // library flexible, and the same reason the mixer is fixed: there
             // is nothing in the row that gets smaller.
             Spec::view("deck-previews")
-                .fixed(72.0)
-                .min(72.0)
+                .fixed(89.0)
+                .min(89.0)
                 .max(f32::INFINITY),
         ],
     )
     .named("program")
-    .fixed(378.0)
-    .min(200.0)
+    .fixed(395.0)
+    .min(217.0)
     .max(f32::INFINITY)
 }
 

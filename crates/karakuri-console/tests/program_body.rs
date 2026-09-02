@@ -25,7 +25,8 @@ use common::{near, rect_of, solved, PLAUSIBLE, SMALLEST};
 use egui::{Pos2, Rect};
 use karakuri_console::room::size;
 use karakuri_console::view::{
-    picture_rect, preview_rects, program_body, program_body_with_row_h, Placement, DECKS,
+    caption_of, picture_rect, preview_rects, program_body, program_body_with_row_h, Placement,
+    DECKS,
 };
 
 /// **The canvas the picture is fitted to**, and it is the workspace's
@@ -42,16 +43,16 @@ const SQUARISH: (u32, u32) = (1024, 768);
 ///
 /// `.console`'s `min-width: 1010px` less its 10px of padding either side is
 /// 990; the centre track is 990 - 218 - 268 - two 10px gaps = 484; the bay is
-/// that wide, and `.program-body`'s 9px padding leaves **466**. The bay is 378
+/// that wide, and `.program-body`'s 9px padding leaves **466**. The bay is 395
 /// tall, less the 27 of bay head painted over it and 9 of that padding top and
-/// bottom, which is **333**.
-const NARROWEST: (f32, f32) = (466.0, 333.0);
+/// bottom, which is **350**.
+const NARROWEST: (f32, f32) = (466.0, 350.0);
 
 /// **The same body in a 1920 window.** The two side tracks and the four
 /// dividers do not move, so the centre track takes the whole of the extra
 /// width: 1920 - 340 - 400 - 20 = 1160, less the same 18 of padding = **1142** (ADR-0239).
-/// The bay is `Sizing::Fixed` along its column, so the height is still 333.
-const WIDE: (f32, f32) = (1142.0, 333.0);
+/// The bay is `Sizing::Fixed` along its column, so the height is still 350.
+const WIDE: (f32, f32) = (1142.0, 350.0);
 
 /// A body of that size, **and not at the origin**: every rectangle this answers
 /// with is inside the bay somebody solved, so an arrangement that had quietly
@@ -88,17 +89,21 @@ struct Hand {
 /// columns and the divider either side of the picture.
 fn by_hand(size: (f32, f32), canvas: (f32, f32)) -> Hand {
     let (w, h) = size;
+    // A cell is the image and the caption band under it — `.cell`'s 4px gap
+    // and `.caption`'s 13px — and it is the **image** that is 16:9, so the
+    // column follows the image and the height a cell takes is the sum.
     let cell_h = 63.0f32;
+    let band = 4.0 + 13.0;
     let column = (cell_h * 16.0 / 9.0).round();
     let min_w = column * 2.0 + 8.0;
-    let total_cells_h = cell_h * 2.0 + 6.0;
+    let total_cells_h = (cell_h + band) * 2.0 + 6.0;
     let beside = if w > min_w && h >= total_cells_h {
         largest(w - column * 2.0 - 8.0, h, canvas)
     } else {
         None
     };
     Hand {
-        below: largest(w, h - 4.0 - 63.0, canvas),
+        below: largest(w, h - 4.0 - cell_h - band, canvas),
         beside,
     }
 }
@@ -136,7 +141,7 @@ fn the_mocks_narrowest_body_is_the_mocks_own_arrangement() {
     for (deck, cell) in arranged.cells.iter().enumerate() {
         assert_rect(
             *cell,
-            (118.0 * deck as f32, 333.0 - 63.0),
+            (118.0 * deck as f32, 350.0 - 80.0),
             (112.0, 63.0),
             &format!("cell {deck}"),
         );
@@ -150,19 +155,23 @@ fn a_nineteen_twenty_window_puts_the_cells_down_the_sides() {
     let arranged = program_body(body(WIDE), CANVAS).expect("the body has room for a picture");
 
     assert_eq!(arranged.placement, Placement::Beside);
-    // (1142 - 592) / 2 = 275.0 centring.
+    // The picture's box is the body less a column and a divider either side:
+    // 1142 - 2 x 112 - 2 x 4 = 910, and 16:9 in 910 x 350 is 622 x 350
+    // centred, so 116 of divider and column plus (910 - 622) / 2 = 144.
     assert_rect(
         arranged.picture,
-        (275.0, 0.0),
-        (592.0, 333.0),
+        (260.0, 0.0),
+        (622.0, 350.0),
         "the picture",
     );
 
     // **A and B down the left, C and D down the right**, preserving 112 x 63
+    // of image with its 17 of caption band under each: two cells are
+    // (63 + 17) x 2 + 6 = 166 tall, centred in 350, so the first starts at 92.
     let left = 0.0;
     let right = 1142.0 - 112.0;
-    let top = 101.0;
-    let lower = top + 63.0 + 6.0;
+    let top = 92.0;
+    let lower = top + 63.0 + 17.0 + 6.0;
     assert_rect(arranged.cells[0], (left, top), (112.0, 63.0), "cell A");
     assert_rect(arranged.cells[1], (left, lower), (112.0, 63.0), "cell B");
     assert_rect(arranged.cells[2], (right, top), (112.0, 63.0), "cell C");
@@ -174,21 +183,21 @@ fn a_nineteen_twenty_window_puts_the_cells_down_the_sides() {
     let gain =
         (arranged.picture.width() * arranged.picture.height()) / (below.width() * below.height());
     assert!(
-        near(gain, 1.614_6),
-        "beside gives a picture {gain} times the size of below's, and the claim is 1.61"
+        near(gain, 1.783_1),
+        "beside gives a picture {gain} times the size of below's, and the claim is 1.78"
     );
 }
 
 /// **Eight hundred wide goes beside with preserved preview size.**
 #[test]
 fn an_eight_hundred_wide_body_goes_beside() {
-    let arranged = program_body(body((800.0, 333.0)), CANVAS).expect("on screen");
+    let arranged = program_body(body((800.0, 350.0)), CANVAS).expect("on screen");
 
     assert_eq!(arranged.placement, Placement::Beside);
-    // 800 - 232 = 568 width for picture box. Picture is 568 x 320, centred at (116.0, 6.5).
+    // 800 - 232 = 568 width for picture box. Picture is 568 x 320, centred at (116.0, 15.0).
     assert_rect(
         arranged.picture,
-        (116.0, 6.5),
+        (116.0, 15.0),
         (568.0, 320.0),
         "the picture",
     );
@@ -205,7 +214,7 @@ fn the_larger_picture_wins_at_every_width_and_a_tie_goes_below() {
     let mut beside_won = 0;
 
     for w in 466..=2400 {
-        let size = (w as f32, 333.0);
+        let size = (w as f32, 350.0);
         let arranged = program_body(body(size), CANVAS).expect("on screen");
         let Hand { below, beside } = by_hand(size, (1280.0, 720.0));
         let below = below.expect("below is drawable at every width from 466 up");
@@ -239,11 +248,13 @@ fn the_larger_picture_wins_at_every_width_and_a_tie_goes_below() {
     );
 }
 
-/// **The two curves cross once at 706px** (ADR-0239).
+/// **The two curves cross once at 706px** (ADR-0239), and the caption band
+/// did not move it: below loses the same 17 to the taller row that the bay
+/// gained, so its picture is the 466 x 262 it always was.
 #[test]
 fn there_is_exactly_one_crossover_and_it_is_at_706() {
     let placement = |w: i32| {
-        program_body(body((w as f32, 333.0)), CANVAS)
+        program_body(body((w as f32, 350.0)), CANVAS)
             .expect("on screen")
             .placement
     };
@@ -263,7 +274,7 @@ fn there_is_exactly_one_crossover_and_it_is_at_706() {
 #[test]
 fn a_body_with_no_room_has_no_arrangement() {
     assert_eq!(program_body(body((466.0, 0.0)), CANVAS), None);
-    assert_eq!(program_body(body((0.0, 333.0)), CANVAS), None);
+    assert_eq!(program_body(body((0.0, 350.0)), CANVAS), None);
     assert_eq!(program_body(body((-100.0, -100.0)), CANVAS), None);
 }
 
@@ -274,7 +285,7 @@ fn a_body_with_no_room_has_no_arrangement() {
 /// **A side column preserves preview cell dimensions.**
 #[test]
 fn the_columns_preserve_cell_dimensions() {
-    let at = |w: f32| program_body(body((w, 333.0)), CANVAS).expect("on screen");
+    let at = |w: f32| program_body(body((w, 350.0)), CANVAS).expect("on screen");
     let reference = at(1396.0);
     assert_eq!(reference.placement, Placement::Beside);
 
@@ -300,7 +311,7 @@ fn the_columns_preserve_cell_dimensions() {
 /// **A cell is 16:9 in both arrangements.**
 #[test]
 fn a_cell_is_the_mocks_shape_and_never_the_canvass() {
-    for size in [NARROWEST, WIDE, (1100.0, 333.0)] {
+    for size in [NARROWEST, WIDE, (1100.0, 350.0)] {
         let mock = program_body(body(size), CANVAS).expect("on screen");
         let squarish = program_body(body(size), SQUARISH).expect("on screen");
 
@@ -326,19 +337,22 @@ fn a_cell_is_the_mocks_shape_and_never_the_canvass() {
 /// **The two gaps beside the picture are the mock's own.**
 #[test]
 fn the_gaps_beside_the_picture_are_the_mocks_own() {
-    let arranged = program_body(body((750.0, 333.0)), CANVAS).expect("on screen");
+    let arranged = program_body(body((750.0, 350.0)), CANVAS).expect("on screen");
 
     assert_eq!(arranged.placement, Placement::Beside);
     assert_rect(
         arranged.picture,
-        (116.0, 21.0),
+        (116.0, 29.5),
         (518.0, 291.0),
         "the picture",
     );
 
     let gap = arranged.picture.min.x - arranged.cells[0].max.x;
     assert!(near(gap, 4.0), "the gap to the picture is {gap}");
-    let stacked = arranged.cells[1].min.y - arranged.cells[0].max.y;
+    // **Between two stacked cells, and a cell ends at its caption** — the
+    // image's own bottom edge is 17 short of that, and measuring from there
+    // would read the caption band as part of the gap.
+    let stacked = arranged.cells[1].min.y - caption_of(arranged.cells[0]).max.y;
     assert!(
         near(stacked, size::PREVIEW_GAP),
         "the gap between two stacked cells is {stacked}"
@@ -381,8 +395,15 @@ fn below_is_what_the_console_draws_today() {
 
     let region = rect_of(&layout, "deck-previews");
     assert!(near(arranged.cells[0].min.y, region.y));
+    // The **image** ends at its own height and the caption band fills the
+    // rest of the row, so the row's height is the cell's and the image's is
+    // one term of it.
     assert!(near(
         arranged.cells[0].max.y,
+        region.y + size::PREVIEW_IMAGE_H
+    ));
+    assert!(near(
+        caption_of(arranged.cells[0]).max.y,
         region.y + size::PREVIEW_ROW_H
     ));
     assert!(near(region.h - size::PREVIEW_ROW_H, size::PROGRAM_BODY_PAD));
@@ -391,7 +412,7 @@ fn below_is_what_the_console_draws_today() {
 /// **The same rectangle always gives the same answer.**
 #[test]
 fn a_width_dragged_out_and_back_comes_back_to_the_same_arrangement() {
-    let at = |w: f32| program_body(body((w, 333.0)), CANVAS).expect("on screen");
+    let at = |w: f32| program_body(body((w, 350.0)), CANVAS).expect("on screen");
 
     let out: Vec<_> = (466..=1600).map(|w| at(w as f32)).collect();
     let back: Vec<_> = (466..=1600).rev().map(|w| at(w as f32)).collect();
@@ -424,10 +445,12 @@ fn a_width_dragged_out_and_back_comes_back_to_the_same_arrangement() {
 /// **A bay dragged to its minimum goes beside at the narrowest console.**
 #[test]
 fn a_bay_dragged_to_its_minimum_goes_beside_at_the_narrowest_console() {
-    let short = program_body_with_row_h(body((466.0, 155.0)), CANVAS, 63.0).expect("on screen");
+    let short = program_body_with_row_h(body((466.0, 172.0)), CANVAS, size::PREVIEW_ROW_H)
+        .expect("on screen");
     assert_eq!(short.placement, Placement::Beside);
-    // At 466 wide and 155 tall, column is 112x63. Picture box is 466 - 232 = 234 x 155.
-    // Picture is 234 x 132 (fitted 16:9 in 234 x 155).
+    // The bay's own minimum of 217 less its head and padding is a body 172
+    // tall. A column is 112x63 of image. Picture box is 466 - 232 = 234 x 172,
+    // and 16:9 in that is 234 x 132.
     assert!(near(short.picture.width(), 234.0) && near(short.picture.height(), 132.0));
     assert!(near(short.cells[0].width(), 112.0) && near(short.cells[0].height(), 63.0));
 
