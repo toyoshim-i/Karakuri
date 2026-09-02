@@ -435,14 +435,28 @@ fn write_vsout_struct(out: &mut String, id: Identity, attrs_used: &[Attr], depth
         ));
         loc += 1;
     }
-    // Last, so that adding it leaves every other varying's location where it
-    // was. **Interpolated rather than flat**, and that is the whole reason it
-    // is a varying at all: perspective-correct interpolation of `w` is exactly
-    // the view depth at the fragment, because the hardware's own divide is what
-    // makes it so. Only `blend weighted` needs it — see [`WEIGHTED_FS_EPILOGUE`].
+    // After every conditional varying, so that adding it left each of theirs
+    // where it was. **Interpolated rather than flat**, and that is the whole
+    // reason it is a varying at all: perspective-correct interpolation of `w`
+    // is exactly the view depth at the fragment, because the hardware's own
+    // divide is what makes it so. Only `blend weighted` needs it — see
+    // [`WEIGHTED_FS_EPILOGUE`].
     if depth {
         out.push_str(&format!("    @location({loc}) view_depth: f32,\n"));
+        loc += 1;
     }
+    // **What the one-pixel floor took, so the fragment stage can give it
+    // back.** A primitive smaller than a pixel is drawn at one pixel and its
+    // alpha multiplied by the coverage it should have had; the size is known
+    // here and the colour is written there, so the factor has to travel. Flat,
+    // because it is one number per element — all six corners computed it from
+    // the same `point_rate` — and 1.0 at or above a pixel, which is what makes
+    // the whole mechanism inert for material that was never sub-pixel. See
+    // `docs/ir-spec.md`, *A sprite smaller than a pixel is drawn at one pixel
+    // and dimmed to compensate*.
+    out.push_str(&format!(
+        "    @location({loc}) @interpolate(flat) coverage: f32,\n"
+    ));
     out.push_str("};\n");
 }
 
@@ -496,24 +510,36 @@ fn vertex_entry(
     match topology {
         Topology::Points => {
             out.push_str("    let corner = corner_of(corner_idx) * 2.0 - 1.0;\n");
-            // **A fraction of the height, in both axes.** `corner` spans
-            // 2.0, and NDC spans 2.0 over the whole target, so multiplying
-            // the corner by `_point_rate` alone makes the quad's vertical
-            // extent exactly `_point_rate` of the target's height whatever
-            // that height is. The horizontal term carries `viewport.y /
-            // viewport.x` on top of that, which is the same number of pixels
-            // expressed against the other axis — so the sprite is square in
-            // pixels, and a change of aspect ratio moves the frame's edges
+            // **The side in pixels first, because the floor below is a pixel.**
+            // `point_rate` is a fraction of the target's height, so the side a
+            // sprite covers is that fraction times `viewport.y` — in both axes,
+            // since the sprite is square in pixels rather than in NDC.
+            out.push_str("    let _side_px = _point_rate * u.viewport.y;\n");
+            // **Never smaller than a pixel.** A quad below a pixel produces no
+            // fragment at all unless it happens to cover a pixel centre, so
+            // material at a small target does not dim, it disappears in
+            // whatever pattern the sample grid picks.
+            out.push_str("    let _drawn_px = max(_side_px, 1.0);\n");
+            // `corner` spans 2.0 and NDC spans 2.0 over each axis of the
+            // target, so a side of `_drawn_px` is `_drawn_px / u.viewport` in
+            // NDC — one term per axis, which is what makes the sprite square in
+            // pixels and makes a change of aspect ratio move the frame's edges
             // rather than the sprite's. The `* _clip.w` is untouched and does
             // what it always did: cancel the rasterizer's perspective divide,
             // so the extent is a fraction of the *frame* rather than of
             // anything in the world.
-            out.push_str(
-                "    let _rate_ndc = _point_rate * vec2<f32>(u.viewport.y / u.viewport.x, 1.0);\n",
-            );
+            out.push_str("    let _rate_ndc = _drawn_px / u.viewport;\n");
             out.push_str("    let ndc_offset = corner * _rate_ndc * _clip.w;\n");
             out.push_str("    out.clip = vec4<f32>(_clip.xy + ndc_offset, _clip.zw);\n");
             out.push_str("    out.point_coord = corner_of(corner_idx);\n");
+            // **Squared, because a sprite is short of coverage in both axes.**
+            // `clamp` rather than a ratio against `_drawn_px`: it is 1.0 at or
+            // above a pixel, which is the inert case, and it is 0.0 for a
+            // non-positive rate, which is the one behaviour this floor would
+            // otherwise invent — a negative side clamps up to a full pixel, and
+            // without the clamp its square would light it.
+            out.push_str("    let _cov = clamp(_side_px, 0.0, 1.0);\n");
+            out.push_str("    out.coverage = _cov * _cov;\n");
             // The whole sprite is at one depth, because a billboard is: all six
             // corners take the element's own `w` and the interpolation across
             // them is constant.
@@ -624,6 +650,12 @@ const FULLSCREEN_RAY: &str =
 /// stroke's width, and so that a sprite and a stroke still mean the same
 /// number in the same unit.
 ///
+/// **The width is floored at a pixel and the fragment stage is told what the
+/// floor took**, exactly as a sprite's side is. The factor is the width itself
+/// rather than its square: a stroke thinner than a pixel is short of coverage
+/// across its width and along none of its length, which is the one place the
+/// two topologies differ here.
+///
 /// **Nothing here interpolates**, and an earlier version of this comment said
 /// it did. `corner_of` returns 0.0 or 1.0 in each component, so every `mix`
 /// below is *selection*: each of the six vertices belongs to one end of the
@@ -663,12 +695,15 @@ const SEGMENT_EXPANSION: &str = "\
     let b_px = _clip_b.xy / _clip_b.w * half_vp;
     let seg = b_px - a_px;
     let dir = seg / max(length(seg), 1e-6);
-    let across = vec2<f32>(-dir.y, dir.x) * (_point_rate * u.viewport.y * 0.5) * (corner.y * 2.0 - 1.0);
+    let _width_px = _point_rate * u.viewport.y;
+    let _drawn_px = max(_width_px, 1.0);
+    let across = vec2<f32>(-dir.y, dir.x) * (_drawn_px * 0.5) * (corner.y * 2.0 - 1.0);
     let p_px = mix(a_px, b_px, corner.x) + across;
     let w = mix(_clip.w, _clip_b.w, corner.x);
     let z = mix(_clip.z / _clip.w, _clip_b.z / _clip_b.w, corner.x);
     out.clip = vec4<f32>(p_px / half_vp * w, z * w, w);
     out.point_coord = corner;
+    out.coverage = clamp(_width_px, 0.0, 1.0);
 ";
 
 /// The two targets a [`Blend::Weighted`] fragment stage writes, and the signature
@@ -767,6 +802,13 @@ fn fragment_entry(id: Identity, attrs_used: &[Attr], body: &str, weighted: bool)
     }
     out.push_str("    var _color: vec4<f32>;\n");
     out.push_str(body);
+    // **The alpha, not the colour**, and the difference is not cosmetic: an
+    // `additive` pipeline adds `color.rgb * color.a` and `weighted` weights by
+    // `color.a`, so the alpha is the channel both modes scale a contribution
+    // by. Scaling the colour as well would apply the factor twice and dim a
+    // sub-pixel sprite by `s⁴`. Above a pixel `coverage` is 1.0 and this line
+    // is arithmetic that changes nothing. See [`write_vsout_struct`].
+    out.push_str("    _color.a = _color.a * in.coverage;\n");
     if weighted {
         out.push_str(WEIGHTED_DEPTH);
         out.push_str(WEIGHTED_FS_EPILOGUE);

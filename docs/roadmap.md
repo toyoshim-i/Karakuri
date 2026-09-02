@@ -825,40 +825,27 @@ badge does not distinguish a drawing that is owed from a machine that is missing
 already been picked up as the first while being the second. **Master and Sequencer stay last for
 machinery rather than for drawing.**
 
-### Decided and not built: a sub-pixel sprite is rounded up and compensated in colour
+### Built: a sub-pixel primitive is floored at one pixel and compensated in the alpha
 
-**This is the next piece of work, and it is not M5's.** It closes no badge and belongs to no bay: it
-is the renderer, and it is here because it is decided, unbuilt and next.
+**This was the *Decided and not built* item and it is built**
+([ADR-0244](adr/0244-a-sub-pixel-primitive-is-drawn-at-one-pixel-and-compensated-in-the-alpha.md)).
+A sprite of side `s` pixels with `s < 1` produced no fragment unless its quad happened to cover a
+pixel centre, so a small target lost most of its material and lost it *arbitrarily* — measured,
+one sprite at the shipped default covered sixteen texels at 1280x720 and none at 128x72. It is now
+drawn at one pixel with the fragment's alpha multiplied by the coverage the floor took: `s²` for a
+sprite, `s` for a stroke, carried from the vertex stage as a flat varying. Exact under `additive`,
+approximate under `over`, and inert at or above a pixel — so no host-clock figure in this file was
+taken on material it touches.
 
-**A sprite smaller than a pixel mostly disappears.** A sprite of side `s` pixels with `s < 1`
-produces no fragment unless its quad happens to cover a pixel centre, so most of them are dropped by
-the rasteriser rather than drawn faintly. Measured: one sprite at the shipped default covers sixteen
-texels at 1280x720 and none at 128x72.
+**Two things it changed that are not the renderer.** `tests/deck.rs` argued that re-rendering into
+a preview cell is *cheaper and wrong*; the *wrong* was this defect, and the cost has moved with it
+— a 112x63 render went from 0.6x the whole 720p frame to 1.1x of it, measured as a pair on one
+machine and recorded in that file. And a `Points` procedure's fragment count no longer falls with
+the target's area all the way down: it bottoms out at one fragment per element, which is what the
+*preparation slot is the measurement* extrapolation below has to be read against.
 
-**The size is `point_rate`, and this roadmap has never named it.** An L4's `vertex` block must
-assign `point_rate`, which is the sprite's size — or a stroke's width — **as a fraction of the render
-target's height**, not a count of pixels; `docs/ir-spec.md` specifies it under *`point_rate` is a
-fraction of the target's height, and not a count of pixels*. It was called `point_size`, and a `.kir`
-still writing that name is refused by name with the new spelling. So `s` is `point_rate` times the
-target's height, which is why the same material behaves differently at two output sizes.
-
-**The fix is to draw it at one pixel and multiply the colour by `s²`.** One pixel is the smallest
-thing that can be drawn, and scaling the colour by the coverage it should have had preserves the
-integrated contribution rather than the peak.
-
-**Three qualifications, and each is a real limit.**
-
-- It is **exact under additive blending** and **approximate under `over`**. Adding light commutes
-  with scaling it; compositing does not.
-- **A stroke is one-dimensional**, so its factor is `s` and not `s²`. A segment that is thinner than
-  a pixel is short of coverage across its width only.
-- **The coverage is known in the vertex stage and the colour is written in the fragment stage**, so
-  the factor has to travel as a varying. That is a shape change to what codegen emits, not a constant
-  folded in.
-
-**This is not a preview feature.** The same sprites vanish on any low-resolution output today, and
-what a low-resolution output *is* has never been decided — see *The instrument has no resolution
-model*, below.
+**What it did not touch is the resolution model**, which is still the largest thing nobody has
+decided — below.
 
 ### The decisions nobody has taken
 
@@ -1047,6 +1034,16 @@ pixel count, so it scales with the target's area. A `Points` procedure is domina
 work, so it does not. `Lines` is unmeasured and its scaling is not known. (The maintainer says
 *segments*; the enum says `Lines`.)
 
+**The small draw has a floor under it now**, which cuts both ways for this.
+[ADR-0244](adr/0244-a-sub-pixel-primitive-is-drawn-at-one-pixel-and-compensated-in-the-alpha.md)
+holds a sub-pixel primitive to one fragment rather than dropping it, so a small target's picture is
+the same picture and the measurement is of the same material — which is the whole premise of
+measuring there. It also puts a floor under the *cost*: below the size at which sprites reach a
+pixel, a `Points` procedure costs one fragment per element whatever the target is, so a draw made
+smaller past that point stops getting cheaper and stops saying anything new. `tests/deck.rs`
+measures the pair: a 112x63 render of the panel's own material went from 0.6x the whole 720p frame
+to 1.1x of it.
+
 **Round the estimate toward refusing.** A show is cheaper to protect before it starts than to rescue
 during it.
 
@@ -1059,7 +1056,8 @@ target cheaply matters, and it is the premise the risk badge's bands are read ag
 ordinary state of good material precisely because two at 60 Hz is the ordinary case.
 
 **What is thin.** How small *small* is, what it is drawn into, and how the extrapolation's confidence
-is expressed are all unstated. So is what happens to a `Lines` slot, whose scaling nobody has
+is expressed are all unstated — and the floor above puts a bound on the first of them that nobody has
+yet turned into a number. So is what happens to a `Lines` slot, whose scaling nobody has
 measured. And every one of these numbers is read against a resolution nobody has chosen — see *The
 decisions nobody has taken*.
 
