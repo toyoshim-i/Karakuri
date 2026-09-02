@@ -247,7 +247,8 @@ column and are in no sub-milestone. The arena's insert and remove is above.
 **Rows.** No `plan` panel badge or key badge remains. The two key badges previously planned were
 resolved: *Put a deck on air, prime it, or take it off* retired its key shortcut in favor of mixer
 controls, and *Choose what the output shows* was retired as a redundant operation now that the four
-deck preview cells monitor channels independently while the central picture displays the mix (see
+deck preview cells monitor channels independently while the central picture displays the mix
+([ADR-0240](adr/0240-the-output-shows-the-mix-and-residency-keys-belong-to-the-mixer.md); see
 [docs/history/m5.md](history/m5.md)).
 
 **Exit.** No `plan` badge in the panel or key column of this bay's rows on
@@ -730,7 +731,8 @@ was settled by ADR-0239 (preserving operator preview size across arrangements, p
 at crossover 706px, and widening outer panes to 340px / 400px so standard windows open in Below
 placement). The two remaining key badges were resolved: *Put a deck on air* retired its shortcut
 in favor of mixer controls, and *Choose what the output shows* was retired as redundant with independent
-preview cells (see [docs/history/m5.md](history/m5.md)). What remains for M5.1 exit is condensing the
+preview cells ([ADR-0240](adr/0240-the-output-shows-the-mix-and-residency-keys-belong-to-the-mixer.md);
+see [docs/history/m5.md](history/m5.md)). What remains for M5.1 exit is condensing the
 bay's two tooltip notes. Nothing is blocked.
 
 **The order after M5.1 is the section above.** Work the sub-milestones top to bottom; each one

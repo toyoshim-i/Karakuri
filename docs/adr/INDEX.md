@@ -265,6 +265,7 @@ number; new records continue from the end.
 | [ADR-0237](0237-a-deck-slot-runs-from-its-own-copy-and-one-preset-in-four-slots-is-four-files.md) | A deck slot runs from its own copy, and one preset in four slots is four files | 2026-09-01 | accepted |
 | [ADR-0238](0238-which-cut-of-the-previous-frame-a-feedback-effect-reads-is-open-and-naming-one-recomposes-the-pipeline.md) | Which cut of the previous frame a feedback effect reads is open, and naming one recomposes the pipeline — records a question, takes no decision | 2026-09-01 | accepted |
 | [ADR-0239](0239-the-program-bay-preserves-preview-size-when-arranging-beside.md) | The Program bay preserves preview cell size when arranging beside | 2026-09-02 | accepted |
+| [ADR-0240](0240-the-output-shows-the-mix-and-residency-keys-belong-to-the-mixer.md) | The output shows the mix, and residency keys belong to the mixer | 2026-09-02 | accepted |
 
 ## Retired numbers
 
