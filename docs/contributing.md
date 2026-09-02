@@ -408,11 +408,71 @@ there, and the plan did not know any of it had happened.
 
 ---
 
-## 5. Verification Checklist for Code Changes
+## 5. Changing What an Operation Is, During M5
+
+§4 says how to record a decision. This says how to land one, for the kind of decision M5 is made
+of: an operation is added, retired, or its route to a surface changes.
+
+An operation exists in nine places. Change one and the suite goes red with a message naming the
+gap; change none of them and the record is a claim about a tree that does not match it. **Find all
+nine before editing any**, and work them in this order.
+
+**1. Find every site.** For an operation titled *T* with variant `V`:
+
+```sh
+grep -rn 'Operation::V' --include='*.rs' crates/     # every construction and match arm
+grep -n 'T' docs/manual/operations.html              # the row
+grep -rn 'T' docs/manual/console.html                # the control's tooltip and notes
+```
+
+**2. `docs/manual/operations.html` — the row.** Add it, delete it, or move its badges. The page is
+the specification, so it moves first. A badge is `has` only where a program a player runs reaches
+it today.
+
+**3. `docs/manual/console.html` — the control.** Its `data-tip`, and any note that names it. A
+control drawn in the mock with no operation behind it is a specification; a control the panel
+draws that the mock does not is a defect.
+
+**4. `crates/karakuri-operation/src/lib.rs` — the variant.** Its title string must equal the row's
+heading exactly. `the_manual_and_the_vocabulary_agree` compares them.
+
+**5. `crates/karakuri-operation/src/gate.rs` — the class.** The match is exhaustive with no
+wildcard arm, so a new variant does not compile until somebody says which class it is in.
+
+**6. `crates/karakuri-operation-record/src/lib.rs` — what it writes.** `Records`, `Silent` or
+`Owed`, each with its reason at the arm.
+
+**7. `crates/karakuri-store/src/record.rs` — the record**, if it writes one. A record is separate
+from an operation: a bay-internal act writes none, and one that a replay must reproduce does.
+
+**8. The surfaces that construct it.** `karakuri-console/src` for a press, `karakuri/src/main.rs`
+for a key and its `apply` arm, `karakuri-cli/src/main.rs` for a flag or key, `karakuri-midi/src/map.rs`
+for a target.
+
+**9. The tests that name it**, including the fixtures. A test whose only subject was the retired
+operation goes with it. A test weakened to pass is worse than a red one.
+
+**Then run the suite. Do not mark it done on red.** Four tests hold the two halves together and
+each reads in a different direction:
+
+- `karakuri-console/tests/panel_column.rs` — a control emits an operation with no row.
+- `karakuri-operation/tests/the_manual_and_the_vocabulary_agree.rs` — a row with no variant, or a
+  title that does not match.
+- `karakuri-console/tests/vocabulary.rs` — the console's own shape against its rows.
+- the `key_column` module in `karakuri/src/main.rs` — a key bound to a route the page calls unbuilt.
+
+**Then write the record's Consequences, and only then.** That section is read as a description of
+the tree. Check each clause against the file it names.
+
+---
+
+## 6. Verification Checklist for Code Changes
 
 Before marking a task or pull request as complete, ensure the following checklist is satisfied:
 
 - [ ] **A decision with a losing alternative has a record**: see §4. If nothing was decided, nothing is owed.
+- [ ] **An operation that changed landed in all nine places**: see §5, which lists them and the
+      order. A record claiming a deletion that did not happen is worse than no record.
 - [ ] **All workspace tests pass**: `cargo test --workspace` returns 0 — it costs about a minute, see §3.
 - [ ] **Formatting and lints pass**: `cargo fmt --all -- --check` and `cargo clippy --workspace --all-targets -- -D warnings`. The push hook enforces both, so a checklist without them is one you can satisfy and still be refused.
 - [ ] **Naga validation passes**: Any modifications to `karakuri-codegen` MUST be verified against `naga_test.rs` to guarantee generated WGSL text parses and validates cleanly.
@@ -422,7 +482,7 @@ Before marking a task or pull request as complete, ensure the following checklis
 
 ---
 
-## 6. Related Architecture & Specification Reference
+## 7. Related Architecture & Specification Reference
 
 - [architecture.md](architecture.md): Source code structure, multi-crate map, pipeline, and threading model
 - [ir-spec.md](ir-spec.md): `.kir` DSL specification and language invariants
