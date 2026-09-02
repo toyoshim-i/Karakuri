@@ -21,10 +21,10 @@
 // is the honest one: there is no direction to shade from, and inventing one
 // would be inventing the picture.
 //
-// **`point_size` is divided by clip-space w.** A constant pixel size makes the
-// far half of a receding sheet thin out into separate dots while the near half
-// overlaps into paste; dividing by w keeps roughly one sprite's worth of cover
-// per surface patch at every depth, which is what makes the plane read as
+// **`point_rate` is divided by clip-space w.** A constant on-screen size makes
+// the far half of a receding sheet thin out into separate dots while the near
+// half overlaps into paste; dividing by w keeps roughly one sprite's worth of
+// cover per surface patch at every depth, which is what makes the plane read as
 // continuous. The clip position is bound to a `let` first because a stage
 // output cannot be read back.
 
@@ -40,7 +40,7 @@ proc sheet_shade {
   // a million sprites is a fill-rate cost before it is anything else, and this
   // is the number that decides it. A Set at a lower capacity wants this higher
   // or the surface comes apart into dots.
-  param point_scale : float [0.5, 40.0] = 3.0
+  param point_scale : float [0.00069, 0.0556] = 0.00417
 
   // Where the key light is, in radians around the sheet. This is the fader to
   // ride: a whole revolution takes the picture from front-lit and flat, through
@@ -78,7 +78,7 @@ proc sheet_shade {
     // this renderer is fill-bound at the reference workload, and the default
     // below is chosen against that rather than against how solid the sheet
     // could be made to look.
-    point_size = clamp(point_scale * 4.0 / max(cp.w, 0.5), 1.0, 24.0);
+    point_rate = clamp(point_scale * 4.0 / max(cp.w, 0.5), 0.00139, 0.0333);
   }
 
   fragment {

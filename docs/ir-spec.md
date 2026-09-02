@@ -375,7 +375,7 @@ param <name> : <type> [<min>, <max>] = <default>
   the name.** Reserved in every layer: `id`, every attribute (`position`, `size`,
   `tint`, …) and every ambient (`seed`, `copy`, `point`, `t`, `beats`, `dt`, `capacity`,
   `camera`, `point_coord`, `eye`, `ray`). Reserved in the layer that *writes* it: a stage
-  output — `clip`, `clip_b`, `point_size` and `color` in an L4, `target`, `up`, `fov_y`,
+  output — `clip`, `clip_b`, `point_rate` and `color` in an L4, `target`, `up`, `fov_y`,
   `near` and `far` in an L3, `strength` in an L2's `mask`, `distance` in a `field`. So
   `param color : vec3` is accepted on an L1, which declares no `color` output, and refused
   on the L4 that would have to write one — the collision is with the *lowering's* name for
@@ -1106,7 +1106,7 @@ proc lens {
 
   vertex {
     clip       = view.clip * vec4(position, 1.0);
-    point_size = 4.0;
+    point_rate = 0.006;
   }
 
   fragment { color = vec4(1.0, 1.0, 1.0, 1.0); }
@@ -1461,14 +1461,52 @@ state. Reading one is a compile error.
 |---|---|---|---|
 | `clip` | `vec4` | vertex | clip-space position. A sprite's centre, or a segment's near end. Required *in a `vertex` block* |
 | `clip_b` | `vec4` | vertex | a segment's far end, in clip space. **Optional — assigning it is what makes the procedure draw lines** |
-| `point_size` | `float` | vertex | sprite size in pixels, or stroke width in pixels. Required *in a `vertex` block* |
+| `point_rate` | `float` | vertex | sprite size, or stroke width, **as a fraction of the render target's height**. Required *in a `vertex` block* |
 | `color` | `vec4` | fragment | linear RGB, straight alpha. Required |
 
 Each required output must be assigned on every path, under the same rule as emitted
 attributes. **A `vertex` block is itself optional**: an L4 without one draws the frame rather
-than an element, so `clip` and `point_size` are required of a block that exists rather than
+than an element, so `clip` and `point_rate` are required of a block that exists rather than
 of every L4. `color` is required unconditionally, because every renderer has a fragment
 stage.
+
+#### `point_rate` is a fraction of the target's height, and not a count of pixels
+
+**A sprite `point_rate` wide covers that fraction of the frame's height, at any render
+target size.** 0.05 is a twentieth of the frame's height whether the frame is 1280x720 or
+112x63. The sprite stays square: the same number of pixels goes across it as down it, so
+what the horizontal axis does is stretch the *frame* around the sprite rather than stretch
+the sprite.
+
+**Two reasons it is not pixels, and the second is the one that matters.**
+
+- **A procedure never sees the render target.** A `.kir` is written once and drawn at
+  whatever size the Set is drawn at — a full canvas, a preview cell, a capture at four
+  times the canvas — and it is given no way to ask which. A number in pixels is therefore a
+  number the author cannot make right, because the size it was right at is not in the file
+  and is not knowable from it. A fraction is right at every size by construction.
+- **A picture that changes with its target is not the same picture.** A slot rendered into
+  a small preview cell is meant to show what that slot looks like. Under a pixel size it
+  showed fatter sprites over a smaller frame, so the preview was not a preview of anything
+  — which is also why the same material measured *dearer* at a small target than a large
+  one: the fragment count stayed fixed while the framebuffer shrank, and the additive blend
+  serialised what landed in each texel.
+
+**The height, rather than the width or the diagonal**, because changing the aspect ratio
+must not resize a sprite. Widening a frame from 16:9 to 21:9 shows more of the scene at the
+sides; against the width it would also inflate every sprite in it, which is a second,
+unasked-for change to the picture. The height is the axis a wider frame leaves alone.
+
+The name follows the unit. `point_size` on a point sprite means pixels everywhere else in
+shader work, and a shader that used it would normally scale it against the screen itself.
+This language keeps the render size away from the procedure, so the spelling has to say the
+number is not a pixel count.
+
+**There is no reference resolution in this specification, and adding one would be a
+mistake.** A fraction needs no anchor to be meaningful; an anchor would only invite a
+procedure to be authored against it and then be wrong everywhere else. Converting an older
+`.kir` written in pixels is a division by the height that file was authored against, which
+is a fact about that file.
 
 ### How an L4 says what it draws
 
@@ -1495,8 +1533,8 @@ Under `lines`:
   segments meeting at an angle leave a wedge at the joint. Invisible on thin or densely
   sampled strokes, and the reason a heavy polyline wants its samples closer together rather
   than its width raised
-- **`point_size` is the width of the stroke in pixels**, uniform along it — the same number
-  and the same units a sprite's extent uses. A stroke that tapers takes its taper from the
+- **`point_rate` is the width of the stroke as a fraction of the target's height**, uniform
+  along it — the same number and the same unit a sprite's extent uses. A stroke that tapers takes its taper from the
   `fragment` block, or from consecutive elements carrying different widths
 - **`point_coord.x` runs along the segment** — 0 at `clip`, 1 at `clip_b` — and
   **`point_coord.y` runs across it**, 0 at one edge and 1 at the other. So a soft edge is
@@ -1569,14 +1607,14 @@ proc soft_points {
 
   consumes position, velocity, age
 
-  param point_scale : float [0.5, 40.0] = 6.0
+  param point_scale : float [0.00069, 0.0556] = 0.00833
   param hue         : float [0.0, 1.0]  = 0.6
   param exposure    : float [0.0, 8.0]  = 1.4
   param falloff     : float [0.5, 8.0]  = 2.0
 
   vertex {
     clip       = camera * vec4(position, 1.0);
-    point_size = point_scale * (0.3 + 0.7 * clamp(length(velocity) * 0.2, 0.0, 1.0));
+    point_rate = point_scale * (0.3 + 0.7 * clamp(length(velocity) * 0.2, 0.0, 1.0));
   }
 
   fragment {
@@ -1601,7 +1639,7 @@ proc soft_streaks {
 
   consumes position, velocity, age
 
-  param width    : float [0.5, 24.0] = 2.0
+  param width    : float [0.00069, 0.0333] = 0.00278
   param streak   : float [0.05, 2.0] = 0.8
   param exposure : float [0.0, 8.0]  = 0.5
   param falloff  : float [0.5, 8.0]  = 2.0
@@ -1609,7 +1647,7 @@ proc soft_streaks {
   vertex {
     clip       = camera * vec4(position, 1.0);
     clip_b     = camera * vec4(position - velocity * streak, 1.0);
-    point_size = width;
+    point_rate = width;
   }
 
   fragment {
@@ -1812,18 +1850,22 @@ disc_point(float, float) -> vec2
 - **`topology points` does not lower to `PrimitiveTopology::PointList`.** WebGPU has no
   point size — a point primitive is always one pixel — so each element expands into a quad:
   six vertices per instance, the corner in `@builtin(vertex_index)` and the element in
-  `@builtin(instance_index)`. `point_size` scales the quad in clip space so a sprite keeps
-  its pixel size at any depth, and `point_coord` falls out of the corner
+  `@builtin(instance_index)`. `point_rate` scales the quad in clip space so a sprite keeps
+  its size relative to the frame at any depth, and `point_coord` falls out of the corner.
+  The vertical offset is the rate itself, because NDC spans the target's height exactly; the
+  horizontal one carries the aspect ratio on top of it, which is what makes the sprite square
+  in pixels rather than square in NDC
 - **`topology lines` does not lower to `PrimitiveTopology::LineList` either**, and for the
   same reason: a line primitive is one pixel wide. It is the *same quad*, laid along the
   segment instead of around a point — six vertices per instance, one instance per element,
   a `TriangleList` pipeline, and the same indirect draw arguments. The topology costs the
   engine nothing; only where the corners land changes.
 
-  The placement happens **in pixels**, because that is the space `point_size` is given in:
-  both endpoints are divided through by `w`, the segment's direction and the perpendicular
-  the width is laid along are computed there, and the result is multiplied by `w` again so
-  the rasterizer's own divide returns the position computed here. That last multiply is what
+  The placement happens **in pixels**, because the segment's direction and the perpendicular
+  the width is laid along are properties of the projected picture: both endpoints are
+  divided through by `w`, the offset is computed there, and the result is multiplied by `w`
+  again so the rasterizer's own divide returns the position computed here. `point_rate` is
+  turned into pixels first, by multiplying by the target's height. That last multiply is what
   keeps the stroke straight on screen at any depth. Each of the six vertices belongs to one
   end of the segment and carries that end's `w` and that end's divided `z`; nothing is
   interpolated in the vertex stage, because the rasterizer is what interpolates.
@@ -1831,7 +1873,7 @@ disc_point(float, float) -> vec2
   **A segment with an endpoint behind the eye is dropped rather than clipped.** Doing it
   properly means intersecting the segment with the near plane; the rasterizer would have
   done that for free had the divide not already happened, and the divide is what makes a
-  width in pixels expressible at all. The honest failure is a missing stroke rather than one
+  width measured on the screen expressible at all. The honest failure is a missing stroke rather than one
   drawn through the camera. A zero-length segment needs no special case — both ends land on
   the same pixel and the quad is zero-area, which is what a guard would have arranged
 - L1 buffers are read as storage, indexed by `@builtin(instance_index)`, not as vertex
@@ -3474,7 +3516,7 @@ there is nothing to migrate, and a decoder meeting the key in an older file pass
 under the unknown-key rule stated above.
 
 **L4 is a measurement at reference conditions.** Point sprite cost is dominated by fill
-rate: `point_size` and resolution decide the overdraw, so it is not linear in element count
+rate: `point_rate` and resolution decide the overdraw, so it is not linear in element count
 and a per-element figure would be a fiction.
 
 ```ndjson

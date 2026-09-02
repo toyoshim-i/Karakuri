@@ -164,8 +164,9 @@
 //! warming: `Set::draw` is the raster half on its own and touches no state.
 //!
 //! It also removes a trap the reduced-resolution version carries: a Set primed at a
-//! reduced resolution is a Set whose L4 ran at a different `point_size`-to-pixel
-//! ratio, and if any of that ever fed back into state the primed result would
+//! reduced resolution is a Set whose L4 rasterised a different number of
+//! fragments per element — `point_rate` fixes a sprite's share of the frame,
+//! not its texel count — and if any of that ever fed back into state the primed result would
 //! not be the result of having been Live. Skipping the draw makes "primed for
 //! thirty frames, then Live" *identical* to "Live for thirty frames" rather
 //! than close to it, and `tests/priming.rs` asserts that bit for bit.

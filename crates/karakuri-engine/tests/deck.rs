@@ -92,7 +92,7 @@ proc soft_points {
 
   vertex {
     clip       = camera * vec4(position, 1.0);
-    point_size = 4.0;
+    point_rate = 0.015625;
   }
 
   fragment {
@@ -117,7 +117,7 @@ proc harder_points {
 
   vertex {
     clip       = camera * vec4(position, 1.0);
-    point_size = 2.0;
+    point_rate = 0.0078125;
   }
 
   fragment {
@@ -142,7 +142,7 @@ proc nan_points {
 
   vertex {
     clip       = camera * vec4(position, 1.0);
-    point_size = 4.0;
+    point_rate = 0.015625;
   }
 
   fragment {
@@ -172,7 +172,7 @@ proc opaque_card {
 
   vertex {
     clip       = camera * vec4(position, 1.0);
-    point_size = 48.0;
+    point_rate = 0.1875;
   }
 
   fragment {
@@ -195,7 +195,7 @@ proc wide_points {
 
   vertex {
     clip       = camera * vec4(position, 1.0);
-    point_size = 48.0;
+    point_rate = 0.1875;
   }
 
   fragment {
@@ -237,7 +237,7 @@ proc overdrawn_card {{
 
   vertex {{
     clip       = camera * vec4(position, 1.0);
-    point_size = 48.0;
+    point_rate = 0.1875;
   }}
 
   fragment {{
@@ -272,7 +272,10 @@ proc wash {
   vertex {
     let ignored = position;
     clip       = vec4(0.0, 0.0, 0.0, 1.0);
-    point_size = 128.0;
+    // Twice the frame's height, so one sprite covers a square target with
+    // margin to spare. `point_rate` is a fraction of the height, so this is
+    // the one fixture here whose number does not depend on [`MASK_SIZE`].
+    point_rate = 2.0;
   }
 
   fragment {
@@ -3271,14 +3274,22 @@ proc wash {
     /// not a box filter — and it does not read the 1.8 MB the source occupies:
     /// 7056 output texels at four taps is 28k taps, scattered.
     ///
-    /// **`point_size` is in pixels, so the small target does not have fewer
-    /// fragments either.** `karakuri-codegen`'s L4 expansion computes
-    /// `corner * _point_size / u.viewport * _clip.w`, which keeps a sprite the
-    /// same size in texels at any viewport. A 112x63 render of this material
-    /// rasterises about as many fragments as a 1280x720 one; what changes is
-    /// that they all land in 56 KB of framebuffer instead of 7.4 MB, blending
-    /// additively over each other. The size sweep at the end of the report is
-    /// there because that turned out to be the whole story.
+    /// **`point_rate` is a fraction of the target's height, so the small target
+    /// does have fewer fragments**, and this is the paragraph that used to say
+    /// the opposite. `karakuri-codegen`'s L4 expansion scales the quad by the
+    /// rate rather than by a pixel count, so a sprite is the same share of the
+    /// frame at every size and a 112x63 render rasterises roughly `(63/720)²`
+    /// of the fragments a 1280x720 one does. That is what turned the sweep
+    /// around: it used to climb as the target shrank and now climbs as the
+    /// target grows.
+    ///
+    /// **The sweep's lit-texel column is not the check for that**, and reading
+    /// it as one would be a mistake. At capacity 262144 the coverage saturates —
+    /// 231 points land on each lit texel at 112x63 — so the column reports the
+    /// material's silhouette rather than any sprite's extent, and it comes out
+    /// near 16% at every size for that reason. What a sprite's extent does at
+    /// two target sizes is asserted to the texel in `tests/lines.rs`, on one
+    /// element, where nothing saturates.
     ///
     /// Same method as its neighbour
     /// [`the_cost_of_a_slot_and_of_the_composite_are_measured_and_reported`]:
@@ -3291,7 +3302,9 @@ proc wash {
     ///   the order rotates.** Run as blocks, the first block measured a cold
     ///   GPU and the last a hot one: 1280x720 came out 9.3 ms as the first
     ///   block and 7.3 ms as the last, which is a quarter of the number and
-    ///   none of it the configuration.
+    ///   none of it the configuration. Those two figures are from the run that
+    ///   found the hazard, under the pixel-size semantics; the hazard is the
+    ///   point and it is not sensitive to either.
     /// - **each present writes into its own cell texture**, so "did this pass
     ///   write anything" can still be asked of each of them at the end. A
     ///   target that persists between frames is the hazard the pixel tests
@@ -3309,17 +3322,29 @@ proc wash {
     /// two threads and one GPU, and every number in both comes out about 40%
     /// high; `--test-threads=1`, or a name filter, is part of the method.
     ///
-    /// **What it found, so that the next reader need not run it**: the
-    /// downsample is a third of a millisecond and the stride costs nothing
-    /// measurable — 0.365 ms against 0.349 ms for the same present with no
-    /// scaling at all. Re-rendering into the cell is **dearer than rendering
-    /// the whole 1280x720 frame**, 17.5 ms against 9.3 ms, and the sweep says
-    /// why: the cost climbs monotonically as the target shrinks, because the
-    /// fragment count is fixed by `point_size` and a smaller target only means
-    /// more of them blending into each texel. That is a claim about point
-    /// sprites and not about every L4 — a fullscreen node such as
-    /// `examples/field_march.kir` has a fragment count that *is* the pixel
-    /// count, and nothing here measures one.
+    /// **What it found, so that the next reader need not run it.** The
+    /// downsample is under a millisecond net of the floor and the 11.4-texel
+    /// stride costs almost nothing — 0.883 ms against 0.805 ms for the same
+    /// present with no scaling at all.
+    ///
+    /// **The cost order reversed when `point_size` became `point_rate`.**
+    /// Re-rendering into the cell was 17.5 ms against 9.3 ms for the whole
+    /// 1280x720 frame; it is now 7.6 ms against 10.5 ms, and the sweep climbs
+    /// with the target rather than against it — 7.6, 8.4, 9.7, 10.1, 10.5 ms
+    /// across 112x63, 224x126, 448x252, 640x360 and 1280x720. The 1280x720
+    /// figure barely moved, which is what says the reversal is the semantics
+    /// and not the machine.
+    ///
+    /// **It is still the wrong way to fill a cell, for a different reason.** At
+    /// 112x63 this material's sprites are about a third of a pixel across and
+    /// most of them cover no pixel centre at all — see
+    /// `tests/lines.rs::a_sprite_below_a_texel_drops_out_rather_than_being_drawn_small`.
+    /// A cell has to be filled by downsampling the slot's own full-size target.
+    /// Cheaper and wrong is still wrong.
+    ///
+    /// All of that is a claim about point sprites and not about every L4 — a
+    /// fullscreen node such as `examples/field_march.kir` has a fragment count
+    /// that *is* the pixel count, and nothing here measures one.
     ///
     /// `#[ignore]`d for the same reason its neighbour is: capacity 262144,
     /// eleven configurations.
@@ -3613,7 +3638,7 @@ proc wash {
 
         eprintln!(
             "  the same Set and the same {CAP} points, target size swept — \
-             a smaller target is *dearer*:"
+             the cost follows the target, and the lit share does not:"
         );
         let sweep = [
             (
@@ -3644,8 +3669,10 @@ proc wash {
         ];
         for (w, h, ms, lit) in sweep {
             eprintln!(
-                "    {w:>4}x{h:<4} {ms:>7.3} ms   {lit} lit of {} — {:.0} points per lit texel",
+                "    {w:>4}x{h:<4} {ms:>7.3} ms   {lit} lit of {} ({:.1}% of the target) \
+                 — {:.0} points per lit texel",
                 w * h,
+                100.0 * f64::from(lit) / f64::from(w * h),
                 f64::from(CAP) / f64::from(lit.max(1)),
             );
         }

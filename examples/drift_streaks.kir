@@ -14,7 +14,7 @@
 // thin the population out and lengthen them:
 //
 //   karakuri-cli examples/drift_shell.kir examples/drift_streaks.kir \
-//     --capacity 16384 --param exposure=0.6 --param streak=1.2 --param width=1.6
+//     --capacity 16384 --param exposure=0.6 --param streak=1.2 --param width=0.00222
 //
 // **How an L4 says it draws lines.** It assigns `clip_b`, the far end of a
 // segment, alongside `clip`. There is no `topology` declaration on an L4 and
@@ -31,8 +31,8 @@
 // rain field), a point on a curve one step behind (a strand — see
 // `strand_shell.kir`), or the origin (a burst).
 //
-// **`point_size` is the width of the stroke in pixels**, the same number and
-// the same units a sprite's extent uses.
+// **`point_rate` is the width of the stroke as a fraction of the frame's
+// height**, the same number and the same unit a sprite's extent uses.
 //
 // **`streak` does not go to zero, and that is not a rounding of the range.** A
 // segment whose two ends coincide is zero-area and draws nothing, where a
@@ -55,7 +55,7 @@ proc drift_streaks {
 
   consumes position, velocity
 
-  param width    : float [0.5, 24.0] = 1.2
+  param width    : float [0.00069, 0.0333] = 0.00167
   param streak   : float [0.05, 2.0] = 0.70
   param hue      : float [0.0, 1.0]  = 0.55
   param spread   : float [0.0, 1.0]  = 0.30
@@ -76,7 +76,7 @@ proc drift_streaks {
 
     // Faster elements are drawn heavier, as in `soft_points` — the same
     // reading of `velocity`, applied to width instead of to extent.
-    point_size = width * (0.35 + 0.65 * clamp(length(velocity) * 0.6, 0.0, 1.0));
+    point_rate = width * (0.35 + 0.65 * clamp(length(velocity) * 0.6, 0.0, 1.0));
   }
 
   fragment {

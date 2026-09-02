@@ -511,7 +511,7 @@ proc soft_points {
 
   vertex {
     clip       = camera * vec4(position, 1.0);
-    point_size = 4.0;
+    point_rate = 0.015625;
   }
 
   fragment {
@@ -538,7 +538,7 @@ proc nan_points {
 
   vertex {
     clip       = camera * vec4(position, 1.0);
-    point_size = 4.0;
+    point_rate = 0.015625;
   }
 
   fragment {

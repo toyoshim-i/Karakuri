@@ -4831,7 +4831,7 @@ proc signed_defaults {
 
   vertex {
     clip       = camera * vec4(position, 1.0);
-    point_size = 1.0;
+    point_rate = 0.004;
   }
 
   fragment {
@@ -4899,7 +4899,7 @@ proc signed_defaults {
 
   vertex {
     clip       = camera * vec4(position, 1.0);
-    point_size = 1.0;
+    point_rate = 0.004;
   }
 
   fragment {
@@ -5085,7 +5085,7 @@ proc probe_l4 {
 
   vertex {
     clip       = camera * vec4(position, 1.0);
-    point_size = 1.0;
+    point_rate = 0.004;
   }
 
   fragment {
@@ -5165,7 +5165,7 @@ proc probe_shared_l4 {
 
   vertex {
     clip       = camera * vec4(position, 1.0);
-    point_size = radius;
+    point_rate = radius;
   }
 
   fragment {
@@ -5311,7 +5311,7 @@ proc dots {
 
   vertex {
     clip       = camera * vec4(position, 1.0);
-    point_size = 1.0;
+    point_rate = 0.004;
   }
 
   fragment {

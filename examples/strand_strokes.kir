@@ -23,7 +23,7 @@ proc strand_strokes {
 
   consumes position, velocity, age
 
-  param point_scale : float [0.5, 40.0] = 8.0
+  param point_scale : float [0.00069, 0.0556] = 0.0111
   param hue         : float [0.0, 1.0]  = 0.58
   param spread      : float [0.0, 1.0]  = 0.75
   param exposure    : float [0.0, 8.0]  = 0.55
@@ -37,7 +37,7 @@ proc strand_strokes {
     clip = camera * vec4(position, 1.0);
 
     // Constant along a strand, so the stroke keeps an even weight end to end.
-    point_size = point_scale * (1.0 - width_var + width_var * hash1(strand + 3u) * 2.0);
+    point_rate = point_scale * (1.0 - width_var + width_var * hash1(strand + 3u) * 2.0);
   }
 
   fragment {

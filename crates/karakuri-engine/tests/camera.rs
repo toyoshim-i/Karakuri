@@ -64,7 +64,7 @@ proc dot {
 
   vertex {
     clip       = camera * vec4(position, 1.0);
-    point_size = 3.0;
+    point_rate = 0.03125;
   }
 
   fragment {
@@ -337,7 +337,7 @@ proc gain_dot {
 
   vertex {
     clip       = camera * vec4(position, 1.0);
-    point_size = 3.0;
+    point_rate = 0.03125;
   }
 
   fragment {
@@ -573,7 +573,7 @@ proc mixed {
 
   vertex {
     clip       = camera * vec4(position, 1.0);
-    point_size = 3.0;
+    point_rate = 0.03125;
   }
 
   fragment {
@@ -639,7 +639,7 @@ proc {name} {{
 
   vertex {{
     clip       = view.clip * vec4(position, 1.0);
-    point_size = 3.0;
+    point_rate = 0.03125;
   }}
 
   fragment {{
@@ -661,7 +661,7 @@ proc plain {
 
   vertex {
     clip       = camera * vec4(position, 1.0);
-    point_size = 3.0;
+    point_rate = 0.03125;
   }
 
   fragment {

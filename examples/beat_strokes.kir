@@ -11,10 +11,10 @@
 // which runs 0 to 1 along the stroke. That interpolation varies per fragment. It
 // is a real screen position.
 //
-// Two things it is not. The across-stroke offset is left out, because converting
-// `point_size` from pixels to NDC needs a resolution nothing exposes — so the
-// position is right to within the width of a stroke, far finer than the bands
-// drawn with it. And **a fragment cannot displace itself**: moving pixels is a
+// Two things it is not. The across-stroke offset is left out, because turning
+// `point_rate` into an NDC offset sideways needs the target's aspect ratio, which
+// nothing exposes — so the position is right to within the width of a stroke, far
+// finer than the bands drawn with it. And **a fragment cannot displace itself**: moving pixels is a
 // vertex operation, so the slab shear stays in the L1. What the fragment can do
 // is everything on the colour side, which is most of what the look is made of.
 //
@@ -62,7 +62,7 @@ proc beat_strokes {
 
   consumes position, velocity, age
 
-  param width       : float [0.5, 24.0] = 1.6
+  param width       : float [0.00069, 0.0333] = 0.00222
   param exposure    : float [0.0, 8.0]  = 0.35
   param falloff     : float [0.5, 8.0]  = 2.0
 
@@ -106,9 +106,9 @@ proc beat_strokes {
 
     if seed < 65536u {
       let strand = seed / 128u;
-      point_size = width * (0.6 + 0.8 * hash1(strand + 3u)) * (1.0 + age);
+      point_rate = width * (0.6 + 0.8 * hash1(strand + 3u)) * (1.0 + age);
     } else {
-      point_size = width * spark_wide * (1.0 + age);
+      point_rate = width * spark_wide * (1.0 + age);
     }
   }
 

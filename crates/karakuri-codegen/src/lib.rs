@@ -579,7 +579,7 @@ mod tests {
 
     /// An L4 fixture matching the ir-spec's `soft_points` shape closely
     /// enough to exercise varying selection, `hsv_to_rgb`, and quad
-    /// expansion together: `vertex` writes `clip`/`point_size` from
+    /// expansion together: `vertex` writes `clip`/`point_rate` from
     /// `position`/`camera`; `fragment` reads `point_coord` and `seed`.
     fn l4_proc() -> Checked {
         let mut p = empty_checked("soft_points", Kind::L4);
@@ -609,14 +609,14 @@ mod tests {
             ),
             span: span(),
         };
-        let point_size = TStmt::Assign {
-            target: Target::Output(Output::PointSize),
-            value: lit_f(6.0),
+        let point_rate = TStmt::Assign {
+            target: Target::Output(Output::PointRate),
+            value: lit_f(0.008),
             span: span(),
         };
         let vertex = TBlock {
             kind: BlockKind::Vertex,
-            stmts: vec![clip, point_size],
+            stmts: vec![clip, point_rate],
             span: span(),
         };
 

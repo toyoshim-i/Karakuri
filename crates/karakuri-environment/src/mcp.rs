@@ -3112,11 +3112,15 @@ fn vocabulary() -> String {
 
     out.push_str(
         "\n# Stage outputs\n\nAssigned like attributes; reading one is an error. \
-                  `clip` and `point_size` are required in a `vertex` block, and `color` in a \
+                  `clip` and `point_rate` are required in a `vertex` block, and `color` in a \
                   `fragment` block, on every path through it — but **a `vertex` block is \
                   itself optional**, which is how an L4 says it draws the whole frame. \
                   `clip_b` is the one optional output, and assigning it on only some paths \
-                  is rejected.\n\n",
+                  is rejected.\n\n**`point_rate` is a fraction of the render target's \
+                  height, not a count of pixels.** A sprite at 0.005 is a two-hundredth of \
+                  the frame's height however large the frame is, and it is square in \
+                  pixels; under `lines` the same number is the stroke's width. Typical \
+                  values are thousandths, and 1.0 fills the frame.\n\n",
     );
     out.push_str("| name | type | block |\n|---|---|---|\n");
     for output in Output::ALL {
@@ -3209,7 +3213,7 @@ proc probe_l4 {
 
   vertex {
     clip       = camera * vec4(position, 1.0);
-    point_size = 2.0;
+    point_rate = 0.008;
   }
 
   fragment {
@@ -3302,7 +3306,7 @@ proc probe_l4_b {
 
   vertex {
     clip       = camera * vec4(position, 1.0);
-    point_size = 5.0;
+    point_rate = 0.02;
   }
 
   fragment {
@@ -5698,7 +5702,7 @@ mod tests {
             assert!(
                 karakuri_ir::parse(&format!(
                     "proc p {{ kind L4 blend {name} consumes position \
-                     vertex {{ clip = vec4(position, 1.0); point_size = 1.0; }} \
+                     vertex {{ clip = vec4(position, 1.0); point_rate = 0.004; }} \
                      fragment {{ color = vec4(1.0, 1.0, 1.0, 1.0); }} }}"
                 ))
                 .is_ok(),

@@ -57,14 +57,14 @@ proc soft_points {
 
   consumes position, velocity, age
 
-  param point_scale : float [0.5, 40.0] = 8.0
+  param point_scale : float [0.00195, 0.15625] = 0.03125
   param hue         : float [0.0, 1.0]  = 0.6
   param exposure    : float [0.0, 8.0]  = 1.4
   param falloff     : float [0.5, 8.0]  = 2.0
 
   vertex {
     clip       = camera * vec4(position, 1.0);
-    point_size = point_scale;
+    point_rate = point_scale;
   }
 
   fragment {
@@ -264,7 +264,7 @@ proc wants_shape {
 
   vertex {
     clip       = camera * vec4(position + normal * 0.0, 1.0);
-    point_size = 4.0 + uv.x * 0.0;
+    point_rate = 0.015625 + uv.x * 0.0;
   }
 
   fragment {
@@ -433,7 +433,7 @@ proc accumulate {
             &L4_UNSATISFIABLE
                 .replace("consumes position, normal, uv", "consumes position")
                 .replace("position + normal * 0.0", "position")
-                .replace("4.0 + uv.x * 0.0", "4.0"),
+                .replace("0.015625 + uv.x * 0.0", "0.015625"),
         );
 
         let result = Set::build(&gpu.device, &gpu.queue, &l1, &l4, u32::MAX, 1);
