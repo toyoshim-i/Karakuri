@@ -434,7 +434,11 @@ renderer row and *take back* each carry one, and the parameter rows and their fa
 
 **Blocked on.** The one row. No output has an identity anywhere in this workspace:
 `RouteFrame { output: Undecided }`, and deciding what names an output is the row's whole content
-rather than a payload it is missing. The bay draws its sinks and hit-tests the dot; what it owes is
+rather than a payload it is missing. **One field of it is decided**: an output holds the size it is
+rendered at, which the operator or the destination window sets
+([ADR-0246](adr/0246-the-render-size-belongs-to-the-output-and-the-sessions-canvas-is-only-its-default.md)).
+The first question that record leaves is this bay's: whether two outputs at two sizes cost two
+renders or one render scaled per output. The bay draws its sinks and hit-tests the dot; what it owes is
 the switchable list, which is the blocked part.
 
 **Also here.** A second `Sink`, which the estimate excluded from its range. The fan-out is built
@@ -847,47 +851,46 @@ machine and recorded in that file. And a `Points` procedure's fragment count no 
 the target's area all the way down: it bottoms out at one fragment per element, which is what the
 *preparation slot is the measurement* extrapolation below has to be read against.
 
-**What it did not touch is the canvas**, and looking for what it was waiting on is what found that
-the resolution model is not missing — it is ADR-0077's, and the panel is the surface that never got
-it. See *The decisions nobody has taken*, below, where that bullet is corrected.
+**What it did not touch is the canvas, and it is what unblocked it.** Looking for what the canvas
+was waiting on found that the model was not missing but four weeks old, and that its one restrictive
+clause — *the window gets no vote* — rested on the picture depending on the render size, which this
+work and `point_rate` between them removed. The size now belongs to the output
+([ADR-0246](adr/0246-the-render-size-belongs-to-the-output-and-the-sessions-canvas-is-only-its-default.md)),
+and what made that safe is a rule:
+[P-0081](principles/0081-the-render-size-is-not-part-of-the-picture.md), *The render size is not
+part of the picture*.
 
 ### The decisions nobody has taken
 
 Four, each with what it blocks. Every one was found by building the thing next to it.
 *What the deck A preview cell is showing* was one and is answered in the M5.1 paragraph above.
 
-- **What names an output — and the panel's canvas, which is a different question that was filed
-  as the same one.** *Corrected 2026-09-02.* This bullet read **the instrument has no resolution
-  model**. It has one, and it is four weeks old:
-  [ADR-0077](adr/0077-the-canvas-belongs-to-the-session-and-the-window-gets-no-vote.md) makes the
-  canvas a **session control** that defaults to 1920×1080 and flows as a record, so a replay draws
-  at the size it was performed at and the window gets no vote — P-0028's *every control ends in the
-  same record*, applied to the drawing size. `karakuri-cli` implements all of it, down to refusing
-  `--size` as a way to say it and refusing a canvas the GPU cannot make a texture of, by name. What
-  is actually open splits in two, and only the second half is a decision.
-
-  **The panel never inherited it, and its own doc says why.**
-  `crates/karakuri/src/main.rs` renders at `const CANVAS: (u32, u32) = (1280, 720)` with no flag to
-  change it, because that is the workspace's reference workload and a number taken in the panel can
-  then be put beside every other number in this repository. That is a measuring harness's reason
-  living inside the instrument, and it is why the console page's mock draws a `1920×1080` size pill
-  over a program that renders 1280x720 — a disagreement the manual wins, since the manual is what
-  changes last. **Every cost figure in this file was measured at that constant**, and the maintainer
-  has said 720p is an unrealistically low resolution for a venue. What is owed is ADR-0077 reaching
-  the panel, with `--canvas 1280x720` typed by whoever wants the reference workload: **a surface
-  that is missing a decision rather than a decision that is missing**, and not blocked on anything.
-  The one judgement inside it is whether the panel's default moves to 1920×1080 with the rest of
-  ADR-0077, which changes what every panel measurement costs.
-
-  **No output has an identity, and that half is genuinely undecided.** `Operation::RouteFrame`
-  carries `output: Undecided`, and the console page's Outputs row already sketches what the
+- **What names an output.** `Operation::RouteFrame` carries `output: Undecided`, and no output has
+  an identity anywhere in the workspace. The console page's Outputs row already sketches what the
   identities look like — *program view*, *projector · DELL U2720Q*, *Syphon*, *NDI · no plugin*, and
   `+ add output` — without saying what a payload holds for each, or what distinguishes a sink this
-  repository owns from one a plugin brings.
-  [ADR-0243](adr/0243-the-program-picture-is-an-output-and-the-four-cells-are-monitors.md) is the one
-  constraint on record: the picture is in the set that needs naming and a preview cell is not.
-  **What it blocks**: M5.6, which cannot name an output without saying what an output is. The risk
-  badge's five bands and the whole-frame budget below wait on the canvas half, not on this one.
+  repository owns from one a plugin brings. Two constraints are on record:
+  [ADR-0243](adr/0243-the-program-picture-is-an-output-and-the-four-cells-are-monitors.md) — the
+  picture is in the set that needs naming and a preview cell is not — and
+  [ADR-0246](adr/0246-the-render-size-belongs-to-the-output-and-the-sessions-canvas-is-only-its-default.md),
+  which puts **the render size** among the fields an identity carries. **What it blocks**: M5.6.
+
+  *This bullet read **the instrument has no resolution model** until 2026-09-02, and that was two
+  questions filed as one.* The model was
+  [ADR-0077](adr/0077-the-canvas-belongs-to-the-session-and-the-window-gets-no-vote.md)'s and four
+  weeks old; what was open in it was one clause, *the window gets no vote*, which held only while
+  the picture depended on the render size. `point_rate` and the sub-pixel floor removed that, and
+  ADR-0246 gives the size to the output with
+  [P-0081](principles/0081-the-render-size-is-not-part-of-the-picture.md) as what keeps it safe. So
+  the risk badge's five bands and the whole-frame budget below are **not** waiting on a decision:
+  they are waiting on an output to have a size, which is M5.6's to build. What remains genuinely
+  undecided is the paragraph above.
+
+  **`crates/karakuri/src/main.rs` still renders at `const CANVAS: (u32, u32) = (1280, 720)`** with no
+  flag, and its own doc says why: it is the workspace's reference workload, so a number taken in the
+  panel sits beside every other number in this repository. **Every cost figure in this file was
+  measured at that constant.** That is a measuring harness's default standing in for an instrument's,
+  and what replaces it is an output's size, with whoever wants the reference workload typing it.
 
 - **Which cut of the previous frame a feedback effect reads, and what holding it costs.** The
   previous frame is not one thing. It could be a Set's output, the raw frame the mix wrote before
@@ -1083,8 +1086,10 @@ ordinary state of good material precisely because two at 60 Hz is the ordinary c
 **What is thin.** How small *small* is, what it is drawn into, and how the extrapolation's confidence
 is expressed are all unstated — and the floor above puts a bound on the first of them that nobody has
 yet turned into a number. So is what happens to a `Lines` slot, whose scaling nobody has
-measured. And every one of these numbers is read against a resolution nobody has chosen — see *The
-decisions nobody has taken*.
+measured. And every one of these numbers was taken at a resolution nobody chose — the panel's
+`CANVAS` constant. What replaces it is the output's own size
+([ADR-0246](adr/0246-the-render-size-belongs-to-the-output-and-the-sessions-canvas-is-only-its-default.md)),
+which makes an extrapolation a per-output question rather than a global one.
 
 #### What a machine's size is allowed to decide
 
