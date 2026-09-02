@@ -106,13 +106,12 @@ its target only under an audition nothing could switch on, so *whatever its resi
 this rule turns on — was met by no surface at all. The reason given for the gate was that an off-air
 slot has nothing new in its view, which was true only because the engine refused to draw one.
 
-**It is being removed as this is written.** `Deck` draws every slot into its own target on every
-frame and the field that chose one is gone (`crates/karakuri-engine/src/deck.rs`); `Engine::aim` asks
-whether there is a slot behind the cell rather than whether it is Live. What is left is the surface's
-own account of itself: `crates/karakuri/src/main.rs` still carries the struct doc saying a cell is
-drawn only while its deck is Live and that three cells reading `off` are the truth about the program
-rather than a gap in it, and `crates/karakuri-console/src/view.rs` still takes the word `off` for an
-unlit cell from a mock that no longer draws one. **A surface that draws the right thing and says it
-draws the old thing has not finished meeting this rule**
+**The residency gate is gone.** `Deck` draws every slot into its own target on every frame and the
+field that chose one is deleted (`crates/karakuri-engine/src/deck.rs`); `Engine::aim` asks whether
+there is a slot behind the cell rather than whether it is Live. The console's cell no longer says
+`off` either: `state_word` answers `material` or `no slot`, which is what the code distinguishes.
+The prose in `crates/karakuri/src/main.rs` that described the old behaviour was corrected on
+2026-09-02. **A surface that draws the right thing and says it draws the old thing has not finished
+meeting this rule**
 ([P-0023](0023-a-document-that-describes-replaced-behaviour-is-worse-than-none.md)), and the rejected
 build's cell — black, or what went wrong — is owed on top of it.

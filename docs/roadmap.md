@@ -158,10 +158,11 @@ transcribes.
 ([ADR-0235](adr/0235-mcp-reaches-every-operation-and-what-could-stop-the-show-is-refused-until-the-operator-opens-it.md)).
 `gate` is the audit and the one place the split lives, with no wildcard arm, so a new operation
 stops the build until somebody says which class it is in; an opening is map configuration rather
-than an operation of its own (ADR-0236). Nothing in `crates/karakuri` serves MCP yet, so the
-panel's pills write into an `Opening` only that program reads back, and four switches do not
-cover every closed row — the clock's, the sequencer's, `Quit`, *Select a deck* and rule 06's
-authority belong to no class.
+than an operation of its own (ADR-0236). **`crates/karakuri` serves MCP**, on `--mcp PORT`, and it
+hands `karakuri_environment::mcp::serve` the same `Opening` the four bay-head pills write — so a
+pill opens a class the server reads on the next call rather than one only the panel sees. Four
+switches still do not cover every closed row: the clock's, the sequencer's, `Quit`, *Select a deck*
+and rule 06's authority belong to no class.
 
 **Five operations are named and left `Undecided`**: moving a boundary, choosing where the frame
 goes, walking the edit history, *edit the file instead*, and the camera. Where each sits in the
@@ -246,25 +247,46 @@ column and are in no sub-milestone. The arena's insert and remove is above.
 
 **Rows.** No `plan` panel badge or key badge remains. The two key badges previously planned were
 resolved: *Put a deck on air, prime it, or take it off* retired its key shortcut in favor of mixer
-controls, and *Choose what the output shows* was retired as a redundant operation now that the four
-deck preview cells monitor channels independently while the central picture displays the mix
+controls, and *Choose what the output shows* was retired
 ([ADR-0240](adr/0240-the-output-shows-the-mix-and-residency-keys-belong-to-the-mixer.md); see
-[docs/history/m5.md](history/m5.md)).
+[docs/history/m5.md](history/m5.md)). **The reason ADR-0240 gave for that retirement is not the
+reason.** It said redundancy with the four cells.
+[ADR-0243](adr/0243-the-program-picture-is-an-output-and-the-four-cells-are-monitors.md) settles the
+model: the picture is one of the outputs, so once material is on it, it is the broadcast of the
+final result and never a preview of anything; the four cells are monitors, each welded to the letter
+under it, and nothing routes one. An operation that pointed the output at a deck was wrong from the
+start rather than made redundant. `Operation::RouteFrame` names the picture and can never name a
+cell, which is one more constraint on M5.6's naming question.
 
 **Exit.** No `plan` badge in the panel or key column of this bay's rows on
 [every operation](manual/operations.html).
 
-**Blocked on.** Nothing. All panel and key rows are clear. What remains is condensing the bay's
-two tooltip notes.
+**Blocked on.** Nothing. All panel and key rows are clear, and what remains for the exit is
+condensing the bay's tooltip notes. The bay draws one thing less than the mock does, and it is not a
+badge and does not block the exit — see the risk badge, below.
 
-**The bay's prose, as tooltips.** Two notes. *Program, sized by height* is the height drag and the
-letterbox, the picture being the `program view` sink and on screen exactly when that sink is on, and
-why the picture carries no label of its own. *What a model is refused, and where a class opens* is
-the `mcp` pill: what a shut class refuses, that the call is answered rather than hidden, and that
-the pill says the word and is drawn armed. The mock tips `solo`, `mcp · shut` and `previews 2 of 4`
-already; the size pill, the picture and the four preview cells carry none. That second note also
-covers the pills in the Mixer's, the Master's and the Outputs' heads, so it is written here once and
-the other three bays take it as it stands.
+**A cell's letter and state are outside the image.** Each cell is an image with a caption band under
+it: the deck's letter, one word for what the cell is showing — `material`, or `no slot` — and a
+place kept for the risk badge. `karakuri-console`'s `caption_of` derives the band from the image
+rectangle rather than taking it beside one, so `preview_rects`, which is what the engine sizes a
+texture from, stays the image and never the image plus its label.
+
+**The risk badge is not drawn, and it is not a drawing that is owed.** Its five bands are specified
+in [the console page](manual/console.html), under *What a deck preview cell shows, and when* and on
+deck A's caption tooltip; the panel draws no dot because nothing in this workspace estimates what a
+slot costs. What would produce that estimate is under *Performance discipline*, below.
+
+**The bay's prose, as tooltips.** Three notes now. *Program, sized by height* is the height drag and
+the letterbox, the picture being the `program view` sink and on screen exactly when that sink is on,
+and why the picture carries no label of its own. *What a deck preview cell shows, and when* is the
+cell: its slot's own material with no fader in it, that residency does not gate it, the caption's
+three parts, which nothing a cell can be showing is *off*, and the five bands. *What a model is
+refused, and where a class opens* is the `mcp` pill: what a shut class refuses, that the call is
+answered rather than hidden, and that the pill says the word and is drawn armed. The mock tips
+`solo`, `mcp · shut`, `previews 3 of 4` and all four cells and their captions already; the size pill
+and the picture carry none. So the second note is largely condensed and the other two are not. That last
+note also covers the pills in the Mixer's, the Master's and the Outputs' heads, so it is written
+here once and the other three bays take it as it stands.
 
 #### M5.2 — Mixer
 
@@ -537,10 +559,24 @@ an MCP route today and the rest carry a `plan` badge.
 
 **Exit.** No `plan` badge in the MCP column of [every operation](manual/operations.html).
 
-**Blocked on.** The bays above, and nothing else. MCP names its operations and performs them itself
-([ADR-0199](adr/0199-mcp-names-its-operations-and-performs-them-itself.md)), so the mechanism is
-settled; a row whose operation the engine cannot yet perform has nothing for MCP to route to. MCP is
-a mouth rather than the control stick, so it follows the bays rather than being spread through them.
+**The server exists in the instrument**, which is a change to what this sub-milestone is. `karakuri
+--mcp PORT` runs `karakuri_environment::mcp::serve` against the panel's own `Opening` and publishes
+seven tools, so the mechanism
+([ADR-0199](adr/0199-mcp-names-its-operations-and-performs-them-itself.md)) is not only settled, it
+is running. **What is left here is two things
+rather than the server**: the audit's surface, and the operations the panel does not reach.
+
+**The audit's surface.** `gate` is the audit and has no wildcard arm, so a new operation stops the
+build until it is classed (ADR-0235, ADR-0236). The console draws four class pills. Four switches do
+not cover every closed row — the clock's, the sequencer's, `Quit`, *Select a deck* and rule 06's
+authority belong to no class — and an opening is map configuration rather than an operation, so
+whether a press covers a class or one operation of it, whether an opening outlives a restart, and
+whether an open class shuts itself are open ([the console page](manual/console.html), *What a model
+is refused, and where a class opens*).
+
+**Blocked on.** The bays above, for the rest. A row whose operation the engine cannot yet perform has
+nothing for MCP to route to. MCP is a mouth rather than the control stick, so it follows the bays
+rather than being spread through them.
 
 #### M5.11 — Hover tooltips
 
@@ -730,34 +766,116 @@ panel or key badges on [every operation](manual/operations.html). The preview si
 was settled by ADR-0239 (preserving operator preview size across arrangements, pure area comparison
 at crossover 706px, and widening outer panes to 340px / 400px so standard windows open in Below
 placement). The two remaining key badges were resolved: *Put a deck on air* retired its shortcut
-in favor of mixer controls, and *Choose what the output shows* was retired as redundant with independent
-preview cells ([ADR-0240](adr/0240-the-output-shows-the-mix-and-residency-keys-belong-to-the-mixer.md);
-see [docs/history/m5.md](history/m5.md)). **That answered what the deck A preview cell shows**, which
+in favor of mixer controls, and *Choose what the output shows* was retired
+([ADR-0240](adr/0240-the-output-shows-the-mix-and-residency-keys-belong-to-the-mixer.md); see
+[docs/history/m5.md](history/m5.md)) — for redundancy with the cells, which
+[ADR-0243](adr/0243-the-program-picture-is-an-output-and-the-four-cells-are-monitors.md) has since
+corrected to the operation having been wrong from the start. **That answered what the deck A preview cell shows**, which
 was one of the decisions nobody had taken: the panel aims **a sink per cell**, each presented from
-`Deck::slot_view` for the slot it is lettered for and aimed while that deck is Live, so no cell can
-show another deck's material under the wrong letter. `Deck::set_preview` and `Deck::preview` are
-**deleted** — that question is answered, in
+`Deck::slot_view` for the slot it is lettered for, so no cell can show another deck's material under
+the wrong letter. `Deck::set_preview` and `Deck::preview` are **deleted** — that question is
+answered, in
 [ADR-0241](adr/0241-auditioning-survives-the-control-that-was-retired-and-is-re-recorded-as-a-property.md),
 which also retired P-0070 and re-recorded the requirement as
 [P-0080](principles/0080-an-operator-can-see-a-slots-own-material-without-putting-it-on-air.md),
-*An operator can see a slot's own material without putting it on air*. **It leaves two gaps and they
-are owed rather than decided**: `karakuri-cli` has one window and no cells, so it can no longer
-audition a slot at all; and a cell is aimed only while its deck is Live, so an operator still cannot
-look at a warming or parked candidate on any surface. Both are written into P-0080's *Where it is not
-met*, and the engine's draw path for an off-air slot is kept, unreachable, for whoever closes the
-second. Neither blocks M5.1: what remains for its exit is condensing the bay's two tooltip notes.
+*An operator can see a slot's own material without putting it on air*.
 
-**The order after M5.1 is the section above.** Work the sub-milestones top to bottom; each one
-names its own rows, its exit condition and its blockers. Run the fourth command beside them: a
-`plan` badge does not distinguish a drawing that is owed from a machine that is missing, and a row
-has already been picked up as the first while being the second. **Master and Sequencer stay last
-for machinery rather than for drawing.**
+**Residency does not gate a cell, and the two gaps that paragraph used to name are gone.** `Deck`
+draws every slot into its own target on every frame, whatever its residency, and the field that
+chose one slot is deleted (`crates/karakuri-engine/src/deck.rs`). `Engine::aim` asks whether there
+is a slot behind the cell — `slot_bind_groups[slot]`, which is `None` past `slot_count` — and never
+what that slot's residency is (`crates/karakuri/src/main.rs`). That closes the second gap. The
+first, that `karakuri-cli` cannot audition a slot, is not a gap:
+[ADR-0242](adr/0242-the-command-line-is-test-tooling-and-the-instruments-principles-do-not-bind-it.md)
+makes the command line test tooling and scopes it out of the instrument's principles, so a rule
+written for the person playing the instrument does not reach it. **What P-0080 still records under
+*Where it is not met* is prose rather than behaviour.** `crates/karakuri/src/main.rs` carries a
+module header and two constant docs that still say a cell is drawn only for a Live deck and that
+three slots are neither stepping nor drawn — its *Three of the four preview cells are off at a time*
+paragraph, and the docs on `ON_AIR` and on the deck's fullness. That is
+[P-0023](principles/0023-a-document-that-describes-replaced-behaviour-is-worse-than-none.md), and it
+is the program narrating behaviour it no longer has. The rejected build's cell — black, or the
+sentence saying what went wrong — is owed on top of it.
+
+**The panel serves MCP.** `karakuri --mcp PORT` binds `127.0.0.1:PORT` and runs
+`karakuri_environment::mcp::serve` with the same `Opening` the four bay-head pills write, so a pill
+opens a class the server reads on the next call. Seven tools: `read_procedure`, `write_procedure`,
+`wire_input`, `swap_outcome`, `save_set`, `read_set` and `list_sets`. The last three came with a
+**save path this program did not have** — `Live::save_set`, which is the one place a Set is written
+here and where the `k` key, the MCP tool and whatever control the Library bay grows all end. The
+server addresses each deck's working copies rather than the paths the operator typed, so a model
+cannot rewrite the preset library, and there is no bind option: reaching it from another machine is
+`ssh -L`. **This changes what M5.10 has left** — see that sub-milestone.
+
+**A cell's letter and state are outside the image**, in a caption band under it, with a place kept
+for a risk badge that is not drawn. And
+[ADR-0243](adr/0243-the-program-picture-is-an-output-and-the-four-cells-are-monitors.md) settles the
+bay's model: the picture is one of the outputs and is in the set `Operation::RouteFrame` has to
+name; the four cells are monitors and are not outputs at all. Both are M5.1's, above.
+
+**Nothing above blocks M5.1**: what remains for its exit is condensing the bay's tooltip notes.
+
+**The fate of `karakuri-cli` is open.** The recommendation on record is to shrink it as each M5.x
+moves its features to the panel, rather than delete it; ADR-0242 says deleting it is out of that
+record's scope.
+
+**The order after M5.1 is the sub-milestone list above.** Work them top to bottom; each one names
+its own rows, its exit condition and its blockers. Run the fourth command beside them: a `plan`
+badge does not distinguish a drawing that is owed from a machine that is missing, and a row has
+already been picked up as the first while being the second. **Master and Sequencer stay last for
+machinery rather than for drawing.**
+
+### Decided and not built: a sub-pixel sprite is rounded up and compensated in colour
+
+**This is the next piece of work, and it is not M5's.** It closes no badge and belongs to no bay: it
+is the renderer, and it is here because it is decided, unbuilt and next.
+
+**A sprite smaller than a pixel mostly disappears.** A sprite of side `s` pixels with `s < 1`
+produces no fragment unless its quad happens to cover a pixel centre, so most of them are dropped by
+the rasteriser rather than drawn faintly. Measured: one sprite at the shipped default covers sixteen
+texels at 1280x720 and none at 128x72.
+
+**The size is `point_rate`, and this roadmap has never named it.** An L4's `vertex` block must
+assign `point_rate`, which is the sprite's size — or a stroke's width — **as a fraction of the render
+target's height**, not a count of pixels; `docs/ir-spec.md` specifies it under *`point_rate` is a
+fraction of the target's height, and not a count of pixels*. It was called `point_size`, and a `.kir`
+still writing that name is refused by name with the new spelling. So `s` is `point_rate` times the
+target's height, which is why the same material behaves differently at two output sizes.
+
+**The fix is to draw it at one pixel and multiply the colour by `s²`.** One pixel is the smallest
+thing that can be drawn, and scaling the colour by the coverage it should have had preserves the
+integrated contribution rather than the peak.
+
+**Three qualifications, and each is a real limit.**
+
+- It is **exact under additive blending** and **approximate under `over`**. Adding light commutes
+  with scaling it; compositing does not.
+- **A stroke is one-dimensional**, so its factor is `s` and not `s²`. A segment that is thinner than
+  a pixel is short of coverage across its width only.
+- **The coverage is known in the vertex stage and the colour is written in the fragment stage**, so
+  the factor has to travel as a varying. That is a shape change to what codegen emits, not a constant
+  folded in.
+
+**This is not a preview feature.** The same sprites vanish on any low-resolution output today, and
+what a low-resolution output *is* has never been decided — see *The instrument has no resolution
+model*, below.
 
 ### The decisions nobody has taken
 
-Three, each with what it blocks. Every one was found by building the thing next to it.
-There were four: *what the deck A preview cell is showing* is answered in the M5.1
-paragraph and is no longer one of them.
+Four, each with what it blocks. Every one was found by building the thing next to it.
+*What the deck A preview cell is showing* was one and is answered in the M5.1 paragraph above.
+
+- **The instrument has no resolution model, and this is the denominator every budget number
+  depends on.** `crates/karakuri/src/main.rs` renders at `const CANVAS: (u32, u32) = (1280, 720)` —
+  a constant, unrelated to the window and to any output. `karakuri-cli` has `--canvas`; the panel has
+  no way to say it at all. No output has an identity anywhere in the workspace either, which is why
+  `Operation::RouteFrame` carries `output: Undecided` and why the console page's own mock draws a
+  size pill reading `1920×1080` over a program that renders 1280x720. **Every cost figure in this
+  file was measured at that constant**, and the maintainer has said 720p is an unrealistically low
+  resolution for a venue — so every band, budget and refusal in this project is calibrated against a
+  number nobody chose. **What it blocks**: the risk badge's five bands, the whole-frame budget below,
+  and M5.6, which cannot name an output without saying what an output is. It is not blocked on
+  anything itself.
 
 - **Which cut of the previous frame a feedback effect reads, and what holding it costs.** The
   previous frame is not one thing. It could be a Set's output, the raw frame the mix wrote before
@@ -893,6 +1011,57 @@ A number measured here is a number from a rich machine: it bounds nothing.
 machines with different thermal limits and different memory, and the second one is the one
 that matters — rehearsal and the night itself run on the same box, and which box that is
 belongs to whoever is playing.
+
+#### The budget is measured over one slot, and it has to be measured over the frame
+
+**Decided, not built.** `Deck::govern` builds its `SlotState` list from `swap.measured_cost()`, which
+is one slot's Set measured on its own. Nothing measures the composite, the present passes or the
+panel, so the number the governor decides on is not the number the frame costs.
+
+**The failure is silence rather than slowness.** Four slots at 262144 elements measured about 10 ms
+a frame and registered as no violation at all. The maintainer's point: the problem is not that it is
+slow, it is that it is not detected.
+
+**What must not be done about an over-budget slot.** Forcing it to keep drawing, or lowering the
+frame rate to fit it, confuses the means with the end — the frame rate is what the show is played at,
+not a dial to spend. **A slot over budget is stopped.** That is the last of the risk badge's five
+bands and the one that is also a behaviour ([the console page](manual/console.html), *What a deck
+preview cell shows, and when*).
+
+**What is thin.** What the whole-frame measurement is taken *with* is not settled — the probe
+measures a Set, and a frame is passes this project has never timed together. The instrument question
+[P-0012](principles/0012-a-measurement-carries-how-it-was-taken.md) asks of any number applies to
+this one and has no answer yet.
+
+#### The preparation slot is the measurement
+
+**Decided, not built, and it is what would produce the risk badge's estimate.** Today a reference
+measurement is the hint that admits a Set into a slot at all. The slot is then **drawn small while it
+prepares**, and that small draw is a second measurement — a higher-confidence estimate of what the
+same material costs at full size, on this machine, in this environment, rather than a number carried
+from elsewhere.
+
+**`Topology` decides the extrapolation, and it is known at compile time.**
+`karakuri_ir::ast::Topology` is `Points | Lines | Fullscreen`. A `Fullscreen` procedure's cost is the
+pixel count, so it scales with the target's area. A `Points` procedure is dominated by primitive
+work, so it does not. `Lines` is unmeasured and its scaling is not known. (The maintainer says
+*segments*; the enum says `Lines`.)
+
+**Round the estimate toward refusing.** A show is cheaper to protect before it starts than to rescue
+during it.
+
+**`Priming` gains a second meaning.** It already means warming buffers
+([ADR-0053](adr/0053-priming-runs-the-simulation-and-skips-rendering.md)); this makes it also mean
+measuring.
+
+**Two slots live and two preparing is the standard way of working.** That is why drawing a small
+target cheaply matters, and it is the premise the risk badge's bands are read against — *blue* is the
+ordinary state of good material precisely because two at 60 Hz is the ordinary case.
+
+**What is thin.** How small *small* is, what it is drawn into, and how the extrapolation's confidence
+is expressed are all unstated. So is what happens to a `Lines` slot, whose scaling nobody has
+measured. And every one of these numbers is read against a resolution nobody has chosen — see *The
+decisions nobody has taken*.
 
 #### What a machine's size is allowed to decide
 
