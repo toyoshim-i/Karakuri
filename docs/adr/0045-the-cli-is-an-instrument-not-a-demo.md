@@ -11,6 +11,16 @@ tags: [ui, process]
 
 # The CLI is an instrument, not a demo
 
+> **Annotated 2026-09-02.** **The word *instrument* in this title is retired**; what this record
+> decided is not. `karakuri-cli` is test tooling — a way to drive the engine, watch a file and record
+> a session — and the instrument is `crates/karakuri`, the console
+> ([ADR-0242](0242-the-command-line-is-test-tooling-and-the-instruments-principles-do-not-bind-it.md),
+> which is the separate decision
+> [ADR-0220](0220-the-key-column-is-the-instruments-keyboard-and-the-clis-keys-are-its-own.md) said
+> was owed). The alternative beaten below was a window that opens and cannot be touched, and every
+> observation listed here still holds: driving it is what found the off-by-one, and each key still
+> prints what it did.
+
 ## Context
 
 The deck existed in the engine and nothing could drive it. The brief for wiring it up carried two

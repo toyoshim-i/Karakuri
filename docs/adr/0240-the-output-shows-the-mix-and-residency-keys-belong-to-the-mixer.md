@@ -25,6 +25,25 @@ tags: [operations, ui]
 > at all, and the four cells draw only Live decks, so an off-air candidate is visible on no
 > surface.
 
+> **Annotated 2026-09-02, again, after the maintainer read it.** **The reason below is not the
+> reason.** This record retired *Choose what the output shows* as *redundant* — the four cells
+> already audition, so swapping the main picture adds nothing. The retirement stands and the
+> argument for it does not. The operation should never have existed: **once material is on the main
+> output it is the broadcast of the final result, not a preview of it**, so putting a slot there was
+> never a look at a candidate and redundancy was never the objection. How it got there is named in
+> [P-0080](../principles/0080-an-operator-can-see-a-slots-own-material-without-putting-it-on-air.md):
+> a design made for the console, which has a picture and four cells, was bent to fit the command
+> line, which has one window. What follows from the corrected reason is
+> [ADR-0243](0243-the-program-picture-is-an-output-and-the-four-cells-are-monitors.md) — the picture
+> is an output and the four cells are monitors.
+>
+> The first annotation above also says this record left `karakuri-cli` unable to audition a slot,
+> and calls that something P-0080 records as owed. **It is not owed.** The command line is test
+> tooling and the instrument's principles do not bind it
+> ([ADR-0242](0242-the-command-line-is-test-tooling-and-the-instruments-principles-do-not-bind-it.md)).
+> The other half of that sentence — the four cells draw only Live decks — is a real gap and is the
+> one entry left in P-0080's *Where it is not met*.
+
 ## Context
 
 In closing sub-milestone M5.1 (Program Bay), two rows on

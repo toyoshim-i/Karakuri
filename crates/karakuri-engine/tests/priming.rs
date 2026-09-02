@@ -218,6 +218,13 @@ proc soft_points {
     /// is doing nothing at all — which is Allocated under another name. The mix is
     /// compared bit for bit against a deck holding only the other slot, on the same
     /// ticks, so the priming slot's absence from it is exact rather than small.
+    ///
+    /// **Drawn into its own target and absent from the mix are the two halves of
+    /// one separation**, and this test now holds both. It used to assert that a
+    /// Priming slot rendered nowhere at all, which was true of the engine and
+    /// wrong of the instrument: the slot an operator is warming is the one they
+    /// need to see. Every slot is drawn into its own target now
+    /// (P-0080), and *drawn* and *mixed* are two questions.
     #[test]
     fn a_priming_slot_advances_its_t_and_contributes_nothing_to_the_mix() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -261,18 +268,24 @@ proc soft_points {
             mixed, expected,
             "a Priming slot reached the mix — it is stepped, and it must not be drawn"
         );
-        // And it drew nothing into its own target either, which is the sharper
-        // version of the same claim: the composite could have been skipping it
-        // while a render pass still ran and still cost.
-        assert_eq!(
-            lit(&readback(&gpu, deck.slot_target(1))),
-            0,
-            "a Priming slot rendered into its own target; priming skips the render \
-         entirely, it does not render somewhere nobody looks"
+        // **And it *did* draw into its own target**, which is the other half of
+        // the separation and used to be asserted the other way round. Priming
+        // itself needs no draw — the warming is in the element buffers and not
+        // in the pixels, which is what "Priming steps; it does not draw" in
+        // `deck.rs` argues — but a warming slot is exactly the one an operator
+        // wants to look at before bringing it up, so every slot is drawn into
+        // its own target whatever its residency
+        // (`docs/principles/0080-an-operator-can-see-a-slots-own-material-without-putting-it-on-air.md`).
+        // The mix comparison above is what says that draw does not leak into
+        // the room.
+        assert!(
+            lit(&readback(&gpu, deck.slot_target(1))) > 100,
+            "a Priming slot drew nothing into its own target, so its console cell is \
+         dark at exactly the moment an operator is deciding whether to bring it up"
         );
-        // No level, for the same reason an off-air slot has none: the meter cannot
-        // vouch that what it measured is what the slot is showing, because the slot
-        // is not showing anything.
+        // No level, and that is the residency and not the draw: a level is what
+        // a fader is read against, a fader acts on what reaches the mix, and
+        // this slot reaches none of it. See `Deck::level`.
         assert!(deck.level(1).is_none());
     }
 

@@ -13,7 +13,7 @@
 //! `mask`, and whether the input contributes at all. Those travel with the edge
 //! wherever it is nested.
 //!
-//! `residency`, priming, hot swap, budget governance, `transport`, `preview` and
+//! `residency`, priming, hot swap, budget governance, `transport` and
 //! metering are properties of **a Set being played**. They sit beside the
 //! top-level mix in [`crate::deck`] because that is where a performance happens,
 //! not because they belong to L5 — which is why `live` here is a plain flag

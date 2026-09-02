@@ -1153,17 +1153,18 @@ impl Costs {
             "{}",
             match self.live {
                 // **Two sinks, so two folds.** This said "fold the picture
-                // away (f over it) and it does" while deck A was auditioning
-                // in the row underneath, which is a sentence that sends an
-                // operator to watch a window that is still drawing at full
-                // rate — the same false claim, in the same place, that cost
-                // this file 270 frames once already.
+                // away (f over it) and it does" while deck A's cell was
+                // drawing in the row underneath, which is a sentence that
+                // sends an operator to watch a window that is still drawing at
+                // full rate — the same false claim, in the same place, that
+                // cost this file 270 frames once already.
                 true =>
                     "the loop asks for the next frame from inside the last one for as long \
                      as anything is making texels, so `ControlFlow::Wait` never gets to \
-                     block. Two things are: the picture, and deck A auditioning in the \
-                     preview row under it. Fold the picture away (f over it) and deck A \
-                     keeps the loop awake on its own; fold the preview row away as well \
+                     block. Two things are: the picture, and the four cells in the preview \
+                     row under it — all four of them, because every slot is drawn whatever \
+                     its residency. Fold the picture away (f over it) and the cells keep \
+                     the loop awake on their own; fold the preview row away as well \
                      and nothing is making texels — and the window still draws, because \
                      the beat grid declares a deadline of its own for as long as it is on \
                      screen (P-0077, ADR-0212) and the mixer bay declares another while \
@@ -2156,16 +2157,19 @@ impl Readout {
              looks like: both ask `karakuri_environment::places::STORE`.",
             store.display()
         );
-        // **The cells, and this sentence has been wrong three times.** It said
+        // **The cells, and this sentence has been wrong four times.** It said
         // C and D had nothing behind them and named the number — *a deck of TWO
         // slots* — which was true of the deck that shipped before this one.
         // Then it said the one sink was an audition, and it was not: nothing
         // called `Deck::set_preview`, so the sink was a second copy of the
         // picture and the word was a claim about a control that did not exist.
         // Then it said the cells were a control an operator pressed to move the
-        // audition, and ADR-0240 retired that control. **Every sentence here is
-        // read off the deck**, which is the only way this legend stops being
-        // rewritten each time: the number that is on is counted, not written.
+        // audition, and ADR-0240 retired that control. Then it said three cells
+        // read `off` because an off-air slot "has no new frame to show", which
+        // was true only because the engine refused to draw one — the gap
+        // P-0080 named, and this pass closed it. **Every sentence here is read
+        // off the deck**, which is the only way this legend stops being
+        // rewritten each time: the numbers are counted, not written.
         let live: Vec<usize> = (0..DECKS)
             .filter(|slot| {
                 self.view
@@ -2174,28 +2178,36 @@ impl Readout {
                     .is_some_and(|strip| strip.tally == view::Tally::Live)
             })
             .collect();
+        // A cell has a slot behind it or it has nothing; this deck is full, so
+        // it is every cell. `Deck::slot_view` is `None` past `slot_count` and a
+        // strip is a slot, so the mixer's length is the same count from the
+        // other end.
+        let behind = self.view.mixer.len().min(DECKS);
         println!(
-            "{} — a cell is on because its deck is LIVE, and it draws that deck's own \
-             material rather than a copy of the output: each cell is presented from \
-             `Deck::slot_view` for the slot it is lettered for, so no cell can be showing \
-             another deck under the wrong letter. the picture above them is the mix, \
-             always — there is no control that swaps it for one deck, and the cells are \
-             why there does not need to be (ADR-0240). every slot of this deck holds a Set \
-             — there are {} of them and the mixer draws a strip for each — so no cell on \
-             this row is a cell with nothing behind it. the {} that read `off` are decks \
-             nothing is drawing: a slot that is not LIVE is not stepping and has no new \
-             frame to show, and an operator brings one up by cycling its tally chip or \
-             loading material into it. cells saying off are what this program is rather \
-             than something left unfinished, and each cell that is on costs a present \
-             pass of its own.",
+            "{behind} of {DECKS} cells have a deck slot behind them and every one of them \
+             is ON, whatever that slot's residency — a cell draws its own slot's material \
+             through the same transfer curve the picture goes through, with no fader on it, \
+             because a fader is applied in the mix and a cell is upstream of the mix. that \
+             is what an operator watches to decide whether material is worth putting on \
+             air, so it cannot wait until it is on air (P-0080). each cell is presented \
+             from `Deck::slot_view` for the slot it is lettered for, so no cell can be \
+             showing another deck under the wrong letter, and the picture above them is \
+             the mix, always — there is no control that swaps it for one deck, and the \
+             cells are why there does not need to be (ADR-0240). {} — that is about the \
+             MIX and not about the cells: a slot that is not LIVE is drawn into its own \
+             target and skipped by the composite, so it is watchable and inaudible. a \
+             slot that is not stepping shows the still it stopped at and one that has \
+             never stepped shows black, which is priming's whole use. every cell costs a \
+             present pass of its own and three of the four are not in the compute budget \
+             — the bill P-0080 says is paid rather than argued.",
             match live.as_slice() {
-                [] => "no cell is ON — nothing on this deck is LIVE".to_owned(),
+                [] => "nothing on this deck is LIVE, so the mix is empty".to_owned(),
                 [one] => format!(
-                    "deck {}'s cell is the only one that is ON",
+                    "deck {} is the only slot that is LIVE and reaches the mix",
                     deck_letter(*one as u8)
                 ),
                 many => format!(
-                    "{} cells are ON — {}",
+                    "{} slots are LIVE and reach the mix — {}",
                     many.len(),
                     many.iter()
                         .map(|slot| format!("deck {}", deck_letter(*slot as u8)))
@@ -2203,8 +2215,6 @@ impl Readout {
                         .join(", ")
                 ),
             },
-            self.view.mixer.len(),
-            DECKS - live.len()
         );
         println!(
             "the transport row reads the session's own oscillator — the tempo, the beat \
@@ -2316,10 +2326,14 @@ impl Readout {
                 "the other {} — {} — {} allocated and {} asked for nothing: the governor \
                  reports `OffAir`, which is a slot at REST rather than a slot refused. each \
                  holds this program's one pair at its own seed salt, because a slot cannot \
-                 hold nothing and this program has no second pair to give one; it steps \
-                 nothing, draws nothing and is in none of the frame numbers below. that is \
-                 what a channel with no material of its own is here, and an operator brings \
-                 one up by cycling its tally or loading a Set onto it.",
+                 hold nothing and this program has no second pair to give one. it steps \
+                 nothing and reaches the mix not at all — but it IS drawn, into its own \
+                 target, every frame, which is what puts it in its cell and what P-0080 \
+                 asks for; the frame numbers below include those draws. a slot that has \
+                 never stepped has no element state, so a cell for a slot that has been \
+                 at rest since this window opened is black until something warms it — \
+                 which is what priming is for. an operator brings one up by cycling its \
+                 tally or loading a Set onto it.",
                 match resting.len() {
                     1 => "slot",
                     _ => "slots",
@@ -2412,22 +2426,16 @@ impl Readout {
                     Kind::Outputs => "row, one sink: program view".to_owned(),
                     Kind::Pane => "pane, inside a bay".to_owned(),
                     Kind::Picture => "the picture, a sink".to_owned(),
-                    // Four cells, and which of them is on is counted rather
-                    // than written: a cell is on because its deck is LIVE, and
-                    // an operator brings a deck up at any time. A constant here
-                    // is exactly the legend naming a control's state from
-                    // before the control existed, which this row has been twice
-                    // already.
+                    // Four cells, and how many are on is counted rather than
+                    // written: a cell is on because there is a deck slot behind
+                    // it, and a strip is a deck slot. Residency does not come
+                    // into it — every slot is drawn — which is the correction
+                    // this line carries. A constant here is exactly the legend
+                    // naming a control's state from before the control existed,
+                    // which this row has been twice already.
                     Kind::Previews => {
-                        let on = (0..DECKS)
-                            .filter(|slot| {
-                                self.view
-                                    .mixer
-                                    .get(*slot)
-                                    .is_some_and(|strip| strip.tally == view::Tally::Live)
-                            })
-                            .count();
-                        format!("{DECKS} previews, {on} of them monitoring a LIVE deck")
+                        let on = self.view.mixer.len().min(DECKS);
+                        format!("{DECKS} previews, {on} of them monitoring a deck slot")
                     }
                     // A bay like the other five: a row of chips saying which
                     // library is being read, and then a row per Set that one
@@ -3396,7 +3404,13 @@ impl Presented {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: PICTURE_FORMAT,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            // COPY_SRC is not for the frame path — nothing here ever copies
+            // one of these — it is what lets a test read a cell back and say
+            // that a pass really was recorded into it. `Deck::slot_target`
+            // carries the same flag for the same reason and says so.
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::COPY_SRC,
             // Declared so the sampled view below may reinterpret it — the two
             // formats differ only in whether the transfer function is applied.
             view_formats: &[PICTURE_SAMPLED_FORMAT],
@@ -3557,14 +3571,15 @@ impl Sink for Presented {
 /// anything**: the reading [`Costs::say`] prints is still one Set stepping, and
 /// three more slots did not change that.
 ///
-/// **Three of the four preview cells are off at a time, and for one reason.**
-/// A cell is drawn only while its deck is `Residency::Live` ([`Engine::aim`]),
-/// and this program brings up one; every slot has a Set behind it, and the
-/// three that are not Live are not stepping and have nothing new to show.
-/// Three cells reading `off` are the truth about this program rather than a
-/// gap in it — and the case an operator would want them for, looking at a
-/// candidate *before* it goes on air, is the gap named in P-0080's *Where it
-/// is not met*.
+/// **All four preview cells are on, whatever the decks are doing.** A cell is
+/// drawn because there is a slot behind it ([`Engine::aim`]), and this deck is
+/// full, so four cells show four slots' own material: deck A stepping and on
+/// air, deck B warming or parked, C and D standing at the still they stopped
+/// at. That is [P-0080](../../../docs/principles/0080-an-operator-can-see-a-slots-own-material-without-putting-it-on-air.md)
+/// met on this surface — the operator watches a candidate's cell to decide
+/// whether it is worth a fader, and then raises the fader. It used to be gated
+/// on `Residency::Live`, which left the three cells worth looking at dark; the
+/// gap P-0080 named under *Where it is not met* was this line.
 struct Engine {
     deck: Deck,
     /// **Elements per geometry, read off the L1's own `capacity` declaration**
@@ -4011,11 +4026,11 @@ impl Engine {
     /// **Aim every sink at its own rectangle, and hand back what the console
     /// should draw in each** — the picture, and one entry per preview cell.
     ///
-    /// # A cell is aimed because its deck is Live, and not because it is being
-    /// auditioned
+    /// # A cell is aimed because there is a slot behind it, and residency has
+    /// nothing to do with it
     ///
-    /// This read `Deck::preview` and aimed the one preview sink at the cell of
-    /// the deck the output was auditioning: the sinks all took the same
+    /// This read `Deck::preview` once and aimed the one preview sink at the
+    /// cell of the deck the output was auditioning: the sinks all took the same
     /// composited frame, so a sink left in deck A's cell would have drawn deck
     /// C's material under the letter `A` the moment somebody auditioned C.
     /// ADR-0240 retired the audition — the picture is the master mix and every
@@ -4023,15 +4038,24 @@ impl Engine {
     /// composited frame: each cell is drawn from `Deck::slot_view` for the slot
     /// it is lettered for, which is a texture that cannot be of the wrong deck.
     ///
-    /// So what is left to decide is which cells are *worth* a pass, and the
-    /// answer is already written one screen down: the draw is gated on
-    /// `deck.residency(slot) == Residency::Live`, because a slot that is not
-    /// Live is not stepping and has nothing new in its view. **The aim asks the
-    /// same question**, so the two cannot disagree — a cell aimed but not drawn
-    /// would be a texture from an earlier frame held under a live letter, and a
-    /// cell drawn but not aimed is a pass into nothing. A constant here would
-    /// be the older defect: deck B's cell would stay dark for good the moment
-    /// an operator brought B up.
+    /// **Then it gated the aim on `Residency::Live`, and that was the defect
+    /// this pass removes.** The reason given was that an off-air slot "is not
+    /// stepping and has nothing new in its view", which was true only because
+    /// the engine refused to draw one. It is the exact case
+    /// [P-0080](../../../docs/principles/0080-an-operator-can-see-a-slots-own-material-without-putting-it-on-air.md)
+    /// exists for: an operator decides whether to put a candidate on air by
+    /// watching its cell, and a cell that is dark until the candidate is
+    /// already on air answers the question after it stops being asked. The deck
+    /// draws every slot into its own target on every frame now, so there is
+    /// something new in every view, every frame.
+    ///
+    /// **What is left to decide is whether there is a slot at all**, and that
+    /// is `slot_bind_groups[slot]`: `Deck::slot_view` is `None` past
+    /// `slot_count`, so a deck of fewer than [`DECKS`] slots leaves the surplus
+    /// cells with nothing to sample. **The aim asks the same question the draw
+    /// asks**, so the two cannot disagree — a cell aimed but not drawn would be
+    /// a texture from an earlier frame held under a letter, and a cell drawn
+    /// but not aimed is a pass into nothing.
     fn aim(
         &mut self,
         gpu: &Gpu,
@@ -4043,12 +4067,11 @@ impl Engine {
         let picture = self
             .picture
             .aim(gpu, renderer, picture_at, scale, &mut self.freed);
-        // Which decks are Live, read once for the frame: the loop below both
-        // aims and reports off the same answer, so a residency that changed
-        // between the two would leave a cell aimed at a rectangle it is not
-        // reported in.
-        let live: [bool; DECKS] =
-            std::array::from_fn(|slot| self.deck.residency(slot) == Residency::Live);
+        // Which cells have a slot behind them, read once for the frame: the
+        // loop below both aims and reports off the same answer, and the draw in
+        // `compose` reads the same `slot_bind_groups`.
+        let behind: [bool; DECKS] =
+            std::array::from_fn(|slot| self.slot_bind_groups[slot].is_some());
         let mut previews = [None; DECKS];
         let freed = &mut self.freed;
         for (slot, (sink, out)) in self
@@ -4057,12 +4080,12 @@ impl Engine {
             .zip(previews.iter_mut())
             .enumerate()
         {
-            let at = match live[slot] {
+            let at = match behind[slot] {
                 true => preview_ats.and_then(|cells| cells.get(slot).copied()),
                 false => None,
             };
             let pic = sink.aim(gpu, renderer, at, scale, freed);
-            if live[slot] {
+            if behind[slot] {
                 *out = pic;
             }
         }
@@ -4076,6 +4099,43 @@ fn aims(
     canvas: (u32, u32),
 ) -> (Option<egui::Rect>, Option<[egui::Rect; DECKS]>) {
     (picture_rect(layout, canvas), preview_rects(layout, canvas))
+}
+
+/// **One tone-mapping pass per deck preview cell, off that slot's own target,
+/// whatever the slot's residency.**
+///
+/// The engine drew every slot into its own target a moment before this — Live
+/// ones stepped and drawn, off-air ones drawn and not stepped — so this reads
+/// [`DECKS`] fresh images and never the composite. Through the same [`Present`]
+/// the picture goes through, so a cell is the material under the transfer curve
+/// the room gets, with no fader on it, because a fader is an edge property
+/// applied in the mix and a slot's target is upstream of the mix. That is
+/// [P-0080](../../../docs/principles/0080-an-operator-can-see-a-slots-own-material-without-putting-it-on-air.md)'s
+/// three clauses in one loop.
+///
+/// **Gated on `aimed` and on there being a slot to sample, and on nothing
+/// else.** Residency was the third gate and is not: a cell that goes dark when
+/// its deck goes off air is dark at exactly the moment an operator is deciding
+/// whether to bring it back. [`Engine::aim`] asks the same two questions, so a
+/// cell cannot be aimed and not drawn.
+///
+/// A function rather than the body of the closure it is called from, for
+/// [`live`]'s reason: `window_event` cannot be called from a test, so the part
+/// worth asserting is lifted to where one can reach it — see
+/// `every_cell_with_a_slot_behind_it_is_aimed_whatever_its_residency`.
+fn monitor(
+    present: &Present,
+    previews: &mut [Presented; DECKS],
+    bind_groups: &[Option<wgpu::BindGroup>; DECKS],
+    encoder: &mut wgpu::CommandEncoder,
+) {
+    for (slot, pres) in previews.iter_mut().enumerate() {
+        if pres.aimed {
+            if let Some(bg) = &bind_groups[slot] {
+                present.draw_with_bind_group(encoder, bg, &pres.target, pres.size);
+            }
+        }
+    }
 }
 
 /// **Is anything making texels this frame?** — which is the whole of what
@@ -7794,8 +7854,6 @@ impl ApplicationHandler for App {
                     } = engine;
                     let textures_delta = &mut output.textures_delta;
                     let cost = &mut cost;
-                    let live_slots: [bool; DECKS] =
-                        std::array::from_fn(|i| deck.residency(i) == Residency::Live);
                     let mut sinks: [&mut dyn Sink; 1] = [picture];
                     compose(
                         gpu,
@@ -7813,18 +7871,7 @@ impl ApplicationHandler for App {
                         },
                         // -- the panel, into the frame's encoder ------
                         |encoder| {
-                            for (slot, pres) in previews.iter_mut().enumerate() {
-                                if pres.aimed && live_slots[slot] {
-                                    if let Some(bg) = &slot_bind_groups[slot] {
-                                        present.draw_with_bind_group(
-                                            encoder,
-                                            bg,
-                                            &pres.target,
-                                            pres.size,
-                                        );
-                                    }
-                                }
-                            }
+                            monitor(present, previews, slot_bind_groups, encoder);
                             panel_started = Some(Instant::now());
                             // One id can carry several deltas in a frame: a
                             // font atlas that grew arrives as the whole image
@@ -12236,9 +12283,10 @@ mod gpu {
         // **Aimed by the call the window makes, and the view is what that
         // answered** rather than three lines this test writes by hand: an id
         // or a rectangle assembled here is a test agreeing with itself about
-        // the one thing `Engine::aim` exists to decide. Deck A auditions and
-        // B, C and D are off, which is the whole of what one preview sink can
-        // show — the other three slots are allocated and make no texels.
+        // the one thing `Engine::aim` exists to decide. All four cells are
+        // aimed — every slot has a Set and every slot is drawn — and this test
+        // drives one of them, because what it is about is the ordering of the
+        // engine's pass against the panel's rather than the row.
         let mut view = View::new(ROOM);
         (view.picture, view.previews) = engine.aim(&gpu, &mut renderer, panel.layout(), 1.0);
         assert_eq!(
@@ -12723,6 +12771,263 @@ mod gpu {
         engine.aim(&gpu, &mut renderer, panel.layout(), 1.0);
         assert_eq!(engine.freed, 1);
         assert!(renderer.texture(&engine.picture.id).is_some());
+    }
+
+    /// **Every cell with a deck slot behind it is aimed, whatever that slot's
+    /// residency — and a cell with no slot behind it is off.**
+    ///
+    /// This is
+    /// [P-0080](../../../docs/principles/0080-an-operator-can-see-a-slots-own-material-without-putting-it-on-air.md)
+    /// on this surface. The operator decides whether to raise a fader by
+    /// watching the cell, so the cell has to be running *before* the fader goes
+    /// up; a cell gated on `Residency::Live` answers the question only after it
+    /// has stopped being asked, and that gate was here.
+    ///
+    /// **All four residency arrangements, and the one that fails a constant.**
+    /// A cell aimed because a constant said four would pass this while being
+    /// the older defect in the other direction — so the deck is put through
+    /// every level, including all four Allocated, where a live-gated `aim`
+    /// reports nothing at all and a correct one reports four.
+    ///
+    /// **The empty case is the fourth cell of a deck that does not have one.**
+    /// `Engine::new` says a slot cannot hold nothing — `HotSwap::new` takes a
+    /// live `Set` — so *empty* is not a slot with no material, it is a **cell
+    /// with no slot**: `Deck::slot_view` is `None` past `slot_count`, the bind
+    /// group is `None`, no pass is recorded, the view's entry stays `None` and
+    /// `karakuri_console::view` draws `D · off` in `pal.faint`. This deck is
+    /// full, so that is asserted where it can be — the view past the last slot
+    /// — rather than by building a short deck this program cannot have.
+    #[test]
+    fn every_cell_with_a_slot_behind_it_is_aimed_whatever_its_residency() {
+        const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
+        const W: u32 = 1440;
+        const H: u32 = 900;
+
+        let gpu = Gpu::headless().expect("no GPU");
+        let mut renderer =
+            egui_wgpu::Renderer::new(&gpu.device, FORMAT, egui_wgpu::RendererOptions::default());
+        let mut panel = Panel::new(W as f32, H as f32);
+        view::rearrange(&mut panel, CANVAS);
+        let cells = preview_rects(panel.layout(), CANVAS).expect("the preview row is on screen");
+        let mut engine = Engine::new(&gpu, &mut renderer, &shipped_slots(), panel.layout(), 1.0);
+
+        // **A cell has a slot behind it or it has nothing**, and that is the
+        // whole of the gate. Past the last slot there is no view to sample.
+        assert_eq!(
+            engine.deck.slot_count(),
+            DECKS,
+            "this program's deck is full, so every cell has a slot and the empty case is \
+             the assertion below rather than one of them"
+        );
+        assert!(
+            engine.deck.slot_view(DECKS).is_none(),
+            "the deck answered with a view for a slot it does not have, so a cell past \
+             the last slot would sample somebody else's texture"
+        );
+
+        // **Every slot is warmed first**, because a Set that has never stepped
+        // draws its zeroed element state and that is black — the honest face
+        // of a cold candidate, and indistinguishable at a cell's size from a
+        // cell nothing drew into. What is asserted below is that a slot with
+        // material in it reaches its cell whatever its residency, so the
+        // material has to be there first. Live is how a slot gets it here;
+        // priming is how an operator gets it without the room seeing.
+        for slot in 0..DECKS {
+            engine.deck.set_residency(slot, Residency::Live);
+        }
+        engine.aim(&gpu, &mut renderer, panel.layout(), 1.0);
+        for _ in 0..4 {
+            let Engine {
+                deck,
+                present,
+                previews,
+                slot_bind_groups,
+                look,
+                ..
+            } = &mut engine;
+            compose(
+                &gpu,
+                deck,
+                present,
+                &mut [],
+                &mut |_, _| {},
+                |_| Committed {
+                    steps: STEPS_A_FRAME,
+                    look: *look,
+                },
+                |encoder| monitor(present, previews, slot_bind_groups, encoder),
+            )
+            .expect("the frame composed");
+        }
+        gpu.device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .expect("poll");
+
+        for residencies in [
+            [
+                Residency::Live,
+                Residency::Priming,
+                Residency::Allocated,
+                Residency::Allocated,
+            ],
+            [Residency::Allocated; DECKS],
+            [Residency::Live; DECKS],
+            [Residency::Priming; DECKS],
+        ] {
+            for (slot, residency) in residencies.into_iter().enumerate() {
+                engine.deck.set_residency(slot, residency);
+            }
+            let (_, previews) = engine.aim(&gpu, &mut renderer, panel.layout(), 1.0);
+            for (slot, aimed) in previews.into_iter().enumerate() {
+                let aimed = aimed.unwrap_or_else(|| {
+                    panic!(
+                        "cell {} was not aimed with the deck at {residencies:?} — a slot's \
+                         own material is what an operator watches to decide whether to put \
+                         it on air, so a cell that waits for its deck to be Live is dark at \
+                         the one moment it is wanted (P-0080)",
+                        deck_letter(slot as u8)
+                    )
+                });
+                assert_eq!(
+                    aimed.rect,
+                    cells[slot],
+                    "cell {} was aimed at a rectangle that is not its own",
+                    deck_letter(slot as u8)
+                );
+            }
+            let mut view = View::new(Room::Night);
+            view.previews = previews;
+            assert!(
+                live(&view),
+                "four running cells did not keep the loop awake at {residencies:?}"
+            );
+
+            // **And the pass is recorded, through the frame the window
+            // makes.** Aimed and not drawn is the other half of the defect —
+            // a texture from an earlier frame held under a live letter — so
+            // the cells are cleared, one frame is composed with `monitor` in
+            // the same encoder, and every cell has to come back with texels
+            // in it. `compose` with no sinks still renders the deck, which is
+            // `frame.rs`'s *every output off is a frame*.
+            for pres in &mut engine.previews {
+                clear(&gpu, &pres.target);
+            }
+            for slot in 0..DECKS {
+                assert_eq!(
+                    texels(&gpu, &engine.previews[slot].texture),
+                    0,
+                    "cell {} did not clear, so nothing below can tell a fresh pass from \
+                     a stale one",
+                    deck_letter(slot as u8)
+                );
+            }
+            let Engine {
+                deck,
+                present,
+                previews,
+                slot_bind_groups,
+                look,
+                ..
+            } = &mut engine;
+            compose(
+                &gpu,
+                deck,
+                present,
+                &mut [],
+                &mut |_, _| {},
+                |_| Committed {
+                    steps: STEPS_A_FRAME,
+                    look: *look,
+                },
+                |encoder| monitor(present, previews, slot_bind_groups, encoder),
+            )
+            .expect("the frame composed");
+            gpu.device
+                .poll(wgpu::PollType::wait_indefinitely())
+                .expect("poll");
+            for slot in 0..DECKS {
+                assert!(
+                    texels(&gpu, &engine.previews[slot].texture) > 0,
+                    "cell {} was aimed at {residencies:?} and nothing was drawn into it — \
+                     an aimed cell that takes no pass holds whatever was in it last, \
+                     under a letter that says it is live",
+                    deck_letter(slot as u8)
+                );
+            }
+        }
+    }
+
+    /// Clear a cell's texture, so that what is in it afterwards can only have
+    /// come from a pass recorded after this one.
+    fn clear(gpu: &Gpu, view: &wgpu::TextureView) {
+        let mut encoder = gpu.device.create_command_encoder(&Default::default());
+        drop(encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("clear a cell"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view,
+                depth_slice: None,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        }));
+        gpu.queue.submit([encoder.finish()]);
+        gpu.device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .expect("poll");
+    }
+
+    /// How many texels of a cell's texture are not transparent black. The row
+    /// pitch is padded to 256 because a cell is 112 wide and
+    /// `copy_texture_to_buffer` will not take 448.
+    fn texels(gpu: &Gpu, texture: &wgpu::Texture) -> usize {
+        let (width, height) = (texture.width(), texture.height());
+        let pitch = (width * 4).div_ceil(256) * 256;
+        let buffer = gpu.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("cell readback"),
+            size: u64::from(pitch * height),
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+        let mut encoder = gpu.device.create_command_encoder(&Default::default());
+        encoder.copy_texture_to_buffer(
+            texture.as_image_copy(),
+            wgpu::TexelCopyBufferInfo {
+                buffer: &buffer,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(pitch),
+                    rows_per_image: Some(height),
+                },
+            },
+            wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+        );
+        gpu.queue.submit([encoder.finish()]);
+        let slice = buffer.slice(..);
+        slice.map_async(wgpu::MapMode::Read, |r| r.expect("map"));
+        gpu.device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .expect("poll");
+        let data = slice.get_mapped_range().expect("map");
+        let lit = (0..height as usize)
+            .flat_map(|y| {
+                data[y * pitch as usize..y * pitch as usize + width as usize * 4].chunks_exact(4)
+            })
+            .filter(|p| p[..3] != [0, 0, 0])
+            .count();
+        drop(data);
+        buffer.unmap();
+        lit
     }
 
     /// **Deck A's texture is the size of its cell, a resize frees the
@@ -13792,7 +14097,7 @@ mod gpu {
     /// Every half of it fails silently. A texture sized from the wrong
     /// rectangle looks perfectly correct — the cell is drawn at whatever size
     /// it is and the texture fills it — and is four to twenty times the texels
-    /// the audition needs, per frame, for as long as the deck runs. A
+    /// the cell needs, per frame, for as long as the deck runs. A
     /// `Picture` carrying an id from before a resize is a freed registration,
     /// which `egui` draws as nothing at all. And a folded region whose sink
     /// still acquires is the manual's *"no state where it is hidden and still
@@ -13878,14 +14183,21 @@ mod gpu {
             "the view carries the id from before the resize, which is a freed registration"
         );
         assert!(renderer.texture(&drawn.id).is_some());
-        let audition =
-            previews[0].expect("deck A is auditioning and the frame aimed nothing at it");
-        assert_eq!(audition.rect, cell);
-        assert_eq!(audition.id, engine.previews[0].id);
-        assert!(renderer.texture(&audition.id).is_some());
+        let monitored = previews[0].expect("deck A has a slot and the frame aimed nothing at it");
+        assert_eq!(monitored.rect, cell);
+        assert_eq!(monitored.id, engine.previews[0].id);
+        assert!(renderer.texture(&monitored.id).is_some());
+        // **All four, and residency has nothing to do with it.** Deck A is the
+        // only Live slot on this engine and the other three rest at
+        // `Allocated`; every one of them is drawn into its own target and
+        // every one of them is aimed at a cell, which is P-0080 —
+        // `every_cell_with_a_slot_behind_it_is_aimed_whatever_its_residency`
+        // is where that is asserted across all four residency arrangements.
         assert!(
-            previews[1..].iter().all(Option::is_none),
-            "a deck with no slot behind it was aimed at a cell"
+            previews.iter().all(Option::is_some),
+            "a cell with a deck slot behind it was not aimed: an operator watches a \
+             candidate's cell to decide whether to put it on air, so a cell that waits \
+             for Live is dark at the one moment it is wanted"
         );
 
         // **Aimed is what `Sink::acquire` answers from**, and that is the
@@ -13894,9 +14206,10 @@ mod gpu {
         assert_eq!(engine.previews[0].acquire(&gpu), Ok(()));
 
         // **Fold the picture away and its sink has no target** — so `compose`
-        // records no present pass into it, the deck still advances, and deck A
-        // goes on auditioning underneath. Both halves matter: a fold that took
-        // the preview with it is the console going dark from one keystroke.
+        // records no present pass into it, the deck still advances, and the
+        // four cells go on monitoring underneath. Both halves matter: a fold
+        // that took the cells with it is the console going dark from one
+        // keystroke.
         let picture_node = panel.layout().find("program-view").expect("program-view");
         assert!(
             matches!(
@@ -13933,8 +14246,13 @@ mod gpu {
              pass is recorded into a texture nothing shows"
         );
         assert!(
-            previews[0].is_some() && engine.previews[0].acquire(&gpu) == Ok(()),
-            "folding the picture away stopped deck A auditioning under it"
+            previews.iter().all(Option::is_some),
+            "folding the picture away stopped the cells monitoring under it"
+        );
+        assert_eq!(
+            engine.previews[0].acquire(&gpu),
+            Ok(()),
+            "folding the picture away stopped deck A's cell taking the frame"
         );
     }
 

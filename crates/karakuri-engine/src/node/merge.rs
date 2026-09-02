@@ -29,7 +29,7 @@
 //!
 //! # What it does not have
 //!
-//! No residency, no priming, no preview, no metering. Those are properties of a
+//! No residency, no priming, no monitoring, no metering. Those are properties of a
 //! Set being *played* and live beside the top-level mix in [`crate::deck`]; an
 //! [`crate::mix::Input`] is the whole of what an edge into an L5 carries.
 

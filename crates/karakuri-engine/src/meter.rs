@@ -564,11 +564,11 @@ impl Meters {
     /// Stop reporting a level for a slot, and disown every measurement of it
     /// still in flight.
     ///
-    /// Called when a slot goes off air, when its target is reallocated, when a
-    /// build lands on it, and at both ends of an audition. All of them are the
-    /// same problem: whatever arrives next was measured on an image that is no
-    /// longer what the slot is showing, and a stale number presented as a live
-    /// one is worse than no number. The buffers those measurements are travelling in come back to
+    /// Called when a slot goes off air, when its target is reallocated, and
+    /// when a build lands on it. All three are the same problem: whatever
+    /// arrives next was measured on an image that is no longer what the slot
+    /// is contributing, and a stale number presented as a live one is worse
+    /// than no number. The buffers those measurements are travelling in come back to
     /// the ring as usual; only their contents are dropped.
     pub fn retire(&mut self, slot: usize) {
         let meter = &mut self.slots[slot];

@@ -11,6 +11,27 @@ tags: [docs, process, ui, engine]
 
 # Auditioning survives the control that was retired, and is re-recorded as a property
 
+> **Annotated 2026-09-02, later the same day, after the maintainer read it.** **Two corrections, and
+> the record stands as history in both.**
+>
+> **The gaps below are one gap, not two.** *Consequences* names `karakuri-cli` first: one window, no
+> cells, no key since `v` went, so an operator choosing a candidate there is choosing blind. That is
+> not a gap. The command line is test tooling and the instrument's principles do not bind it —
+> [ADR-0242](0242-the-command-line-is-test-tooling-and-the-instruments-principles-do-not-bind-it.md)
+> — and it has been removed from
+> [P-0080](../principles/0080-an-operator-can-see-a-slots-own-material-without-putting-it-on-air.md).
+> The second gap is real and is now the only one: the console's four cells are gated on
+> `Residency::Live` in `Engine::aim`, so the off-air candidate is the one nothing draws. The
+> machinery kept unreachable below is kept for exactly that.
+>
+> **And *four cells meet it better than one switched output did* concedes too much.** One switched
+> output did not meet the requirement worse; it did not meet it at all, because material on the main
+> output is the broadcast of the final result rather than a look at a candidate. The reasoning below
+> — that P-0070 named a shape and the property survived it — is right, and this is the sentence
+> inside it that reads as though the retired control had been a poorer instance of the same rule.
+> [ADR-0240](0240-the-output-shows-the-mix-and-residency-keys-belong-to-the-mixer.md) carries the
+> matching annotation.
+
 ## Context
 
 [ADR-0240](0240-the-output-shows-the-mix-and-residency-keys-belong-to-the-mixer.md) retired the

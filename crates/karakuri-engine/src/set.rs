@@ -3986,14 +3986,16 @@ impl Set {
     /// the room**, and a slot on air must be on the room's beat however far
     /// behind its own clock is.
     ///
-    /// **An audition is the case where the frame before *is* drawn**, and it is
-    /// the one place that discontinuity is visible: a warming slot is shown at
-    /// its own grid position, so material that reads `beats` or carries a
-    /// binding moves the moment it goes on air, by however far behind the
-    /// governor's rate had it. Named rather than closed, because the close is
-    /// to read the session's grid instead — which is the defect this split cost
-    /// a repair to fix. See "Preview" in [`crate::deck`], which also records
-    /// that nothing can start an audition today.
+    /// **A monitor cell is the case where the frame before *is* drawn**, and
+    /// it is the one place that discontinuity is visible: a warming slot is
+    /// shown at its own grid position, so material that reads `beats` or
+    /// carries a binding moves the moment it goes on air, by however far behind
+    /// the governor's rate had it. Every slot is drawn on every frame now
+    /// (see "Every slot is drawn; only a Live slot is mixed" in
+    /// [`crate::deck`]), so this is visible on the console rather than
+    /// hypothetical. Named rather than closed, because the close is to read the
+    /// session's grid instead — which is the defect this split cost a repair to
+    /// fix.
     pub fn prepare_warming(&mut self, queue: &wgpu::Queue, steps: u8, signals: &Signals) {
         self.prepare_on(queue, steps, signals, Clock::Local);
     }
@@ -4118,8 +4120,8 @@ impl Set {
 
     /// The L4 node's uniform block, from state this does not change.
     ///
-    /// Split out of [`Set::prepare_on`] because a preview needs it without the
-    /// rest: an audition draws a slot nothing prepared, and every field there
+    /// Split out of [`Set::prepare_on`] because a monitor draw needs it without
+    /// the rest: an off-air slot is drawn and nothing prepared it, and every field there
     /// but the viewport is already what it should be.
     ///
     /// **The Set supplies the view and the node packs it.** Which fields exist
@@ -4308,7 +4310,7 @@ impl Set {
     /// **Rewrite the L4 uniforms against the current viewport**, without
     /// advancing anything.
     ///
-    /// For a slot being auditioned that nothing is preparing. `viewport` and
+    /// For an off-air slot that nothing is preparing. `viewport` and
     /// the camera's aspect ratio are written by [`Set::prepare`] and by nothing
     /// else, while [`Set::resize`] moves only the host-side value — so an
     /// `Allocated` slot drawn after a resize would draw at the aspect ratio it
@@ -4601,7 +4603,8 @@ impl Set {
     ///
     /// Nothing here touches `t`, `steps_taken` or the simulation's parity. That
     /// is what lets an operator look at an `Allocated` slot without the act of
-    /// looking moving it — see "Preview" in [`crate::deck`].
+    /// looking moving it — see "Every slot is drawn; only a Live slot is mixed"
+    /// in [`crate::deck`].
     ///
     /// **What a Set decides is the order and which one clears**, not how any of
     /// them draws. The renderers run in list order over the one attachment, the
