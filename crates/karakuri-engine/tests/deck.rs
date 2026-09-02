@@ -3247,6 +3247,314 @@ proc wash {
         eprintln!();
     }
 
+    /// What filling a deck slot's **preview cell** costs, two ways. **Printed,
+    /// not asserted.**
+    ///
+    /// A cell in the program bay is **112 x 63** — `karakuri-console`'s
+    /// `view::preview_cells` derives the width from `(466 - three 6px gaps) / 4
+    /// = 112`, and 112 at 16:9 is 63 — while a slot renders at the deck's
+    /// canvas, 1280x720. Two ways to get one into the other, and this measures
+    /// both rather than arguing them:
+    ///
+    /// - **downsample**: present the 1280x720 target into the cell. No extra
+    ///   draw. The horizontal stride is `1280 / 112` = 11.4 source texels at 8
+    ///   bytes each, so consecutive output texels fall in different cache lines.
+    /// - **re-render**: draw the Set again into a 112x63 target. Better
+    ///   locality, and **not fewer primitives**: the point count is the
+    ///   capacity either way, 262144.
+    ///
+    /// **The filter decides how many taps the downsample takes, and this one
+    /// takes four.** `Present`'s sampler is `Linear`/`Linear` over a texture
+    /// with `mip_level_count: 1`, so there is no mip chain to fall back on and
+    /// a fragment reads a 2x2 neighbourhood, not an 11x11 box. The downsample
+    /// therefore *undersamples* — it is bilinear point-picking with aliasing,
+    /// not a box filter — and it does not read the 1.8 MB the source occupies.
+    ///
+    /// **`point_size` is in pixels, so the small target does not have fewer
+    /// fragments either.** `karakuri-codegen`'s L4 expansion computes
+    /// `corner * _point_size / u.viewport * _clip.w`, which keeps a sprite the
+    /// same size in texels at any viewport. A 112x63 render of this material
+    /// rasterises about as many fragments as a 1280x720 one; what changes is
+    /// that they land in 56 KB of framebuffer instead of 7.4 MB. So the
+    /// small-target render is not a clean "everything that does not depend on
+    /// pixel count" — it is that plus a framebuffer that fits in cache. The
+    /// step-only and draw-only lines below are what actually splits it.
+    ///
+    /// Same method as its neighbour
+    /// [`the_cost_of_a_slot_and_of_the_composite_are_measured_and_reported`]:
+    /// host clock around submit-and-wait, the same 60-frame warm-up and
+    /// 120-frame window, medians and worst rather than means, and a Set built
+    /// fresh per configuration so that two lines are the same simulation at the
+    /// same step and not one Set at two ages.
+    ///
+    /// `#[ignore]`d for the same reason it is: capacity 262144, seven windows.
+    #[test]
+    #[ignore = "a measurement, not a check; run with --ignored --nocapture"]
+    fn the_cost_of_filling_a_preview_cell_is_measured_and_reported() {
+        /// The panel's own material, rather than this file's fixtures: the
+        /// question is about what a slot on the console costs.
+        const PANEL_L1: &str = include_str!("../../../examples/drift_shell.kir");
+        const PANEL_L4: &str = include_str!("../../../examples/soft_points.kir");
+
+        const CAP: u32 = 262_144;
+        const W: u32 = 1280;
+        const H: u32 = 720;
+        const CELL_W: u32 = 112;
+        const CELL_H: u32 = 63;
+        const WARMUP: usize = 60;
+        const MEASURED: usize = 120;
+
+        let gpu = Gpu::headless().expect("no GPU available");
+
+        let summarize = |label: &str, xs: &[f32]| {
+            let mut xs = xs.to_vec();
+            xs.sort_by(|a, b| a.partial_cmp(b).expect("finite"));
+            eprintln!(
+                "  {label:<30} n={:<4} median {:.3} ms   worst {:.3} ms",
+                xs.len(),
+                xs[xs.len() / 2],
+                xs[xs.len() - 1]
+            );
+        };
+        let median = |xs: &[f32]| {
+            let mut xs = xs.to_vec();
+            xs.sort_by(|a, b| a.partial_cmp(b).expect("finite"));
+            xs[xs.len() / 2]
+        };
+
+        let make_set = |width: u32, height: u32| -> Set {
+            let mut set = Set::build(
+                &gpu.device,
+                &gpu.queue,
+                &compile(PANEL_L1),
+                &compile(PANEL_L4),
+                CAP,
+                SEED_A,
+            )
+            .expect("the panel's own pair is compatible");
+            set.resize(&gpu.device, width, height);
+            set
+        };
+
+        // The slot's own target, a target the size of one cell, and the cell
+        // itself. All three `Rgba16Float`, because a monitor cell in the bay is
+        // a texture something else samples and not a surface.
+        let canvas = Present::new(&gpu.device, Present::HDR_FORMAT, W, H);
+        let cell_canvas = Present::new(&gpu.device, Present::HDR_FORMAT, CELL_W, CELL_H);
+        let cell = gpu.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("preview cell"),
+            size: wgpu::Extent3d {
+                width: CELL_W,
+                height: CELL_H,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: Present::HDR_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
+        let cell_view = cell.create_view(&Default::default());
+
+        // Black, so that "this loop wrote something" can be told from "the
+        // previous loop's picture is still in there" — the persistence the
+        // pixel tests above defeat by resizing.
+        let blacken = |view: &wgpu::TextureView| {
+            let mut encoder = gpu.device.create_command_encoder(&Default::default());
+            drop(encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("blacken"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            }));
+            gpu.queue.submit([encoder.finish()]);
+            gpu.device
+                .poll(wgpu::PollType::wait_indefinitely())
+                .expect("poll");
+        };
+
+        // [`readback`] above requires a 256-aligned row and a 112-wide
+        // `Rgba16Float` row is 896 bytes, so this pads the pitch and walks the
+        // padding back off. Counting lit texels is all it is for.
+        let lit_texels = |texture: &wgpu::Texture| -> usize {
+            let (width, height) = (texture.width(), texture.height());
+            let row = width * 8;
+            let pitch = row.div_ceil(256) * 256;
+            let buffer = gpu.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("cell readback"),
+                size: u64::from(pitch * height),
+                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                mapped_at_creation: false,
+            });
+            let mut encoder = gpu.device.create_command_encoder(&Default::default());
+            encoder.copy_texture_to_buffer(
+                texture.as_image_copy(),
+                wgpu::TexelCopyBufferInfo {
+                    buffer: &buffer,
+                    layout: wgpu::TexelCopyBufferLayout {
+                        offset: 0,
+                        bytes_per_row: Some(pitch),
+                        rows_per_image: Some(height),
+                    },
+                },
+                wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+            );
+            gpu.queue.submit([encoder.finish()]);
+            let slice = buffer.slice(..);
+            slice.map_async(wgpu::MapMode::Read, |r| r.expect("map"));
+            gpu.device
+                .poll(wgpu::PollType::wait_indefinitely())
+                .expect("poll");
+            let data = slice.get_mapped_range().expect("map");
+            let mut lit = 0;
+            for y in 0..height as usize {
+                for x in 0..width as usize {
+                    let at = y * pitch as usize + x * 8;
+                    // The three colour channels; alpha is written 1.0 by the
+                    // present pass and would count every texel.
+                    if data[at..at + 6].iter().any(|&b| b != 0) {
+                        lit += 1;
+                    }
+                }
+            }
+            drop(data);
+            buffer.unmap();
+            lit
+        };
+
+        let measure = |body: &mut dyn FnMut()| -> Vec<f32> {
+            let mut out = Vec::with_capacity(MEASURED);
+            for i in 0..WARMUP + MEASURED {
+                let at = Instant::now();
+                body();
+                if i >= WARMUP {
+                    out.push(at.elapsed().as_secs_f32() * 1_000.0);
+                }
+            }
+            out
+        };
+
+        let submit = |encoder: wgpu::CommandEncoder| {
+            gpu.queue.submit([encoder.finish()]);
+            gpu.device
+                .poll(wgpu::PollType::wait_indefinitely())
+                .expect("poll");
+        };
+
+        // 1. The slot at the deck's canvas: the baseline, and the same path as
+        //    `bare_frame`.
+        let mut big = make_set(W, H);
+        blacken(canvas.hdr_view());
+        let render_720 = measure(&mut || {
+            big.prepare(&gpu.queue, 1, &Signals::default());
+            let mut encoder = gpu.device.create_command_encoder(&Default::default());
+            big.render(&mut encoder, canvas.hdr_view(), 1);
+            submit(encoder);
+        });
+        let lit_720 = lit_texels(canvas.hdr_texture());
+
+        // 1b. The raster half alone, on a Set left warm by the loop above and
+        //     never stepped again — which is exactly what an off-air slot does.
+        let draw_720 = measure(&mut || {
+            let mut encoder = gpu.device.create_command_encoder(&Default::default());
+            big.draw(&mut encoder, canvas.hdr_view());
+            submit(encoder);
+        });
+
+        // 1c. The compute half alone: no target, no draw. What is left of the
+        //     baseline once both the fragments and the point expansion are gone.
+        let step_only = measure(&mut || {
+            big.prepare(&gpu.queue, 1, &Signals::default());
+            let mut encoder = gpu.device.create_command_encoder(&Default::default());
+            big.step(&mut encoder, 1);
+            submit(encoder);
+        });
+
+        // 2. The downsample: 1280x720 through the present pipeline into the
+        //    cell. The canvas holds a real picture from step 1, so this is not
+        //    sampling a texture that has only ever been fast-cleared.
+        blacken(&cell_view);
+        let present_down = measure(&mut || {
+            let mut encoder = gpu.device.create_command_encoder(&Default::default());
+            canvas.draw(&mut encoder, &cell_view, (CELL_W, CELL_H));
+            submit(encoder);
+        });
+        let lit_down = lit_texels(&cell);
+
+        // 3. The same Set rendered straight into a cell-sized target.
+        let mut small = make_set(CELL_W, CELL_H);
+        blacken(cell_canvas.hdr_view());
+        let render_cell = measure(&mut || {
+            small.prepare(&gpu.queue, 1, &Signals::default());
+            let mut encoder = gpu.device.create_command_encoder(&Default::default());
+            small.render(&mut encoder, cell_canvas.hdr_view(), 1);
+            submit(encoder);
+        });
+        let lit_cell = lit_texels(cell_canvas.hdr_texture());
+
+        // 3b. Its raster half alone, on the same terms as 1b.
+        let draw_cell = measure(&mut || {
+            let mut encoder = gpu.device.create_command_encoder(&Default::default());
+            small.draw(&mut encoder, cell_canvas.hdr_view());
+            submit(encoder);
+        });
+
+        // 4. A present that is not a downsample: 112x63 into 112x63, viewport
+        //    1:1. The present pass's own fixed cost, so the difference from
+        //    line 2 is what the 11.4-texel stride costs and nothing else.
+        blacken(&cell_view);
+        let present_flat = measure(&mut || {
+            let mut encoder = gpu.device.create_command_encoder(&Default::default());
+            cell_canvas.draw(&mut encoder, &cell_view, (CELL_W, CELL_H));
+            submit(encoder);
+        });
+        let lit_flat = lit_texels(&cell);
+
+        eprintln!(
+            "\nfilling one {CELL_W}x{CELL_H} preview cell from a {W}x{H} slot, \
+             capacity {CAP}, `examples/drift_shell.kir` + `examples/soft_points.kir`,\n\
+             host clock around submit-and-wait, {WARMUP} frames warm-up discarded:"
+        );
+        summarize("1  render 1280x720", &render_720);
+        summarize("2  present 1280x720 -> cell", &present_down);
+        summarize("3  render 112x63", &render_cell);
+        summarize("4  present cell -> cell 1:1", &present_flat);
+        eprintln!("  and, to split line 1:");
+        summarize("1b draw only, 1280x720", &draw_720);
+        summarize("1c step only, no draw", &step_only);
+        summarize("3b draw only, 112x63", &draw_cell);
+        eprintln!(
+            "  lit texels: {lit_720} of {} at 720p, {lit_down} of {} downsampled, \
+             {lit_cell} rendered at cell size, {lit_flat} presented 1:1 \
+             (zero anywhere means a loop measured a pass that wrote nothing)",
+            W * H,
+            CELL_W * CELL_H
+        );
+        eprintln!(
+            "  fragment-dependent part of line 1: {:.3} ms of {:.3} ms; \
+             what survives at cell size: {:.3} ms",
+            median(&render_720) - median(&render_cell),
+            median(&render_720),
+            median(&render_cell)
+        );
+        eprintln!();
+    }
+
     /// A mix target that is not the deck's size is refused rather than mixed.
     ///
     /// The composite reads its sources with `textureLoad`, and an out-of-range

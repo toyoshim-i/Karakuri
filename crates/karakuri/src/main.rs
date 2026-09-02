@@ -298,7 +298,7 @@ use karakuri_engine::{
     compose, Blend, Committed, Control, Deck, Event, Gpu, HotSwap, Look, Mask, MaskKind, Present,
     Residency, Set, Sink, Skip, TonemapOp, DEFAULT_BUDGET_MS,
 };
-use karakuri_environment::{audio, mix, watch, Opening};
+use karakuri_environment::{audio, mcp, mix, setfile, watch, Opening};
 use karakuri_ir::Kind as Layer;
 use karakuri_layout::{Axis, Hit, Layout, NodeId, Point};
 use karakuri_operation::gate::{Class, Open};
@@ -2644,6 +2644,10 @@ const KEYS: &[(&str, &str)] = &[
     ("down", "and down, as far as the rows the bay drew"),
     ("l", "load the Set under that cursor onto the selected deck"),
     (
+        "k",
+        "keep what the selected deck is playing — a Set filed under the time you saved it",
+    ),
+    (
         "esc",
         "quit — or, while a name is being typed, abandon the name",
     ),
@@ -3083,7 +3087,7 @@ fn running_from(dir: &std::path::Path, copies: &[Sources]) -> String {
 /// [`Sources`] for why a flag that answers *where the data lives* is not the
 /// second material vocabulary P-0031 refuses.
 const USAGE: &str = "\
-usage: karakuri [--presets DIR] [--store DIR] [GEOMETRY.kir RENDERER.kir]
+usage: karakuri [--presets DIR] [--store DIR] [--mcp PORT] [GEOMETRY.kir RENDERER.kir]
 
   The console, with a deck behind it. Both paths or neither: a Set is an L1 and
   an L4, and with neither the pair that ships in the preset library is played.
@@ -3098,13 +3102,17 @@ usage: karakuri [--presets DIR] [--store DIR] [GEOMETRY.kir RENDERER.kir]
   --store DIR     where the Library bay reads Sets and arrangements from, where
                   a save goes, and where the scratch each deck runs from is
                   written. Defaults to .karakuri beside the session.
+  --mcp PORT      serve the Model Context Protocol on 127.0.0.1:PORT, so a
+                  model can read a deck's procedure, rewrite it, rewire an
+                  input and keep what a deck is playing. Loopback only, and
+                  0 takes an ephemeral port and prints the one it got.
 
-  Either flag may be given before or after the pair.
+  Any flag may be given before or after the pair.
 
   This is not `karakuri-cli`'s command line and does not try to be — that one
-  has the flags, the audio, the MIDI and the MCP server, and its parser is its
-  own. It reads the same two directories, and `--store` means the same thing to
-  both. See `cargo run -p karakuri-cli -- --help`.";
+  has the audio, the MIDI and the rest of the flags, and its parser is its own.
+  It reads the same two directories, and `--store` and `--mcp` mean the same
+  thing to both. See `cargo run -p karakuri-cli -- --help`.";
 
 /// **Everything the command line settles**: what plays, and the two
 /// directories this program's data is in.
@@ -3127,6 +3135,15 @@ struct Launch {
     /// preset tier is simply empty. See
     /// [`karakuri_environment::places::presets`].
     presets: Option<karakuri_environment::places::Presets>,
+    /// **The port a model reaches this run on**, or `None` for a run that
+    /// serves nothing — `--mcp PORT`.
+    ///
+    /// A port and not an open server, because the two are settled in different
+    /// places: this function reads a command line and cannot bind a socket
+    /// without either failing here or handing back something a `--help` run
+    /// would have to close again. [`main`] binds it, before the window, for
+    /// the reason the working copies are made there.
+    mcp: Option<u16>,
 }
 
 /// **The command line, read.** Two paths or none, and two flags that are not
@@ -3158,6 +3175,7 @@ fn sources_from<I: IntoIterator<Item = String>>(args: I) -> Result<Launch, Strin
     // (`list_sets_prints_and_is_never_a_run`).
     let mut named: Option<std::path::PathBuf> = None;
     let mut store: Option<std::path::PathBuf> = None;
+    let mut mcp: Option<u16> = None;
     let mut paths: Vec<String> = Vec::new();
     let mut rest = args.into_iter();
     while let Some(arg) = rest.next() {
@@ -3166,6 +3184,13 @@ fn sources_from<I: IntoIterator<Item = String>>(args: I) -> Result<Launch, Strin
                 named = Some(std::path::PathBuf::from(value_for("--presets", &mut rest)?))
             }
             "--store" => store = Some(std::path::PathBuf::from(value_for("--store", &mut rest)?)),
+            // **The same two silences the other two flags refuse**, because
+            // [`value_for`] is underneath this one as well: a `--mcp` at the
+            // end of the line does not fall back to a port, and `--mcp
+            // --store x` does not read `--store` as a number. What this adds
+            // is the third — a value that is not a port — which is
+            // [`number_for`]'s and is why that function exists here at all.
+            "--mcp" => mcp = Some(number_for("--mcp", "a port number", &mut rest)?),
             // **An unknown option is not a path.** Without this a `--prests`
             // typo becomes the first half of a Set and is reported as a file
             // that will not open, which sends the operator looking at their
@@ -3206,6 +3231,7 @@ fn sources_from<I: IntoIterator<Item = String>>(args: I) -> Result<Launch, Strin
         store: store
             .unwrap_or_else(|| std::path::PathBuf::from(karakuri_environment::places::STORE)),
         presets,
+        mcp,
     })
 }
 
@@ -3218,9 +3244,10 @@ fn sources_from<I: IntoIterator<Item = String>>(args: I) -> Result<Launch, Strin
 /// next flag — `--presets --store x` reading `--store` as a directory would
 /// then blame `x` for being an unknown option.
 ///
-/// No number arm, unlike that one: both flags here take a directory, and a
-/// directory beginning with `-` is a path an operator can still name as
-/// `./-odd`.
+/// Two of the three flags here take a directory, and a directory beginning
+/// with `-` is a path an operator can still name as `./-odd`. The third takes
+/// a number and reads it through [`number_for`], which is where the parse and
+/// its refusal are — so this function goes on answering one question.
 fn value_for(flag: &str, rest: &mut impl Iterator<Item = String>) -> Result<String, String> {
     match rest.next() {
         Some(value) if !value.starts_with('-') => Ok(value),
@@ -3230,6 +3257,71 @@ fn value_for(flag: &str, rest: &mut impl Iterator<Item = String>) -> Result<Stri
         None => Err(format!("`{flag}` needs a value")),
     }
 }
+
+/// **The number after a flag**, refused rather than defaulted, swallowed or
+/// clamped.
+///
+/// [`value_for`] with a parse behind it, which is `karakuri-cli`'s `number_for`
+/// spelled a second time for that file's reason: it is a binary with no library
+/// target and there is nothing to call. The three refusals are the three that
+/// program gives — no value, a value that is the next flag, and a value that is
+/// not a number — so `--mcp` on this command line and `--mcp` on that one are
+/// wrong in the same words.
+///
+/// **A port beginning with `-` is caught by the first two rather than by the
+/// parse**, which is the right refusal and not a lucky one: `--mcp -1` is a
+/// line where the value is missing far more often than it is a negative number
+/// somebody meant.
+fn number_for<T: std::str::FromStr>(
+    flag: &str,
+    what: &str,
+    rest: &mut impl Iterator<Item = String>,
+) -> Result<T, String> {
+    let value = value_for(flag, rest)?;
+    value
+        .parse()
+        .map_err(|_| format!("`{flag} {value}` — expected {what}"))
+}
+
+/// **How often a run with `--mcp` wakes to serve.**
+///
+/// # The loop sleeps, and that is the whole of why this exists
+///
+/// This window draws a frame when something changed it or when `egui` asked for
+/// one after a delay it named, and on no other occasion — [`App::about_to_wait`]
+/// is where that rule lives, and it is P-0072's first clause as the operating
+/// system sees it. `karakuri-cli` has no such rule: it draws continuously, so
+/// what a model asks for is taken up on the next frame, which is always a
+/// millisecond away.
+///
+/// **Ported without this, `--mcp` on the panel answers a timeout.** A `save_set`
+/// reaches the render loop over a channel and waits for the loop to drain it,
+/// and a loop asleep on `ControlFlow::Wait` drains nothing until somebody
+/// touches the window — so the first thing a model asked this program for came
+/// back as *the render loop had not taken this save after 10s*. That was found
+/// by launching the panel and talking to it, and by nothing else: it is
+/// invisible to a test that drives the drain itself.
+///
+/// # What the wake costs, and why it is a frame and not only a drain
+///
+/// Draining alone would answer a save and a rewiring, because neither needs a
+/// picture. It would not answer the thing this surface is *for*: a procedure a
+/// model writes is picked up by a watcher, compiled on a worker and installed
+/// **at a frame boundary** — `Deck::begin_frame`, which happens on a frame and
+/// nowhere else. A run that drained and never drew would take a write, say it
+/// took it, and go on showing what it was showing.
+///
+/// So a served run draws. The reading [`Costs::say`] prints says so in its own
+/// words and needs no new ones: the picture is live, so the run takes the arm
+/// that names the engine as the reason and prints the rate it measured.
+///
+/// **A tenth of a second, which is the watcher's own poll interval.** A model is
+/// not a pair of hands and does not need sixty frames a second to be answered;
+/// what it needs is that no request waits longer than the machinery behind it
+/// already does, and `watch::Watch` stamps its files ten times a second. Faster
+/// would be frames spent on nothing; slower would be a surface answering more
+/// slowly than the files it is watching.
+const SERVED: Duration = Duration::from_millis(100);
 
 /// **One simulation step per frame drawn, and no clock anywhere.**
 ///
@@ -3624,8 +3716,8 @@ struct Engine {
     /// is the whole engine's tally rather than either texture's, which is why
     /// it lives here and is handed to [`Presented::fit`].
     freed: usize,
-    /// **One sender per slot, in slot order**: how a load reaches that slot's
-    /// build worker.
+    /// **One [`Aiming`] per slot, in slot order**: how a load or a rewiring
+    /// reaches that slot's build worker, and where that watcher is pointed.
     ///
     /// This is the whole of what putting a library Set on a running deck took,
     /// and what it is *not* is the point of it. `Deck::install` is the one
@@ -3645,7 +3737,524 @@ struct Engine {
     /// preview cells are all in. Kept beside the deck rather than inside it
     /// for the reason the whole of [`Engine`] is on this side: the channel is
     /// `karakuri-environment`'s and the engine takes no environment.
-    aimed: Vec<std::sync::mpsc::Sender<watch::Aim>>,
+    aimed: Vec<Aiming>,
+    /// **Every node the run launched with**, in file order, with the bytes each
+    /// one was compiled from — see [`karakuri_environment::compile::Placed`].
+    ///
+    /// **One list for four slots, because the four files hold the same bytes.**
+    /// [`working_copies`] writes the one pair the command line settled into
+    /// every slot, so a node's layer, its index, its address and its source are
+    /// the same answer four times; the only per-slot difference is the *path*,
+    /// which each watcher is given from `slots[slot]` and which no part of a
+    /// saved node carries. A second compile per slot would be four answers to
+    /// one question with a window between them — see [`Placed::source`], which
+    /// is where that hazard is written.
+    ///
+    /// This is what [`Playing`] is seeded from, and it is the reason a deck can
+    /// be saved on the first frame rather than only after something has been
+    /// rebuilt.
+    placed: Vec<karakuri_environment::compile::Placed>,
+}
+
+/// **One slot's watcher, and where it is pointed.**
+///
+/// `karakuri-cli`'s `Aiming` is the same pair for the same reason, restated
+/// here because that program is a binary with no library target and there is
+/// nothing to call.
+///
+/// **The aim is kept and not only the sender**, because a [`watch::Aim`] is
+/// every field of the slot's identity and *anything left out comes back as the
+/// outgoing slot's* — a fold silently un-selected, a camera back at
+/// `Orbit::default()`, salts that repaint every element. A rewiring changes one
+/// field of thirteen, so the other twelve have to be restated from somewhere,
+/// and this is that somewhere: what the watcher was constructed with until the
+/// first aim, and the last aim after that.
+///
+/// **This program had the sender and not the aim**, which was harmless for as
+/// long as the only thing that sent one was [`loading`] — a load states every
+/// field off the Set file it read. It stops being harmless the moment anything
+/// changes *one* field, which is what `wire_input` does: a rewiring that
+/// restated the launch pair would have thrown away the Set the operator had
+/// just loaded.
+struct Aiming {
+    /// The other end of [`watch::Watch::aimed_by`]'s channel, for this slot's
+    /// watcher and no other. A watcher re-pointed through somebody else's
+    /// sender would rebuild a deck nobody named.
+    aim: std::sync::mpsc::Sender<watch::Aim>,
+    /// Where that watcher is pointed, kept in step with what has been sent.
+    at: watch::Aim,
+}
+
+impl Aiming {
+    /// **Point the watcher at what it is already looking at, with `edges`
+    /// instead**, and answer whether it is still there to be pointed.
+    ///
+    /// `Err` is a build worker that has ended — the receiver is gone — which is
+    /// a run shutting down. It is reported rather than swallowed: the edge is in
+    /// the run's wiring either way, and *nothing will rebuild* is a different
+    /// fact from *the slot is recompiling*.
+    fn re_aim(&mut self, edges: Vec<karakuri_engine::set::Edge>) -> Result<(), ()> {
+        self.at.edges = edges;
+        self.aim.send(restated(&self.at)).map_err(|_| ())
+    }
+
+    /// **Point it at something else entirely**, keeping the aim that was sent.
+    ///
+    /// The one route a load takes, and the reason [`loading`] is handed this
+    /// rather than the sender: a load that sent an aim and left `at` behind
+    /// would leave the *next* rewiring restating the material the run launched
+    /// with, which is the hardest version of this mistake to see.
+    fn re_point(&mut self, aim: watch::Aim) -> Result<(), ()> {
+        self.at = aim;
+        self.aim.send(restated(&self.at)).map_err(|_| ())
+    }
+}
+
+/// One aim, said again — because [`watch::Aim`] is not `Clone` and a re-point
+/// restates every field of it.
+///
+/// **No `..` on either side of this**, which is `Watch::repointed`'s own rule
+/// met from the sending end: it destructures with no `..` so that a field added
+/// to `Aim` cannot be left behind, and a *sender* that filled the new field
+/// with a default would defeat that from here. The compiler names all thirteen,
+/// so the day a fourteenth arrives this stops compiling rather than quietly
+/// re-aiming a slot at it.
+fn restated(aim: &watch::Aim) -> watch::Aim {
+    let watch::Aim {
+        head,
+        rest,
+        layering,
+        live,
+        capacity,
+        seed_salt,
+        salts,
+        camera,
+        overrides,
+        published,
+        bindings,
+        edges,
+        authorities,
+    } = aim;
+    watch::Aim {
+        head: head.clone(),
+        rest: rest.clone(),
+        layering: *layering,
+        live: *live,
+        capacity: *capacity,
+        seed_salt: *seed_salt,
+        salts: salts.clone(),
+        camera: *camera,
+        overrides: overrides.clone(),
+        published: published.clone(),
+        bindings: bindings.clone(),
+        edges: edges.clone(),
+        authorities: authorities.clone(),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Keeping what a deck is playing
+// ---------------------------------------------------------------------------
+
+/// **What each deck is running, as the nodes a Set file names.**
+///
+/// `karakuri-cli`'s `Running` is the same fact held the same way, and this is
+/// the second surface rather than a copy with a different opinion — that
+/// program is a binary with no library target, so there is nothing to call.
+/// What differs is the shape and only the shape: that one holds addresses and
+/// zips the launch bytes back on at save time, and this one holds the
+/// [`setfile::SavedNode`] whole, because the panel has one launch list for four
+/// slots and nothing to zip it against.
+///
+/// **It is seeded before the first frame**, from [`Engine::placed`] — so every
+/// deck can be written down from the outset rather than only after something
+/// has been rebuilt. A slot that is `None` is one whose last build's sources did
+/// not reach the store, which the watcher said at the time; it saves nothing
+/// rather than guessing.
+///
+/// **A type of its own rather than two fields on [`App`]**, because the pair is
+/// one fact with one transition rule: a swap moves `playing` into `previous`, a
+/// rollback moves it back, and the two halves are never right apart.
+struct Playing {
+    playing: Vec<Option<Vec<setfile::SavedNode>>>,
+    /// What a rollback restores, and the only way to name it: a rollback brings
+    /// back a Set nothing will name again.
+    previous: Vec<Option<Vec<setfile::SavedNode>>>,
+}
+
+impl Playing {
+    /// **Every slot seeded from the material this run compiled**, addressed by
+    /// the bytes that compile read.
+    ///
+    /// **No store, no disk and nothing that can fail.** The bytes ride along in
+    /// [`setfile::SavedNode::source`] and reach the store at the moment a file
+    /// names them, which is [`setfile::Sources::into_nodes`] — so a run that
+    /// never saves writes no artifact.
+    fn at_launch(placed: &[karakuri_environment::compile::Placed], slots: usize) -> Playing {
+        let nodes: Vec<setfile::SavedNode> = placed
+            .iter()
+            .map(|node| setfile::SavedNode {
+                layer: setfile::kind_name(node.layer),
+                index: node.index,
+                hash: node.hash(),
+                name: node.named.name.clone(),
+                source: Some(std::sync::Arc::clone(&node.source)),
+                meta: Some(std::sync::Arc::clone(&node.meta)),
+            })
+            .collect();
+        Playing {
+            playing: (0..slots)
+                .map(|_| match nodes.is_empty() {
+                    true => None,
+                    false => Some(nodes.iter().map(copied).collect()),
+                })
+                .collect(),
+            previous: (0..slots).map(|_| None).collect(),
+        }
+    }
+
+    /// What `slot` is running, or `None` for a slot with no address to name.
+    fn at(&self, slot: usize) -> Option<&Vec<setfile::SavedNode>> {
+        self.playing.get(slot).and_then(Option::as_ref)
+    }
+
+    /// **A build landed.** `nodes` is `None` when that build's sources never
+    /// reached the store — the watcher says so at the time, and the addresses it
+    /// would have named do not exist.
+    ///
+    /// **That is still a swap**, and taking it as one is the whole of why this
+    /// is a method rather than an assignment at the call site: the slot is on
+    /// something new, so the version it was on becomes what a rollback restores,
+    /// and the slot itself has no address until the next build lands.
+    fn landed(&mut self, slot: usize, nodes: Option<Vec<setfile::SavedNode>>) {
+        if slot >= self.playing.len() {
+            return;
+        }
+        self.previous[slot] = self.playing[slot].take();
+        self.playing[slot] = nodes;
+    }
+
+    /// **A build was rolled back**, so the slot is running what it was running
+    /// before it. With the launch version in `previous`, the first rollback of a
+    /// slot restores it like any other.
+    fn rolled_back(&mut self, slot: usize) {
+        if slot >= self.playing.len() {
+            return;
+        }
+        self.playing[slot] = self.previous[slot].take();
+    }
+}
+
+/// One saved node, again — because [`setfile::SavedNode`] is not `Clone` and a
+/// save consumes the list it is handed while the run goes on holding it.
+///
+/// The bytes and the card are `Arc`s and are shared rather than duplicated,
+/// which is what those two fields are `Arc`s for.
+fn copied(node: &setfile::SavedNode) -> setfile::SavedNode {
+    setfile::SavedNode {
+        layer: node.layer,
+        index: node.index,
+        hash: node.hash,
+        name: node.name.clone(),
+        source: node.source.clone(),
+        meta: node.meta.clone(),
+    }
+}
+
+/// **What a build that just landed is running**, from the addresses the watcher
+/// reported and the names the slot is spelled with.
+///
+/// The bytes are `None` for every one of them, and that is
+/// [`setfile::SavedNode::source`]'s own rule rather than an omission: the
+/// watcher put this build's sources in the store as it built them, so there is
+/// nothing left here to carry.
+///
+/// **The names come off the aim the slot is pointed at**, zipped by position.
+/// `watch::Built::nodes` is built from the sort's `Placed`, which keeps file
+/// order, and [`Aiming::at`]'s head and rest are that same file list — so entry
+/// `n` of one is entry `n` of the other. A name belongs to the *use* rather
+/// than to the procedure, so nothing a hash carries could hold it, and the
+/// alternative is a Set loaded with named nodes coming back after its first
+/// rebuild with the `edge` records pointing at nothing.
+fn built_nodes(built: &watch::Built, at: &watch::Aim) -> Vec<setfile::SavedNode> {
+    let names: Vec<Option<String>> = std::iter::once(at.head.name.clone())
+        .chain(at.rest.iter().map(|node| node.name.clone()))
+        .collect();
+    built
+        .nodes
+        .iter()
+        .enumerate()
+        .map(|(node, (layer, index, hash))| setfile::SavedNode {
+            layer,
+            index: *index,
+            hash: *hash,
+            name: names.get(node).cloned().flatten(),
+            source: None,
+            meta: None,
+        })
+        .collect()
+}
+
+/// **What a Set file says about the Set that is playing**, read off that Set.
+///
+/// `karakuri-cli`'s `playing_values` is this function and its doc is the
+/// argument for every line: **eight of the nine are read from the Set and not
+/// from anything this program was told**, because a writer with its own copy of
+/// the rule records numbers the run was not using and the file then describes a
+/// picture nobody has seen. The capacities are the Set's per geometry, the
+/// params are every declaration of every node at the value it is holding, the
+/// layering and the fold are the Set's rather than a flag's, and the salts are
+/// what it *is* salted with rather than what a position would derive.
+///
+/// The ninth is `edges`, which is the run's — see [`App::edges`]. It is not the
+/// Set's for the reason `mcp::WireRequest` states: the wiring a slot rebuilds
+/// with is not on disk anywhere, and the run is the only thing that holds it.
+///
+/// Restated here rather than called, for [`number_for`]'s reason.
+fn playing_values(
+    set: &karakuri_engine::Set,
+    edges: &[karakuri_engine::set::Edge],
+) -> setfile::Owned {
+    setfile::Owned {
+        // Filled where a store is open, and nowhere else — see [`Save::run`].
+        nodes: Vec::new(),
+        capacities: set.source_capacities(),
+        params: set
+            .params()
+            .map(|(layer, index, key, value)| {
+                karakuri_engine::ParamWrite::at(layer, index, key, value)
+            })
+            .collect(),
+        bindings: set.bindings().to_vec(),
+        edges: edges.to_vec(),
+        camera: set.camera,
+        layering: set.layering(),
+        live: selected_renderer(set.inputs()),
+        seeds: set.source_salts().to_vec(),
+    }
+}
+
+/// **Which renderer a Set is folded to**, as a `merge` record spells it:
+/// `Some(i)` where exactly one input is live, and `None` where every one of them
+/// is.
+///
+/// **Every-live is checked first, and that decides the one-renderer case.** A
+/// composited Set holding a single renderer has one live input, which is both
+/// "all of them" and "exactly one" — and it is the first, because such a Set is
+/// one nobody has selected in. Writing `live 0` for it would record a choice
+/// that was never made.
+fn selected_renderer(inputs: &[karakuri_engine::mix::Input]) -> Option<u32> {
+    if inputs.iter().all(|input| input.live) {
+        return None;
+    }
+    let mut live = inputs.iter().enumerate().filter(|(_, input)| input.live);
+    match (live.next(), live.next()) {
+        (Some((at, _)), None) => Some(at as u32),
+        _ => None,
+    }
+}
+
+/// Whether this deck holds `slot`. The companion of
+/// [`karakuri_environment::no_such_slot`], which is the sentence it is refused
+/// in.
+fn slot_in_range(slot: usize, slot_count: usize) -> bool {
+    slot < slot_count
+}
+
+/// **One live save, from the frame that asked for it to the file on disk.**
+struct Save {
+    slot: usize,
+    id: String,
+    /// The store root, not an open store: opening it creates directories, which
+    /// is I/O, which belongs on the thread below rather than on a frame.
+    root: std::path::PathBuf,
+    sources: setfile::Sources,
+    /// **What the file will say, with `nodes` still empty.** The nodes are the
+    /// one part of a Set file that needs a store — a hash per source — so they
+    /// are filled in where one is opened and never here.
+    values: setfile::Owned,
+}
+
+impl Save {
+    /// Write it. **Everything here is off the render thread**: opening a store
+    /// creates directories, and the Set file itself is written and renamed into
+    /// place.
+    fn run(self) -> Result<(), String> {
+        let Save {
+            id,
+            root,
+            sources,
+            mut values,
+            ..
+        } = self;
+        let store = Store::open(&root).map_err(|e| format!("store `{}`: {e}", root.display()))?;
+        // **Before the file that references them**, which is what
+        // `setfile::Node` carrying a hash asks of every caller: the writer
+        // cannot check that a hash resolves without reading the store back, so
+        // putting them is the caller's promise.
+        values.nodes = sources.into_nodes(&store)?;
+        setfile::save(&store, &id, values.saving())
+    }
+}
+
+/// What a live save came back with, at the frame it arrives.
+struct Saved {
+    slot: usize,
+    id: String,
+    /// `Ok` and the file is on disk under `id`. **A failure is printed and
+    /// nothing claims otherwise**: a program saying a save happened when the
+    /// disk refused is the shape of lie this codebase is arranged against.
+    outcome: Result<(), String>,
+    /// Where a client that asked for this save is waiting, and `None` when a
+    /// hand pressed `k`.
+    ///
+    /// **It rides the save rather than being looked up when the outcome
+    /// lands.** A map from an id to whoever asked would be a second place that
+    /// knows which save is which, and the outcome already carries everything
+    /// needed to find its way home.
+    reply: Option<mcp::Reply>,
+}
+
+/// A save that will not happen, to the terminal and to whoever asked if that was
+/// not a hand.
+///
+/// **One sentence and one home.** Every refusal here reaches two audiences, and
+/// the way that goes wrong is a copy of the words for the second one — free to
+/// be right on the day it is written and wrong at the next correction.
+fn refused(reply: Option<mcp::Reply>, said: String) {
+    println!("{said}");
+    if let Some(reply) = reply {
+        reply.settled(Err(said));
+    }
+}
+
+/// **Every edge a client asked for on one frame, applied to the run's wiring and
+/// answered.**
+///
+/// This is `karakuri_environment::mcp::WireRequest`'s three points, and it is a
+/// free function so that all three are checkable without a window, a GPU or a
+/// `Deck` — the wiring, the re-aim and the sentence are the whole of what this
+/// decides, and none of them needs one. `karakuri-cli`'s `rewired` is the same
+/// three decisions for the same reasons; it is restated rather than called for
+/// [`number_for`]'s reason.
+///
+/// # Replace, keyed on the input
+///
+/// An edge is dropped and the new one appended, keyed on `(node, slot)` — the
+/// node that declares the input and what its procedure calls it. It is forced
+/// rather than chosen: `SetError::SlotBoundTwice` refuses two edges on one input
+/// where the Set is built, so an append would make the *second* call on an input
+/// a refusal and leave a model unable to change its mind.
+///
+/// **The key does not include the deck slot, because the run's wiring does
+/// not.** [`App::edges`] is one list for the whole run and an edge naming a node
+/// a Set has not got is passed over where the Set is built. So a request names a
+/// deck slot to say *which slot rebuilds*, and two slots holding a node of the
+/// same name share one entry in this list.
+///
+/// # A slot this deck does not hold
+///
+/// **Refused, in [`karakuri_environment::no_such_slot`]'s words, and nothing is
+/// rewired** — the decision [`App::save_set`] already makes and for its reason:
+/// the server checks the number against its own `Slots` before it sends, and
+/// this is the guard that does not depend on it having.
+///
+/// # The same input wired twice on one frame
+///
+/// **Every request is applied, in the order it arrived, and the last one is what
+/// the run is wired with.** One aim per slot goes out after all of them are in
+/// the list, so the rebuild carries the settled wiring rather than an
+/// intermediate one. **A request the same frame overwrote is told so**: its edge
+/// *was* written and then replaced, and a reply saying only "wired" would be a
+/// true sentence about a state the run no longer holds.
+fn rewired(
+    asked: &[(usize, karakuri_engine::set::Edge)],
+    edges: &mut Vec<karakuri_engine::set::Edge>,
+    aims: &mut [Aiming],
+    slot_count: usize,
+) -> Vec<Result<String, String>> {
+    use std::fmt::Write as _;
+    // **Every edge into the list before any watcher is re-aimed**, so that a
+    // frame carrying two of them rebuilds once, at the wiring the frame ended
+    // with.
+    let mut said: Vec<Option<Result<String, String>>> = asked.iter().map(|_| None).collect();
+    let mut named: Vec<usize> = Vec::new();
+    for (at, (slot, edge)) in asked.iter().enumerate() {
+        if !slot_in_range(*slot, slot_count) {
+            said[at] = Some(Err(format!(
+                "{}, and nothing was rewired",
+                karakuri_environment::no_such_slot(*slot, slot_count)
+            )));
+            continue;
+        }
+        edges.retain(|held| !(held.node == edge.node && held.slot == edge.slot));
+        edges.push(edge.clone());
+        if !named.contains(slot) {
+            named.push(*slot);
+        }
+    }
+    // `None` for a slot with no watcher at all, `Some(false)` for one whose
+    // build worker has ended: two different things to say, and neither of them
+    // is "the slot is recompiling".
+    let rebuilding: Vec<(usize, Option<bool>)> = named
+        .into_iter()
+        .map(|slot| {
+            let state = aims
+                .get_mut(slot)
+                .map(|aiming| aiming.re_aim(edges.clone()).is_ok());
+            (slot, state)
+        })
+        .collect();
+    for (at, (slot, edge)) in asked.iter().enumerate() {
+        if said[at].is_some() {
+            continue;
+        }
+        let mut line = format!(
+            "slot {slot}: wired `{}.{}={}`",
+            edge.node, edge.slot, edge.to
+        );
+        // Keyed on the input alone, like the replacement above, and **only ones
+        // that were applied**: a later request refused for its slot number wrote
+        // nothing, and telling this one it had been replaced by an edge that
+        // never landed would be the same lie in the other direction.
+        let over = asked[at + 1..].iter().find(|(later_slot, later)| {
+            slot_in_range(*later_slot, slot_count)
+                && later.node == edge.node
+                && later.slot == edge.slot
+        });
+        if let Some((_, later)) = over {
+            let _ = write!(
+                line,
+                ", and a later request on this frame replaced it with `{}` — the run is \
+                 wired with that one and it is what the rebuild carries",
+                later.to
+            );
+        }
+        let state = rebuilding
+            .iter()
+            .find(|(named, _)| named == slot)
+            .and_then(|(_, state)| *state);
+        let tail = match state {
+            Some(true) => {
+                " — the slot is recompiling with it, and `swap_outcome` says what the build \
+                 made of it"
+            }
+            Some(false) => {
+                " — this slot's build worker has ended, so nothing will rebuild: the edge is \
+                 the run's from here on and a `save_set` of this slot records it"
+            }
+            None => {
+                " — this slot has no watcher, so nothing rebuilds: what is on air was built \
+                 with the wiring the run started with, and a `save_set` of this slot records \
+                 the edge"
+            }
+        };
+        line.push_str(tail);
+        said[at] = Some(Ok(line));
+    }
+    // Every entry was filled by one of the two loops above: the first answers
+    // the refusals and the second answers everything it skipped.
+    said.into_iter().map(Option::unwrap).collect()
 }
 
 /// **One slot, with a worker watching its own two files behind it** — which is
@@ -3683,17 +4292,19 @@ struct Engine {
 ///   authorities** — this program has no flag for any of the five and grants
 ///   nothing (ADR-0216), so each is the empty list the startup build used.
 ///
-/// # And no store
+/// # The store, and the one thing that is still not done
 ///
-/// `Watch::storing_to` and `Watch::snapshotting_to` are the two things this
-/// does not do. The first puts every build's sources in the store and reports
-/// them as `watch::Built` — which is the channel a node address would have to
-/// be derived from, and nothing derives it (`view::staging`) — and the second
-/// keeps every version that compiled so an edit can be walked back, which is
-/// what *put a node's previous version back* would read. **Both are what the
-/// lane's two controls wait on**, and neither is wiring this pass needs: a row
-/// says what happened to a build, and what happened to a build is on the
-/// `swap::Event` channel.
+/// `Watch::storing_to` **is** given now and `Watch::snapshotting_to` is not.
+/// The first puts every build's sources in the store and reports them as
+/// [`watch::Built`], which is where a rebuilt node's address comes from — and
+/// nothing could derive one until something needed one, which is *Keep what a
+/// deck is playing*: a Set file references its sources by hash, so a slot whose
+/// builds were never stored is a slot that cannot be written down. See
+/// [`Playing`], which is the other end of that channel.
+///
+/// The second keeps every version that compiled so an edit can be walked back,
+/// which is what *put a node's previous version back* would read. That control
+/// is still waiting on it, and this is still not the pass that adds it.
 ///
 /// # What it costs the frame path, which is nothing
 ///
@@ -3709,13 +4320,65 @@ fn watched(
     live: Set,
     slot: usize,
     salt: u32,
-) -> (HotSwap, std::sync::mpsc::Sender<watch::Aim>) {
+    // Where this watcher puts what it builds, and where it says so — or `None`
+    // for a harness with no store to write into. See [`Engine::new`].
+    stored: Option<(std::sync::Arc<Store>, std::sync::mpsc::Sender<watch::Built>)>,
+) -> (HotSwap, Aiming) {
     // **The other end of `Watch::aimed_by`**, kept by [`Engine`] so that a
     // load can say *look at these files instead*. It is made here rather than
     // by the caller because the watcher it belongs to is made here, and a
     // sender paired with the wrong slot's watcher would load a deck the
     // operator did not name.
     let (aim, aimed) = std::sync::mpsc::channel();
+    // **The aim this watcher is constructed with, said once in a value rather
+    // than only in the argument list below.** It is `Watch::new`'s arguments
+    // less the slot, which is what [`watch::Aim`] is, and it is kept so that a
+    // rewiring can restate the twelve fields it does not change. The two lists
+    // are read side by side here on purpose: a field that disagreed would be a
+    // rewiring that quietly moved something else.
+    let at = watch::Aim {
+        head: karakuri_environment::compile::Named::bare(&sources.l1),
+        rest: vec![karakuri_environment::compile::Named::bare(&sources.l4)],
+        layering: Layering::Overdraw,
+        live: None,
+        capacity: None,
+        seed_salt: salt,
+        salts: Vec::new(),
+        camera: karakuri_engine::camera::Orbit::default(),
+        overrides: Vec::new(),
+        published: Vec::new(),
+        bindings: Vec::new(),
+        edges: Vec::new(),
+        authorities: Vec::new(),
+    };
+    let watching = watch::Watch::new(
+        slot,
+        // **Bare, so every node is called what its procedure declares**,
+        // which is `Set::build`'s own: *"A pair names nothing, so both
+        // nodes are called what their procedures are."* A name here
+        // belongs to the *use* and this program has no syntax for one.
+        karakuri_environment::compile::Named::bare(&sources.l1),
+        vec![karakuri_environment::compile::Named::bare(&sources.l4)],
+        Layering::Overdraw,
+        None,
+        None,
+        salt,
+        Vec::new(),
+        karakuri_engine::camera::Orbit::default(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+    )
+    .aimed_by(aimed);
+    // **Where a rebuild's sources go**, so that what a slot is running has an
+    // address a Set file can name. Nothing is put until a build happens, and
+    // the put is on the worker thread that compiled it.
+    let watching = match stored {
+        Some((store, tx)) => watching.storing_to(store, tx),
+        None => watching,
+    };
     let swap = HotSwap::new(
         &gpu.device,
         &gpu.queue,
@@ -3728,31 +4391,9 @@ fn watched(
         // at all — `HotSwap::fixed` judged against infinity, so no candidate
         // could ever be thrown out for cost.
         DEFAULT_BUDGET_MS,
-        Box::new(
-            watch::Watch::new(
-                slot,
-                // **Bare, so every node is called what its procedure declares**,
-                // which is `Set::build`'s own: *"A pair names nothing, so both
-                // nodes are called what their procedures are."* A name here
-                // belongs to the *use* and this program has no syntax for one.
-                karakuri_environment::compile::Named::bare(&sources.l1),
-                vec![karakuri_environment::compile::Named::bare(&sources.l4)],
-                Layering::Overdraw,
-                None,
-                None,
-                salt,
-                Vec::new(),
-                karakuri_engine::camera::Orbit::default(),
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-            )
-            .aimed_by(aimed),
-        ),
+        Box::new(watching),
     );
-    (swap, aim)
+    (swap, Aiming { aim, at })
 }
 
 impl Engine {
@@ -3767,6 +4408,12 @@ impl Engine {
         slots: &[Sources],
         layout: &karakuri_layout::Layout,
         scale: f32,
+        // **Where every watcher puts what it builds, and where it reports it.**
+        // `None` is a harness with no store to write into, which is every test
+        // under `mod gpu` below: nothing there saves, and a run that created a
+        // store to draw four cells would be the side effect
+        // `karakuri_environment::scratch` refuses for a `--render`.
+        stored: Option<(std::sync::Arc<Store>, std::sync::mpsc::Sender<watch::Built>)>,
     ) -> Engine {
         assert!(
             slots.len() == SLOTS,
@@ -3780,8 +4427,33 @@ impl Engine {
         // answer four times. What is *not* the same is the path each slot's
         // watcher polls, which is the whole of what per-slot copies buy and is
         // read off `slots[slot]` in the loop below.
-        let l1 = checked(&slots[ON_AIR].l1);
-        let l4 = checked(&slots[ON_AIR].l4);
+        // **Compiled through the sort every other surface compiles through**,
+        // which is what this used to do by hand and is the whole of what a save
+        // needed: `checked` gave back a `Checked` and dropped the bytes it read,
+        // and a node's address is a function of exactly those bytes
+        // ([`karakuri_environment::compile::Placed::source`]). Re-reading the
+        // path later to hash it is the defect that function's own doc is
+        // written against — between here and the first frame sit a device, four
+        // `Set::build`s and, now, an MCP server.
+        //
+        // **Once, for slot 0, and used by all four.** See [`Engine::placed`].
+        let (material, placed) = karakuri_environment::compile::sort_slot(
+            ON_AIR,
+            &karakuri_environment::compile::Named::bare(&slots[ON_AIR].l1),
+            &[karakuri_environment::compile::Named::bare(
+                &slots[ON_AIR].l4,
+            )],
+        );
+        let l1 = material
+            .l1s
+            .first()
+            .expect("the launch pair declares a geometry")
+            .clone();
+        let l4 = material
+            .l4s
+            .first()
+            .expect("the launch pair declares a renderer")
+            .clone();
         let capacity = capacity_of(&l1);
         // **The same material in every slot, at its own salt and in its own
         // file.** A slot cannot hold *nothing*: `HotSwap::new` takes a live
@@ -3839,7 +4511,16 @@ impl Engine {
         let mut aimed = Vec::with_capacity(SLOTS);
         for (slot, running) in slots.iter().enumerate().take(SLOTS) {
             let salt = slot_salt(slot);
-            let (swap, aim) = watched(gpu, running, built(salt), slot, salt);
+            let (swap, aim) = watched(
+                gpu,
+                running,
+                built(salt),
+                slot,
+                salt,
+                stored
+                    .as_ref()
+                    .map(|(store, tx)| (std::sync::Arc::clone(store), tx.clone())),
+            );
             swaps.push(swap);
             aimed.push(aim);
         }
@@ -3941,6 +4622,7 @@ impl Engine {
             look: LOOK,
             freed: 0,
             aimed,
+            placed,
         }
     }
 
@@ -4670,7 +5352,11 @@ fn loading(
     root: &std::path::Path,
     slot: usize,
     salt: u32,
-    aim: &std::sync::mpsc::Sender<watch::Aim>,
+    // **The slot's [`Aiming`] and not its sender**, so that where the watcher
+    // is pointed is kept with what was sent. A load that sent an aim and left
+    // `Aiming::at` behind would leave the next rewiring restating the pair the
+    // run launched with — see [`Aiming`].
+    aim: &mut Aiming,
     id: &str,
 ) -> Result<String, String> {
     let store = Store::open(root).map_err(|e| format!("{}: {e}", root.display()))?;
@@ -4727,7 +5413,7 @@ fn loading(
         .collect();
 
     let nodes = loaded.srcs.len();
-    aim.send(watch::Aim {
+    aim.re_point(watch::Aim {
         head,
         rest: named.collect(),
         layering: loaded.layering,
@@ -4756,7 +5442,7 @@ fn loading(
         edges: loaded.edges,
         authorities: Vec::new(),
     })
-    .map_err(|_| {
+    .map_err(|()| {
         format!(
             "deck {letter}'s build worker is gone, so `{id}` cannot be built; \
              what is on that deck keeps running"
@@ -5215,10 +5901,39 @@ fn mixer(deck: &Deck, names: &[String], out: &mut Vec<view::Strip>) {
 /// is the frame that also installed a whole Set built on the worker. A row
 /// whose slot rebuilds again rewrites the same buffer, and a run in which
 /// nothing is saved allocates nothing here at all.
-fn staging(deck: &mut Deck, out: &mut Vec<view::Candidate>) -> bool {
+fn staging(
+    deck: &mut Deck,
+    out: &mut Vec<view::Candidate>,
+    // **Where the same event goes when somebody who is not at the panel is
+    // watching**, and `None` for a run without `--mcp`. A model that wrote a
+    // procedure has no other way to learn that it was rolled back for cost, and
+    // *it compiled* is not the same news as *it is on screen*.
+    //
+    // **Reported from here rather than from a second drain.** `Deck::events`
+    // empties the channel, so a loop that read it again would read nothing at
+    // all: the lane and the server are told by one pass or one of them is told
+    // by none.
+    //
+    // The `String` is formed only when there is somebody to tell.
+    mcp: Option<&mcp::Reporter>,
+    // **Which slots took a build, and which build**, for the caller to take up
+    // once this borrow of the deck has ended. `Some(id)` is a swap and `None` is
+    // a rollback, which is the pair [`Keeping::took_up`] is written against.
+    // Collected rather than acted on here, because `Deck::events` borrows the
+    // deck for as long as it is being read.
+    took: &mut Vec<(usize, Option<u64>)>,
+) -> bool {
     let mut landed = false;
     for slot in 0..deck.slot_count() {
         for event in deck.events(slot) {
+            if let Some(mcp) = mcp {
+                mcp.swap(slot, &event.to_string());
+            }
+            match &event {
+                Event::Swapped { id, .. } => took.push((slot, Some(*id))),
+                Event::RolledBack { .. } => took.push((slot, None)),
+                _ => {}
+            }
             // **Whether the *live Set* changed**, which is a different
             // question from whether a row did and is why this is read here
             // rather than off the rows: a build that landed replaced what is
@@ -5805,12 +6520,12 @@ fn played(gfx: &mut Gfx, operation: &Operation) -> Option<String> {
     };
     let slot = usize::from(*deck);
     let letter = deck_letter(*deck);
-    let Some(aim) = gfx.engine.aimed.get(slot) else {
+    let count = gfx.engine.aimed.len();
+    let Some(aim) = gfx.engine.aimed.get_mut(slot) else {
         return Some(format!(
-            "  load: deck {letter} refused — this deck has {} slot{}, and `{set}` has nowhere to \
-             land",
-            gfx.engine.aimed.len(),
-            match gfx.engine.aimed.len() {
+            "  load: deck {letter} refused — this deck has {count} slot{}, and `{set}` has \
+             nowhere to land",
+            match count {
                 1 => "",
                 _ => "s",
             }
@@ -6342,22 +7057,6 @@ fn capacity_of(l1: &karakuri_ir::typed::Checked) -> u32 {
         .map_or(karakuri_ir::DEFAULT_CAPACITY, |declared| declared.default)
 }
 
-fn checked(path: &std::path::Path) -> karakuri_ir::typed::Checked {
-    let src = std::fs::read_to_string(path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
-    let parsed = karakuri_ir::parse(&src)
-        .unwrap_or_else(|e| panic!("{}:\n{}", path.display(), rendered(&e, &src)));
-    karakuri_ir::check::check(&parsed)
-        .unwrap_or_else(|e| panic!("{}:\n{}", path.display(), rendered(&e, &src)))
-}
-
-fn rendered(errors: &[karakuri_ir::IrError], src: &str) -> String {
-    errors
-        .iter()
-        .map(|e| e.render(src))
-        .collect::<Vec<_>>()
-        .join("\n\n")
-}
-
 /// A rectangle in logical pixels, in physical ones. **Both of the engine's
 /// textures are sized from this and from nothing else** — the picture from its
 /// region, deck A's preview from its cell — which is what makes each of them
@@ -6531,10 +7230,436 @@ struct App {
     /// not choose is an origin nobody can see. What would matter is having
     /// *two*, and there is one.
     started: Instant,
+    /// **When a served run next wakes to take what a model asked for**, and
+    /// `None` for a run without `--mcp` — see [`SERVED`], which is the whole of
+    /// why this deadline exists.
+    ///
+    /// A deadline beside `egui_due` rather than a `ControlFlow::Poll`, because
+    /// this loop has one rule about when it runs and a second one would be a
+    /// second answer to it: [`App::about_to_wait`] takes the soonest of what is
+    /// owed, and this is one of the things owed.
+    served: Option<Instant>,
+    /// The sending half of [`watch::Watch::storing_to`]'s channel, handed to
+    /// every watcher [`Engine::new`] makes. Kept because a window remade makes
+    /// them again.
+    built_tx: std::sync::mpsc::Sender<watch::Built>,
+    /// **The store the watchers put their builds in**, opened once in [`main`].
+    ///
+    /// An open store rather than the root beside it, because this one is shared
+    /// with four worker threads and each of them writes to it on every build.
+    /// [`App::store`] is still the root, and is still what a save, a listing and
+    /// an arrangement are handed: those open per call, which is what keeps a
+    /// listing from creating a directory it only wanted to read.
+    held: std::sync::Arc<Store>,
+    /// **Everything a save and a rewiring need that is not the deck** — see
+    /// [`Keeping`].
+    keeping: Keeping,
+}
+
+/// **What this run holds so that a deck can be kept, and rewired.**
+///
+/// One value rather than seven fields on [`App`], because the seven move
+/// together and every one of them is read by the same three moments: a request
+/// arriving, a build landing, and a save coming back off the disk. It is also
+/// what makes those three reachable at all — the window loop binds `gfx` out of
+/// `self.gfx` and holds it for the length of the handler, so a method on `App`
+/// could not be called there. This is the piece that is passed instead.
+struct Keeping {
+    /// **The server's half of the channel, when `--mcp` asked for one**, and the
+    /// whole of what a model reaches this program through.
+    ///
+    /// Told what the swap machinery said, handed what a client asked the render
+    /// loop for, and nothing else — see [`karakuri_environment::mcp`]. It is
+    /// bound in [`main`], before the window, for the reason the working copies
+    /// are made there: `serve` binds a socket and can fail, and a failure has to
+    /// be a sentence on a terminal rather than a panic inside a `winit`
+    /// callback, where it aborts with no message at all.
+    mcp: Option<mcp::Reporter>,
+    /// **The run's wiring** — every edge a `wire_input` has written, for the
+    /// whole run and not per slot.
+    ///
+    /// One list because `--edge` is one list: an edge names the node that
+    /// declares the input and what its procedure calls it, and a Set that has
+    /// not got that node passes it over where it is built. See [`rewired`].
+    ///
+    /// **What a rebuild carries and what a save records**, which is why it lives
+    /// here rather than inside a watcher: [`Aiming::re_aim`] restates it to the
+    /// worker and [`playing_values`] writes it into the file, and those are one
+    /// list or they are two answers to what the run is wired with.
+    edges: Vec<karakuri_engine::set::Edge>,
+    /// **What each deck is playing**, seeded before the first frame and moved by
+    /// every build that lands — see [`Playing`].
+    playing: Playing,
+    /// Where the watchers report what they built and stored — the other end of
+    /// [`watch::Watch::storing_to`], drained where a build lands.
+    built: std::sync::mpsc::Receiver<watch::Built>,
+    /// **Builds reported but not yet landed**, kept by their build id.
+    ///
+    /// The two arrive on two channels and in either order: a watcher stores a
+    /// build on its worker thread and the swap lands at a frame boundary some
+    /// frames later, so a report that came in before its `Swapped` has to wait
+    /// somewhere. **Removed when it lands**, so a build that was refused or that
+    /// the deck never took leaves nothing behind — there is at most one
+    /// outstanding build per slot, which is what `HotSwap` allows.
+    pending: Vec<watch::Built>,
+    /// Where a save that has reached the disk comes back, and the sending half
+    /// each save thread is given a clone of.
+    saves: std::sync::mpsc::Receiver<Saved>,
+    save_tx: std::sync::mpsc::Sender<Saved>,
+    /// How many saves are being written right now. The run waits for these once,
+    /// at the end and under a bound — see [`Keeping::awaited_saves`].
+    in_flight: usize,
+}
+
+impl Keeping {
+    /// **What a model has asked for since the last frame.**
+    ///
+    /// `karakuri-cli`'s `Live::run_requests` is this function, and it is at the
+    /// top of the frame for its reason: a surface is polled once and every
+    /// request it produces ends in the method a key press ends in. That is what
+    /// makes `--mcp` a second pair of hands rather than a second way to do
+    /// anything.
+    ///
+    /// **Collected out of the borrow before any of it is acted on**, because
+    /// both arms below take `&mut self`. Nothing is allocated on a frame that
+    /// was asked for nothing: collecting an empty iterator makes no allocation.
+    ///
+    /// **Both channels drained before either is acted on**, for that reason and
+    /// for a second one: they are two queues by design — see
+    /// `mcp::Reporter::wires` — so a deck being saved to a slow disk cannot
+    /// delay a rewiring, and taking them in one pass is what keeps that true on
+    /// this side too.
+    fn requests(&mut self, engine: &mut Engine, root: &std::path::Path) {
+        let Some(mcp) = &self.mcp else {
+            return;
+        };
+        let asked: Vec<mcp::SaveRequest> = mcp.saves().collect();
+        let wires: Vec<mcp::WireRequest> = mcp.wires().collect();
+        for request in asked {
+            self.save_set(engine, root, request.slot, request.id, Some(request.reply));
+        }
+        self.rewire(engine, wires);
+    }
+
+    /// **Every edge asked for since the last frame, written and answered here,
+    /// on this frame.**
+    ///
+    /// The decisions are [`rewired`]'s and are written there, because none of
+    /// them needs a device. What is here is the two things that do: the deck's
+    /// own slot count, which is the only thing that knows how many slots there
+    /// are, and the answer going back to whoever asked.
+    ///
+    /// **Answered once, at the frame it was applied on**, which is
+    /// `mcp::WireRequest`'s third point. Not at the swap: what the *build* made
+    /// of the edge is `swap_outcome`'s answer, as it is for every other rebuild,
+    /// and a tool that waited for thirty judged frames would hold a connection
+    /// open across a transition.
+    ///
+    /// **One sentence for both audiences**, which is [`refused`]'s rule: what
+    /// the terminal is told and what the client is handed are the same words, so
+    /// the second cannot be right on the day it is written and wrong at the next
+    /// correction.
+    fn rewire(&mut self, engine: &mut Engine, asked: Vec<mcp::WireRequest>) {
+        if asked.is_empty() {
+            return;
+        }
+        let mut wires = Vec::with_capacity(asked.len());
+        let mut replies = Vec::with_capacity(asked.len());
+        for mcp::WireRequest { slot, edge, reply } in asked {
+            wires.push((slot, edge));
+            replies.push(reply);
+        }
+        let said = rewired(
+            &wires,
+            &mut self.edges,
+            &mut engine.aimed,
+            engine.deck.slot_count(),
+        );
+        for (reply, said) in replies.into_iter().zip(said) {
+            match &said {
+                Ok(line) | Err(line) => println!("{line}"),
+            }
+            reply.settled(said);
+        }
+    }
+
+    /// **Write what a deck is playing as a Set file.**
+    ///
+    /// `karakuri-cli`'s `Live::save_set` is the same method and says of itself
+    /// that it is *the only save path* in that program; this is that path in
+    /// this one, and every surface here ends in it — the `k` key, the MCP tool,
+    /// and whatever control the Library bay grows. That is what makes a refusal
+    /// and an outcome one sentence each rather than one sentence per surface.
+    ///
+    /// **The slot is an argument and the key passes the selected deck in.** A
+    /// Set file describes one Set and this deck holds four; the one an
+    /// *operator* means is the deck they have already selected, and a model has
+    /// no selection and names the slot as it names one to read a procedure.
+    ///
+    /// **`id` is what the caller wanted it called, or a stamp.** A key press
+    /// cannot type a name, so it passes `None`; see
+    /// [`karakuri_environment::accepted_save`], whose convention that is.
+    ///
+    /// **Read off the live Set, not off the command line.** Every number a Set
+    /// file carries can have moved since this run started — a param through a
+    /// record, a capacity or a salt through a rebuild — so the only reading that
+    /// cannot be stale is the Set's own. See [`playing_values`].
+    ///
+    /// **Gathered here, written elsewhere.** Everything up to the spawn is a
+    /// read off values already in memory; the store I/O goes to a thread of its
+    /// own — one per save, since saves are rare and a pool would be machinery
+    /// for a rate of a few an hour. The outcome comes back over `saves` and is
+    /// said at the frame it arrives, not at this press.
+    fn save_set(
+        &mut self,
+        engine: &Engine,
+        root: &std::path::Path,
+        slot: usize,
+        id: Option<String>,
+        reply: Option<mcp::Reply>,
+    ) {
+        // **Checked here rather than only where the request came from.** A key
+        // press cannot name a slot this deck does not hold and a tool call can,
+        // and below this line `playing_values` reads `deck.slot(slot)`, which
+        // indexes. The server refuses it too, in its own words, so a model never
+        // reaches this — and this is the guard that does not depend on it
+        // having.
+        let count = engine.deck.slot_count();
+        if !slot_in_range(slot, count) {
+            return refused(reply, karakuri_environment::no_such_slot(slot, count));
+        }
+        let Some(nodes) = self.playing.at(slot) else {
+            // **The only way to reach this in this program**: a build landed
+            // whose sources the store would not take, which the watcher said at
+            // the time. Every slot is seeded at launch, so a slot that has never
+            // rebuilt always has an address.
+            return refused(
+                reply,
+                karakuri_environment::nothing_to_save(slot, None, false),
+            );
+        };
+        let sources = setfile::Sources(nodes.iter().map(copied).collect());
+        if sources.is_empty() {
+            return refused(
+                reply,
+                karakuri_environment::nothing_to_save(slot, None, true),
+            );
+        }
+        // **Named and answered above the line that needs a deck**, which is
+        // where the whole of `accepted_save`'s doc lives: `playing_values` below
+        // is the one read here that needs one, and the accept has to be on the
+        // side of it a test can reach.
+        let id = karakuri_environment::accepted_save(slot, id, &sources, root, reply.as_ref());
+        let values = playing_values(engine.deck.slot(slot).set(), &self.edges);
+        let save = Save {
+            slot,
+            id,
+            root: root.to_path_buf(),
+            sources,
+            values,
+        };
+        let tx = self.save_tx.clone();
+        // **A thread per save**, and detached: no frame waits for it. The *run*
+        // waits, once, at the end and under a bound — see
+        // [`Keeping::awaited_saves`], which is what this count is for.
+        self.in_flight += 1;
+        std::thread::spawn(move || {
+            let (slot, id) = (save.slot, save.id.clone());
+            // **Carried back rather than answered from here.** This thread knows
+            // the outcome and could say it, and that would be a second place a
+            // save is reported from.
+            let outcome = save.run();
+            let _ = tx.send(Saved {
+                slot,
+                id,
+                outcome,
+                reply,
+            });
+        });
+    }
+
+    /// **Every save that has landed since the last frame, said and answered.**
+    ///
+    /// Drained and never waited on: a frame owes the display a picture and owes
+    /// a disk nothing. Called at the top of the frame beside
+    /// [`Keeping::requests`], because a window that has faulted still has saves
+    /// finishing behind it and a run that told nobody about them until it quit
+    /// would be withholding the one answer a waiting client cannot get anywhere
+    /// else.
+    ///
+    /// Returns whether any of them landed, which is what the Library bay's
+    /// listing is re-read on: a save is the only thing in this program that adds
+    /// a Set, and a bay that did not list it would be a readout that is wrong
+    /// and silent.
+    fn finished_saves(&mut self) -> bool {
+        let mut landed: Vec<Saved> = Vec::new();
+        while let Ok(saved) = self.saves.try_recv() {
+            landed.push(saved);
+        }
+        let mut written = false;
+        for saved in landed {
+            written |= self.took_save(saved);
+        }
+        written
+    }
+
+    /// One save's outcome, said and answered.
+    ///
+    /// **One sentence for both audiences.** What the terminal is told and what a
+    /// waiting client is handed are the same fact, so the words are formed once
+    /// here and the client gets the ones the operator got. The `Ok`/`Err` split
+    /// is what a tool call's `isError` is built from — see `mcp::Reply::settled`.
+    fn took_save(&mut self, saved: Saved) -> bool {
+        let Saved {
+            slot,
+            id,
+            outcome,
+            reply,
+        } = saved;
+        self.in_flight = self.in_flight.saturating_sub(1);
+        let (written, said) = match outcome {
+            Ok(()) => {
+                let said = format!(
+                    "  keep: deck {}: saved as set `{id}` — the Library bay's `my sets` lists \
+                     it, and `l` loads it back",
+                    deck_letter(slot as u8)
+                );
+                println!("{said}");
+                (true, Ok(said))
+            }
+            // **Printed, and nothing claiming otherwise.** See `Saved::outcome`.
+            Err(e) => {
+                let said = format!(
+                    "  keep: deck {}: set `{id}` was not saved: {e}",
+                    deck_letter(slot as u8)
+                );
+                println!("{said}");
+                (false, Err(said))
+            }
+        };
+        if let Some(reply) = reply {
+            reply.settled(said);
+        }
+        written
+    }
+
+    /// **Take up what a slot is now playing.**
+    ///
+    /// `landed` is the build id when a swap went in, or `None` when one was
+    /// rolled back — which is the case [`Playing::previous`] exists for. A
+    /// rollback brings back a Set nothing will name again, so the only way to
+    /// say what came back is to have remembered it.
+    ///
+    /// The `built` channel is drained here rather than per frame: it only has
+    /// anything in it when a build has just been requested, and this runs when
+    /// one has just landed.
+    fn took_up(&mut self, engine: &Engine, slot: usize, landed: Option<u64>) {
+        let mut ready: Vec<watch::Built> = Vec::new();
+        while let Ok(built) = self.built.try_recv() {
+            ready.push(built);
+        }
+        for built in ready {
+            self.pending.push(built);
+        }
+        match landed {
+            // **Missing means the watcher could not store this build's
+            // sources**, which it said at the time. Handed to `landed` as `None`
+            // rather than returned on, because the swap happened either way: a
+            // slot that took a version nobody can name is a slot with no
+            // address, not a slot still on its old one.
+            Some(id) => {
+                let at = self.pending.iter().position(|built| built.id == id);
+                let built = at.map(|at| self.pending.remove(at));
+                let nodes = built
+                    .as_ref()
+                    .zip(engine.aimed.get(slot))
+                    .map(|(built, aiming)| built_nodes(built, &aiming.at));
+                self.playing.landed(slot, nodes);
+            }
+            None => self.playing.rolled_back(slot),
+        }
+    }
+
+    /// **Every save still being written, waited for — up to
+    /// [`karakuri_environment::SAVE_WAIT`].**
+    ///
+    /// A frame owes the disk nothing, which is why [`Keeping::finished_saves`]
+    /// drains and never blocks. The end of the run is the one moment where that
+    /// is the wrong trade: a save asked for in the last second reached the disk
+    /// under an id nobody was ever told, so the client that asked for it waits
+    /// out its deadline and the operator is told nothing at all.
+    ///
+    /// **Bounded, because a disk can hang and quitting must not depend on one.**
+    /// Past the bound the run says how many saves it left behind and exits.
+    ///
+    /// The wait is only ever paid by a run that saved and quit within a few
+    /// frames; the count is zero for every other run and this returns without
+    /// blocking.
+    fn awaited_saves(&mut self) {
+        self.finished_saves();
+        if self.in_flight == 0 {
+            return;
+        }
+        println!(
+            "waiting up to {:.0}s for {} save{} still being written",
+            karakuri_environment::SAVE_WAIT.as_secs_f32(),
+            self.in_flight,
+            match self.in_flight {
+                1 => "",
+                _ => "s",
+            }
+        );
+        let deadline = Instant::now() + karakuri_environment::SAVE_WAIT;
+        while self.in_flight > 0 {
+            let Some(left) = deadline.checked_duration_since(Instant::now()) else {
+                break;
+            };
+            // Timed out, or every sender is gone and nothing more can arrive.
+            // Either way there is nothing left to wait for.
+            let Ok(saved) = self.saves.recv_timeout(left) else {
+                break;
+            };
+            self.took_save(saved);
+        }
+        if self.in_flight > 0 {
+            println!(
+                "  {} save{} still unfinished after {:.0}s — each is written or it is not, and \
+                 nothing here claims either way",
+                self.in_flight,
+                match self.in_flight {
+                    1 => "",
+                    _ => "s",
+                },
+                karakuri_environment::SAVE_WAIT.as_secs_f32(),
+            );
+        }
+    }
 }
 
 impl App {
-    fn new(launch: Launch, running: Vec<Sources>) -> App {
+    /// **The opening is handed in rather than made here**, which is the whole of
+    /// what pairing the four pills with a server took: [`main`] gives the same
+    /// handle to [`karakuri_environment::mcp::serve`] and to this, so a press on
+    /// a bay head and the class the server reads are one value. [`Readout::new`]
+    /// makes one of its own — it is constructed from a size and nothing else —
+    /// and this replaces it before the window opens, which is before anything
+    /// can read either.
+    fn new(
+        launch: Launch,
+        running: Vec<Sources>,
+        held: std::sync::Arc<Store>,
+        mcp: Option<mcp::Reporter>,
+        opening: Opening,
+    ) -> App {
+        let mut readout = Readout::new(WINDOW.0 as f32, WINDOW.1 as f32);
+        // **The one handle, and it lives on the readout because that is where
+        // the pills reach it.** A copy kept on [`App`] as well would be a second
+        // answer to what is open the day one of them was written and the other
+        // was not.
+        readout.view.opening = opening.read();
+        readout.opening = opening;
+        let (built_tx, built) = std::sync::mpsc::channel();
+        let (save_tx, saves) = std::sync::mpsc::channel();
         App {
             gfx: None,
             sources: launch.sources,
@@ -6542,11 +7667,34 @@ impl App {
             store: launch.store,
             presets: launch.presets,
             faulted: false,
-            readout: Readout::new(WINDOW.0 as f32, WINDOW.1 as f32),
+            readout,
             costs: Costs::new(),
             scale: 1.0,
             egui_due: None,
+            // **Due at once on a served run**, so the first thing a model asks
+            // for is taken on the first wake rather than a tenth of a second
+            // after it.
+            served: mcp.is_some().then(Instant::now),
             started: Instant::now(),
+            built_tx,
+            held,
+            keeping: Keeping {
+                mcp,
+                edges: Vec::new(),
+                // **Empty until there is a deck**, because the launch nodes are
+                // what the engine's compile produced and there is no engine
+                // before `resumed`. It is seeded there, off [`Engine::placed`],
+                // on the same pass that makes the watchers.
+                playing: Playing {
+                    playing: Vec::new(),
+                    previous: Vec::new(),
+                },
+                built,
+                pending: Vec::new(),
+                saves,
+                save_tx,
+                in_flight: 0,
+            },
         }
     }
 
@@ -6847,7 +7995,15 @@ impl ApplicationHandler for App {
             &self.running,
             self.readout.panel.layout(),
             self.scale as f32,
+            Some((std::sync::Arc::clone(&self.held), self.built_tx.clone())),
         );
+        // **What every deck is playing, seeded from the compile that just
+        // built them**, before a frame has run — see [`Playing::at_launch`].
+        // It is written here rather than in [`App::new`] because the nodes are
+        // the engine's compile, and it is written on *every* remake for the
+        // same reason: a window remade rebuilds the deck from the launch pair,
+        // so what each slot is running goes back to what it was seeded with.
+        self.keeping.playing = Playing::at_launch(&engine.placed, engine.deck.slot_count());
         // **Before the first frame and before the first strip is written**, so
         // that the panel's first frame draws the deck as it actually is rather
         // than a settled version of it that the second frame corrects.
@@ -6979,6 +8135,28 @@ impl ApplicationHandler for App {
                 self.costs.say(capacity, &material);
             }
         }
+        // **What a model asked for, taken on the wake it asked to be taken
+        // on** — see [`SERVED`], where the whole of this is argued. It is here
+        // beside the two deadlines above because it is a third one, and
+        // `about_to_wait` is where all three are turned into a control flow.
+        if self.served.is_some_and(|due| due <= now) {
+            self.served = Some(now + SERVED);
+            if let Some(gfx) = self.gfx.as_mut() {
+                self.keeping.requests(&mut gfx.engine, &self.store);
+                if self.keeping.finished_saves() {
+                    println!(
+                        "{}",
+                        listing(&mut self.readout.view, &self.store, self.presets.as_ref())
+                    );
+                }
+                // **A frame, because a build lands at a frame boundary and
+                // nowhere else.** A write a model made is on disk, compiled on
+                // a worker and waiting for `Deck::begin_frame`; a run that
+                // answered the write and never drew would go on showing what it
+                // was showing.
+                gfx.window.request_redraw();
+            }
+        }
     }
 
     /// **The one place the control flow is set, and it is a deadline or
@@ -6986,13 +8164,18 @@ impl ApplicationHandler for App {
     ///
     /// `Wait` is a window that costs the machine nothing at all until somebody
     /// touches it, which is P-0072's first clause as the operating system sees
-    /// it. `WaitUntil` is the soonest of the two things that are owed at a
+    /// it. `WaitUntil` is the soonest of the three things that are owed at a
     /// time rather than on an event: the frame `egui` asked for after a delay,
-    /// and the reading `Costs` takes once the window has been still long
-    /// enough. Neither is `Poll`, and nothing here asks for a frame in order
+    /// the reading `Costs` takes once the window has been still long enough,
+    /// and — on a run with `--mcp` — the wake that takes what a model asked for
+    /// ([`SERVED`]). None is `Poll`, and nothing here asks for a frame in order
     /// to have something to measure.
+    ///
+    /// **The third one is the only one that can be owed forever**, and that is
+    /// what a served run is: something outside this process is driving the
+    /// instrument, so the window is being touched even though nobody is at it.
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
-        let next = [self.egui_due, self.costs.due()]
+        let next = [self.egui_due, self.costs.due(), self.served]
             .into_iter()
             .flatten()
             .min();
@@ -7017,7 +8200,10 @@ impl ApplicationHandler for App {
             self.costs.touched();
         }
         match event {
-            WindowEvent::CloseRequested => event_loop.exit(),
+            WindowEvent::CloseRequested => {
+                self.keeping.awaited_saves();
+                event_loop.exit()
+            }
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
                 self.scale = scale_factor;
                 App::to_egui(gfx, &mut self.costs, &event);
@@ -7203,6 +8389,12 @@ impl ApplicationHandler for App {
                 }
                 let op = match key.logical_key.as_ref() {
                     Key::Named(NamedKey::Escape) => {
+                        // **The one place a save is waited for**, and it is
+                        // bounded — see [`Keeping::awaited_saves`]. A save asked
+                        // for in the last second reaches the disk under an id
+                        // nobody was ever told, and a client waiting on it has
+                        // nowhere else to learn what happened.
+                        self.keeping.awaited_saves();
                         event_loop.exit();
                         return;
                     }
@@ -7332,6 +8524,52 @@ impl ApplicationHandler for App {
                             Acted::Emitted(Some(Operation::SelectScope { scope: Undecided }));
                         let repaint =
                             App::performed(gfx, &mut self.readout, &acted, Repaint::Never);
+                        App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
+                        return;
+                    }
+                    // **Keep what the selected deck is playing**, filed under a
+                    // stamp because a bare key press cannot type a name — see
+                    // `karakuri_environment::accepted_save`, whose convention
+                    // that is and whose reason it borrows: an operator looks for
+                    // the time they saved it.
+                    //
+                    // **The selected deck and not a slot in the key**, which is
+                    // the split every deck-addressed control on this panel
+                    // makes: the deck an operator means is the one they have
+                    // already selected with `0`–`3`, and a model has no
+                    // selection and names the slot in the call.
+                    //
+                    // **Named through `performed` and performed beside it**,
+                    // which is `e`'s shape: the emission is what records the
+                    // press as `Silent(OnLanding)` rather than as nothing at
+                    // all, and the save itself is this arm's because
+                    // `Operation::SaveSet` writes no record here — the `save`
+                    // record is written where the work lands, and this program
+                    // records no session to write it into.
+                    //
+                    // **The panel column of this row is still `plan`.** A key is
+                    // not a control, the Library bay has no *keep* pill drawn,
+                    // and a badge that said otherwise would be a claim about a
+                    // control that is not there.
+                    Key::Character("k") => {
+                        let deck = self.readout.view.selection();
+                        let acted = Acted::Emitted(Some(Operation::SaveSet {
+                            deck,
+                            // **`None`, and it is the payload saying so rather
+                            // than this arm inventing a stamp.** A caller that
+                            // can type a name is not made to take a timestamp,
+                            // and a key press is not one of them.
+                            id: None,
+                        }));
+                        let repaint =
+                            App::performed(gfx, &mut self.readout, &acted, Repaint::Never);
+                        self.keeping.save_set(
+                            &gfx.engine,
+                            &self.store,
+                            usize::from(deck),
+                            None,
+                            None,
+                        );
                         App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
                         return;
                     }
@@ -7579,6 +8817,27 @@ impl ApplicationHandler for App {
             }
 
             WindowEvent::RedrawRequested => {
+                // **What a model asked for, and what a save came back with —
+                // both above everything that touches the window.** A client
+                // asking to keep what is playing should not be waiting on a
+                // swapchain, and nothing either of these reaches needs one; a
+                // window that has faulted returns below this line and still owes
+                // a waiting client its answer. That is `karakuri-cli`'s
+                // `Live::run_requests` and `Live::finished_saves`, at the top of
+                // the frame for the reason written there.
+                self.keeping.requests(&mut gfx.engine, &self.store);
+                if self.keeping.finished_saves() {
+                    // **The one thing in this program that adds a Set**, so the
+                    // bay that lists them is re-read on the frame it landed —
+                    // and only on that frame. A directory read is not a thing to
+                    // do per frame (P-0072), and a bay still listing what it
+                    // listed before a save is a readout that is wrong and
+                    // silent.
+                    println!(
+                        "{}",
+                        listing(&mut self.readout.view, &self.store, self.presets.as_ref())
+                    );
+                }
                 let waited = Instant::now();
                 let acquired = gfx.surface.get_current_texture();
                 let waited = waited.elapsed();
@@ -7731,12 +8990,26 @@ impl ApplicationHandler for App {
                 // slots were watched no Set ever landed after the first, so
                 // this read was a startup step and nothing else; it is still
                 // a startup step and now also a rebuild's.
-                if staging(&mut gfx.engine.deck, &mut self.readout.view.staging) {
+                let mut took: Vec<(usize, Option<u64>)> = Vec::new();
+                if staging(
+                    &mut gfx.engine.deck,
+                    &mut self.readout.view.staging,
+                    self.keeping.mcp.as_ref(),
+                    &mut took,
+                ) {
                     inspector(
                         &gfx.engine.deck,
                         &gfx.material,
                         &mut self.readout.view.inspector,
                     );
+                }
+                // **What each of those slots is now playing**, taken up once the
+                // drain above has let go of the deck. A slot whose material
+                // changed and was not taken up is a slot a save would write down
+                // the *previous* version of, which is the failure [`Playing`]
+                // exists to make impossible.
+                for (slot, landed) in took {
+                    self.keeping.took_up(&gfx.engine, slot, landed);
                 }
 
                 // **The one clock behind everything that moves on the panel,
@@ -8507,6 +9780,84 @@ fn main() {
         }
     };
     println!("{}", running_from(&scratch, &running));
+    // **Opened here, beside the copies and for their reason.** Every build a
+    // watcher makes puts its sources in this store, which is what gives a deck
+    // an address a Set file can name — see [`Playing`]. It creates four
+    // directories under a root this run has already written into, so it is not
+    // a promise the copies above did not already make; it is fatal for the same
+    // reason they are, because a run whose store will not open is a run that
+    // cannot keep anything.
+    let held = match Store::open(&launch.store) {
+        Ok(store) => std::sync::Arc::new(store),
+        Err(why) => {
+            eprintln!("store `{}`: {why}", launch.store.display());
+            eprintln!();
+            eprintln!(
+                "that is where every deck's copies were just written and where a save would \
+                 go, so nothing was built."
+            );
+            std::process::exit(1)
+        }
+    };
+    // **What every surface in this run reads and no surface decides**, made
+    // here so that there is one of it: the four bay-head pills write it and
+    // the MCP server reads it on every call, and a second handle would be a
+    // pill that opens a class the server never sees. All four classes start
+    // shut, which is the state ADR-0235 says a run starts in.
+    let opening = Opening::closed();
+    // **Before the window, for the reason the working copies are**: `serve`
+    // binds a socket, and a socket that is already taken has to be a sentence
+    // on a terminal. Everything after `run_app` is inside a `winit` callback,
+    // where a panic aborts without a message.
+    //
+    // **Fatal, because `--mcp` was asked for.** A run that went on without it
+    // would look exactly like one whose client is connected and idle.
+    let mcp = match launch.mcp {
+        Some(port) => {
+            // **One pair per deck, and they are the working copies rather than
+            // the two paths the operator typed.** The server addresses a slot
+            // and reads and writes the files behind it, and the files behind a
+            // deck are its own copy — see [`working_copies`]. Handing it the
+            // typed paths would let a model rewrite the preset library.
+            let slots = mcp::Slots(
+                running
+                    .iter()
+                    .map(|pair| (pair.l1.clone(), vec![pair.l4.clone()]))
+                    .collect(),
+            );
+            match mcp::serve(
+                port,
+                slots,
+                launch.store.clone(),
+                // **True, and not a flag read from anywhere.** Every slot in
+                // this program is built over a `watch::Watch` ([`watched`]) and
+                // there is no run of this binary that opens a file read-only,
+                // so a procedure a model writes is always picked up. This is
+                // where that fact is stated to the server, which uses it to
+                // tell a client whether a write will reach the screen.
+                true,
+                opening.clone(),
+            ) {
+                Ok(reporter) => {
+                    // The port bound rather than the one asked for: `--mcp 0`
+                    // takes an ephemeral one, and printing the 0 would name a
+                    // port that is not the port.
+                    println!(
+                        "mcp: 127.0.0.1:{} — a model can read and rewrite a deck's procedure, \
+                         rewire an input and keep what a deck is playing; every deck is \
+                         watched, so a write reaches the screen",
+                        reporter.port()
+                    );
+                    Some(reporter)
+                }
+                Err(why) => {
+                    eprintln!("karakuri: mcp: {why}");
+                    std::process::exit(2)
+                }
+            }
+        }
+        None => None,
+    };
     let event_loop = EventLoop::new().expect("event loop");
     // **The loop sleeps.** A frame is drawn when something changed it or when
     // `egui` asked for one after a delay it named, and on no other occasion —
@@ -8515,7 +9866,7 @@ fn main() {
     // window between here and the first `about_to_wait` is not a spin either.
     event_loop.set_control_flow(ControlFlow::Wait);
     event_loop
-        .run_app(&mut App::new(launch, running))
+        .run_app(&mut App::new(launch, running, held, mcp, opening))
         .expect("run");
 }
 
@@ -8913,7 +10264,7 @@ mod tests {
 
     /// A temporary directory of this test's own, named after the test that
     /// wants it — the shape every other CPU test in this file uses.
-    fn scratch_dir(what: &str) -> std::path::PathBuf {
+    pub(crate) fn scratch_dir(what: &str) -> std::path::PathBuf {
         let root = std::env::temp_dir().join(format!(
             "karakuri-{what}-{}-{:?}",
             std::process::id(),
@@ -9384,11 +10735,31 @@ mod tests {
         // Deck B, so the letter in the scratch name is not the first one and a
         // hard-coded `A` fails here.
         let (tx, rx) = std::sync::mpsc::channel();
+        // **An [`Aiming`] and not a bare sender**, because a load keeps where it
+        // pointed the watcher — see the assertion at the end of this test.
+        let mut aiming = Aiming {
+            aim: tx,
+            at: watch::Aim {
+                head: karakuri_environment::compile::Named::bare("nowhere.kir"),
+                rest: Vec::new(),
+                layering: Layering::Overdraw,
+                live: None,
+                capacity: None,
+                seed_salt: 0,
+                salts: Vec::new(),
+                camera: karakuri_engine::camera::Orbit::default(),
+                overrides: Vec::new(),
+                published: Vec::new(),
+                bindings: Vec::new(),
+                edges: Vec::new(),
+                authorities: Vec::new(),
+            },
+        };
         let line = loading(
             &root,
             ASKED_TO_PRIME,
             slot_salt(ASKED_TO_PRIME),
-            &tx,
+            &mut aiming,
             "night01",
         )
         .unwrap_or_else(|e| panic!("the load failed: {e}"));
@@ -9434,14 +10805,30 @@ mod tests {
             "a Set file carries no grant, so a load must hand none over"
         );
 
+        // **And the load kept where it pointed the watcher**, which is what a
+        // later rewiring restates the other twelve fields from: an `Aiming` that
+        // sent an aim and left `at` behind would re-aim this slot at the pair
+        // the run launched with. See [`Aiming`].
+        assert_eq!(
+            aiming.at.head.name.as_deref(),
+            Some("grid"),
+            "the load sent an aim and did not keep it"
+        );
+        assert_eq!(aiming.at.live, Some(0), "the kept aim is not the sent one");
+
         // And a Set that is not there is a sentence with nothing sent: the
         // deck goes on playing what it was.
-        let e = loading(&root, ON_AIR, slot_salt(ON_AIR), &tx, "nothing01")
+        let e = loading(&root, ON_AIR, slot_salt(ON_AIR), &mut aiming, "nothing01")
             .expect_err("a Set that is not in the store");
         assert!(e.contains("nothing01"), "the refusal does not name it: {e}");
         assert!(
             rx.try_recv().is_err(),
             "a load that failed aimed the slot anyway"
+        );
+        assert_eq!(
+            aiming.at.live,
+            Some(0),
+            "a load that failed moved where the watcher is pointed"
         );
 
         std::fs::remove_dir_all(&root).expect("clean up");
@@ -11279,6 +12666,178 @@ mod tests {
         );
     }
 
+    /// **`--mcp` takes a port, and it is refused in the three ways a flag with a
+    /// value is refused.**
+    ///
+    /// The first two are [`value_for`]'s and are the two the other flags already
+    /// meet — a flag at the end of the line does not fall back to a default, and
+    /// a flag whose value is the next flag does not eat it. The third is
+    /// [`number_for`]'s and is new here, because this is the first flag on this
+    /// command line that takes a number: a port that is not a port is a mistake
+    /// on the command line, and a run that started serving on some other number
+    /// would be the wrong kind of helpful.
+    #[test]
+    fn the_mcp_flag_takes_a_port_and_is_refused_the_three_ways_a_valued_flag_is() {
+        let read =
+            |args: &[&str]| sources_from(args.iter().map(|a| a.to_string()).collect::<Vec<_>>());
+
+        let launch = read(&["--mcp", "8000"]).expect("a port is a port");
+        assert_eq!(launch.mcp, Some(8000));
+        // **On either side of the pair, like the two flags beside it.** An
+        // operator types the flags in whatever order they think of them.
+        let pair = shipped();
+        let (l1, l4) = (pair.l1.display().to_string(), pair.l4.display().to_string());
+        let launch = read(&[&l1, &l4, "--mcp", "0"]).expect("after the pair");
+        assert_eq!(launch.mcp, Some(0), "a port after the pair");
+        let launch = read(&["--mcp", "0", &l1, &l4]).expect("before the pair");
+        assert_eq!(launch.mcp, Some(0), "a port before the pair");
+
+        // And a run that does not ask serves nothing rather than a default port.
+        assert_eq!(
+            read(&[&l1, &l4]).expect("no flag").mcp,
+            None,
+            "a run that did not ask for a server was given one"
+        );
+
+        // The end of the line: nothing after the flag.
+        let why = read(&["--mcp"]).expect_err("a flag with nothing after it");
+        assert!(why.contains("--mcp"), "the refusal does not name it: {why}");
+        assert!(
+            why.contains("needs a value"),
+            "the refusal is not the one the other flags give: {why}"
+        );
+
+        // The next flag is not a value: `--mcp --store x` must blame `--mcp`
+        // rather than reading `--store` as a port and then blaming `x` for
+        // being an unknown option.
+        let why = read(&["--mcp", "--store", "somewhere"]).expect_err("a flag as a value");
+        assert!(
+            why.contains("--mcp") && why.contains("--store"),
+            "the refusal does not say which flag ate which: {why}"
+        );
+
+        // And a value that is not a number.
+        let why = read(&["--mcp", "eight-thousand"]).expect_err("a port that is not one");
+        assert!(
+            why.contains("eight-thousand") && why.contains("a port number"),
+            "the refusal does not say what was expected: {why}"
+        );
+    }
+
+    /// **A wire request reaches the slot's watcher, and the rest of that
+    /// watcher's aim is restated with it.**
+    ///
+    /// The three points `mcp::WireRequest` owes, checked without a window: the
+    /// edge is replaced rather than appended and keyed on the input, the slot is
+    /// re-aimed with the run's whole wiring, and a slot this deck has not got is
+    /// refused in the one sentence every surface refuses one in.
+    ///
+    /// **The twelve other fields are the point of the second assertion.** An
+    /// `Aim` is every field of a slot's identity, and a rewiring that restated
+    /// only the edges would come back with the outgoing slot's camera, fold and
+    /// salts — a defect that shows on the *next* build rather than on the
+    /// rewiring, which is why it is asserted here rather than left to be seen.
+    #[test]
+    fn a_wire_request_reaches_the_slots_watcher_with_the_rest_of_its_aim_restated() {
+        let edge = |node: &str, slot: &str, to: &str| karakuri_engine::set::Edge {
+            node: node.to_string(),
+            slot: slot.to_string(),
+            to: to.to_string(),
+        };
+        let (tx, rx) = std::sync::mpsc::channel();
+        let mut aims = vec![Aiming {
+            aim: tx,
+            at: watch::Aim {
+                head: karakuri_environment::compile::Named {
+                    name: Some("grid".into()),
+                    path: std::path::PathBuf::from("A0-grid.kir"),
+                },
+                rest: vec![karakuri_environment::compile::Named::bare("A1-points.kir")],
+                layering: Layering::Composite,
+                live: Some(0),
+                capacity: Some(2048),
+                seed_salt: 9,
+                salts: vec![9],
+                camera: karakuri_engine::camera::Orbit::default(),
+                overrides: Vec::new(),
+                published: Vec::new(),
+                bindings: Vec::new(),
+                edges: Vec::new(),
+                authorities: Vec::new(),
+            },
+        }];
+        let mut edges = Vec::new();
+
+        let said = rewired(
+            &[(0, edge("warp", "shape", "field"))],
+            &mut edges,
+            &mut aims,
+            1,
+        );
+        assert_eq!(said.len(), 1);
+        let line = said[0].as_ref().expect("the slot is in range");
+        assert!(
+            line.contains("warp.shape=field") && line.contains("recompiling"),
+            "the answer does not say what was wired or that anything rebuilds: {line}"
+        );
+        let aim = rx.try_recv().expect("the watcher was not re-aimed at all");
+        assert_eq!(aim.edges, vec![edge("warp", "shape", "field")]);
+        // **The twelve fields that are not the edges.**
+        assert_eq!(aim.head.name.as_deref(), Some("grid"));
+        assert_eq!(aim.live, Some(0), "the fold was silently un-selected");
+        assert_eq!(aim.capacity, Some(2048), "the capacity came back as none");
+        assert_eq!(aim.salts, vec![9], "the salts would repaint every element");
+        assert_eq!(aim.layering, Layering::Composite);
+
+        // **The same input again is a replacement and not a second edge**,
+        // because `SetError::SlotBoundTwice` refuses two edges on one input
+        // where the Set is built — an append would make a model unable to
+        // change its mind.
+        let said = rewired(
+            &[(0, edge("warp", "shape", "other"))],
+            &mut edges,
+            &mut aims,
+            1,
+        );
+        assert!(said[0].is_ok(), "{:?}", said[0]);
+        assert_eq!(
+            edges,
+            vec![edge("warp", "shape", "other")],
+            "the run is wired with both, and the Set will refuse to build"
+        );
+        let aim = rx.try_recv().expect("the second request re-aimed nothing");
+        assert_eq!(aim.edges, vec![edge("warp", "shape", "other")]);
+        // And the aim the watcher is pointed at moved with it, so a third
+        // request restates the second rather than the first.
+        assert_eq!(aims[0].at.edges, vec![edge("warp", "shape", "other")]);
+
+        // A slot this deck has not got, in the one sentence.
+        let said = rewired(
+            &[(3, edge("warp", "shape", "field"))],
+            &mut edges,
+            &mut aims,
+            1,
+        );
+        let why = said[0].as_ref().expect_err("slot 3 of a deck of one");
+        assert_eq!(
+            why,
+            &format!(
+                "{}, and nothing was rewired",
+                karakuri_environment::no_such_slot(3, 1)
+            ),
+            "the refusal is not the one every other surface gives"
+        );
+        assert_eq!(
+            edges,
+            vec![edge("warp", "shape", "other")],
+            "a refused request wrote an edge anyway"
+        );
+        assert!(
+            rx.try_recv().is_err(),
+            "a refused request re-aimed a watcher"
+        );
+    }
+
     /// **The two flags say where this program's data is, and either may sit on
     /// either side of the pair.**
     ///
@@ -11499,6 +13058,33 @@ mod tests {
 /// writing this. Here it is after the boundary, and reachable from all three
 /// test modules — [`tests`], [`key_column`] and [`gpu`] — because it is at the
 /// file's own scope, which the two that are not inside [`tests`] need.
+/// One `.kir`, parsed and checked, for the tests that need a `Checked` and no
+/// window.
+///
+/// **`karakuri-environment`'s own five stages and not a sixth spelling.** This
+/// used to be a hand-rolled parse-then-check, which is what the run itself used
+/// to build a slot from; the run compiles through
+/// [`karakuri_environment::compile::sort_slot`] now, because that is the one
+/// place that keeps the bytes a node's address is derived from
+/// ([`karakuri_environment::compile::Placed::source`]). What is left here is a
+/// test helper, and a test helper with its own compiler would be a second answer
+/// to *does this file check* the day either moved.
+///
+/// **Below `mod tests` for [`shipped`]'s reason, which is the same reason and
+/// was learned here.** [`key_column::bound`] stops reading this file at the
+/// first `#[cfg(test)]` line, so a test-only item above the window loop's
+/// `match` moves that stop line past every key arm — the scan then finds no
+/// keys at all and both checks built on it pass over an empty set. This
+/// function sat beside [`capacity_of`] when it became test-only, and that is
+/// exactly what happened.
+#[cfg(test)]
+fn checked(path: &std::path::Path) -> karakuri_ir::typed::Checked {
+    match karakuri_environment::compile::load(path) {
+        Ok((checked, _)) => checked,
+        Err(report) => panic!("{report}"),
+    }
+}
+
 #[cfg(test)]
 fn shipped() -> Sources {
     let presets = karakuri_environment::places::presets(None)
@@ -11767,6 +13353,16 @@ mod key_column {
         // transfer from the keyboard, and they cannot: the only way to that
         // emission is a load off a row of `presets`.
         ("l", &["Load material into a deck"]),
+        // **The save, whose operand is the selection the load's is.** The
+        // command line reaches this row with the same letter and from its own
+        // focus; the two agree because a deck is a slot number, which is the
+        // deck keys' argument one row along.
+        //
+        // **It is the key column and not the panel column that this makes
+        // `has`.** The Library bay draws no *keep* control, so the row's panel
+        // badge stays `plan` — a key is not a control, and a badge that named
+        // one would be a claim about something that is not drawn.
+        ("k", &["Keep what a deck is playing"]),
         // **The scope, and it is the one key here whose row the page marks
         // `plan` in every other column.** The chips are drawn by
         // `karakuri-console` and pressed by nobody: `SelectScope` is emitted
@@ -12113,6 +13709,10 @@ mod key_column {
 mod gpu {
     //! The console, through `egui`, through `wgpu` 30, onto a real device.
 
+    /// **A temporary root nobody else's run wrote into**, shared with
+    /// `mod tests` rather than spelled twice: two answers to *where does a test
+    /// put its store* is two directories to clean up and one of them stale.
+    use super::tests::scratch_dir;
     use super::*;
     /// **The engine's own fitting, asked rather than re-derived.** It is what
     /// `Present::draw` sets its viewport from, so what it leaves over at the
@@ -12120,6 +13720,272 @@ mod gpu {
     /// copy of the arithmetic here would be a test agreeing with itself about
     /// the one thing it is checking.
     use karakuri_engine::letterbox;
+
+    /// **A [`Keeping`] with nothing served and nothing yet built**, which is
+    /// what a run holds on its first frame.
+    fn keeping() -> Keeping {
+        let (_, built) = std::sync::mpsc::channel();
+        let (save_tx, saves) = std::sync::mpsc::channel();
+        Keeping {
+            mcp: None,
+            edges: Vec::new(),
+            playing: Playing {
+                playing: Vec::new(),
+                previous: Vec::new(),
+            },
+            built,
+            pending: Vec::new(),
+            saves,
+            save_tx,
+            in_flight: 0,
+        }
+    }
+
+    /// One request, one reply, over TCP exactly as a client would — the shape
+    /// `karakuri-environment/src/mcp.rs`'s own `wire_tests` use, restated here
+    /// because that module is `#[cfg(test)]` and nothing outside it can call in.
+    ///
+    /// **Over a socket, because that is the only way to read a
+    /// [`mcp::Reporter`] back.** A report handed to the server goes into a queue
+    /// only the protocol can drain, which is exactly the property under test: a
+    /// swap the lane drew is a swap a model can ask about.
+    fn call(port: u16, name: &str, args: serde_json::Value) -> (bool, String) {
+        use std::io::{BufRead, Write};
+        let body = serde_json::json!({"jsonrpc":"2.0","id":1,"method":"tools/call",
+                                      "params":{"name":name,"arguments":args}})
+        .to_string();
+        let request = format!(
+            "POST / HTTP/1.1\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}",
+            body.len()
+        );
+        let mut stream = std::net::TcpStream::connect(("127.0.0.1", port)).expect("connect");
+        stream
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .expect("a read timeout, so a wedged server fails as a timeout");
+        stream.write_all(request.as_bytes()).expect("write");
+        let mut reader = std::io::BufReader::new(stream);
+        let mut line = String::new();
+        reader.read_line(&mut line).expect("no status line");
+        let mut length = 0usize;
+        loop {
+            let mut header = String::new();
+            reader.read_line(&mut header).expect("header");
+            let header = header.trim_end();
+            if header.is_empty() {
+                break;
+            }
+            if let Some((name, value)) = header.split_once(':') {
+                if name.eq_ignore_ascii_case("content-length") {
+                    length = value.trim().parse().unwrap_or(0);
+                }
+            }
+        }
+        let mut body = vec![0u8; length];
+        std::io::Read::read_exact(&mut reader, &mut body).expect("body");
+        let reply: serde_json::Value =
+            serde_json::from_slice(&body).expect("the answer is not JSON");
+        let result = &reply["result"];
+        (
+            result["isError"].as_bool().unwrap_or(true),
+            result["content"][0]["text"]
+                .as_str()
+                .unwrap_or("")
+                .to_string(),
+        )
+    }
+
+    /// **A save writes what the deck is playing as a Set file, and the file
+    /// loads back.**
+    ///
+    /// This is the whole of what *Keep what a deck is playing* is, from the
+    /// press or the tool call through to a `.set` in the store — and it is a
+    /// device test because the one line of it that needs a `Deck` is the one
+    /// that reads what the slot is playing ([`playing_values`]).
+    ///
+    /// **It is asserted against the deck rather than against the flags**, which
+    /// is the whole reason that function exists: the capacity written down is
+    /// the geometry's own declaration and the salt is the one this slot is
+    /// running at, so a save that read the command line would record a picture
+    /// nobody has seen.
+    ///
+    /// **Nothing has been rebuilt when this saves**, which is the case
+    /// [`Playing::at_launch`] exists for: a deck could not be written down at
+    /// all until the launch version had an address, and the failure it replaces
+    /// is a refusal saying the sources are not in the store on a run where they
+    /// are.
+    #[test]
+    fn a_save_writes_what_the_deck_is_playing_as_a_set_file_that_loads_back() {
+        let gpu = Gpu::headless().expect("no GPU");
+        let mut renderer = egui_wgpu::Renderer::new(
+            &gpu.device,
+            wgpu::TextureFormat::Rgba8Unorm,
+            egui_wgpu::RendererOptions::default(),
+        );
+        let mut panel = Panel::new(1440.0, 900.0);
+        view::rearrange(&mut panel, CANVAS);
+        let engine = Engine::new(
+            &gpu,
+            &mut renderer,
+            &shipped_slots(),
+            panel.layout(),
+            1.0,
+            None,
+        );
+
+        let root = scratch_dir("kept");
+        let mut keeping = keeping();
+        keeping.playing = Playing::at_launch(&engine.placed, engine.deck.slot_count());
+        // Deck B, so a hard-coded slot 0 fails here.
+        keeping.save_set(&engine, &root, ASKED_TO_PRIME, Some("kept01".into()), None);
+        assert_eq!(keeping.in_flight, 1, "the save was never started");
+
+        // The save is on a thread of its own and no frame waits for it; this is
+        // what the end of a run does — see [`Keeping::awaited_saves`].
+        keeping.awaited_saves();
+        assert_eq!(keeping.in_flight, 0, "the save never came back");
+
+        let store = Store::open(&root).expect("the store the save made");
+        let loaded = setfile::load(&store, "kept01").expect("the file it wrote");
+        assert_eq!(
+            loaded.srcs.len(),
+            engine.placed.len(),
+            "the file does not name every node the slot is running"
+        );
+        // **What the deck is running, not what a flag says.** The capacity is
+        // the L1's own declaration and the salt is this slot's.
+        assert_eq!(
+            loaded.capacities,
+            vec![Some(engine.capacity)],
+            "the capacity written down is not the one the deck is drawing"
+        );
+        assert_eq!(
+            loaded.salts,
+            vec![Some(slot_salt(ASKED_TO_PRIME))],
+            "the salt written down is not the one this slot is salted with"
+        );
+
+        std::fs::remove_dir_all(&root).expect("clean up");
+    }
+
+    /// **The swap report says what the lane says**, because the lane and the
+    /// server are told by one drain.
+    ///
+    /// `Deck::events` empties the channel, so there is no second drain to be
+    /// had: a loop that read it again would read nothing, and a server told
+    /// from anywhere else would be told about a different build. That is why
+    /// [`staging`] reports rather than a function beside it, and this is the
+    /// check that fact owes — the sentence a model reads out of `swap_outcome`
+    /// is the event the row was written from.
+    ///
+    /// **And what the slot is now playing moves with it.** A build that landed
+    /// and was not taken up is a build a save would write the *previous*
+    /// version of, so the address is asserted here rather than left to the save
+    /// test, which never rebuilds anything.
+    #[test]
+    fn the_swap_report_says_what_the_lane_says() {
+        let gpu = Gpu::headless().expect("no GPU");
+        let mut renderer = egui_wgpu::Renderer::new(
+            &gpu.device,
+            wgpu::TextureFormat::Rgba8Unorm,
+            egui_wgpu::RendererOptions::default(),
+        );
+        let mut panel = Panel::new(1440.0, 900.0);
+        view::rearrange(&mut panel, CANVAS);
+
+        // **Its own copies, because this test edits a `.kir`** — which is what
+        // `working_copies` is for and why no other device test in this file
+        // needs it.
+        let root = scratch_dir("swapped");
+        let (_, running) =
+            working_copies(&root, &shipped(), SLOTS).expect("the copies this deck runs from");
+        let store = std::sync::Arc::new(Store::open(&root).expect("store"));
+        let (built_tx, built) = std::sync::mpsc::channel();
+        let mut engine = Engine::new(
+            &gpu,
+            &mut renderer,
+            &running,
+            panel.layout(),
+            1.0,
+            Some((std::sync::Arc::clone(&store), built_tx)),
+        );
+
+        let reporter = mcp::serve(
+            0,
+            mcp::Slots(
+                running
+                    .iter()
+                    .map(|pair| (pair.l1.clone(), vec![pair.l4.clone()]))
+                    .collect(),
+            ),
+            root.clone(),
+            true,
+            Opening::closed(),
+        )
+        .expect("an ephemeral port");
+        let port = reporter.port();
+
+        let mut keeping = keeping();
+        keeping.built = built;
+        keeping.playing = Playing::at_launch(&engine.placed, engine.deck.slot_count());
+        let was = keeping.playing.at(ON_AIR).expect("seeded at launch")[0].hash;
+        keeping.mcp = Some(reporter);
+
+        // An edit the watcher will pick up: the same procedure, one comment
+        // longer, so it compiles and its bytes are different.
+        let l1 = &running[ON_AIR].l1;
+        let edited = format!(
+            "{}\n// an edit\n",
+            std::fs::read_to_string(l1).expect("read")
+        );
+        std::fs::write(l1, edited).expect("write");
+
+        // The worker polls every hundred milliseconds and wants two polls of
+        // quiet before it builds, then compiles; the swap lands at a frame
+        // boundary, which is `begin_frame`.
+        let mut rows: Vec<view::Candidate> = Vec::new();
+        let mut took: Vec<(usize, Option<u64>)> = Vec::new();
+        let deadline = Instant::now() + Duration::from_secs(30);
+        while took.is_empty() && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(50));
+            drop(engine.deck.begin_frame(&gpu.device, &gpu.queue));
+            staging(&mut engine.deck, &mut rows, keeping.mcp.as_ref(), &mut took);
+        }
+        assert!(
+            !took.is_empty(),
+            "nothing was built in 30s — the watcher never saw the edit"
+        );
+        let row = rows
+            .iter()
+            .find(|row| row.deck == ON_AIR)
+            .expect("the lane drew no row for the deck that rebuilt");
+        assert_eq!(
+            row.stage,
+            view::Stage::Landed,
+            "the build did not land, so this test is not about what it says it is"
+        );
+
+        // **The same sentence, out of the server.** `swap_outcome` answers with
+        // the reports the render loop handed over, newest last.
+        let (failed, said) = call(port, "swap_outcome", serde_json::json!({}));
+        assert!(!failed, "swap_outcome refused: {said}");
+        assert!(
+            said.contains(&format!("slot {ON_AIR}:")) && said.contains(&row.name),
+            "the server was told something the lane was not: {said} against `{}`",
+            row.name
+        );
+
+        // And the slot is playing the new bytes, so a save would write them.
+        for (slot, landed) in took {
+            keeping.took_up(&engine, slot, landed);
+        }
+        let now = keeping.playing.at(ON_AIR).expect("still addressable")[0].hash;
+        assert_ne!(
+            was, now,
+            "the build landed and the slot is still addressed as what it launched with"
+        );
+
+        std::fs::remove_dir_all(&root).expect("clean up");
+    }
 
     /// **A real Set reads out into a pane**, which is the seven reads
     /// [`inspector`] makes held against a Set this program actually builds
@@ -12143,7 +14009,14 @@ mod gpu {
         let mut panel = Panel::new(1440.0, 900.0);
         view::rearrange(&mut panel, CANVAS);
         let sources = shipped();
-        let engine = Engine::new(&gpu, &mut renderer, &shipped_slots(), panel.layout(), 1.0);
+        let engine = Engine::new(
+            &gpu,
+            &mut renderer,
+            &shipped_slots(),
+            panel.layout(),
+            1.0,
+            None,
+        );
         // One name per slot, which is what `Gfx::material` is: every slot
         // opens on the same pair, and a load is what makes them differ.
         let material = vec![sources.material(); engine.deck.slot_count()];
@@ -12266,7 +14139,14 @@ mod gpu {
         panel.solve();
         let rect = picture_rect(panel.layout(), CANVAS).expect("the picture is on screen");
         let cells = preview_rects(panel.layout(), CANVAS).expect("the preview row is on screen");
-        let mut engine = Engine::new(&gpu, &mut renderer, &shipped_slots(), panel.layout(), 1.0);
+        let mut engine = Engine::new(
+            &gpu,
+            &mut renderer,
+            &shipped_slots(),
+            panel.layout(),
+            1.0,
+            None,
+        );
         // **Built at what the file declares**, which is the other half of
         // `the_capacity_is_the_l1s_own_declaration_and_the_l4_declares_none`:
         // that one says what the `.kir` says, and this one says the deck was
@@ -12594,7 +14474,14 @@ mod gpu {
         panel.solve();
         let rect = picture_rect(panel.layout(), CANVAS).expect("on screen");
         let want = physical(rect, 1.0);
-        let engine = Engine::new(&gpu, &mut renderer, &shipped_slots(), panel.layout(), 1.0);
+        let engine = Engine::new(
+            &gpu,
+            &mut renderer,
+            &shipped_slots(),
+            panel.layout(),
+            1.0,
+            None,
+        );
 
         // The picture's, in both axes, and **neither of them is the window's**
         // — the picture is narrower than the window by both panes and taller
@@ -12686,7 +14573,14 @@ mod gpu {
             picture_rect(panel.layout(), CANVAS).expect("on screen"),
             1.0,
         );
-        let mut engine = Engine::new(&gpu, &mut renderer, &shipped_slots(), panel.layout(), 1.0);
+        let mut engine = Engine::new(
+            &gpu,
+            &mut renderer,
+            &shipped_slots(),
+            panel.layout(),
+            1.0,
+            None,
+        );
         let first = engine.picture.id;
         assert_eq!(engine.picture.size, want);
 
@@ -12809,7 +14703,14 @@ mod gpu {
         let mut panel = Panel::new(W as f32, H as f32);
         view::rearrange(&mut panel, CANVAS);
         let cells = preview_rects(panel.layout(), CANVAS).expect("the preview row is on screen");
-        let mut engine = Engine::new(&gpu, &mut renderer, &shipped_slots(), panel.layout(), 1.0);
+        let mut engine = Engine::new(
+            &gpu,
+            &mut renderer,
+            &shipped_slots(),
+            panel.layout(),
+            1.0,
+            None,
+        );
 
         // **A cell has a slot behind it or it has nothing**, and that is the
         // whole of the gate. Past the last slot there is no view to sample.
@@ -13100,7 +15001,14 @@ mod gpu {
             (112, 63),
             "the mock's own cell, at the mock's own width"
         );
-        let mut engine = Engine::new(&gpu, &mut renderer, &shipped_slots(), panel.layout(), 1.0);
+        let mut engine = Engine::new(
+            &gpu,
+            &mut renderer,
+            &shipped_slots(),
+            panel.layout(),
+            1.0,
+            None,
+        );
 
         // **The cell's, in both axes** — not the row's, not the picture's and
         // not the window's. The row holds four of these side by side with
@@ -13255,7 +15163,14 @@ mod gpu {
             egui_wgpu::Renderer::new(&gpu.device, FORMAT, egui_wgpu::RendererOptions::default());
         let mut panel = Panel::new(W as f32, H as f32);
         panel.solve();
-        let mut engine = Engine::new(&gpu, &mut renderer, &shipped_slots(), panel.layout(), 1.0);
+        let mut engine = Engine::new(
+            &gpu,
+            &mut renderer,
+            &shipped_slots(),
+            panel.layout(),
+            1.0,
+            None,
+        );
 
         // The strips, written the way the frame writes them.
         let material = vec![shipped().material(); engine.deck.slot_count()];
@@ -13342,7 +15257,14 @@ mod gpu {
             egui_wgpu::Renderer::new(&gpu.device, FORMAT, egui_wgpu::RendererOptions::default());
         let mut panel = Panel::new(1440.0, 900.0);
         panel.solve();
-        let engine = Engine::new(&gpu, &mut renderer, &shipped_slots(), panel.layout(), 1.0);
+        let engine = Engine::new(
+            &gpu,
+            &mut renderer,
+            &shipped_slots(),
+            panel.layout(),
+            1.0,
+            None,
+        );
 
         assert_eq!(
             engine.deck.slot_count(),
@@ -13408,7 +15330,14 @@ mod gpu {
             egui_wgpu::Renderer::new(&gpu.device, FORMAT, egui_wgpu::RendererOptions::default());
         let mut panel = Panel::new(W as f32, H as f32);
         panel.solve();
-        let mut engine = Engine::new(&gpu, &mut renderer, &shipped_slots(), panel.layout(), 1.0);
+        let mut engine = Engine::new(
+            &gpu,
+            &mut renderer,
+            &shipped_slots(),
+            panel.layout(),
+            1.0,
+            None,
+        );
         let material = vec![shipped().material(); engine.deck.slot_count()];
 
         // **Before the pass, and this is the deck this program opens with.**
@@ -13610,7 +15539,14 @@ mod gpu {
             egui_wgpu::Renderer::new(&gpu.device, FORMAT, egui_wgpu::RendererOptions::default());
         let mut panel = Panel::new(W as f32, H as f32);
         panel.solve();
-        let mut engine = Engine::new(&gpu, &mut renderer, &shipped_slots(), panel.layout(), 1.0);
+        let mut engine = Engine::new(
+            &gpu,
+            &mut renderer,
+            &shipped_slots(),
+            panel.layout(),
+            1.0,
+            None,
+        );
         let material = vec![shipped().material(); engine.deck.slot_count()];
 
         // The state, produced by the governor and not written here.
@@ -13788,7 +15724,14 @@ mod gpu {
             egui_wgpu::Renderer::new(&gpu.device, FORMAT, egui_wgpu::RendererOptions::default());
         let mut panel = Panel::new(W as f32, H as f32);
         panel.solve();
-        let mut engine = Engine::new(&gpu, &mut renderer, &shipped_slots(), panel.layout(), 1.0);
+        let mut engine = Engine::new(
+            &gpu,
+            &mut renderer,
+            &shipped_slots(),
+            panel.layout(),
+            1.0,
+            None,
+        );
         let material = vec![shipped().material(); engine.deck.slot_count()];
 
         // A wipe in progress on the deck that is on air: a straight front,
@@ -13945,7 +15888,14 @@ mod gpu {
             egui_wgpu::Renderer::new(&gpu.device, FORMAT, egui_wgpu::RendererOptions::default());
         let mut panel = Panel::new(W as f32, H as f32);
         panel.solve();
-        let mut engine = Engine::new(&gpu, &mut renderer, &shipped_slots(), panel.layout(), 1.0);
+        let mut engine = Engine::new(
+            &gpu,
+            &mut renderer,
+            &shipped_slots(),
+            panel.layout(),
+            1.0,
+            None,
+        );
         engine.look = STARTS_AT;
 
         // What the console reads this frame, off the look the engine holds.
@@ -14117,7 +16067,14 @@ mod gpu {
 
         let mut panel = Panel::new(W as f32, H as f32);
         panel.solve();
-        let mut engine = Engine::new(&gpu, &mut renderer, &shipped_slots(), panel.layout(), 1.0);
+        let mut engine = Engine::new(
+            &gpu,
+            &mut renderer,
+            &shipped_slots(),
+            panel.layout(),
+            1.0,
+            None,
+        );
 
         // A different window on a different display, so nothing asserted below
         // can be what construction happened to leave in place — and at 1760
