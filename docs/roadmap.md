@@ -244,15 +244,17 @@ column and are in no sub-milestone. The arena's insert and remove is above.
 
 #### M5.1 — Program
 
-**Rows.** No `plan` panel badge at all — the Program bay is the one complete bay on the page. Two
-of its rows carry a `plan` key badge — *Put a deck on air, prime it, or take it off* at the tally
-chip, and *Choose what the output shows* at the preview.
+**Rows.** No `plan` panel badge or key badge remains. The two key badges previously planned were
+resolved: *Put a deck on air, prime it, or take it off* retired its key shortcut in favor of mixer
+controls, and *Choose what the output shows* was retired as a redundant operation now that the four
+deck preview cells monitor channels independently while the central picture displays the mix (see
+[docs/history/m5.md](history/m5.md)).
 
 **Exit.** No `plan` badge in the panel or key column of this bay's rows on
 [every operation](manual/operations.html).
 
-**Blocked on.** Nothing. The picture, the four preview cells, the deck selection and its MCP pill
-are drawn and each reaches something. What is left is two key bindings.
+**Blocked on.** Nothing. All panel and key rows are clear. What remains is condensing the bay's
+two tooltip notes.
 
 **The bay's prose, as tooltips.** Two notes. *Program, sized by height* is the height drag and the
 letterbox, the picture being the `program view` sink and on screen exactly when that sink is on, and
@@ -723,12 +725,13 @@ data lives, and with neither given a four-candidate search runs (ADR-0230). `exa
 `.kset` files a fresh clone opens on; `my sets` is empty until something is saved.
 
 **M5.1 is the current sub-milestone and it is nearly closed.** The Program bay carries no `plan`
-panel badge at all — it is the one complete bay on the page. The decision on preview sizing and
-arrangement was resolved by ADR-0239 (preserving operator preview size across arrangements, pure
-area comparison at crossover 706px, and widening default outer panes to 340px / 400px so standard
-windows open in Below mode; see [docs/history/m5.md](history/m5.md)). What is left is two key
-bindings (*Put a deck on air, prime it, or take it off* and *Choose what the output shows*), and
-then the bay's two tooltip notes. Nothing is blocked.
+panel or key badges on [every operation](manual/operations.html). The preview sizing and arrangement
+was settled by ADR-0239 (preserving operator preview size across arrangements, pure area comparison
+at crossover 706px, and widening outer panes to 340px / 400px so standard windows open in Below
+placement). The two remaining key badges were resolved: *Put a deck on air* retired its shortcut
+in favor of mixer controls, and *Choose what the output shows* was retired as redundant with independent
+preview cells (see [docs/history/m5.md](history/m5.md)). What remains for M5.1 exit is condensing the
+bay's two tooltip notes. Nothing is blocked.
 
 **The order after M5.1 is the section above.** Work the sub-milestones top to bottom; each one
 names its own rows, its exit condition and its blockers. Run the fourth command beside them: a

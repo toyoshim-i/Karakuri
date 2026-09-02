@@ -181,13 +181,13 @@
         </div>
       </div>
       <div class="op">
-        <div class="op-name" tabindex="0" data-tip="Three states, not two switches: live is stepped and composited, priming is stepped out of sight and adds nothing to the mix, allocated is held &mdash; so a deck taken off and brought back resumes rather than restarts. Priming is a request the governor reconsiders every pass, and a deck asked to prime with no room is parked until there is. MIDI names the deck and the state; a key acts on the selected deck.">
+        <div class="op-name" tabindex="0" data-tip="Three states, not two switches: live is stepped and composited, priming is stepped out of sight and adds nothing to the mix, allocated is held &mdash; so a deck taken off and brought back resumes rather than restarts. Priming is a request the governor reconsiders every pass, and a deck asked to prime with no room is parked until there is. MIDI names the deck and the state.">
           <div class="op-head"><h3>Put a deck on air, prime it, or take it off</h3></div>
         </div>
         <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt has">panel <b>tally chip</b></span>
-          <span class="rt plan">key <b>space, w</b></span>
+          <span class="rt gap">key <b>&mdash;</b></span>
           <span class="rt has">MIDI <b>note &rarr; residency N live|priming|allocated</b></span>
           <span class="rt plan">MCP <b>&mdash;</b></span>
           <span class="rt-none"></span>
@@ -351,19 +351,6 @@
           <span class="rt plan">panel <b>renderer chips</b></span>
           <span class="rt plan">key <b>r</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
-          <span class="rt plan">MCP <b>&mdash;</b></span>
-          <span class="rt-none"></span>
-        </div>
-      </div>
-      <div class="op">
-        <div class="op-name" tabindex="0" data-tip="The mix, or one deck auditioned. The panel's control is the four deck preview cells, and a press on one names its own deck &mdash; except on the cell the output is already showing, which asks for the mix, because ending an audition is the other half of what this row says. MIDI can name a deck or the mix directly.">
-          <div class="op-head"><h3>Choose what the output shows</h3></div>
-        </div>
-        <span class="op-when">immediate</span>
-        <div class="rts">
-          <span class="rt has">panel <b>preview</b></span>
-          <span class="rt plan">key <b>v</b></span>
-          <span class="rt has">MIDI <b>note &rarr; preview N|mix</b></span>
           <span class="rt plan">MCP <b>&mdash;</b></span>
           <span class="rt-none"></span>
         </div>
