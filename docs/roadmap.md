@@ -432,13 +432,24 @@ renderer row and *take back* each carry one, and the parameter rows and their fa
 **Exit.** No `plan` badge in the panel or key column of this bay's rows on
 [every operation](manual/operations.html).
 
-**Blocked on.** The one row. No output has an identity anywhere in this workspace:
-`RouteFrame { output: Undecided }`, and deciding what names an output is the row's whole content
-rather than a payload it is missing. **One field of it is decided**: an output holds the size it is
-rendered at, which the operator or the destination window sets
-([ADR-0246](adr/0246-the-render-size-belongs-to-the-output-and-the-sessions-canvas-is-only-its-default.md)).
-The first question that record leaves is this bay's: whether two outputs at two sizes cost two
-renders or one render scaled per output. The bay draws its sinks and hit-tests the dot; what it owes is
+**What an output is, which is this bay's to build.** `RouteFrame { output: Undecided }`, and no
+output has an identity anywhere in this workspace. It was in *The decisions nobody has taken* and it
+is here instead: it blocks nothing but this bay, so it is an implementation item of it rather than a
+standing question. Three constraints are on record and the rest is this bay's work.
+
+- **The picture is in the set that needs naming and a preview cell is not**
+  ([ADR-0243](adr/0243-the-program-picture-is-an-output-and-the-four-cells-are-monitors.md)).
+- **An output holds the size it is rendered at**, which the operator or the destination window sets
+  ([ADR-0246](adr/0246-the-render-size-belongs-to-the-output-and-the-sessions-canvas-is-only-its-default.md)).
+- **One render, scaled into each output**, at the largest enabled output's size, so no output is
+  ever upscaled ([ADR-0247](adr/0247-one-frame-is-rendered-and-scaled-into-each-output.md)). There
+  is no second `Deck`, no second mix and no second present pipeline to design.
+
+What is left to decide is the identity itself — the destination, and what tells a sink this
+repository owns from one a plugin brings. The mock already draws four of them: *program view*,
+*projector · DELL U2720Q*, *Syphon*, *NDI · no plugin*.
+
+**Blocked on.** Nothing outside this bay. The bay draws its sinks and hit-tests the dot; what it owes is
 the switchable list, which is the blocked part.
 
 **Also here.** A second `Sink`, which the estimate excluded from its range. The fan-out is built
@@ -792,14 +803,15 @@ what that slot's residency is (`crates/karakuri/src/main.rs`). That closes the s
 first, that `karakuri-cli` cannot audition a slot, is not a gap:
 [ADR-0242](adr/0242-the-command-line-is-test-tooling-and-the-instruments-principles-do-not-bind-it.md)
 makes the command line test tooling and scopes it out of the instrument's principles, so a rule
-written for the person playing the instrument does not reach it. **What P-0080 still records under
-*Where it is not met* is prose rather than behaviour.** `crates/karakuri/src/main.rs` carries a
-module header and two constant docs that still say a cell is drawn only for a Live deck and that
-three slots are neither stepping nor drawn — its *Three of the four preview cells are off at a time*
-paragraph, and the docs on `ON_AIR` and on the deck's fullness. That is
-[P-0023](principles/0023-a-document-that-describes-replaced-behaviour-is-worse-than-none.md), and it
-is the program narrating behaviour it no longer has. The rejected build's cell — black, or the
-sentence saying what went wrong — is owed on top of it.
+written for the person playing the instrument does not reach it. **The prose that narrated the old behaviour is corrected**, on 2026-09-02: the *Three of the four
+preview cells are off at a time* paragraph is gone, the doc on `ON_AIR` reads *"every cell draws its
+own slot whatever its residency"*, and the deck's fullness doc says each resting slot is *"still
+drawn into its own cell"*. P-0023 is met here and this paragraph said otherwise until 2026-09-03.
+**What P-0080 still records under *Where it is not met* is one clause**: the rejected build's cell —
+black, or the sentence saying what went wrong. [The console page](manual/console.html) specifies it
+under *What a deck preview cell shows, and when* and says of it *"neither can happen yet, so nothing
+draws either word"*, which is the claim to check before drawing anything: the panel watches every
+slot's `.kir` pair now, so a build can be refused while it is running.
 
 **The panel serves MCP.** `karakuri --mcp PORT` binds `127.0.0.1:PORT` and runs
 `karakuri_environment::mcp::serve` with the same `Opening` the four bay-head pills write, so a pill
@@ -862,35 +874,29 @@ part of the picture*.
 
 ### The decisions nobody has taken
 
-Four, each with what it blocks. Every one was found by building the thing next to it.
-*What the deck A preview cell is showing* was one and is answered in the M5.1 paragraph above.
+Three, each with what it blocks. Every one was found by building the thing next to it.
 
-- **What names an output.** `Operation::RouteFrame` carries `output: Undecided`, and no output has
-  an identity anywhere in the workspace. The console page's Outputs row already sketches what the
-  identities look like — *program view*, *projector · DELL U2720Q*, *Syphon*, *NDI · no plugin*, and
-  `+ add output` — without saying what a payload holds for each, or what distinguishes a sink this
-  repository owns from one a plugin brings. Two constraints are on record:
-  [ADR-0243](adr/0243-the-program-picture-is-an-output-and-the-four-cells-are-monitors.md) — the
-  picture is in the set that needs naming and a preview cell is not — and
-  [ADR-0246](adr/0246-the-render-size-belongs-to-the-output-and-the-sessions-canvas-is-only-its-default.md),
-  which puts **the render size** among the fields an identity carries. **What it blocks**: M5.6.
+**Two have left this list since it was written, and neither by being decided here.** *What the deck A
+preview cell is showing* is answered in the M5.1 paragraph above. *The instrument has no resolution
+model* was not a decision at all: the model was
+[ADR-0077](adr/0077-the-canvas-belongs-to-the-session-and-the-window-gets-no-vote.md)'s, four weeks
+old and never cited from this file, and its one restrictive clause held only while the picture
+depended on the render size — which `point_rate` and the sub-pixel floor removed.
+[ADR-0246](adr/0246-the-render-size-belongs-to-the-output-and-the-sessions-canvas-is-only-its-default.md)
+gives the size to the output,
+[ADR-0247](adr/0247-one-frame-is-rendered-and-scaled-into-each-output.md) says one render scaled into
+each, and [P-0081](principles/0081-the-render-size-is-not-part-of-the-picture.md) is the rule that
+keeps both safe. What was left of it — **what names an output** — blocks only M5.6 and is an
+implementation item of that bay rather than a standing question. So the risk badge's five bands and
+the whole-frame budget below are not waiting on anybody's decision; they are waiting on an output to
+have a size.
 
-  *This bullet read **the instrument has no resolution model** until 2026-09-02, and that was two
-  questions filed as one.* The model was
-  [ADR-0077](adr/0077-the-canvas-belongs-to-the-session-and-the-window-gets-no-vote.md)'s and four
-  weeks old; what was open in it was one clause, *the window gets no vote*, which held only while
-  the picture depended on the render size. `point_rate` and the sub-pixel floor removed that, and
-  ADR-0246 gives the size to the output with
-  [P-0081](principles/0081-the-render-size-is-not-part-of-the-picture.md) as what keeps it safe. So
-  the risk badge's five bands and the whole-frame budget below are **not** waiting on a decision:
-  they are waiting on an output to have a size, which is M5.6's to build. What remains genuinely
-  undecided is the paragraph above.
-
-  **`crates/karakuri/src/main.rs` still renders at `const CANVAS: (u32, u32) = (1280, 720)`** with no
-  flag, and its own doc says why: it is the workspace's reference workload, so a number taken in the
-  panel sits beside every other number in this repository. **Every cost figure in this file was
-  measured at that constant.** That is a measuring harness's default standing in for an instrument's,
-  and what replaces it is an output's size, with whoever wants the reference workload typing it.
+**`crates/karakuri/src/main.rs` still renders at `const CANVAS: (u32, u32) = (1280, 720)`** with no
+flag, and its own doc says why: it is the workspace's reference workload, so a number taken in the
+panel sits beside every other number in this repository. **Every cost figure in this file was
+measured at that constant.** That is a measuring harness's default standing in for an instrument's,
+and what replaces it is the largest enabled output's size, with whoever wants the reference workload
+typing it.
 
 - **Which cut of the previous frame a feedback effect reads, and what holding it costs.** The
   previous frame is not one thing. It could be a Set's output, the raw frame the mix wrote before
