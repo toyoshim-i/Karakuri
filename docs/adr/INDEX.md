@@ -272,6 +272,7 @@ number; new records continue from the end.
 | [ADR-0244](0244-a-sub-pixel-primitive-is-drawn-at-one-pixel-and-compensated-in-the-alpha.md) | A sub-pixel primitive is drawn at one pixel and compensated in the alpha | 2026-09-02 | **superseded by ADR-0245** |
 | [ADR-0245](0245-the-sub-pixel-compensation-is-paid-in-the-colour-because-alpha-is-coverage.md) | The sub-pixel compensation is paid in the colour, because alpha is coverage | 2026-09-02 | accepted |
 | [ADR-0246](0246-the-render-size-belongs-to-the-output-and-the-sessions-canvas-is-only-its-default.md) | The render size belongs to the output, and the session's canvas is only its default | 2026-09-02 | accepted |
+| [ADR-0247](0247-one-frame-is-rendered-and-scaled-into-each-output.md) | One frame is rendered and scaled into each output | 2026-09-03 | accepted |
 
 ## Retired numbers
 

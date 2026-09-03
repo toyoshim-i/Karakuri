@@ -3120,7 +3120,11 @@ fn vocabulary() -> String {
                   height, not a count of pixels.** A sprite at 0.005 is a two-hundredth of \
                   the frame's height however large the frame is, and it is square in \
                   pixels; under `lines` the same number is the stroke's width. Typical \
-                  values are thousandths, and 1.0 fills the frame.\n\n",
+                  values are thousandths, and 1.0 fills the frame. A rate that works out \
+                  below one pixel does not disappear: the primitive is drawn at one pixel \
+                  and its colour multiplied by the coverage it lost, so a small target \
+                  gets the same picture dimmer rather than a sparser one. Zero or less \
+                  draws nothing.\n\n",
     );
     out.push_str("| name | type | block |\n|---|---|---|\n");
     for output in Output::ALL {
