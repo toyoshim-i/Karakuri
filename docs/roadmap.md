@@ -243,7 +243,7 @@ the frame goes* is M5.6's and *the camera* is M5.5's; *walking the edit history*
 section; and *moving a boundary* and *"edit the file instead"* carry no `plan` badge in either
 column and are in no sub-milestone. The arena's insert and remove is above.
 
-#### M5.1 — Program
+#### M5.1 — Program — **closed**
 
 **Rows.** No `plan` panel badge or key badge remains. The two key badges previously planned were
 resolved: *Put a deck on air, prime it, or take it off* retired its key shortcut in favor of mixer
@@ -261,9 +261,10 @@ cell, which is one more constraint on M5.6's naming question.
 **Exit.** No `plan` badge in the panel or key column of this bay's rows on
 [every operation](manual/operations.html).
 
-**Blocked on.** Nothing. All panel and key rows are clear, and what remains for the exit is
-condensing the bay's tooltip notes. The bay draws one thing less than the mock does, and it is not a
-badge and does not block the exit — see the risk badge, below.
+**Closed on 2026-09-03**, and the exit is a grep rather than a judgement: the board names no control
+of this bay, and none of the thirteen rows still carrying a `plan` key badge is one of its. See
+[docs/history/m5.md](history/m5.md) for what met it. The bay draws one thing less than the mock does,
+and it is not a badge and does not block the exit — see the risk badge, below.
 
 **A cell's letter and state are outside the image.** Each cell is an image with a caption band under
 it: the deck's letter, one word for what the cell is showing — `material`, or `no slot` — and a
@@ -286,7 +287,11 @@ answered rather than hidden, and that the pill says the word and is drawn armed.
 `solo`, `mcp · shut`, `previews 3 of 4` and all four cells and their captions already; the size pill
 and the picture carry none. So the second note is largely condensed and the other two are not. That last
 note also covers the pills in the Mixer's, the Master's and the Outputs' heads, so it is written
-here once and the other three bays take it as it stands.
+here once and the other three bays take it as it stands. **Done.** The size pill and the picture were
+the two controls in the bay with no `data-tip`, and both carry one now: the pill says the size is an
+output's rather than this bay's ([ADR-0246](adr/0246-the-render-size-belongs-to-the-output-and-the-sessions-canvas-is-only-its-default.md),
+[ADR-0247](adr/0247-one-frame-is-rendered-and-scaled-into-each-output.md)), and the picture carries
+*Program, sized by height* whole.
 
 #### M5.2 — Mixer
 
