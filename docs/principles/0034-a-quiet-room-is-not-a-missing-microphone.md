@@ -2,7 +2,9 @@
 
 An `energy` of 0.0 at high confidence is a **measurement** — silence. A frame with no audio record is
 a frame with **no provider**, and every name answers what it answered before audio existed. Nothing
-anywhere asks whether a device is attached.
+anywhere asks whether a device is attached, because
+[P-0029](0029-a-consumer-branches-only-on-confidence.md)'s blend is what a consumer branches on and
+there is nothing else to ask.
 
 **What it rules out.** Treating absence as zero, which is the reading that makes an unplugged
 interface look like a silent room and freezes the picture mid-set instead of letting it free-run. It
