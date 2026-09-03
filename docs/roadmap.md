@@ -318,13 +318,26 @@ condition. It is the mixer's under-draw, named in
 [ADR-0206](adr/0206-a-fader-marks-where-it-is-going-and-keeps-reaching-for-it.md), and whatever
 surface gives the mask's front a position closes it.
 
-**The bay's prose, as tooltips.** Two notes and half of a third. *Mixer* is the four strips, the
-paged list whose length is a number, the residency chip that rolls toward what was asked for and
-never lands, and the three things a fader with a fade scheduled on it says. *The mixer has no
-crossfader* is why `x` stays a key. And the selection half of *Two focuses, and they do not look
-alike* says why the strip is the one thing in the bay with no capsule of its own to press. The mock
-tips the three tallies, the two blend chips and the priming fader; the trims, the meters and the
-whole transition row carry none, and that row is where the crossfader note has to land.
+**The bay's prose, as tooltips. Done, on 2026-09-03.** Two notes and half of a third — *Mixer*, *The
+mixer has no crossfader*, and the selection half of *Two focuses, and they do not look alike* — are
+on the controls they describe. Eleven tips written: the strip-count readout, deck A's strip (the
+selection, which is why the strip has no capsule of its own), three trims, three faders, three
+meters, deck B's pending-fade number, and the transition row, which carries the crossfader argument
+whole and says of the wipe's shape and soft edge that they are open questions rather than states it
+is holding. The meters are the only ones not sourced from the notes, which say nothing about a
+meter: they come from
+[ADR-0043](adr/0043-the-meter-never-waits-and-the-deck-owns-it.md) and
+[ADR-0178](adr/0178-the-mixer-draws-four-tracks-and-as-many-strips-as-the-deck-has.md).
+
+**And it found the mock drawing what ADR-0178 rejected.** The fourth track carries a whole empty
+strip — a name, a `tally off`, a trim, a fader and a meter — and that record's *Alternatives
+rejected* is precisely *"a well per track, empty where no deck fills it … A track nothing fills
+draws nothing at all"*, on the grounds that an empty strip asserts *there is a deck here and it is
+at zero*. `karakuri-console`'s `tests/mixer.rs` already holds the panel to the record and says so
+against the mock. **Four tips for that strip were written and then removed rather than kept**: a
+tooltip is what an operator reads, and one on a control the panel is decided never to draw is a
+reading nobody can take. What is owed is the mock losing that strip, which is a change to a designed
+page and is this bay's rather than a tidy-up.
 
 #### M5.3 — Library
 
