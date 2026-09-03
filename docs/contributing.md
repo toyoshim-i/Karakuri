@@ -85,10 +85,12 @@ not.
 
 - **Set the hooks up once per clone**: `git config core.hooksPath .githooks`. The gates are
   in the repository rather than in anyone's habits — a commit is refused if its Rust is not
-  what `cargo fmt` writes, and a push is refused unless the whole workspace formats, lints
-  under `-D warnings`, and passes every test. Formatting is on the commit because it costs a
-  second; the rest is on the push, because a gate that costs minutes gets skipped until it is
-  not a gate
+  what `cargo fmt` writes, and a **tag** push is refused unless the whole workspace formats,
+  lints under `-D warnings`, and passes every test. Formatting is on the commit because it
+  costs a second; the suite is on the tag and on nothing else, because a gate that costs
+  minutes gets skipped until it is not a gate, and a branch push is part of working rather
+  than a moment anybody claimed the work was good. §2 states the same condition; this bullet
+  said *a push* until 2026-09-03 and the two had been disagreeing since ADR-0114
 - **Stage by explicit path. Never `git add -A`, never `git commit -a`.** A wildcard stage
   commits what you did not read, and on a shared checkout what you did not write — which is
   not hypothetical; it has happened in this repository. Read `git status --short` before

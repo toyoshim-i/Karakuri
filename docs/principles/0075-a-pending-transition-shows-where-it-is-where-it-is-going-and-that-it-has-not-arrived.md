@@ -118,8 +118,9 @@ The console owns that — *one* phase, panel-wide — but it does not own the cl
 `crates/karakuri-console/src/view.rs` reads no clock at all, deliberately: the transport row's doc
 says an `Instant` there *"would put a clock in it, and then the row would be reading wall time in a
 repository whose first principle is that nothing does"*
-([P-0002](0002-simulation-time-comes-from-a-record-never-from-a-clock.md)). Every `Instant::now` in
-that crate is in `examples/panel.rs`, which is whoever owns the window and the device.
+([P-0002](0002-simulation-time-comes-from-a-record-never-from-a-clock.md)). That crate holds no
+`Instant::now` at all; every one is in `crates/karakuri/src/main.rs`, which is whoever owns the
+window and the device.
 
 So the phase arrives the way `Transport` and `View::picture` arrive — **a plain value written per
 frame by whoever has the clock** — and `src/` stays a pure derivation with no device, no window and

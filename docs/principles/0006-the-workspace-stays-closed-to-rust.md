@@ -4,13 +4,12 @@ Building this repository requires `cargo` and nothing else. Anything that would 
 second toolchain in — Objective-C interop for Syphon, cmake and a C++ compiler for Ableton
 Link — runs **out of process**, in its own repository, talking versioned ndjson over a pipe.
 
-**A helper may live outside only if it is off the deterministic path.** An output plugin
-consumes the composited frame and writes no record, so a session replays identically
-whether one was attached. An input plugin produces the same records a key press produces, so
-a session recorded with it replays without it. A generator, a blend mode or a tone mapper
-could not be a plugin on these terms, whatever toolchain it wanted: what they do reaches
-pixels a replay has to reproduce. The test is the deterministic path, not the platform —
-Link runs everywhere and is outside for its toolchain alone.
+**A helper may live outside only if it is off the deterministic path.** That test is
+[P-0042](0042-a-boundary-is-drawn-by-the-deterministic-path.md)'s and is stated there; what it
+means here is that a second toolchain is a reason to put something out of process and never a
+licence to. Link is outside for its cmake and its C++ compiler alone, and a generator, a blend
+mode or a tone mapper could not be a plugin whatever toolchain it wanted — so wanting one is a
+reason to write it in Rust, not a reason to open the workspace.
 
 **What it rules out.** Vendoring a C++ dependency behind a build script, which charges the
 cost to everyone who builds the repository, including on platforms where the feature does

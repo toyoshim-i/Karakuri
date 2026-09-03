@@ -87,8 +87,8 @@ beat grid declares for as long as it is drawn
 the three folds above the window goes on drawing at `view::BEAT_STALENESS` — 24.67 ms, about forty a
 second — and the transport row has to be folded away as well before nothing on this panel is
 declaring. The three-fold reading above is what this example measured on 2026-08-26 and stands as
-that; the fourth fold has not been measured, and `examples/panel.rs` now says which of the two
-declarations its arm is looking at.
+that; the fourth fold has not been measured, and `crates/karakuri/src/main.rs` now says which of the
+two declarations its arm is looking at.
 
 **It did not, and that was this file's own measurement of a defect.** The same three folds used to
 leave the rate exactly where two folds had it — 28.7 and 29.0 a second, re-taken on 2026-08-26 with
@@ -167,11 +167,11 @@ machine rather than the panel and is exactly the swing the paragraphs above warn
 
 **Taken once more on 2026-08-28, with the beat declaring**: **535 allocations** and 673.9 kB a
 frame, 58.3 frames a second, 20.1% of a second drawing, and the panel-draw median at **0.997 ms**
-against the 1.260 `PANEL_PASS` declares — both inside the 2x band `examples/panel.rs` holds its own
-figures to, and 535 inside the 524 to 538 the nine runs of 2026-08-26 spread. **One run rather than
-a batch**, so read the ten allocations as a direction and not a finding: the likeliest place for
-them is the second halo the travelling light draws on the frames it is between two dots
-([ADR-0212](../adr/0212-the-beat-is-a-light-that-travels-and-it-declares-for-itself.md)), and one
+against the 1.260 `PANEL_PASS` declares — both inside the 2x band `crates/karakuri/src/main.rs`
+holds its own figures to, and 535 inside the 524 to 538 the nine runs of 2026-08-26 spread. **One
+run rather than a batch**, so read the ten allocations as a direction and not a finding: the
+likeliest place for them is the second halo the travelling light draws on the frames it is between
+two dots ([ADR-0212](../adr/0212-the-beat-is-a-light-that-travels-and-it-declares-for-itself.md)), and one
 reading cannot tell that from the swing this paragraph has already been caught by twice.
 **Re-taken on 2026-08-31 over nine runs, and this one moved by a factor**: **1518 allocations and
 1781.6 kB a frame**, which every one of the nine read to the allocation and to the tenth of a
