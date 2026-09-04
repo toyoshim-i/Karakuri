@@ -28,6 +28,20 @@ Start with these, and read the rest before changing anything they touch:
 stops being true is deleted and re-recorded under a new number rather than edited — see
 [ADR-0000](adr/0000-record-decisions-here-and-standing-rules-in-principles.md).
 
+**When a judgement is genuinely open, hold it against the principles before deciding it.** That is
+what the directory is *for*: it is the design's reasoning written down so that somebody who has to
+decide something nobody has decided can work out what this project would do. Read the ones that could
+reach the question — a principle earns its place by deciding things it does not itself mention
+([ADR-0249](adr/0249-a-principle-is-what-decides-a-question-it-does-not-mention.md)), so the one that
+answers you will usually be about something else. Do this **before** proposing an answer of your own,
+not to justify one afterwards.
+
+**And say what happened either way.** Where a principle settles it, cite it in the record and the
+argument is done. **Where none of them reaches**, say so — in the ADR, in the commit message, or to
+whoever asked — because that is the signal a rule is missing, and it is the only moment anybody
+notices. A question answered by taste, where the reasoning could have been written down, is how a
+catalogue of decisions grows in a directory of principles.
+
 The engine-level rules — the render thread, state mutation, signals, determinism, the IR and
 colour — are principles like any other, and there is deliberately **no second document
 restating them**. `invariants.md` was exactly that document, and a sixth copy of a rule stated
@@ -349,10 +363,14 @@ the conclusion alone does not stop anyone re-proposing it. Number it after the h
 add a row to [docs/adr/INDEX.md](adr/INDEX.md), and follow the shape in
 [ADR-0000](adr/0000-record-decisions-here-and-standing-rules-in-principles.md).
 
-**Add a principle only if a future proposal could violate it.** *An element is never identified by its
-buffer slot* is a rule somebody will otherwise re-propose; *rekordbox never publishes its deck BPM* is
-a fact about the world and belongs in the ADR alone. Every principle has an ADR; not every ADR yields
-a principle.
+**Add a principle only if it decides a question it does not itself mention** — and demonstrate that
+rather than asserting it: name a concrete undecided question, from a domain the file does not discuss,
+that reading the file answers. If you cannot name one, what you have is a decision and it belongs in
+an ADR, however true or load-bearing it is. Every principle has an ADR; not every ADR yields a
+principle. **Judge the body, not the filename**: a narrow title over a general argument is a principle,
+and widening the title is a delete-and-re-record rather than an edit. This replaces *could a future
+proposal violate it*, which admitted every specific prohibition —
+[ADR-0249](adr/0249-a-principle-is-what-decides-a-question-it-does-not-mention.md).
 
 **When a rule stops being true, delete its file and re-record it under a new number** — never edit it
 into something else, and never reuse the retired number. Record the retirement in `INDEX.md` and
