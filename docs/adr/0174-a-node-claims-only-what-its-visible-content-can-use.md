@@ -54,7 +54,7 @@ the node will leave empty.
 any amount, `min(378, ∞)` is 378 and `min(200, ∞)` is 200. Every existing assertion about 378 and
 200 passes unedited. The rule is a no-op except where it bites.
 
-**P-0071 is untouched and this is why it had to be checked**: a bottom-up pass is the shape a reader
+**P-0082 is untouched and this is why it had to be checked**: a bottom-up pass is the shape a reader
 expects to see mutating nodes. `measure` takes `&Arrangement` like the rest of the solve and writes
 into the `Solved` buffers, so writing a size back into the arrangement still does not compile.
 

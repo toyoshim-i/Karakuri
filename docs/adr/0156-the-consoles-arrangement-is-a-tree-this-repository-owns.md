@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-23
 supersedes: []
 superseded_by: []
-principles: [0071]
+principles: [0082]
 tags: [ui]
 ---
 
@@ -74,7 +74,7 @@ how a pane is resized without a mouse, so the rows are owed before the panel is 
 
 **Solving never mutates.** A viewport too small for the minima produces small rectangles and
 changes nothing stored, so a window dragged narrow and back comes back to exactly what it left.
-That is [P-0071](../principles/0071-solving-a-layout-never-mutates-it.md), and it is the rule most
+That is [P-0082](../principles/0082-looking-never-writes-back.md), and it is the rule most
 of this crate's tests are about.
 
 ## Alternatives

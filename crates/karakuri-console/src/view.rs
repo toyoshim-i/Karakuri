@@ -1523,7 +1523,7 @@ pub struct Body {
 /// [`Placement::Below`]**, which is the mock's. Both are computed and their
 /// pictures compared; nothing is stored, nothing is remembered between frames,
 /// and the same rectangle always gives the same answer — so
-/// [P-0071](../../../docs/principles/0071-solving-a-layout-never-mutates-it.md)
+/// [P-0082](../../../docs/principles/0082-looking-never-writes-back.md)
 /// is untouched, and so is the property it buys: a window dragged wide and
 /// back again comes back to exactly the arrangement it left.
 ///

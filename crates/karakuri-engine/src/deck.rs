@@ -227,7 +227,7 @@
 //! stopped at. Nothing here advances a clock because something is being looked
 //! at — [`crate::set::Set::draw`] is the raster half on its own, and `t` moves
 //! only through `Set::prepare`
-//! (`docs/principles/0041-observing-must-not-advance-what-is-observed.md`).
+//! (`docs/principles/0082-looking-never-writes-back.md`).
 //!
 //! **There is no chooser, and that is the change.** A `preview: Option<usize>`
 //! lived here with `Deck::set_preview` as its only writer: one slot at a time
@@ -1983,7 +1983,7 @@ impl Frame<'_> {
                 }
                 // Not stepped, and drawn anyway — which shows the still it
                 // stopped at, since `t` only advances through `prepare` and
-                // looking at something must not run it (P-0041). A Set that has
+                // looking at something must not run it (P-0082). A Set that has
                 // never stepped at all has no element state to draw and comes
                 // out black; that is the honest face of a candidate nobody has
                 // warmed, and priming is what exists to give it one.

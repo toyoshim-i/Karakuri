@@ -192,7 +192,7 @@ fn the_bay_rearranges_at_the_crossover() {
 
 /// **Out past the crossover and back, and every rectangle returns.**
 ///
-/// [P-0071](../../../docs/principles/0071-solving-a-layout-never-mutates-it.md)
+/// [P-0082](../../../docs/principles/0082-looking-never-writes-back.md)
 /// reached through the rearrangement: the bit is a function of the geometry and
 /// nothing is stored, so a window dragged wide and back comes back to the
 /// arrangement it left rather than near it. It is

@@ -86,8 +86,8 @@ it does not say whether the caller is drawing that region here, and the crate mu
 
 ## Consequences
 
-- **P-0071 and P-0073 are untouched.** `set_aside` is an operation reached through `node_mut`, so
-  the solve still holds the arrangement by `&` and cannot write to it — and `lib.rs`'s P-0071
+- **P-0082 and P-0073 are untouched.** `set_aside` is an operation reached through `node_mut`, so
+  the solve still holds the arrangement by `&` and cannot write to it — and `lib.rs`'s P-0082
   paragraph now names it with the sentence that matters: **taking a region out is an operation
   however derived the value being written is.** The caller works it out and then tells the layout.
   A split's `usable` is zero when none of its children is laid out, unchanged, and a set-aside child

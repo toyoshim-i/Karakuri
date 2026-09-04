@@ -2562,7 +2562,7 @@ proc wash {
     /// P-0080's second and third clauses together: *whatever its residency*, and
     /// *without changing it*. The slot an operator most needs to look at is the
     /// one that is not on air yet, and the look may not move it
-    /// ([P-0041](../../../docs/principles/0041-observing-must-not-advance-what-is-observed.md)).
+    /// ([P-0082](../../../docs/principles/0082-looking-never-writes-back.md)).
     ///
     /// **The resize is what makes this a test of *this* frame's draw.** A slot
     /// target persists, so a parked slot that was Live a moment ago keeps the last
@@ -2626,8 +2626,8 @@ proc wash {
             match residency {
                 Residency::Allocated => assert_eq!(
                     after, parked_at,
-                    "drawing an Allocated slot advanced it — observing must not advance \
-                     what is observed (P-0041)"
+                    "drawing an Allocated slot advanced it — looking never writes back \
+                     (P-0082)"
                 ),
                 _ => assert_eq!(
                     after, parked_at,
