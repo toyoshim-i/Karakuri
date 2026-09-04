@@ -28,19 +28,14 @@ Start with these, and read the rest before changing anything they touch:
 stops being true is deleted and re-recorded under a new number rather than edited — see
 [ADR-0000](adr/0000-record-decisions-here-and-standing-rules-in-principles.md).
 
-**When a judgement is genuinely open, hold it against the principles before deciding it.** That is
-what the directory is *for*: it is the design's reasoning written down so that somebody who has to
-decide something nobody has decided can work out what this project would do. Read the ones that could
-reach the question — a principle earns its place by deciding things it does not itself mention
-([ADR-0249](adr/0249-a-principle-is-what-decides-a-question-it-does-not-mention.md)), so the one that
-answers you will usually be about something else. Do this **before** proposing an answer of your own,
-not to justify one afterwards.
+**Deciding something that is not already decided:**
 
-**And say what happened either way.** Where a principle settles it, cite it in the record and the
-argument is done. **Where none of them reaches**, say so — in the ADR, in the commit message, or to
-whoever asked — because that is the signal a rule is missing, and it is the only moment anybody
-notices. A question answered by taste, where the reasoning could have been written down, is how a
-catalogue of decisions grows in a directory of principles.
+1. Check `docs/principles/` first, before settling on an answer.
+2. Search by the question, not by the topic. A principle decides questions it does not itself
+   mention ([ADR-0249](adr/0249-a-principle-is-what-decides-a-question-it-does-not-mention.md)), so
+   the one that applies is usually filed under something else.
+3. If a principle settles it, cite it — in the ADR, the commit message, or the code comment.
+4. If none does, say so in the same place. A missing rule is visible only there.
 
 The engine-level rules — the render thread, state mutation, signals, determinism, the IR and
 colour — are principles like any other, and there is deliberately **no second document
