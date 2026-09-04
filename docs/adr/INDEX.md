@@ -273,6 +273,7 @@ number; new records continue from the end.
 | [ADR-0245](0245-the-sub-pixel-compensation-is-paid-in-the-colour-because-alpha-is-coverage.md) | The sub-pixel compensation is paid in the colour, because alpha is coverage | 2026-09-02 | accepted |
 | [ADR-0246](0246-the-render-size-belongs-to-the-output-and-the-sessions-canvas-is-only-its-default.md) | The render size belongs to the output, and the session's canvas is only its default | 2026-09-02 | accepted |
 | [ADR-0247](0247-one-frame-is-rendered-and-scaled-into-each-output.md) | One frame is rendered and scaled into each output | 2026-09-03 | accepted |
+| [ADR-0248](0248-a-wipes-front-shape-is-the-transition-rows-and-travels-with-the-quantum-and-the-length.md) | A wipe's front shape is the transition row's, and travels with the quantum and the length | 2026-09-04 | accepted |
 
 ## Retired numbers
 

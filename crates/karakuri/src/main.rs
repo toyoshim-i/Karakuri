@@ -4388,7 +4388,7 @@ fn watched(
         live,
         // **The engine's own default rather than a number written here**: a
         // budget transcribed into this file would be a second answer to *how
-        // long may a frame take* the day the engine's moves (P-0179 on a
+        // long may a frame take* the day the engine's moves (ADR-0179 on a
         // number that is not even the mock's). It is 20 ms, which is 60 Hz
         // with room, and it is what makes a rollback reachable in this program
         // at all — `HotSwap::fixed` judged against infinity, so no candidate
@@ -6368,7 +6368,7 @@ fn look(look: &Look) -> view::Look {
 /// - [`Written::Silent`] is **settled**. Selecting a deck or folding a bay is
 ///   a surface's own state and there is nothing to write; the sentence says
 ///   which of the four kinds of nothing it is, and that is the end of it.
-/// - [`Written::Owed`] is **a gap nobody has closed yet**. A fade owes a
+/// - [`Written::Owed`] is **a gap nobody has closed yet**. A tap owes a
 ///   record and no build can make it, so a press that reads as *nothing
 ///   happened* is exactly the wrong reading — the sentence names the question
 ///   instead, which is `Owed::why`'s whole job and the reason `Owed` is not
@@ -6953,14 +6953,16 @@ fn reading(operation: &Operation, deck: &Deck, look: &Look) -> Current {
     // **The transition settings are the one reading this window answers
     // `None` for, and it is an answer rather than an omission.** The type grew
     // them the day `FadeDeck`, `Crossfade` and `SelectRenderer` stopped being
-    // owed, which is exactly the event the paragraph above was written to
+    // owed, and grew a fourth field the day `Wipe` followed them — which is
+    // twice over exactly the event the paragraph above was written to
     // catch — so this is somebody saying whether this window can take it, and
     // the answer is that it has nothing to say.
     //
-    // A quantum and a length are a *surface's* setting deciding what the next
-    // move means, and this panel draws no control that sets either: the
-    // transition row is not built, there is no crossfader to build, and no
-    // control here emits any of the three operations that read them. A value
+    // A quantum, a length and a wipe shape are a *surface's* setting deciding
+    // what the next move means, and this panel draws no control that sets any
+    // of them: the transition row is not built, there is no crossfader to
+    // build, and no control here emits any of the four operations that read
+    // them. A value
     // handed in would be this file inventing a setting nobody chose, which is
     // the failure `Current`'s every-field-optional rule exists to prevent —
     // and if a control ever does emit one before the settings exist, the
@@ -6968,12 +6970,26 @@ fn reading(operation: &Operation, deck: &Deck, look: &Look) -> Current {
     // handed over* and names the operation, which is a sentence rather than a
     // fade at a length the operator never set.
     let transition = None;
+    // **The mix reading is the second this window answers `None` for, and it
+    // is the same kind of answer.** It says where the deck a wipe is arriving
+    // on already sits — its blend mode and its residency — and it is read so
+    // that a wipe can leave those two records *out* rather than write a mode
+    // over one the operator chose. No control here emits a wipe: this bay
+    // draws a blend chip and a residency chip, and each of those operations
+    // carries everything its own record carries, which is the four-of-ten
+    // sentence at the top of this function. So there is nothing to hand over
+    // and no gesture that would read it — and the day a control here does emit
+    // one, the window prints *the blend mode and residency of the deck it
+    // names were not read* and names the operation, which is a sentence rather
+    // than a `blend over` nobody asked for.
+    let mix = None;
     Current {
         look,
         mask,
         transport,
         tempo,
         transition,
+        mix,
     }
 }
 
@@ -7841,8 +7857,8 @@ impl App {
                     }
                     // **Every record, in the order it was written.** One
                     // today for each of the four, and a list because
-                    // `Crossfade` is four and `Wipe` is five — one control is
-                    // not one record (P-0028, ADR-0194).
+                    // `Crossfade` is four and `Wipe` is up to six — one
+                    // control is not one record (P-0028, ADR-0194).
                     if let Written::Records(records) = &written {
                         for record in records {
                             if let Some(line) =
@@ -12263,18 +12279,20 @@ mod tests {
     ///
     /// This is what the third answer is *for*, and the cheap harness is the
     /// one that treats *not `Records`* as a no-op. A press that emitted
-    /// `Wipe` would then look exactly like a press that emitted
+    /// `TapBeat` would then look exactly like a press that emitted
     /// `SelectDeck` — nothing printed and nothing moved — and an operator
-    /// would read the first as *the wipe did not take* when what happened is
-    /// *nobody has decided what a wipe writes* (`Owed` is a question, not an
+    /// would read the first as *the tap did not take* when what happened is
+    /// *nobody has decided what a tap writes* (`Owed` is a question, not an
     /// error: ADR-0194).
     ///
-    /// **The operation this names used to be `FadeDeck` and had to change**,
-    /// which is the test doing what it says on the line below: a fade stopped
-    /// being owed the day the transition settings became a reading, so the
-    /// operation named here is now `Operation::Wipe` — the one whose record is
-    /// still nobody's to write, because it carries a shape
-    /// `Operation::SetTransition` holds and a soft edge no operation names.
+    /// **The operation this names has had to change twice**, which is the test
+    /// doing what it says on the line below. It was `FadeDeck`, which stopped
+    /// being owed the day the transition settings became a reading; it was
+    /// then `Wipe`, which stopped the day the front shape went over with them
+    /// and the soft edge turned out to be the arriving deck's. It is now
+    /// `Operation::TapBeat` — and that one is a different shape rather than
+    /// the next in a queue: what a tap owes is the beat lock's answer and not
+    /// a value any surface holds, so no reading added to `Current` closes it.
     /// The fade has not left this test, though: it is the second half, and it
     /// is now the *other* kind of gap — a reading this window does not have,
     /// said with the name of the reading in it.
@@ -12284,24 +12302,25 @@ mod tests {
     /// reason, and that the two answers are two different sentences.
     #[test]
     fn an_operation_whose_record_is_owed_is_said_rather_than_swallowed() {
-        // Owed, and `NotSettled` is the reason: a wipe carries a mask whose
-        // shape is a console setting and whose soft edge no operation names,
-        // so nobody has said what it writes.
-        let wipe = Operation::Wipe { from: 0, to: 1 };
-        let owed = written(&wipe, &Current::default());
+        // Owed, and `NotSettled` is the reason: a tap's record is the beat
+        // lock's answer — a tapped tempo, a phase error, an output lag — and
+        // none of it is a value a `Current` carries, so nobody has said what
+        // it writes here.
+        let tap = Operation::TapBeat;
+        let owed = written(&tap, &Current::default());
         assert_eq!(
             owed,
             Written::Owed(Owed::NotSettled),
-            "a wipe is not owed any more — this test names the operation it does, and \
+            "a tap is not owed any more — this test names the operation it does, and \
              the one it names has to still be one nobody can write"
         );
-        let said = unwritten(&wipe, &owed).expect(
-            "a wipe owes a record and this window said nothing at all — a press whose \
+        let said = unwritten(&tap, &owed).expect(
+            "a tap owes a record and this window said nothing at all — a press whose \
              record nobody has decided how to write reads, in silence, exactly like a \
              press that did not work",
         );
         assert!(
-            said.contains("Wipe") && said.contains(Owed::NotSettled.why()),
+            said.contains("TapBeat") && said.contains(Owed::NotSettled.why()),
             "the window said `{said}`, which does not name both the operation and the \
              question it is waiting on"
         );

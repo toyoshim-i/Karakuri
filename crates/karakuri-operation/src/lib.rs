@@ -856,6 +856,19 @@ operations! {
     /// A mask at position 0 on the incoming deck, put on air under `over`, and
     /// one scheduled move carrying the front to 1. Refused with no shape
     /// chosen.
+    ///
+    /// **The put-on-air and the `over` are written only where they change
+    /// something**, which is the one part of that sentence that is a
+    /// condition rather than a record. A deck the operator has moved off the
+    /// mode a deck starts in keeps the mode: a wipe under `add` or `max` is a
+    /// wipe *on* rather than a wipe *over*, a different picture and one they
+    /// may have chosen, and a gesture is not where an operator's choice is
+    /// taken back
+    /// (`docs/principles/0079-nothing-takes-the-show-down-and-nothing-takes-it-away-from-the-operator.md`).
+    /// A deck already live is not told so again. What decides it is a reading
+    /// of where the deck already sits in the mix, which is
+    /// `karakuri_operation_record::Current::mix`, so the condition is one
+    /// sentence in one place rather than each surface's.
     Wipe {
         /// The deck being covered.
         from: u8,
