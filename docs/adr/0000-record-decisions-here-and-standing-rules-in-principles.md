@@ -67,6 +67,15 @@ principle only if a future proposal could violate it. `An element is never ident
 its buffer slot` is a rule somebody will otherwise re-propose; `rekordbox never publishes
 its deck BPM` is a fact about the world and lives here only.
 
+> **Annotated 2026-09-04.** **That gate is replaced by
+> [ADR-0249](0249-a-principle-is-what-decides-a-question-it-does-not-mention.md)**: a principle is
+> what decides a question it does not itself mention, demonstrated by naming one rather than
+> asserted. *Could a future proposal violate it* admits every specific prohibition, which is how
+> `docs/principles/` reached seventy-eight files and stopped being something anybody consults. The
+> example above is the proof rather than the showcase: `An element is never identified by its buffer
+> slot` passes the old test and fails the new one. Everything else on this page stands — one rule per
+> file, `ls` as the index, numbers never reused, deletion rather than editing.
+
 **Citation.** `ADR-0007` and `P-0007` are different documents. Always write the prefix.
 
 ## What moves, and where
