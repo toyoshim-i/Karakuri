@@ -74,7 +74,7 @@ fn a_fixed_split_claims_what_its_visible_content_can_use() {
     assert!(near(h(&l, "tail"), 448.0), "tail is {}", h(&l, "tail"));
 
     // And nothing was written back on the way: the 378 is still there to come
-    // back to, which is the whole of P-0071 applied to a measuring pass that
+    // back to, which is the whole of P-0082 applied to a measuring pass that
     // runs bottom-up.
     l.expand(head);
     l.solve();

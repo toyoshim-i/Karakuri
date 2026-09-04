@@ -45,7 +45,7 @@ returned a position for the split's own far edge — a boundary with nothing bey
 though it were one. `Released::Gone` existed for exactly that case and was unreachable through it.
 A gap between two children **cannot be constructed without both**, so the check is not something the
 implementation remembers to do; it is what the return value means. That is the same species of
-argument as [P-0071](../principles/0071-solving-a-layout-never-mutates-it.md), one level down.
+argument as [P-0082](../principles/0082-looking-never-writes-back.md), one level down.
 
 ## Alternatives
 

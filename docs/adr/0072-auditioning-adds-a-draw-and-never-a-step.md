@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-10
 supersedes: []
 superseded_by: []
-principles: [0041]
+principles: [0082]
 tags: [engine, ui]
 ---
 
@@ -56,4 +56,4 @@ auditioning.**
 ## Evidence
 
 Session 2026-08-10T22:42Z, commit `57a9519`. Standing rule:
-[P-0041](../principles/0041-observing-must-not-advance-what-is-observed.md).
+[P-0082](../principles/0082-looking-never-writes-back.md).

@@ -19,7 +19,7 @@ child claimed is not capped. A cap says what a node would *ask for*; there, nobo
 split whose children are all folded can use zero — capping it leaves a hole nothing can ever fill.
 
 Measuring writes into the solved buffers and never into the arrangement, so
-[P-0071](0071-solving-a-layout-never-mutates-it.md) is unaffected: fold and unfold restore the
+[P-0082](0082-looking-never-writes-back.md) is unaffected: fold and unfold restore the
 original rectangles exactly.
 
 See [ADR-0174](../adr/0174-a-node-claims-only-what-its-visible-content-can-use.md).

@@ -154,7 +154,7 @@ struct Solved {
     /// thing in the solve that is computed bottom-up, so the next reader will
     /// expect it to have been written into the tree — it is not, and cannot
     /// be: [`measure`] takes the arrangement by shared reference like the rest
-    /// of the solve, so P-0071 holds for it by the same construction. Nothing
+    /// of the solve, so P-0082 holds for it by the same construction. Nothing
     /// here survives the solve that computed it; every entry is rewritten
     /// before it is read again.
     usable: Vec<f32>,
@@ -1065,7 +1065,7 @@ impl Layout {
         if !self.dirty {
             return;
         }
-        // The split borrow that makes P-0071 a compiler error. `arrangement`
+        // The split borrow that makes P-0082 a compiler error. `arrangement`
         // is re-borrowed as `&` here and stays that way for the whole solve,
         // so a line that stored a solved size into a node would not compile.
         let Layout {
@@ -1355,7 +1355,7 @@ impl Arrangement {
 ///
 /// **This is the one pass that runs bottom-up, and it still writes nothing
 /// into the arrangement.** It takes `&Arrangement` exactly as the rest of the
-/// solve does and puts its answer in the [`Solved`] buffers, so P-0071 is
+/// solve does and puts its answer in the [`Solved`] buffers, so P-0082 is
 /// enforced here by the same borrow that enforces it everywhere else — the
 /// direction of the pass is not the direction of the writes. Said explicitly
 /// because a bottom-up pass is the shape a reader expects to see mutating
@@ -1428,7 +1428,7 @@ fn claim(s: &Solved, c: usize, size: f32) -> f32 {
 /// The solve, as a function of the arrangement rather than a method on it.
 ///
 /// `a` is shared and `s` is exclusive, which is the whole enforcement of
-/// P-0071: there is no path from here to a mutable node.
+/// P-0082: there is no path from here to a mutable node.
 fn solve_subtree(a: &Arrangement, s: &mut Solved, i: usize) {
     if a.split_of(i).is_none() {
         return;

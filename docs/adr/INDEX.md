@@ -275,6 +275,7 @@ number; new records continue from the end.
 | [ADR-0247](0247-one-frame-is-rendered-and-scaled-into-each-output.md) | One frame is rendered and scaled into each output | 2026-09-03 | accepted |
 | [ADR-0248](0248-a-wipes-front-shape-is-the-transition-rows-and-travels-with-the-quantum-and-the-length.md) | A wipe's front shape is the transition row's, and travels with the quantum and the length | 2026-09-04 | accepted |
 | [ADR-0249](0249-a-principle-is-what-decides-a-question-it-does-not-mention.md) | A principle is what decides a question it does not mention | 2026-09-04 | accepted |
+| [ADR-0250](0250-below-the-minima-the-arrangement-scales-rather-than-being-rewritten.md) | Below the minima the arrangement scales rather than being rewritten | 2026-09-04 | accepted |
 
 ## Retired numbers
 
@@ -287,6 +288,8 @@ never reused.
 | P-0015 | One record tag is one record shape | [P-0031](../principles/0031-a-name-means-one-thing-across-the-system.md) | The same rule holds for any name, not only a record tag — found when `"noise"` meant two things at two confidences |
 | P-0022 | Closed-form material needs no warming | [P-0032](../principles/0032-closed-form-means-scrubbable.md) | Not needing warming is the smaller half; the larger one is being scrubbable |
 | P-0070 | Auditioning is a prerequisite, not a convenience | [P-0080](../principles/0080-an-operator-can-see-a-slots-own-material-without-putting-it-on-air.md) | It named a mechanism — one slot put on the output in place of the mix — and [ADR-0240](0240-the-output-shows-the-mix-and-residency-keys-belong-to-the-mixer.md) retired that mechanism. The requirement did not move, so it is re-recorded as the property ([ADR-0241](0241-auditioning-survives-the-control-that-was-retired-and-is-re-recorded-as-a-property.md)) |
+| P-0041 | Observing must not advance what is observed | [P-0082](../principles/0082-looking-never-writes-back.md) | It stated the audition half of one rule — a read leaves what it read alone — which P-0071 was stating again for the layout solve. The mechanism it named, and the faders it ignores, stay in [ADR-0072](0072-auditioning-adds-a-draw-and-never-a-step.md), which already carried them |
+| P-0071 | Solving a layout never mutates it | [P-0082](../principles/0082-looking-never-writes-back.md) | The same rule, and its title undersold a general body — [ADR-0249](0249-a-principle-is-what-decides-a-question-it-does-not-mention.md) names it as that example. What was specific to the layout — the behaviour below the sum of the minima, and the clamp that loses to it — is [ADR-0250](0250-below-the-minima-the-arrangement-scales-rather-than-being-rewritten.md) |
 
 Re-pointing the records that cited a retired principle is permitted, and why, is
 [ADR-0059](0059-a-records-pointer-into-the-principles-registry-is-metadata.md).

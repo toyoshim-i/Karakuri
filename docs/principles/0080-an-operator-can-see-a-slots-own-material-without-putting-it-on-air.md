@@ -46,7 +46,7 @@ moment it is needed.
 
 **Without changing it.** Looking adds a draw and never a step. A slot that is watched and then put
 on air resumes where it stopped, or the audition would have moved the thing it was opened to judge —
-[P-0041](0041-observing-must-not-advance-what-is-observed.md).
+[P-0082](0082-looking-never-writes-back.md).
 
 **Never nothing.** A slot with something loaded in it is running, and it is on its cell from the
 moment it is loaded. If the build was rejected — over budget, or it failed to compile — the cell

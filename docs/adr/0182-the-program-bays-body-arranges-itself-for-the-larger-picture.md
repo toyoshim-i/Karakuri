@@ -21,7 +21,7 @@ needed before a resize gives a unique answer.
 
 **Whichever placement gives the larger picture wins**, ties to *below* — the arrangement the mock
 draws. It is stateless and nothing is stored, so
-[P-0071](../principles/0071-solving-a-layout-never-mutates-it.md) is untouched, and it is one
+[P-0082](../principles/0082-looking-never-writes-back.md) is untouched, and it is one
 function of a rectangle: `program_body(body, canvas)`.
 
 Verified against the numbers rather than argued:

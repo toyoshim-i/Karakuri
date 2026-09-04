@@ -63,7 +63,7 @@ reuse the number, record the retirement in [INDEX.md](INDEX.md), and re-point wh
 **What the old rule got right, and what P-0080 keeps.** Three clauses, all of them the requirement
 rather than the mechanism: the operator judges the slot's *own moving material* through the transfer
 curve the audience gets, at *any residency*, and *without stepping it*
-([P-0041](../principles/0041-observing-must-not-advance-what-is-observed.md)). The cost is also kept
+([P-0082](../principles/0082-looking-never-writes-back.md)). The cost is also kept
 where P-0070 put it: an audition adds an unbudgeted draw inside the watchdog's judging window
 ([ADR-0072](0072-auditioning-adds-a-draw-and-never-a-step.md)), that bill is paid rather than argued,
 and [P-0079](../principles/0079-nothing-takes-the-show-down-and-nothing-takes-it-away-from-the-operator.md)
