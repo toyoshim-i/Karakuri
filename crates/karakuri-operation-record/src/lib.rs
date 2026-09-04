@@ -57,12 +57,12 @@
 //! - [`Written::Silent`] — it writes none, and that is settled. Thirty-two,
 //!   for [`Silent`]'s four different reasons.
 //! - [`Written::Owed`] — it writes one and this build cannot make it.
-//!   Fifteen, for [`Owed`]'s three different reasons.
+//!   Fourteen, for [`Owed`]'s three different reasons.
 //!
 //! **`Owed` is not a refusal and not an error.** It is a gap this crate
 //! declares about itself, in the shape `karakuri_operation::Undecided` is: a
 //! caller that meets one has met a question nobody has answered, and printing
-//! it is more use than a silent no-op. Twelve of the fifteen are the
+//! it is more use than a silent no-op. Twelve of the fourteen are the
 //! vocabulary's own `Undecided` rows, and eight of those twelve are the master
 //! chain's three effects and the sequencer's five — two bays the manual
 //! specifies and nothing holds.
@@ -75,9 +75,8 @@
 //! from here — which is right, because a crate that pulled `wgpu` in would be
 //! unreachable from every surface again. Anything an operation's record needs
 //! that is arithmetic rather than a value has to arrive inside [`Current`], and
-//! the three operations whose record needs the beat tracker or a mask no
-//! operation names are [`Owed::NotSettled`] until somebody decides who supplies
-//! the rest.
+//! the two operations whose record needs the beat tracker are
+//! [`Owed::NotSettled`] until somebody decides who supplies the rest.
 //!
 //! **Scheduling a move was four of those six and three of the four are now a
 //! reading.** A fade, a crossfade and a renderer selection each need the
@@ -88,13 +87,31 @@
 //! under one paragraph down — the arithmetic stays in the crate that owns the
 //! grid and what crosses the seam is its result.
 //!
-//! **The wipe is the fourth and is still owed**, which is the difference
-//! between a gesture that is a scheduled move and one that only contains one:
-//! `Operation::Wipe`'s six records include the shape the front takes, which is
-//! `Operation::SetTransition`'s third setting, and the soft edge, which no
-//! operation names at all. Those are a `Record::Mask`'s and reach a record
-//! through `Operation::SetMaskShape`; what a wipe still owes is who says they
-//! are its.
+//! **The wipe was the fourth and is now a reading too**, and it took three
+//! rather than one. Its scheduled move is a fade's exactly; what it also
+//! carries is a mask, and the two values that mask needed had no owner. Both
+//! have one now. The shape its front takes is the transition row's — it is
+//! `Operation::SetTransition`'s third setting, the one the `z` key writes, and
+//! it reaches the conversion inside [`Current::transition`] beside the instant
+//! and the length that operation's other two settings are. The soft edge is
+//! read off the mask already running on the deck being wiped in, which is what
+//! this crate does for `Operation::SetMaskShape` already and is
+//! [`Current::mask`]. No operation names a softness and none was added.
+//!
+//! **The third of the wipe's readings is taken so that two of its records can
+//! be left out**, which is the only one on [`Current`] that works that way.
+//! Where the deck arriving is already under `over`, or already live, a wipe
+//! that wrote those records anyway would overwrite a blend mode the operator
+//! chose — so [`Current::mix`] is what the arm asks before it writes them, and
+//! `karakuri-cli`'s `c` no longer has to hold that decision itself.
+//!
+//! **The other answer was that the shape is the deck's**, written by
+//! `Operation::SetMaskShape` and read back by a wipe like any other mask
+//! value, and it lost on the company the setting keeps: the quantum and the
+//! length are the surface's own state handed over in [`Current::transition`],
+//! and there is no reason the third setting of one operation should travel a
+//! different road from the other two. It would also have left the `z` key's
+//! shape half with nothing to do.
 //!
 //! **`Operation::SetSync` was the seventh and is now a reading**, which is what
 //! that sentence looks like when it is paid. `Transport::engaged` decides what
@@ -197,12 +214,37 @@ pub struct Transport {
 /// reason: a stream that scheduled a fade without saying when it lands or how
 /// long it takes would describe a move nobody can reconstruct.
 ///
-/// **The wipe shape is deliberately not here**, although it is
-/// `SetTransition`'s third setting. What this type holds is what
-/// `Record::Transition` and [`Record::Select`] need and the operation does not
-/// carry; a shape is a `Record::Mask`'s and reaches a record through
-/// [`Operation::SetMaskShape`], which converts already. A field for it would
-/// be a value no arm reads.
+/// **The wipe shape is here, and the paragraph this replaces said it
+/// deliberately was not.** That paragraph is worth keeping as the position it
+/// was rather than deleting, because it was an argument and not an oversight:
+/// what this type holds is what a record needs and the operation does not
+/// carry, a shape is a `Record::Mask`'s, it reaches a record through
+/// [`Operation::SetMaskShape`] which converts already — *"a field for it would
+/// be a value no arm reads"*.
+///
+/// **What overturned it is the company the setting keeps.** The wipe shape is
+/// `SetTransition`'s third setting, and the other two are already here: the
+/// quantum [`start`] comes from and the length [`beats`] is. All three are one
+/// operation's, that operation writes no record, and each of them decides what
+/// the *next* move means — so there was never a reason for the third to travel
+/// a different road from the first two, and sending it by
+/// `Operation::SetMaskShape` would have made a deck's *current* mask the place
+/// a surface's *next* setting was kept. The last sentence stopped being true
+/// the moment [`Operation::Wipe`] read it: [`wipe_kind`] and [`wipe_angle`]
+/// are what its front takes, and the arm reads them.
+///
+/// **The shape a deck is wearing is still a mask's**, which is the half of the
+/// old position that survives whole. `Operation::SetMaskShape` writes that and
+/// nothing here changes it; what is on this type is the shape the next wipe
+/// will *make* it, which is a different value with a different owner. The soft
+/// edge went the other way for the same reason — no operation names one, so a
+/// wipe reads it off the mask that is running ([`Current::mask`]) rather than
+/// carrying one here.
+///
+/// [`start`]: Transition::start
+/// [`beats`]: Transition::beats
+/// [`wipe_kind`]: Transition::wipe_kind
+/// [`wipe_angle`]: Transition::wipe_angle
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Transition {
     /// **The musical instant the move lands on, in beats**, absolute on the
@@ -252,6 +294,82 @@ pub struct Transition {
     /// which is [`Look::tonemap`]'s rule — a `String` here would make this
     /// crate the place a typo arrives.
     pub curve: karakuri_operation::Curve,
+    /// **The shape a wipe's front takes**, and the third of
+    /// [`karakuri_operation::TransitionSetting`]'s three settings — the one
+    /// the `z` key writes, where [`start`] comes from `n`'s quantum and
+    /// [`beats`] is `j`'s length.
+    ///
+    /// **Read by [`Operation::Wipe`] and by nothing else here**, which is what
+    /// makes it the one field on this type that is not read by all three of
+    /// the operations the other fields serve: a fade moves a fader and a
+    /// selection is a cut, and neither has a front. It is beside them for the
+    /// reason they are here at all — it is a *setting*, a surface's own state
+    /// deciding what the next gesture means, and the operation that runs the
+    /// gesture never carries one.
+    ///
+    /// **Not the shape a deck's mask is wearing**, which is the distinction
+    /// [`Operation::SetMaskShape`] draws at its own definition: that operation
+    /// names a deck and changes what its layer reaches *now*; this is what the
+    /// next wipe will make it. The two are the same three values and different
+    /// facts, and the wipe arm writes the second over the first.
+    ///
+    /// [`start`]: Transition::start
+    /// [`beats`]: Transition::beats
+    pub wipe_kind: karakuri_operation::WipeKind,
+    /// **Which way that front runs, in radians.**
+    ///
+    /// Half of one setting rather than a setting of its own —
+    /// `TransitionSetting::WipeShape` carries a kind and an angle together —
+    /// because an angle is what makes one linear front a different picture
+    /// from another, and the other two shapes ignore it exactly as a mask
+    /// does. A surface that offers a curated list of shapes rather than a dial
+    /// is choosing pairs out of this, which is
+    /// [`karakuri_operation::WipeKind`]'s own note and a keyboard's
+    /// compromise rather than the operation's.
+    pub wipe_angle: f32,
+}
+
+/// **Where the deck a gesture arrives on already sits in the mix** — how it
+/// meets what is under it, and whether it is in the picture at all.
+///
+/// **Read by [`Operation::Wipe`] and by nothing else here**, and it is the one
+/// reading on this type taken so that a record can be left *out*. The others
+/// complete a record the operation could not say whole — a tone map nobody
+/// named, a soft edge no operation carries — and this one answers a question
+/// the arm asks before it writes: *is the deck arriving already there?* A wipe
+/// puts the deck it reveals under `over` and on air, and writing either at a
+/// deck that is already there is where a choice the operator made gets written
+/// over
+/// ([P-0079](../../../docs/principles/0079-nothing-takes-the-show-down-and-nothing-takes-it-away-from-the-operator.md)).
+///
+/// **One reading and not two.** A blend mode and a residency are two
+/// operations, two records and two rows of the manual, and they are one
+/// reading because no caller can be holding one and not the other: they are
+/// read off the same deck in the same breath — `Deck::blend(slot)` beside
+/// `Deck::residency(slot)` — so a second [`Reading`] would name a state no
+/// surface can be in, and the arm would have to pick an order between two
+/// [`Owed::NotRead`] answers for one lookup.
+///
+/// The vocabulary's [`karakuri_operation::BlendMode`] and
+/// [`karakuri_operation::Residency`] rather than wire names, which is
+/// [`Look::tonemap`]'s rule one type up: a `String` here would make this crate
+/// the place a typo arrives, and these two are compared rather than printed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Mix {
+    /// **How the deck meets what is under it**, as the deck reports it.
+    ///
+    /// What a wipe does with it is at the arm: `over` is written where this is
+    /// [`karakuri_operation::BlendMode::Add`] — where a slot starts, which is
+    /// `BlendMode::ALL`'s own sentence — and nothing is written where the
+    /// operator has moved it, because a wipe under a mode they chose is a
+    /// different picture and a legitimate one.
+    pub blend: karakuri_operation::BlendMode,
+    /// **Whether the deck is in the picture at all**, as the deck reports it
+    /// rather than as it was asked for — the governor may hold a slot below
+    /// the request, which is [`karakuri_operation::Residency`]'s own note, and
+    /// what a wipe needs to know is whether the put-on-air it is about to
+    /// write would change anything.
+    pub residency: karakuri_operation::Residency,
 }
 
 /// **What is running, at the instant the operation arrives.**
@@ -284,7 +402,18 @@ pub struct Transition {
 /// *the operation names*, and no other: every operation here that needs one
 /// names exactly one deck, so a map from deck to transport would be a
 /// container built to be indexed once.
-/// [`Current::mask`] is the mask of that same deck, on the same terms.
+/// [`Current::mask`] is the mask of that same deck, on the same terms — with
+/// one operation that names two, and it names them in an order that answers
+/// the question rather than raising it. [`Operation::Wipe`] carries a `from`
+/// and a `to`, and everything it writes is written about the `to`: the deck
+/// arriving is the one that wears the mask, so the mask handed in for a wipe
+/// is that deck's and the `from` is read for nothing at all. A caller that
+/// handed in the covered deck's mask would give the arriving deck somebody
+/// else's soft edge, which is the one value of the four a wipe does not
+/// otherwise say.
+/// [`Current::mix`] is that same deck's on those same terms, and for the wipe
+/// it is the arriving deck's for the arriving deck's reason: what the two
+/// records it governs would change is the picture the wipe is putting on air.
 /// [`Current::tempo`] and [`Current::transition`] are the two readings here
 /// that belong to no deck at all — one is the room's and one is the surface's,
 /// and a crossfade naming two decks reads the same transition for both halves
@@ -327,9 +456,11 @@ pub struct Current {
     /// the one crate that can see both.
     pub tempo: Option<f32>,
     /// **What the next scheduled move means**, which is what a fade, a
-    /// crossfade and a renderer selection are each half of. See
+    /// crossfade, a renderer selection and a wipe are each half of. See
     /// [`Transition`], which carries the whole argument for why it is the
-    /// surface's and not the operation's.
+    /// surface's and not the operation's — including the wipe shape, which is
+    /// the fourth field, is read by the wipe alone, and is the one the type
+    /// once said out loud it would never carry.
     ///
     /// **It is a convention on [`Current::tempo`]'s terms, and the structural
     /// half is the same shape.** `karakuri_environment::mix`'s
@@ -342,6 +473,12 @@ pub struct Current {
     /// each surface's to keep: there is nothing to read it back from, which is
     /// the whole reason it is handed in.
     pub transition: Option<Transition>,
+    /// **Where the deck arriving already sits in the mix**, and the one
+    /// reading here taken so that a record can be left *out* rather than
+    /// written. See [`Mix`]. [`Operation::Wipe`] is its only reader, and it is
+    /// read for the deck [`Current::mask`] is read for — the one arriving,
+    /// never the one covered.
+    pub mix: Option<Mix>,
 }
 
 /// Which reading an [`Owed::NotRead`] wanted, so a caller can say what it did
@@ -352,7 +489,8 @@ pub enum Reading {
     Look,
     /// [`Current::transport`], for the deck the operation names.
     Transport,
-    /// [`Current::mask`], for the deck the operation names.
+    /// [`Current::mask`], for the deck the operation names — and for
+    /// [`Operation::Wipe`], which names two, the deck arriving.
     Mask,
     /// [`Current::tempo`] — the session's, and so one of the two that names no
     /// deck.
@@ -360,8 +498,15 @@ pub enum Reading {
     /// [`Current::transition`] — the surface's, and the other one. A caller
     /// that meets this forgot a setting it is already holding rather than a
     /// reading it would have had to take off the engine, which makes it the
-    /// one of the five answered by remembering rather than by looking.
+    /// one of the six answered by remembering rather than by looking.
     Transition,
+    /// [`Current::mix`] — the blend mode and the residency of the deck the
+    /// operation names, which for [`Operation::Wipe`] is the deck arriving.
+    /// The one of the six a caller takes so that records can be left out
+    /// rather than written, which is what makes it the one whose absence
+    /// would not be visible in a record: a caller that forgot it and got a
+    /// wipe anyway would get the two records omitting it exists to omit.
+    Mix,
 }
 
 /// **Why an operation writes no record**, and there are four different
@@ -429,29 +574,44 @@ pub enum Owed {
     /// and which nobody can yet say owes one.
     Undecided,
     /// **Its record is not a function of values alone, and who supplies the
-    /// rest is undecided.** Three operations, and they divide into two shapes:
-    /// moving the grid (a tap, an octave shift) needs the beat tracker rather
-    /// than a value and may be refused by it; and a wipe needs the shape its
-    /// front takes, which is `Operation::SetTransition`'s third setting, and
-    /// the soft edge, which no operation names anywhere.
+    /// rest is undecided.** Two operations, and they are one shape: moving the
+    /// grid — a tap, an octave shift — needs the beat tracker rather than a
+    /// value, and may be refused by it.
     ///
-    /// **It was six, and the four that left went in two different ways.**
-    /// Setting a sync mode was held here because the anchor goes through the
-    /// engine's clamp, so whether the record carried what was asked for or
-    /// what was clamped looked like a decision about the bytes on disk. It is
-    /// not one: the two are the same number for every tempo an oscillator can
-    /// report, and what the record carries was decided at `Transport::engaged`
-    /// with the reason written at it. A fade, a crossfade and a renderer
-    /// selection were held for a different question — *whose* the quantum and
-    /// the length are — and that one had an answer rather than a computation
-    /// behind it: they are the surface's. Both times what was actually missing
-    /// was a reading; [`Current::tempo`] is the first and
+    /// **It was six, and the four that left first went in two different
+    /// ways.** Setting a sync mode was held here because the anchor goes
+    /// through the engine's clamp, so whether the record carried what was
+    /// asked for or what was clamped looked like a decision about the bytes on
+    /// disk. It is not one: the two are the same number for every tempo an
+    /// oscillator can report, and what the record carries was decided at
+    /// `Transport::engaged` with the reason written at it. A fade, a crossfade
+    /// and a renderer selection were held for a different question — *whose*
+    /// the quantum and the length are — and that one had an answer rather than
+    /// a computation behind it: they are the surface's. Both times what was
+    /// actually missing was a reading; [`Current::tempo`] is the first and
     /// [`Current::transition`] is the second.
     ///
-    /// **The wipe stayed, and that is the line between the two answers.** Its
-    /// scheduled move is a fade's exactly; what it also carries is a mask, and
-    /// nothing has said whether the shape `SetTransition` holds is the wipe's
-    /// to write. Deciding that is one sentence and it is not this one.
+    /// **The wipe was the fifth, and it is the one that took three
+    /// readings.**
+    /// It stayed here after the other four left, and the sentence that stood
+    /// in this place said why: its scheduled move is a fade's exactly, what it
+    /// also carries is a mask, and *"nothing has said whether the shape
+    /// `SetTransition` holds is the wipe's to write"*. Something has now.
+    /// The shape is the transition row's and arrives in
+    /// [`Current::transition`] beside the quantum and the length, which are
+    /// the same operation's other two settings; the soft edge is read off the
+    /// mask running on the deck being wiped in, which is [`Current::mask`] and
+    /// is what `Operation::SetMaskShape` already does with it. Neither was a
+    /// computation, and for the third time what was missing was a reading.
+    /// [`Current::mix`] is its third and arrived after the other two, for a
+    /// different job: it is read so that the blend mode and the put-on-air can
+    /// be left out where the deck arriving is already there.
+    ///
+    /// **What is left here is the one shape that is not a reading.** A tap's
+    /// record is the beat lock's answer — the tapped tempo, the phase error
+    /// against the oscillator, the output lag — and no value a surface holds
+    /// determines it, which is why these two did not leave with the other
+    /// four.
     NotSettled,
 }
 
@@ -469,6 +629,9 @@ impl Owed {
             Owed::NotRead(Reading::Tempo) => "the session tempo its anchor comes from was not read",
             Owed::NotRead(Reading::Transition) => {
                 "the transition settings its move is scheduled by were not handed over"
+            }
+            Owed::NotRead(Reading::Mix) => {
+                "the blend mode and residency of the deck it names were not read"
             }
             Owed::Undecided => "what it acts on is an open question in the vocabulary itself",
             Owed::NotSettled => "the record it writes is not a function of values alone, and who supplies the rest is undecided",
@@ -490,11 +653,22 @@ pub enum Written {
     ///
     /// It was written before anything answered more than one, against the day
     /// a gesture would, and the prediction is what held: nothing about this
-    /// shape changed when the crossfade landed. `Operation::Wipe` is six for
-    /// the same reason — five until the mask took a row for its shape and a
-    /// row for its position, each of which writes a whole `Record::Mask`
-    /// (ADR-0201) — and is still [`Owed::NotSettled`], which was never about
-    /// the shape of this answer.
+    /// shape changed when the crossfade landed, and nothing changed when the
+    /// wipe followed it. `Operation::Wipe` is **six at most** for the same
+    /// reason — five until the mask took a row for its shape and a row for its
+    /// position, each of which writes a whole `Record::Mask` (ADR-0201) — and
+    /// the arm writes them in the order the picture needs: the shape, the
+    /// front at 0, the opacity, the blend mode, the put-on-air, and the move
+    /// that carries the front to 1.
+    ///
+    /// **Never empty, and not always the same length.** The wipe is four, five
+    /// or six: its blend mode and its put-on-air are written only where the
+    /// deck arriving is not already there, so that a wipe does not overwrite a
+    /// mode the operator chose (see the arm, and [`Mix`]). The order above is a
+    /// property of what the list *does* hold rather than of how long it is —
+    /// whatever is written is written in it, because the front has to be at 0
+    /// before the move that carries it across is scheduled and a reader
+    /// applies these in sequence.
     Records(Vec<Record>),
     /// It writes none, and that is settled. See [`Silent`].
     Silent(Silent),
@@ -685,10 +859,15 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
 
         // ----- What it schedules, given the surface's settings -------------
         //
-        // Three, and the reading they share is [`Current::transition`]: the
+        // Four, and the reading they share is [`Current::transition`]: the
         // instant the move lands on, how long it lasts and the shape it
-        // takes. None of the three is on the operation, because an operation
+        // takes. None of the four is on the operation, because an operation
         // says what it wants and never how it is scheduled.
+        //
+        // **The wipe is the fourth and takes a second reading beside it**,
+        // which is what its arm at the end of this group is about: a fade
+        // moves a fader that is already there, and a wipe has to put a mask on
+        // the deck first.
         //
         // **The fader and never the trim.** `FadeDeck` says of itself that it
         // is opacity only — *"a gain fade is in the record vocabulary and has
@@ -754,16 +933,150 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
             }),
             None => Written::Owed(Owed::NotRead(Reading::Transition)),
         },
-
-        // ----- Owed: the tracker, and a mask nobody has assigned -----------
+        // **One gesture, six records at most, and it is the largest thing
+        // here.**
         //
-        // **A wipe is here and its three neighbours are not**, which is the
-        // line [`Owed::NotSettled`] draws: its scheduled move is a fade's
-        // exactly, and the five records around it include a shape that is
-        // `Operation::SetTransition`'s and a soft edge no operation names.
-        Operation::Wipe { .. }
-        | Operation::TapBeat
-        | Operation::ScaleGrid { .. } => Written::Owed(Owed::NotSettled),
+        // A wipe is a mask and one scheduled move, and nothing in either half
+        // knows about the other: the transition moves a number and the mask
+        // reads one. So the deck arriving is given the shape at position 0 —
+        // revealing nothing — put on air under `over` so that what it reveals
+        // *hides* what is beneath, and then one move carries the front from 0
+        // to 1. **Two of the six are written only where they would change
+        // something**, which is the paragraph below and why this is *at most*:
+        // four, five or six, always in the order they are listed in.
+        //
+        // **Everything is written about `to`, and `from` is read for
+        // nothing.** The deck being covered is not touched: it is revealed
+        // away from rather than moved, which is why this operation names two
+        // decks and writes about one. That is also what decides whose mask
+        // [`Current::mask`] is — the arriving deck's, said at [`Current`].
+        //
+        // **The two readings, and where each of the six fields comes from.**
+        // The shape and the angle are [`Current::transition`]'s
+        // `wipe_kind` and `wipe_angle` — `Operation::SetTransition`'s third
+        // setting, the surface's own, arriving beside the instant and the
+        // length that are its other two. The soft edge is the running mask's
+        // and nothing else's: no operation names a softness, so it is read off
+        // the deck exactly as `Operation::SetMaskShape` one group up reads it,
+        // and a wipe that invented one would rewrite a value nobody asked
+        // about ([`Mask::softness`], [`Look::white_point`]).
+        //
+        // **Two `Record::Mask` and not one**, which is what routing the mask
+        // honestly costs rather than an accident: the shape and the front are
+        // two operations (ADR-0201) and each of them writes the record whole,
+        // because a `Record::Mask` is a *state* and not an ask. The first
+        // keeps the front where the deck already had it, which is
+        // `SetMaskShape`'s arm; the second restates the shape the first chose
+        // and puts the front at 0, which is `SetMaskPosition`'s arm reading
+        // the mask the record before it just wrote. They land in that order,
+        // so the front is at 0 before the move that carries it to 1 is
+        // scheduled.
+        //
+        // **The blend and the put-on-air are written only where they change
+        // something**, which is what the third reading is for: [`Current::mix`]
+        // is taken so that a record can be left *out*, and this is the arm
+        // that leaves it. `over` is written only where the deck arriving is
+        // still at `add` — where a slot starts, which is
+        // `karakuri_operation::BlendMode::ALL`'s own sentence — and the
+        // put-on-air only where the deck is not already live.
+        //
+        // **Because the mode is the operator's and a wipe under it is a
+        // picture.** Under `add` the same gesture is a wipe *on* rather than a
+        // wipe *over*, and under `max` it is a third thing; both are
+        // legitimate, and a gesture that forced `over` every time would take
+        // the choice away from the hand that made it
+        // ([P-0079](../../../docs/principles/0079-nothing-takes-the-show-down-and-nothing-takes-it-away-from-the-operator.md):
+        // a rule protecting a performance may not remove what the performance
+        // is played with). That is what makes `m` in front of `c` mean
+        // something, and the sentence is here rather than on a surface because
+        // this is where it is now decided: `karakuri-cli`'s `c` held it while
+        // it built these records itself, and it builds none.
+        //
+        // **The crossfade one gesture back is not the same case and did not
+        // change.** Its put-on-air is unconditional because a `residency live`
+        // for a slot already live decodes to a state it is already in; what
+        // that would have cost here is a blend mode somebody chose, which is a
+        // different picture rather than the same one restated.
+        //
+        // **The move is on the mask's front and not on a fader**, which is
+        // the one place this differs from every other scheduled move here:
+        // [`MASK`] rather than [`OPACITY`], and `fade` is not what builds it.
+        //
+        // **A shape of `WipeKind::None` is refused by the surface and not
+        // here.** `Operation::Wipe` says *"Refused with no shape chosen"* and
+        // [`Written`] has three answers, none of which is a refusal — the
+        // shape is the surface's own setting, so the surface is where a wipe
+        // with nothing to move is turned away, before it asks.
+        Operation::Wipe { from: _, to } => {
+            match (current.transition, current.mask, current.mix) {
+                (Some(transition), Some(mask), Some(mix)) => {
+                    let mut records = vec![
+                        Record::Mask {
+                            slot: *to,
+                            kind: transition.wipe_kind.name().to_string(),
+                            angle: transition.wipe_angle,
+                            position: mask.position,
+                            softness: mask.softness,
+                        },
+                        Record::Mask {
+                            slot: *to,
+                            kind: transition.wipe_kind.name().to_string(),
+                            angle: transition.wipe_angle,
+                            position: 0.0,
+                            softness: mask.softness,
+                        },
+                        Record::Opacity {
+                            slot: *to,
+                            value: 1.0,
+                        },
+                    ];
+                    if mix.blend == karakuri_operation::BlendMode::Add {
+                        records.push(Record::Blend {
+                            slot: *to,
+                            mode: karakuri_operation::BlendMode::Over.name().to_string(),
+                        });
+                    }
+                    if mix.residency != karakuri_operation::Residency::Live {
+                        records.push(Record::Residency {
+                            slot: *to,
+                            level: karakuri_operation::Residency::Live.name().to_string(),
+                        });
+                    }
+                    records.push(Record::Transition {
+                        slot: *to,
+                        control: MASK.to_string(),
+                        to: 1.0,
+                        start: transition.start,
+                        beats: transition.beats,
+                        curve: transition.curve.name().to_string(),
+                    });
+                    Written::Records(records)
+                }
+                // **The settings first**, because that is the reading a caller
+                // is holding rather than one it would have had to take off the
+                // engine — see [`Reading::Transition`]. A surface that handed
+                // in neither is told about the one it forgot before the one it
+                // did not look up. The mix comes last for the other half of
+                // that rule: it is the reading a caller looks up *and* the one
+                // whose absence a record would not show, so a caller missing
+                // two is told about the one it can fix from memory first.
+                (None, _, _) => Written::Owed(Owed::NotRead(Reading::Transition)),
+                (_, None, _) => Written::Owed(Owed::NotRead(Reading::Mask)),
+                (_, _, None) => Written::Owed(Owed::NotRead(Reading::Mix)),
+            }
+        }
+
+        // ----- Owed: the tracker ------------------------------------------
+        //
+        // **Two, and the wipe that used to be the third has gone**, which is
+        // the line [`Owed::NotSettled`] draws seen from the side that is left:
+        // what a tap and an octave shift owe is not a value any surface holds
+        // but the beat lock's answer — a tapped tempo, a phase error, an
+        // output lag — and no reading added to [`Current`] would make either
+        // of them a function of values. The wipe was never that shape: what it
+        // was missing was two readings and an owner for each, which is exactly
+        // what the four before it were missing.
+        Operation::TapBeat | Operation::ScaleGrid { .. } => Written::Owed(Owed::NotSettled),
 
         // ----- Owed: the vocabulary's own open questions -------------------
         //
@@ -963,8 +1276,8 @@ fn fade(slot: u8, to: f32, transition: Transition) -> Record {
     }
 }
 
-/// **The wire name of the control a fade moves**, and the one spelling in this
-/// crate with no list of its own behind it.
+/// **The wire name of the control a fade moves**, and one of the two spellings
+/// in this crate with no list of its own behind it.
 ///
 /// `Record::Transition`'s `control` is `gain`, `opacity` or `mask`, and that
 /// list is `karakuri_engine::transition::Control` — the engine's, and
@@ -977,6 +1290,20 @@ fn fade(slot: u8, to: f32, transition: Transition) -> Record {
 /// the engine's list at once, exactly as the mode and level names one group up
 /// are checked there.
 const OPACITY: &str = "opacity";
+
+/// **The wire name of the control a wipe moves**, and the second of those two.
+///
+/// [`OPACITY`]'s paragraph word for word, one control along:
+/// `Operation::Wipe` *is* the mask-position one and says so at its own
+/// definition — *"one scheduled move carrying the front to 1"* — so no
+/// operation names this control either and there is still no list here to be
+/// exhaustive over. It is checked in the same place and by the same argument.
+///
+/// **`mask` and not `mask-position`**, which is the engine's spelling and the
+/// only one that decodes: `karakuri_engine::transition::Control::name` is what
+/// reads it back, and a move on a control that failed to decode is a wipe that
+/// replays as nothing at all.
+const MASK: &str = "mask";
 
 /// **The vocabulary's layer as the store's**, which is the one list this crate
 /// has to translate between rather than carry.
@@ -1175,6 +1502,22 @@ mod tests {
             angle: 1.25,
             position: 0.4,
             softness: 0.02,
+        }
+    }
+
+    /// **A deck that is nowhere the wipe is about to put it**: still at the
+    /// blend mode a slot starts in, and not on air.
+    ///
+    /// So both of the two records a wipe writes conditionally are written
+    /// against this fixture, and a wipe is its full six — which is what makes
+    /// [`a_wipe_leaves_a_mode_the_operator_chose_and_a_deck_already_on_air`]
+    /// the other half of one statement rather than a second subject. A fixture
+    /// already under `over` would have hidden the omission behind a record
+    /// that says the same thing.
+    fn mix() -> Mix {
+        Mix {
+            blend: karakuri_operation::BlendMode::Add,
+            residency: karakuri_operation::Residency::Allocated,
         }
     }
 
@@ -1552,6 +1895,12 @@ mod tests {
             start: 37.0,
             beats: 6.0,
             curve: karakuri_operation::Curve::Smooth,
+            // And a front shape that is neither the mask fixture's nor the
+            // first in the list, for the same reason: a wipe that took its
+            // shape off the deck instead of off the settings is visible here
+            // rather than coincidentally right.
+            wipe_kind: karakuri_operation::WipeKind::Linear,
+            wipe_angle: 0.75,
         }
     }
 
@@ -1673,6 +2022,11 @@ mod tests {
                 start: 37.0,
                 beats: 0.0,
                 curve: karakuri_operation::Curve::Lin,
+                // The front shape a wipe would take, which a selection has no
+                // front to apply it to: the fill is here so that this fixture
+                // differs from the last one in the two fields the assertion is
+                // about and in nothing else.
+                ..transition()
             }),
             ..Current::default()
         };
@@ -1704,6 +2058,7 @@ mod tests {
                 start: 12.375,
                 beats: 0.0,
                 curve: karakuri_operation::Curve::Smooth,
+                ..transition()
             }),
             ..Current::default()
         };
@@ -1722,6 +2077,272 @@ mod tests {
         );
     }
 
+    /// **A wipe is six records, in the order the picture needs**, and this is
+    /// the whole of what settling that conversion decided: the shape its front
+    /// takes is the transition row's and arrives beside the instant and the
+    /// length, and the soft edge is read off the mask that is running.
+    ///
+    /// **Every field is asserted against a fixture nothing else here is**, so
+    /// a value taken from the wrong side is visible: the shape and the angle
+    /// are [`transition`]'s and *not* [`mask`]'s, and the softness is
+    /// [`mask`]'s and is on no surface at all. A conversion that read the
+    /// shape off the deck would write `radial` at 1.25 here, which is the
+    /// losing answer spelled out as a failure.
+    ///
+    /// **The two `Record::Mask` are not one**, and the first is not
+    /// redundant: it is `SetMaskShape`'s record — the shape asked for and the
+    /// front left where the deck had it — and the second is
+    /// `SetMaskPosition`'s, restating that shape with the front at 0. That is
+    /// the pair `karakuri-cli`'s `c` wrote through two `operate` calls, and
+    /// what this holds is that the change of route did not change a record.
+    #[test]
+    fn a_wipe_is_a_mask_at_the_front_and_one_move_carrying_it_across() {
+        let current = Current {
+            transition: Some(transition()),
+            mask: Some(mask()),
+            mix: Some(mix()),
+            ..Current::default()
+        };
+        assert_eq!(
+            records(written(&Operation::Wipe { from: 3, to: 1 }, &current)),
+            vec![
+                Record::Mask {
+                    slot: 1,
+                    kind: "linear".to_string(),
+                    angle: 0.75,
+                    position: 0.4,
+                    softness: 0.02,
+                },
+                Record::Mask {
+                    slot: 1,
+                    kind: "linear".to_string(),
+                    angle: 0.75,
+                    position: 0.0,
+                    softness: 0.02,
+                },
+                Record::Opacity {
+                    slot: 1,
+                    value: 1.0,
+                },
+                Record::Blend {
+                    slot: 1,
+                    mode: "over".to_string(),
+                },
+                Record::Residency {
+                    slot: 1,
+                    level: "live".to_string(),
+                },
+                Record::Transition {
+                    slot: 1,
+                    control: "mask".to_string(),
+                    to: 1.0,
+                    start: 37.0,
+                    beats: 6.0,
+                    curve: "smooth".to_string(),
+                },
+            ],
+            "the six records a wipe writes are not the mask, the front, the opacity, \
+             the blend, the put-on-air and the move — in that order, about the deck \
+             arriving, with the shape off the transition row and the soft edge off the \
+             deck"
+        );
+    }
+
+    /// **The deck being covered is read for nothing**, which is what makes a
+    /// two-deck operation write about one of them.
+    ///
+    /// Everything a wipe writes is the arriving deck's: the covered one is
+    /// revealed away from rather than moved, and a record naming it would be a
+    /// change to a deck the gesture does not touch.
+    #[test]
+    fn a_wipe_writes_about_the_deck_arriving_and_never_the_one_covered() {
+        let current = Current {
+            transition: Some(transition()),
+            mask: Some(mask()),
+            mix: Some(mix()),
+            ..Current::default()
+        };
+        for record in records(written(&Operation::Wipe { from: 3, to: 1 }, &current)) {
+            let slot = match record {
+                Record::Mask { slot, .. }
+                | Record::Opacity { slot, .. }
+                | Record::Blend { slot, .. }
+                | Record::Residency { slot, .. }
+                | Record::Transition { slot, .. } => slot,
+                other => panic!("a wipe wrote {other:?}, which is not one of its six"),
+            };
+            assert_eq!(
+                slot, 1,
+                "a wipe wrote a record about slot {slot} — it names two decks and \
+                 writes about the one arriving"
+            );
+        }
+    }
+
+    /// **A wipe with the settings but no mask is told it is the mask**, which
+    /// is the second of its two readings and the one that is read off the
+    /// deck.
+    ///
+    /// The softness is the value at stake: no operation names one, so a
+    /// conversion with no mask in front of it would have to invent a soft
+    /// edge for a front somebody else chose — which is
+    /// [`a_mask_that_was_not_read_is_owed_rather_than_defaulted`] arriving at
+    /// the gesture that moves the front rather than at the two that set it.
+    #[test]
+    fn a_wipe_with_no_mask_read_is_owed_the_soft_edge_rather_than_given_one() {
+        let current = Current {
+            transition: Some(transition()),
+            ..Current::default()
+        };
+        assert_eq!(
+            written(&Operation::Wipe { from: 0, to: 1 }, &current),
+            Written::Owed(Owed::NotRead(Reading::Mask)),
+            "a wipe with no mask read came back with something other than the reading \
+             it is missing — a default soft edge is a value nobody asked about, written \
+             over one somebody may have"
+        );
+    }
+
+    /// **A wipe onto a deck that is already there writes neither the blend
+    /// mode nor the put-on-air**, which is the affordance `m` in front of `c`
+    /// is, said as a test.
+    ///
+    /// The mode is the operator's: a wipe under `max` — or under `add` — is a
+    /// wipe *on* rather than a wipe *over*, a different picture and a
+    /// legitimate one, and a gesture that forced `over` every time would take
+    /// it back from the hand that chose it
+    /// ([P-0079](../../../docs/principles/0079-nothing-takes-the-show-down-and-nothing-takes-it-away-from-the-operator.md)).
+    /// The put-on-air is the same shape with nothing at stake but the byte: a
+    /// deck already live is told so again.
+    ///
+    /// **Four records rather than six, in the same order.** What the list
+    /// drops it drops from the middle, and the front is still at 0 before the
+    /// move that carries it across — which is the sentence
+    /// [`Written::Records`] gained when the wipe stopped being one length.
+    #[test]
+    fn a_wipe_leaves_a_mode_the_operator_chose_and_a_deck_already_on_air() {
+        let current = Current {
+            transition: Some(transition()),
+            mask: Some(mask()),
+            mix: Some(Mix {
+                blend: karakuri_operation::BlendMode::Max,
+                residency: karakuri_operation::Residency::Live,
+            }),
+            ..Current::default()
+        };
+        let written = records(written(&Operation::Wipe { from: 3, to: 1 }, &current));
+        assert!(
+            !written
+                .iter()
+                .any(|record| matches!(record, Record::Blend { .. } | Record::Residency { .. })),
+            "a wipe onto a deck already under a mode the operator chose and already \
+             live wrote a blend or a residency anyway — `m` in front of `c` means \
+             nothing if the gesture writes `over` over it: {written:?}"
+        );
+        assert_eq!(
+            written,
+            vec![
+                Record::Mask {
+                    slot: 1,
+                    kind: "linear".to_string(),
+                    angle: 0.75,
+                    position: 0.4,
+                    softness: 0.02,
+                },
+                Record::Mask {
+                    slot: 1,
+                    kind: "linear".to_string(),
+                    angle: 0.75,
+                    position: 0.0,
+                    softness: 0.02,
+                },
+                Record::Opacity {
+                    slot: 1,
+                    value: 1.0,
+                },
+                Record::Transition {
+                    slot: 1,
+                    control: "mask".to_string(),
+                    to: 1.0,
+                    start: 37.0,
+                    beats: 6.0,
+                    curve: "smooth".to_string(),
+                },
+            ],
+            "a wipe that leaves the mix alone is the mask, the front at 0, the opacity \
+             and the move — in the order the six are in, with the two that change \
+             nothing missing rather than the rest reordered"
+        );
+    }
+
+    /// **A deck already under `over` is told it is live and nothing else**,
+    /// which is the pair one at a time rather than together.
+    ///
+    /// The two conditions are independent and this is what says so: a deck
+    /// wearing the mode the wipe wants but sitting off air needs the
+    /// put-on-air and nothing else. Five records, and the one that is missing
+    /// is the one that would have restated a mode.
+    #[test]
+    fn a_wipe_writes_the_put_on_air_alone_for_a_deck_already_under_over() {
+        let current = Current {
+            transition: Some(transition()),
+            mask: Some(mask()),
+            mix: Some(Mix {
+                blend: karakuri_operation::BlendMode::Over,
+                residency: karakuri_operation::Residency::Priming,
+            }),
+            ..Current::default()
+        };
+        let written = records(written(&Operation::Wipe { from: 3, to: 1 }, &current));
+        assert_eq!(
+            written.len(),
+            5,
+            "a wipe onto a deck already under `over` and not yet live is five records \
+             — the two conditions are separate and one of them fired: {written:?}"
+        );
+        assert_eq!(
+            written[3],
+            Record::Residency {
+                slot: 1,
+                level: "live".to_string(),
+            },
+            "the record a wipe writes for a deck already under `over` is not the \
+             put-on-air, or it is not where the order puts it: {written:?}"
+        );
+    }
+
+    /// **A wipe with no mix read is owed it rather than given the records it
+    /// would have left out**, which is [`Current`]'s every-field-optional rule
+    /// meeting the one reading taken so that a record can be omitted.
+    ///
+    /// The failure this catches is quiet in a way the other four are not: a
+    /// default of *the deck is at `add` and off air* is a perfectly plausible
+    /// `Mix` and a wipe built on it writes six perfectly plausible records —
+    /// one of which is a blend mode nobody chose, written over one somebody
+    /// did. There is nothing in the stream afterwards that says a reading was
+    /// missing, which is why this answers rather than assumes.
+    #[test]
+    fn a_wipe_with_no_mix_read_is_owed_it_rather_than_writing_over_a_chosen_mode() {
+        let current = Current {
+            transition: Some(transition()),
+            mask: Some(mask()),
+            ..Current::default()
+        };
+        assert_eq!(
+            written(&Operation::Wipe { from: 0, to: 1 }, &current),
+            Written::Owed(Owed::NotRead(Reading::Mix)),
+            "a wipe with the settings and the mask but no mix read came back with \
+             something other than the reading it is missing — a default here is a \
+             `blend over` for a deck the operator may have put under `add`"
+        );
+        assert_ne!(
+            Owed::NotRead(Reading::Mix).why(),
+            Owed::NotRead(Reading::Mask).why(),
+            "the two readings a wipe takes off the deck it names say the same sentence, \
+             so a caller is told which of them to go and read only by luck"
+        );
+    }
+
     /// **A surface that handed in no settings is told which reading it
     /// forgot**, rather than getting a cut it did not ask for.
     ///
@@ -1730,8 +2351,13 @@ mod tests {
     /// perfectly plausible `Transition` — a start of 0 is in the past and a
     /// length of 0 is a cut — so a surface that forgot its settings would get
     /// every fade as an instant jump and nothing anywhere would say so. All
-    /// three are asserted, because the failure is the conversion's and not one
+    /// four are asserted, because the failure is the conversion's and not one
     /// operation's.
+    ///
+    /// **The wipe is the fourth and is the one that could answer two
+    /// things.** It reads the settings and the mask, and with neither handed
+    /// in it names the settings — the reading a caller is holding rather than
+    /// one it would have had to look up.
     #[test]
     fn a_surface_that_handed_in_no_settings_is_told_which_reading_it_forgot() {
         for operation in [
@@ -1741,6 +2367,7 @@ mod tests {
                 deck: 0,
                 renderer: 1,
             },
+            Operation::Wipe { from: 0, to: 1 },
         ] {
             assert_eq!(
                 written(&operation, &Current::default()),
@@ -1804,10 +2431,10 @@ mod tests {
             "selecting a deck is a surface's own state and settled — not a gap"
         );
         assert_eq!(
-            written(&Operation::Wipe { from: 0, to: 1 }, &Current::default()),
+            written(&Operation::TapBeat, &Current::default()),
             Written::Owed(Owed::NotSettled),
-            "a wipe writes six records and cannot be written here — saying it is silent \
-             would lose a wipe an operator asked for"
+            "a tap moves the beat tracker and cannot be written here — saying it is \
+             silent would lose a tap an operator asked for"
         );
         assert_eq!(
             written(

@@ -307,11 +307,17 @@ whose panel cell is a `gap` and whose only owed route is `x`.
 **Order inside the bay.** Draw *Choose the wipe shape, the quantum, the length* first. `.xfade`, the
 transition row, is drawn nowhere at all, and the other three rows convert only once a surface holds
 what that row sets: *Fade a deck out or in* answers `Owed::NotRead` until the transition settings
-are handed over, and *Choose which renderer of a deck is live* reads the same way.
+are handed over, and *Choose which renderer of a deck is live* and *Wipe the next deck in* read the
+same way — the wipe reading the row's third setting, its front shape, as well as the other two.
 
-**Blocked on.** One row of the eight. *Wipe the next deck in* waits on who says the front shape and
-the soft edge are its: the shape is `Operation::SetTransition`'s third setting and nothing has said
-it is the wipe's to write, and the soft edge is named by no operation anywhere.
+**Blocked on.** Nothing. *Wipe the next deck in* was the one row of the eight that was, and it
+waited on who says the front shape and the soft edge are its. Both have an owner now: the shape is
+`Operation::SetTransition`'s third setting and reaches the conversion inside `Current::transition`
+beside the quantum and the length, which are that operation's other two, and the soft edge is read
+off the mask already running on the deck being wiped in. `written(Wipe)` writes its six records —
+four or five where the deck arriving is already under `over` or already live, because the mode is
+the operator's and a wipe does not take it back — and `karakuri-cli`'s `c` is one `operate` call, so
+what the panel's row needs is the control, not a decision.
 
 *Set a deck's mask position* carries no `plan` badge in either column and is not in this exit
 condition. It is the mixer's under-draw, named in
@@ -323,8 +329,9 @@ mixer has no crossfader*, and the selection half of *Two focuses, and they do no
 on the controls they describe. Eleven tips written: the strip-count readout, deck A's strip (the
 selection, which is why the strip has no capsule of its own), three trims, three faders, three
 meters, deck B's pending-fade number, and the transition row, which carries the crossfader argument
-whole and says of the wipe's shape and soft edge that they are open questions rather than states it
-is holding. The meters are the only ones not sourced from the notes, which say nothing about a
+whole and says where the wipe's shape and soft edge come from — the row itself and the arriving
+deck's mask. (That tip said they were open questions while they were; it was rewritten when they
+were answered.) The meters are the only ones not sourced from the notes, which say nothing about a
 meter: they come from
 [ADR-0043](adr/0043-the-meter-never-waits-and-the-deck-owns-it.md) and
 [ADR-0178](adr/0178-the-mixer-draws-four-tracks-and-as-many-strips-as-the-deck-has.md).

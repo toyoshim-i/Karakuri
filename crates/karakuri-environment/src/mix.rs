@@ -108,19 +108,34 @@
 //! record is gone. It writes two `Record::Mask` where it wrote one, which is
 //! what routing it honestly costs: each row writes the record whole.
 //!
-//! **`select_record` went the same way, and `transition_record` is down to one
-//! caller.** They were `cycle_renderer`'s and `fade_slot`'s, held while
-//! `Operation::FadeDeck`, `Operation::Crossfade` and `Operation::SelectRenderer`
-//! needed the grid quantised onto a musical instant plus the quantum and the
-//! length `Operation::SetTransition` sets and no record carries. **The quantum
-//! and the length turned out not to be missing but unassigned**, and they are
-//! the surface's: `karakuri_operation_record::Current` carries them the way it
+//! **`select_record` and `transition_record` went the same way, and the
+//! second of them went in two steps.** They were `cycle_renderer`'s,
+//! `fade_slot`'s and `wipe`'s, held while `Operation::FadeDeck`,
+//! `Operation::Crossfade` and `Operation::SelectRenderer` needed the grid
+//! quantised onto a musical instant plus the quantum and the length
+//! `Operation::SetTransition` sets and no record carries. **The quantum and
+//! the length turned out not to be missing but unassigned**, and they are the
+//! surface's: `karakuri_operation_record::Current` carries them the way it
 //! carries the look and the mask, [`current_transition`] is the reading that
 //! hands them over, and the three operations write their own records now. A
-//! selection is one record, so `select_record` had nothing left to be and is
-//! gone; `transition_record` stays because `Operation::Wipe` is still owed —
-//! its six records include a shape `SetTransition` holds and a soft edge no
-//! operation names — and it is `wipe`'s alone until that is settled.
+//! selection is one record, so `select_record` had nothing left to be and went
+//! then; `transition_record` stayed one caller longer, because
+//! `Operation::Wipe` was still owed the shape its front takes and its soft
+//! edge. **Those turned out to be unassigned too.** The shape is the same
+//! operation's third setting and travels the same road — [`current_transition`]
+//! carries it, which is why that function takes a `MaskKind` and an angle — and
+//! the soft edge is read off the deck by [`current_mask`], which was already
+//! the reading `Operation::SetMaskShape` takes. So `wipe` is one `operate` call
+//! and this function has no caller left.
+//!
+//! **What `wipe` did keep is the one decision a gesture was making rather than
+//! a record it was building**, and it kept it for a moment: it wrote the blend
+//! mode only where the slot was still at the mode a slot starts in, and the
+//! put-on-air only where the slot was not already live, so `m` in front of `c`
+//! left the operator's mode alone. Routing the gesture took a deck to ask away
+//! from it. [`current_mix`] is the reading that hands the answer over, and the
+//! condition now lives beside the records it governs in the conversion's own
+//! `Wipe` arm.
 //!
 //! `look_record` builds the launch look, which is a complete look rather than
 //! an ask. `canvas_record` names a record no operation writes. Each of them
@@ -429,43 +444,64 @@ pub fn current_mask(mask: Mask) -> karakuri_operation_record::Mask {
 /// handed — so ASAP is a setting a surface already has rather than anything
 /// this signature had to invent. See
 /// [`tests::a_quantum_of_zero_starts_the_move_on_the_beat_it_was_asked_on`].
+///
+/// **The wipe shape is the fourth setting to come through here, and it is the
+/// third of `Operation::SetTransition`'s three.** `mask` and `angle` are what
+/// the `z` key holds — the shape the *next* wipe takes, never the shape a
+/// deck's layer is wearing — and they arrive by this route for the reason the
+/// quantum and the length do: all three are one operation's, that operation
+/// writes no record, and a surface is the only thing holding them.
+/// `Operation::Wipe` is the one conversion that reads them, and it reads the
+/// soft edge off the deck instead, through [`current_mask`].
+///
+/// **The engine's `MaskKind` as the vocabulary's, on the way in.** The caller
+/// hands over what it is holding and [`wipe_kind`] is the one place the two
+/// lists are made to agree, exactly as [`curve`] is for the shape of the move.
 pub fn current_transition(
     grid: &Oscillator,
     quantum: f64,
     beats: f64,
     shape: Curve,
+    mask: MaskKind,
+    angle: f32,
 ) -> karakuri_operation_record::Transition {
     karakuri_operation_record::Transition {
         start: karakuri_engine::transition::quantise(grid.beats(), quantum),
         beats,
         curve: curve(shape),
+        wipe_kind: wipe_kind(mask),
+        wipe_angle: angle,
     }
 }
 
-/// A scheduled move, as the record that carries it.
+/// **Where a slot already sits in the mix, as the reading the conversion
+/// needs** — the sixth of these, and the one that is read so a record can be
+/// left *out*.
 ///
-/// **`wipe`'s alone now.** `fade_slot` was the other caller and is gone: a
-/// fade, a crossfade and a renderer selection write their records through
-/// `karakuri_operation_record::written` since the transition settings became a
-/// reading. `Operation::Wipe` is still owed — the shape its front takes is
-/// `Operation::SetTransition`'s and the soft edge is no operation's at all —
-/// so the one gesture that still builds a move by hand still needs this. It
-/// goes the day that is settled.
-pub fn transition_record(
-    slot: usize,
-    control: Control,
-    to: f32,
-    start: f64,
-    beats: f64,
-    curve: Curve,
-) -> Record {
-    Record::Transition {
-        slot: slot as u8,
-        control: control.name().to_string(),
-        to,
-        start,
-        beats,
-        curve: curve.name().to_string(),
+/// `Operation::Wipe` puts the deck it reveals under `over` and on air, and
+/// both of those are a state the deck may be in already. Under `add` or under
+/// `max` the same gesture is a wipe *on* rather than a wipe *over* — a
+/// different picture and a legitimate one — so a wipe writes the blend mode
+/// only where the slot is still at the mode a slot starts in, and the
+/// put-on-air only where the slot is not already live. That is the decision
+/// `karakuri-cli`'s `c` made for itself while it built those records by hand;
+/// the conversion has no deck to ask, so what it needs is this
+/// ([P-0079](../../../docs/principles/0079-nothing-takes-the-show-down-and-nothing-takes-it-away-from-the-operator.md):
+/// safety is never bought with the operator's authority).
+///
+/// **What the deck reports, not what it was asked for.** `Deck::residency`
+/// answers the level the slot is at — the governor may hold one below the
+/// request — which is the same value the surface reading this used to compare
+/// against, and the right one: what a wipe needs to know is whether the
+/// put-on-air it is about to write would change anything.
+///
+/// Both values cross into the vocabulary's lists on the way, through
+/// [`blend_mode`] and [`residency`], which is [`current_transition`]'s
+/// arrangement for the wipe shape and [`current_mask`]'s for the mask's.
+pub fn current_mix(blend: Blend, level: Residency) -> karakuri_operation_record::Mix {
+    karakuri_operation_record::Mix {
+        blend: blend_mode(blend),
+        residency: residency(level),
     }
 }
 
@@ -964,13 +1000,18 @@ mod tests {
     }
 
     /// A reading of the transition settings a surface is holding, for the
-    /// three operations that schedule a move.
+    /// four operations that schedule a move.
     ///
     /// Through [`current_transition`] rather than by spelling a
     /// `karakuri_operation_record::Transition`, which is `from_operation`'s
     /// rule one function down: what these tests convert is what a surface
     /// hands over, including the curve going through the two copies of that
     /// list.
+    ///
+    /// **The front shape is fixed here and is a wipe's alone.** A fade, a
+    /// crossfade and a selection have no front, so the fourth setting is a
+    /// value none of the three reads; [`wiping`] is what hands one over on
+    /// purpose.
     fn scheduled(
         at: u8,
         quantum: f64,
@@ -978,7 +1019,53 @@ mod tests {
         shape: Curve,
     ) -> karakuri_operation_record::Current {
         karakuri_operation_record::Current {
-            transition: Some(current_transition(&grid_at(at), quantum, beats, shape)),
+            transition: Some(current_transition(
+                &grid_at(at),
+                quantum,
+                beats,
+                shape,
+                MaskKind::Linear,
+                0.0,
+            )),
+            ..karakuri_operation_record::Current::default()
+        }
+    }
+
+    /// The same, plus the three readings a wipe takes that a fade does not:
+    /// the front shape the transition row is holding, the mask the deck being
+    /// wiped in is already wearing, and where that deck already sits in the
+    /// mix.
+    ///
+    /// All three go through the functions a surface calls —
+    /// [`current_transition`], [`current_mask`] and [`current_mix`] — for
+    /// [`scheduled`]'s reason: what these tests convert is what a program
+    /// hands over, including the shape crossing `MaskKind`'s two spellings on
+    /// the way.
+    ///
+    /// **The slot is at `add` and off air**, so both of the records a wipe
+    /// writes conditionally are written: the caller that wants the other case
+    /// is [`a_wipe_leaves_the_mode_the_operator_chose_on_the_deck`], which
+    /// hands in its own.
+    fn wiping(
+        at: u8,
+        quantum: f64,
+        beats: f64,
+        shape: Curve,
+        front: MaskKind,
+        angle: f32,
+        worn: Mask,
+    ) -> karakuri_operation_record::Current {
+        karakuri_operation_record::Current {
+            transition: Some(current_transition(
+                &grid_at(at),
+                quantum,
+                beats,
+                shape,
+                front,
+                angle,
+            )),
+            mask: Some(current_mask(worn)),
+            mix: Some(current_mix(Blend::Add, Residency::Allocated)),
             ..karakuri_operation_record::Current::default()
         }
     }
@@ -1014,11 +1101,13 @@ mod tests {
     ///
     /// The two gestures asked this module for a `Record::Opacity`, a
     /// `Record::Blend` and a `Record::Residency` while their own operations
-    /// were unsettled — and their own operations are unsettled still, because
-    /// what is owed is the *scheduled move*, never the silencing or the
-    /// put-on-air. Those three parts go through `Live::operate` now, and this
-    /// is what says the change of route did not change a byte of what they
-    /// write.
+    /// were unsettled, because what was owed was the *scheduled move* and
+    /// never the silencing or the put-on-air. **Both operations are settled
+    /// now** — a crossfade when the quantum and the length became a reading,
+    /// a wipe when the front shape followed them and the soft edge turned out
+    /// to be the deck's — so each gesture is one `operate` call and these
+    /// three records come out of `written` whole. This is what says neither
+    /// change of route changed a byte of what they write.
     ///
     /// **Literals on the right-hand side on purpose.** An expectation derived
     /// from `written` would assert that `written` equals itself; these are the
@@ -1094,7 +1183,7 @@ mod tests {
         // Now, the next beat, the next bar.
         for (quantum, expected) in [(0.0, 33.0), (1.0, 33.0), (4.0, 36.0)] {
             assert_eq!(
-                current_transition(&grid, quantum, 4.0, Curve::Smooth).start,
+                current_transition(&grid, quantum, 4.0, Curve::Smooth, MaskKind::Linear, 0.0).start,
                 expected,
                 "a quantum of {quantum} on beat 33 scheduled the move at something \
                  other than {expected} — this reading is `quantise` handed over, not a \
@@ -1104,7 +1193,7 @@ mod tests {
         // And a cut is due the instant it is read, which is what a start of
         // *now* has to mean: `Transition::value_at` and `Selection::due` are
         // both `>=`, so the beat it was asked on belongs to the move.
-        let now = current_transition(&grid, 0.0, 0.0, Curve::Smooth);
+        let now = current_transition(&grid, 0.0, 0.0, Curve::Smooth, MaskKind::Linear, 0.0);
         assert!(
             karakuri_engine::transition::Transition::new(
                 0,
@@ -1156,6 +1245,153 @@ mod tests {
                 shape.name()
             );
         }
+    }
+
+    /// **What a wipe schedules decodes back onto the mask's front**, which is
+    /// the second wire name in `karakuri-operation-record` with no list behind
+    /// it and is checked here for the first one's reason exactly.
+    ///
+    /// `Operation::Wipe` *is* the mask-position move — no operation names a
+    /// control — so the crate writes the literal `mask` and cannot reach
+    /// `karakuri_engine::transition::Control` to check it. A wipe that spelled
+    /// it `mask-position` would fail to decode and replay as nothing at all,
+    /// which is the one failure that looks identical to a wipe nobody asked
+    /// for.
+    ///
+    /// **The whole gesture is decoded and not only the move**, because a wipe
+    /// is six records and what makes it a picture is that the mask lands
+    /// before the move that carries it: the front is at 0 when the transition
+    /// is scheduled, and the shape it is at 0 in is the transition row's
+    /// rather than whatever the deck was wearing.
+    #[test]
+    fn what_a_wipe_schedules_decodes_back_onto_the_masks_front() {
+        use karakuri_operation_record::Written;
+
+        // The deck arriving is wearing a radial front part way across, which
+        // is nothing the wipe asks for: what survives of it is the soft edge
+        // and nothing else.
+        let worn = Mask::new(MaskKind::Radial, 1.25, 0.4, MASK_SOFTNESS);
+        let current = wiping(33, 4.0, 8.0, Curve::Smooth, MaskKind::Linear, 0.75, worn);
+        let Written::Records(records) = karakuri_operation_record::written(
+            &karakuri_operation::Operation::Wipe { from: 0, to: 1 },
+            &current,
+        ) else {
+            panic!("a wipe with both its readings handed over wrote no records");
+        };
+        let decoded: Vec<Change> = records
+            .iter()
+            .map(|record| {
+                change(record, 4)
+                    .expect("built here")
+                    .expect("every record a wipe writes decodes to a change")
+            })
+            .collect();
+        assert_eq!(
+            decoded,
+            vec![
+                Change::Mask {
+                    slot: 1,
+                    mask: Mask::new(MaskKind::Linear, 0.75, 0.4, MASK_SOFTNESS),
+                },
+                Change::Mask {
+                    slot: 1,
+                    mask: Mask::new(MaskKind::Linear, 0.75, 0.0, MASK_SOFTNESS),
+                },
+                Change::Opacity {
+                    slot: 1,
+                    value: 1.0,
+                },
+                Change::Blend {
+                    slot: 1,
+                    mode: Blend::Over,
+                },
+                Change::Residency {
+                    slot: 1,
+                    level: Residency::Live,
+                },
+                Change::Transition {
+                    slot: 1,
+                    control: Control::MaskPosition,
+                    to: 1.0,
+                    start: 36.0,
+                    beats: 8.0,
+                    curve: Curve::Smooth,
+                },
+            ],
+            "the six records a wipe writes did not decode back as the mask, the front \
+             at 0, the opacity, the blend, the put-on-air and one move carrying the \
+             front across — a control or a name it spells is not the one the engine \
+             reads back"
+        );
+    }
+
+    /// **A wipe onto a deck the operator has already moved leaves it where
+    /// they put it**, which is the affordance `m` in front of `c` is, checked
+    /// where both halves of it can be seen at once.
+    ///
+    /// `karakuri-operation-record` holds the same statement about the records;
+    /// this holds it about the **deck**, which is the half that crate cannot
+    /// see. A wipe under `max` is a wipe *on* rather than a wipe *over* — a
+    /// different picture and a legitimate one — and the gesture that decides
+    /// whether it survives is the one this module hands the reading to
+    /// ([P-0079](../../../docs/principles/0079-nothing-takes-the-show-down-and-nothing-takes-it-away-from-the-operator.md)).
+    ///
+    /// **Decoded rather than counted**, because what is at stake is a
+    /// `Change::Blend` reaching the deck: a record that decodes to *the mode
+    /// is `over`* is the mode being taken back from the hand that set it,
+    /// whatever the list it arrived in was.
+    #[test]
+    fn a_wipe_leaves_the_mode_the_operator_chose_on_the_deck() {
+        use karakuri_operation_record::Written;
+
+        let worn = Mask::new(MaskKind::Radial, 1.25, 0.4, MASK_SOFTNESS);
+        let current = karakuri_operation_record::Current {
+            mix: Some(current_mix(Blend::Max, Residency::Live)),
+            ..wiping(33, 4.0, 8.0, Curve::Smooth, MaskKind::Linear, 0.75, worn)
+        };
+        let Written::Records(records) = karakuri_operation_record::written(
+            &karakuri_operation::Operation::Wipe { from: 0, to: 1 },
+            &current,
+        ) else {
+            panic!("a wipe with all three of its readings handed over wrote no records");
+        };
+        let decoded: Vec<Change> = records
+            .iter()
+            .map(|record| {
+                change(record, 4)
+                    .expect("built here")
+                    .expect("every record a wipe writes decodes to a change")
+            })
+            .collect();
+        assert_eq!(
+            decoded,
+            vec![
+                Change::Mask {
+                    slot: 1,
+                    mask: Mask::new(MaskKind::Linear, 0.75, 0.4, MASK_SOFTNESS),
+                },
+                Change::Mask {
+                    slot: 1,
+                    mask: Mask::new(MaskKind::Linear, 0.75, 0.0, MASK_SOFTNESS),
+                },
+                Change::Opacity {
+                    slot: 1,
+                    value: 1.0,
+                },
+                Change::Transition {
+                    slot: 1,
+                    control: Control::MaskPosition,
+                    to: 1.0,
+                    start: 36.0,
+                    beats: 8.0,
+                    curve: Curve::Smooth,
+                },
+            ],
+            "a wipe onto a deck already at `max` and already live decoded to something \
+             other than the mask, the front at 0, the opacity and the move — a \
+             `Change::Blend` here is the operator's mode being taken back by a gesture \
+             that did not have to touch it"
+        );
     }
 
     /// **The records `fade_slot` and `cycle_renderer` built by hand are the
@@ -1289,7 +1525,10 @@ mod tests {
                 },
             ),
             (
-                transition_record(1, Control::Opacity, 0.0, 64.0, 8.0, Curve::Smooth),
+                from_operation_reading(
+                    karakuri_operation::Operation::FadeDeck { deck: 1, to: 0.0 },
+                    scheduled(33, 64.0, 8.0, Curve::Smooth),
+                ),
                 Change::Transition {
                     slot: 1,
                     control: Control::Opacity,
@@ -1418,11 +1657,28 @@ mod tests {
     /// **Every control and every curve a transition can name round-trips**, so
     /// one added to the engine and not to the wire vocabulary is a move that
     /// fails to decode rather than one that moves the wrong thing.
+    ///
+    /// **Spelled here rather than asked of the conversion**, which is the one
+    /// place in this module that has to be: `written` writes two of the three
+    /// controls — `opacity` for a fade and `mask` for a wipe — and no
+    /// operation names a control at all, so a `gain` move has nothing to be
+    /// converted from. What is checked is the decoder against the engine's own
+    /// list, and the two literals the conversion does write are checked
+    /// against it in
+    /// [`what_the_conversion_schedules_decodes_back_onto_the_fader`] and
+    /// [`what_a_wipe_schedules_decodes_back_onto_the_masks_front`].
     #[test]
     fn every_transition_control_and_curve_has_a_wire_name_that_decodes_back() {
         for control in Control::ALL {
             for curve in karakuri_engine::binding::CURVES {
-                let record = transition_record(0, control, 1.0, 0.0, 4.0, curve);
+                let record = Record::Transition {
+                    slot: 0,
+                    control: control.name().to_string(),
+                    to: 1.0,
+                    start: 0.0,
+                    beats: 4.0,
+                    curve: curve.name().to_string(),
+                };
                 assert_eq!(
                     change(&record, 1).expect("built here"),
                     Some(Change::Transition {

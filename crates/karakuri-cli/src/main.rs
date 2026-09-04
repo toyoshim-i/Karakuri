@@ -5576,42 +5576,51 @@ impl Live {
     /// [`Live::operate`], because every operation a map line can produce is one
     /// `karakuri_operation_record::written` converts. **A keyboard is not that
     /// shape**, and this is the survey rather than an intention: of the
-    /// thirty-nine keys below, twenty name an operation whose record converts,
-    /// four name one whose record is owed, twelve name one that writes no
-    /// record at all, and three name nothing in the vocabulary.
+    /// thirty-nine keys below, twenty-one name an operation whose record
+    /// converts, three name one whose record is owed, twelve name one that
+    /// writes no record at all, and three name nothing in the vocabulary.
     ///
     /// - **Its record converts, so it goes through [`Live::operate`].**
     ///   `space` and `w` (`SetResidency`), `[`, `]` and `\` (`SetGain`),
     ///   `;` and `'` (`SetOpacity`), `m` (`SetBlendMode`),
     ///   `t` (`SetTonemap`), `-`, `=` and the backquote (`SetExposure`), `u`
     ///   and `i` (`ScrubDeck`), `y` (`SetSync`), `f` and `g` (`FadeDeck`),
-    ///   `x` (`Crossfade`), `r` (`SelectRenderer`). A key and a mapped pad
-    ///   reach the deck by **one
+    ///   `x` (`Crossfade`), `r` (`SelectRenderer`), `c` (`Wipe`). A key and a
+    ///   mapped pad reach the deck by **one
     ///   derivation**, which is the whole of why the two surfaces cannot drift.
     ///   Which way to step is still the keyboard's — a cycle and a nudge are
     ///   translations a surface makes, never operations
     ///   (`docs/principles/0074-…`).
     /// - **Its record is owed, so it keeps its present path** — each with the
-    ///   reason written at the function it ends in: `c` ([`Live::wipe`]), `b`
-    ///   ([`Live::tap`]), `,` and `.` ([`Live::shift_octave`]). All four
+    ///   reason written at the function it ends in: `b` ([`Live::tap`]), `,`
+    ///   and `.` ([`Live::shift_octave`]). All three
     ///   operations answer `Owed::NotSettled`, and the day one is settled its
     ///   function is what goes — the promise `run_surface`'s `TapBeat` arm
     ///   already carries. Routing one through `operate` today would print the
     ///   gap where the gesture used to happen, which is the one thing a change
     ///   of route may not do.
     ///
-    ///   **It was eight, and the four that left are what the promise looks
-    ///   like kept twice.** `Operation::SetSync` was owed for the engine's
-    ///   anchor clamp; the clamp turned out to be the identity on every tempo
-    ///   an oscillator can report, the conversion took a session tempo as a
-    ///   reading, and [`Live::cycle_sync`] moved to `operate` with its
-    ///   record-building deleted rather than kept in step. `FadeDeck`,
+    ///   **It was eight, and the five that left are what the promise looks
+    ///   like kept three times.** `Operation::SetSync` was owed for the
+    ///   engine's anchor clamp; the clamp turned out to be the identity on
+    ///   every tempo an oscillator can report, the conversion took a session
+    ///   tempo as a reading, and [`Live::cycle_sync`] moved to `operate` with
+    ///   its record-building deleted rather than kept in step. `FadeDeck`,
     ///   `Crossfade` and `SelectRenderer` went the same way and took a whole
     ///   function with them: the quantum and the length `n` and `j` cycle are
     ///   **this surface's**, `Current::transition` is where they are handed
     ///   over, and `Live::fade_slot` is gone rather than kept beside the
-    ///   conversion. `c` is the one that stayed, because a wipe also carries a
-    ///   shape and a soft edge that nothing has assigned.
+    ///   conversion. **`c` was the one that stayed and is the fifth to go**,
+    ///   because what a wipe carried beyond a fade turned out to be unassigned
+    ///   rather than missing too: the shape its front takes is the third of
+    ///   the settings `z`, `n` and `j` write and travels with the other two,
+    ///   and the soft edge is read off the mask on the deck being wiped in.
+    ///   [`Live::wipe`] keeps only the two refusals and the line it prints.
+    ///
+    ///   **What is left is the beat tracker, and it is a different shape.** A
+    ///   tap and an octave shift do not want a reading nobody hands over; they
+    ///   want the beat lock's answer, which no value a surface holds
+    ///   determines — see [`Live::tap`].
     /// - **It writes no record, and this surface is what has to perform it.**
     ///   `0`–`3` (`SelectDeck`), `z`, `n` and `j` (`SetTransition`), `a`
     ///   (`SizeWindow`), `k` (`SaveSet`), `o` and `p` (`SetLatencyOffset`),
@@ -6430,26 +6439,47 @@ impl Live {
     /// transition system knows what a mask is and nothing in the mask knows
     /// what a beat is.
     ///
-    /// Under `add` the same gesture is a wipe *on* rather than a wipe *over*,
-    /// which is a different picture and a legitimate one — so the mode is left
-    /// wherever the operator had it, and `over` is only forced when the slot
-    /// was still at the default. That way `m` in front of `c` means something.
+    /// **All six of its records are one operation now, and this function is
+    /// one `operate` call** — six where nothing is already where the wipe is
+    /// putting it, and four or five where something is — which is
+    /// [`Live::crossfade`]'s paragraph one gesture along and the last of them
+    /// to be written. It built five of the
+    /// six out of five separate operations and the sixth by hand, while what a
+    /// wipe owed had no owner: the *shape* its front takes and the soft edge.
+    /// Both have one. The shape is `Operation::SetTransition`'s third setting
+    /// — the one this program holds in `mask_kind` and `mask_angle` and the
+    /// `z` key writes — so it goes over with the quantum and the length inside
+    /// `karakuri_operation_record::Current::transition`, which is where its
+    /// two neighbours already were. The soft edge is read off the mask on the
+    /// deck being wiped in, which is `mix::current_mask` and was already the
+    /// reading `Operation::SetMaskShape` takes.
     ///
-    /// **Five of its six records are operations, and one is not.** The mask's
-    /// shape, its position, the opacity, the blend mode and the put-on-air go
-    /// through [`Live::operate`], because each of them *is* an operation the
-    /// vocabulary names; only the scheduled move is left, and it is
-    /// [`Operation::Wipe`]'s own record.
+    /// **The two lines that are left are the keyboard's translation and not
+    /// the gesture.** *The next slot* is what `c` means here and the operation
+    /// names both decks, so working out which one and refusing a deck with
+    /// nowhere to go stays. So does the refusal with no shape chosen:
+    /// `Operation::Wipe` says *"Refused with no shape chosen"* at its own
+    /// definition, `written` has no answer that is a refusal, and the shape is
+    /// this surface's own setting — so this is the only place that can turn a
+    /// wipe with nothing to move away, and it does it before it asks.
     ///
-    /// **It is the last gesture here that builds one**, and the reason is no
-    /// longer the one [`Live::crossfade`] carried: the quantum and the length
-    /// have an owner now and a fade converts. What a wipe still owes is the
-    /// *shape* — `Operation::SetTransition`'s third setting, which this
-    /// program holds in `mask_kind` and `mask_angle` — and the soft edge,
-    /// which no operation names at all. `Owed::NotSettled` is what `written`
-    /// answers until somebody says whether those are the wipe's to write.
+    /// **The one decision this function used to make is made in the
+    /// conversion now, and it is not a record.** Under `add` the same gesture
+    /// is a wipe *on* rather than a wipe *over*, which is a different picture
+    /// and a legitimate one — so the mode is left wherever the operator had it
+    /// and `over` is written only where the slot is still at the mode a slot
+    /// starts in, which is what makes `m` in front of `c` mean something. The
+    /// put-on-air is written only where the slot is not already live, on the
+    /// same terms. Those were two `if`s here and they are the `Wipe` arm's
+    /// now, because the sentence belongs beside the records it governs rather
+    /// than on one of the surfaces that can reach them
+    /// ([P-0076](../../../docs/principles/0076-a-surface-owns-the-affordance-never-the-authority.md)
+    /// — a rule held in one surface binds none of the other three). What the
+    /// conversion needed to keep it is a reading, which is the third this
+    /// gesture takes: `karakuri_operation_record::Current::mix`, handed over
+    /// by [`Live::operate`] out of the deck this function no longer touches.
     ///
-    /// **Six records where it used to write five**, and the extra one is what
+    /// **Six records where it once wrote five**, and the extra one is what
     /// routing the mask honestly costs rather than an accident: the shape and
     /// the front are two operations
     /// (`docs/adr/0201-the-mask-is-two-rows-because-a-control-change-can-only-set.md`)
@@ -6468,45 +6498,10 @@ impl Live {
             eprintln!("no mask shape — `z` chooses one, and a wipe is a shape moving");
             return;
         }
-        // The shape first and the front second, which is the order the picture
-        // needs: the front has to be at 0 before the move that carries it to 1
-        // is scheduled. Each writes a whole `Record::Mask`, so the second one
-        // restates the shape the first one chose.
-        self.operate(&Operation::SetMaskShape {
-            deck: over as u8,
-            kind: mix::wipe_kind(self.mask_kind),
-            angle: self.mask_angle,
+        self.operate(&Operation::Wipe {
+            from: under as u8,
+            to: over as u8,
         });
-        self.operate(&Operation::SetMaskPosition {
-            deck: over as u8,
-            position: 0.0,
-        });
-        self.operate(&Operation::SetOpacity {
-            deck: over as u8,
-            opacity: 1.0,
-        });
-        if self.deck.blend(over) == Blend::Add {
-            self.operate(&Operation::SetBlendMode {
-                deck: over as u8,
-                blend: mix::blend_mode(Blend::Over),
-            });
-        }
-        if self.deck.residency(over) != Residency::Live {
-            self.operate(&Operation::SetResidency {
-                deck: over as u8,
-                residency: mix::residency(Residency::Live),
-            });
-        }
-        let now = self.deck.signals().oscillator().beats();
-        let start = karakuri_engine::transition::quantise(now, self.quantum);
-        self.record(mix::transition_record(
-            over,
-            karakuri_engine::transition::Control::MaskPosition,
-            1.0,
-            start,
-            self.fade_beats,
-            FADE_CURVE,
-        ));
         eprintln!(
             "wipe {over} over {under} — {} at {:.0}°, over {} beat{} from {}",
             self.mask_kind.name(),
@@ -6777,8 +6772,15 @@ impl Live {
         // The mask of the deck the operation names, on the transport's terms:
         // both halves of a mask write the record whole, so each of them needs
         // the half it did not ask for.
+        // A wipe names two decks and is read for one of them: everything it
+        // writes is about the deck arriving, so the mask handed over is
+        // `to`'s. The soft edge is the only field of it a wipe does not say,
+        // and giving it the covered deck's would put somebody else's edge on
+        // the front that is about to cross the frame.
         let mask = match operation {
-            Operation::SetMaskShape { deck, .. } | Operation::SetMaskPosition { deck, .. } => {
+            Operation::SetMaskShape { deck, .. }
+            | Operation::SetMaskPosition { deck, .. }
+            | Operation::Wipe { to: deck, .. } => {
                 let slot = usize::from(*deck);
                 slot_in_range(slot, self.deck.slot_count())
                     .then(|| mix::current_mask(self.deck.mask(slot)))
@@ -6794,25 +6796,54 @@ impl Live {
             Operation::SetSync { .. } => Some(mix::current_tempo(self.deck.signals().oscillator())),
             _ => None,
         };
-        // **The transition settings, for the three operations that schedule a
-        // move**, and the one reading here that is read off nothing: `n` and
-        // `j` set the quantum and the length, no record carries either, and
-        // they are this program's own state until it hands them over. That is
-        // the whole of what settling these three conversions decided — see
-        // `karakuri_operation_record::Transition`.
+        // **The transition settings, for the four operations that schedule a
+        // move**, and the one reading here that is read off nothing: `z`, `n`
+        // and `j` set the shape, the quantum and the length, no record carries
+        // any of them, and they are this program's own state until it hands
+        // them over. That is the whole of what settling these four
+        // conversions decided — see `karakuri_operation_record::Transition`.
+        //
+        // **The shape is the third setting and the wipe is the only reader.**
+        // `mask_kind` and `mask_angle` are what `z` cycles, they are the shape
+        // the *next* wipe takes rather than the shape any slot is wearing, and
+        // handing them over here is what stopped `Live::wipe` building a
+        // record of its own.
         //
         // `mix::current_transition` takes the oscillator and the quantum
         // rather than an instant, so the start is
         // `karakuri_engine::transition::quantise`'s answer and this file
         // cannot hand in a beat the grid was never on.
+        // **Where the deck a wipe is arriving on already sits in the mix**,
+        // and the one reading here taken so that a record can be left *out*.
+        // A wipe puts that deck under `over` and on air; this program is what
+        // knows the deck is already there, and the conversion is where the two
+        // records that would say so again are dropped. `c` used to make that
+        // decision here, in the two `if`s that are gone — the mode is the
+        // operator's, and `m` in front of `c` is what it buys.
+        //
+        // **The deck as it reports, which is what the governor may have held
+        // below the request.** `mix::current_mix` takes the engine's two
+        // values rather than the vocabulary's, so the crossing is made in one
+        // place, exactly as the mask's and the transition's are.
+        let mix = match operation {
+            Operation::Wipe { to: deck, .. } => {
+                let slot = usize::from(*deck);
+                slot_in_range(slot, self.deck.slot_count())
+                    .then(|| mix::current_mix(self.deck.blend(slot), self.deck.residency(slot)))
+            }
+            _ => None,
+        };
         let transition = match operation {
             Operation::FadeDeck { .. }
             | Operation::Crossfade { .. }
-            | Operation::SelectRenderer { .. } => Some(mix::current_transition(
+            | Operation::SelectRenderer { .. }
+            | Operation::Wipe { .. } => Some(mix::current_transition(
                 self.deck.signals().oscillator(),
                 self.quantum,
                 self.fade_beats,
                 FADE_CURVE,
+                self.mask_kind,
+                self.mask_angle,
             )),
             _ => None,
         };
@@ -6822,6 +6853,7 @@ impl Live {
             mask,
             tempo,
             transition,
+            mix,
         };
         match karakuri_operation_record::written(operation, &current) {
             Written::Records(records) => {
@@ -10578,17 +10610,10 @@ mod live_save_tests {
     /// [`the_keys_that_keep_their_own_path_are_the_ones_whose_record_is_not_settled`]
     /// — so an entry that stops being owed fails there rather than lingering
     /// here as a stale excuse.
-    const OWED_RECORD_PATHS: &[(&str, &str)] = &[
-        (
-            "operate",
-            "the route itself: this is where `written`'s records are written",
-        ),
-        (
-            "wipe",
-            "`Wipe` — the shape its front takes is `SetTransition`'s and the soft edge \
-             is no operation's, so nothing has said whose they are to write",
-        ),
-    ];
+    const OWED_RECORD_PATHS: &[(&str, &str)] = &[(
+        "operate",
+        "the route itself: this is where `written`'s records are written",
+    )];
 
     /// The method a byte offset falls inside, read off the nearest `fn` above
     /// it at `impl` indentation.
@@ -10648,17 +10673,20 @@ mod live_save_tests {
         }
         // A floor rather than a count, and a low one: what is guarded against
         // is the scan going quiet, which would let every direct write through.
-        // **Two, where it was five and then four.** `cycle_sync` was the
-        // fifth; `fade_slot` and `cycle_renderer` were the third and fourth
-        // and went together when the transition settings became a reading. A
-        // floor above what is left would fail as a dead scan on the day a row
-        // was correctly deleted — which is the one failure a guard against a
-        // dead scan must not invent.
+        // **One, where it was five, then four, then two.** `cycle_sync` was
+        // the fifth; `fade_slot` and `cycle_renderer` were the third and
+        // fourth and went together when the transition settings became a
+        // reading; `wipe` was the second and went when the front shape joined
+        // them. What is left is `operate` itself, which is the route rather
+        // than a path around it — so this floor is now as low as it can go,
+        // and the loop below is what actually keeps the table honest. A floor
+        // above what is left would fail as a dead scan on the day a row was
+        // correctly deleted — which is the one failure a guard against a dead
+        // scan must not invent.
         assert!(
-            reached.len() >= 2,
-            "only {} method(s) reading as record writers — the scan is not seeing \
-             `Live`'s bodies: {reached:?}",
-            reached.len()
+            !reached.is_empty(),
+            "no method reads as a record writer — the scan is not seeing `Live`'s \
+             bodies, and `Live::operate` itself is one: {reached:?}"
         );
         // And nothing in the table is a leftover. A path whose last direct
         // write moved to `operate` is a row to delete, not a permission to
@@ -10675,14 +10703,17 @@ mod live_save_tests {
     /// **The keys that keep their own path are exactly the ones whose record
     /// is not settled**, and this is what will say so the day one changes.
     ///
-    /// `c`, `b` and `, .` build their records where they
+    /// `b` and `, .` reach the beat tracker where they
     /// stand because `written` answers `Owed::NotSettled` for the operation
-    /// each of them names. **`y`, `f g`, `x` and `r` are the four that have
-    /// already gone**, and every one of them went the way this test names:
-    /// `SetSync` stopped being owed when the conversion took a session tempo,
-    /// and `FadeDeck`, `Crossfade` and `SelectRenderer` stopped when it took
-    /// the transition settings — so each key moved through [`Live::operate`]
-    /// and its line here came out, taking `Live::fade_slot` with it. That is a statement about
+    /// each of them names. **`y`, `f g`, `x`, `r` and `c` are the five that
+    /// have already gone**, and every one of them went the way this test
+    /// names: `SetSync` stopped being owed when the conversion took a session
+    /// tempo, `FadeDeck`, `Crossfade` and `SelectRenderer` stopped when it
+    /// took the transition settings, and `Wipe` stopped when the front shape
+    /// went over with them and the soft edge turned out to be the arriving
+    /// deck's — so each key moved through [`Live::operate`]
+    /// and its line here came out, taking `Live::fade_slot` and the last
+    /// hand-built record with it. That is a statement about
     /// `karakuri-operation-record` rather than about this file, so it is
     /// checked against that crate: the day somebody settles one of these
     /// conversions, this fails and names the key that is now due to move
@@ -10692,7 +10723,6 @@ mod live_save_tests {
     fn the_keys_that_keep_their_own_path_are_the_ones_whose_record_is_not_settled() {
         use karakuri_operation_record::Owed;
         let owed = [
-            ("c", Operation::Wipe { from: 0, to: 1 }),
             ("b", Operation::TapBeat),
             (
                 ", .",
