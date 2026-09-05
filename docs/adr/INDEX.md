@@ -284,6 +284,7 @@ number; new records continue from the end.
 | [ADR-0254](0254-a-written-figure-is-re-measured-rather-than-predicted-from-the-change-somebody-remembered.md) | A written figure is re-measured, rather than predicted from the change somebody remembered | 2026-09-05 | accepted |
 | [ADR-0255](0255-three-clocks-run-at-once-and-a-slower-ones-work-never-lands-on-a-faster-one.md) | Three clocks run at once, and a slower one's work never lands on a faster one | 2026-09-05 | accepted |
 | [ADR-0256](0256-a-swap-lands-on-a-frame-boundary-and-an-over-budget-set-rolls-back-without-being-asked.md) | A swap lands on a frame boundary, and an over-budget Set rolls back without being asked | 2026-09-05 | accepted |
+| [ADR-0257](0257-a-pointer-inside-a-records-prose-is-metadata-too.md) | A pointer inside a record's prose is metadata too | 2026-09-05 | accepted |
 
 ## Retired numbers
 
