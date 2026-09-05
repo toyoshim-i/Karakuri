@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-28
 supersedes: []
 superseded_by: []
-principles: [0072]
+principles: [0091]
 tags: [ui, perf]
 ---
 
@@ -13,7 +13,7 @@ tags: [ui, perf]
 
 ## Context
 
-[P-0072](../principles/0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md) has
+[ADR-0164](0164-the-panel-is-budgeted-rather-than-forbidden-to-allocate.md) has
 two halves. The first — *a panel with nothing changing on it is paid for once and not again* — is
 built and asserted ([ADR-0165](0165-the-repaint-decision-is-one-closed-list.md),
 [ADR-0193](0193-a-region-that-is-not-laid-out-declares-nothing-rather-than-being-dropped-later.md)).

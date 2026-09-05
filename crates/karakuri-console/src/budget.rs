@@ -1,7 +1,7 @@
 //! **What a live region declares, and what the panel has to fit every
 //! declaration into.**
 //!
-//! [P-0072](../../../docs/principles/0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md)
+//! [ADR-0164](../../../docs/adr/0164-the-panel-is-budgeted-rather-than-forbidden-to-allocate.md)
 //! has two halves and this module is the second one's *inputs*: **what must be
 //! live during a performance is named, and each named thing declares two
 //! numbers** — what its update costs, and how stale it may get. [`Declared`]
@@ -10,7 +10,7 @@
 //!
 //! # Nothing here schedules, and nothing here is read on a frame
 //!
-//! P-0072's arithmetic is two inequalities over the declarations:
+//! ADR-0164's arithmetic is two inequalities over the declarations:
 //!
 //! ```text
 //! Σ (cost / staleness)  ≤  budget / frame interval
@@ -35,8 +35,8 @@
 //!
 //! # What is *not* on this budget
 //!
-//! **The Program bay's picture.** P-0072: *"What is inside it is the engine's
-//! output, already accounted for by the governor, and counting it here would
+//! **The Program bay's picture.** ADR-0210: the picture is the engine's
+//! output, *"already accounted for by the governor, and counting it here would
 //! count it twice."* What lands here is the composite — putting that texture
 //! into the panel — *"drawn every frame at the highest priority regardless"*,
 //! which is to say it is not scheduled and does not declare.
@@ -52,8 +52,8 @@ use std::time::Duration;
 /// **One live region's declaration**: what one update of it costs, and how
 /// stale it may get.
 ///
-/// The unit is a **region** and never a slice of time, which is P-0072 stated
-/// as a type: a region is redrawn whole or not at all, so what declares is a
+/// The unit is a **region** and never a slice of time, which is ADR-0210
+/// stated as a type: a region is redrawn whole or not at all, so what declares is a
 /// node of the arrangement rather than an animation, a control or a frame.
 /// [`Declared::region`] is that node's name, and it is the name the
 /// arrangement, the manual, the operations and this crate all address it by
@@ -105,8 +105,8 @@ pub struct Declared {
 /// declares what it needs; what the panel can afford is decided elsewhere …
 /// a deliberate over-declaration that a scheduler can refine downwards."* It
 /// stops being one on the day a region can be drawn once into a texture and
-/// composited after — P-0072's own remedy for a region that cannot meet the
-/// second condition — and that day this constant becomes a per-region number
+/// composited after — the remedy ADR-0210 names for a region that cannot meet
+/// the second condition — and that day this constant becomes a per-region number
 /// and `Declared::cost` stops being written from one place.
 ///
 /// # Where the number comes from, and why it is not measured at runtime
@@ -132,7 +132,7 @@ pub struct Declared {
 ///
 /// **Three numbers on that frame are deliberately not in it.** The engine
 /// pass, because the picture is the governor's and counting it here would
-/// count it twice (P-0072). The vsync wait, because a frame blocked in
+/// count it twice (ADR-0210). The vsync wait, because a frame blocked in
 /// `get_current_texture` is not paying for anything. And the submission —
 /// about 2.4 ms, larger than this whole figure — because it carries the
 /// engine's half of the frame as well and is paid whenever anything is
@@ -157,7 +157,7 @@ pub struct Declared {
 /// still redrawn whole.
 pub const PANEL_PASS: Duration = Duration::from_micros(1260);
 
-/// **What the panel may spend on a frame**, and the divisor in P-0072's
+/// **What the panel may spend on a frame**, and the divisor in ADR-0164's
 /// second condition.
 ///
 /// **It is the console's only written-down budget and it is the whole frame's,
@@ -181,7 +181,7 @@ pub const PANEL_PASS: Duration = Duration::from_micros(1260);
 /// be equal today.
 pub const BUDGET: Duration = Duration::from_nanos(16_666_667);
 
-/// **How long a frame is**, and the divisor in P-0072's first condition.
+/// **How long a frame is**, and the divisor in ADR-0164's first condition.
 ///
 /// 60 Hz: the rate the mock's transport is drawn against (`12.4/16.6 ms`), the
 /// rate `crates/karakuri/src/main.rs` reads off the monitor it opens on, and the rate
@@ -196,7 +196,7 @@ pub const BUDGET: Duration = Duration::from_nanos(16_666_667);
 pub const FRAME_INTERVAL: Duration = Duration::from_nanos(16_666_667);
 
 /// **How much of the [`BUDGET`] one region's update may be**, and the whole of
-/// P-0072's second condition: `max(cost) ≤ a small part of the budget`.
+/// ADR-0164's second condition: `max(cost) ≤ a small part of the budget`.
 ///
 /// The clause exists because *an update is not divisible*: a region costing
 /// most of the budget is a traffic jam of one — every frame it runs, nothing

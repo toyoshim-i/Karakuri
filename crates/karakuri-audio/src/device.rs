@@ -431,7 +431,7 @@ fn describe(device: &cpal::Device) -> String {
 /// in between two calls is a different answer, and it should be: the caller
 /// that asks is a hand about to open a menu, which is exactly the moment the
 /// answer has to be current. It is not a thing to ask on a frame path
-/// (`docs/principles/0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md`),
+/// (`docs/principles/0091-cost-is-known-before-it-is-paid.md`),
 /// for the same reason a directory listing is not.
 ///
 /// **Empty is a room with no microphone, and it is not a failure** — see

@@ -19,7 +19,7 @@
 //!    moves, and would resize under a word rolling through it. *This one
 //!    failed before the change that added the rest of this file.*
 //! 2. **A strip whose two halves agree is still**, draws one word, and asks
-//!    for no repaint at all. P-0072's first clause is the one thing an
+//!    for no repaint at all. ADR-0164's still-panel clause is the one thing an
 //!    animation is most likely to cost by accident.
 //! 3. **The roll is a function of the phase it was handed** — asserted at
 //!    phases this file chose, which is the whole reason the phase is a value
@@ -30,12 +30,12 @@
 //!    the chip's own slack separates them, and at 9px two words with nothing
 //!    between them are mud.
 //! 6. **The panel asks for a deadline while a slot is parked and for `Never`
-//!    when none is** — the declaration end of P-0072, from the view, which is
+//!    when none is** — the declaration end of P-0091, from the view, which is
 //!    what knows the rate.
 //! 7. **And for `Never` while the bay the chip is in is out of the layout**,
 //!    however parked the slot behind it is. A declaration answered off the
 //!    deck alone bought a 30 Hz deadline for a chip nobody could see, which is
-//!    P-0072's *what must be live* read as *what is pending*.
+//!    P-0091's *what must be live* read as *what is pending*.
 //!
 //! None of it needs a window, a device or a clock.
 
@@ -228,7 +228,7 @@ fn the_chip_is_the_widest_words_width_whatever_it_shows() {
 /// second word unconditionally would draw it clipped away and cost a galley a
 /// frame for nothing — invisible, and the kind of thing that is discovered by
 /// a profiler years later. A panel that declared a staleness unconditionally
-/// would end the still panel outright: P-0072's first clause is *a panel with
+/// would end the still panel outright: ADR-0164's still-panel clause is *a panel with
 /// nothing changing on it is paid for once and not again*, and the whole
 /// console is on the other side of it.
 #[test]
@@ -536,7 +536,7 @@ fn the_panel_asks_for_a_deadline_only_while_something_is_parked() {
 /// measured with the picture and the preview row folded, the window sat at
 /// 28.7 to 29.0 frames a second, and folding the mixer bay on top of that
 /// moved the price of a frame — 432 allocations to 260 — and not the rate at
-/// all. That is P-0072 read backwards: the rule is *what **must be live**
+/// all. That is P-0091 read backwards: the rule is *what **must be live**
 /// declares a cost and a staleness*, and a bay the operator has folded away is
 /// not live.
 ///

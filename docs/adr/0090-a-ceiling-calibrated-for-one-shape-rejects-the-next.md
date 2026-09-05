@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-15
 supersedes: []
 superseded_by: []
-principles: [0049]
+principles: [0091]
 tags: [ir, render]
 ---
 
@@ -45,4 +45,4 @@ Generalised and written into the roadmap **before the next case arrives**:
 ## Evidence
 
 Session 2026-08-15T19:13Z. Standing rule:
-[P-0049](../principles/0049-a-general-default-must-not-beat-a-specific-declaration.md).
+[P-0091](../principles/0091-cost-is-known-before-it-is-paid.md).

@@ -5,7 +5,7 @@ status: accepted
 date: 2026-07-27
 supersedes: []
 superseded_by: []
-principles: [0001]
+principles: [0091]
 tags: [engine]
 ---
 
@@ -43,4 +43,4 @@ Two more things were found in the same pass and fixed for the same reason:
 ## Evidence
 
 Session 2026-07-27T14:47Z, 2026-07-27T09:22Z. Sharpens
-[P-0001](../principles/0001-nothing-allocates-or-compiles-a-shader-on-the-render-thread.md).
+[P-0091](../principles/0091-cost-is-known-before-it-is-paid.md).

@@ -1,7 +1,7 @@
 //! **Whether a frame is owed**, asserted without a window.
 //!
-//! [P-0072](../../../docs/principles/0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md)'s
-//! first clause has two halves and the second one is the dangerous half. *A
+//! [ADR-0164](../../../docs/adr/0164-the-panel-is-budgeted-rather-than-forbidden-to-allocate.md)'s
+//! still-panel clause has two halves and the second one is the dangerous half. *A
 //! still panel costs nothing* is easy to get right and easy to see when it is
 //! wrong — a window that spins shows up on any clock. *And everything else
 //! still costs what it costs* is the half that fails silently: one path that

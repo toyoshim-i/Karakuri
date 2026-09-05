@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-26
 supersedes: []
 superseded_by: []
-principles: [0072, 0089]
+principles: [0089, 0091]
 tags: [console, decks, testing]
 ---
 

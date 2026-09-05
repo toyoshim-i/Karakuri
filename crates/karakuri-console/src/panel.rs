@@ -488,7 +488,7 @@ pub enum Op {
     /// [`tests/repaint.rs`](../../tests/repaint.rs) asks it because
     /// [`Outcome::Report`] is the one outcome that carries a `Vec` and must
     /// still answer [`crate::repaint::Repaint::Never`], which is the case
-    /// P-0072's still-panel clause is most exposed to.
+    /// ADR-0164's still-panel clause is most exposed to.
     ///
     /// **And it is not the startup legend's table.** That one is each
     /// region's *min and max* — the constraints, printed once, before

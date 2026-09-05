@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-01
 supersedes: []
 superseded_by: []
-principles: [0032]
+principles: [0091]
 tags: [ir, engine, determinism]
 ---
 
@@ -71,4 +71,4 @@ was argued from determinism in general; scrub is its concrete use.
 ## Evidence
 
 Session 2026-08-01T07:01Z–07:22Z. Standing rule:
-[P-0032](../principles/0032-closed-form-means-scrubbable.md).
+[P-0091](../principles/0091-cost-is-known-before-it-is-paid.md).

@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-26
 supersedes: []
 superseded_by: []
-principles: [0072, 0073]
+principles: [0073, 0091]
 tags: [ui, perf]
 ---
 
@@ -13,7 +13,7 @@ tags: [ui, perf]
 
 ## Context
 
-[P-0072](../principles/0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md) has
+[ADR-0164](0164-the-panel-is-budgeted-rather-than-forbidden-to-allocate.md) has
 two halves. The first is *a panel with nothing changing on it is paid for once and not again*; the
 second is *what **must be live** is named, and each named thing declares what its update costs and
 how stale it may get*. `View::animating` is the whole of the declaring half today, with one client —

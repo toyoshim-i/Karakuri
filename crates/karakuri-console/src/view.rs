@@ -229,7 +229,7 @@
 //! one ([`View::declares`], which answers with the bay's name, what one update
 //! of it costs and how stale it may get) — and it declares only while the bay
 //! it rolls in is laid out, because a fold takes the chip off the screen and a
-//! price paid for what nobody can see is P-0072 broken rather than served.
+//! price paid for what nobody can see is ADR-0193 broken rather than served.
 //!
 //! # The bay head is one component with seven call sites
 //!
@@ -2097,12 +2097,13 @@ fn kept(rect: Rect) -> Option<Rect> {
 ///   [`set_aside`](karakuri_layout::Layout::set_aside) with the value the node
 ///   already carries, which marks nothing dirty by construction (ADR-0183).
 ///   What is left is one [`program_bay`] — a dozen divisions and two fits, no
-///   allocation — and no repaint is asked for, which is P-0072's first clause.
+///   allocation — and no repaint is asked for, which is ADR-0164's
+///   still-panel clause.
 /// - **The frame it does change solves to the new arrangement and not to the
 ///   previous one**, because the second solve is after the write. That frame
 ///   costs **two solves**, and it is worth saying plainly rather than hiding:
 ///   a placement only changes when the bay's rectangle does, which is a window
-///   resize or a drag on a boundary, and P-0072 does not budget what the
+///   resize or a drag on a boundary, and ADR-0210 does not budget what the
 ///   operator does.
 /// - **Nothing re-enters the solve.** The value written is derived from the
 ///   bay's rectangle, and the bay is `Fixed(378)` over a flexible
@@ -2503,7 +2504,7 @@ const BEAT_STEPS: u64 = BEAT_PITCH as u64;
 
 /// **How stale the beat grid may get**, which is what the transport row
 /// declares under
-/// [P-0072](../../../docs/principles/0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md)
+/// [P-0091](../../../docs/principles/0091-cost-is-known-before-it-is-paid.md)
 /// and what the harness turns into a deadline.
 ///
 /// [`BEAT_MICROS`] in [`BEAT_STEPS`] steps — **24.67 ms, about forty a
@@ -2928,7 +2929,7 @@ pub struct AudioIn {
     ///
     /// **Read when the menu opens rather than per frame**, which is
     /// [`Arrangement::filed`]'s rule for its reason: enumerating a host is a
-    /// device read and a frame path does not do one (P-0072). It changes when
+    /// device read and a frame path does not do one (P-0091). It changes when
     /// somebody plugs something in, and the press that opens the menu is the
     /// moment that matters — so the list a hand is about to read is the list
     /// as of the press.
@@ -3520,7 +3521,7 @@ pub struct Arrangement {
     ///
     /// **Read when it changes rather than per frame**, which is
     /// [`View::library`]'s rule for its reason: a listing is a directory read
-    /// and that is not a thing to do on a frame path (P-0072). It changes
+    /// and that is not a thing to do on a frame path (P-0091). It changes
     /// exactly when a save lands, and whoever performed the save is who
     /// re-reads it.
     ///
@@ -5233,14 +5234,14 @@ pub const ROLL_REACH: f32 = 0.4;
 const ROLL_STEPS: u32 = 12;
 
 /// **How stale the roll may get**, which is what a presentation declares under
-/// [P-0072](../../../docs/principles/0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md)
+/// [P-0091](../../../docs/principles/0091-cost-is-known-before-it-is-paid.md)
 /// and what the harness turns into a deadline.
 ///
 /// [`ROLL_TRAVEL`] in [`ROLL_STEPS`] steps — 33.33 ms, about thirty a second.
 /// It is **one number for the whole period** rather than a fine one while the
 /// word moves and a coarse one while it rests: two numbers is two live regions
 /// wearing one name, and choosing between them frame by frame is a scheduler's
-/// job (P-0072's second half) rather than a presentation's. A presentation
+/// job (ADR-0164's second half) rather than a presentation's. A presentation
 /// declares what it needs; what the panel can afford is decided somewhere
 /// else.
 pub const ROLL_STALENESS: Duration =
@@ -7867,7 +7868,7 @@ fn chip_width(ctx: &egui::Context, name: &str) -> f32 {
 /// **Both halves are handed in.** The scopes are a slice and the rows are a
 /// slice, and which rows go with which scope is the host's answer rather than
 /// this bay's: a listing is a directory read, a frame path does not do those
-/// (P-0072), and this crate could not do it anyway (ADR-0156). So the bay
+/// (P-0091), and this crate could not do it anyway (ADR-0156). So the bay
 /// draws the row of questions it was given and the answer to the one that is
 /// marked.
 ///
@@ -10469,7 +10470,7 @@ pub struct View {
     ///
     /// **Read once rather than per frame**, by whoever owns the store. A
     /// listing is a directory read, which is not a thing to do on a frame
-    /// path (P-0072), and nothing in this crate can do it anyway: opening a
+    /// path (P-0091), and nothing in this crate can do it anyway: opening a
     /// store is `karakuri-store`'s and `src/` depends on neither it nor the
     /// engine (ADR-0156). What crosses the seam is a list of names.
     ///
@@ -10748,7 +10749,7 @@ impl View {
     ///
     /// The `bool` is [`Arrangement::typed`]'s: a caller repaints on a move and
     /// not on a press, so a press that changed nothing costs no frame
-    /// (P-0072).
+    /// (P-0091).
     pub fn select(&mut self, deck: u8) -> bool {
         if usize::from(deck) >= self.mixer.len() {
             return false;
@@ -10903,12 +10904,11 @@ impl View {
     /// **Every live region that is declaring this frame**, each with what one
     /// update of it costs and how stale it may get.
     ///
-    /// # This is P-0072's naming, and the unit is a region
+    /// # This is P-0091's naming, and the unit is a region
     ///
-    /// [P-0072](../../../docs/principles/0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md):
-    /// *"What must be live during a performance is named, and each named thing
-    /// declares two numbers: what its update costs, and how stale it may get,
-    /// in milliseconds."* This is that naming, and [`crate::budget`] holds the
+    /// [P-0091](../../../docs/principles/0091-cost-is-known-before-it-is-paid.md):
+    /// *"Anything that must be live names two numbers — what its update costs,
+    /// and how stale it may get in milliseconds."* This is that naming, and [`crate::budget`] holds the
     /// numbers with the arguments for where each came from. **A region is
     /// redrawn whole or not at all**, so what appears here is a node of the
     /// arrangement — by the name every surface addresses it by — and never an
@@ -10944,7 +10944,7 @@ impl View {
     ///
     /// **A region that is not on screen declares nothing**, however much is
     /// pending behind it. The strips are rewritten every frame from the deck,
-    /// so *is anything pending* is a fact about the deck; P-0072 is about what
+    /// so *is anything pending* is a fact about the deck; P-0091 is about what
     /// **must be live**, and a bay the operator has folded away is not live.
     /// A declaration made for it buys a repaint of something nobody can see —
     /// measured, before this asked: with the picture and the preview row
@@ -10978,7 +10978,7 @@ impl View {
     ///
     /// # Nothing arbitrates between two of these
     ///
-    /// P-0072's second half is a scheduler and there is not one. What this
+    /// ADR-0164's second half is a scheduler and there is not one. What this
     /// feeds is [`View::animating`], which takes the soonest staleness and
     /// nothing else, and `tests/schedulable.rs`, which sums over whatever this
     /// answers and asserts the two conditions the principle states.
@@ -11080,7 +11080,7 @@ impl View {
     /// answers `None`**, because the beat is moving and says so
     /// ([`View::transport_declares`],
     /// [P-0077](../../../docs/principles/0077-continuous-motion-is-how-a-stopped-panel-announces-itself.md)).
-    /// That is P-0072's first clause narrowing rather than failing: a panel
+    /// That is ADR-0164's still-panel clause narrowing rather than failing: a panel
     /// with something moving on it is a panel with something changing on it,
     /// and the reason it is moving is a declaration rather than an accident.
     pub fn animating(&self, layout: &karakuri_layout::Layout) -> Option<Duration> {

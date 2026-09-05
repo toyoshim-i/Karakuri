@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-28
 supersedes: []
 superseded_by: []
-principles: [0001]
+principles: [0091]
 tags: [midi, surfaces, frame-path, records]
 ---
 
@@ -14,7 +14,7 @@ tags: [midi, surfaces, frame-path, records]
 ## Context
 
 **A mapped fader breaks the first rule this repository has.**
-[P-0001](../principles/0001-nothing-allocates-or-compiles-a-shader-on-the-render-thread.md) says
+[P-0091](../principles/0091-cost-is-known-before-it-is-paid.md) says
 the frame path allocates no heap memory, and it says it with no clause for a small allocation.
 
 The path is short and every step of it is written down where it happens. `Live::run_surface` is

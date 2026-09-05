@@ -10,7 +10,7 @@ Three timescales run at once, and what may happen on each is fixed:
 
 **What this rules out is doing a slower clock's work on a faster one.** Allocating a buffer or
 compiling a shader on the frame path, which is
-[P-0001](0001-nothing-allocates-or-compiles-a-shader-on-the-render-thread.md) stated from the other
+[P-0091](0091-cost-is-known-before-it-is-paid.md) stated from the other
 end. A beat-clock event that *computes* the material it is switching to rather than choosing among
 material that is already built — the reason a hot swap arrives from a worker already compiled, and
 the reason a transition is a function of `beats` and nothing else. And, when there is a generator,

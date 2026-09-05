@@ -51,8 +51,8 @@ immediate mode exists to remove.
 
 **What this does not retire, and the distinction matters.** Caching a bay into a texture was
 serving two masters. As a way to upload less, it is dead. As **the unit a scheduler defers**, it is
-untouched: [P-0072](../principles/0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md)
-says the unit of deferral is a region, a whole-panel cache has no unit at all, and none of that is
+untouched: [ADR-0164](0164-the-panel-is-budgeted-rather-than-forbidden-to-allocate.md)
+puts the unit of deferral at a region, a whole-panel cache has no unit at all, and none of that is
 about uploads — it is about not *building* shapes for a bay nobody is looking at. That cost is the
 `egui` pass, which this table does not measure and this record does not settle.
 

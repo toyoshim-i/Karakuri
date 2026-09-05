@@ -37,15 +37,15 @@
 //! they were dragging.
 //!
 //! [`repaint`] is here for the same reason and it is the same kind of rule:
-//! **whether a frame is owed at all.** P-0072's first clause says a panel with
-//! nothing changing on it does no per-frame work, and the way that clause is
+//! **whether a frame is owed at all.** ADR-0164's still-panel clause says a
+//! panel with nothing changing on it does no per-frame work, and the way that clause is
 //! got wrong is by omission — one path that changes the screen and reaches no
 //! repaint, which shows as a stale control and says nothing anywhere. So the
 //! decision is a value with one list of everything that can change the
 //! console, and a test asks it rather than an operator noticing.
 //!
 //! [`budget`] is the other half of that rule and it is inputs rather than a
-//! decision: P-0072's second clause has every live region declare **what its
+//! decision: ADR-0164's second clause has every live region declare **what its
 //! update costs and how stale it may get**, and that module is where the two
 //! numbers, the panel's budget and the frame interval are written down.
 //! Nothing reads them on a frame — the two schedulability conditions are

@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-30
 supersedes: []
 superseded_by: []
-principles: [0005, 0072, 0085]
+principles: [0005, 0085, 0091]
 tags: [engine, console, store, hot-swap]
 ---
 
@@ -201,7 +201,7 @@ nobody opens in an editor."*
   asks for another frame. With the picture and every preview cell folded away no frame is requested,
   so the verdicts sit on the channel until something else asks for one. **This is not new and not the
   load's**: a save reaches the lane the same way and waits the same way, and the still-panel reading
-  ([P-0072](../principles/0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md))
+  ([ADR-0164](0164-the-panel-is-budgeted-rather-than-forbidden-to-allocate.md))
   measures 0 frames a second in exactly that state on purpose.
 
 ### What this leaves undone

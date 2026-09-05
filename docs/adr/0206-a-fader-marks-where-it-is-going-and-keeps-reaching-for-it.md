@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-28
 supersedes: []
 superseded_by: []
-principles: [0072, 0087]
+principles: [0087, 0091]
 tags: [ui, decks, transitions]
 ---
 

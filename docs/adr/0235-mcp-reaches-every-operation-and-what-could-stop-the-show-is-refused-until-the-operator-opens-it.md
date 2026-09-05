@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-31
 supersedes: []
 superseded_by: []
-principles: [0005, 0027, 0067, 0078, 0079, 0083, 0090]
+principles: [0005, 0027, 0078, 0079, 0083, 0090, 0091]
 tags: [mcp, live, vocabulary, surfaces, docs]
 ---
 
