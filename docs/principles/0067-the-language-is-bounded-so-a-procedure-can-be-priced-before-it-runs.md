@@ -12,7 +12,7 @@ without taking the show down.
 **What it rules out** is any construct whose trip count is not knowable at parse time. A bound
 that reads a param — so a procedure could adapt itself — is the one that keeps being reached
 for, and it is why the checker's diagnostic states the constraint rather than the correction
-(*"cost estimation needs them fixed at parse time"*, [P-0046](0046-a-diagnostic-says-why-not-only-what.md)).
+(*"cost estimation needs them fixed at parse time"*, [P-0083](0083-a-refusal-carries-what-the-next-attempt-needs.md)).
 `while` for an iterative solver and recursion for a tree walk are the other two. Each would
 turn a price into a guess, and a governor that cannot price a candidate has nothing to do but
 run it and watch — which is the frame this rule exists to protect.

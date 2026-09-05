@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-15
 supersedes: []
 superseded_by: []
-principles: [0046, 0010]
+principles: [0083]
 tags: [ir, mcp]
 ---
 
@@ -49,4 +49,4 @@ constraint rather than the syntax.
 ## Evidence
 
 Session 2026-08-15T06:27Z–07:06Z, commit `105997a`. Standing rule:
-[P-0046](../principles/0046-a-diagnostic-says-why-not-only-what.md).
+[P-0083](../principles/0083-a-refusal-carries-what-the-next-attempt-needs.md).

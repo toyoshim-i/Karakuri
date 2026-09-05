@@ -101,7 +101,7 @@ impl Class {
 
     /// **Where the operator opens it**, which the refusal has to say or the
     /// model reports the instrument as incapable rather than as closed
-    /// ([P-0046](../../../docs/principles/0046-a-diagnostic-says-why-not-only-what.md)).
+    /// ([P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md)).
     pub fn bay(self) -> &'static str {
         match self {
             Class::LiveDeck => "Program",
@@ -347,7 +347,7 @@ pub fn audit<'a>(
 /// a `contains`.
 ///
 /// It says three things because
-/// [P-0046](../../../docs/principles/0046-a-diagnostic-says-why-not-only-what.md)
+/// [P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md)
 /// asks for the constraint and not only the fact: **which operation**, **which
 /// class it is in**, and **that the operator can open that class, and where**.
 /// A model told only *no* reports the instrument as incapable; one told this
@@ -992,7 +992,7 @@ mod tests {
     }
 
     /// **A refusal names the operation, its class and where the class is
-    /// opened** — P-0046, in the register it applies to a tool surface: a
+    /// opened** — P-0083, in the register it applies to a tool surface: a
     /// model told only *no* reports the instrument as incapable rather than as
     /// closed.
     #[test]
