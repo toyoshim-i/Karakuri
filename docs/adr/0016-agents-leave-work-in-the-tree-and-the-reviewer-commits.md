@@ -58,4 +58,5 @@ Defects caught before entering history, in one day:
 ## Evidence
 
 Session 2026-07-25T12:56Z–15:00Z. Standing rule:
-[P-0017](../principles/0017-only-reviewed-work-enters-history.md).
+`docs/contributing.md` §3, *When the work is split across several hands*. P-0017 stated it and was
+retired on 2026-09-05: it governs how the work is run rather than how the instrument is designed.

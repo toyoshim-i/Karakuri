@@ -36,7 +36,7 @@ each committable as it finished.**
 
 - Applied immediately: the next independent fix was picked precisely because it was *a different file
   in a different crate*, so it could not collide with the review already running.
-- This sharpens [P-0017](../principles/0017-only-reviewed-work-enters-history.md): cutting the seam
+- This sharpens `docs/contributing.md` §3 (P-0017 until it was retired on 2026-09-05): cutting the seam
   first is what makes parallel work possible, and **cutting it along the wrong axis makes parallel
   work impossible even when the seam is clean.**
 
