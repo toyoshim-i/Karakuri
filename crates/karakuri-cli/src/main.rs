@@ -128,16 +128,6 @@ const MASK_SHAPES: [(MaskKind, f32, &str); 6] = [
     (MaskKind::Radial, 0.0, "an iris"),
 ];
 
-/// The shape every scheduled fade takes.
-///
-/// `smooth` rather than `lin`, and the reason is in `binding.rs`: its
-/// derivative is zero at both ends, so a fade neither jumps off the floor nor
-/// slams into the ceiling. A crossfade of two linear ramps has a visible corner
-/// at each end; two smooth ones do not. Not on a key, because the other three
-/// curves are for *signals* — a fade wants easing and nothing else, and a
-/// fourth cycling key for a choice nobody would revisit is a key in the way.
-const FADE_CURVE: Curve = Curve::Smooth;
-
 /// One press of an opacity key. Additive for the same reason as [`GAIN_STEP`],
 /// and clamped to `[0, 1]` where gain is not: opacity is a proportion of a
 /// blend and there is no such thing as 1.4 of one, while gain is a level into
@@ -6842,7 +6832,7 @@ impl Live {
                 self.deck.signals().oscillator(),
                 self.quantum,
                 self.fade_beats,
-                FADE_CURVE,
+                mix::FADE_CURVE,
                 self.mask_kind,
                 self.mask_angle,
             )),
