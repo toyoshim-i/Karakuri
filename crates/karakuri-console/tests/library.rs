@@ -581,8 +581,8 @@ fn a_folded_or_soloed_or_short_bay_lists_nothing() {
 /// settles that a load is *"a cursor and a key with no pointer anywhere in
 /// it"*, and the panel's own route to that row is the drag — *"a second route
 /// to the same command, and never the first"* — which the operations page
-/// still records as not drawn. So the two claims in this file are separate
-/// tests, because they are separate sentences: this one, and
+/// still marks *designed* rather than reached. So the two claims in this file
+/// are separate tests, because they are separate sentences: this one, and
 /// [`a_load_is_a_cursor_and_a_key_with_no_pointer_anywhere_in_it`].
 ///
 /// # The bay's corners do not reach the pill, and the two numbers say why
@@ -725,7 +725,8 @@ fn the_scope_chips_answer_a_press_and_nothing_else_in_the_bay_does() {
 /// instead is to say where it lands before the press"* — and the panel's route
 /// to *Load material into a deck* is the drag from a row onto a strip, which
 /// that page calls *"a second route to the same command, and never the first"*
-/// and the operations page records as not drawn.
+/// and the operations page carries as this row's panel badge, marked
+/// *designed* — *"this surface is meant to reach it and does not yet"*.
 ///
 /// **So a pill that does nothing when it is pressed is the specification and
 /// not an oversight**, and what would be the oversight is the opposite: a

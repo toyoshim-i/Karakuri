@@ -405,8 +405,9 @@ The missing sentence is where a package goes when no shell redirected it, and it
 vocabulary rather than to this bay (`view::LibraryBay`). *Load material into a deck* is not
 blocked: `l` performs the operation
 ([ADR-0228](adr/0228-a-library-load-re-points-the-slots-source-and-never-installs-a-set.md)), and
-the control the page names is the drag from a row onto a strip, of which the page says *"and it is
-not drawn"*. The pill beside it is a readout on purpose, so a press on it would be a third route
+the control the page names is the drag from a row onto a strip, which the page carries as that
+row's panel badge and marks *designed* — *"this surface is meant to reach it and does not yet"*.
+The pill beside it is a readout on purpose, so a press on it would be a third route
 nobody specified (`view::LibraryBay`).
 
 **Also here.** The Set browser's live previews and the thumbnail beside them.

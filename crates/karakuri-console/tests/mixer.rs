@@ -6,8 +6,10 @@
 //!
 //! 1. **That the strips are the deck's count and not four.** A page has four
 //!    tracks whatever the deck holds, and a track with no strip in it draws
-//!    nothing — not the empty strip the mock draws, which would be six
-//!    readings nobody took.
+//!    nothing — not the empty strip the mock drew until `39f1e6b`, which would
+//!    be six readings nobody took. This file held the panel to ADR-0178
+//!    against the mock for as long as both existed, and the claim is the
+//!    record's rather than the page's, so it outlives the strip.
 //! 2. **That a console with no deck behind it draws nothing in the bay's
 //!    body** — asserted by drawing a frame and counting what landed in the
 //!    strips' own rectangle, because *nothing is drawn* is a claim about the
@@ -549,7 +551,7 @@ fn wells(shapes: &[egui::Shape], width: f32) -> usize {
 /// `cargo test -p karakuri-console`, which is a console with nothing running
 /// behind it. What it draws then is the card and the head and **nothing in the
 /// body** — not four empty strips, which is what the mock's own fourth strip
-/// is and which would be six readings nobody took.
+/// was until `39f1e6b` and which would be six readings nobody took.
 ///
 /// So this counts what lands inside the strips' own rectangle on a frame drawn
 /// with nothing, with one strip and with four. **One well per strip and not

@@ -5293,11 +5293,18 @@ pub fn roll_at(phase: Phase) -> f32 {
 /// what fits in a strip 53 wide, and `Live`, `Priming` and `Allocated` are
 /// what `Deck::residency` answers.
 ///
-/// **The mock draws a fourth and it is not a residency.** `.strip.empty` reads
-/// `empty` in `.tally.off`, and a `Deck` has no such slot: every one of its
-/// `slot_count` slots holds a `HotSwap`. An empty strip is a *track on the
-/// page nothing fills*, and this bay draws nothing at all in one rather than a
-/// strip full of dashes — see [`mixer`].
+/// **The mock drew a fourth and it was not a residency.** Its `.strip.empty`
+/// read `empty` through a `.tally.off` rule, and a `Deck` has no such slot:
+/// every one of its `slot_count` slots holds a `HotSwap`. An empty strip is a
+/// *track on the page nothing fills*, and this bay draws nothing at all in one
+/// rather than a strip full of dashes — see [`mixer`].
+///
+/// **The page has since agreed**: `39f1e6b` took that strip out under
+/// ADR-0178, and `.tally.off` went with it as the one rule only that strip
+/// used. The argument is kept in the past tense rather than deleted, because
+/// it is still why there is no fourth variant here — the three below are the
+/// residencies a `Deck` has, and a fourth would have to be invented whether or
+/// not a mock is drawing one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tally {
     /// `.tally.live` — stepped and composited. On air.
@@ -7017,9 +7024,12 @@ const GO: &str = "go";
 /// strip. That is the opposite of what [`preview`] does with a cell that has
 /// no slot behind it, and the two are not in tension: a preview cell is the
 /// region's own face and its caption says `no slot`, where a strip is six
-/// readings and an empty one is six readings nobody took. The mock draws such a strip — `.strip.empty`,
-/// with `—` for a name, `empty` for a tally and both tracks bare — and
-/// inventing one is ADR-0177's row of zeroes with a different glyph.
+/// readings and an empty one is six readings nobody took. The mock drew such a
+/// strip — `.strip.empty`, with `—` for a name, `empty` for a tally and both
+/// tracks bare — until `39f1e6b` took it out under ADR-0178; inventing one
+/// here would be ADR-0177's row of zeroes with a different glyph, which is why
+/// the strip going does not make this rule the mock's rather than the
+/// record's.
 ///
 /// **The example's deck has one slot, so it draws one strip**, and that is the
 /// example rather than a gap in it — exactly as three of its preview cells
@@ -8648,8 +8658,9 @@ fn chip_width(ctx: &egui::Context, name: &str) -> f32 {
 /// onto a strip is a second route to the same command, and never the first …
 /// it names both operands in the one gesture, which makes it the only way to
 /// load a deck without selecting it first"*, and the operations page carries
-/// that gesture as this row's panel badge and says of it, today, *"and it is
-/// not drawn"*.
+/// that gesture as this row's panel badge: `plan`, reading `library → deck`,
+/// which its legend defines as *"designed — this surface is meant to reach it
+/// and does not yet"*.
 ///
 /// **So a press on the pill would be a third route nobody specified**, and it
 /// would be the wrong one twice over: it would name the deck from the
