@@ -2876,7 +2876,7 @@ const AUDIO_LABEL: &str = "audio-in";
 /// preview cell's `C · no slot` one bay down.
 ///
 /// **It is not the same statement as silence**, which is the whole of
-/// [P-0034](../../../docs/principles/0034-a-quiet-room-is-not-a-missing-microphone.md):
+/// [P-0084](../../../docs/principles/0084-a-confident-wrong-automatic-judgement-is-worse-than-not-judging.md):
 /// a quiet room measures `0.0` at full confidence and this pill would name the
 /// input it measured it through. `none` is *no provider* — every name answers
 /// what it answered before audio existed — and the two must not read alike on

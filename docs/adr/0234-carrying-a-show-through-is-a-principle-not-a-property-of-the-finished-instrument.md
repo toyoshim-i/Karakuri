@@ -115,14 +115,13 @@ Each of these decides a case of the same question and none of them says what the
 A reading of the whole registry finds more of them —
 [P-0004](../principles/0004-a-live-set-is-never-mutated-in-place.md),
 [P-0012](../principles/0012-a-measurement-carries-how-it-was-taken.md),
-[P-0034](../principles/0034-a-quiet-room-is-not-a-missing-microphone.md),
 [P-0037](../principles/0037-check-a-measurement-against-another-measurement.md),
-[P-0039](../principles/0039-a-warning-that-fires-on-healthy-material-teaches-the-operator-to-ignore-warnings.md),
 [P-0069](../principles/0069-the-three-clocks-never-collapse-into-each-other.md),
 [P-0072](../principles/0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md),
 [P-0075](../principles/0075-a-pending-transition-shows-where-it-is-where-it-is-going-and-that-it-has-not-arrived.md),
 [P-0076](../principles/0076-a-surface-owns-the-affordance-never-the-authority.md),
-[P-0082](../principles/0082-looking-never-writes-back.md) — which is the
+[P-0082](../principles/0082-looking-never-writes-back.md),
+[P-0084](../principles/0084-a-confident-wrong-automatic-judgement-is-worse-than-not-judging.md) — which is the
 argument rather than a longer list. **A property that eighteen files are instances of is being
 rediscovered per file**, and the eighteenth had to make it again from nothing.
 

@@ -40,7 +40,7 @@ of a paragraph is where the contradiction survives, because that is where nobody
   it was scheduled**.
 - Two lessons were added to the milestone at the same time, both since promoted:
   *a confident wrong automatic judgement is worse than not judging*
-  ([P-0035](../principles/0035-arithmetic-and-an-operator-key-beat-a-rule-that-is-usually-right.md)),
+  ([P-0084](../principles/0084-a-confident-wrong-automatic-judgement-is-worse-than-not-judging.md)),
   and *a test can pass against the exact defect it is named for* — eight found in this milestone
   ([P-0025](../principles/0025-a-test-meant-to-catch-something-is-run-against-the-defect.md)).
 

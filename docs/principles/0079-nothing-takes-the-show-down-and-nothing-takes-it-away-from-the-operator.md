@@ -59,7 +59,7 @@ leaving a bad Set on air until somebody sees it; a bound that reads a `param`, w
 into a guess; `dlopen`ing third-party code into the render process during a show, where a panic
 crossing FFI cannot be caught; treating an absent input as zero, which freezes the picture mid-set
 instead of letting it free-run
-([P-0034](0034-a-quiet-room-is-not-a-missing-microphone.md)); and a measurement that silently falls
+([P-0084](0084-a-confident-wrong-automatic-judgement-is-worse-than-not-judging.md)); and a measurement that silently falls
 back, because `0.0 ms` reads as a very fast shader and promotes what nobody has priced
 ([P-0012](0012-a-measurement-carries-how-it-was-taken.md),
 [P-0037](0037-check-a-measurement-against-another-measurement.md)).
@@ -200,16 +200,15 @@ covers.** These are instances and were written before it: the three answers in
 [P-0005](0005-a-swap-happens-on-a-frame-boundary-and-an-over-budget-set-rolls-back-on-its-own.md),
 [P-0012](0012-a-measurement-carries-how-it-was-taken.md),
 [P-0027](0027-a-silently-wrong-image-loses-to-a-loud-failure.md),
-[P-0034](0034-a-quiet-room-is-not-a-missing-microphone.md),
 [P-0037](0037-check-a-measurement-against-another-measurement.md),
-[P-0039](0039-a-warning-that-fires-on-healthy-material-teaches-the-operator-to-ignore-warnings.md),
 [P-0043](0043-nothing-external-enters-the-render-process.md),
 [P-0067](0067-the-language-is-bounded-so-a-procedure-can-be-priced-before-it-runs.md),
 [P-0069](0069-the-three-clocks-never-collapse-into-each-other.md),
 [P-0072](0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md),
 [P-0075](0075-a-pending-transition-shows-where-it-is-where-it-is-going-and-that-it-has-not-arrived.md),
-[P-0077](0077-continuous-motion-is-how-a-stopped-panel-announces-itself.md)
-and [P-0082](0082-looking-never-writes-back.md); the never-from-the-operator
+[P-0077](0077-continuous-motion-is-how-a-stopped-panel-announces-itself.md),
+[P-0082](0082-looking-never-writes-back.md)
+and [P-0084](0084-a-confident-wrong-automatic-judgement-is-worse-than-not-judging.md); the never-from-the-operator
 clause in [P-0033](0033-the-governor-never-takes-a-live-slot-off-air.md),
 [P-0052](0052-publishing-is-a-choice-of-attention-not-of-authority.md),
 [P-0076](0076-a-surface-owns-the-affordance-never-the-authority.md) and

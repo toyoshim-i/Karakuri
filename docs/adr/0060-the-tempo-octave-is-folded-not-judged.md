@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-02
 supersedes: []
 superseded_by: []
-principles: [0035]
+principles: [0084]
 tags: [signal]
 ---
 
@@ -69,4 +69,4 @@ both `T` and `2T`.
 ## Evidence
 
 Session 2026-08-02T05:48Z–08:38Z, commits `8711b6b`, `a8a2a44`. Standing rule:
-[P-0035](../principles/0035-arithmetic-and-an-operator-key-beat-a-rule-that-is-usually-right.md).
+[P-0084](../principles/0084-a-confident-wrong-automatic-judgement-is-worse-than-not-judging.md).

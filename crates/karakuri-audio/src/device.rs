@@ -435,7 +435,7 @@ fn describe(device: &cpal::Device) -> String {
 /// for the same reason a directory listing is not.
 ///
 /// **Empty is a room with no microphone, and it is not a failure** — see
-/// `docs/principles/0034-a-quiet-room-is-not-a-missing-microphone.md`. Nothing
+/// `docs/principles/0084-a-confident-wrong-automatic-judgement-is-worse-than-not-judging.md`. Nothing
 /// here decides what to do about that, because deciding is the caller's: a
 /// machine with no input is a machine where every name answers what it
 /// answered before audio existed.

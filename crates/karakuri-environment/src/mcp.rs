@@ -1589,7 +1589,7 @@ fn written_procedure(args: &Value, slots: &Slots) -> Result<Operation, String> {
 /// paths, not names, because a path never crosses this protocol. So a check
 /// built from the files alone would accept an edge that is wrong wherever a
 /// name was given on the command line and refuse one that is right, which is
-/// `docs/principles/0039-…`'s failure exactly: a warning that fires on healthy
+/// `docs/principles/0084-…`'s failure exactly: a warning that fires on healthy
 /// material. The names are refused where the Set is built, in the sentence
 /// `--edge` meets there too
 /// (`docs/principles/0061-a-refusal-a-person-can-reach-from-two-surfaces-is-one-sentence.md`).

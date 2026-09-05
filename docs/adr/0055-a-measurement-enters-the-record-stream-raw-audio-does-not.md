@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-01
 supersedes: []
 superseded_by: []
-principles: [0002, 0034]
+principles: [0002, 0084]
 tags: [signal, determinism, format]
 ---
 
@@ -44,4 +44,4 @@ by that distinction.
 
 Session 2026-08-01T06:01Z, 2026-08-01T06:50Z. Standing rules:
 [P-0002](../principles/0002-simulation-time-comes-from-a-record-never-from-a-clock.md),
-[P-0034](../principles/0034-a-quiet-room-is-not-a-missing-microphone.md).
+[P-0084](../principles/0084-a-confident-wrong-automatic-judgement-is-worse-than-not-judging.md).

@@ -9352,7 +9352,7 @@ const DT: f32 = karakuri_engine::set::DT;
 /// principles point in different directions across them:
 ///
 /// 1. **No device at all.**
-///    [P-0034](../../../docs/principles/0034-a-quiet-room-is-not-a-missing-microphone.md)
+///    [P-0084](../../../docs/principles/0084-a-confident-wrong-automatic-judgement-is-worse-than-not-judging.md)
 ///    — *a quiet room is not a missing microphone* — and neither is a missing
 ///    microphone a fault. Nobody asked for one here: this program opens the
 ///    default because that is what an instrument does, and a machine with no
@@ -9409,7 +9409,7 @@ fn listening(session_bpm: f32) -> (Option<audio::Audio>, String) {
 /// Split out from [`listening`] because it is the whole of the judgement and
 /// none of the device: a machine with no inputs and a machine whose default
 /// vanished are two sentences, and the difference between them is the
-/// difference between P-0034 and P-0027. Being a function of an error and a
+/// difference between P-0084 and P-0027. Being a function of an error and a
 /// string, it is checkable where no input can be opened at all — which is
 /// every machine a test runs on, whatever it happens to have plugged in.
 ///
@@ -9926,7 +9926,7 @@ mod tests {
     /// that is `karakuri-audio`'s ignored `the_default_input_opens_and_delivers`
     /// and no assertion in this file could stand in for it.
     ///
-    /// 1. **No device at all is not a fault** (P-0034): the sentence says
+    /// 1. **No device at all is not a fault** (P-0084): the sentence says
     ///    `none` is a state, and says what goes on answering.
     /// 2. **A device that was named and is not there is loud** (P-0027): the
     ///    sentence carries the list, so an operator who picked a cable that has
