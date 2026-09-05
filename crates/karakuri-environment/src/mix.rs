@@ -360,6 +360,26 @@ pub fn current_look(look: &Look) -> karakuri_operation_record::Look {
     }
 }
 
+/// **The shape every scheduled fade takes**, which is what [`current_transition`]
+/// is handed and what `Record::Transition`'s `curve` ends up spelling.
+///
+/// `smooth` rather than `lin`, and the reason is in `binding.rs`: its
+/// derivative is zero at both ends, so a fade neither jumps off the floor nor
+/// slams into the ceiling. A crossfade of two linear ramps has a visible corner
+/// at each end; two smooth ones do not. **On no control anywhere**, because the
+/// other three curves are for *signals* — a fade wants easing and nothing else,
+/// and a fourth cycling key for a choice nobody would revisit is a key in the
+/// way.
+///
+/// **It is here rather than in each surface**, and that is the one thing that
+/// changed about it: `karakuri-cli` held it as a private const of its own, and
+/// the day `crates/karakuri`'s window began scheduling moves too there would
+/// have been two copies of one decision with nothing holding them together —
+/// two surfaces easing the same fade differently, in a value a replay carries
+/// (`docs/contributing.md` §4). Both binaries already reach this module for
+/// [`current_transition`], so this is where the one copy goes.
+pub const FADE_CURVE: Curve = Curve::Smooth;
+
 /// **What one slot's clock is doing, as the reading the conversion needs.**
 /// `Operation::ScrubDeck` moves the scrub by an amount and `Record::Transport`
 /// is absolute, so the conversion reads where the slot is.
