@@ -116,6 +116,6 @@ not about design, and it had no home until the manual had one.
 
 ## Where to go next
 
-- **[docs/contributing.md](docs/contributing.md)** — **Every contributor and coding agent MUST read this first**: how this repository is run, the standing invariants in [`docs/principles/`](docs/principles/), and the ADR lifecycle ([Principle 0066](docs/principles/0066-an-adr-is-a-description-of-history-corrected-but-never-revised.md)). It is the essential file to read before designing or implementing any change.
+- **[docs/contributing.md](docs/contributing.md)** — **Every contributor and coding agent MUST read this first**: how this repository is run, the standing invariants in [`docs/principles/`](docs/principles/), and the ADR lifecycle ([§4](docs/contributing.md)). It is the essential file to read before designing or implementing any change.
 - **[docs/roadmap.md](docs/roadmap.md)** — **what exists today, what is next, and the decisions it is waiting on.** *What exists today* is the status page, part by part, and *Where this goes next* at the end of it is the order and the open questions. Read it after contributing.md if you are picking the work up rather than looking something up.
 - **[docs/manual/](docs/manual/)** — the manual as published, at <https://toyoshim-i.github.io/Karakuri/manual/>, for somebody who wants to play the instrument rather than build it. It is also **the specification the console is built to**: the panel is checked against it, and where the two disagree the manual is what changes last.

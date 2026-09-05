@@ -10,7 +10,7 @@
 // It is affordable because slot 0 and slot 1 share one L1. Drawing one geometry
 // several ways is the cheapest visual variety per unit of GPU time in the whole
 // system; the caveat is that a Set owns its element buffers
-// (docs/principles/0062-a-set-owns-its-element-buffers-and-never-shares-them.md),
+// (docs/principles/0092-the-same-inputs-produce-the-same-frame.md),
 // so the simulation is stepped twice rather than shared.
 // Both slots were already stepping before this file, so this layer costs a draw
 // and not a second shell.
