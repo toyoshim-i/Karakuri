@@ -17,7 +17,6 @@ Start with these, and read the rest before changing anything they touch:
 
 - [Cost is known before it is paid](principles/0091-cost-is-known-before-it-is-paid.md)
 - [The same inputs produce the same frame](principles/0092-the-same-inputs-produce-the-same-frame.md)
-- [A check you have not watched fail is guessing](principles/0089-a-check-you-have-not-watched-fail-is-guessing.md)
 
 **Why** each is the way it is, and what was rejected on the way, is in [docs/adr/](adr/). A rule that
 stops being true is deleted and re-recorded under a new number rather than edited — see
@@ -185,6 +184,66 @@ name the smallest suite, keep the workspace for boundaries, put the cost on whoe
 directing — is recoverable from this paragraph and from §2, and the number above is dated so
 it can be checked rather than assumed.
 
+### A test is watched to fail before it is kept
+
+**Run the test against the broken implementation and observe it fail before you keep it**, and read
+a green result by asking what it was green against. A check nobody has watched fail is a guess about
+what it checks.
+
+- **Assert the property, not a consequence of it.** Changing `Poll` to `Wait` — a full render-thread
+  stall, the exact thing the module documentation calls a bug — left all seven meter tests passing,
+  because a `Wait` paces the loop and a paced reading is exactly one frame old, so
+  `frames_behind >= 1` and `mean > 0.0` are satisfied by a stalled loop.
+  `karakuri-engine/tests/meter.rs` states the property instead: over 240 unpaced frames either a
+  reading is more than one frame behind or a measurement was skipped, and a `Wait` anywhere in the
+  frame path makes both impossible.
+- **A rejection test carries a negative control.** A checker that refused everything would pass a
+  suite made only of refusals. `karakuri-ir/tests/check.rs` pairs each refusal with the case that
+  must be accepted — a `spawn` block *with* a rate, a range whose minimum is exactly 1.
+- **A `compile_fail` test has a compiling twin** differing by exactly the thing under test, and the
+  expected error is verified to be the *only* error. `Deck::begin_frame` carries the pair — a
+  `compile_fail` doctest and a `no_run` twin differing by the second borrow — with the reason written
+  between them.
+- **Ask what a green result was green against.** A verification reported *140 tests pass* while
+  measuring `HEAD`, and the tell was the number: the suite has 147. Fifteen commits in a row lost a
+  `Co-Authored-By` trailer, each verified with `git log --oneline -1` — a view in which a trailer is
+  structurally invisible.
+- **Do not assume a validation stage does what its name says.** Five defects checked clean and came
+  up short at runtime, and **not one was found by an existing test**: among them `spawn` with no
+  `spawn_rate`, where `Proc::spawn_rate()` existed with no caller anywhere and the engine defaulted
+  the missing value to `0.0`, so a procedure parsed, type-checked, cost-checked, built a Set, and
+  created zero elements every step forever — a black frame, no diagnostic.
+- **A fixture the product can rewrite is not a fixture.** The criterion is not *it probably will not
+  change* but **it can change**. Tests derived a second procedure by substituting a sentence in
+  `examples/soft_points.kir`, one of the files the MCP surface exists to rewrite, and a live session
+  rewrote it until the two procedures were identical. Prepend a line rather than substituting one —
+  that changes the content whatever the content is — and prefer a fixture the product cannot reach,
+  as `karakuri-cli/tests/fixtures/flat.kir` is.
+- **Name a fixture after what the code generates, not around it.** A hand-built fixture dodges by
+  accident: the codegen's naga tests passed while the generator was broken because the fixtures named
+  their locals `uu` and `vv` rather than the `u` the specification's own example uses — and `u` was
+  the uniform block, so a `param` named `array` passed all four validation stages and produced WGSL
+  that would not compile. State why a class is **closed**, never why a collision is unlikely: the
+  blocklist that lost there stated the second, and `lower.rs`'s `mangle_local` is `usr_{name}`
+  unconditionally, which states the first.
+- **A gate is judged by its output, not by its exit code, and a gate's test is something that must
+  not pass.** [`.githooks/pre-commit`](../.githooks/pre-commit) first failed by passing:
+  `rustfmt --check` reading stdin prints its diff and exits 0. A green suite is not evidence that a
+  gate works. What each hook runs, and why a gate costing minutes on every commit gets `--no-verify`d
+  and is then not a gate, is §2.
+
+Decided in
+[ADR-0014](adr/0014-generated-code-cannot-be-captured-by-a-name-a-procedure-can-spell.md),
+[ADR-0030](adr/0030-simulation-time-comes-from-an-integer-step-count.md),
+[ADR-0032](adr/0032-nothing-checks-clean-and-comes-up-short-at-runtime.md),
+[ADR-0044](adr/0044-a-test-that-survives-mutation-is-not-a-test.md),
+[ADR-0087](adr/0087-a-fixture-the-product-can-rewrite-is-not-a-fixture.md),
+[ADR-0093](adr/0093-a-verification-that-measures-the-wrong-tree-verifies-nothing.md),
+[ADR-0102](adr/0102-a-renderers-address-is-layer-and-index.md),
+[ADR-0103](adr/0103-a-trailer-missed-fifteen-times.md),
+[ADR-0109](adr/0109-format-the-workspace-and-split-the-gate.md) and
+[ADR-0114](adr/0114-tests-run-when-somebody-asks-not-when-git-does.md).
+
 ### Testing one crate
 ```sh
 cargo test -p karakuri-ir          # IR: lexer, parser, checker, cost
@@ -325,9 +384,8 @@ answered. The rule in §2 does not change, but who applies it does.
 - **After a fix, run the test that failed — first, and on its own.** `cargo test -p <crate>
   <name>` runs one. Broaden only once it passes; a green suite is a slower way to learn the
   same fact, and a red one tells you less.
-- **Running a test against its injected defect
-  ([P-0089](principles/0089-a-check-you-have-not-watched-fail-is-guessing.md)) is
-  one test's evidence.** Run that test with the defect in place, not the suite around it.
+- **Running a test against its injected defect is one test's evidence.** Run that test with the
+  defect in place, not the suite around it — *A test is watched to fail before it is kept* above.
 - **`cargo check -p <crate>` answers "does this compile"** without building or running a test,
   which is often the whole question.
 - **Cut the seam serially before anything fans out.** The shared types several passes must agree

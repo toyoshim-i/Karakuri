@@ -599,7 +599,7 @@ fn nothing_in_the_staging_lane_is_a_control() {
 
     // **The negative control.** It was written when there was nothing in this
     // bay to break, which made the assertions above the trivially-passing kind
-    // [P-0089](../../../docs/principles/0089-a-check-you-have-not-watched-fail-is-guessing.md)
+    // `docs/contributing.md` §3, *A test is watched to fail before it is kept*,
     // is about; a lane with rows in it has a defect to be run against, and the
     // rows above were — `claim` given a candidate row to answer `Panel` for
     // fails at the bay's centre. This stays all the same, because it is the

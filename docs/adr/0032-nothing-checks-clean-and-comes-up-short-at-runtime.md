@@ -51,5 +51,6 @@ else references it.
 
 ## Evidence
 
-Session 2026-07-27T09:22Z, 2026-07-30T12:52Z. Standing rule:
-[P-0089](../principles/0089-a-check-you-have-not-watched-fail-is-guessing.md).
+Session 2026-07-27T09:22Z, 2026-07-30T12:52Z. Standing rule: none in
+`docs/principles/`. P-0089 stated it and was retired on 2026-09-05 — it is a testing discipline
+rather than a property of the instrument, so it is stated in `docs/contributing.md` §3, *A test is watched to fail before it is kept*.

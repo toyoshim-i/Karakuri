@@ -31,7 +31,7 @@ had failed, so nothing under test was what I thought was under test — and I re
 of the command block. **The tell was in the number: 140, where the suite has 147.**
 
 This sits one layer below *watch a test fail before trusting it*
-([P-0089](../principles/0089-a-check-you-have-not-watched-fail-is-guessing.md)). The
+(`docs/contributing.md` §3; P-0089 until it was retired on 2026-09-05). The
 tests were correct. **The thing they ran against was not.**
 
 ## Decision
@@ -44,5 +44,6 @@ Each of the four commits was then checked out individually and its suite run gre
 
 ## Evidence
 
-Session 2026-08-15T16:11Z, commits `6422f72`, `0b439ca`, `b12c696`, `3c5e166`. Standing rule:
-[P-0089](../principles/0089-a-check-you-have-not-watched-fail-is-guessing.md).
+Session 2026-08-15T16:11Z, commits `6422f72`, `0b439ca`, `b12c696`, `3c5e166`. Standing rule: none
+in `docs/principles/`. P-0089 stated it and was retired on 2026-09-05 — it is a testing discipline
+rather than a property of the instrument, so it is stated in `docs/contributing.md` §3, *A test is watched to fail before it is kept*.
