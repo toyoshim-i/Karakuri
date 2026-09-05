@@ -833,7 +833,7 @@ makes the command line test tooling and scopes it out of the instrument's princi
 written for the person playing the instrument does not reach it. **The prose that narrated the old behaviour is corrected**, on 2026-09-02: the *Three of the four
 preview cells are off at a time* paragraph is gone, the doc on `ON_AIR` reads *"every cell draws its
 own slot whatever its residency"*, and the deck's fullness doc says each resting slot is *"still
-drawn into its own cell"*. P-0093 is met here and this paragraph said otherwise until 2026-09-03.
+drawn into its own cell"*. `docs/contributing.md` §4 is met here, and this paragraph said otherwise until 2026-09-03.
 **One clause is still owed, and
 [ADR-0258](adr/0258-the-look-comes-before-the-fader-so-a-cell-draws-every-slot-and-says-which-nothing-it-is.md)
 carries it**: the rejected build's cell — black, or the sentence saying what went wrong. [The console

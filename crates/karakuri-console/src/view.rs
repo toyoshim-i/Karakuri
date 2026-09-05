@@ -1406,7 +1406,7 @@ fn above_caption(slot: Rect) -> Rect {
 /// one and a rectangle that quietly included the caption would put texels over
 /// the letter. Renaming the field is a ripple through six test files and the
 /// program's frame path, so the clash is written down here instead
-/// ([P-0093](../../../docs/principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)
+/// ([`docs/contributing.md`](../../../docs/contributing.md) §4
 /// is the rule it is in tension with, and this is the report rather than the
 /// fix).
 pub fn caption_of(image: Rect) -> Rect {
@@ -4864,7 +4864,7 @@ const PROGRAM_VIEW: &str = "program view";
 /// [`Layout::visible`] on the picture's node and there is no second copy of it
 /// to drift — a fold from the keyboard lights the dot down, and the dot folds
 /// the same node the keyboard does.
-/// [ADR-0161](../../../docs/adr/0161-a-solo-is-stored-because-it-cannot-be-derived.md)
+/// [ADR-0161](../../../docs/adr/0161-solo-remembers-which-region-because-it-cannot-be-derived.md)
 /// stored `soloed` because it could not be derived; this can.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Outputs {
@@ -8031,7 +8031,7 @@ impl MasterRow {
 /// **The widest is measured and not assumed**: all ten `d.dd` strings are laid
 /// out and the widest of them wins, because whether `0.00` is wider than
 /// `1.11` is a fact about whatever font the room is drawn in and not one to
-/// take on trust ([P-0088](../../../docs/principles/0088-no-number-is-trusted-further-than-its-instrument-has-been-checked.md)).
+/// take on trust ([`docs/contributing.md`](../../../docs/contributing.md) §1).
 /// Ten cached layouts of four characters, on a pointer event and on a frame.
 ///
 /// **A reading outside `[0, 1]` is the one case it does not cover**, and it is

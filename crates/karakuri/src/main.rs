@@ -15537,7 +15537,7 @@ mod gpu {
     /// live `Set` — so *empty* is not a slot with no material, it is a **cell
     /// with no slot**: `Deck::slot_view` is `None` past `slot_count`, the bind
     /// group is `None`, no pass is recorded, the view's entry stays `None` and
-    /// `karakuri_console::view` draws `D · off` in `pal.faint`. This deck is
+    /// `karakuri_console::view` draws `D · no slot` in `pal.faint`. This deck is
     /// full, so that is asserted where it can be — the view past the last slot
     /// — rather than by building a short deck this program cannot have.
     #[test]
