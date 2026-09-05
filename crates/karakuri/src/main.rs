@@ -283,8 +283,8 @@ use karakuri_console::view::{
     self, arrangement as arrangement_pill, audio_in as audio_in_pill, class_at,
     deck_head as deck_head_row, inspector as inspector_pane, library as library_bay,
     look as look_row, master as master_row, mcp_pill, mixer as mixer_bay, outputs, picture_rect,
-    preview_rects, program_head, Ask, AudioAsk, AudioIn, Chosen, Kind, McpPill, Picture, Scope,
-    View, DECKS, DECK_LETTERS,
+    preview_rects, program_head, transition as transition_row, Ask, AudioAsk, AudioIn, Chosen, Go,
+    Kind, McpPill, Picture, Scope, TransitionSettings, View, DECKS, DECK_LETTERS,
 };
 // **How many slots a deck can hold**, which is how many this one has — see
 // [`SLOTS`]. Not re-exported at the crate root, and asked of the module that
@@ -1668,6 +1668,47 @@ impl Readout {
                 {
                     return (claim, self.chose(chosen));
                 }
+                // **The transition row's four capsules, derived once for all
+                // of them**, exactly as `claim` does it: the three settings
+                // are laid end to end from the block's left padding and `go`
+                // is measured back from the right one, so where each of them
+                // is depends on the words beside it and a second walk would
+                // put the capsule a press lands on somewhere the word is not.
+                //
+                // **It cannot overlap the bay below**: `.xfade` is under
+                // `.mixer-strips` and outside every strip's rectangle, so the
+                // order against the mixer is arbitrary. This is asked first
+                // because it is the one control on this panel whose press can
+                // be *refused*, and a refusal is a line rather than a value
+                // the arms below could carry.
+                let row = transition_row(ctx, self.panel.layout(), self.view.transition());
+                if let Some(row) = row.as_ref() {
+                    if let Some(operation) = row
+                        .shape(at)
+                        .or_else(|| row.quantum(at))
+                        .or_else(|| row.length(at))
+                    {
+                        return (claim, Acted::Emitted(Some(operation)));
+                    }
+                    // **The `go` capsule**, which is the only control here
+                    // that answers something other than an operation or
+                    // nothing: a one-strip mixer and a shape reading `no
+                    // shape` are turned away by the control itself, because
+                    // the shape is the console's own setting and no conversion
+                    // can see it is unset. `karakuri-cli`'s `c` refuses the
+                    // same two before it asks, and this is that pair as a
+                    // value with the sentence on this side of the seam.
+                    match row.go(at, self.view.selection(), self.view.mixer.len()) {
+                        Some(Go::Wipe(operation)) => {
+                            return (claim, Acted::Emitted(Some(operation)))
+                        }
+                        Some(refused) => {
+                            println!("{}", refusal(&refused, self.view.mixer.len()));
+                            return (claim, Acted::Nothing);
+                        }
+                        None => {}
+                    }
+                }
                 let sink =
                     outputs(ctx, self.panel.layout(), self.view.opening).filter(|row| row.hit(at));
                 let bay = mixer_bay(ctx, self.panel.layout(), &self.view.mixer);
@@ -2370,12 +2411,14 @@ impl Readout {
             );
         }
         println!(
-            "the transition row under the strips is NOT drawn — wipe, iris, next bar, \
-             8 beats and go are a transition being armed and fired, and nothing here holds \
-             what is armed. the crossfader that used to sit over it is not undrawn but \
-             gone: the mixer has no crossfader. nor are the two focuses drawn: the deck \
-             selection and keyboard focus must not look alike, and this console keeps \
-             neither."
+            "the transition row under the strips IS drawn — a shape, a grid, a length and \
+             the `go` that runs a wipe with them — and this window holds what is armed: \
+             the three settings are the console's own, and a wipe is converted against \
+             them. the crossfader that used to sit over it is not undrawn but \
+             gone: the mixer has no crossfader. of the two focuses only one is drawn: the \
+             deck selection is a solid ring round a strip, and keyboard focus is not \
+             drawn at all because this console takes none — the two must not look alike, \
+             which is why the mock's dashed outline is on nothing."
         );
         println!();
         for node in self.panel.nodes() {
@@ -6633,6 +6676,105 @@ fn pointed(view: &mut View, operation: &Operation) -> Option<String> {
     ))
 }
 
+/// **What a refused `go` says**, and the whole of what this window puts on
+/// this side of that seam.
+///
+/// `karakuri_console::view::Go` answers *which* refusal, because the console
+/// is what can see a shape is unset and how many strips it drew; the sentence
+/// is here because this package is the one that has anywhere to print. What
+/// each of them owes is
+/// [P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md):
+/// a rejection is a message to whoever makes the next attempt, and it carries
+/// the constraint and where to go rather than *refused*.
+///
+/// **`karakuri-cli`'s `c` prints the same two**, and its wording is where
+/// these come from — *"a wipe needs somewhere to come from — this deck holds
+/// one slot"* and *"no mask shape — `z` chooses one, and a wipe is a shape
+/// moving"*. What changes on this surface is where the next attempt is made:
+/// a pill two capsules to the left rather than a key.
+fn refusal(refused: &Go, decks: usize) -> String {
+    match refused {
+        // **Unreachable while this window builds a full deck** — `SLOTS` is
+        // `MAX_SLOTS` and the mixer draws one strip per slot — so what this
+        // answers for is a console drawn before the deck reached it, and it
+        // is written rather than left to be an unexplained silence. The count
+        // is said because it is the thing that would have to change.
+        Go::NoOtherDeck => format!(
+            "  wipe: refused — this mixer draws {decks} strip{}, and a wipe needs a deck to \
+             come from as well as one to arrive. Two decks side by side in the bay is what \
+             makes the press mean something",
+            match decks {
+                1 => "",
+                _ => "s",
+            }
+        ),
+        Go::NoShape => String::from(
+            "  wipe: refused — no shape chosen, and a wipe is a shape moving. The first pill \
+             on this row is where one is picked: it reads `no shape` now, and a press on it \
+             takes it to `left`. The vocabulary refuses this one too — \
+             `Operation::Wipe` is *refused with no shape chosen* at its own definition — and \
+             the refusal is here because the shape is this console's own setting",
+        ),
+        // A wipe is not a refusal, and this arm exists so that the day a
+        // fourth answer lands somebody has to say what it reads rather than
+        // a wildcard printing one of these two over it.
+        Go::Wipe(operation) => format!(
+            "  wipe: {} is not a refusal and this line should not have been reached",
+            operation.title()
+        ),
+    }
+}
+
+/// **A press on one of the transition row's three pills, applied to the
+/// console's own setting**, and what to say about it. `None` for every
+/// operation that is not it.
+///
+/// [`pointed`]'s shape one row down, and for the same reason:
+/// `Operation::SetTransition` *"changes nothing you can see and writes nothing
+/// to the stream"* — `written` answers `Silent(Surface)` for it and no record
+/// in `karakuri-store` carries a quantum, a length or a wipe shape — so there
+/// is nothing on the deck for [`apply`] to move and the surface that emits it
+/// is what performs it. `View::set_transition` is the only door into that
+/// setting, which is where the refusal below lives.
+///
+/// **What it changes is what the next wipe means**, and that is why the line
+/// says the whole row rather than the field that moved: an operator reading
+/// *the shape is an iris* still has to know what grid it starts on.
+///
+/// **A setting no pill can draw is refused**, and it is said rather than
+/// swallowed for [`pointed`]'s reason — a press that does nothing and a press
+/// that is not bound are the same experience. Nothing this window emits can
+/// reach it: the pills name a destination out of the console's own cycles. It
+/// is a mapped controller or an MCP call that could, the day either reaches
+/// this row.
+fn scheduled(view: &mut View, operation: &Operation) -> Option<String> {
+    let Operation::SetTransition { setting } = operation else {
+        return None;
+    };
+    if !view.set_transition(*setting) {
+        let at = view.transition();
+        return Some(format!(
+            "  transition: {setting:?} refused or already there — the row is on `{}`, `{}`, \
+             `{}`, and a pill draws only what its own cycle names",
+            at.shape_word(),
+            at.quantum_word(),
+            at.length_word()
+        ));
+    }
+    let at = view.transition();
+    Some(format!(
+        "  transition: {setting:?} -> no record, and that is settled: it is a surface's own \
+         setting. The next fade, crossfade or wipe is `{}` on the `{}`, over {} beat{}",
+        at.shape_word(),
+        at.quantum_word(),
+        at.length,
+        match at.length == 1.0 {
+            true => "",
+            false => "s",
+        }
+    ))
+}
+
 /// **Which salt a slot's material is seeded from** — the one it was built at,
 /// and the one a load restates when the Set file recorded none.
 ///
@@ -6899,6 +7041,56 @@ fn apply(record: &Record, deck: &mut Deck, look: &mut Look) -> Option<String> {
                 op_name = mix::op_wire_name(op)
             ))
         }
+        // **A scheduled move, and the first record this window applies that
+        // does not land now.** `Record::Transition` carries the slot, which
+        // control is moving, where it ends up, the beat it starts on, how long
+        // it lasts and the shape it eases with — and the one thing it does not
+        // carry is where the move starts *from*, because that is where the
+        // control already is at the moment the record is applied. Reading it
+        // here rather than off the record is what makes a replay fade from
+        // where the run did, and it is `karakuri-cli`'s `schedule_from`, in
+        // the one place this window needs it.
+        //
+        // **It landed with the `go` capsule, and until then the window drew a
+        // wipe's other records and dropped this one on the floor**: the
+        // arriving deck was masked to nothing and put on air, and the front
+        // never travelled. A record with no arm here is silent — the `_` at
+        // the foot of this match — which is why the gap was invisible.
+        //
+        // **The two names come back off the wire, refused rather than
+        // defaulted**, as the blend's, the residency's and the sync mode's do:
+        // a control this engine has not got and a curve it cannot ease with
+        // are both a record from a stream this build does not understand, and
+        // guessing at either would schedule a move nobody wrote.
+        Record::Transition {
+            slot,
+            ref control,
+            to,
+            start,
+            beats,
+            ref curve,
+        } => {
+            let slot = held(deck, slot)?;
+            let control = Control::from_name(control)?;
+            let curve = karakuri_engine::binding::Curve::parse(curve)?;
+            let from = match control {
+                Control::Gain => deck.gain(slot),
+                Control::Opacity => deck.opacity(slot),
+                Control::MaskPosition => deck.mask(slot).position(),
+            };
+            deck.schedule(karakuri_engine::Transition::new(
+                slot, control, from, to, start, beats, curve,
+            ));
+            Some(format!(
+                "  transition: deck {} {} {from:.3} -> {to:.3} -> Record::Transition {{ \
+                 start: {start:.3}, beats: {beats:.3}, curve: {} }} -> \
+                 deck.transitions_on({slot}) = {}",
+                deck_letter(slot as u8),
+                control.name(),
+                curve.name(),
+                deck.transitions_on(slot).count()
+            ))
+        }
         // **One level on the whole fold, and the one arm here that names no
         // slot at all.** `Record::MasterOut` carries a number and nothing
         // else, so unlike the look and the mask there is no other half of it
@@ -6983,10 +7175,10 @@ fn apply(record: &Record, deck: &mut Deck, look: &mut Look) -> Option<String> {
 /// (ADR-0156, ADR-0194).
 ///
 /// **`Current::default()` is *I read nothing*, and it is still the answer for
-/// four of this panel's ten emitting controls**: a gain, an opacity, a blend
+/// four of this panel's emitting controls**: a gain, an opacity, a blend
 /// mode and a residency each carry everything their record carries, so handing
 /// a reading in would be this file inventing a value. The mask mini is one of
-/// the six that need one, and it needs it for the deck the operation *names*
+/// those that need one, and it needs it for the deck the operation *names*
 /// rather than for the deck the pointer is over — which is `Reading::Mask`'s
 /// own wording and the reason this takes the operation and not a slot.
 ///
@@ -7011,10 +7203,23 @@ fn apply(record: &Record, deck: &mut Deck, look: &mut Look) -> Option<String> {
 /// back is what stops a press rewriting it — the same argument the angle's is,
 /// one field along.
 ///
+/// **The `go` capsule is the last of them and it is the one that reads
+/// three**: a wipe is written against the transition settings, the mask of the
+/// deck arriving and where that deck already sits in the mix. The first is the
+/// console's own — `settings` is what [`View::transition`] holds and what the
+/// row's three pills move — and the other two are the deck's, taken for the
+/// `to` slot and never for the `from`, which is `Current::mask`'s own wording:
+/// everything a wipe writes is about the deck arriving.
+///
 /// A slot the deck has not got answers `None`, and [`written`] then says the
 /// reading was owed rather than indexing something that is not there — the
 /// guard [`apply`] has, at the other end of the same press.
-fn reading(operation: &Operation, deck: &Deck, look: &Look) -> Current {
+fn reading(
+    operation: &Operation,
+    deck: &Deck,
+    look: &Look,
+    settings: TransitionSettings,
+) -> Current {
     let look = match *operation {
         // **Two thirds of the record, for whichever third was asked for.**
         // `SetTonemap` carries an operator and `SetExposure` a level, and
@@ -7081,8 +7286,15 @@ fn reading(operation: &Operation, deck: &Deck, look: &Look) -> Current {
         Operation::SetSync { .. } => Some(mix::current_tempo(deck.signals().oscillator())),
         _ => None,
     };
+    // **Two operations read this and one of them names two decks.** A wipe
+    // writes `Record::Mask` for the deck *arriving* — twice, at the front's
+    // present position and then at 0 — so the mask handed over is `to`'s and
+    // `from` is read for nothing at all. Handing in the covered deck's would
+    // put somebody else's soft edge on the front that is about to cross the
+    // frame, which is `Current::mask`'s own sentence and `karakuri-cli`'s
+    // `Live::operate` arm exactly.
     let mask = match *operation {
-        Operation::SetMaskShape { deck: slot, .. } => {
+        Operation::SetMaskShape { deck: slot, .. } | Operation::Wipe { to: slot, .. } => {
             let slot = usize::from(slot);
             (slot < deck.slot_count()).then(|| {
                 let mask = deck.mask(slot);
@@ -7105,39 +7317,69 @@ fn reading(operation: &Operation, deck: &Deck, look: &Look) -> Current {
     // corrected.** It said four where there are three and named a fifth that
     // would be a fourth, which is a figure nothing checks going stale in the
     // one comment whose whole argument is that the compiler does the checking.
-    // **The transition settings are the one reading this window answers
-    // `None` for, and it is an answer rather than an omission.** The type grew
-    // them the day `FadeDeck`, `Crossfade` and `SelectRenderer` stopped being
-    // owed, and grew a fourth field the day `Wipe` followed them — which is
-    // twice over exactly the event the paragraph above was written to
-    // catch — so this is somebody saying whether this window can take it, and
-    // the answer is that it has nothing to say.
     //
-    // A quantum, a length and a wipe shape are a *surface's* setting deciding
-    // what the next move means, and this panel draws no control that sets any
-    // of them: the transition row is not built, there is no crossfader to
-    // build, and no control here emits any of the four operations that read
-    // them. A value
-    // handed in would be this file inventing a setting nobody chose, which is
-    // the failure `Current`'s every-field-optional rule exists to prevent —
-    // and if a control ever does emit one before the settings exist, the
-    // window prints *the transition settings its move is scheduled by were not
-    // handed over* and names the operation, which is a sentence rather than a
-    // fade at a length the operator never set.
-    let transition = None;
-    // **The mix reading is the second this window answers `None` for, and it
-    // is the same kind of answer.** It says where the deck a wipe is arriving
-    // on already sits — its blend mode and its residency — and it is read so
-    // that a wipe can leave those two records *out* rather than write a mode
-    // over one the operator chose. No control here emits a wipe: this bay
-    // draws a blend chip and a residency chip, and each of those operations
-    // carries everything its own record carries, which is the four-of-ten
-    // sentence at the top of this function. So there is nothing to hand over
-    // and no gesture that would read it — and the day a control here does emit
-    // one, the window prints *the blend mode and residency of the deck it
-    // names were not read* and names the operation, which is a sentence rather
-    // than a `blend over` nobody asked for.
-    let mix = None;
+    // **The transition settings used to be answered `None` here, on the
+    // grounds that this panel drew no control that set any of them.** That
+    // sentence was true of a window with no transition row in it and is not
+    // true of this one: the row is drawn, its three pills emit
+    // `Operation::SetTransition`, and `View::transition` is the model of
+    // record for what they arrive at. So the reading is taken, and it is the
+    // one here that is read off the *console* rather than off the deck —
+    // a quantum, a length and a wipe shape are a surface's setting deciding
+    // what the next move means, and this surface now holds one.
+    //
+    // **Four operations, which is every one that schedules a move**, and it
+    // is `karakuri-cli`'s `Live::operate` arm exactly: only the wipe has a
+    // control on this panel today, and the other three are answered because
+    // what the reading *is* does not depend on which surface asked. A
+    // conversion that came back `Owed(NotRead(Transition))` for a fade the
+    // day a fader learned to schedule one would be this arm having to be
+    // found again.
+    //
+    // `mix::current_transition` takes the oscillator and the quantum rather
+    // than an instant, so the start is
+    // `karakuri_engine::transition::quantise`'s answer and this file cannot
+    // hand in a beat the grid was never on — the arrangement `mix::current_tempo`
+    // is in one reading up
+    // ([P-0092](../../../docs/principles/0092-the-same-inputs-produce-the-same-frame.md)).
+    // `mix::FADE_CURVE` is the shape every scheduled fade takes, and it is
+    // asked for by name rather than spelled here because two surfaces easing
+    // one fade differently is a value a replay carries.
+    let transition = match *operation {
+        Operation::FadeDeck { .. }
+        | Operation::Crossfade { .. }
+        | Operation::SelectRenderer { .. }
+        | Operation::Wipe { .. } => Some(mix::current_transition(
+            deck.signals().oscillator(),
+            settings.quantum,
+            settings.length,
+            mix::FADE_CURVE,
+            mask_kind(settings.kind),
+            settings.angle,
+        )),
+        _ => None,
+    };
+    // **Where the deck a wipe is arriving on already sits in the mix**, and
+    // the one reading here taken so that a record can be left *out* rather
+    // than written. A wipe puts that deck under `over` and on air, and both
+    // are a state it may be in already: under `add` the same gesture is a wipe
+    // *on* rather than a wipe *over*, a different picture and a legitimate
+    // one, so the mode is left where the operator put it. The condition is the
+    // conversion's and what it needs to hold it is this
+    // ([P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)).
+    //
+    // **What the deck reports rather than what it was asked for**, which is
+    // `Deck::residency`'s answer: the governor may hold a slot below the
+    // request, and what a wipe needs to know is whether the put-on-air it is
+    // about to write would change anything.
+    let mix = match *operation {
+        Operation::Wipe { to: slot, .. } => {
+            let slot = usize::from(slot);
+            (slot < deck.slot_count())
+                .then(|| mix::current_mix(deck.blend(slot), deck.residency(slot)))
+        }
+        _ => None,
+    };
     Current {
         look,
         mask,
@@ -7163,6 +7405,30 @@ fn wipe_kind(kind: MaskKind) -> karakuri_operation::WipeKind {
         MaskKind::None => karakuri_operation::WipeKind::None,
         MaskKind::Linear => karakuri_operation::WipeKind::Linear,
         MaskKind::Radial => karakuri_operation::WipeKind::Radial,
+    }
+}
+
+/// **The vocabulary's mask shape, as the engine's** — [`wipe_kind`] read the
+/// other way, and the two are a pair rather than one function because the
+/// crossing happens in both directions in this file.
+///
+/// The console holds the shape the *next* wipe takes as a
+/// [`karakuri_operation::WipeKind`] — `TransitionSetting::WipeShape` is what
+/// its pill emits — and `mix::current_transition` takes the engine's, so a
+/// wipe's front crosses here on its way to the reading. It crosses back
+/// inside that function, through `mix`'s own `wipe_kind`, which is the one
+/// place `karakuri-environment` makes the two lists agree: what a record
+/// carries is the vocabulary's word either way, and this round trip is the
+/// price of a signature that speaks the engine's types to a caller holding
+/// them (`karakuri-cli` is that caller).
+///
+/// A match for [`wipe_kind`]'s reason, so a fourth shape on either side stops
+/// the build here rather than at a record naming a shape nothing can read.
+fn mask_kind(kind: karakuri_operation::WipeKind) -> MaskKind {
+    match kind {
+        karakuri_operation::WipeKind::None => MaskKind::None,
+        karakuri_operation::WipeKind::Linear => MaskKind::Linear,
+        karakuri_operation::WipeKind::Radial => MaskKind::Radial,
     }
 }
 
@@ -7992,18 +8258,37 @@ impl App {
                     if let Some(line) = played(gfx, operation) {
                         println!("{line}");
                     }
-                    // **The reading is taken off the deck, and for four of the
-                    // five controls it is *I read nothing*.** A gain, an
+                    // **The transition row's three settings, performed on the
+                    // console's own pointer**, and it is here for the reason
+                    // the selection is one line up: `Operation::SetTransition`
+                    // writes no record — `written` answers `Silent(Surface)` —
+                    // so the surface that emits it is what performs it. See
+                    // [`scheduled`].
+                    if let Some(line) = scheduled(&mut readout.view, operation) {
+                        println!("{line}");
+                    }
+                    // **The reading is taken off the deck and off the console,
+                    // and for four of this bay's controls it is *I read
+                    // nothing*.** A gain, an
                     // opacity, a blend mode and a residency carry everything
                     // their record carries, so a reading handed in for one of
                     // them would be this file inventing a value — which is
-                    // what ADR-0194 refuses a default for. The mask mini is
-                    // the fifth and its record is written whole out of two
+                    // what ADR-0194 refuses a default for. The mask mini's
+                    // record is written whole out of two
                     // halves (ADR-0201), so its half is read here rather than
-                    // assumed. See [`reading`].
+                    // assumed, and a wipe reads three — the transition
+                    // settings the row above holds among them, which is why
+                    // this is the one call that is handed something the deck
+                    // does not know. See [`reading`].
+                    //
+                    // **Read after [`scheduled`] has run**, so a press on a
+                    // pill and the wipe after it are converted against the
+                    // settings the operator can see rather than the ones they
+                    // just left.
+                    let settings = readout.view.transition();
                     let written = written(
                         operation,
-                        &reading(operation, &gfx.engine.deck, &gfx.engine.look),
+                        &reading(operation, &gfx.engine.deck, &gfx.engine.look, settings),
                     );
                     // **A press that wrote no record says so**, and says
                     // which of the two kinds of nothing it was, before
@@ -12912,6 +13197,61 @@ mod tests {
         }
     }
 
+    /// **A refused wipe says which refusal it was and where the next attempt
+    /// is made**, rather than *refused*.
+    ///
+    /// `karakuri_console::view::Go` answers which of the two it is because the
+    /// console is what can see it; the sentence is this window's, and
+    /// [P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md)
+    /// is what it owes: the constraint and the numbers, never a bare no. A
+    /// press on `go` that printed nothing would read exactly like a press on
+    /// the card beside it, which is the failure the whole `Go` type exists to
+    /// prevent.
+    ///
+    /// **The two are asserted to be different sentences**, for
+    /// [`an_operation_whose_record_is_owed_is_said_rather_than_swallowed`]'s
+    /// reason one test up: a window that printed one line for both would tell
+    /// an operator with four decks and no shape that they need a second deck.
+    ///
+    /// **Not word for word.** What has to hold is that each names what would
+    /// have to change — the shape pill for one, a second deck for the other —
+    /// and that the count is in the one whose count is the constraint.
+    #[test]
+    fn a_refused_wipe_says_which_refusal_it_was_and_where_to_go_next() {
+        let no_shape = refusal(&Go::NoShape, 4);
+        assert!(
+            no_shape.contains("shape"),
+            "the refusal for an unchosen shape does not say what is missing: `{no_shape}`"
+        );
+        assert!(
+            no_shape.contains("pill"),
+            "the refusal for an unchosen shape does not say where one is picked, so an \
+             operator is told no and not told where to go: `{no_shape}`"
+        );
+
+        let alone = refusal(&Go::NoOtherDeck, 1);
+        assert!(
+            alone.contains('1') && alone.contains("strip"),
+            "the refusal for a mixer with nowhere to wipe from does not carry the count \
+             that is the constraint: `{alone}`"
+        );
+        assert!(
+            alone.contains("deck"),
+            "the refusal for a mixer with nowhere to wipe from does not say what would \
+             have to change: `{alone}`"
+        );
+        // The plural moves with the count, which is this file's rule for every
+        // sentence that carries one.
+        assert!(refusal(&Go::NoOtherDeck, 0).contains("0 strips"));
+        assert!(refusal(&Go::NoOtherDeck, 1).contains("1 strip,"));
+
+        assert_ne!(
+            no_shape, alone,
+            "a wipe with no shape chosen and a wipe with nowhere to come from came out of \
+             this window as the same sentence"
+        );
+    }
+
     /// **An operation whose record nobody can write yet does not silently do
     /// nothing**, and it is not the same event as one that writes no record on
     /// purpose.
@@ -12932,9 +13272,32 @@ mod tests {
     /// `Operation::TapBeat` — and that one is a different shape rather than
     /// the next in a queue: what a tap owes is the beat lock's answer and not
     /// a value any surface holds, so no reading added to `Current` closes it.
-    /// The fade has not left this test, though: it is the second half, and it
-    /// is now the *other* kind of gap — a reading this window does not have,
-    /// said with the name of the reading in it.
+    ///
+    /// **The second half has been re-pointed once, and the reason is worth
+    /// reading.** It was `FadeDeck`, on the grounds that this panel held no
+    /// transition settings to hand over — and the day the transition row was
+    /// wired into this window that stopped being true, without this test going
+    /// red: it builds a `Current::default()` by hand, so it went on passing
+    /// while its own sentence had become false. That is the failure mode
+    /// `docs/contributing.md` §3 is about, met from the wrong side.
+    ///
+    /// **It is `Operation::SetMaskPosition` now, and that one is genuinely
+    /// owed here.** Its record is `Record::Mask` written whole and it needs
+    /// the shape, the angle and the softness it does not name (ADR-0201) —
+    /// and [`reading`]'s mask arm answers for `SetMaskShape` and for a wipe's
+    /// arriving deck, and for nothing else, because **no control on this panel
+    /// emits a mask position**: the mask mini cycles a shape and the front's
+    /// travel is a value with nowhere on a strip to show it. So a press that
+    /// emitted one — a mapped controller, an MCP call — would be told *which*
+    /// reading was not handed over rather than getting a front sent back to
+    /// wherever a default put it, mid-wipe.
+    ///
+    /// **`Current::default()` is what this window would hand over for it**,
+    /// exactly: every arm of [`reading`] answers `None` for this operation, so
+    /// spelling the empty reading here and taking one off a deck are the same
+    /// value. That the two agree is asserted where there *is* a deck —
+    /// `gpu::the_go_pill_runs_a_wipe_against_the_settings_the_row_is_on`, which
+    /// is the half a test with no device cannot make.
     ///
     /// **Neither sentence is asserted word for word.** What has to hold is
     /// that the window says something, that it names the operation and the
@@ -12965,33 +13328,64 @@ mod tests {
         );
 
         // **And the other gap, which is this window's rather than nobody's.**
-        // A fade converts now, and what it needs is the quantum and the length
-        // a surface holds — which this panel does not, because it draws no
-        // control that sets either. So a press that emitted one would be told
-        // *which reading* was not handed over rather than getting a fade at a
-        // length nobody chose, and the sentence has to be a different one from
-        // the wipe's above or the two gaps read alike.
-        let fade = Operation::FadeDeck { deck: 1, to: 0.0 };
-        let unread = written(&fade, &Current::default());
+        // A mask position converts now, and what it needs is the rest of the
+        // mask — the shape, the angle and the soft edge `Record::Mask` is
+        // written whole out of. This panel reads that for the mask mini and
+        // for the deck a wipe is arriving on, and for nothing else, because no
+        // control here emits a position at all. So a press that emitted one
+        // would be told *which reading* was not handed over rather than
+        // getting a front sent back to wherever a default put it, and the
+        // sentence has to be a different one from the tap's above or the two
+        // gaps read alike.
+        let front = Operation::SetMaskPosition {
+            deck: 1,
+            position: 0.5,
+        };
+        let unread = written(&front, &Current::default());
         assert_eq!(
             unread,
+            Written::Owed(karakuri_operation_record::Owed::NotRead(
+                karakuri_operation_record::Reading::Mask
+            )),
+            "a mask position with no mask handed in came back with something \
+             other than the reading it is missing — a default here is a shape and an \
+             angle nobody chose written over the ones a deck is wearing"
+        );
+        let told = unwritten(&front, &unread).expect(
+            "a mask position this window cannot write said nothing at all, so a control \
+             that emitted one would read exactly like a control that did not work",
+        );
+        assert!(
+            told.contains("SetMaskPosition")
+                && told.contains(Owed::NotRead(karakuri_operation_record::Reading::Mask).why()),
+            "the window said `{told}`, which does not name both the operation and the \
+             reading it did not get"
+        );
+        // **And the one it replaced is not owed any more**, which is the half
+        // that would have caught this test going quietly stale: a fade is
+        // scheduled against settings this console holds now, so `FadeDeck` is
+        // no longer a case of *a reading this window does not have*. If this
+        // ever fails, the second half above has a candidate again and somebody
+        // has to say which of the two this test is about.
+        assert_ne!(
+            written(
+                &Operation::FadeDeck { deck: 1, to: 0.0 },
+                &Current {
+                    transition: Some(karakuri_operation_record::Transition {
+                        start: 0.0,
+                        beats: 4.0,
+                        curve: karakuri_operation::Curve::Smooth,
+                        wipe_kind: karakuri_operation::WipeKind::None,
+                        wipe_angle: 0.0,
+                    }),
+                    ..Current::default()
+                }
+            ),
             Written::Owed(Owed::NotRead(
                 karakuri_operation_record::Reading::Transition
             )),
-            "a fade with no transition settings handed in came back with something \
-             other than the reading it is missing — a default here is a cut at beat \
-             zero, which is a move nobody asked for"
-        );
-        let told = unwritten(&fade, &unread).expect(
-            "a fade this window cannot schedule said nothing at all, so a control that \
-             emitted one would read exactly like a control that did not work",
-        );
-        assert!(
-            told.contains("FadeDeck")
-                && told
-                    .contains(Owed::NotRead(karakuri_operation_record::Reading::Transition).why()),
-            "the window said `{told}`, which does not name both the operation and the \
-             reading it did not get"
+            "a fade handed the transition settings this window now holds is still owed \
+             them, so the reading this panel supplies is not the one the conversion wants"
         );
         assert_ne!(
             told, said,
@@ -16631,6 +17025,240 @@ mod gpu {
         );
     }
 
+    /// **The whole loop, closed on the transition row: the settings the three
+    /// pills arrive at are what a press on `go` converts against, and the wipe
+    /// writes its records rather than answering `Owed`.**
+    ///
+    /// `karakuri-console/tests/transition.rs` asserts everything up to the
+    /// operation with no deck anywhere, which is the point of that file. This
+    /// is the other end, and it needs a device for the reason the mask mini's
+    /// test does: a `Deck` is what the mask, the blend, the residency and the
+    /// grid are read off, and a wipe reads three of those four.
+    ///
+    /// **The path is the product's own from end to end.** The shape, the grid
+    /// and the length are walked to where this test wants them through
+    /// [`scheduled`] — the same function the press handler calls — rather than
+    /// written into the view, so what is converted is a setting the console
+    /// took. The press is [`TransitionRow::go`] at the capsule's centre. The
+    /// reading is [`reading`]'s, unaltered.
+    ///
+    /// **What separates this from a plausible wrong answer is the `Owed`
+    /// arm.** Until this window supplied `Current::transition` and
+    /// `Current::mix` a wipe came back `Owed(NotRead(…))` — a sentence rather
+    /// than a fade — and every assertion below about the records would have
+    /// been unreachable. So the answer is asserted to be `Records` before
+    /// anything is read out of it, and the transition record is checked
+    /// against the settings *the row is on* rather than against numbers
+    /// written here: a conversion that invented a quantum would otherwise
+    /// agree with a test that invented the same one.
+    ///
+    /// **And the mask position is asserted to still be owed**, off the same
+    /// deck, which is the half `tests::an_operation_whose_record_is_owed_is_said_rather_than_swallowed`
+    /// cannot make with no device: that test spells `Current::default()` for
+    /// it, and this is what says the empty reading and the one this window
+    /// takes are the same value.
+    #[test]
+    fn the_go_pill_runs_a_wipe_against_the_settings_the_row_is_on() {
+        const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
+        const W: u32 = 1440;
+        const H: u32 = 900;
+        /// The deck the wipe covers, and the one the selection is put on.
+        const UNDER: usize = 1;
+
+        let gpu = Gpu::headless().expect("no GPU");
+        let mut renderer =
+            egui_wgpu::Renderer::new(&gpu.device, FORMAT, egui_wgpu::RendererOptions::default());
+        let mut panel = Panel::new(W as f32, H as f32);
+        panel.solve();
+        let mut engine = Engine::new(
+            &gpu,
+            &mut renderer,
+            &shipped_slots(),
+            panel.layout(),
+            1.0,
+            None,
+        );
+        let material = vec![shipped().material(); engine.deck.slot_count()];
+        let over = (UNDER + 1) % engine.deck.slot_count();
+        assert!(
+            engine.deck.slot_count() >= 2,
+            "a deck of one slot cannot wipe and this test needs one that can"
+        );
+
+        // **The grid is run on before anything is scheduled**, and it is the
+        // one piece of setup here that is not the product's own path.
+        // `quantise` answers `ceil(beats / quantum) * quantum`, so at beat
+        // zero every quantum agrees on zero and a record built with the wrong
+        // one is indistinguishable from a record built with the row's. Four
+        // seconds of grid is past the first bar at the default tempo, and the
+        // guard below is what says this line is still doing its job.
+        let mut signals = karakuri_engine::binding::Signals::default();
+        signals.advance(u8::MAX, 1.0 / 60.0);
+        engine.deck.set_signals(signals);
+        assert!(
+            engine.deck.signals().oscillator().beats() > 1.0,
+            "the grid is still on the first beat, so every quantum quantises to the same \
+             instant and the start below says nothing about the row"
+        );
+
+        let mut view = View::new(Room::Day);
+        mixer(&engine.deck, &material, &mut view.mixer);
+        view.select(UNDER as u8);
+        assert_eq!(view.selection(), UNDER as u8);
+
+        // **The row walked to `iris · now · 2 beats`, through the door the
+        // panel has.** `now` rather than the next bar so the record's start is
+        // the beat the grid is on and the arithmetic below has nothing to wait
+        // for; every value is still one the pills can reach.
+        for setting in [
+            karakuri_operation::TransitionSetting::WipeShape {
+                kind: karakuri_operation::WipeKind::Radial,
+                angle: 0.0,
+            },
+            karakuri_operation::TransitionSetting::Quantum { beats: 0.0 },
+            karakuri_operation::TransitionSetting::Length { beats: 2.0 },
+        ] {
+            let said = scheduled(&mut view, &Operation::SetTransition { setting })
+                .expect("a transition setting said nothing at all");
+            assert!(
+                !said.contains("refused"),
+                "the console refused `{setting:?}`, which this test needs it to take: {said}"
+            );
+        }
+        let settings = view.transition();
+        assert!(
+            settings.armed(),
+            "the row is not armed, so the press below would be refused for the shape"
+        );
+
+        // The press, at the centre of the `go` capsule.
+        let ctx = super::tests::drawn_once();
+        let row = transition_row(&ctx, panel.layout(), settings).expect("the transition row");
+        let centre = row.go.center();
+        let asked = row
+            .go(
+                Point::new(centre.x, centre.y),
+                view.selection(),
+                view.mixer.len(),
+            )
+            .expect("a press on the `go` capsule");
+        let Go::Wipe(operation) = asked else {
+            panic!(
+                "the press was refused with the row armed and {} strips: {asked:?}",
+                view.mixer.len()
+            )
+        };
+        assert_eq!(
+            operation,
+            Operation::Wipe {
+                from: UNDER as u8,
+                to: over as u8,
+            },
+            "the press did not cover the addressed deck with the next one round"
+        );
+
+        // **Nothing has been told anything yet**, which is the middle step the
+        // device is worth: the console asks and the deck moves when the record
+        // does.
+        let before = engine.deck.mask(over);
+        assert_eq!(
+            engine.deck.transitions_on(over).count(),
+            0,
+            "something was already moving on the deck this wipe arrives on"
+        );
+
+        // The reading, and the answer that used to be a sentence.
+        let current = reading(&operation, &engine.deck, &engine.look, settings);
+        let wiped = written(&operation, &current);
+        assert!(
+            matches!(wiped, Written::Records(_)),
+            "a wipe off this window's own reading did not write records: {wiped:?} — the \
+             two readings a wipe converts against are what this asserts are handed over"
+        );
+        let Written::Records(records) = &wiped else {
+            unreachable!("just matched")
+        };
+
+        // **The transition the row is on, and not one this test spelled.**
+        // `now` is a quantum of 0, which `quantise` answers with the beat the
+        // grid is on, so the start is read off the same oscillator the
+        // conversion read.
+        let start = karakuri_engine::transition::quantise(
+            engine.deck.signals().oscillator().beats(),
+            settings.quantum,
+        );
+        assert!(
+            records.contains(&Record::Transition {
+                slot: over as u8,
+                control: "mask".to_owned(),
+                to: 1.0,
+                start,
+                beats: settings.length,
+                curve: "smooth".to_owned(),
+            }),
+            "the wipe's scheduled move is not the one the row is set to — {records:?}"
+        );
+        // **The guard on the start**, and it is what a green run means here: a
+        // quantum this test did not choose would put the move on a different
+        // instant, and without a grid that has been running it would put it on
+        // the same one. `next bar` is the pill's other end of the same cycle.
+        assert_ne!(
+            start,
+            karakuri_engine::transition::quantise(engine.deck.signals().oscillator().beats(), 4.0),
+            "`now` and `next bar` quantise to the same instant on this grid, so the start \
+             above is satisfied by a conversion reading a quantum nobody chose"
+        );
+        // And the mask, written whole out of the shape the *row* holds and the
+        // position and soft edge the *deck* is wearing. The second of the two
+        // puts the front at 0, which is what makes the move a wipe.
+        assert!(
+            records.contains(&Record::Mask {
+                slot: over as u8,
+                kind: "radial".to_owned(),
+                angle: 0.0,
+                position: 0.0,
+                softness: before.softness(),
+            }),
+            "the front is not put to 0 at the shape the row holds, with the deck's own soft \
+             edge — {records:?}"
+        );
+
+        // And the deck follows.
+        for record in records {
+            apply(record, &mut engine.deck, &mut engine.look);
+        }
+        assert_eq!(
+            engine.deck.mask(over).kind(),
+            MaskKind::Radial,
+            "the records were built and the arriving deck is not wearing the row's shape"
+        );
+        assert_eq!(
+            engine.deck.transitions_on(over).count(),
+            1,
+            "the wipe wrote its records and nothing is moving on the deck it arrives on"
+        );
+
+        // **The other gap, off the same deck**: no control here emits a mask
+        // position, `reading` has no arm for one, and the conversion says so
+        // by name rather than writing a shape nobody chose.
+        let front = Operation::SetMaskPosition {
+            deck: over as u8,
+            position: 0.5,
+        };
+        assert_eq!(
+            written(
+                &front,
+                &reading(&front, &engine.deck, &engine.look, settings)
+            ),
+            Written::Owed(karakuri_operation_record::Owed::NotRead(
+                karakuri_operation_record::Reading::Mask
+            )),
+            "this window reads a mask for an operation no control on it emits, so the \
+             sentence `an_operation_whose_record_is_owed_is_said_rather_than_swallowed` \
+             checks is about an operation that is no longer owed"
+        );
+    }
+
     /// **The whole loop, closed on a parked deck: a press on the tally chip
     /// withdraws the prime request the governor could not grant, and the strip
     /// stops rolling because the *deck* changed.**
@@ -16919,7 +17547,21 @@ mod gpu {
         // The record, out of the operation and the reading the harness takes
         // off the deck — written **whole**, which is the half the operation
         // does not name (ADR-0201).
-        let written = written(&operation, &reading(&operation, &engine.deck, &engine.look));
+        // **The transition settings are where a run begins and this press
+        // does not read them**: `Current::transition` is a wipe's, a fade's, a
+        // crossfade's and a selection's, and none of the three conversions
+        // below is one of those. Handed in because `reading` takes them, and
+        // `START` rather than a chosen value so that nothing here can look
+        // like a setting the test needed.
+        let written = written(
+            &operation,
+            &reading(
+                &operation,
+                &engine.deck,
+                &engine.look,
+                TransitionSettings::START,
+            ),
+        );
         let Written::Records(records) = &written else {
             panic!("a press on the mask mini wrote no record: {written:?}")
         };
@@ -17078,7 +17720,21 @@ mod gpu {
             "the look moved before the record did"
         );
 
-        let chosen = written(&operation, &reading(&operation, &engine.deck, &engine.look));
+        // **The transition settings are where a run begins and this press
+        // does not read them**: `Current::transition` is a wipe's, a fade's, a
+        // crossfade's and a selection's, and none of the three conversions
+        // below is one of those. Handed in because `reading` takes them, and
+        // `START` rather than a chosen value so that nothing here can look
+        // like a setting the test needed.
+        let chosen = written(
+            &operation,
+            &reading(
+                &operation,
+                &engine.deck,
+                &engine.look,
+                TransitionSettings::START,
+            ),
+        );
         let Written::Records(records) = &chosen else {
             panic!("a press on the tone map capsule wrote no record: {chosen:?}")
         };
@@ -17121,7 +17777,21 @@ mod gpu {
             "a press at the middle of the track did not ask for unity"
         );
 
-        let levelled = written(&operation, &reading(&operation, &engine.deck, &engine.look));
+        // **The transition settings are where a run begins and this press
+        // does not read them**: `Current::transition` is a wipe's, a fade's, a
+        // crossfade's and a selection's, and none of the three conversions
+        // below is one of those. Handed in because `reading` takes them, and
+        // `START` rather than a chosen value so that nothing here can look
+        // like a setting the test needed.
+        let levelled = written(
+            &operation,
+            &reading(
+                &operation,
+                &engine.deck,
+                &engine.look,
+                TransitionSettings::START,
+            ),
+        );
         let Written::Records(records) = &levelled else {
             panic!("a press on the exposure track wrote no record: {levelled:?}")
         };
