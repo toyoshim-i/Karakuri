@@ -10877,7 +10877,7 @@ pub struct View {
     /// material whatever the slot's residency — a parked deck's still and a
     /// warming deck's picture are the two an operator most needs to see, which
     /// is
-    /// [P-0080](../../../docs/principles/0080-an-operator-can-see-a-slots-own-material-without-putting-it-on-air.md).
+    /// [ADR-0258](../../../docs/adr/0258-the-look-comes-before-the-fader-so-a-cell-draws-every-slot-and-says-which-nothing-it-is.md).
     /// `None` is a cell with nothing to sample at all: a deck of fewer slots
     /// than there are cells, or a console with no engine behind it.
     ///
@@ -12084,7 +12084,7 @@ fn preview(ui: &Ui, pal: &Palette, cell: Rect, picture: Option<Picture>) {
 /// - [`PREVIEW_MATERIAL`] — there is a deck slot behind this cell and the
 ///   image is that slot's own target. It says nothing about residency: a
 ///   parked deck's still and a live deck's frame are the same word, which is
-///   [P-0080](../../../docs/principles/0080-an-operator-can-see-a-slots-own-material-without-putting-it-on-air.md).
+///   [ADR-0258](../../../docs/adr/0258-the-look-comes-before-the-fader-so-a-cell-draws-every-slot-and-says-which-nothing-it-is.md).
 /// - [`PREVIEW_NO_SLOT`] — there is no slot behind this cell at all: a deck of
 ///   fewer slots than there are cells, or a console with no engine behind it.
 ///

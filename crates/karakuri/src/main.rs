@@ -195,7 +195,7 @@
 //! **Every cell draws, whatever its slot's residency.** An off-air slot is
 //! drawn into its own target and never stepped, because the slot nobody is
 //! watching is the candidate and the cell is what it is judged from
-//! ([P-0080](../../../docs/principles/0080-an-operator-can-see-a-slots-own-material-without-putting-it-on-air.md)).
+//! ([ADR-0258](../../../docs/adr/0258-the-look-comes-before-the-fader-so-a-cell-draws-every-slot-and-says-which-nothing-it-is.md)).
 //! It costs a draw per slot and that draw is outside the governor's
 //! arithmetic; the roadmap's *Performance discipline* carries what is owed.
 //!
@@ -2167,7 +2167,7 @@ impl Readout {
         // audition, and ADR-0240 retired that control. Then it said three cells
         // read `off` because an off-air slot "has no new frame to show", which
         // was true only because the engine refused to draw one — the gap
-        // P-0080 named, and this pass closed it. **Every sentence here is read
+        // ADR-0241 named, and this pass closed it. **Every sentence here is read
         // off the deck**, which is the only way this legend stops being
         // rewritten each time: the numbers are counted, not written.
         let live: Vec<usize> = (0..DECKS)
@@ -2189,7 +2189,7 @@ impl Readout {
              through the same transfer curve the picture goes through, with no fader on it, \
              because a fader is applied in the mix and a cell is upstream of the mix. that \
              is what an operator watches to decide whether material is worth putting on \
-             air, so it cannot wait until it is on air (P-0080). each cell is presented \
+             air, so it cannot wait until it is on air (ADR-0258). each cell is presented \
              from `Deck::slot_view` for the slot it is lettered for, so no cell can be \
              showing another deck under the wrong letter, and the picture above them is \
              the mix, always — there is no control that swaps it for one deck, and the \
@@ -2199,7 +2199,7 @@ impl Readout {
              slot that is not stepping shows the still it stopped at and one that has \
              never stepped shows black, which is priming's whole use. every cell costs a \
              present pass of its own and three of the four are not in the compute budget \
-             — the bill P-0080 says is paid rather than argued.",
+             — the bill ADR-0258 says is paid rather than argued.",
             match live.as_slice() {
                 [] => "nothing on this deck is LIVE, so the mix is empty".to_owned(),
                 [one] => format!(
@@ -2328,7 +2328,7 @@ impl Readout {
                  holds this program's one pair at its own seed salt, because a slot cannot \
                  hold nothing and this program has no second pair to give one. it steps \
                  nothing and reaches the mix not at all — but it IS drawn, into its own \
-                 target, every frame, which is what puts it in its cell and what P-0080 \
+                 target, every frame, which is what puts it in its cell and what ADR-0258 \
                  asks for; the frame numbers below include those draws. a slot that has \
                  never stepped has no element state, so a cell for a slot that has been \
                  at rest since this window opened is black until something warms it — \
@@ -3702,11 +3702,11 @@ impl Sink for Presented {
 /// drawn because there is a slot behind it ([`Engine::aim`]), and this deck is
 /// full, so four cells show four slots' own material: deck A stepping and on
 /// air, deck B warming or parked, C and D standing at the still they stopped
-/// at. That is [P-0080](../../../docs/principles/0080-an-operator-can-see-a-slots-own-material-without-putting-it-on-air.md)
+/// at. That is [ADR-0258](../../../docs/adr/0258-the-look-comes-before-the-fader-so-a-cell-draws-every-slot-and-says-which-nothing-it-is.md)
 /// met on this surface — the operator watches a candidate's cell to decide
 /// whether it is worth a fader, and then raises the fader. It used to be gated
 /// on `Residency::Live`, which left the three cells worth looking at dark; the
-/// gap P-0080 named under *Where it is not met* was this line.
+/// gap ADR-0241 named was this line.
 struct Engine {
     deck: Deck,
     /// **Elements per geometry, read off the L1's own `capacity` declaration**
@@ -4759,7 +4759,7 @@ impl Engine {
     /// this pass removes.** The reason given was that an off-air slot "is not
     /// stepping and has nothing new in its view", which was true only because
     /// the engine refused to draw one. It is the exact case
-    /// [P-0080](../../../docs/principles/0080-an-operator-can-see-a-slots-own-material-without-putting-it-on-air.md)
+    /// [ADR-0258](../../../docs/adr/0258-the-look-comes-before-the-fader-so-a-cell-draws-every-slot-and-says-which-nothing-it-is.md)
     /// exists for: an operator decides whether to put a candidate on air by
     /// watching its cell, and a cell that is dark until the candidate is
     /// already on air answers the question after it stops being asked. The deck
@@ -4827,8 +4827,8 @@ fn aims(
 /// the picture goes through, so a cell is the material under the transfer curve
 /// the room gets, with no fader on it, because a fader is an edge property
 /// applied in the mix and a slot's target is upstream of the mix. That is
-/// [P-0080](../../../docs/principles/0080-an-operator-can-see-a-slots-own-material-without-putting-it-on-air.md)'s
-/// three clauses in one loop.
+/// what [ADR-0258](../../../docs/adr/0258-the-look-comes-before-the-fader-so-a-cell-draws-every-slot-and-says-which-nothing-it-is.md)
+/// asks of a monitor, in one loop.
 ///
 /// **Gated on `aimed` and on there being a slot to sample, and on nothing
 /// else.** Residency was the third gate and is not: a cell that goes dark when
@@ -15520,7 +15520,7 @@ mod gpu {
     /// residency — and a cell with no slot behind it is off.**
     ///
     /// This is
-    /// [P-0080](../../../docs/principles/0080-an-operator-can-see-a-slots-own-material-without-putting-it-on-air.md)
+    /// [ADR-0258](../../../docs/adr/0258-the-look-comes-before-the-fader-so-a-cell-draws-every-slot-and-says-which-nothing-it-is.md)
     /// on this surface. The operator decides whether to raise a fader by
     /// watching the cell, so the cell has to be running *before* the fader goes
     /// up; a cell gated on `Residency::Live` answers the question only after it
@@ -15634,7 +15634,7 @@ mod gpu {
                         "cell {} was not aimed with the deck at {residencies:?} — a slot's \
                          own material is what an operator watches to decide whether to put \
                          it on air, so a cell that waits for its deck to be Live is dark at \
-                         the one moment it is wanted (P-0080)",
+                         the one moment it is wanted (ADR-0258)",
                         deck_letter(slot as u8)
                     )
                 });
@@ -17274,7 +17274,7 @@ mod gpu {
         // **All four, and residency has nothing to do with it.** Deck A is the
         // only Live slot on this engine and the other three rest at
         // `Allocated`; every one of them is drawn into its own target and
-        // every one of them is aimed at a cell, which is P-0080 —
+        // every one of them is aimed at a cell, which is ADR-0258 —
         // `every_cell_with_a_slot_behind_it_is_aimed_whatever_its_residency`
         // is where that is asserted across all four residency arrangements.
         assert!(

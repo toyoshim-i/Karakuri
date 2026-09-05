@@ -224,7 +224,7 @@ proc soft_points {
     /// Priming slot rendered nowhere at all, which was true of the engine and
     /// wrong of the instrument: the slot an operator is warming is the one they
     /// need to see. Every slot is drawn into its own target now
-    /// (P-0080), and *drawn* and *mixed* are two questions.
+    /// (ADR-0258), and *drawn* and *mixed* are two questions.
     #[test]
     fn a_priming_slot_advances_its_t_and_contributes_nothing_to_the_mix() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -275,7 +275,7 @@ proc soft_points {
         // `deck.rs` argues — but a warming slot is exactly the one an operator
         // wants to look at before bringing it up, so every slot is drawn into
         // its own target whatever its residency
-        // (`docs/principles/0080-an-operator-can-see-a-slots-own-material-without-putting-it-on-air.md`).
+        // (`docs/adr/0258-the-look-comes-before-the-fader-so-a-cell-draws-every-slot-and-says-which-nothing-it-is.md`).
         // The mix comparison above is what says that draw does not leak into
         // the room.
         assert!(

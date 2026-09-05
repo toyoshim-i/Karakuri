@@ -24,7 +24,7 @@ in as many words:
 > written.
 
 This is that separate decision, and it is taken because the unresolved word started deciding things.
-[P-0080](../principles/0080-an-operator-can-see-a-slots-own-material-without-putting-it-on-air.md)
+P-0080
 was written with a *Where it is not met* section naming `karakuri-cli` as a surface that fails the
 rule — one window, no cells, and no way to see a single slot on its own since
 [ADR-0240](0240-the-output-shows-the-mix-and-residency-keys-belong-to-the-mixer.md) retired the `v`
