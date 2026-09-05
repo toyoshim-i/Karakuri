@@ -172,19 +172,28 @@ split is under *The estimate is retired rather than re-cut*, below.
 
 **M5.1 to M5.9 are one sub-milestone per console bay, in the order below.** Each is the same job:
 complete that bay's GUI components and connect them to operations from the mouse and the keyboard.
-MCP, hover tooltips and MIDI cut across every bay, so they are M5.10, M5.11 and M5.12 rather than
-a share of each bay's work. **Each names its rows, its exit condition and what it is blocked on**,
+MCP, hover tooltips, MIDI and **the keyboard** cut across every bay, so they are M5.10, M5.11,
+M5.12 and M5.13 rather than a share of each bay's work. The keyboard joined them on 2026-09-05 and
+was a share of each bay's work until then: it stopped being one when
+[ADR-0259](adr/0259-the-keyboard-is-addressed-to-the-bay-that-has-focus-and-a-global-letter-is-a-convenience-or-the-operators-own.md)
+made a key press a consequence of one mechanism — the bay that has focus — rather than a letter each
+bay chose for itself. **Each names its rows, its exit condition and what it is blocked on**,
 and is the one place those are written down. The maintainer, 2026-09-01: *"you have to get to the
 point where all the bay GUI components are there and assembled, or you cannot even try it out."*
 
 **The order is the order below, and the work goes top to bottom.** If an order needs changing the
 sub-milestones are reordered; if a row needs a note the note goes in the sub-milestone that owns it.
 
-**A sub-milestone's exit condition is a grep over two columns**: no `plan` badge in the **panel**
-or **key** column of that bay's rows on [every operation](manual/operations.html). The MIDI and
-MCP columns are out of scope for M5.1 to M5.9, being M5.12's and M5.10's. **A row can carry a
-`plan` key badge and no `plan` panel badge**, so each sub-milestone below names those rows as well
-as the ones the panel column owes. **ADR-0226 is unchanged by the split**: M5 closes when M5.1 to
+**A sub-milestone's exit condition is a grep over one column**: no `plan` badge in the **panel**
+column of that bay's rows on [every operation](manual/operations.html). The key, MIDI and MCP
+columns are out of scope for M5.1 to M5.9, being M5.13's, M5.12's and M5.10's.
+
+**It was two columns until 2026-09-05, and the key column left for a reason rather than for
+convenience.** While a key was a letter a bay chose, a bay owed its own keys and the exit said so.
+ADR-0259 makes a key press an address into whichever bay has focus, so no bay chooses letters any
+more and none can be held to them: the column is now one mechanism's, the way the MIDI column is the
+map's. M5.2 is the sub-milestone this was noticed in — it had finished its panel column and was
+being held open by four key badges naming letters the record had just retired. **ADR-0226 is unchanged by the split**: M5 closes when M5.1 to
 M5.9 close and the two sections at the end of this list close with them.
 
 ##### Every bay ends by rewriting its own prose as tooltips
@@ -293,7 +302,7 @@ output's rather than this bay's ([ADR-0246](adr/0246-the-render-size-belongs-to-
 [ADR-0247](adr/0247-one-frame-is-rendered-and-scaled-into-each-output.md)), and the picture carries
 *Program, sized by height* whole.
 
-#### M5.2 — Mixer
+#### M5.2 — Mixer — **closed**
 
 **Rows.** None carries a `plan` panel badge any more. *Choose the wipe shape, the quantum, the
 length* and *Wipe the next deck in* are built, and ***Fade a deck out or in* is a `gap`**, decided on
@@ -303,9 +312,10 @@ gesture the strip is built around. What it would have bought is the one thing a 
 landing the move on the beat rather than near it — and that is not worth a control here. The
 argument an operator reads is *Nothing on a strip starts a fade* on
 [the console page](manual/console.html), beside *The mixer has no crossfader*, which is the same
-shape of decision and the precedent for the `gap`. Four more carry a `plan` key badge and no `plan` panel
-badge: *Gain*, *Opacity*, *Blend mode*, and *Crossfade to the next deck*, whose panel cell is a
-`gap` and whose only owed route is `x`.
+shape of decision and the precedent for the `gap`. *Gain*, *Opacity* and *Blend mode* reach the
+instrument's keyboard as well, bound on 2026-09-05. **The four rows still carrying a `plan` key
+badge are M5.13's and not this bay's** — the letters they name (`f g`, `x`, `c`, `z n j`) are a
+scheme ADR-0259 retired, and binding them here would have been work thrown away.
 
 ***Choose which renderer of a deck is live* was counted here and is M5.5's**, moved on 2026-09-05.
 It was never a control of this bay: the mock draws `rend-row` in the **Inspector** and nowhere in
@@ -317,8 +327,14 @@ existed. Its `plan` key badge (`r`) goes with it, and is
 [ADR-0259](adr/0259-the-keyboard-is-addressed-to-the-bay-that-has-focus-and-a-global-letter-is-a-convenience-or-the-operators-own.md)'s
 rather than that bay's.
 
-**Exit.** No `plan` badge in the panel or key column of this bay's rows on
+**Exit.** No `plan` badge in the panel column of this bay's rows on
 [every operation](manual/operations.html).
+
+**Closed on 2026-09-05**, and the exit is a grep rather than a judgement: no row of this bay carries
+a `plan` panel badge. What it drew on the way is the transition row, which was painted by nothing;
+what it stopped drawing is the mock's fourth strip, which a record had rejected; and what it decided
+is that a fade has no control on a strip. The key column it used to owe left with ADR-0259 and is
+M5.13's.
 
 **Order inside the bay.** *Choose the wipe shape, the quantum, the length* went first and **is
 drawn**: `.xfade` was painted by nothing, and the console now owns the quantum, the length and the
@@ -709,6 +725,53 @@ two things can move a fader; and **14-bit control changes**, so a fader is more 
 
 **Blocked on.** M5.11, and only for learn: there is no tooltip to learn from until the pointer
 decision is taken. MIDI out and 14-bit control changes do not wait on it.
+
+#### M5.13 — The keyboard
+
+**Rows.** The key column of [every operation](manual/operations.html), which is not this bay's list
+or any bay's — `grep -c 'rt plan">key' docs/manual/operations.html` is the count and it is not
+written down here.
+
+**Exit.** No `plan` badge in the key column of [every operation](manual/operations.html).
+
+**What it is.**
+[ADR-0259](adr/0259-the-keyboard-is-addressed-to-the-bay-that-has-focus-and-a-global-letter-is-a-convenience-or-the-operators-own.md):
+a key press is addressed to the bay that has focus, `Tab` walks the arrangement down a column and
+then across, and the keys that act inside a bay are the same six everywhere because they are rules
+about kinds of thing rather than about bays. A global letter survives only where the operation it
+names has no operand, or where its only operand is the choice the key itself spells — seven keys of
+the thirty-one this file binds today.
+
+**Blocked on. Nothing.** The one uncertainty the record carried was whether `egui` swallows `Tab`
+before the window loop's `match` sees it, which would have been the failure that looks like nothing
+at all. It does not, and the reason is that `App::to_egui` reads `repaint` and nothing else —
+`egui-winit` reports `consumed` for every `Tab` and this program never asks. That is now an
+invariant a test holds.
+
+**What it owes beyond the badges**, and none of it is drawing:
+
+1. **The manual.** ADR-0259 edits none of it on purpose. `operations.html`'s key column stops naming
+   letters and needs a spelling that says what it does name; `console.html` gains a mark for a
+   folded bay holding focus, and its *Two focuses, and they do not look alike* note is rewritten by
+   item 2; `concepts.html` has never mentioned focus and a reader needs it before the panel makes
+   sense. `index.html`'s seven rules are capped and this fits inside rule 01 rather than adding one.
+2. **The three pointers collapse.** `View::selection`, `View::cursor_row` and `View::scope` become
+   instances of one mechanism — a bay's remembered address — which is the record's strongest
+   structural result and the reason the deck selection persisting *"while your hands are in the
+   library"* stops being a special property of the mixer.
+3. **`map.rs` moves to `karakuri-map`.** A global key is a complete line exactly as a `cc` is, so it
+   is a third `Key` beside `Cc` and `Note`; the crate holding the layer between a surface and the
+   vocabulary then stops being named for a wire. Keys reached under focus are deliberately not
+   customisable, which is a property rather than a gap.
+4. **`key_column`'s machinery changes shape.** `KEYS`, `ROWS` and `NO_ROW` in
+   `crates/karakuri/src/main.rs` are built around one letter reaching a fixed set of rows; under
+   focus a digit reaches a different row in every bay. The check reads this file's own `match` arms
+   as text, so a keyboard that becomes a per-bay dispatch table is invisible to it — which is the
+   thing to solve rather than to discover.
+
+**And it takes `z` with it.** *Bring back what is folded* unfolds everything rather than one region
+because *"a region a pointer cannot reach is a region a key has no way to name either"*, and focus
+can name a folded bay. The key may still earn its place as a bulk act; its recorded reason is gone.
 
 #### Rows the manual has not given a home
 
