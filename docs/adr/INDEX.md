@@ -375,3 +375,11 @@ Re-pointing the records that cited a retired principle is permitted, and why, is
 
 A principle with no ADR is one whose reasoning is still only in the code and the specification.
 
+**The list is empty as of 2026-09-05**, and that is a state rather than an omission: the last three
+entries — P-0005, P-0067 and P-0069 — were retired into the thirteen meta-rules, and the gap each
+of them left is now a record ([ADR-0256](0256-a-swap-lands-on-a-frame-boundary-and-an-over-budget-set-rolls-back-without-being-asked.md),
+[ADR-0252](0252-the-language-is-bounded-so-a-price-can-be-computed-before-anything-is-built.md),
+[ADR-0255](0255-three-clocks-run-at-once-and-a-slower-ones-work-never-lands-on-a-faster-one.md))
+rather than something carried forward. The section stays, because the next principle added before
+its record is the next entry.
+
