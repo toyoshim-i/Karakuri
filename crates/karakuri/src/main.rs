@@ -8787,9 +8787,22 @@ impl ApplicationHandler for App {
             }
 
             WindowEvent::KeyboardInput { .. } => {
-                // `egui` sees every key: it has no focused widget in this pass
-                // and so consumes nothing, and its modifier state has to stay
-                // current for the frame it does.
+                // **`egui` sees every key, and is never asked for
+                // permission.** `App::to_egui` reads `EventResponse::repaint`
+                // and nothing else — `consumed` is read nowhere in `crates/` —
+                // so the `match` below runs whatever `egui` answers, and
+                // `egui`'s modifier state stays current for the frame it does
+                // ask for.
+                //
+                // **Not because nothing has focus.** `egui-winit` 0.36.1
+                // hard-codes the flag — *"When pressing the Tab key, egui
+                // focuses the first focusable element, hence Tab always
+                // consumes"* — so `consumed` is `true` for every `Tab`
+                // whatever the focus state is, and honouring it would swallow
+                // the first press rather than being harmless. ADR-0259 makes
+                // `Tab` the key that moves focus between bays, where that is
+                // the failure that looks like nothing at all; the invariant
+                // that record names is `event_response`'s test.
                 App::to_egui(gfx, &mut self.costs, &event);
                 let WindowEvent::KeyboardInput { event: key, .. } = &event else {
                     unreachable!("the arm this is in")
@@ -15706,6 +15719,143 @@ mod press_handler {
             }
         }
         quotes % 2 == 1
+    }
+}
+
+#[cfg(test)]
+mod event_response {
+    //! **`EventResponse` has exactly one field read in this workspace, and it
+    //! is `repaint`.**
+    //!
+    //! That sentence is the whole of why a key press reaches the `match` in
+    //! [`super::App::window_event`] at all, and it is not the reason that
+    //! arm's comment gave until 2026-09-05. `egui-winit` 0.36.1 hard-codes the
+    //! other field — *"When pressing the Tab key, egui focuses the first
+    //! focusable element, hence Tab always consumes"* — so
+    //! `EventResponse::consumed` is `true` for every `Tab` whether or not
+    //! anything has focus. Nothing here asks: [`super::App::to_egui`] takes
+    //! `repaint`, so `egui` is **told** about the key and never asked for
+    //! permission, and the delivery does not depend on the focus state at all.
+    //!
+    //! # Why it is worth a check
+    //!
+    //! [ADR-0259](../../../docs/adr/0259-the-keyboard-is-addressed-to-the-bay-that-has-focus-and-a-global-letter-is-a-convenience-or-the-operators-own.md)
+    //! makes `Tab` the key that moves focus between bays, and names this
+    //! invariant as the thing to watch. An `if response.consumed` added here
+    //! reads as an ordinary courtesy to the toolkit; what it does is swallow
+    //! `Tab` on the first press, which in that scheme is **the failure that
+    //! looks like nothing at all** — no panic, no diagnostic, a key that stops
+    //! doing anything. The comment that invited it said `egui` *"has no
+    //! focused widget in this pass and so consumes nothing"*, which is true of
+    //! `egui::Context` and false of the flag `egui-winit` returns.
+    //!
+    //! # How it is read
+    //!
+    //! [`super::key_column`]'s machinery, one question along: this file read
+    //! as text, cut at the first [`TESTS`], comments dropped and the lines
+    //! joined — [`code`], the same answer [`super::press_handler`] asks it
+    //! for. There is nothing to enumerate instead. A field read is a field
+    //! read, and no list in the program says which ones happen.
+    //!
+    //! Three assertions, and the first is the floor the other two stand on:
+    //!
+    //! - **The response is still produced, and still bound to `response`.**
+    //!   [`CALL`] is the whole statement rather than a name, which is
+    //!   [`super::press_handler`]'s `HANDLER` reason: a rename or a
+    //!   resignature fails here, rather than leaving the field scan below
+    //!   reading a haystack with no receiver in it and passing.
+    //! - **Every field read off that receiver is `repaint`.** The invariant as
+    //!   ADR-0259 states it, and the half that catches a second field `egui`
+    //!   has not shipped yet.
+    //! - **`consumed` is spelled nowhere above the tests.** The belt for the
+    //!   first: a destructure — `let EventResponse { consumed, .. } = …` — or
+    //!   a second call bound to another name would both slip past a scan keyed
+    //!   on the receiver, and both have to spell the field.
+    //!
+    //! # What it cannot see, and which way each one fails
+    //!
+    //! - **A read below the first [`TESTS`].** [`code`] stops there for
+    //!   [`super::key_column`]'s reason — a field spelled in a test is not one
+    //!   this program reads — and the window loop is above it. A *false
+    //!   negative*.
+    //! - **`/* … */`, and a `//` inside a string literal.** Neither cut in
+    //!   [`code`] handles either, unchanged from the two modules above;
+    //!   `super::press_handler::the_two_cuts_are_the_whole_of_the_comment_syntax_they_meet`
+    //!   is what fails the day one is written.
+    //! - **The second condition, which is a different claim.** ADR-0259 asks
+    //!   for two things, and this is only the first. That the console draws no
+    //!   focusable `egui` widget — no `Button`, `TextEdit`, `Slider`,
+    //!   `DragValue`, `.interact(` or `.sense(` in `karakuri-console/src`, so
+    //!   `Memory::focused()` is permanently `None` — was read once, on
+    //!   2026-09-05, and is **checked by nothing**. It is written here rather
+    //!   than left to look covered by the module it is not in.
+    //! - **Whether the key is then acted on.** That the arms exist is
+    //!   [`super::key_column`]'s; that a press reaches the deck is `mod gpu`'s.
+    //!   This file says one thing: `egui` is never asked for permission.
+
+    use std::collections::BTreeSet;
+
+    use super::key_column::{code, SRC, TESTS};
+
+    /// **The statement that produces the response**, whole rather than by
+    /// name, for [`super::press_handler`]'s `HANDLER` reason: `response` is a
+    /// common enough word that the receiver alone would be a bet on nothing
+    /// else in this file ever binding one, and a call that changes is a seam
+    /// that changes.
+    const CALL: &str = "let response = gfx.egui.on_window_event(&gfx.window, event);";
+
+    /// The receiver, with its dot, which is how a field read off it is spelled.
+    const READ: &str = "response.";
+
+    /// **The one field `repaint` is not**, spelled once so the message can
+    /// name it and so this module holds the only copy of the word.
+    const NEVER: &str = "consumed";
+
+    /// **`EventResponse` has exactly one field read in this workspace, and it
+    /// is `repaint`** — ADR-0259's sentence, as a check.
+    ///
+    /// A CPU test, deliberately, and for [`super::key_column`]'s reason: it
+    /// reads a file, so a machine with no adapter still has an answer about
+    /// what this file asks `egui` for.
+    #[test]
+    fn the_only_field_read_off_an_event_response_is_repaint() {
+        // **`" ." → "."`**, [`super::press_handler`]'s one addition to
+        // [`code`]: `rustfmt` breaks a long chain *before* the dot, and where
+        // a line was wrapped is a decision about width rather than about which
+        // field is being read.
+        let code = code().replace(" .", ".");
+
+        assert!(
+            code.contains(CALL),
+            "{SRC} no longer says `{CALL}` — the answer `egui` gives for a window event is \
+             produced somewhere else now, or bound to another name, and the scan below is \
+             looking for a receiver this file does not have"
+        );
+
+        let mut fields = BTreeSet::new();
+        for after in code.split(READ).skip(1) {
+            let end = after
+                .find(|c: char| !c.is_alphanumeric() && c != '_')
+                .unwrap_or(after.len());
+            fields.insert(after[..end].to_owned());
+        }
+        assert_eq!(
+            fields,
+            BTreeSet::from(["repaint".to_owned()]),
+            "`EventResponse` has exactly one field read in this workspace and it is `repaint` \
+             (ADR-0259); {SRC} reads {fields:?}. `egui-winit` 0.36.1 sets `consumed` for every \
+             `Tab` whether or not a widget has focus, so a second field honoured here swallows \
+             the key that moves focus between bays, on its first press and with no diagnostic"
+        );
+
+        assert!(
+            !code.contains(NEVER),
+            "`{NEVER}` is spelled in {SRC} somewhere above `{TESTS}`, and it is the one field \
+             of `EventResponse` this program must not read — whether it is reached through a \
+             destructure or off a receiver by another name. `egui-winit` 0.36.1 hard-codes it \
+             true for every `Tab`, so honouring it stops `Tab` reaching the `match` that moves \
+             focus between bays (ADR-0259), on the first press and in silence"
+        );
     }
 }
 
