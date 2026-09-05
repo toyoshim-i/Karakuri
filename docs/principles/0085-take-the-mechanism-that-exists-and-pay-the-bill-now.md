@@ -11,8 +11,11 @@ applying.
 when a palette is `origin.prompt` plus `tag` plus the previews and genealogy the library already
 holds — justified by reproducibility, which this material does not want, because generating
 repeatedly from one starting point and keeping the few you like *is* the workflow. A subsystem for
-variant pools, when a family of pre-forked Sets sharing most of their slots is the switch that
-already exists. Treating every instruction as a generation request, which is the obvious
+variant pools, when the alternatives are nodes of one Set and selection picks among them — the
+mechanism a Set already has. P-0019 reached for a different existing thing here, a family of
+pre-forked Sets across deck slots, and
+[ADR-0148](../adr/0148-a-variant-pool-is-a-set-and-the-deck-stays-a-mixer.md) rejected it: a pool is
+a Set, and the deck stays a mixer. Treating every instruction as a generation request, which is the obvious
 implementation, is orders of magnitude slower and throws away the parts that were already right —
 told `speed` is `[0.0, 2.0]` and currently `0.15`, a model turns *slower* into `0.08` without
 generating anything. Keeping `field(p)` as a compatibility alias when deleting it was plainly right,
