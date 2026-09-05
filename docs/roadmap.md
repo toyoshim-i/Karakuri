@@ -271,7 +271,7 @@ cell, which is one more constraint on M5.6's naming question.
 [every operation](manual/operations.html).
 
 **Closed on 2026-09-03**, and the exit is a grep rather than a judgement: the board names no control
-of this bay, and none of the thirteen rows still carrying a `plan` key badge is one of its. See
+of this bay, and no row still carrying a `plan` key badge is one of its. See
 [docs/history/m5.md](history/m5.md) for what met it. The bay draws one thing less than the mock does,
 and it is not a badge and does not block the exit — see the risk badge, below.
 
@@ -345,7 +345,7 @@ same way — the wipe reading the row's third setting, its front shape, as well 
 
 **Blocked on — the panel column, nothing; the key column, four rows.** *Fade a deck out or in*
 (`f g`), *Choose which renderer of a deck is live* (`r`) and *Choose the wipe shape, the quantum, the
-length* (`z n`) name letters this binary already binds to folding, resetting and unfolding — the
+length* (`z n j`) name letters this binary already binds to folding, resetting and unfolding — the
 collision ADR-0220 recorded and did not resolve — and
 [ADR-0259](adr/0259-the-keyboard-is-addressed-to-the-bay-that-has-focus-and-a-global-letter-is-a-convenience-or-the-operators-own.md)
 now dissolves it rather than picking a winner: the keyboard is addressed to the bay that has focus,
@@ -410,7 +410,7 @@ designed page and this bay's rather than a tidy-up; `.tally.off` went with it, t
 **Rows.** Four carry a `plan` panel badge: *List what the store holds*, *Read what one Set holds
 and declares*, *Load material into a deck*, *Send a Set to somebody, and take one in*.
 
-**Exit.** No `plan` badge in the panel or key column of this bay's rows on
+**Exit.** No `plan` badge in the panel column of this bay's rows on
 [every operation](manual/operations.html).
 
 **Blocked on. Nothing, as of 2026-09-05.** *Send a Set to somebody, and take one in* waited on a
@@ -455,11 +455,19 @@ than found*, *A Set has two forms, and loading one is packaging it*, and *How a 
 #### M5.4 — Transport
 
 **Rows.** Six carry a `plan` panel badge: *Tap the beat*, *Halve or double the grid*, *Nudge the
-latency offset*, *Set the free-run tempo*, *Find out what a write did*, *Record the session*. Two
-more carry a `plan` key badge and name the transport as their panel home: *Tone map* and
-*Exposure*.
+latency offset*, *Set the free-run tempo*, *Find out what a write did*, *Record the session*.
 
-**Exit.** No `plan` badge in the panel or key column of this bay's rows on
+***Tone map* and *Exposure* were counted here and are M5.13's**, dropped on 2026-09-05. They name
+the transport as their panel home and this row is where the mock draws them, but both carry a `has`
+panel badge — the tone capsule cycles the four operators and the exposure track is twelve stops you
+click into, and both have carried a `data-tip` since the mock was written. So this bay never owed
+them a control; what it owed was the letters on their key badges — `t` for the tone map, and `-`,
+`=` and the backtick for the exposure track — which is the scheme
+[ADR-0259](adr/0259-the-keyboard-is-addressed-to-the-bay-that-has-focus-and-a-global-letter-is-a-convenience-or-the-operators-own.md)
+retired. Their prose stays this bay's, in the tooltip item below, because the controls are still
+drawn here.
+
+**Exit.** No `plan` badge in the panel column of this bay's rows on
 [every operation](manual/operations.html).
 
 **Blocked on.** Nothing. This is the cheapest bay on the page: every table row is a control beside a
@@ -486,10 +494,16 @@ and write one node's source*, *Keep what a deck is playing*, *Set a node's autho
 deck's renderers*, and ***Choose which renderer of a deck is live***, moved here from M5.2 on
 2026-09-05 because the mock draws its chips in this bay directly under *Composite*, which this bay
 already owned, and the console page describes the two as one control and the choice it turns into.
-Two more carry a `plan` key badge only, both at the deck head: *Set a deck's sync mode* and *Scrub a
-deck a quarter beat*.
 
-**Exit.** No `plan` badge in the panel or key column of this bay's rows on
+***Set a deck's sync mode* and *Scrub a deck a quarter beat* were counted here and are M5.13's**,
+dropped on 2026-09-05. Both sit at the deck head and both carry a `has` panel badge — the chip and
+the scrub are drawn — so the only thing this bay held them for was the letters on their key badges
+(`y`, `u i`), and under
+[ADR-0259](adr/0259-the-keyboard-is-addressed-to-the-bay-that-has-focus-and-a-global-letter-is-a-convenience-or-the-operators-own.md)
+a key press is addressed to the bay that has focus rather than to a letter a bay picked, so there is
+no letter here to bind.
+
+**Exit.** No `plan` badge in the panel column of this bay's rows on
 [every operation](manual/operations.html).
 
 **Blocked on.** Two rows. *Set a node's authority* waits on a writer, and a live-session one:
@@ -500,8 +514,9 @@ else, so every node of every Set is `Manual` and the chip can read while nothing
 `layering == Layering::Composite` at `Set::build`, nothing writes it afterwards, and neither `Set`
 nor `Deck` offers one, so the operation names a state the engine cannot be moved into while running.
 
-The other nine of the eleven wait on nothing. This is the largest bay of the unblocked ones and the most lopsided:
-every read it needs answers off a running Set, so what is missing is presses rather than faces.
+The other eight of the ten wait on nothing. This is the largest bay of the unblocked ones and the
+most lopsided: every read it needs answers off a running Set, so what is missing is presses rather
+than faces.
 
 **Also here.** Three of the four items with no sub-milestone land in this bay. The **node
 editor**, whose source half is
@@ -510,10 +525,12 @@ or removing a node is the part with no home, listed in the preamble. The **param
 which are *Write a parameter*, *Attach a signal to a parameter* and *Take a parameter back* — the
 MIDI learn half of that item is M5.12 and the tooltip it lives in is M5.11. And the **`man / sug /
 auto` control**, which is *Set a node's authority*: the node head draws it since 2026-08-29 and the
-writer is what is left. The two deck-head key badges are what remains of the **sync toggles** item,
-which is otherwise done — two of the three sync modes are conditional rather than one, which is what
-the chip has to be able to say, and a one-off scrub shows a price rather than a disabled control
-("8 bars back — 340 ms").
+writer is what is left.
+
+**The sync toggles item is done, as far as a bay can own it.** The deck head draws both controls —
+two of the three sync modes are conditional rather than one, which is what the chip has to be able
+to say, and a one-off scrub shows a price rather than a disabled control ("8 bars back — 340 ms") —
+and the two key badges that were the remainder of it left with the two rows above, for M5.13.
 
 **The bay's prose, as tooltips.** Eight notes: *Inspector*, *A control that names no one node*,
 *The deck head, and why it is in the inspector*, *Who is holding a control*, *A knob is bound to a
@@ -527,7 +544,7 @@ renderer row and *take back* each carry one, and the parameter rows and their fa
 
 **Rows.** One carries a `plan` panel badge: *Choose where the frame goes*.
 
-**Exit.** No `plan` badge in the panel or key column of this bay's rows on
+**Exit.** No `plan` badge in the panel column of this bay's rows on
 [every operation](manual/operations.html).
 
 **What an output is, which is this bay's to build.** `RouteFrame { output: Undecided }`, and no
@@ -564,7 +581,7 @@ so this is the smallest of the nine items.
 
 **Rows.** Two carry a `plan` panel badge: *Keep a candidate*, *Put a node's previous version back*.
 
-**Exit.** No `plan` badge in the panel or key column of this bay's rows on
+**Exit.** No `plan` badge in the panel column of this bay's rows on
 [every operation](manual/operations.html).
 
 **Blocked on.** Both rows, on six items. Nothing in the list is a drawing — the row the two verdict
@@ -622,7 +639,7 @@ so every tip in this bay is written from nothing.
 
 **Rows.** Three carry a `plan` panel badge: *Feedback*, *Bloom*, *RGB shift*.
 
-**Exit.** No `plan` badge in the panel or key column of this bay's rows on
+**Exit.** No `plan` badge in the panel column of this bay's rows on
 [every operation](manual/operations.html).
 
 **Blocked on.** All three, on an L5 kind the IR does not have: `ast::Kind` is
@@ -646,7 +663,7 @@ are the rows this bay is blocked on drawing.
 *Point a lane at what it drives*, *Choose a pattern's steps and what a step is worth*, *Choose
 which pattern the sequencer plays*.
 
-**Exit.** No `plan` badge in the panel or key column of this bay's rows on
+**Exit.** No `plan` badge in the panel column of this bay's rows on
 [every operation](manual/operations.html).
 
 **Blocked on.** All five, on one thing: a pattern and a step grid, neither of which anything in this
