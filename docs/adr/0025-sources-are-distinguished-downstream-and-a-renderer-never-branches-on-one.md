@@ -5,7 +5,7 @@ status: accepted
 date: 2026-07-26
 supersedes: []
 superseded_by: []
-principles: [0021]
+principles: [0086]
 tags: [ir, render]
 ---
 
@@ -46,4 +46,4 @@ of that class.
 ## Evidence
 
 Session 2026-07-26T07:32Z–07:39Z. Standing rule:
-[P-0021](../principles/0021-a-renderer-does-not-know-how-many-sources-there-are.md).
+[P-0086](../principles/0086-a-procedure-knows-only-what-it-declares.md).

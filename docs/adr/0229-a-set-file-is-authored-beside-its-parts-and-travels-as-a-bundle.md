@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-30
 supersedes: []
 superseded_by: []
-principles: [0013, 0048, 0068, 0076, 0085]
+principles: [0013, 0048, 0076, 0085, 0086]
 tags: [store, format, console, distribution, security]
 ---
 
@@ -58,7 +58,7 @@ tested:
 - `Sources::default()` (`crates/karakuri/src/main.rs`) is one pairing —
   `examples/drift_shell.kir` with `examples/soft_points.kir` — as two `PathBuf` fields.
 - **A part may not close the gap itself.**
-  [P-0068](../principles/0068-a-kir-never-names-a-node-of-a-set.md) is the rule: *"a part that names
+  [P-0086](../principles/0086-a-procedure-knows-only-what-it-declares.md) is the rule: *"a part that names
   the parts around it is bound to one Set and stops being a library part. A corpus of procedures
   that cannot be recombined is not a corpus."* So the pairing has to live in a file that is not a
   `.kir`, and the only such file the format has is a Set file.
@@ -163,7 +163,7 @@ hashes anything.
 **Two smaller counts against it.** It hands the Library a row that cannot be listed honestly — a
 Set whose parts are somewhere else is a Set whose readiness depends on a directory the listing did
 not read. And it makes a `.kir` reachable by a name a Set chose, which is one letter away from what
-[P-0068](../principles/0068-a-kir-never-names-a-node-of-a-set.md) forbids in the other direction.
+[P-0086](../principles/0086-a-procedure-knows-only-what-it-declares.md) forbids in the other direction.
 
 **What it costs to lose it, honestly.** Duplication on the wire and in `examples/` — one copy of a
 shared part per Set that names it. It is smaller than it sounds twice over: within one file the

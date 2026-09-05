@@ -5,7 +5,7 @@ status: accepted
 date: 2026-09-03
 supersedes: []
 superseded_by: []
-principles: [0081]
+principles: [0086]
 tags: [engine, ui, operations]
 ---
 
@@ -34,7 +34,7 @@ visible, and paying for it while a larger surface is already being fed would be 
 worse of the two pictures.
 
 **What makes it acceptable is the same rule that made ADR-0246 acceptable.**
-[P-0081](../principles/0081-the-render-size-is-not-part-of-the-picture.md) — the render size is not
+[P-0086](../principles/0086-a-procedure-knows-only-what-it-declares.md) — the render size is not
 part of the picture — is why a frame drawn at one size and presented at another is the same picture
 at two resolutions rather than two pictures. Without it, scaling would be an approximation and
 rendering per output would be the only honest answer.
@@ -43,7 +43,7 @@ rendering per output would be the only honest answer.
 
 **Render once per output.** It is exact, it is the plain reading of ADR-0246, and it costs a full
 scene per output: the deck's slot targets, every slot's draw and the mix, again. Two outputs
-double the frame and four quadruple it, for a picture P-0081 says is the same picture. It buys
+double the frame and four quadruple it, for a picture P-0086 says is the same picture. It buys
 nothing the scale does not already give, and it buys it on the frame path, where the budget is.
 
 **Render at the session's canvas and let each output scale either way.** Simplest, and it upscales:

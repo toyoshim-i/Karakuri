@@ -894,8 +894,8 @@ clause — *the window gets no vote* — rested on the picture depending on the 
 work and `point_rate` between them removed. The size now belongs to the output
 ([ADR-0246](adr/0246-the-render-size-belongs-to-the-output-and-the-sessions-canvas-is-only-its-default.md)),
 and what made that safe is a rule:
-[P-0081](principles/0081-the-render-size-is-not-part-of-the-picture.md), *The render size is not
-part of the picture*.
+[P-0086](principles/0086-a-procedure-knows-only-what-it-declares.md) — a procedure does not know
+how large its target is, so the same Set at two sizes is one picture at two resolutions.
 
 ### The decisions nobody has taken
 
@@ -910,7 +910,7 @@ depended on the render size — which `point_rate` and the sub-pixel floor remov
 [ADR-0246](adr/0246-the-render-size-belongs-to-the-output-and-the-sessions-canvas-is-only-its-default.md)
 gives the size to the output,
 [ADR-0247](adr/0247-one-frame-is-rendered-and-scaled-into-each-output.md) says one render scaled into
-each, and [P-0081](principles/0081-the-render-size-is-not-part-of-the-picture.md) is the rule that
+each, and [P-0086](principles/0086-a-procedure-knows-only-what-it-declares.md) is the rule that
 keeps both safe. What was left of it — **what names an output** — blocks only M5.6 and is an
 implementation item of that bay rather than a standing question. So the risk badge's five bands and
 the whole-frame budget below are not waiting on anybody's decision; they are waiting on an output to

@@ -196,7 +196,7 @@ impl Reply {
 /// a save asks what the slot is wired with — and nothing in this process but
 /// the render loop can see any of the three. A copy kept here would be a second
 /// answer to what the run is wired with, which is the shape
-/// `docs/principles/0068-a-kir-never-names-a-node-of-a-set.md` warns about from
+/// `docs/principles/0086-a-procedure-knows-only-what-it-declares.md` warns about from
 /// the other end: *every surface that rebuilds one has to carry the names it
 /// was spelled with rather than regenerate them.*
 ///
@@ -1579,7 +1579,7 @@ fn written_procedure(args: &Value, slots: &Slots) -> Result<Operation, String> {
 /// two are not interchangeable.* A tool here that took `{layer, index}` because
 /// its five neighbours do would be spelling an edge in the one address an edge
 /// may not be spelled in, and
-/// `docs/principles/0068-a-kir-never-names-a-node-of-a-set.md` is what it would
+/// `docs/principles/0086-a-procedure-knows-only-what-it-declares.md` is what it would
 /// be breaking: the names are the *Set's* answer, and a procedure never knows
 /// them.
 ///
