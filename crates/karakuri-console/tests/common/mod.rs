@@ -311,7 +311,7 @@ pub fn implied_min(l: &Layout, id: NodeId, axis: Axis) -> f32 {
 /// and it is **not** whether the operator folded it.
 ///
 /// A node the console has set aside is out of the layout by the other bit
-/// ([ADR-0183](../../../docs/adr/0183-a-node-is-out-of-the-layout-for-two-reasons-and-they-are-two-bits.md))
+/// ([ADR-0183](../../../../docs/adr/0183-a-node-is-out-of-the-layout-for-two-reasons-and-they-are-two-bits.md))
 /// and is out of it just as completely, so `is_collapsed` here would count a
 /// phantom divider before a region that is not there and would hold a region
 /// with no extent to its 72px minimum. `karakuri-layout`'s own checker has the
