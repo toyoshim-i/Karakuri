@@ -50,5 +50,8 @@ there; only the scope of the salt is.
 
 ## Evidence
 
-Session 2026-07-25T11:50Z. Standing rule:
-[P-0008](../principles/0008-structure-and-randomness-are-independently-seeded.md).
+Session 2026-07-25T11:50Z. Standing rule: none in
+`docs/principles/`. P-0008 stated it and was retired on 2026-09-05 — `docs/ir-spec.md` states it
+normatively where the hash builtins are specified, and the second clause, that randomness comes only
+from an explicit seed stream, is
+[P-0092](../principles/0092-the-same-inputs-produce-the-same-frame.md)'s.
