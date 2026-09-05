@@ -295,11 +295,20 @@ output's rather than this bay's ([ADR-0246](adr/0246-the-render-size-belongs-to-
 
 #### M5.2 — Mixer
 
-**Rows.** Four carry a `plan` panel badge: *Choose the wipe shape, the quantum, the length*, *Fade
-a deck out or in*, *Choose which renderer of a deck is live*, *Wipe the next deck in*. Four more
-carry a `plan` key badge and no `plan` panel badge: *Gain*, *Opacity*, *Blend mode*, and *Crossfade
-to the next deck*,
-whose panel cell is a `gap` and whose only owed route is `x`.
+**Rows.** Three carry a `plan` panel badge: *Choose the wipe shape, the quantum, the length*, *Fade
+a deck out or in*, *Wipe the next deck in*. Four more carry a `plan` key badge and no `plan` panel
+badge: *Gain*, *Opacity*, *Blend mode*, and *Crossfade to the next deck*, whose panel cell is a
+`gap` and whose only owed route is `x`.
+
+***Choose which renderer of a deck is live* was counted here and is M5.5's**, moved on 2026-09-05.
+It was never a control of this bay: the mock draws `rend-row` in the **Inspector** and nowhere in
+the Mixer, and [the console page](manual/console.html) describes it and *Composite a deck's
+renderers* as one thing — *"Composite is the deck's, and the renderer chips below are what it turns
+into a choice"* — while that other half was already counted under M5.5. Split across two
+sub-milestones, the chips would have been built first and meant nothing until the toggle above them
+existed. Its `plan` key badge (`r`) goes with it, and is
+[ADR-0259](adr/0259-the-keyboard-is-addressed-to-the-bay-that-has-focus-and-a-global-letter-is-a-convenience-or-the-operators-own.md)'s
+rather than that bay's.
 
 **Exit.** No `plan` badge in the panel or key column of this bay's rows on
 [every operation](manual/operations.html).
@@ -421,11 +430,14 @@ notes against what the tips already say.
 
 #### M5.5 — Inspector
 
-**Rows.** Nine carry a `plan` panel badge: *Write a parameter*, *Attach a signal to a parameter*,
+**Rows.** Ten carry a `plan` panel badge: *Write a parameter*, *Attach a signal to a parameter*,
 *Take a parameter back*, *Element capacity, seeds, the camera*, *Read one node's source*, *Check
 and write one node's source*, *Keep what a deck is playing*, *Set a node's authority*, *Composite a
-deck's renderers*. Two more carry a `plan` key badge only, both at the deck head: *Set a deck's
-sync mode* and *Scrub a deck a quarter beat*.
+deck's renderers*, and ***Choose which renderer of a deck is live***, moved here from M5.2 on
+2026-09-05 because the mock draws its chips in this bay directly under *Composite*, which this bay
+already owned, and the console page describes the two as one control and the choice it turns into.
+Two more carry a `plan` key badge only, both at the deck head: *Set a deck's sync mode* and *Scrub a
+deck a quarter beat*.
 
 **Exit.** No `plan` badge in the panel or key column of this bay's rows on
 [every operation](manual/operations.html).
