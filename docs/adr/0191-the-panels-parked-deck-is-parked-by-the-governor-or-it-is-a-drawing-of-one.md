@@ -124,7 +124,7 @@ already does exactly this and is right to. It loses because the example is not a
 presentation, it is the program: a panel showing a parked chip that no `Deck` ever parked is a
 drawing of a state the engine never entered, and the next person to change `Deck::govern` would
 break the real path with the picture still looking correct.
-[P-0089](../principles/0089-a-check-you-have-not-watched-fail-is-guessing.md) is the same
+`docs/contributing.md` §3 (P-0089 until it was retired on 2026-09-05) is the same
 argument from the other side — a test owns its inputs, and this window's input is an engine. The
 tempting version is not the `Strip`, which nobody would write here, but
 `HotSwap::set_measured_cost`: it is public, it is documented for *"a caller that has a number from

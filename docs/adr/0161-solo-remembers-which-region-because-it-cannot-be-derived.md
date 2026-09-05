@@ -39,7 +39,7 @@ look possible again has to make that test fail first.
 that names a node outside the arena is refused at load, as invariant 6 of `check_structure` with an
 error of its own, because `soloed()` hands that id to a caller that will immediately ask for its
 rectangle — this is
-[P-0089](../principles/0089-a-check-you-have-not-watched-fail-is-guessing.md) in the same
+`docs/contributing.md` §3 (P-0089 until it was retired on 2026-09-05) in the same
 place [ADR-0158](0158-a-saved-arrangement-that-disagrees-with-itself-is-refused-not-repaired.md)
 put the rest of the structural checks.
 

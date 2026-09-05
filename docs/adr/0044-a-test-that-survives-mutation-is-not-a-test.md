@@ -50,5 +50,5 @@ Carried forward into every subsequent brief, verbatim:
 
 ## Evidence
 
-Session 2026-07-31T12:18Z, 15:37Z, 16:00Z. Sharpens
-[P-0089](../principles/0089-a-check-you-have-not-watched-fail-is-guessing.md).
+Session 2026-07-31T12:18Z, 15:37Z, 16:00Z. Sharpens `docs/contributing.md` §3, *A test is watched to fail before it is kept*
+— P-0089 stated it and was retired on 2026-09-05.

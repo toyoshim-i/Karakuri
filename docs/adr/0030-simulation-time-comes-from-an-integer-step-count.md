@@ -67,5 +67,5 @@ must not be knowingly wrong.)
 ## Evidence
 
 Session 2026-07-27T03:58Z. Standing rules:
-[P-0092](../principles/0092-the-same-inputs-produce-the-same-frame.md),
-[P-0089](../principles/0089-a-check-you-have-not-watched-fail-is-guessing.md).
+[P-0092](../principles/0092-the-same-inputs-produce-the-same-frame.md), and `docs/contributing.md` §3, *A test is watched to fail before it is kept*
+for the testing half — P-0089 stated that and was retired on 2026-09-05.

@@ -647,8 +647,8 @@ proc probe {
 /// block without a rate compiles clean, builds a Set, and then creates zero
 /// elements every step forever, which reads as a procedure that draws
 /// nothing rather than as a mistake. That is exactly the shape this pass
-/// exists to refuse — see
-/// `docs/principles/0089-a-check-you-have-not-watched-fail-is-guessing.md`.
+/// exists to refuse — see `docs/contributing.md` §3, *A test is watched to
+/// fail before it is kept*.
 #[test]
 fn a_spawn_block_without_a_spawn_rate_param_is_rejected() {
     let src = r#"

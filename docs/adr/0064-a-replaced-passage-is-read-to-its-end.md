@@ -42,7 +42,7 @@ of a paragraph is where the contradiction survives, because that is where nobody
   *a confident wrong automatic judgement is worse than not judging*
   ([P-0084](../principles/0084-a-confident-wrong-automatic-judgement-is-worse-than-not-judging.md)),
   and *a test can pass against the exact defect it is named for* — eight found in this milestone
-  ([P-0089](../principles/0089-a-check-you-have-not-watched-fail-is-guessing.md)).
+  (`docs/contributing.md` §3; P-0089 until it was retired on 2026-09-05).
 
 ## Evidence
 
