@@ -5,7 +5,7 @@ status: accepted
 date: 2026-07-26
 supersedes: []
 superseded_by: []
-principles: [0020]
+principles: [0085]
 tags: [process, ir]
 ---
 
@@ -47,4 +47,4 @@ a procedure and nothing else moves.
 ## Evidence
 
 Session 2026-07-26T02:23Z. Standing rule:
-[P-0020](../principles/0020-the-cheapest-correct-revision-is-a-parameter-write.md).
+[P-0085](../principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md).

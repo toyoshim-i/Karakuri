@@ -18,7 +18,7 @@ The ones a reader of this document needs first:
 - [Compaction preserves order](principles/0003-compaction-preserves-order.md)
 - [A live Set is never mutated in place](principles/0004-a-live-set-is-never-mutated-in-place.md)
 - [A swap happens on a frame boundary, and an over-budget Set rolls back on its own](principles/0005-a-swap-happens-on-a-frame-boundary-and-an-over-budget-set-rolls-back-on-its-own.md)
-- [The workspace stays closed to Rust](principles/0006-the-workspace-stays-closed-to-rust.md)
+- [Take the mechanism that exists, and pay the bill now](principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md)
 
 Why each is the way it is — and what was rejected to get there — is in
 [docs/adr/](adr/).

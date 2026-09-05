@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-27
 supersedes: []
 superseded_by: []
-principles: [0074, 0058]
+principles: [0074, 0085]
 tags: [midi, vocabulary, surfaces]
 ---
 
@@ -78,7 +78,7 @@ named, each with somewhere to go, and the nine that were already destinations st
 This is what the crate's own design already says to do about a bad line — every complaint carries a
 line number, and *one bad line is a line an operator can fix*. Breaking the format is permitted
 before v1 and has to be deliberate
-([P-0058](../principles/0058-before-v1-compatibility-is-a-bill-not-an-argument.md)); this is the
+([P-0085](../principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md)); this is the
 deliberate part.
 
 ### 2. The pad count is the bill, and it is written into the example

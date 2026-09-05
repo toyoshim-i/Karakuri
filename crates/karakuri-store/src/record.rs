@@ -48,7 +48,7 @@
 //! spelled `offset_beats` and collided with the operator's latency offset; it is
 //! `scrub_beats` now, on disk as well as in Rust, because before v1 the bill is a bill and
 //! not an argument — see that variant's own documentation and
-//! `docs/principles/0058-before-v1-compatibility-is-a-bill-not-an-argument.md`. What made
+//! `docs/principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md`. What made
 //! that affordable and `slot` not is the size of the bill, not a rule against the move.
 //!
 //! **The one collision there was is settled, and it is the metadata name that
@@ -880,7 +880,7 @@ pub enum Record {
     /// `docs/adr/0117-before-v1-pay-the-cost-of-changing-toward-the-ideal.md`
     /// refused for `field(p)`: two spellings for one thing, forever. Before v1
     /// the bill is a bill and not an argument
-    /// (`docs/principles/0058-before-v1-compatibility-is-a-bill-not-an-argument.md`),
+    /// (`docs/principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md`),
     /// and the bill here is loud rather than silent — a stream carrying
     /// `offset_beats` fails its line with serde's missing-field error, not with
     /// a scrub silently read as zero.

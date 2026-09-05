@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-21
 supersedes: []
 superseded_by: []
-principles: [0058]
+principles: [0085]
 tags: [process]
 ---
 
@@ -39,4 +39,4 @@ point the bill starts being an argument.
 ## Evidence
 
 Session 2026-08-21T06:26Z–06:28Z. Standing rule:
-[P-0058](../principles/0058-before-v1-compatibility-is-a-bill-not-an-argument.md).
+[P-0085](../principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md).

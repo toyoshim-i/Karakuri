@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-30
 supersedes: []
 superseded_by: []
-principles: [0019, 0027, 0061, 0076]
+principles: [0027, 0061, 0076, 0085]
 tags: [console, ui]
 ---
 
@@ -110,7 +110,7 @@ so before it is pressed rather than after.
 
 **Everything in it is `.lib-row` inside `.lib-list` padding, with `.lib-foot`'s count under it where
 the window is too short for the list.** That is
-[P-0019](../principles/0019-prefer-the-mechanism-that-already-exists.md) taken literally: a menu of
+[P-0085](../principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md) taken literally: a menu of
 filed names *is* a list of names, the console already draws exactly one of those in the Library bay,
 and a second set of numbers for the same box is a second answer waiting to disagree. The foot is
 [P-0027](../principles/0027-a-silently-wrong-image-loses-to-a-loud-failure.md) — a list that ends

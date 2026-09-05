@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-30
 supersedes: []
 superseded_by: []
-principles: [0013, 0019, 0048, 0068, 0076]
+principles: [0013, 0048, 0068, 0076, 0085]
 tags: [store, format, console, distribution, security]
 ---
 

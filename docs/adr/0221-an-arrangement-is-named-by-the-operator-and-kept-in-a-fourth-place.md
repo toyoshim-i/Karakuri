@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-29
 supersedes: []
 superseded_by: []
-principles: [0019, 0048, 0053]
+principles: [0048, 0053, 0085]
 tags: [console, store, format]
 ---
 
@@ -65,7 +65,7 @@ the fallback was written for a caller that does not exist, and it is half of why
 a stamped save would keep arrangements nothing in this program can put back, since there is no
 listing control to show an operator the stamp picked for them.)*
 
-[P-0019](../principles/0019-prefer-the-mechanism-that-already-exists.md) is most of the argument:
+[P-0085](../principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md) is most of the argument:
 the naming rule, the stamp fallback, the refusal that keeps a name to one path component
 (`mcp::checked_id`) and the listing that skips a name the layout does not claim all exist and were
 built for a Set. Nothing here is new machinery; it is the same handle on a different kind of file.

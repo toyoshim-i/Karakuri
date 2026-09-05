@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-30
 supersedes: []
 superseded_by: []
-principles: [0013, 0019, 0028, 0048]
+principles: [0013, 0028, 0048, 0085]
 tags: [store, format, console, sequencer]
 ---
 
@@ -98,7 +98,7 @@ named by the operator, one path component, a place of their own under the store 
 store does not parse.
 
 **Following that record rather than inventing a shape is most of this decision.** It is
-[P-0019](../principles/0019-prefer-the-mechanism-that-already-exists.md) taken at the width of a
+[P-0085](../principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md) taken at the width of a
 file format: the naming rule, the refusal that keeps a name to one path component, the atomic
 overwrite that makes saving over a name mean saving over it, the listing that skips what does not
 claim to be one, and the `Store::open` that establishes a directory an older build did not write —

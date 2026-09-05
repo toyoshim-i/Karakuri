@@ -5,7 +5,7 @@ status: accepted
 date: 2026-09-01
 supersedes: []
 superseded_by: []
-principles: [0019, 0036, 0051, 0067, 0068]
+principles: [0036, 0051, 0067, 0068, 0085]
 tags: [ir, engine, render, console, docs]
 ---
 
@@ -103,7 +103,7 @@ in draw order, the fold is `crate::node::Merge` and the compositing is fixed
 a target to be allocated by asking for one.
 
 The mechanism that already exists is `uses` plus `edge`
-([P-0019](../principles/0019-prefer-the-mechanism-that-already-exists.md)), and feedback needs it
+([P-0085](../principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md)), and feedback needs it
 extended to a type it has not got. The extension changes what the graph builder allocates, not what a
 uniform holds. **That is the whole of why this is not a knob**: the answer decides passes and
 allocations.

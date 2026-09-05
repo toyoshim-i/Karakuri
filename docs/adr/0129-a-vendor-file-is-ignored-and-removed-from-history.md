@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-22
 supersedes: [0127]
 superseded_by: []
-principles: [0043, 0006]
+principles: [0043, 0085]
 tags: [process]
 ---
 

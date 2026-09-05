@@ -5,7 +5,7 @@ status: accepted
 date: 2026-09-01
 supersedes: []
 superseded_by: []
-principles: [0018, 0019, 0023, 0027, 0031, 0044, 0048, 0066]
+principles: [0018, 0023, 0027, 0031, 0044, 0048, 0066, 0085]
 tags: [store, console, mcp, hot-swap, docs]
 ---
 
@@ -196,7 +196,7 @@ Tempting while the mechanism is being taken away, and it is refused as **prematu
 Nothing has asked for it: the shared file was never a control an operator reached for, it was what
 happened when they named one preset twice, and the only evidence about it is one report of it going
 wrong. Designing the deliberate version now would be choosing a spelling on no evidence, which is
-[P-0019](../principles/0019-prefer-the-mechanism-that-already-exists.md)'s *"Before a feature gets a
+[P-0085](../principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md)'s *"Before a feature gets a
 subsystem, check what it is made of"* read the other way round. It stays open below.
 
 ## Consequences

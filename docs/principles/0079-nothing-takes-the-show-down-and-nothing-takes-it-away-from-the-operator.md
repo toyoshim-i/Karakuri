@@ -150,7 +150,7 @@ does not get to remove the look or hide it behind a flag. It loses because choos
 candidates cannot be done blind, and a rule that protects a performance cannot be used to remove
 what the performance is played with. The bill is paid and written down
 ([ADR-0072](../adr/0072-auditioning-adds-a-draw-and-never-a-step.md);
-[P-0058](0058-before-v1-compatibility-is-a-bill-not-an-argument.md) is the form of the answer). This
+[P-0085](0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md) is the form of the answer). This
 case was P-0070 until 2026-09-02, which named one output switched away from the mix; the mechanism
 was retired and the requirement re-recorded as the property, and what this rule loses to is the
 requirement

@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-30
 supersedes: []
 superseded_by: []
-principles: [0005, 0019, 0072]
+principles: [0005, 0072, 0085]
 tags: [engine, console, store, hot-swap]
 ---
 
@@ -48,7 +48,7 @@ library Set's procedures into the scratch and sends a `watch::Aim`; it touches n
 comment says what that buys: *"Everything after this line is the path a save already takes"*. The
 library gets the trial, the verdict and the rollback for nothing, and no second route into a slot is
 opened —
-[P-0019](../principles/0019-prefer-the-mechanism-that-already-exists.md), where the mechanism that
+[P-0085](../principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md), where the mechanism that
 already exists is the file watcher.
 
 Both halves of the mechanism below were **forced by the code rather than chosen**, which is why they
