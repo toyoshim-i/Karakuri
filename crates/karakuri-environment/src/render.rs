@@ -11,7 +11,7 @@
 //! would be a different feature — looking at one candidate on its own is what
 //! the console's four deck preview cells do on screen, and the deck draws every
 //! slot into a target of its own on every frame whatever its residency
-//! (`docs/principles/0080-an-operator-can-see-a-slots-own-material-without-putting-it-on-air.md`),
+//! (`docs/adr/0258-the-look-comes-before-the-fader-so-a-cell-draws-every-slot-and-says-which-nothing-it-is.md`),
 //! so a per-slot file is `Deck::slot_target` and a second present pass and
 //! changes nothing here. What the mix must not become is
 //! a fourth definition of "the output"; there is one, and this is it.

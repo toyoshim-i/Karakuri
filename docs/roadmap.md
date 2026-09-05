@@ -816,9 +816,11 @@ was one of the decisions nobody had taken: the panel aims **a sink per cell**, e
 the wrong letter. `Deck::set_preview` and `Deck::preview` are **deleted** — that question is
 answered, in
 [ADR-0241](adr/0241-auditioning-survives-the-control-that-was-retired-and-is-re-recorded-as-a-property.md),
-which also retired P-0070 and re-recorded the requirement as
-[P-0080](principles/0080-an-operator-can-see-a-slots-own-material-without-putting-it-on-air.md),
-*An operator can see a slot's own material without putting it on air*.
+which also retired P-0070 and re-recorded the requirement as P-0080,
+*An operator can see a slot's own material without putting it on air* — itself retired on
+2026-09-05, because every question it decided was inside auditioning and it had to name the crate it
+bound. The requirement is stated in
+[ADR-0258](adr/0258-the-look-comes-before-the-fader-so-a-cell-draws-every-slot-and-says-which-nothing-it-is.md).
 
 **Residency does not gate a cell, and the two gaps that paragraph used to name are gone.** `Deck`
 draws every slot into its own target on every frame, whatever its residency, and the field that
@@ -832,11 +834,19 @@ written for the person playing the instrument does not reach it. **The prose tha
 preview cells are off at a time* paragraph is gone, the doc on `ON_AIR` reads *"every cell draws its
 own slot whatever its residency"*, and the deck's fullness doc says each resting slot is *"still
 drawn into its own cell"*. P-0093 is met here and this paragraph said otherwise until 2026-09-03.
-**What P-0080 still records under *Where it is not met* is one clause**: the rejected build's cell —
-black, or the sentence saying what went wrong. [The console page](manual/console.html) specifies it
-under *What a deck preview cell shows, and when* and says of it *"neither can happen yet, so nothing
-draws either word"*, which is the claim to check before drawing anything: the panel watches every
-slot's `.kir` pair now, so a build can be refused while it is running.
+**One clause is still owed, and
+[ADR-0258](adr/0258-the-look-comes-before-the-fader-so-a-cell-draws-every-slot-and-says-which-nothing-it-is.md)
+carries it**: the rejected build's cell — black, or the sentence saying what went wrong. [The console
+page](manual/console.html) specifies it under *What a deck preview cell shows, and when* and says of
+it *"neither can happen yet, so nothing draws either word"*. **Half of that reason is wrong and the
+conclusion is not.** The panel watches every slot's `.kir` pair, so a build can be refused while a
+slot is running and the Staging lane draws that verdict; what cannot happen is the *cell* the page
+describes, because a refused build installs nothing — a failed compile makes no `Request` and a
+rolled-back trial leaves the previous Set running — so the honest picture after a rejection is the
+material that is still there. `crates/karakuri-engine/tests/deck.rs`'s
+`a_rejected_build_shows_what_is_still_running_and_a_cold_slot_shows_black` asserts both ends of it.
+**What is owed is the page's sentence**, and the open question under it is whether a cell ever
+carries a diagnostic or whether saying what went wrong stays the Staging lane's.
 
 **The panel serves MCP.** `karakuri --mcp PORT` binds `127.0.0.1:PORT` and runs
 `karakuri_environment::mcp::serve` with the same `Opening` the four bay-head pills write, so a pill

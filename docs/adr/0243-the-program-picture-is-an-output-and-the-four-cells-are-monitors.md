@@ -18,7 +18,7 @@ operation that swapped the Program picture from the mix to one deck. The reason 
 redundancy with the four cells. The reason it should have given is that **once material is on the
 main output it is the broadcast of the final result** and never a preview of anything — which is
 recorded in
-[P-0080](../principles/0080-an-operator-can-see-a-slots-own-material-without-putting-it-on-air.md)
+P-0080
 and annotated onto ADR-0240.
 
 That sentence says something about the picture as well as about the retired control, and the Program

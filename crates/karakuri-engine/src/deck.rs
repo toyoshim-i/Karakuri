@@ -236,13 +236,13 @@
 //! `docs/adr/0240-the-output-shows-the-mix-and-residency-keys-belong-to-the-mixer.md`
 //! retired that operation — the picture is the master mix and nothing swaps it
 //! — which left the field with no writer and its branches unreachable. What
-//! `docs/principles/0080-an-operator-can-see-a-slots-own-material-without-putting-it-on-air.md`
+//! `docs/adr/0258-the-look-comes-before-the-fader-so-a-cell-draws-every-slot-and-says-which-nothing-it-is.md`
 //! asks for is not a chooser at all: *every* slot's own material, always, on a
 //! surface of its own. One slot at a time is the wrong instrument for that, so
 //! the field is gone and the draw is unconditional.
 //!
 //! **A slot's own target is fader-free by construction**, which is the rest of
-//! what P-0080 asks for. `gain`, `opacity`, `blend` and `mask` are applied in
+//! what ADR-0258 asks for. `gain`, `opacity`, `blend` and `mask` are applied in
 //! the composite and nowhere else, so what a slot renders into its target is
 //! the level and the colour the material arrives at — the input to setting a
 //! fader rather than the output of having set one. A surface that samples
@@ -963,7 +963,7 @@ impl Deck {
     /// so "the drawn ones" would be all of them. A level is what a fader is
     /// read against and a fader acts on what reaches the mix, so an off-air
     /// slot has no level to give — what it has is a monitor cell, which is
-    /// the picture rather than the number and is what P-0080 asks for.
+    /// the picture rather than the number and is what ADR-0258 asks for.
     ///
     /// A level is a few frames old and says so: [`Level::frames_behind`]. What
     /// it is never is a reading of an image the slot is no longer showing; see
@@ -1898,7 +1898,7 @@ impl Frame<'_> {
             // steps.** See "Every slot is drawn; only a Live slot is mixed" in
             // the module doc. The draw is unconditional because the console
             // shows every slot's own material continuously
-            // (`docs/principles/0080-an-operator-can-see-a-slots-own-material-without-putting-it-on-air.md`);
+            // (`docs/adr/0258-the-look-comes-before-the-fader-so-a-cell-draws-every-slot-and-says-which-nothing-it-is.md`);
             // what decides whether the mix folds this slot is `live` on its
             // edge, written below and read from the same `effective`.
             match slot.effective {

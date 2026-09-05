@@ -25,6 +25,16 @@ tags: [process, docs, live, mcp]
 > that existed on 2026-09-01 and is what the argument is about; the list is what is left of them.
 > Correcting the number instead would change what this record argued, which is the one thing a
 > pointer swap may not do ([ADR-0257](0257-a-pointer-inside-a-records-prose-is-metadata-too.md)).
+>
+> **P-0080 is retired too** — into
+> [ADR-0258](0258-the-look-comes-before-the-fader-so-a-cell-draws-every-slot-and-says-which-nothing-it-is.md),
+> *The look comes before the fader, so a cell draws every slot and says which nothing it is* — and
+> both mentions of it below are unlinked with the rest. The cost sentence, *knowingly adds unbudgeted
+> risk to the live path … and keeps the control*, is true clause for clause of that record, which is
+> why `885aa24` re-pointed it at P-0080 in the first place. What a pointer swap may not do is make a
+> record written on 2026-08-31 read as having consulted one written a week later in the commit that
+> moved the link, which is the fault `885aa24` was fixing elsewhere in this directory. The number
+> resolves in [INDEX.md](INDEX.md).
 
 > **Annotated 2026-08-31, later the same day.** The MCP scope this record treats as settled — and
 > whose contradiction with the manual's rule 01 it left in *What this leaves undone* for the
@@ -41,7 +51,7 @@ tags: [process, docs, live, mcp]
 > **Annotated 2026-09-02.** The principle this record cites as the case where P-0094 loses —
 > P-0070, *Auditioning is a prerequisite, not a convenience* — was retired that day and
 > re-recorded as
-> [P-0080](../principles/0080-an-operator-can-see-a-slots-own-material-without-putting-it-on-air.md),
+> P-0080,
 > *An operator can see a slot's own material without putting it on air*
 > ([ADR-0241](0241-auditioning-survives-the-control-that-was-retired-and-is-re-recorded-as-a-property.md)).
 > **The argument below is untouched and read it as written**: what P-0094 loses to is the
@@ -195,7 +205,7 @@ failure this rule names, and *go on air* is the case P-0090 had already settled:
 instrument, the one operation that cannot be refused."*
 
 **And it is written with the case where it loses.**
-[P-0080](../principles/0080-an-operator-can-see-a-slots-own-material-without-putting-it-on-air.md)
+P-0080
 knowingly adds unbudgeted risk to the live path — an audition can roll back an unrelated slot's build
 ([ADR-0072](0072-auditioning-adds-a-draw-and-never-a-step.md)) — and keeps the control, because
 choosing between candidates cannot be done blind. A rule protecting a performance may not be used to

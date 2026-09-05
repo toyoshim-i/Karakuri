@@ -11,6 +11,19 @@ tags: [docs, process, ui, engine]
 
 # Auditioning survives the control that was retired, and is re-recorded as a property
 
+> **Annotated 2026-09-05.** **P-0080, the file this record wrote, is retired.** Every question it
+> decided is inside auditioning and it had to state the crate it bound, which is a product
+> requirement rather than a rule other questions are decided against
+> ([ADR-0249](0249-a-principle-is-what-decides-a-question-it-does-not-mention.md)). The requirement
+> itself did not move; only where it is written down did. It is
+> [ADR-0258](0258-the-look-comes-before-the-fader-so-a-cell-draws-every-slot-and-says-which-nothing-it-is.md),
+> which carries the three steps in order, the fader that is not in the monitor, the residency gate
+> this record left open and since closed, *never nothing*, and the four-draw bill. **What this record
+> decided is untouched** — the mentions of P-0080 below name the file that existed then and are
+> unlinked rather than re-pointed
+> ([ADR-0257](0257-a-pointer-inside-a-records-prose-is-metadata-too.md)); the number resolves in
+> [INDEX.md](INDEX.md).
+
 > **Annotated 2026-09-02, later the same day, after the maintainer read it.** **Two corrections, and
 > the record stands as history in both.**
 >
@@ -19,7 +32,7 @@ tags: [docs, process, ui, engine]
 > not a gap. The command line is test tooling and the instrument's principles do not bind it —
 > [ADR-0242](0242-the-command-line-is-test-tooling-and-the-instruments-principles-do-not-bind-it.md)
 > — and it has been removed from
-> [P-0080](../principles/0080-an-operator-can-see-a-slots-own-material-without-putting-it-on-air.md).
+> P-0080.
 > The second gap is real and is now the only one: the console's four cells are gated on
 > `Residency::Live` in `Engine::aim`, so the off-air candidate is the one nothing draws. The
 > machinery kept unreachable below is kept for exactly that.
@@ -54,7 +67,7 @@ The requirement had not moved. Only the shape it was written in had.
 ## Decision
 
 **Retire P-0070 and re-record the rule as
-[P-0080](../principles/0080-an-operator-can-see-a-slots-own-material-without-putting-it-on-air.md),
+P-0080,
 *An operator can see a slot's own material without putting it on air*.** Delete the file, do not
 reuse the number, record the retirement in [INDEX.md](INDEX.md), and re-point what cited it —
 `docs/contributing.md` §4 and

@@ -2480,7 +2480,7 @@ proc wash {
     }
 
     // ---------------------------------------------------------------------------
-    // P-0080: an operator can see a slot's own material without putting it on air
+    // ADR-0258: an operator sees a slot's own material without putting it on air
     //
     // Three tests, one per case the requirement names, each asserting on the
     // slot's own target — `Deck::slot_target` — because that is the texture a
@@ -2491,8 +2491,8 @@ proc wash {
     /// **A running slot's own target holds its own texels, with no fader on
     /// them.**
     ///
-    /// The first of P-0080's three clauses, and the one that decides where a
-    /// monitor may sample from. `gain`, `opacity`, `blend` and `mask` are edge
+    /// ADR-0258's *the fader is not in the monitor*, and the clause that decides
+    /// where a monitor may sample from. `gain`, `opacity`, `blend` and `mask` are edge
     /// properties applied in `Composite`, so a slot's target is upstream of all
     /// four — which is what lets a cell show *the level the material arrives at*
     /// rather than the level the operator has already set.
@@ -2559,8 +2559,8 @@ proc wash {
     /// **An off-air slot is drawn into its own target every frame, and never
     /// stepped.**
     ///
-    /// P-0080's second and third clauses together: *whatever its residency*, and
-    /// *without changing it*. The slot an operator most needs to look at is the
+    /// ADR-0258's *residency does not gate a cell* and *looking adds a draw and
+    /// never a step*, together. The slot an operator most needs to look at is the
     /// one that is not on air yet, and the look may not move it
     /// ([P-0082](../../../docs/principles/0082-looking-never-writes-back.md)).
     ///
@@ -2615,7 +2615,7 @@ proc wash {
                 lit(&readback(&gpu, deck.slot_target(1))) > 100,
                 "a slot at {residency:?} drew nothing into its own target on the frame \
                  after a resize, so its console cell is dark at exactly the moment an \
-                 operator is deciding whether to bring the slot up (P-0080)"
+                 operator is deciding whether to bring the slot up (ADR-0258)"
             );
 
             // And the look did not move it. `Allocated` may not have stepped at
@@ -2656,7 +2656,7 @@ proc wash {
     /// **A slot whose build was rejected shows what is still running, and a slot
     /// with nothing behind the draw shows black.**
     ///
-    /// The two failure cases P-0080 has to answer honestly, and the answer is not
+    /// The two failure cases ADR-0258 has to answer honestly, and the answer is not
     /// the same for both because the states are not the same.
     ///
     /// **A rejected build changes nothing** — `swap.rs` is explicit that the
@@ -3110,7 +3110,7 @@ proc wash {
     /// of it is identical. Deck-of-one against deck-of-four is what a slot costs,
     /// which is dominated by the Set and not by the mix.
     ///
-    /// **The last pair is what P-0080 costs**, and it is why it is measured here
+    /// **The last pair is what ADR-0258 costs**, and it is why it is measured here
     /// rather than argued in a comment. Every slot is drawn on every frame so
     /// that its console cell has something in it, which on the panel's own deck
     /// is one Live slot and three off-air draws. `Residency::Allocated` is the
@@ -3245,7 +3245,7 @@ proc wash {
         summarize("deck of four", four);
         summarize("four, one Live", one_live);
         eprintln!(
-            "  `deck of one` is what `four, one Live` cost before every slot was drawn: \n               the three off-air slots did nothing at all on the frame path. The gap between \n               those two lines is what P-0080 costs on this machine."
+            "  `deck of one` is what `four, one Live` cost before every slot was drawn: \n               the three off-air slots did nothing at all on the frame path. The gap between \n               those two lines is what ADR-0258 costs on this machine."
         );
         eprintln!();
     }

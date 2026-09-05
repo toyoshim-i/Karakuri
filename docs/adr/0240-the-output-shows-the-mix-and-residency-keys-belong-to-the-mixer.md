@@ -16,7 +16,7 @@ tags: [operations, ui]
 > rule was *one slot on the output in place of the mix*, and its *Where it holds* named
 > `Deck::set_preview` and the `v` key. P-0070 is retired and the requirement re-recorded as the
 > property,
-> [P-0080](../principles/0080-an-operator-can-see-a-slots-own-material-without-putting-it-on-air.md),
+> P-0080,
 > *An operator can see a slot's own material without putting it on air*
 > ([ADR-0241](0241-auditioning-survives-the-control-that-was-retired-and-is-re-recorded-as-a-property.md)).
 > The front matter above is re-pointed to it, which is metadata rather than a change to what this
@@ -31,7 +31,7 @@ tags: [operations, ui]
 > argument for it does not. The operation should never have existed: **once material is on the main
 > output it is the broadcast of the final result, not a preview of it**, so putting a slot there was
 > never a look at a candidate and redundancy was never the objection. How it got there is named in
-> [P-0080](../principles/0080-an-operator-can-see-a-slots-own-material-without-putting-it-on-air.md):
+> P-0080:
 > a design made for the console, which has a picture and four cells, was bent to fit the command
 > line, which has one window. What follows from the corrected reason is
 > [ADR-0243](0243-the-program-picture-is-an-output-and-the-four-cells-are-monitors.md) — the picture
