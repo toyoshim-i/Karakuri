@@ -61,8 +61,7 @@ crossing FFI cannot be caught; treating an absent input as zero, which freezes t
 instead of letting it free-run
 ([P-0084](0084-a-confident-wrong-automatic-judgement-is-worse-than-not-judging.md)); and a measurement that silently falls
 back, because `0.0 ms` reads as a very fast shader and promotes what nobody has priced
-([P-0012](0012-a-measurement-carries-how-it-was-taken.md),
-[P-0037](0037-check-a-measurement-against-another-measurement.md)).
+([P-0088](0088-no-number-is-trusted-further-than-its-instrument-has-been-checked.md)).
 
 **And it rules out the mirror of that: buying the safety back from the operator.** A confirmation
 before a live action, a lock while something is pending, a mode that will not let the show be put in
@@ -198,17 +197,16 @@ covers.** These are instances and were written before it: the three answers in
 [P-0001](0001-nothing-allocates-or-compiles-a-shader-on-the-render-thread.md),
 [P-0004](0004-a-live-set-is-never-mutated-in-place.md),
 [P-0005](0005-a-swap-happens-on-a-frame-boundary-and-an-over-budget-set-rolls-back-on-its-own.md),
-[P-0012](0012-a-measurement-carries-how-it-was-taken.md),
 [P-0027](0027-a-silently-wrong-image-loses-to-a-loud-failure.md),
-[P-0037](0037-check-a-measurement-against-another-measurement.md),
 [P-0043](0043-nothing-external-enters-the-render-process.md),
 [P-0067](0067-the-language-is-bounded-so-a-procedure-can-be-priced-before-it-runs.md),
 [P-0069](0069-the-three-clocks-never-collapse-into-each-other.md),
 [P-0072](0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md),
 [P-0077](0077-continuous-motion-is-how-a-stopped-panel-announces-itself.md),
 [P-0082](0082-looking-never-writes-back.md),
-[P-0084](0084-a-confident-wrong-automatic-judgement-is-worse-than-not-judging.md)
-and [P-0087](0087-name-the-property-never-the-shape.md); the never-from-the-operator
+[P-0084](0084-a-confident-wrong-automatic-judgement-is-worse-than-not-judging.md),
+[P-0087](0087-name-the-property-never-the-shape.md)
+and [P-0088](0088-no-number-is-trusted-further-than-its-instrument-has-been-checked.md); the never-from-the-operator
 clause in [P-0033](0033-the-governor-never-takes-a-live-slot-off-air.md),
 [P-0052](0052-publishing-is-a-choice-of-attention-not-of-authority.md),
 [P-0076](0076-a-surface-owns-the-affordance-never-the-authority.md) and

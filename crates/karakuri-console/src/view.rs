@@ -7489,7 +7489,7 @@ impl MasterRow {
 /// **The widest is measured and not assumed**: all ten `d.dd` strings are laid
 /// out and the widest of them wins, because whether `0.00` is wider than
 /// `1.11` is a fact about whatever font the room is drawn in and not one to
-/// take on trust ([P-0055](../../../docs/principles/0055-this-machine-is-not-the-reference.md)).
+/// take on trust ([P-0088](../../../docs/principles/0088-no-number-is-trusted-further-than-its-instrument-has-been-checked.md)).
 /// Ten cached layouts of four characters, on a pointer event and on a frame.
 ///
 /// **A reading outside `[0, 1]` is the one case it does not cover**, and it is

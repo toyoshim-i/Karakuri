@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-01
 supersedes: []
 superseded_by: []
-principles: [0012]
+principles: [0088]
 tags: [signal, engine]
 ---
 
@@ -59,4 +59,4 @@ becomes a clock; it **corrects** one.
 ## Evidence
 
 Session 2026-08-01T06:49Z–06:57Z. Sharpens
-[P-0012](../principles/0012-a-measurement-carries-how-it-was-taken.md).
+[P-0088](../principles/0088-no-number-is-trusted-further-than-its-instrument-has-been-checked.md).

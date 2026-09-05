@@ -986,7 +986,7 @@ proc wide_points {
     /// during, and after. **Printed, not asserted** — see the module doc. Run with
     /// `cargo test -p karakuri-engine --test hot_swap -- --nocapture` to see them;
     /// they print labelled as the host-clock figures they are — see
-    /// `docs/principles/0012-a-measurement-carries-how-it-was-taken.md`.
+    /// `docs/principles/0088-no-number-is-trusted-further-than-its-instrument-has-been-checked.md`.
     #[test]
     fn frame_times_across_a_swap_are_measured_and_reported() {
         let (capacity, size) = REAL;

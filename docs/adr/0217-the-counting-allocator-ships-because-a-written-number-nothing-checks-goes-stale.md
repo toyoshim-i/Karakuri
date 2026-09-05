@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-29
 supersedes: []
 superseded_by: []
-principles: [0012, 0016, 0026, 0036]
+principles: [0016, 0026, 0036, 0088]
 tags: [performance, architecture, ui]
 ---
 
@@ -60,7 +60,7 @@ question was only the `GlobalAlloc` wrapper over it.
 ## Alternatives rejected
 
 **A cargo feature, default off.** The obvious engineering answer, and it loses on
-[P-0012](../principles/0012-a-measurement-carries-how-it-was-taken.md) — *a measurement carries how
+[P-0088](../principles/0088-no-number-is-trusted-further-than-its-instrument-has-been-checked.md) — *a measurement carries how
 it was taken*. A number taken in a configuration nobody ships is a number about a different program,
 and this repository already keeps one such distinction painfully: every host-clock figure in it
 says so beside itself because a reader who subtracts two figures taken differently gets a result
