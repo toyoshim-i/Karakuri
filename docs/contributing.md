@@ -21,7 +21,6 @@ Start with these, and read the rest before changing anything they touch:
 - [A live Set is never mutated in place](principles/0004-a-live-set-is-never-mutated-in-place.md)
 - [A check you have not watched fail is guessing](principles/0089-a-check-you-have-not-watched-fail-is-guessing.md)
 - [Only reviewed work enters history](principles/0017-only-reviewed-work-enters-history.md)
-- [Run what the question needs, when it is asked](principles/0057-run-what-the-question-needs-when-it-is-asked.md)
 
 **Why** each is the way it is, and what was rejected on the way, is in [docs/adr/](adr/). A rule that
 stops being true is deleted and re-recorded under a new number rather than edited — see
@@ -178,9 +177,11 @@ let the directing side carry the suite when several agents are working, but neit
 The second kind holds at any price — **after a fix, run the failed test first and alone**,
 because a green suite is a slower way to learn the same fact and a red one tells you less;
 and **run a test against its injected defect on its own**, because that is one test's
-evidence and the suite around it is not. See
-[P-0057](principles/0057-run-what-the-question-needs-when-it-is-asked.md), which is about
-answering the question in front of you rather than about saving seconds.
+evidence and the suite around it is not. That is about
+answering the question in front of you rather than about saving seconds, and it is stated in §3
+above rather than in `docs/principles/`: it governs how a contributor works, not how the instrument
+behaves. Decided in
+[ADR-0114](adr/0114-tests-run-when-somebody-asks-not-when-git-does.md).
 
 **Revisit this if the suite becomes a bottleneck again.** The strict operation it replaces —
 name the smallest suite, keep the workspace for boundaries, put the cost on whoever is

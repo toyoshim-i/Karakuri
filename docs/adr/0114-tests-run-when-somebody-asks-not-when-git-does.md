@@ -61,5 +61,7 @@ is the named suite. Briefs now say so.
 
 ## Evidence
 
-Session 2026-08-20T16:27Z–18:07Z, commit `867973b`. Standing rule:
-[P-0057](../principles/0057-run-what-the-question-needs-when-it-is-asked.md).
+Session 2026-08-20T16:27Z–18:07Z, commit `867973b`. Standing rule: none in
+`docs/principles/`. P-0057 stated it and was retired on 2026-09-05 — it governs how a contributor
+works rather than how the instrument behaves, so it is stated in `docs/contributing.md` §3, which
+this record decided.
