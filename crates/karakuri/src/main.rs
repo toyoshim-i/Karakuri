@@ -2906,7 +2906,8 @@ const ASKED_TO_PRIME: usize = 1;
 /// **defaults to** when the operator gives no pair at all, which is the whole
 /// of its reach into this type.
 ///
-/// P-0093 is about one name meaning one thing, and the failure it names would
+/// `docs/contributing.md` §4 is about one name meaning one thing, and the
+/// failure it names would
 /// be two ways to say *play this file*. Two ways to say *and the files are
 /// over here* is not that failure; refusing to have any way to say it is how
 /// [`Sources::under`]'s predecessor came to bake the build machine's own tree
@@ -3115,7 +3116,7 @@ fn running_from(dir: &std::path::Path, copies: &[Sources]) -> String {
 /// where they belong: an operator reading this is looking for how to play
 /// something, and the answer is still the pair on the first line. See
 /// [`Sources`] for why a flag that answers *where the data lives* is not the
-/// second material vocabulary P-0093 refuses.
+/// second material vocabulary `docs/contributing.md` §4 refuses.
 const USAGE: &str = "\
 usage: karakuri [--presets DIR] [--store DIR] [--mcp PORT] [GEOMETRY.kir RENDERER.kir]
 
@@ -16581,7 +16582,7 @@ mod gpu {
         // runs of one program, and `DEFAULT_COMPUTE_BUDGET_MS` is 16.7. So the
         // measurement is taken where it can be taken and reported;
         // `cargo test -p karakuri -- --nocapture` is where to read it.
-        // P-0088: it carries how it was taken — `Deck::measure_slots`, one
+        // P-0095: it carries how it was taken — `Deck::measure_slots`, one
         // `Probe` for the deck, at the probe's own resolution rather than at
         // `CANVAS`.
         let costs: Vec<f32> = (0..SLOTS)
