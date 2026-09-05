@@ -83,13 +83,14 @@
 //!    describing itself to an operator has to say what a pointer reaches, and
 //!    a sentence saying it is where the count goes stale. What they are is
 //!    still written here, because a name is not a number and there is nowhere
-//!    else the thirty sit together: the Outputs row's sink
+//!    else the thirty-one sit together: the Outputs row's sink
 //!    ([`crate::view::outputs`]), a mixer strip's fader knob
 //!    ([`crate::view::Mixer::grab`]), its blend chip
 //!    ([`crate::view::Mixer::blend`]), its tally chip
 //!    ([`crate::view::Mixer::tally`]), its mask mini
 //!    ([`crate::view::Mixer::mask`]), under the strips the transition row's
-//!    shape, quantum and length pills ([`crate::view::TransitionRow`]), the
+//!    shape, quantum and length pills and the `go` capsule that runs one
+//!    ([`crate::view::TransitionRow`]), the
 //!    transport row's audio-in pill
 //!    ([`crate::view::audio_in`]) and its arrangement pill
 //!    ([`crate::view::arrangement`]), at the end of that row the tone map's
@@ -100,7 +101,7 @@
 //!    ([`crate::view::program_head`]), the four deck preview cells under it
 //!    ([`crate::view::ProgramBay::preview`]) and the Library bay's scope chips
 //!    ([`crate::view::LibraryBay::chip`]). The rule did not change to hold
-//!    any of the twenty-nine that came after the first, which is what it was
+//!    any of the thirty that came after the first, which is what it was
 //!    written for — and each is asked exactly the way the first is: the
 //!    derivation that draws it, asked whether the point is on it, with nothing
 //!    stored.
@@ -420,7 +421,7 @@ use crate::view::{
 /// **What each of rule 4's derivations answers for**, one entry per probe in
 /// [`claim`] and in that order: the Outputs sink, the audio-in pill, the
 /// arrangement pill, the look group's two, a strip's four, the transition
-/// row's three, the Master bay's one, a deck head's four, the Program bay
+/// row's four, the Master bay's one, a deck head's four, the Program bay
 /// head's `solo`, the four deck preview cells, the Library bay's scope chips,
 /// and the four class pills.
 ///
@@ -441,7 +442,7 @@ use crate::view::{
 /// is values of [`Scope`] — so the number of chips a pointer can reach is the
 /// number of scopes that exist, and the day a fifth is added this rises with
 /// it rather than being a four somebody has to remember.
-const CLAIMS: [usize; 12] = [1, 1, 1, 2, 4, 3, 1, 4, 1, 4, Scope::ALL.len(), 4];
+const CLAIMS: [usize; 12] = [1, 1, 1, 2, 4, 4, 1, 4, 1, 4, Scope::ALL.len(), 4];
 
 /// **How many controls rule 4 hit-tests**, summed over [`CLAIMS`].
 ///
@@ -589,7 +590,7 @@ pub fn claim(panel: &mut Panel, ctx: &egui::Context, view: &View, p: Point) -> C
                         || bay.mask(p).is_some()
                 })
             };
-            // **The transition row's three pills, derived once for all of
+            // **The transition row's four capsules, derived once for all of
             // them**, which is a strip's arrangement one row down: the pills
             // are laid end to end from the block's left padding, so where the
             // third is depends on how wide the first two words are, and a
@@ -599,8 +600,13 @@ pub fn claim(panel: &mut Panel, ctx: &egui::Context, view: &View, p: Point) -> C
             // **It is asked whatever the deck is doing.** `on_strip` above
             // pays nothing on a console with no deck because there are no
             // strips to lay out; this row is the console's own setting and is
-            // drawn either way, so it is a laid-out row and three word widths
+            // drawn either way, so it is a laid-out row and four word widths
             // on every press that gets this far.
+            //
+            // **The `go` capsule is claimed with no deck behind it too**, and
+            // that is `TransitionRow::owns`' own sentence rather than a
+            // decision here: a press on it is refused and the refusal is the
+            // act, so the panel is what has to answer for the press.
             let on_transition = || {
                 transition(ctx, panel.layout(), view.transition()).is_some_and(|row| row.owns(p))
             };

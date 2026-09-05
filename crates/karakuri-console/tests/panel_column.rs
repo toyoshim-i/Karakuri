@@ -312,6 +312,19 @@ fn sample(variant: &str) -> Operation {
         "SetTransition" => Operation::SetTransition {
             setting: karakuri_operation::TransitionSetting::Quantum { beats: 4.0 },
         },
+        // **The `go` capsule at the end of that row**, and the one emission in
+        // this list that names *two* decks: a wipe covers the deck the
+        // selection is on with the next one round, which is
+        // `view::TransitionRow::go`'s translation and never the operation's —
+        // the vocabulary carries both decks for exactly that reason.
+        //
+        // **The one emission here that a press can be refused for.** A
+        // one-deck mixer and a shape reading `no shape` both turn the press
+        // away before an operation is built, and the badge is still `has`:
+        // ADR-0213's meter is *an operator reaches the operation*, and a
+        // control that refuses under a named condition is reached. It is
+        // `karakuri-cli`'s `c` in that too.
+        "Wipe" => Operation::Wipe { from: 0, to: 1 },
         // **The Library bay's scope chips**, and the one emission in this list
         // whose payload cannot say what the control chose: `SelectScope`
         // carries `Undecided`, deliberately, because *"an enum of the four
