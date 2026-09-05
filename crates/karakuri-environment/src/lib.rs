@@ -196,6 +196,35 @@ impl Opening {
 /// the surface's `Live::awaited_saves` for why the wait exists at all.
 pub const SAVE_WAIT: std::time::Duration = std::time::Duration::from_secs(5);
 
+/// **Whose act a save is**, which is the whole of what decides where it lands.
+///
+/// `<store>/sets/` is the operator's library and is written by an operator's own
+/// act; a save asked for over MCP lands in `<store>/sandbox/` instead. The rule
+/// is
+/// [P-0096](../../../docs/principles/0096-the-operators-library-is-written-by-an-operators-own-act.md)
+/// and the decision is
+/// [ADR-0261](../../../docs/adr/0261-a-model-asked-save-lands-in-a-sandbox-because-the-operators-library-is-the-operators-own-act.md).
+///
+/// **An argument rather than a thing inferred from `reply`.** Both surfaces
+/// already know which this is at the call site — a request off `mcp::Reporter`
+/// passes `Some(reply)` and a key press passes `None` — so `reply.is_some()`
+/// would answer correctly today and would be answering a different question:
+/// *is anybody waiting who is not at the terminal*. The next control that waits
+/// for an answer without being a model would file its saves in the sandbox and
+/// nothing would fail. This is the actor, named.
+///
+/// **There is no third arm and a MIDI target would take [`Asked::Operator`]**:
+/// a control change is a hand on a control, and every route an operator's hands
+/// reach is one act arriving by a different door.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Asked {
+    /// The operator's own act: `--save-set`, the `k` key, a control they
+    /// pressed.
+    Operator,
+    /// A model, over MCP.
+    Model,
+}
+
 /// **No such slot**, in the words every surface says it in.
 ///
 /// Extracted where a second caller appeared, rather than copied to it: focusing
@@ -326,28 +355,80 @@ pub fn nothing_to_save(slot: usize, loaded_set: Option<&str>, no_files: bool) ->
 /// stand-in loop that sends `accepted` itself. Above that line it is testable,
 /// and `mcp::tests::a_save_the_loop_has_taken_names_its_id_to_a_client_that_times_out`
 /// is what deleting the call now costs.
+///
+/// **What it is filed under is `filed_as`**, the private function below, which
+/// turns on [`Asked`] as well as on whether a name was given — and the sentence
+/// below says which of the store's two directories it is going into, because
+/// that is the half a model cannot infer.
 pub fn accepted_save(
     slot: usize,
+    asked: Asked,
     id: Option<String>,
     sources: &setfile::Sources,
     root: &std::path::Path,
     reply: Option<&mcp::Reply>,
 ) -> String {
-    // **A name is a stamp, because a key press cannot type one.** See
-    // `history::stamped_id`, whose convention this is: an operator looks for
-    // the time they saved it. A client that named one gets the name it named —
-    // see `mcp::checked_id` on why a set filed under a name its caller did not
-    // ask for is the worse answer.
-    let id = id.unwrap_or_else(history::stamped_id);
+    let id = filed_as(asked, id);
     let said = format!(
         "slot {slot}: saving {} node{} as set `{id}` in {}",
         sources.len(),
         if sources.len() == 1 { "" } else { "s" },
-        root.display()
+        match asked {
+            Asked::Operator => root.display().to_string(),
+            // **Named rather than left as the root**, because this sentence is
+            // the one a model is handed and the directory is the whole of what
+            // changed for it: told only the root, a client would look under
+            // `sets/`, find nothing, and report the save as lost.
+            Asked::Model => root
+                .join(karakuri_store::store::Store::SANDBOX)
+                .display()
+                .to_string(),
+        }
     );
     eprintln!("{said}");
     if let Some(reply) = reply {
         reply.accepted(&said);
     }
     id
+}
+
+/// **What a save is filed under**, which is the caller's name, a stamp, or both.
+///
+/// **An operator's own act gets the name it asked for.** A key press cannot type
+/// one and takes a stamp — `history::stamped_id`, whose convention this is: an
+/// operator looks for the time they saved it — and a caller that *can* type one
+/// is not made to take a timestamp. A name typed twice overwrites the library
+/// entry under it, which is
+/// [ADR-0128](../../../docs/adr/0128-a-set-saved-under-a-name-the-caller-chose-overwrites.md)'s
+/// decision and unchanged: an id an operator types is an instruction.
+///
+/// **A model's save always carries the stamp**, and its chosen name rides behind
+/// it as `<stamp>_<name>`. Two reasons, and the second is the one that decides
+/// it.
+///
+/// 1. **Nothing in the sandbox is overwritten.** What lands there is an edit
+///    history — the thing an operator goes looking for after a show when a model
+///    has been editing live — and a snapshot a later snapshot can replace is not
+///    a snapshot. ADR-0128's argument does not reach here because its premise
+///    does not: there is no id an operator typed.
+/// 2. **A directory of snapshots is read by time.** `history.rs` files every
+///    kept version under the moment it was written and the operator's name for
+///    it second, and this is the same directory read the same way. The separator
+///    is `_` for that reason: it is the one a snapshot's own name already uses,
+///    and `-` is what [`history::stamped_id`] appends when it breaks a tie.
+///
+/// **The cost is that a model is answered with an id it did not ask for**, which
+/// `mcp::checked_id` calls the worse answer where the library is concerned and
+/// where a name is an instruction. It is the right answer here: the accept and
+/// the outcome both name the id the file was written under, so a model that
+/// reads what it is told is never wrong about where its work is, and a model
+/// that assumes its own name would have been wrong about a file it had already
+/// destroyed.
+fn filed_as(asked: Asked, id: Option<String>) -> String {
+    match (asked, id) {
+        (Asked::Operator, Some(id)) => id,
+        (Asked::Operator, None) => history::stamped_id(),
+        (Asked::Model, None) => history::stamped_id(),
+        (Asked::Model, Some(name)) => format!("{}_{name}", history::stamped_id()),
+    }
 }

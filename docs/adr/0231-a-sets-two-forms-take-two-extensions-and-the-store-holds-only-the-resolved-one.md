@@ -59,7 +59,7 @@ it does not know the authoring form at all; ADR-0229 booked that as a debt it co
 the file was held by another session.
 
 The three-places table under
-[P-0048](../principles/0048-what-ships-what-you-saved-and-what-you-are-editing-are-three-places.md)
+P-0048
 spelled the row `<store>/sets/<id>.set.ndjson` in **two** module headers —
 [`scratch.rs`](../../crates/karakuri-environment/src/scratch.rs) and
 [`places.rs`](../../crates/karakuri-environment/src/places.rs), the latter arriving with

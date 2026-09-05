@@ -973,7 +973,12 @@ carries a diagnostic or whether saying what went wrong stays the Staging lane's.
 opens a class the server reads on the next call. Seven tools: `read_procedure`, `write_procedure`,
 `wire_input`, `swap_outcome`, `save_set`, `read_set` and `list_sets`. The last three came with a
 **save path this program did not have** — `Live::save_set`, which is the one place a Set is written
-here and where the `k` key, the MCP tool and whatever control the Library bay grows all end. The
+here and where the `k` key, the MCP tool and whatever control the Library bay grows all end. **What
+that one path now differs on is one argument**: a save asked for over MCP lands in
+`<store>/sandbox/` and the operator's own act writes `<store>/sets/`
+([ADR-0261](adr/0261-a-model-asked-save-lands-in-a-sandbox-because-the-operators-library-is-the-operators-own-act.md)),
+which leaves the Library bay's planned *keep* pill an operator's act and owing nothing new, and
+leaves a model unable to read back what it saved — `read_set` and `list_sets` read the library. The
 server addresses each deck's working copies rather than the paths the operator typed, so a model
 cannot rewrite the preset library, and there is no bind option: reaching it from another machine is
 `ssh -L`. **This changes what M5.10 has left** — see that sub-milestone.
@@ -1069,7 +1074,7 @@ typing it.
   makes a load a packaging step that stores the bundle, so opening a shipped Set adds an entry to
   `<store>/sets/` — a consequence of two decisions rather than a decision anybody took. It is
   probably right, being copy-on-load exactly as `scratch.rs` performs it for material and what
-  keeps `examples/` unwritten (P-0048). **The first symptom if it is wrong** is a `my sets` filling
+  keeps `examples/` unwritten (P-0096). **The first symptom if it is wrong** is a `my sets` filling
   up with things the operator did not make.
 
 - **What `expand` under a solo should do.** `Layout::soloed()` can lie: the solve never reads it

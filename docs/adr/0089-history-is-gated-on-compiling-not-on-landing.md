@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-15
 supersedes: []
 superseded_by: []
-principles: [0048]
+principles: [0096]
 tags: [store]
 ---
 

@@ -170,19 +170,25 @@ a far end of the wrong kind is refused where the slot is built, in the same sent
 meets, and comes back through `swap_outcome` with everything else that rebuild decided.
 
 `save_set` is the fifth, and it is the `k` key reachable from a client: **it keeps what a
-slot is playing** as a Set file you can reload with `--load-set`. Give it a `slot`, and an
-`id` if you want to name the result — leave the `id` out and it is named after the moment it
-was saved, exactly as the key press is. **An `id` you choose overwrites a set already under
-that name**, exactly as `--save-set ID` does: a name you typed is an instruction, and nothing
-is quietly renamed behind you, so give each keeper its own name or leave the `id` out and let
-the clock do it. It writes the material *on screen* and not what is on disk, which is the
+slot is playing** as a Set file. Give it a `slot`, and an `id` if you want to name the result.
+**What it writes goes into `<store>/sandbox/` and not into your library**: the library is
+written by your own act and nothing else, and a model asked to save something as `night01`
+would otherwise destroy the `night01` you made. Nothing in the sandbox is overwritten either —
+what a client saves is filed under the moment it was saved with its name behind it, so two
+saves under one name are two files, and the answer names the id the file was actually written
+under. `read_set`, `list_sets` and `--load-set` all read your library, so they do not reach
+what a model kept; if you want one of them in your library, save it yourself or move the file.
+It writes the material *on screen* and not what is on disk, which is the
 same distinction the key makes and is worth re-reading below under [Keep it](#keep-it).
 **It waits for the disk before it answers**, so what comes back names the id the set was
 written under; a model that has just made something worth keeping can ask for it to be kept
 and be told whether that worked, instead of asking a hand to press a key.
 
-**Why these behave as they do**, if you are about to change one: an id you choose
-overwrites rather than being renamed ([ADR-0128](adr/0128-a-set-saved-under-a-name-the-caller-chose-overwrites.md)),
+**Why these behave as they do**, if you are about to change one: an id *you* type on the
+command line overwrites rather than being renamed
+([ADR-0128](adr/0128-a-set-saved-under-a-name-the-caller-chose-overwrites.md)), while a model's
+save is stamped and lands in the sandbox
+([ADR-0261](adr/0261-a-model-asked-save-lands-in-a-sandbox-because-the-operators-library-is-the-operators-own-act.md)),
 `read_set` takes a set id rather than a hash because nothing here has ever handed a model a
 hash ([ADR-0138](adr/0138-a-model-names-a-set-not-a-hash.md)), and it states what a
 procedure *declares* rather than what the set turned it to
@@ -465,16 +471,18 @@ to five seconds for a save still being written, and says so if it gives up.
 hand, a model and the interface M5 builds all want. It is one control and not three: a tool
 call names the slot instead of using your focus and may name the file, and everything after
 that — what is read, what is refused and in whose words, what goes into the session stream —
-is the same code path the key press takes. The one thing a call can do that the key cannot is
-name the file, and that carries `--save-set`'s rule with it: **a name given twice overwrites**
-the set already under it, while a stamped name cannot collide.
+is the same code path the key press takes. **Where it differs is the directory**, and that is
+the whole of the difference: your `k` writes your library and a tool call writes
+`<store>/sandbox/`, because the library is written by your own act. A name a call gives twice
+does not overwrite anything — it is stamped first — while your own name on the command line
+still does.
 
 What it records is **what is on screen**, and that is the whole difference from `--save-set`:
 
 |  | `--save-set ID` | `k` |
 |---|---|---|
 | when | before a run, and the run then stops | during one, as often as you like |
-| named by | you, and a name reused overwrites | the clock, or an MCP call — which also overwrites a name it reuses |
+| named by | you, and a name reused overwrites | the clock, or an MCP call — whose name is stamped, so nothing it saves overwrites anything |
 | which slot | slot 0 | the focused one, or the one an MCP call names |
 | the values | what the flags say | what the Set is playing — a param you moved, a capacity or a salt a reloaded Set brought with it |
 | the sources | the files named on the command line, read now | the versions **on screen**, by content hash |
@@ -630,13 +638,19 @@ press.
 
 ## Where your work lives
 
-Three places, and only one of them is written to.
+Four places, and what decides the second is **who asked**.
 
 | | where | who writes it |
 |---|---|---|
 | **App presets** | `examples/` | nobody. They ship with the program |
-| **Your presets** | `<store>/sets/<id>.kbset` | `--save-set`, and the `k` key. `--list-sets` prints them |
+| **Your library** | `<store>/sets/<id>.kbset` | your own act: `--save-set`, the `k` key. `--list-sets` prints them |
+| **The sandbox** | `<store>/sandbox/<id>.kbset` | a save asked for over MCP, and nothing else |
 | **Scratch** | `<store>/scratch/` | `--watch`, `--mcp`, and your editor |
+
+**A model is not refused a save and does not write your library.** What it keeps goes to the
+sandbox, filed under the moment it was saved, and nothing there is overwritten — so after a session
+where a model has been editing live, that directory is the edit history to go looking through. It is
+yours to keep or to `rm -rf`; nothing in the program prunes it.
 
 **A run that can be edited copies its material into the scratch and runs from
 the copy.** So `karakuri-cli --watch examples/drift_shell.kir examples/soft_points.kir`
@@ -692,7 +706,8 @@ That used to be refused, because there was nothing on disk for a model to read.
 **The other end of that loop is the `k` key**, and the `save_set` tool beside
 it. `--save-set` writes what the flags say and exits; `k` writes what the focused
 slot is playing, right now, into `<store>/sets/` under a timestamp, and a model
-asks for the same thing by naming a slot. So load, edit, watch — by hand or by
+asks for the same thing by naming a slot — and gets `<store>/sandbox/`, because
+your library is written by your own act. So load, edit, watch — by hand or by
 asking — and keep the version you liked without leaving the run.
 
 ### Sending somebody a Set

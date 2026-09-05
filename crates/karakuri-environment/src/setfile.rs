@@ -79,6 +79,7 @@ use karakuri_store::store::{Store, StoreError};
 // and `Sources::into_nodes` is now the second caller of — the first being the
 // startup put in `compile`.
 use crate::meta::put_meta;
+use crate::Asked;
 
 /// The Set file format version this build writes. One number for the whole
 /// file, on `Record::Set`.
@@ -740,7 +741,15 @@ pub fn kind_name(kind: Kind) -> &'static str {
 /// stopped reading files. What this owes is that every hash it writes was
 /// already stored, and it cannot check that without reading the store back,
 /// which is the caller's promise instead.
-pub fn save(store: &Store, id: &str, set: Saving<'_>) -> Result<(), String> {
+///
+/// **`asked` is who the save belongs to, and it decides the directory.** An
+/// operator's own act writes the library; a save asked for over MCP writes
+/// `<store>/sandbox/` — [`crate::Asked`] and
+/// [P-0096](../../../docs/principles/0096-the-operators-library-is-written-by-an-operators-own-act.md).
+/// It is an argument at every call site rather than a default here, because a
+/// writer that reached the operator's library by saying nothing is exactly the
+/// shape that rule exists against.
+pub fn save(store: &Store, asked: Asked, id: &str, set: Saving<'_>) -> Result<(), String> {
     let Saving {
         nodes,
         capacities,
@@ -881,9 +890,11 @@ pub fn save(store: &Store, id: &str, set: Saving<'_>) -> Result<(), String> {
         }));
     }
 
-    store
-        .write_set(id, &lines)
-        .map_err(|e| format!("writing set `{id}`: {e}"))
+    match asked {
+        Asked::Operator => store.write_set(id, &lines),
+        Asked::Model => store.write_sandbox_set(id, &lines),
+    }
+    .map_err(|e| format!("writing set `{id}`: {e}"))
 }
 
 /// **Read a Set file back into what the engine takes.**
@@ -2524,6 +2535,7 @@ proc blob {
         }];
         save(
             &store,
+            Asked::Operator,
             "wired",
             Saving {
                 nodes: &nodes,
@@ -2628,6 +2640,7 @@ proc dissolve {
         }];
         save(
             &store,
+            Asked::Operator,
             "masked",
             Saving {
                 nodes: &nodes,
@@ -2685,6 +2698,7 @@ proc dissolve {
         };
         save(
             &store,
+            Asked::Operator,
             "s1",
             Saving {
                 nodes: &ordinary(&store, &l1, std::slice::from_ref(&l4)),
@@ -2733,6 +2747,7 @@ proc dissolve {
         let (_dir, store, l1, l4) = fixture();
         save(
             &store,
+            Asked::Operator,
             "s1",
             plain(&ordinary(&store, &l1, std::slice::from_ref(&l4)), &[]),
         )
@@ -2756,6 +2771,7 @@ proc dissolve {
         let (_dir, store, l1, l4) = fixture();
         save(
             &store,
+            Asked::Operator,
             "s1",
             plain(&ordinary(&store, &l1, std::slice::from_ref(&l4)), &[]),
         )
@@ -2846,6 +2862,7 @@ proc dissolve {
         let (_dir, store, l1, l4) = fixture();
         save(
             &store,
+            Asked::Operator,
             "s1",
             plain(&ordinary(&store, &l1, std::slice::from_ref(&l4)), &[]),
         )
@@ -2886,6 +2903,7 @@ proc dissolve {
         let (_dir, store, l1, l4) = fixture();
         save(
             &store,
+            Asked::Operator,
             "s1",
             plain(
                 &ordinary(&store, &l1, std::slice::from_ref(&l4)),
@@ -3101,6 +3119,7 @@ proc dissolve {
         ];
         save(
             &store,
+            Asked::Operator,
             "chain",
             Saving {
                 nodes: &nodes,
@@ -3195,6 +3214,7 @@ proc dissolve {
         ];
         save(
             &store,
+            Asked::Operator,
             "two_fields",
             Saving {
                 nodes: &nodes,
@@ -3273,6 +3293,7 @@ proc dissolve {
         ];
         save(
             &store,
+            Asked::Operator,
             "two",
             Saving {
                 nodes: &nodes,
@@ -3329,6 +3350,7 @@ proc dissolve {
         ];
         save(
             &store,
+            Asked::Operator,
             "two",
             Saving {
                 nodes: &nodes,
@@ -3409,6 +3431,7 @@ proc dissolve {
         let (_dir, store, l1, l4) = fixture();
         save(
             &store,
+            Asked::Operator,
             "s1",
             plain(&ordinary(&store, &l1, std::slice::from_ref(&l4)), &[]),
         )
@@ -3455,6 +3478,7 @@ proc dissolve {
         let nodes = ordinary(&store, &l1, &[l4, l4b]);
         save(
             &store,
+            Asked::Operator,
             "pool",
             Saving {
                 layering: Layering::Composite,
@@ -3508,7 +3532,7 @@ proc dissolve {
             &L4.replace("proc points", "proc points_two"),
         );
         let nodes = ordinary(&store, &l1, &[l4, l4b]);
-        save(&store, "stack", plain(&nodes, &[])).expect("save");
+        save(&store, Asked::Operator, "stack", plain(&nodes, &[])).expect("save");
 
         let text = written(&store, "stack");
         assert!(
@@ -3523,6 +3547,111 @@ proc dissolve {
             "a Set that recorded no merge loaded back compositing"
         );
         assert_eq!(loaded.live, None, "a Set with no merge recorded a fold");
+    }
+
+    /// **A save a model asked for lands in the sandbox and never in the
+    /// operator's library.**
+    ///
+    /// This is
+    /// `docs/principles/0096-the-operators-library-is-written-by-an-operators-own-act.md`
+    /// at the one line that decides it — [`save`]'s match on [`Asked`] — and
+    /// the property it holds is a *negative* one: the file that must not be
+    /// there. Delete the `Asked::Model` arm and the sandbox assertion still
+    /// passes on nothing, so the assertion that matters is the second: `sets/`
+    /// is where the operator's presets are, and a model writing an id one of
+    /// them already has is the loss P-0096 exists against.
+    ///
+    /// **The control is the same call with the other actor**, which is what
+    /// stops this passing against a `save` that had stopped writing anywhere
+    /// the library can see.
+    #[test]
+    fn a_save_a_model_asked_for_lands_in_the_sandbox_and_never_in_the_library() {
+        let (dir, store, l1, l4) = fixture();
+        let nodes = ordinary(&store, &l1, &[l4]);
+        let root = dir.path().join("store");
+
+        save(&store, Asked::Model, "night01", plain(&nodes, &[])).expect("save");
+
+        assert!(
+            root.join("sandbox").join("night01.kbset").exists(),
+            "a save asked for over MCP did not reach the sandbox"
+        );
+        assert!(
+            !root.join("sets").join("night01.kbset").exists(),
+            "a save asked for over MCP wrote the operator's library"
+        );
+        assert!(
+            load(&store, "night01").is_err(),
+            "the library loaded a Set only the sandbox holds"
+        );
+
+        // The control. Without it this would pass against a `save` that wrote
+        // no library file for anybody.
+        save(&store, Asked::Operator, "night01", plain(&nodes, &[])).expect("save");
+        assert!(
+            root.join("sets").join("night01.kbset").exists(),
+            "the operator's own save did not reach the library"
+        );
+        load(&store, "night01").expect("and the library loads it back");
+    }
+
+    /// **Two saves a model asked for under one name are two files.**
+    ///
+    /// `filed_as` is where this is decided and the reason is written there: the
+    /// sandbox holds snapshots, and a snapshot a later snapshot can replace is
+    /// not one. Asserted here rather than beside that function because the
+    /// property is about what is on the disk afterwards — a rule about an id
+    /// that never reached a store would be a rule about a string.
+    ///
+    /// **The control is the operator's own name, which overwrites**, and that
+    /// is ADR-0128 unchanged: an id an operator types is an instruction.
+    #[test]
+    fn two_saves_a_model_asked_for_under_one_name_are_two_files() {
+        let (dir, store, l1, l4) = fixture();
+        let nodes = ordinary(&store, &l1, &[l4]);
+        let root = dir.path().join("store");
+
+        let first = crate::accepted_save(
+            0,
+            Asked::Model,
+            Some("take".into()),
+            &Sources(vec![]),
+            &root,
+            None,
+        );
+        let second = crate::accepted_save(
+            0,
+            Asked::Model,
+            Some("take".into()),
+            &Sources(vec![]),
+            &root,
+            None,
+        );
+        assert_ne!(
+            first, second,
+            "a model's second save was handed the first one's id, so it would \
+             have written over a snapshot it had been told was kept"
+        );
+        save(&store, Asked::Model, &first, plain(&nodes, &[])).expect("save");
+        save(&store, Asked::Model, &second, plain(&nodes, &[])).expect("save");
+        let kept = std::fs::read_dir(root.join("sandbox"))
+            .expect("the sandbox")
+            .count();
+        assert_eq!(kept, 2, "two snapshots did not leave two files");
+
+        // The control: an operator's own name is an instruction and is reused.
+        assert_eq!(
+            crate::accepted_save(
+                0,
+                Asked::Operator,
+                Some("take".into()),
+                &Sources(vec![]),
+                &root,
+                None
+            ),
+            "take",
+            "an operator's own id was not the id it asked for"
+        );
     }
 
     /// **A composited Set nobody selected in writes no `live`**, and comes back
@@ -3543,6 +3672,7 @@ proc dissolve {
         let nodes = ordinary(&store, &l1, &[l4, l4b]);
         save(
             &store,
+            Asked::Operator,
             "unselected",
             Saving {
                 layering: Layering::Composite,
@@ -3580,6 +3710,7 @@ proc dissolve {
         let nodes = ordinary(&store, &l1, std::slice::from_ref(&l4));
         save(
             &store,
+            Asked::Operator,
             "wrong",
             Saving {
                 layering: Layering::Composite,
@@ -3658,6 +3789,7 @@ proc dissolve {
         for (nodes, capacities, expected) in cases {
             let err = save(
                 &store,
+                Asked::Operator,
                 "bad",
                 Saving {
                     nodes: &nodes,
@@ -3799,6 +3931,7 @@ proc dissolve {
         // file this build saves is the line every earlier build wrote.
         save(
             &store,
+            Asked::Operator,
             "written_back",
             Saving {
                 nodes: &ordinary(&store, &l1, std::slice::from_ref(&l4)),
@@ -3896,6 +4029,7 @@ proc dissolve {
         let (_dir, store, l1, l4) = fixture();
         save(
             &store,
+            Asked::Operator,
             "s1",
             plain(&ordinary(&store, &l1, std::slice::from_ref(&l4)), &[]),
         )
@@ -3950,7 +4084,13 @@ proc dissolve {
     fn one_artifact_referenced_twice_is_inlined_once() {
         let (_dir, store, l1, l4) = fixture();
         let twice = vec![l4.clone(), l4.clone()];
-        save(&store, "s1", plain(&ordinary(&store, &l1, &twice), &[])).expect("save");
+        save(
+            &store,
+            Asked::Operator,
+            "s1",
+            plain(&ordinary(&store, &l1, &twice), &[]),
+        )
+        .expect("save");
         let bundled = bundle(&store, "s1").expect("bundle");
 
         let renderer = Hash::of(&std::fs::read(&l4).expect("read"));
@@ -3988,6 +4128,7 @@ proc dissolve {
         let (_dir, store, l1, l4) = fixture();
         save(
             &store,
+            Asked::Operator,
             "s1",
             plain(&ordinary(&store, &l1, std::slice::from_ref(&l4)), &[]),
         )
@@ -4040,6 +4181,7 @@ proc dissolve {
         let (dir, store, l1, l4) = fixture();
         save(
             &store,
+            Asked::Operator,
             "s1",
             plain(&ordinary(&store, &l1, std::slice::from_ref(&l4)), &[]),
         )
@@ -4071,7 +4213,7 @@ proc dissolve {
                 name: None,
             },
         ];
-        save(&theirs, "s1", plain(&mine, &[])).expect("save");
+        save(&theirs, Asked::Operator, "s1", plain(&mine, &[])).expect("save");
         let before = written(&theirs, "s1");
 
         let e = unbundle(&theirs, &sent).expect_err("an id that arrived in a file is not typed");

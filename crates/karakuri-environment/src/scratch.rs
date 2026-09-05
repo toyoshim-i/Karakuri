@@ -1,12 +1,15 @@
 //! The working copy an editing session runs from.
 //!
-//! # Three places, and only one of them is writable
+//! # The one place a live edit may land, and this module is it
 //!
-//! | | where | who writes it |
-//! |---|---|---|
-//! | app presets | `examples/` | nobody — they ship with the program |
-//! | user presets | `<store>/sets/<id>.kbset` | `--save-set`, and nothing else |
-//! | **scratch** | `<store>/scratch/` | `--watch`, `--mcp`, and the operator's editor |
+//! Where the material lives and who writes each place is
+//! `docs/principles/0096-the-operators-library-is-written-by-an-operators-own-act.md`.
+//! **The table is there and not here**, because it was here as well as in
+//! [`crate::places`] and the two copies drifted together: both said the
+//! operator's library was written by `--save-set` *"and nothing else"* long
+//! after three other controls were writing it. What this module owns is the row
+//! it is: `<store>/scratch/` is where the deck actually runs, and `--watch`,
+//! MCP and the operator's editor all write there.
 //!
 //! Before this existed there was one place and it was whatever path the
 //! operator named, so `--mcp` handed a model write access to the repository's
@@ -35,9 +38,10 @@
 //! scratch, `--mcp` with `--load-set` was refused because there was nothing for
 //! a model to read or rewrite.
 //!
-//! That closes the loop the three places were separated for: a user preset is
-//! materialised here, edited by a hand or a model, and saved back with
-//! `--save-set`. Saving worked already; reading one back to edit it did not.
+//! That closes the loop the places were separated for: a Set of the operator's
+//! is materialised here, edited by a hand or a model, and saved back — into the
+//! library by the operator's own act, and into `<store>/sandbox/` when a model
+//! asked for it. Saving worked already; reading one back to edit it did not.
 //!
 //! # A slot runs from its own copy, and the name carries the slot
 //!
@@ -425,8 +429,7 @@ mod tests {
     }
 
     /// A Set loaded from the store becomes a file the deck can run from and an
-    /// editor can open — the half of the three places that saving alone did not
-    /// give.
+    /// editor can open — the half of the loop that saving alone did not give.
     #[test]
     fn a_procedure_from_the_store_gets_a_readable_file() {
         let tmp = tempfile::tempdir().expect("tempdir");

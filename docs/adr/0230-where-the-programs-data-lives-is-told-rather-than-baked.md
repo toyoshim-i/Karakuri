@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-30
 supersedes: []
 superseded_by: []
-principles: [0048, 0085, 0088, 0090, 0093, 0094]
+principles: [0096, 0085, 0088, 0090, 0093, 0094]
 tags: [cli, distribution, environment, store, presets]
 ---
 
@@ -300,7 +300,7 @@ directory as a side effect of `--render` would make a pure function of its argum
 leaves a mark."*
 
 **The presets tier is the one place where it would be worse than either.** Under
-[P-0048](../principles/0048-what-ships-what-you-saved-and-what-you-are-editing-are-three-places.md)
+P-0048
 `examples/` is *"app presets | nobody writes it"* — the only one of the three places with no writer
 at all. A program that creates its own preset directory has made itself that writer, on the tier
 whose whole definition is that it ships and is never written.
