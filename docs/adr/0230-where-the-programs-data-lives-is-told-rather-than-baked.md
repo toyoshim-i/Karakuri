@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-30
 supersedes: []
 superseded_by: []
-principles: [0023, 0027, 0031, 0045, 0048, 0055, 0061, 0085]
+principles: [0023, 0027, 0031, 0045, 0048, 0061, 0085, 0088]
 tags: [cli, distribution, environment, store, presets]
 ---
 
@@ -266,7 +266,7 @@ build and the binary knows its own install prefix. This is what a great many C p
 `-DDATADIR=`, and it is the smallest change of the four: one constant, no runtime search, no flag.
 
 **It loses because a build machine's path is not a user machine's**, which is
-[P-0055](../principles/0055-this-machine-is-not-the-reference.md) stated about a directory instead
+[P-0088](../principles/0088-no-number-is-trusted-further-than-its-instrument-has-been-checked.md) stated about a directory instead
 of about VRAM: *using the development machine as evidence* is the thing that principle rules out,
 and a path compiled in is that mistake in its most literal form. It is also, exactly, the defect
 this record was opened to fix — `env!("CARGO_MANIFEST_DIR")` **is** a path baked at build time, and

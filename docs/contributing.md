@@ -76,7 +76,7 @@ anything on the frame path; the colour rule in particular is
   [`swap.rs`](../crates/karakuri-engine/src/swap.rs)'s `PROBE_RESOLUTION` is fixed rather than
   the deck's — a governor adds per-Set measurements together, so **comparable matters more than
   absolute**. What a number carries about *how* it was taken is separate and is
-  [P-0012](principles/0012-a-measurement-carries-how-it-was-taken.md)
+  [P-0088](principles/0088-no-number-is-trusted-further-than-its-instrument-has-been-checked.md)
 
 ### Working with git
 

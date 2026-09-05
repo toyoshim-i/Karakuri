@@ -5,7 +5,7 @@ status: accepted
 date: 2026-07-25
 supersedes: []
 superseded_by: []
-principles: [0012]
+principles: [0088]
 tags: [engine, process]
 ---
 
@@ -56,4 +56,4 @@ consistently falls back to the host clock, and says so.
 ## Evidence
 
 Session 2026-07-25T15:00Z, 2026-07-25T15:42Z. Standing rule:
-[P-0012](../principles/0012-a-measurement-carries-how-it-was-taken.md).
+[P-0088](../principles/0088-no-number-is-trusted-further-than-its-instrument-has-been-checked.md).

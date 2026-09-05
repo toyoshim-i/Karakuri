@@ -15483,7 +15483,7 @@ mod gpu {
         // runs of one program, and `DEFAULT_COMPUTE_BUDGET_MS` is 16.7. So the
         // measurement is taken where it can be taken and reported;
         // `cargo test -p karakuri -- --nocapture` is where to read it.
-        // P-0012: it carries how it was taken — `Deck::measure_slots`, one
+        // P-0088: it carries how it was taken — `Deck::measure_slots`, one
         // `Probe` for the deck, at the probe's own resolution rather than at
         // `CANVAS`.
         let costs: Vec<f32> = (0..SLOTS)

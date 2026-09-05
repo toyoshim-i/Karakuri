@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-03
 supersedes: []
 superseded_by: []
-principles: [0037]
+principles: [0088]
 tags: [engine, process]
 ---
 
@@ -71,4 +71,4 @@ Two further decisions:
 ## Evidence
 
 Session 2026-08-03T04:00Z–04:34Z, commit `328a80a`. Standing rule:
-[P-0037](../principles/0037-check-a-measurement-against-another-measurement.md).
+[P-0088](../principles/0088-no-number-is-trusted-further-than-its-instrument-has-been-checked.md).

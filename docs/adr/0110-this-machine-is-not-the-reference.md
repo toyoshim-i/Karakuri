@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-19
 supersedes: []
 superseded_by: []
-principles: [0055]
+principles: [0088]
 tags: [process, engine]
 ---
 
@@ -48,4 +48,4 @@ likelier a laptop**, which is the same correction one level up.
 ## Evidence
 
 Session 2026-08-19T13:32Z. Standing rule:
-[P-0055](../principles/0055-this-machine-is-not-the-reference.md).
+[P-0088](../principles/0088-no-number-is-trusted-further-than-its-instrument-has-been-checked.md).

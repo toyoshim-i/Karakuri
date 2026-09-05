@@ -114,14 +114,13 @@ Each of these decides a case of the same question and none of them says what the
 
 A reading of the whole registry finds more of them —
 [P-0004](../principles/0004-a-live-set-is-never-mutated-in-place.md),
-[P-0012](../principles/0012-a-measurement-carries-how-it-was-taken.md),
-[P-0037](../principles/0037-check-a-measurement-against-another-measurement.md),
 [P-0069](../principles/0069-the-three-clocks-never-collapse-into-each-other.md),
 [P-0072](../principles/0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md),
 [P-0076](../principles/0076-a-surface-owns-the-affordance-never-the-authority.md),
 [P-0082](../principles/0082-looking-never-writes-back.md),
 [P-0084](../principles/0084-a-confident-wrong-automatic-judgement-is-worse-than-not-judging.md),
-[P-0087](../principles/0087-name-the-property-never-the-shape.md) — which is the
+[P-0087](../principles/0087-name-the-property-never-the-shape.md),
+[P-0088](../principles/0088-no-number-is-trusted-further-than-its-instrument-has-been-checked.md) — which is the
 argument rather than a longer list. **A property that eighteen files are instances of is being
 rediscovered per file**, and the eighteenth had to make it again from nothing.
 
