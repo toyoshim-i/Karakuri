@@ -520,6 +520,24 @@ go on claiming an operator reaches it."* The console draws no `egui` widget and 
 today, so `Tab` should arrive — **nothing was run to confirm it**, and a `Tab` swallowed by the
 toolkit is the failure mode in this scheme that looks like nothing at all.
 
+**Checked on 2026-09-05, and the answer is yes — but not for the reason the code gives.**
+`egui-winit` 0.36.1 hard-codes the flag: *"When pressing the Tab key, egui focuses the first
+focusable element, hence Tab always consumes"*, so `EventResponse::consumed` is `true` for every
+`Tab` whether or not anything has focus. What makes this program safe is that `App::to_egui` reads
+`repaint` and nothing else — `consumed` is not read anywhere in `crates/`. So `egui` is told about
+the key and never asked for permission, and the delivery does not depend on the focus state at all.
+The console also draws no focusable `egui` widget: `Button`, `TextEdit`, `Slider`, `DragValue`,
+`.interact(` and `.sense(` return no hits in `karakuri-console/src`, `CentralPanel` allocates no
+interactive response, and `Memory::focused()` is therefore permanently `None`.
+
+**The arm's own comment states the wrong reason and is the thing to correct.** It says `egui` *"has
+no focused widget in this pass and so consumes nothing"*, which is true of `egui::Context` and false
+of the flag `egui-winit` returns. Read as written, it invites somebody to honour `consumed` on the
+grounds that an empty focus state makes it harmless — and it does not: `Tab` would be swallowed on
+the first press. **The invariant to watch is therefore one sentence: `EventResponse` has exactly one
+field read in this workspace, and it is `repaint`.** The second condition is that no focusable `egui`
+widget is added to the console, which would start a focus system competing with this record's.
+
 **Every figure here is read rather than computed by a check**: 63 rows, 16 `has`, 10 `plan`, 37 `gap`,
 26 rows naming letters, 31 entries in `KEYS`. The 19 gaps that become `plan` are a row-by-row reading
 of the page.
