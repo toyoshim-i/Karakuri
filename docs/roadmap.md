@@ -304,13 +304,24 @@ whose panel cell is a `gap` and whose only owed route is `x`.
 **Exit.** No `plan` badge in the panel or key column of this bay's rows on
 [every operation](manual/operations.html).
 
-**Order inside the bay.** Draw *Choose the wipe shape, the quantum, the length* first. `.xfade`, the
-transition row, is drawn nowhere at all, and the other three rows convert only once a surface holds
-what that row sets: *Fade a deck out or in* answers `Owed::NotRead` until the transition settings
+**Order inside the bay.** *Choose the wipe shape, the quantum, the length* went first and **is
+drawn**: `.xfade` was painted by nothing, and the console now owns the quantum, the length and the
+wipe shape as a pointer of its own and emits the operation from three pills. The other three rows
+convert only once a surface holds what that row sets: *Fade a deck out or in* answers `Owed::NotRead` until the transition settings
 are handed over, and *Choose which renderer of a deck is live* and *Wipe the next deck in* read the
 same way — the wipe reading the row's third setting, its front shape, as well as the other two.
 
-**Blocked on.** Nothing. *Wipe the next deck in* was the one row of the eight that was, and it
+**Blocked on — the panel column, nothing; the key column, four rows.** *Fade a deck out or in*
+(`f g`), *Choose which renderer of a deck is live* (`r`) and *Choose the wipe shape, the quantum, the
+length* (`z n`) name letters this binary already binds to folding, resetting and unfolding — the
+collision ADR-0220 recorded and did not resolve — and
+[ADR-0259](adr/0259-the-keyboard-is-addressed-to-the-bay-that-has-focus-and-a-global-letter-is-a-convenience-or-the-operators-own.md)
+now dissolves it rather than picking a winner: the keyboard is addressed to the bay that has focus,
+and those rows' badges stop naming letters at all. **So this sub-milestone closes short of its stated
+exit on purpose**, and the four `plan` key badges it leaves are ADR-0259's to clear rather than
+work anybody skipped. What is still this bay's own is the `go` pill and *Crossfade to the next deck*,
+both of which wait on the binary's `reading()`, which answers `None` for the transition settings and
+the mix. *Wipe the next deck in* was the one row of the eight that was blocked, and it
 waited on who says the front shape and the soft edge are its. Both have an owner now: the shape is
 `Operation::SetTransition`'s third setting and reaches the conversion inside `Current::transition`
 beside the quantum and the length, which are that operation's other two, and the soft edge is read

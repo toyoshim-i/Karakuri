@@ -286,6 +286,7 @@ number; new records continue from the end.
 | [ADR-0256](0256-a-swap-lands-on-a-frame-boundary-and-an-over-budget-set-rolls-back-without-being-asked.md) | A swap lands on a frame boundary, and an over-budget Set rolls back without being asked | 2026-09-05 | accepted |
 | [ADR-0257](0257-a-pointer-inside-a-records-prose-is-metadata-too.md) | A pointer inside a record's prose is metadata too | 2026-09-05 | accepted |
 | [ADR-0258](0258-the-look-comes-before-the-fader-so-a-cell-draws-every-slot-and-says-which-nothing-it-is.md) | The look comes before the fader, so a cell draws every slot and says which nothing it is | 2026-09-05 | accepted |
+| [ADR-0259](0259-the-keyboard-is-addressed-to-the-bay-that-has-focus-and-a-global-letter-is-a-convenience-or-the-operators-own.md) | The keyboard is addressed to the bay that has focus, and a global letter is a convenience or the operator's own | 2026-09-05 | accepted |
 
 ## Retired numbers
 
