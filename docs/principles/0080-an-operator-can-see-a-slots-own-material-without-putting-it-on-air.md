@@ -64,7 +64,7 @@ broadcast rather than a look at a candidate. How it got there is legible: a desi
 console — a picture and four cells — was bent to fit the command line, which has one window, and with
 one window the only place to put a look is the output, so the look took the output.
 
-[P-0060](0060-name-the-property-not-the-shape.md) is why the rule is written as a property now: the
+[P-0087](0087-name-the-property-never-the-shape.md) is why the rule is written as a property now: the
 requirement is that the operator can see a slot on its own, and *where that look is drawn* was never
 the thing being required. The retirement is
 [ADR-0240](../adr/0240-the-output-shows-the-mix-and-residency-keys-belong-to-the-mixer.md) and the

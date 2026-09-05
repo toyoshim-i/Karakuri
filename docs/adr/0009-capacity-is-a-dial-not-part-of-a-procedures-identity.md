@@ -5,7 +5,7 @@ status: accepted
 date: 2026-07-25
 supersedes: []
 superseded_by: []
-principles: [0014]
+principles: [0087]
 tags: [ir, engine, store]
 ---
 
@@ -50,4 +50,4 @@ costs a fork and a swap but **no recompilation**.
 ## Evidence
 
 Session 2026-07-25T12:03Z–12:24Z. Standing rule:
-[P-0014](../principles/0014-capacity-is-a-dial-and-not-part-of-what-a-procedure-is.md).
+[P-0087](../principles/0087-name-the-property-never-the-shape.md).

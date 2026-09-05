@@ -52,7 +52,7 @@ The fourth line is
 [ADR-0221](0221-an-arrangement-is-named-by-the-operator-and-kept-in-a-fourth-place.md)'s, and it is
 the precedent this record follows rather than the one it argues with. What that record decided, in
 four parts: a **name the operator typed** is the handle, because
-[P-0053](../principles/0053-a-value-that-must-be-stable-is-recorded-not-derived.md) rules out a
+[P-0087](../principles/0087-name-the-property-never-the-shape.md) rules out a
 content address that moves on every character and a slot number that moves when something else is
 deleted; a **fourth place under the store**, because each of the three that existed refuses it for
 its own reason; the **spelling is one component at a time** — the operator's name, what kind of

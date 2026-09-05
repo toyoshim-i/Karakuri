@@ -5,7 +5,7 @@ status: accepted
 date: 2026-09-02
 supersedes: []
 superseded_by: []
-principles: [0036, 0060, 0080]
+principles: [0036, 0080, 0087]
 tags: [docs, process, ui, engine]
 ---
 
@@ -74,8 +74,8 @@ mix.* How many outputs the instrument has, and whether the look costs the operat
 is up, are answers to the requirement — not the requirement. Four cells beside the picture meet it
 better than one switched output did, and the rule written as a shape could not say so; it could only
 go false.
-[P-0060](../principles/0060-name-the-property-not-the-shape.md) is that rule, and this is an instance
-of it with the failure mode the other way round from the one P-0060 was written against: there,
+[P-0087](../principles/0087-name-the-property-never-the-shape.md) is that rule, and this is an instance
+of it with the failure mode the other way round from the one P-0087 was written against: there,
 deleting a named shape let the duplication relocate; here, deleting a named shape left a live
 requirement with nothing standing for it.
 

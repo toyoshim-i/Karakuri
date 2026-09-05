@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-28
 supersedes: []
 superseded_by: []
-principles: [0016, 0030, 0045, 0060]
+principles: [0016, 0030, 0045, 0087]
 tags: [docs, process, console]
 ---
 
@@ -134,7 +134,7 @@ twenty matches; fifteen are prose in doc comments and **five are emissions** —
 It lost twice. It lost to P-0030 and to the README's statement of who the manual is for: nobody can
 play a set from `cargo run --example panel`, so a page written for a player would be asserting a
 route none of its readers has. And it lost to
-[P-0060](../principles/0060-name-the-property-not-the-shape.md), which is the sharper of the two.
+[P-0087](../principles/0087-name-the-property-never-the-shape.md), which is the sharper of the two.
 *Which cargo target the control happens to live in* is the shape; **the operator reaches it** is
 the property. Naming the shape would have the meter move the day the code is copied from an example
 into a binary and not the day anything became reachable — and worse, it would go on reading the same

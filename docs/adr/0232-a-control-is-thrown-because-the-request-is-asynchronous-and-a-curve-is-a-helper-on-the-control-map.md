@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-31
 supersedes: []
 superseded_by: []
-principles: [0001, 0028, 0043, 0069, 0074, 0075, 0076, 0078, 0085]
+principles: [0001, 0028, 0043, 0069, 0074, 0076, 0078, 0085, 0087]
 tags: [operations, console, transitions, automation, architecture]
 ---
 
@@ -135,7 +135,7 @@ buffer from what a record asks for at the moment it asks, because **"the record 
 and the work lands later."** That sentence is the whole of *why a control is thrown*, written down
 about buffers before anyone asked it about faders.
 
-[P-0075](../principles/0075-a-pending-transition-shows-where-it-is-where-it-is-going-and-that-it-has-not-arrived.md)
+[P-0087](../principles/0087-name-the-property-never-the-shape.md)
 is its surface consequence: *a control whose request has been made and not yet granted has three
 things to say and must say all three* — the state it is in, the state it was asked for, and that the
 second has not happened. **Its second user is already built.** *"The mixer strip's two faders… A

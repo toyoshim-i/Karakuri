@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-16
 supersedes: []
 superseded_by: []
-principles: [0051]
+principles: [0087]
 tags: [ir, process]
 ---
 
@@ -47,4 +47,4 @@ edge, the scope is settled, and the question is a leak from the current code.
 ## Evidence
 
 Session 2026-08-16T04:50Z, 2026-08-16T05:30Z. Standing rule:
-[P-0051](../principles/0051-an-existing-field-is-not-a-fact-about-the-design.md).
+[P-0087](../principles/0087-name-the-property-never-the-shape.md).

@@ -5,7 +5,7 @@ status: accepted
 date: 2026-09-01
 supersedes: []
 superseded_by: []
-principles: [0036, 0051, 0067, 0085, 0086]
+principles: [0036, 0067, 0085, 0086, 0087]
 tags: [ir, engine, render, console, docs]
 ---
 
@@ -141,7 +141,7 @@ others do not. It is distinguished by having a second reason that naming knobs d
 
 Together: an L5 kind and a named parameter set would let *Bloom* and *RGB shift* be built, and would
 leave *Feedback* exactly where it is
-([P-0051](../principles/0051-an-existing-field-is-not-a-fact-about-the-design.md) — the shape of the
+([P-0087](../principles/0087-name-the-property-never-the-shape.md) — the shape of the
 payload is not the shape of the question).
 
 ## What a decision here would touch

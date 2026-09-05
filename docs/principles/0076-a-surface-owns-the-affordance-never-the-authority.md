@@ -79,5 +79,5 @@ the first control with a pending state is the first control anyone would put a l
 Decided in
 [ADR-0188](../adr/0188-a-pending-transition-says-it-is-pending-and-no-surface-holds-the-rule.md), which records
 the console-held constraint as a rejected alternative with both arguments, beside
-[P-0075](0075-a-pending-transition-shows-where-it-is-where-it-is-going-and-that-it-has-not-arrived.md), which is
+[P-0087](0087-name-the-property-never-the-shape.md), which is
 what a pending state has to say.

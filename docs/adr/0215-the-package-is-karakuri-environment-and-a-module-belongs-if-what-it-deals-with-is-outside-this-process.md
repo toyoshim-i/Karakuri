@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-28
 supersedes: []
 superseded_by: []
-principles: [0013, 0031, 0060, 0066, 0085]
+principles: [0013, 0031, 0066, 0085, 0087]
 tags: [architecture, vocabulary]
 ---
 
@@ -23,7 +23,7 @@ They are one record rather than two because of the order in which they actually 
 did not win a beauty contest against four other nouns; it won because it is the only candidate that
 names the **property** the package has rather than a position it occupies or a relationship it
 stands in — which is
-[P-0060](../principles/0060-name-the-property-not-the-shape.md) — and **a name that names a property
+[P-0087](../principles/0087-name-the-property-never-the-shape.md) — and **a name that names a property
 can be used to decide placement.** The boundary is not a second decision taken beside the name; it is
 what the name is for, and it is what makes the name worth a record at all. The alternative that was
 standing when this session opened, `karakuri-core`, cannot do that work: nothing about the word
@@ -123,7 +123,7 @@ centre of a picture**, which is a real recurring noun here
 ([ADR-0037](0037-tone-mapping-is-a-uniform-and-the-default-is-chosen-by-looking.md)'s comparison
 table, `karakuri-engine/src/present.rs:70`, `karakuri-engine/tests/meter.rs` where `let core =
 measure(&gpu, &core_view)`, and `examples/beat_strands.kir`'s *"the blue core and the violet
-shell"*). None of that is fatal. **`core` does not lose on P-0031. It loses on P-0060**, and that
+shell"*). None of that is fatal. **`core` does not lose on P-0031. It loses on P-0087**, and that
 argument is below.
 
 ## The boundary test, applied
@@ -181,7 +181,7 @@ procedure *and the bytes it was compiled from*, and says why:
 
 That paragraph exists **because the file is outside this process and can change under it.** A module
 whose central design comment is about the disk changing beneath a second read is not a module with
-nothing outside it; it is a worked example of P-0060 applied to exactly this boundary — name which
+nothing outside it; it is a worked example of P-0087 applied to exactly this boundary — name which
 read is canonical, rather than deleting the second reader.
 
 The residual doubt is real and is worth writing down: `check(src)` and the private `compile(src)`
@@ -217,7 +217,7 @@ these two decisions are one record.**
 
 **`karakuri-core`.** The standing recommendation until `environment` was proposed, and it has no
 collision worth the name — 49 loose occurrences, none of them a defined component. It loses on
-[P-0060](../principles/0060-name-the-property-not-the-shape.md): it names a **position** rather than a
+[P-0087](../principles/0087-name-the-property-never-the-shape.md): it names a **position** rather than a
 property, and it cannot be applied. Asked whether `midi.rs` belongs in `karakuri-core`, the word
 returns nothing; asked whether `Clock` does, it returns nothing again, which is precisely the
 question ADR-0214 left open and the reason it was left open. It is also the **wrong** position. A

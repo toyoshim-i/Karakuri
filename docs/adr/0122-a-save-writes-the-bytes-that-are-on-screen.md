@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-22
 supersedes: []
 superseded_by: []
-principles: [0053, 0060]
+principles: [0087]
 tags: [store, engine]
 ---
 

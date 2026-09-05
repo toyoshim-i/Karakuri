@@ -125,7 +125,7 @@ rolling toward a residency the governor has not granted, and a reach on each of 
 while a transition has not run
 ([ADR-0190](../adr/0190-the-parked-tally-rolls-because-two-lamps-do-not-fit-in-fifty-three-pixels.md),
 [ADR-0206](../adr/0206-a-fader-marks-where-it-is-going-and-keeps-reaching-for-it.md),
-[P-0075](0075-a-pending-transition-shows-where-it-is-where-it-is-going-and-that-it-has-not-arrived.md)).
+[P-0087](0087-name-the-property-never-the-shape.md)).
 The staleness is `view::ROLL_STALENESS` — `ROLL_TRAVEL` in `ROLL_STEPS` steps, 33.33 ms, about
 thirty a second. The cost is
 [`budget::PANEL_PASS`](../../crates/karakuri-console/src/budget.rs), **1.26 ms**, and it is one

@@ -98,6 +98,5 @@ P-0072's first clause asks for and what this rule says is not enough on its own.
 
 Decided in
 [ADR-0189](../adr/0189-motion-may-carry-the-meaning-and-a-stopped-animation-is-a-fault-to-report.md),
-which is one decision with two consequences: a presentation may carry its meaning in motion
-([P-0075](0075-a-pending-transition-shows-where-it-is-where-it-is-going-and-that-it-has-not-arrived.md)),
+which is one decision with two consequences: a presentation may carry its meaning in motion,
 because a stopped panel is read as stopped — which is only true while something on it moves.

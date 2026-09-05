@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-26
 supersedes: []
 superseded_by: [0189]
-principles: [0075, 0076]
+principles: [0076, 0087]
 tags: [ui, vocabulary, decks]
 ---
 
@@ -44,7 +44,7 @@ request is pending, should the panel refuse everything except the withdrawal?
 Two principles and one number.
 
 **What must be said is
-[P-0075](../principles/0075-a-pending-transition-shows-where-it-is-where-it-is-going-and-that-it-has-not-arrived.md),
+[P-0087](../principles/0087-name-the-property-never-the-shape.md),
 and the presentation is not.** A pending control says where it is, where it is going, and that it
 has not arrived: the actual state stays legible and unambiguous, the destination is identifiable
 from the surface itself, it reads as unsettled in a single frame, and it declares a price and a
@@ -65,7 +65,7 @@ indicators, old lit, new blinking, swap on arrival, with a degenerate one-indica
 a blinking pending mark and the destination in a tooltip — prescribed underneath it.
 
 **That fixes a shape**, and this repository has a rule against exactly that habit:
-[P-0060](../principles/0060-name-the-property-not-the-shape.md) — *a shape is one instance of a
+[P-0087](../principles/0087-name-the-property-never-the-shape.md) — *a shape is one instance of a
 property*, and naming the shape leaves the property to be reinvented wherever the shape does not
 fit, in a form that is harder to find afterwards because nothing advertises it. A surface with one
 indicator, or one where a blink is wrong for some other reason, would have been outside the rule
