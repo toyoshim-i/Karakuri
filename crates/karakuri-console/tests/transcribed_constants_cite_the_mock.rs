@@ -5,7 +5,9 @@
 //!
 //! # Why a transcription needs a guard of its own
 //!
-//! `room::size` is 72 numbers copied out of a stylesheet by hand, and a wrong
+//! `room::size` is 156 numbers copied out of a stylesheet by hand — 72 of them
+//! when this file landed, and the count carries its date because it only grows
+//! (2026-09-05) — and a wrong
 //! copy is invisible to every other test in the crate. Those tests state a
 //! region's arithmetic *in terms of* these constants — `head.height() ==
 //! size::HEAD_H`, and so on — so a test of the arithmetic compares the layout
@@ -608,22 +610,29 @@ fn every_transcribed_constant_matches_the_source_it_cites() {
     // one. The margin under each reading is the same two or three it was set
     // with: a floor at the reading itself fails on any deletion at all, which
     // is a different question from the one this guards.
+    //
+    // **They had not been raised since, and the numbers say by how much**: the
+    // scan reads 160, 127 and 118 on 2026-09-05, where the floors still stood
+    // at 85's margin. A floor two thirds under the reading is not a floor —
+    // seventy constants could have gone before it said anything — so they are
+    // set from that reading here, with the same margin, when the Library
+    // filter row's six moved into `room::size` and came under this guard.
     assert_eq!(
         total,
         transcribed + derived + own,
         "every constant is exactly one of the three kinds"
     );
     assert!(
-        total >= 83,
+        total >= 158,
         "only {total} constants read out of {} files — has a marker drifted?",
         SOURCES.len()
     );
     assert!(
-        transcribed >= 67,
+        transcribed >= 124,
         "only {transcribed} constants read as transcribed — the citation scan is not seeing them"
     );
     assert!(
-        resolved >= 74,
+        resolved >= 115,
         "only {resolved} citations resolved against {STYLESHEET} — is the stylesheet still parsing?"
     );
     assert!(
