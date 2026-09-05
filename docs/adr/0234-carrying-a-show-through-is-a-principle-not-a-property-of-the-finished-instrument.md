@@ -134,7 +134,7 @@ P-0072,
 [P-0082](../principles/0082-looking-never-writes-back.md),
 [P-0084](../principles/0084-a-confident-wrong-automatic-judgement-is-worse-than-not-judging.md),
 [P-0087](../principles/0087-name-the-property-never-the-shape.md),
-[P-0088](../principles/0088-no-number-is-trusted-further-than-its-instrument-has-been-checked.md),
+[P-0095](../principles/0095-an-instrument-that-cannot-measure-says-so-rather-than-reporting-a-number.md),
 [P-0090](../principles/0090-a-surface-offers-it-never-decides.md) — which is the
 argument rather than a longer list. **A property that eighteen files are instances of is being
 rediscovered per file**, and the eighteenth had to make it again from nothing.

@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-03
 supersedes: []
 superseded_by: []
-principles: [0088]
+principles: [0095]
 tags: [engine, process]
 ---
 
@@ -70,5 +70,7 @@ Two further decisions:
 
 ## Evidence
 
-Session 2026-08-03T04:00Z–04:34Z, commit `328a80a`. Standing rule:
-[P-0088](../principles/0088-no-number-is-trusted-further-than-its-instrument-has-been-checked.md).
+Session 2026-08-03T04:00Z–04:34Z, commit `328a80a`. Standing rules:
+[P-0095](../principles/0095-an-instrument-that-cannot-measure-says-so-rather-than-reporting-a-number.md)
+for what the probe does, and `docs/contributing.md` §1, *Working style* for how a
+reader checks a number — P-0088 stated both and was split on 2026-09-05.

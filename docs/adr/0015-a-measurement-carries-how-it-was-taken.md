@@ -5,7 +5,7 @@ status: accepted
 date: 2026-07-25
 supersedes: []
 superseded_by: []
-principles: [0088]
+principles: [0095]
 tags: [engine, process]
 ---
 
@@ -56,4 +56,6 @@ consistently falls back to the host clock, and says so.
 ## Evidence
 
 Session 2026-07-25T15:00Z, 2026-07-25T15:42Z. Standing rule:
-[P-0088](../principles/0088-no-number-is-trusted-further-than-its-instrument-has-been-checked.md).
+[P-0095](../principles/0095-an-instrument-that-cannot-measure-says-so-rather-than-reporting-a-number.md)
+— P-0088 stated it and was split on 2026-09-05, the instrument's half re-recorded under that
+number.

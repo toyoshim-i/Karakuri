@@ -248,7 +248,7 @@ unreachable* is the property.
 - **The number ADR-0213 shipped with, 0 of 46, is `3 gap 14 has 38 plan` today**, read by that
   record's own command on 2026-08-30 and transcribed nowhere else; the command is the citation, and
   the figure here is dated for the same reason
-  ([P-0088](../principles/0088-no-number-is-trusted-further-than-its-instrument-has-been-checked.md)).
+  ([P-0095](../principles/0095-an-instrument-that-cannot-measure-says-so-rather-than-reporting-a-number.md)).
 - **Three rows naming no home are work rather than exclusions.** *Wire a procedure's input to a
   node*, *Narrow the published interface* and *Walk the edit history* each need a home named on the
   page before a control can be built to it, and ADR-0197 already established that naming one is a

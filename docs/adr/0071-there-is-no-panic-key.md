@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-08
 supersedes: []
 superseded_by: []
-principles: [0084, 0088]
+principles: [0084, 0095]
 tags: [ui, engine]
 ---
 
@@ -65,4 +65,6 @@ This milestone reached that same answer three times: the tempo octave, semi-auto
 
 Session 2026-08-08T18:09Z–19:35Z, commit `15dec5a`. Standing rules:
 [P-0084](../principles/0084-a-confident-wrong-automatic-judgement-is-worse-than-not-judging.md),
-[P-0088](../principles/0088-no-number-is-trusted-further-than-its-instrument-has-been-checked.md).
+[P-0095](../principles/0095-an-instrument-that-cannot-measure-says-so-rather-than-reporting-a-number.md)
+— P-0088 stated it and was split on 2026-09-05, the instrument's half re-recorded under that
+number.

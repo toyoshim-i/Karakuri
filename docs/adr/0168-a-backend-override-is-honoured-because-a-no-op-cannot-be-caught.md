@@ -33,7 +33,7 @@ the actual mistake and is not fixed by either answer below.
 
 **The alternative was to leave the code alone and delete the instruction**, on the grounds that a
 shell variable is the worst possible way to change a measurement:
-[P-0088](../principles/0088-no-number-is-trusted-further-than-its-instrument-has-been-checked.md) says a measurement carries
+[P-0095](../principles/0095-an-instrument-that-cannot-measure-says-so-rather-than-reporting-a-number.md) says a measurement carries
 how it was taken, and an environment variable does not travel with a number in a table. That cost
 is real and is now real — a stray `WGPU_BACKEND` moves every figure in this repository to another
 backend, which is worth a factor of 3.5.

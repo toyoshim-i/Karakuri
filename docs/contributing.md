@@ -69,8 +69,27 @@ anything on the frame path; the colour rule in particular is
   gets a result that looks like a finding. It is also why
   [`swap.rs`](../crates/karakuri-engine/src/swap.rs)'s `PROBE_RESOLUTION` is fixed rather than
   the deck's — a governor adds per-Set measurements together, so **comparable matters more than
-  absolute**. What a number carries about *how* it was taken is separate and is
-  [P-0088](principles/0088-no-number-is-trusted-further-than-its-instrument-has-been-checked.md)
+  absolute**. What a number carries about *how* it was taken is the instrument's own rule and is
+  [P-0095](principles/0095-an-instrument-that-cannot-measure-says-so-rather-than-reporting-a-number.md)
+- **Check a number against a second measurement whose bias direction you know, never against a
+  constant.** The host clock includes submit and synchronisation, so it is an upper bound on GPU
+  time, and that is why `Probe::plausible` reads
+  `host_ns < PLAUSIBILITY_FLOOR_NS || gpu_ns * PLAUSIBILITY_RATIO >= host_ns` rather than comparing
+  against a fixed number. **A threshold on its own has no good value**: low lets garbage through,
+  high rejects a genuinely fast machine, and the lying measurement this replaced reported 0.095 ms
+  for work taking tens of milliseconds — two million points at size 40 measuring lighter than
+  sixty-four points — missing a constant floor of 0.1 ms by **five microseconds**, on a floor
+  already raised once from `> 0` for the same reason. `gpu_ns >= host_ns / 4` is the same test on a
+  fast machine and a slow one. **Never relax a threshold until the reports stop**, which is the
+  instinct that would have kept this one hidden
+  ([ADR-0068](adr/0068-a-timestamp-is-checked-against-a-second-measurement-not-a-constant.md))
+- **This machine is evidence about this machine.** It has been read for more than that twice: once
+  concluding that GPU timestamps work, and once concluding that a wasteful element layout could wait
+  because four resident slots fit here — where under `std430` only scalars are recoverable, 80 B to
+  64 B for `drift_shell`, a fifth and not a half, and one `amplify 64` stage adds 1.25 GiB by
+  multiplying exactly the stride the layout shrinks. The backend bullet above is the same lesson a
+  third time, one level down
+  ([ADR-0110](adr/0110-this-machine-is-not-the-reference.md))
 
 ### Working with git
 
