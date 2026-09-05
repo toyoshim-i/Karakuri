@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-30
 supersedes: []
 superseded_by: []
-principles: [0048, 0085, 0090, 0092]
+principles: [0096, 0085, 0090, 0092]
 tags: [store, format, console, sequencer]
 ---
 
@@ -26,7 +26,7 @@ about where both are kept, and the shape it follows is already built.
 one `surface.map`: `crates/karakuri-midi/src/map.rs` `include_str!`s that map into its own test and
 calls it *"what an operator copies before they have one"*. So the precedent for a preset that is a
 *setting* rather than a procedure is in the tree, and it is the only one.
-[P-0048](../principles/0048-what-ships-what-you-saved-and-what-you-are-editing-are-three-places.md)
+P-0048
 names the tier: *"`examples/` is app presets and **nobody writes it**"*, and
 [manual.md](../manual.md)'s *Where your work lives* table is the same three rows — app presets in
 `examples/`, your presets in `<store>/sets/<id>.set.ndjson`, scratch in `<store>/scratch/`.
@@ -110,8 +110,9 @@ ADR-0221 says outright that *the default is not a file and there is no reserved 
 not that. It is authored content the way a `.kir` and `surface.map` are — somebody sits down and
 writes one — so its preset tier is a file that ships, in `examples/` with the material and the map,
 and nothing in this program may write there
-([P-0048](../principles/0048-what-ships-what-you-saved-and-what-you-are-editing-are-three-places.md),
-whose *what it rules out* is the day a session rewrote three tracked examples).
+([P-0096](../principles/0096-the-operators-library-is-written-by-an-operators-own-act.md),
+whose *what it rules out* is the day a session rewrote three tracked examples; P-0048 when this
+was written).
 
 ## Why the two other homes are wrong
 

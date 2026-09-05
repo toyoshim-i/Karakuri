@@ -28,6 +28,10 @@ fn open_establishes_layout_and_is_idempotent() {
     assert!(root.is_dir());
     assert!(root.join("thumbnails").is_dir());
     assert!(root.join("sets").is_dir());
+    // **Established even though nothing has written one**, so an operator
+    // looking for what a model kept meets an empty directory rather than a
+    // missing one — which is itself the answer.
+    assert!(root.join("sandbox").is_dir());
     assert!(root.join("sessions").is_dir());
 }
 
@@ -1390,4 +1394,82 @@ fn open_establishes_the_arrangements_directory_beside_the_other_three() {
     fs::remove_dir_all(root.join("arrangements")).unwrap();
     Store::open(&root).unwrap();
     assert!(root.join("arrangements").is_dir());
+}
+
+/// **A Set written into the sandbox lands there and nowhere else**, and the
+/// library is written by the other method.
+///
+/// The store half of
+/// `docs/principles/0096-the-operators-library-is-written-by-an-operators-own-act.md`:
+/// `sets/` is the operator's library, so a save asked for over MCP is written
+/// with `write_sandbox_set` and the library is left exactly as it was.
+///
+/// **The negative control is the second half.** A test that only checked the
+/// sandbox file appeared would pass against a writer that wrote both, which is
+/// the failure that matters here — the operator's preset gone. So this asserts
+/// what is *not* in `sets/` and then that the same id put through
+/// `write_set` does land there, which is what stops the whole thing passing
+/// against a store that writes everything into one directory.
+#[test]
+fn a_sandbox_set_is_written_to_sandbox_and_the_library_is_untouched() {
+    let dir = tempdir().unwrap();
+    let store = Store::open(dir.path()).unwrap();
+
+    let lines = vec![Line::new(Record::Set {
+        id: "night01".into(),
+        v: 1,
+    })];
+    store.write_sandbox_set("night01", &lines).unwrap();
+
+    assert!(
+        dir.path().join("sandbox").join("night01.kbset").exists(),
+        "a save asked for over MCP did not reach the sandbox"
+    );
+    assert!(
+        !dir.path().join("sets").join("night01.kbset").exists(),
+        "a save asked for over MCP wrote the operator's library"
+    );
+    assert!(
+        matches!(store.read_set("night01"), Err(StoreError::Io(_))),
+        "the library answered for a set only the sandbox holds"
+    );
+
+    // The control: the same id, the same lines, through the library's own
+    // writer. Without this the test above would pass against a store whose two
+    // writers were one.
+    store.write_set("night01", &lines).unwrap();
+    assert!(dir.path().join("sets").join("night01.kbset").exists());
+}
+
+/// **The sandbox refuses what the library refuses**, because what may be in a
+/// Set file is a property of the format and not of the directory.
+///
+/// One of the three is enough to check that the shared scan is reached — the
+/// three sentences and the order they are asked in are `write_set`'s own tests
+/// above — and a `part` is the one chosen because it is the check that makes
+/// `.kbset` mean *already resolved*, which a sandbox file claims by carrying
+/// the extension.
+#[test]
+fn a_sandbox_set_refuses_a_part_the_way_the_library_does() {
+    let dir = tempdir().unwrap();
+    let store = Store::open(dir.path()).unwrap();
+
+    let lines = vec![
+        Line::new(Record::Set {
+            id: "night01".into(),
+            v: 1,
+        }),
+        Line::new(Record::Part {
+            layer: Layer::L1,
+            index: 0,
+            name: None,
+            path: "drift_shell.kir".into(),
+        }),
+    ];
+
+    match store.write_sandbox_set("night01", &lines) {
+        Err(StoreError::PartInSet { index }) => assert_eq!(index, 1),
+        other => panic!("expected PartInSet, got {other:?}"),
+    }
+    assert!(!dir.path().join("sandbox").join("night01.kbset").exists());
 }

@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-29
 supersedes: []
 superseded_by: []
-principles: [0048, 0085, 0087]
+principles: [0096, 0085, 0087]
 tags: [console, store, format]
 ---
 
@@ -91,7 +91,7 @@ operation in `Silent::Surface`: an arrangement is not something a replay reconst
 which is precisely why it needs a file of its own instead of a place in the stream.
 
 **Under the store, and that is
-[P-0048](../principles/0048-what-ships-what-you-saved-and-what-you-are-editing-are-three-places.md)
+P-0048
 rather than convenience.** The principle's three places have exact counterparts here, which is the
 strongest evidence this is the right shelf: *what ships* is `karakuri_console::layout()`, the
 built-in default, and **nobody writes it**; *what you saved* is `<store>/arrangements/`, and only a

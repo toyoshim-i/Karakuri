@@ -5,7 +5,7 @@ status: accepted
 date: 2026-09-01
 supersedes: []
 superseded_by: []
-principles: [0044, 0048, 0085, 0093, 0094]
+principles: [0044, 0096, 0085, 0093, 0094]
 tags: [store, console, mcp, hot-swap, docs]
 ---
 
@@ -134,8 +134,8 @@ here, so the files you named are not written to. Point an editor at these"*, the
 and its own documentation says why one line is not enough there: four decks on one preset are four
 files *"whose names an operator cannot guess and cannot tell apart by content, since at startup they
 are identical; what makes a file deck B's is its **name**"*. This is
-[P-0048](../principles/0048-what-ships-what-you-saved-and-what-you-are-editing-are-three-places.md)'s
-own last clause — *"the location is printed so an editor knows where to point"* — at the resolution
+[P-0096](../principles/0096-the-operators-library-is-written-by-an-operators-own-act.md)'s
+(P-0048 when this was written) own last clause — *"the location is printed so an editor knows where to point"* — at the resolution
 the rule now needs.
 
 ### 5. The paragraph that lost is quoted where it stood, not deleted

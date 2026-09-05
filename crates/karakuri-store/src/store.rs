@@ -7,6 +7,7 @@
 //! <hash>.meta.ndjson                regenerated metadata
 //! thumbnails/<hash>.mp4
 //! sets/<id>.kbset
+//! sandbox/<id>.kbset
 //! sessions/<stamp>.ndjson
 //! arrangements/<name>.arrangement.json
 //! ```
@@ -33,6 +34,17 @@
 //! (`docs/adr/0158-a-saved-arrangement-that-disagrees-with-itself-is-refused-not-repaired.md`),
 //! and a check here would be a second answer to a question that already has
 //! one.
+//!
+//! **`sandbox/` is `sets/`'s shape and not its meaning.** It holds Set files
+//! written the same way, refused on the same three terms and named the same
+//! way, and it is a second directory for one reason: `sets/` is the operator's
+//! library and is written by an operator's own act, so a save asked for over
+//! MCP lands here instead
+//! (`docs/principles/0096-the-operators-library-is-written-by-an-operators-own-act.md`,
+//! `docs/adr/0261-a-model-asked-save-lands-in-a-sandbox-because-the-operators-library-is-the-operators-own-act.md`).
+//! Which of the two a save goes to is decided by whoever asked and never here:
+//! [`Store::write_set`] and [`Store::write_sandbox_set`] are two methods so
+//! that no caller can reach the library by leaving an argument at its default.
 
 use std::collections::BTreeSet;
 use std::fs;
@@ -117,6 +129,32 @@ pub struct Store {
     root: PathBuf,
 }
 
+/// **What a Set file may not hold**, asked once for both directories a Set file
+/// is written into.
+///
+/// A free function rather than a method because it touches no root: what may be
+/// in the file is a property of the format, and both [`Store::write_set`] and
+/// [`Store::write_sandbox_set`] owe the same three answers. Written once so
+/// that the two cannot drift into accepting different files under one
+/// extension — see [`Store::write_set`], where each of the three sentences and
+/// the order they are asked in is argued.
+fn refuse_what_is_not_a_set(lines: &[Line]) -> Result<(), StoreError> {
+    if let Some(index) = lines.iter().position(|l| l.record().is_metadata()) {
+        return Err(StoreError::MetaInSet { index });
+    }
+    // Before the `is_set_state` scan below, which would also refuse it —
+    // and would name a tick while doing so. Asked first for the reason
+    // `is_metadata` is asked first: the earlier question owns the more
+    // specific sentence.
+    if let Some(index) = lines.iter().position(|l| l.record().is_authoring()) {
+        return Err(StoreError::PartInSet { index });
+    }
+    if let Some(index) = lines.iter().position(|l| !l.record().is_set_state()) {
+        return Err(StoreError::TickInSet { index });
+    }
+    Ok(())
+}
+
 impl Store {
     /// Establish the store layout under `root`, creating any directories
     /// that do not exist yet. Safe to call repeatedly on the same root.
@@ -131,6 +169,12 @@ impl Store {
         // record carries names a directory that exists.
         fs::create_dir_all(root.join("thumbnails"))?;
         fs::create_dir_all(root.join("sets"))?;
+        // Established on `open` beside `sets/` for the reason
+        // `arrangements/` is: a store written by an older build gains the
+        // directory the first time this one opens it, so an operator looking
+        // for what a model kept finds an empty directory rather than a missing
+        // one — and the empty directory is itself the answer.
+        fs::create_dir_all(root.join(Store::SANDBOX))?;
         fs::create_dir_all(root.join("sessions"))?;
         // Established on `open` like the other three, so that a store written
         // by an older build gains the directory the first time this one opens
@@ -188,9 +232,29 @@ impl Store {
     /// `docs/adr/0231-a-sets-two-forms-take-two-extensions-and-the-store-holds-only-the-resolved-one.md`.
     pub const SET_FILE_SUFFIX: &str = ".kbset";
 
+    /// **The directory a save asked for by a model lands in**, and the one
+    /// place it is spelled.
+    ///
+    /// Public because a refusal and an accept both have to say where a file
+    /// went — a model told only that a set was kept, in a store whose `sets/`
+    /// does not hold it, would go looking in the wrong directory and report the
+    /// instrument as broken
+    /// (`docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md`).
+    pub const SANDBOX: &str = "sandbox";
+
     fn set_path(&self, id: &str) -> PathBuf {
         self.root
             .join("sets")
+            .join(format!("{id}{}", Store::SET_FILE_SUFFIX))
+    }
+
+    /// [`Store::set_path`]'s sibling under [`Store::SANDBOX`], built the same
+    /// way and off the same suffix: what lands here is a Set file, and a second
+    /// spelling of the extension is the drift [`Store::SET_FILE_SUFFIX`] exists
+    /// to prevent.
+    fn sandbox_path(&self, id: &str) -> PathBuf {
+        self.root
+            .join(Store::SANDBOX)
             .join(format!("{id}{}", Store::SET_FILE_SUFFIX))
     }
 
@@ -298,20 +362,30 @@ impl Store {
     /// [`Record::is_authoring`](crate::record::Record::is_authoring) and
     /// [`StoreError::PartInSet`].
     pub fn write_set(&self, id: &str, lines: &[Line]) -> Result<(), StoreError> {
-        if let Some(index) = lines.iter().position(|l| l.record().is_metadata()) {
-            return Err(StoreError::MetaInSet { index });
-        }
-        // Before the `is_set_state` scan below, which would also refuse it —
-        // and would name a tick while doing so. Asked first for the reason
-        // `is_metadata` is asked first: the earlier question owns the more
-        // specific sentence.
-        if let Some(index) = lines.iter().position(|l| l.record().is_authoring()) {
-            return Err(StoreError::PartInSet { index });
-        }
-        if let Some(index) = lines.iter().position(|l| !l.record().is_set_state()) {
-            return Err(StoreError::TickInSet { index });
-        }
+        refuse_what_is_not_a_set(lines)?;
         ndjson::write(&self.set_path(id), lines)
+    }
+
+    /// **Write a Set file into [`Store::SANDBOX`]** — [`Store::write_set`]'s
+    /// sibling, refusing exactly what it refuses.
+    ///
+    /// A method of its own rather than an argument on `write_set`, because the
+    /// directory is decided by *who asked* and that is not something a caller
+    /// should be able to leave at a default: a save asked for over MCP lands
+    /// here and an operator's own act lands in the library
+    /// (`docs/principles/0096-the-operators-library-is-written-by-an-operators-own-act.md`).
+    /// A `bool` or an `Option` here would make the operator's library the value
+    /// a caller gets by saying nothing, which is the wrong way round.
+    ///
+    /// **The three refusals are shared rather than re-stated.** What may be in
+    /// a Set file is a property of the format and not of the directory — a
+    /// `part` under `sandbox/` would be a file disagreeing with its own name in
+    /// exactly the way [`StoreError::PartInSet`] describes — so both writers go
+    /// through one scan and neither can drift into accepting what the other
+    /// refuses.
+    pub fn write_sandbox_set(&self, id: &str, lines: &[Line]) -> Result<(), StoreError> {
+        refuse_what_is_not_a_set(lines)?;
+        ndjson::write(&self.sandbox_path(id), lines)
     }
 
     /// Read a session stream (`sessions/<stamp>.ndjson`).
@@ -384,7 +458,7 @@ impl Store {
     /// **This never returns the built-in.** Resetting the console is a
     /// different operation reaching different code — the default arrangement is
     /// what ships, and what ships is not a file anything here can write
-    /// ([P-0048](../../../docs/principles/0048-what-ships-what-you-saved-and-what-you-are-editing-are-three-places.md)).
+    /// ([P-0096](../../../docs/principles/0096-the-operators-library-is-written-by-an-operators-own-act.md)).
     /// A fallback here would make an operator who mistyped a name watch their
     /// console reset instead of being told the name is wrong.
     pub fn read_arrangement(&self, name: &str) -> Result<Vec<u8>, StoreError> {

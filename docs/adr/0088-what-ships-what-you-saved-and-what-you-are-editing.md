@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-15
 supersedes: []
 superseded_by: [0237]
-principles: [0048]
+principles: [0096]
 tags: [store, mcp]
 ---
 
@@ -59,4 +59,6 @@ reached slot N* untrue.
 ## Evidence
 
 Session 2026-08-15T14:59Z–18:47Z, commits `6422f72`, and the `--load-set` follow-up. Standing rule:
-[P-0048](../principles/0048-what-ships-what-you-saved-and-what-you-are-editing-are-three-places.md).
+[P-0096](../principles/0096-the-operators-library-is-written-by-an-operators-own-act.md)
+(P-0048 until 2026-09-05, retired for naming a flag where the rule is about the actor —
+[ADR-0261](0261-a-model-asked-save-lands-in-a-sandbox-because-the-operators-library-is-the-operators-own-act.md)).

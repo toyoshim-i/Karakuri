@@ -300,7 +300,7 @@ use karakuri_engine::{
     compose, Blend, Committed, Control, Deck, Event, Gpu, HotSwap, Look, Mask, MaskKind, Present,
     Residency, Set, Sink, Skip, TonemapOp, DEFAULT_BUDGET_MS,
 };
-use karakuri_environment::{audio, mcp, mix, setfile, watch, Opening};
+use karakuri_environment::{audio, mcp, mix, setfile, watch, Asked, Opening};
 use karakuri_ir::Kind as Layer;
 use karakuri_layout::{Axis, Hit, Layout, NodeId, Point};
 use karakuri_operation::gate::{Class, Open};
@@ -3051,10 +3051,10 @@ impl Sources {
 ///
 /// # Why a panel copies at all
 ///
-/// `karakuri_environment::scratch` names three places and says only one of them
-/// is written to, because before it existed a surface was given write access to
+/// `karakuri_environment::scratch` is the one place a live edit may land, and it
+/// exists because before it did a surface was given write access to
 /// whatever path the material came from and **three shipped presets were
-/// replaced in one session**. This program had none of it: every slot watched
+/// replaced in one session** (P-0096). This program had none of it: every slot watched
 /// the two paths the operator typed, so the file an editor opened was the
 /// preset itself, and a run started with no paths at all watched `examples/`.
 ///
@@ -4142,6 +4142,10 @@ fn slot_in_range(slot: usize, slot_count: usize) -> bool {
 /// **One live save, from the frame that asked for it to the file on disk.**
 struct Save {
     slot: usize,
+    /// **Whose act this save is**, which decides the directory it lands in and
+    /// is decided at the call site — see [`Keeping::save_set`] and
+    /// [`karakuri_environment::Asked`].
+    asked: Asked,
     id: String,
     /// The store root, not an open store: opening it creates directories, which
     /// is I/O, which belongs on the thread below rather than on a frame.
@@ -4159,6 +4163,7 @@ impl Save {
     /// place.
     fn run(self) -> Result<(), String> {
         let Save {
+            asked,
             id,
             root,
             sources,
@@ -4171,13 +4176,17 @@ impl Save {
         // cannot check that a hash resolves without reading the store back, so
         // putting them is the caller's promise.
         values.nodes = sources.into_nodes(&store)?;
-        setfile::save(&store, &id, values.saving())
+        setfile::save(&store, asked, &id, values.saving())
     }
 }
 
 /// What a live save came back with, at the frame it arrives.
 struct Saved {
     slot: usize,
+    /// Carried through so the sentence at the end names the right place: the
+    /// library's line points at the Library bay, and the sandbox's cannot,
+    /// because the bay does not list one.
+    asked: Asked,
     id: String,
     /// `Ok` and the file is on disk under `id`. **A failure is printed and
     /// nothing claims otherwise**: a program saying a save happened when the
@@ -7777,7 +7786,14 @@ impl Keeping {
         let asked: Vec<mcp::SaveRequest> = mcp.saves().collect();
         let wires: Vec<mcp::WireRequest> = mcp.wires().collect();
         for request in asked {
-            self.save_set(engine, root, request.slot, request.id, Some(request.reply));
+            self.save_set(
+                engine,
+                root,
+                Asked::Model,
+                request.slot,
+                request.id,
+                Some(request.reply),
+            );
         }
         self.rewire(engine, wires);
     }
@@ -7855,6 +7871,7 @@ impl Keeping {
         &mut self,
         engine: &Engine,
         root: &std::path::Path,
+        asked: Asked,
         slot: usize,
         id: Option<String>,
         reply: Option<mcp::Reply>,
@@ -7890,10 +7907,12 @@ impl Keeping {
         // where the whole of `accepted_save`'s doc lives: `playing_values` below
         // is the one read here that needs one, and the accept has to be on the
         // side of it a test can reach.
-        let id = karakuri_environment::accepted_save(slot, id, &sources, root, reply.as_ref());
+        let id =
+            karakuri_environment::accepted_save(slot, asked, id, &sources, root, reply.as_ref());
         let values = playing_values(engine.deck.slot(slot).set(), &self.edges);
         let save = Save {
             slot,
+            asked,
             id,
             root: root.to_path_buf(),
             sources,
@@ -7905,13 +7924,14 @@ impl Keeping {
         // [`Keeping::awaited_saves`], which is what this count is for.
         self.in_flight += 1;
         std::thread::spawn(move || {
-            let (slot, id) = (save.slot, save.id.clone());
+            let (slot, asked, id) = (save.slot, save.asked, save.id.clone());
             // **Carried back rather than answered from here.** This thread knows
             // the outcome and could say it, and that would be a second place a
             // save is reported from.
             let outcome = save.run();
             let _ = tx.send(Saved {
                 slot,
+                asked,
                 id,
                 outcome,
                 reply,
@@ -7953,21 +7973,44 @@ impl Keeping {
     fn took_save(&mut self, saved: Saved) -> bool {
         let Saved {
             slot,
+            asked,
             id,
             outcome,
             reply,
         } = saved;
         self.in_flight = self.in_flight.saturating_sub(1);
         let (written, said) = match outcome {
-            Ok(()) => {
-                let said = format!(
-                    "  keep: deck {}: saved as set `{id}` — the Library bay's `my sets` lists \
-                     it, and `l` loads it back",
-                    deck_letter(slot as u8)
-                );
-                println!("{said}");
-                (true, Ok(said))
-            }
+            // **Two sentences, and the `written` beside them is two answers
+            // too.** `my sets` lists the operator's library, so a sandbox save
+            // adds no row and re-reading the listing would be a repaint that
+            // changes nothing — and telling a model that `l` loads its file
+            // back would send it after a row the bay does not draw
+            // (P-0096, ADR-0261).
+            Ok(()) => match asked {
+                Asked::Operator => {
+                    let said = format!(
+                        "  keep: deck {}: saved as set `{id}` — the Library bay's `my sets` \
+                         lists it, and `l` loads it back",
+                        deck_letter(slot as u8)
+                    );
+                    println!("{said}");
+                    (true, Ok(said))
+                }
+                Asked::Model => {
+                    let said = format!(
+                        "  keep: deck {}: saved as set `{id}` in the sandbox — \
+                         `<store>/{}/{id}{}`. A save asked for over MCP is kept there \
+                         rather than in the operator's library, so `my sets` does not list \
+                         it and `l` does not load it; the operator's own `k` writes the \
+                         library",
+                        deck_letter(slot as u8),
+                        karakuri_store::store::Store::SANDBOX,
+                        karakuri_store::store::Store::SET_FILE_SUFFIX,
+                    );
+                    println!("{said}");
+                    (false, Ok(said))
+                }
+            },
             // **Printed, and nothing claiming otherwise.** See `Saved::outcome`.
             Err(e) => {
                 let said = format!(
@@ -9039,6 +9082,7 @@ impl ApplicationHandler for App {
                         self.keeping.save_set(
                             &gfx.engine,
                             &self.store,
+                            Asked::Operator,
                             usize::from(deck),
                             None,
                             None,
@@ -11673,6 +11717,7 @@ mod tests {
         let seeds = [0x0bad_cafeu32];
         setfile::save(
             &store,
+            Asked::Operator,
             "night01",
             setfile::Saving {
                 nodes: &nodes,
@@ -15990,7 +16035,14 @@ mod gpu {
         let mut keeping = keeping();
         keeping.playing = Playing::at_launch(&engine.placed, engine.deck.slot_count());
         // Deck B, so a hard-coded slot 0 fails here.
-        keeping.save_set(&engine, &root, ASKED_TO_PRIME, Some("kept01".into()), None);
+        keeping.save_set(
+            &engine,
+            &root,
+            Asked::Operator,
+            ASKED_TO_PRIME,
+            Some("kept01".into()),
+            None,
+        );
         assert_eq!(keeping.in_flight, 1, "the save was never started");
 
         // The save is on a thread of its own and no frame waits for it; this is

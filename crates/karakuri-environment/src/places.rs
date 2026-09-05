@@ -1,15 +1,21 @@
 //! Where this program's two directories are, when nobody has said.
 //!
-//! # The third row of [`crate::scratch`]'s table, which never had an address
+//! # The first row of P-0096's table, which never had an address
 //!
-//! | | where | who writes it |
-//! |---|---|---|
-//! | app presets | `examples/` | nobody — they ship with the program |
-//! | user presets | `<store>/sets/<id>.kbset` | `--save-set`, and nothing else |
-//! | scratch | `<store>/scratch/` | `--watch`, `--mcp`, and the operator's editor |
+//! Where the material lives and who writes each place is
+//! `docs/principles/0096-the-operators-library-is-written-by-an-operators-own-act.md`,
+//! and **the table is there rather than here**. It was written out in this
+//! header and in [`crate::scratch`]'s, and two copies of one rule is two things
+//! to keep in step: both said the operator's library was written by
+//! `--save-set` *"and nothing else"* while the `k` key, the panel and MCP's
+//! `save_set` were all writing it, and both had to be corrected at once when
+//! the store gained an extension
+//! (`docs/adr/0231-a-sets-two-forms-take-two-extensions-and-the-store-holds-only-the-resolved-one.md`
+//! counts that as a cost it paid twice). What is left here is the sentence this
+//! module is about, which the principle states and does not address.
 //!
-//! That table has said `examples/` since it was written, and `examples/`
-//! relative to *what* was never in it. It was the repository's own directory,
+//! **That table has said `examples/` since it was written, and `examples/`
+//! relative to *what* was never in it.** It was the repository's own directory,
 //! reached by whichever program happened to be run from the repository — and
 //! [`crate::mcp`]'s own header records what that cost once already, when a
 //! model was handed write access to it. This module is that missing address:

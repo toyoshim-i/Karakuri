@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-30
 supersedes: []
 superseded_by: []
-principles: [0048, 0085, 0086, 0090, 0092]
+principles: [0096, 0085, 0086, 0090, 0092]
 tags: [store, format, console, distribution, security]
 ---
 
@@ -19,7 +19,7 @@ the code — it is a tier with no file in it.**
 [ADR-0227](0227-a-pattern-and-a-master-chain-setting-are-library-data-in-two-tiers.md) records the
 shape this application keeps its data in: presets ship with the program and the operator's own live
 under the store, and
-[P-0048](../principles/0048-what-ships-what-you-saved-and-what-you-are-editing-are-three-places.md)
+P-0048
 names the three places —
 [`crates/karakuri-environment/src/scratch.rs`](../../crates/karakuri-environment/src/scratch.rs)'s
 header table is the same three rows, *"app presets | `examples/` | nobody — they ship with the

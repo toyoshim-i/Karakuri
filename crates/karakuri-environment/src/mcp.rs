@@ -83,6 +83,10 @@
 //! same way, is taken where the MIDI surface is taken, and ends in the method
 //! the `k` key ends in. **There is one save path in this program**, and it is
 //! `Live::save_set`; this is a way to ask for it and not a second copy of it.
+//! What the two calls differ in is one argument — `karakuri_environment::Asked`
+//! — and what it decides is the directory: a save asked for here lands in
+//! `<store>/sandbox/` and the operator's own key writes the library
+//! (`docs/principles/0096-the-operators-library-is-written-by-an-operators-own-act.md`).
 //!
 //! **The wait for its answer happens with [`State`] unlocked.** There is a
 //! thread per connection and one mutex over the state, so a tool that waited
@@ -608,8 +612,9 @@ const ASKED: usize = 16;
 
 /// The longest an `id` a client names may be.
 ///
-/// It becomes a file name under `<store>/sets/`, and a stamp is twenty
-/// characters.
+/// It becomes part of a file name in the store — `<store>/sandbox/` for a save
+/// a model asked for, `<store>/sets/` for the id a read names — and a stamp is
+/// twenty characters.
 const MAX_ID: usize = 64;
 
 /// **What [`checked_id`] accepts, spelled for a schema.**
@@ -1309,8 +1314,8 @@ fn tools() -> Value {
         {
             "name": "save_set",
             "description":
-                "Keep what a slot is playing, as a Set file that can be loaded again with \
-                 `--load-set ID`. It writes the material **on screen** — the versions the \
+                "Keep what a slot is playing, as a Set file. It writes the material \
+                 **on screen** — the versions the \
                  slot is running, by content hash, with the whole of the wiring and the \
                  state around them: the parameters, the capacities, the bindings and the \
                  seeds the live Set holds now, the edges binding each `uses` slot, \
@@ -1318,9 +1323,17 @@ fn tools() -> Value {
                  not what any file on disk says, which is exactly what the operator's \
                  `k` key writes. That distinction is the \
                  point: a procedure that was written and then rolled back for cost is on \
-                 disk and not on screen, and this saves the screen. **It waits for the \
+                 disk and not on screen, and this saves the screen. **What you save goes \
+                 into the store's sandbox, `<store>/sandbox/`, and not into the \
+                 operator's library**: the library is written by the operator's own act \
+                 and nothing else, and what lands in the sandbox is the edit history of \
+                 this session — the files a person goes looking for afterwards. So \
+                 `read_set`, `list_sets` and `--load-set` do not reach what you write \
+                 here; if the operator wants one of these in their library they save it \
+                 themselves, or move the file. **It waits for the \
                  disk and tells you what happened**, so what comes back names the id it \
-                 was saved under; do not report a set as kept until it does.",
+                 was saved under; do not report a set as kept until it does, and use the \
+                 id it gives you rather than the one you asked for.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -1334,14 +1347,17 @@ fn tools() -> Value {
                         "pattern": ID_PATTERN,
                         "maxLength": MAX_ID,
                         "description":
-                            "what to file it under: letters, digits, `-` and `_`, and it \
-                             becomes a file name. **An id that already names a set is \
-                             overwritten**, as `--save-set ID` overwrites — a name you \
-                             choose is an instruction and nothing is renamed behind you, so \
-                             use a new one for each keeper. Omit it and the set is named \
-                             after the moment it was saved, which is what the key press \
-                             gets — a name an operator can find by the time they saved it, \
-                             and one that cannot collide.",
+                            "what to call it: letters, digits, `-` and `_`, and it \
+                             becomes part of a file name. **Nothing in the sandbox is \
+                             overwritten**, so what you save is filed under the moment it \
+                             was saved with your name behind it — `20260905-143052-271_my_take` \
+                             — and two saves under one name are two files rather than one. \
+                             That is the point of the directory: it is a session's edit \
+                             history, and a snapshot a later snapshot can replace is not \
+                             one. Omit it and the set is named after the moment alone, \
+                             which is what the operator's key press gets. **The answer \
+                             names the id the file was actually written under**; use that \
+                             one.",
                     },
                 },
                 "required": ["slot"],
@@ -1352,9 +1368,10 @@ fn tools() -> Value {
             "description":
                 "What a saved Set holds, and what each procedure in it declares — read \
                  out of the library without loading anything and without compiling \
-                 anything. A Set is a slot's material kept under a name: `save_set` \
-                 writes one, so does the operator's `k` key, and `--load-set ID` plays \
-                 one back. For every node this says which layer it is on — L1 is what \
+                 anything. A Set is a slot's material kept under a name: the operator's \
+                 `k` key writes one and `--load-set ID` plays one back. **This reads the \
+                 operator's library and not the sandbox `save_set` writes into**, so a \
+                 set you kept yourself is not here. For every node this says which layer it is on — L1 is what \
                  the elements are and how they move, L2 a deformation, L3 the camera, \
                  L4 how they are drawn, Field a distance function the others evaluate — \
                  what the procedure calls itself, and what it *declares*: each \
@@ -1388,8 +1405,9 @@ fn tools() -> Value {
             "description":
                 "What this store holds: every Set saved into it, most recently written \
                  first, with an address and a name per node. A Set is a slot's material \
-                 kept under a name — `save_set` writes one, so does the operator's `k` \
-                 key, and `--load-set ID` plays one back — and until this there was no \
+                 kept under a name — the operator's `k` key writes one and `--load-set \
+                 ID` plays one back; this is **the operator's library and not the \
+                 sandbox `save_set` writes into** — and until this there was no \
                  way to find out what had been kept: `read_set` answers about an id you \
                  already have, and the ids of everything saved before this conversation \
                  are not something a model can guess. **Call this first, then `read_set` \
@@ -2222,9 +2240,11 @@ fn read_set(id: &str, state: &State) -> Result<String, String> {
         .map_err(|e| format!("the store at `{}`: {e}", state.store.display()))?;
     let lines = store.read_set(id).map_err(|e| {
         format!(
-            "reading set `{id}`: {e} — a set is filed under the id it was saved \
-             under, by `save_set`, by the operator's `k` key or by `--save-set ID`, \
-             and this store holds only the ones written into it"
+            "reading set `{id}`: {e} — this reads the operator's library, which is \
+             filed under the id a set was saved under by the `k` key or by \
+             `--save-set ID`. A set kept with `save_set` is in `<store>/{}/` and not \
+             here, because the library is written by the operator's own act",
+            Store::SANDBOX
         )
     })?;
     // **The file's own order**, which is the order [`crate::setfile::save`]
@@ -2334,9 +2354,10 @@ fn list_sets(
     // are applied, because a filter over nothing has nothing to say.
     if held == 0 {
         return Ok(format!(
-            "this store holds no sets at all — nothing has been kept here yet. A set is \
-             written by `save_set`, by the operator's `k` key, or by `--save-set ID` on \
-             the command line, and this store is `{}`. Once one is saved, this lists it.",
+            "this store holds no sets at all — nothing has been kept here yet. This lists \
+             the operator's library, which is written by their own act: the `k` key, or \
+             `--save-set ID` on the command line. What `save_set` keeps goes to the \
+             sandbox and is not listed here. This store is `{}`.",
             state.store.display()
         ));
     }
@@ -2786,7 +2807,7 @@ fn layer_spelled(layer: Layer) -> &'static str {
 ///
 /// **A Set id is one path component.** [`crate::history::stamped_id`] says so
 /// where it explains why the date is spelled `20260816` rather than
-/// `2026/08/16`, and `Store::set_path` spells the file `sets/<id>.kbset`
+/// `2026/08/16`, and the store spells the file `<dir>/<id>.kbset`
 /// without checking that what it was handed is one. That is the operator's own
 /// business on `--save-set`, where the id came out of their own shell. It is not
 /// a model's: this is the same rule [`Slots`] exists for — **paths never cross
@@ -2797,20 +2818,22 @@ fn layer_spelled(layer: Layer) -> &'static str {
 /// filed under a name its caller did not ask for is a worse answer than one that
 /// is told to pick another.
 ///
-/// **A name a client picks twice overwrites, and that is the decision rather
-/// than an oversight.** `karakuri-environment`'s private `history::unused`
-/// exists because two saves in
-/// one millisecond produced one stamp and the second file replaced the first
-/// while the operator was told both were kept, and its own doc names this
-/// control as the reach that would make that matter. It is not reached from
-/// here, and it must not be: it renames — `keeper` becomes `keeper-1` — which is
-/// exactly the sanitising the paragraph above refuses, and it would rename only
-/// inside one run, so the same call in tomorrow's run would overwrite anyway.
-/// A *stamp* is a name nobody chose and renaming one loses nothing; a name a
-/// caller typed is an instruction, and `--save-set ID` has always obeyed it by
-/// overwriting. So `save_set` does what `--save-set` does, and says so — in the
-/// tool description a model reads and in `docs/manual.md`. Undocumented was
-/// the thing that was not allowed.
+/// **A name a client picks twice no longer overwrites, and the reason it once
+/// did no longer holds.** This paragraph said the opposite until 2026-09-05, and
+/// the argument it made was sound on its own premise: a name a caller typed is
+/// an instruction, `--save-set ID` has always obeyed it by overwriting, and
+/// `save_set` did what `--save-set` did. What changed is where a model's save
+/// lands. It writes `<store>/sandbox/` rather than the operator's library
+/// ([P-0096](../../../docs/principles/0096-the-operators-library-is-written-by-an-operators-own-act.md)),
+/// and nothing in that directory is an id an operator typed — it is a session's
+/// edit history, and a snapshot a later snapshot can replace is not one. So
+/// `crate::filed_as` puts the stamp in front of whatever name a client chose and
+/// the accept names what was written; the renaming this paragraph refused is
+/// still refused **here**, because refusing a bad id and naming a good file are
+/// two different jobs and this one is still the first. What remains true
+/// unchanged is that the behaviour is documented — in the tool description a
+/// model reads and in `docs/manual.md`. Undocumented was the thing that was not
+/// allowed.
 ///
 /// **No `con`, `nul`, `aux`, `com1` check.** They are reserved device names on
 /// Windows and would be a file that is not a file. There is no Windows target
@@ -2842,7 +2865,7 @@ fn checked_id(id: &str) -> Result<String, String> {
     {
         return Err(format!(
             "`id` holds `{bad}`, and a set id is letters, digits, `-` and `_`: it is one \
-             path component and it names a file under `<store>/sets/`"
+             path component and it names a file in the store"
         ));
     }
     Ok(id.to_string())
@@ -6191,22 +6214,29 @@ mod tests {
         }]);
         let id = crate::accepted_save(
             1,
+            // **A `Reply` exists only because a model asked**, so this is the
+            // arm this test has always been about — see
+            // `docs/principles/0096-the-operators-library-is-written-by-an-operators-own-act.md`.
+            crate::Asked::Model,
             Some("keeper".to_string()),
             &sources,
             std::path::Path::new("/nowhere/store"),
             Some(&reply),
         );
-        assert_eq!(
-            id, "keeper",
-            "a client's own id is what the set is filed under"
+        assert!(
+            id.ends_with("_keeper") && id != "keeper",
+            "a client's own name rides behind the stamp so a snapshot cannot be \
+             written over: {id}"
         );
 
         let said = awaited(&news, std::time::Duration::from_millis(60))
             .expect_err("a save with no outcome yet came back as a success");
         assert!(
-            said.starts_with("slot 1: saving 1 node as set `keeper` in /nowhere/store"),
+            said.starts_with(&format!(
+                "slot 1: saving 1 node as set `{id}` in /nowhere/store/sandbox"
+            )),
             "the loop's acceptance did not reach the client, so a timeout has no id \
-             to offer: {said}"
+             to offer, and no directory to look in: {said}"
         );
         assert!(
             said.contains("neither a success nor a failure"),
@@ -6242,7 +6272,7 @@ mod tests {
         ] {
             assert!(
                 checked_id(bad).is_err(),
-                "`{bad}` was accepted as the name of a file under `<store>/sets/`"
+                "`{bad}` was accepted as the name of a file in the store"
             );
         }
         assert!(checked_id(&"x".repeat(MAX_ID + 1)).is_err());

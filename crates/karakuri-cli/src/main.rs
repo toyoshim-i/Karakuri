@@ -38,7 +38,7 @@ use karakuri_environment::compile::{sort_slot, Material, Named, Placed};
 use karakuri_environment::mix::{op_name, op_wire_names, parse_op};
 use karakuri_environment::setfile::{layer_named, Names, SavedNode, Sources};
 use karakuri_environment::{
-    accepted_save, no_such_renderer, no_such_slot, nothing_to_save, SAVE_WAIT,
+    accepted_save, no_such_renderer, no_such_slot, nothing_to_save, Asked, SAVE_WAIT,
 };
 
 use std::fmt::Write as _;
@@ -2763,6 +2763,9 @@ fn session_head(
     };
     if let Err(e) = setfile::save(
         store,
+        // **The operator's**: this is the material of a run they started, kept
+        // where they will look for it.
+        Asked::Operator,
         &material,
         setfile::Saving {
             nodes: &nodes,
@@ -3220,6 +3223,8 @@ fn save_set(args: &Args, placed: &[Vec<Placed>], l1s: &[karakuri_ir::typed::Chec
     };
     match setfile::save(
         &store,
+        // `--save-set ID`, which is a flag an operator typed.
+        Asked::Operator,
         id,
         setfile::Saving {
             nodes: &nodes,
@@ -4653,6 +4658,10 @@ fn drained_saves(
 /// **One live save, from the frame that asked for it to the file on disk.**
 struct Save {
     slot: usize,
+    /// **Whose act this save is**, which decides the directory it lands in and
+    /// is decided at the call site — see [`Live::save_set`] and
+    /// [`karakuri_environment::Asked`].
+    asked: Asked,
     id: String,
     /// The store root, not an open store: opening it creates directories, which
     /// is I/O, which belongs on the thread below rather than on a frame.
@@ -4676,6 +4685,7 @@ impl Save {
     /// place.
     fn run(self) -> Result<(), String> {
         let Save {
+            asked,
             id,
             root,
             sources,
@@ -4689,13 +4699,17 @@ impl Save {
         // cannot check that a hash resolves without reading the store back, so
         // putting them is the caller's promise. See [`Sources::into_nodes`].
         values.nodes = sources.into_nodes(&store)?;
-        setfile::save(&store, &id, values.saving())
+        setfile::save(&store, asked, &id, values.saving())
     }
 }
 
 /// What a live save came back with, at the frame it arrives.
 struct Saved {
     slot: usize,
+    /// Carried through so the sentence at the end names the right directory:
+    /// the library's line tells an operator how to load it back, and the
+    /// sandbox's cannot, because nothing loads one.
+    asked: Asked,
     id: String,
     /// `Ok` and the file is on disk under `id`. **A failure is printed and no
     /// record is written**: a stream saying a save happened when the disk
@@ -5507,7 +5521,7 @@ impl Live {
         // that true on this side too.
         let wires: Vec<mcp::WireRequest> = mcp.wires().collect();
         for request in asked {
-            self.save_set(request.slot, request.id, Some(request.reply));
+            self.save_set(Asked::Model, request.slot, request.id, Some(request.reply));
         }
         self.rewire(wires);
     }
@@ -5672,7 +5686,7 @@ impl Live {
                 // The focused slot, a stamped name, and nobody waiting: a hand
                 // has one slot in front of it, cannot type a name, and is
                 // reading the terminal.
-                'k' => self.save_set(self.focus, None, None),
+                'k' => self.save_set(Asked::Operator, self.focus, None, None),
                 's' => self.print_status(),
                 'h' | '?' => eprint!("{BINDINGS}"),
                 _ => {}
@@ -5920,7 +5934,13 @@ impl Live {
     /// for a rate of a few an hour. The outcome comes back over `saves` and the
     /// record is written at the frame it arrives, not at this key press. See
     /// `Live::finished_saves`.
-    fn save_set(&mut self, slot: usize, id: Option<String>, reply: Option<mcp::Reply>) {
+    fn save_set(
+        &mut self,
+        asked: Asked,
+        slot: usize,
+        id: Option<String>,
+        reply: Option<mcp::Reply>,
+    ) {
         // **Checked here rather than only where the request came from.** A key
         // press cannot name a slot this deck does not hold and a tool call can,
         // and below this line `playing_values` reads `deck.slot(slot)`, which
@@ -5942,10 +5962,11 @@ impl Live {
         // of [`accepted_save`]'s doc lives: `playing_values` below is the one
         // read here that needs a `Deck`, and the accept has to be on the side
         // of it a test can reach.
-        let id = accepted_save(slot, id, &sources, &self.store_root, reply.as_ref());
+        let id = accepted_save(slot, asked, id, &sources, &self.store_root, reply.as_ref());
         let values = playing_values(self.deck.slot(slot).set(), &self.edges);
         let save = Save {
             slot,
+            asked,
             id,
             root: self.store_root.clone(),
             sources,
@@ -5957,7 +5978,7 @@ impl Live {
         // [`Live::awaited_saves`], which is what this count is for.
         self.saves_in_flight += 1;
         std::thread::spawn(move || {
-            let (slot, id) = (save.slot, save.id.clone());
+            let (slot, asked, id) = (save.slot, save.asked, save.id.clone());
             let outcome = save.run();
             // **Carried back rather than answered from here.** This thread
             // knows the outcome and could send it, and that would be a second
@@ -5966,6 +5987,7 @@ impl Live {
             // frame decided would be reading a different story from the stream.
             let _ = tx.send(Saved {
                 slot,
+                asked,
                 id,
                 outcome,
                 reply,
@@ -6012,6 +6034,7 @@ impl Live {
     fn took_save(&mut self, saved: Saved) {
         let Saved {
             slot,
+            asked,
             id,
             outcome,
             reply,
@@ -6019,8 +6042,26 @@ impl Live {
         self.saves_in_flight = self.saves_in_flight.saturating_sub(1);
         let said = match outcome {
             Ok(()) => {
-                let said =
-                    format!("slot {slot}: saved as set `{id}` — load it with `--load-set {id}`");
+                // **Two sentences because two things are true**, and the second
+                // would be a lie in the first's words: `--load-set` reads the
+                // library, so telling a model to load what it just wrote into
+                // the sandbox would send it after a file that path cannot see.
+                // What it is told instead is where the file is, which is what
+                // the operator needs to find it after the show
+                // (P-0096, ADR-0261).
+                let said = match asked {
+                    Asked::Operator => {
+                        format!("slot {slot}: saved as set `{id}` — load it with `--load-set {id}`")
+                    }
+                    Asked::Model => format!(
+                        "slot {slot}: saved as set `{id}` in the sandbox — \
+                         `<store>/{}/{id}{}`. A save asked for over MCP is kept there \
+                         rather than in the operator's library, so `--load-set {id}` does \
+                         not reach it; the operator's own `k` writes the library",
+                        karakuri_store::store::Store::SANDBOX,
+                        karakuri_store::store::Store::SET_FILE_SUFFIX,
+                    ),
+                };
                 eprintln!("{said}");
                 self.record_only(karakuri_store::record::Record::Save {
                     slot: slot as u8,
@@ -9633,6 +9674,7 @@ mod live_save_tests {
     fn save_and_load(store_root: &Path, id: &str, set: &Set, sources: Sources) -> setfile::Loaded {
         Save {
             slot: 0,
+            asked: Asked::Operator,
             id: id.to_string(),
             root: store_root.to_path_buf(),
             sources,
@@ -10750,6 +10792,7 @@ mod live_save_tests {
             std::thread::sleep(Duration::from_millis(120));
             tx.send(Saved {
                 slot: 0,
+                asked: Asked::Operator,
                 id: "late".to_string(),
                 outcome: Ok(()),
                 // A hand pressed the key; nobody is waiting on a socket.
