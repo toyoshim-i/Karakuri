@@ -47,5 +47,7 @@ likelier a laptop**, which is the same correction one level up.
 
 ## Evidence
 
-Session 2026-08-19T13:32Z. Standing rule:
-[P-0088](../principles/0088-no-number-is-trusted-further-than-its-instrument-has-been-checked.md).
+Session 2026-08-19T13:32Z. Standing rule: none in
+`docs/principles/`. P-0088 stated it and was split on 2026-09-05 — reading this machine as evidence
+about this machine is a discipline for whoever is working rather than a property of the engine, so
+it is stated in `docs/contributing.md` §1, *Working style*.

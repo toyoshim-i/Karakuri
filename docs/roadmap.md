@@ -1076,7 +1076,7 @@ preview cell shows, and when*).
 
 **What is thin.** What the whole-frame measurement is taken *with* is not settled — the probe
 measures a Set, and a frame is passes this project has never timed together. The instrument question
-[P-0088](principles/0088-no-number-is-trusted-further-than-its-instrument-has-been-checked.md) asks of any number applies to
+[P-0095](principles/0095-an-instrument-that-cannot-measure-says-so-rather-than-reporting-a-number.md) asks of any number applies to
 this one and has no answer yet.
 
 #### The preparation slot is the measurement

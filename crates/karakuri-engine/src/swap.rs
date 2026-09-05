@@ -126,7 +126,7 @@
 //!   rather than trusting the feature flag, and labels every number with how it
 //!   was obtained. A governor steering on an unlabelled number is the failure
 //!   mode a measurement that does not say how it was taken invites — see
-//!   `docs/principles/0088-no-number-is-trusted-further-than-its-instrument-has-been-checked.md`.
+//!   `docs/principles/0095-an-instrument-that-cannot-measure-says-so-rather-than-reporting-a-number.md`.
 //! - A Set is the unit the governor budgets in, and it is the unit that gets
 //!   built. Measuring it where it is built means the measurement travels with
 //!   it and cannot get attached to the wrong one.
