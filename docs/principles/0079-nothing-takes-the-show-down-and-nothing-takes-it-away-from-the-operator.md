@@ -83,7 +83,7 @@ machine that will not do what it is told is the same lost show with a better exc
 A refusal at the door is one of the three answers and is the best of them: an over-budget procedure,
 an ABI version mismatch, a wipe with no shape chosen. All three share the properties that make a
 refusal safe — nothing that was on air changed, the diagnostic says *why* rather than only *what*
-([P-0046](0046-a-diagnostic-says-why-not-only-what.md)), and every route meets the same wall in the
+([P-0083](0083-a-refusal-carries-what-the-next-attempt-needs.md)), and every route meets the same wall in the
 same sentence ([P-0061](0061-a-refusal-a-person-can-reach-from-two-surfaces-is-one-sentence.md)).
 A refusal that leaves the show exactly where it was has cost the operator nothing but a message.
 

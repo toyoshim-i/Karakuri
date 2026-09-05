@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-31
 supersedes: []
 superseded_by: []
-principles: [0005, 0027, 0046, 0061, 0067, 0074, 0076, 0078, 0079]
+principles: [0005, 0027, 0061, 0067, 0074, 0076, 0078, 0079, 0083]
 tags: [mcp, live, vocabulary, surfaces, docs]
 ---
 
@@ -120,7 +120,7 @@ have kept the contradiction alive under a new name while claiming to have closed
 audited is the reading under which rule 01 is simply true.
 
 **A refusal can say why; an absence cannot.**
-[P-0046](../principles/0046-a-diagnostic-says-why-not-only-what.md) is the rule that a diagnostic
+[P-0083](../principles/0083-a-refusal-carries-what-the-next-attempt-needs.md) is the rule that a diagnostic
 states the constraint behind it, and it is the principle written *for this reader in particular* — *"a
 diagnostic written for a human turned out to be a specification for a model."* A model that cannot see
 a tool learns nothing and plans around a hole it cannot name. A model that is refused is told the
@@ -190,7 +190,7 @@ P-0079's *"buying the safety back from the operator"* performed by a model.
   stated rather than an invention here, and it has a cost the audit has to carry: it reads engine state,
   so two identical calls can be answered differently a minute apart, and the refusal sentence must
   therefore name the deck and say that it is live — a refusal that only says *closed* would be unfixable
-  by the model that got it (P-0046).
+  by the model that got it (P-0083).
 - **`SetResidency` is the hinge and is closed for that reason.** It does not act on a live deck's
   contents; it is how a slot *becomes* live, and how one stops being live. Leaving it open while
   closing the contents would be a hole big enough to walk the whole class through — a model cannot
@@ -338,7 +338,7 @@ around a tool it cannot see, so a closed class costs nothing in wasted calls, an
 never has to be written. It loses on three counts and the maintainer replaced it the same day.
 **Rule 01 says reachable, and an unadvertised tool is not reachable** — the contradiction this
 decision exists to end would have survived under a new name. **A refusal says why and an absence
-cannot** (P-0046): the model learns nothing, and neither does the person sitting beside it, who is the
+cannot** (P-0083): the model learns nothing, and neither does the person sitting beside it, who is the
 one who can open the class. **And a shortened list is P-0027's silently wrong picture in the register
 of a tool surface** — nothing is broken, nothing is logged, and the model reports back that the
 instrument cannot do a thing it can do. It also makes `tools()` stateful and makes the list a model

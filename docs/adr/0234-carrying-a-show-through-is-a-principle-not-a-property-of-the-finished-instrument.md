@@ -175,7 +175,7 @@ with loudness, never with the operator's authority. The line is drawn where an a
 otherwise be had every time: **the instrument refuses what it cannot do, and never what it judges
 unwise.** A refusal at the door is answer one and the best of the three — nothing that was on air
 changed, the diagnostic says why
-([P-0046](../principles/0046-a-diagnostic-says-why-not-only-what.md)), every route meets the same
+([P-0083](../principles/0083-a-refusal-carries-what-the-next-attempt-needs.md)), every route meets the same
 sentence ([P-0061](../principles/0061-a-refusal-a-person-can-reach-from-two-surfaces-is-one-sentence.md)).
 A refusal of something the instrument *can* do, on the ground that it might go badly, is the second
 failure this rule names, and *go on air* is the case P-0076 had already settled: *"in a live

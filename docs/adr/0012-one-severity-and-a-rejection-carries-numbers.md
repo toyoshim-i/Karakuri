@@ -5,7 +5,7 @@ status: accepted
 date: 2026-07-25
 supersedes: []
 superseded_by: []
-principles: [0010]
+principles: [0083]
 tags: [ir, process]
 ---
 
@@ -47,4 +47,4 @@ states the estimate, the ceiling, and which call dominates:
 ## Evidence
 
 Session 2026-07-25T13:15Z–13:22Z; output shown at 2026-07-25T15:42Z. Standing rule:
-[P-0010](../principles/0010-a-rejection-carries-what-the-next-attempt-needs.md).
+[P-0083](../principles/0083-a-refusal-carries-what-the-next-attempt-needs.md).
