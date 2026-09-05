@@ -32,9 +32,8 @@ use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::{Panel, GRAB};
 use karakuri_console::room::{size, Room};
 use karakuri_console::view::{
-    library, mcp_pill, Field, Filters, LibraryBay, Scope, View, DECK_LETTERS, FIELD_H, FIELD_PAD_X,
-    HOLDS_UNSET, LAYERS, LAYER_UNSET, LIB_FILTERS_GAP, LIB_FILTERS_H, LIB_FILTERS_PAD_X,
-    LIB_FILTERS_PAD_Y,
+    library, mcp_pill, Field, Filters, LibraryBay, Scope, View, DECK_LETTERS, HOLDS_UNSET, LAYERS,
+    LAYER_UNSET,
 };
 use karakuri_layout::{Point, Rect};
 use karakuri_operation::gate::{Class, Open};
@@ -198,7 +197,7 @@ fn the_rows_and_the_foot_are_the_bays_own_geometry() {
     // and the one gap, which is `.field`'s `flex: 1`.
     let filters = bay.filters.expect("the bay draws its filter row");
     assert!(
-        near(filters.min.y, scopes.max.y) && near(filters.height(), LIB_FILTERS_H),
+        near(filters.min.y, scopes.max.y) && near(filters.height(), size::LIB_FILTERS_H),
         "the filter row is {filters:?} and the scope row ends at {}",
         scopes.max.y
     );
@@ -209,22 +208,22 @@ fn the_rows_and_the_foot_are_the_bays_own_geometry() {
     let holds = bay.field(Field::Holds).expect("the `holds` field");
     let layer = bay.field(Field::Layer).expect("the `layer` field");
     assert!(
-        near(holds.width(), layer.width()) && near(holds.height(), FIELD_H),
+        near(holds.width(), layer.width()) && near(holds.height(), size::FIELD_H),
         "the two fields are {} and {} wide at {} tall",
         holds.width(),
         layer.width(),
         holds.height()
     );
     assert!(
-        near(holds.min.x, filters.min.x + LIB_FILTERS_PAD_X)
-            && near(layer.max.x, filters.max.x - LIB_FILTERS_PAD_X)
-            && near(layer.min.x - holds.max.x, LIB_FILTERS_GAP),
+        near(holds.min.x, filters.min.x + size::LIB_FILTERS_PAD_X)
+            && near(layer.max.x, filters.max.x - size::LIB_FILTERS_PAD_X)
+            && near(layer.min.x - holds.max.x, size::LIB_FILTERS_GAP),
         "the fields are {holds:?} and {layer:?} in a row spanning {} to {}",
         filters.min.x,
         filters.max.x
     );
     assert!(
-        near(holds.min.y, filters.min.y + LIB_FILTERS_PAD_Y),
+        near(holds.min.y, filters.min.y + size::LIB_FILTERS_PAD_Y),
         "the fields sit at {} in a row starting at {}",
         holds.min.y,
         filters.min.y
@@ -355,7 +354,7 @@ fn the_foot_says_how_many_are_listed_of_how_many_there_are() {
     let room = region.height()
         - size::HEAD_H
         - size::SCOPES_H
-        - LIB_FILTERS_H
+        - size::LIB_FILTERS_H
         - size::LIB_LIST_PAD * 2.0
         - size::LIB_FOOT_H;
     assert_eq!(
@@ -550,8 +549,11 @@ fn a_folded_or_soloed_or_short_bay_lists_nothing() {
     // Below 632 the solve stops honouring minima and scales everything down
     // together (`common::SMALLEST` says so), and that is where a bay too short
     // for a row exists at all.
-    let chrome =
-        size::HEAD_H + size::SCOPES_H + LIB_FILTERS_H + size::LIB_FOOT_H + size::LIB_LIST_PAD * 2.0;
+    let chrome = size::HEAD_H
+        + size::SCOPES_H
+        + size::LIB_FILTERS_H
+        + size::LIB_FOOT_H
+        + size::LIB_LIST_PAD * 2.0;
     let short = solved(Rect {
         h: 160.0,
         ..SMALLEST
@@ -733,11 +735,11 @@ fn the_scope_chips_and_the_filter_fields_are_the_bays_controls_and_nothing_else_
     let filters = bay.filters.expect("the bay draws its filter row");
     let holds = bay.field(Field::Holds).expect("the `holds` field");
     points.push(egui::pos2(
-        filters.min.x + LIB_FILTERS_PAD_X * 0.5,
+        filters.min.x + size::LIB_FILTERS_PAD_X * 0.5,
         filters.center().y,
     ));
     points.push(egui::pos2(
-        holds.max.x + LIB_FILTERS_GAP * 0.5,
+        holds.max.x + size::LIB_FILTERS_GAP * 0.5,
         filters.center().y,
     ));
     let (left, right) = (
@@ -1602,73 +1604,6 @@ fn strip() -> karakuri_console::view::Strip {
 // The two filter fields
 // ---------------------------------------------------------------------------
 
-/// **The five numbers the filter row is laid out from, against the stylesheet
-/// they were copied out of.**
-///
-/// `transcribed_constants_cite_the_mock.rs` is where every other transcription
-/// in this crate is held to `docs/manual/style.css`, and it reads `room.rs` and
-/// `lib.rs`. These five live in `view.rs` beside the row they lay out, so this
-/// is the check they owe — the same question that file asks, asked of one rule
-/// each rather than of a whole module. **Moving them into `room::size` makes
-/// this test redundant and it goes with them.**
-///
-/// It reads the stylesheet the way a person does — find the rule, find the
-/// declaration — rather than parsing CSS, because two rules and four
-/// declarations do not want a parser.
-#[test]
-fn the_filter_rows_numbers_are_the_mocks_own() {
-    let css = std::fs::read_to_string(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/manual/style.css"),
-    )
-    .expect("the stylesheet");
-    let rule = |selector: &str| {
-        let at = css
-            .find(&format!("{selector} {{"))
-            .unwrap_or_else(|| panic!("{selector} is not in style.css any more"));
-        let rest = &css[at..];
-        let end = rest.find('}').expect("an unclosed rule in style.css");
-        rest[..end].to_owned()
-    };
-
-    let filters = rule(".lib-filters");
-    for want in ["padding: 6px 9px", "gap: 5px", "border-bottom: 1px"] {
-        assert!(
-            filters.contains(want),
-            "`.lib-filters` does not say `{want}` any more: {filters}"
-        );
-    }
-    let field = rule(".field");
-    for want in ["padding: 0 9px", "border: 1px"] {
-        assert!(
-            field.contains(want),
-            "`.field` does not say `{want}` any more: {field}"
-        );
-    }
-
-    for (name, transcribed, mock) in [
-        ("LIB_FILTERS_PAD_X", LIB_FILTERS_PAD_X, 9.0),
-        ("LIB_FILTERS_PAD_Y", LIB_FILTERS_PAD_Y, 6.0),
-        ("LIB_FILTERS_GAP", LIB_FILTERS_GAP, 5.0),
-        ("FIELD_PAD_X", FIELD_PAD_X, 9.0),
-    ] {
-        assert!(
-            near(transcribed, mock),
-            "{name} is {transcribed} and the rule it cites says {mock} — the stylesheet is the \
-             specification"
-        );
-    }
-    // The two derived ones: a field is one line of type inside a border either
-    // side, and the row is a field inside its padding over its own rule.
-    assert!(
-        near(FIELD_H, size::BASE * size::LINE + 2.0),
-        "a field is {FIELD_H} tall and the mock's is 16.5 inside two borders"
-    );
-    assert!(
-        near(LIB_FILTERS_H, 31.5),
-        "the filter row is {LIB_FILTERS_H} tall and the mock's is 6 + 18.5 + 6 + 1"
-    );
-}
-
 /// **Every layer of the vocabulary is one the `layer` field can be stepped
 /// to**, which is what makes `View::narrow` right to accept any of them.
 ///
@@ -1831,7 +1766,7 @@ fn the_filter_fields_answer_a_press_and_the_row_around_them_does_not() {
 
     // The gap between the two, which is 5 wide and bare card.
     let holds = bay.field(Field::Holds).expect("the `holds` field");
-    let gap = Point::new(holds.max.x + LIB_FILTERS_GAP * 0.5, holds.center().y);
+    let gap = Point::new(holds.max.x + size::LIB_FILTERS_GAP * 0.5, holds.center().y);
     assert_eq!(
         bay.filter(&view.holds, view.filters(), gap),
         None,
@@ -1879,8 +1814,8 @@ fn the_filter_fields_clear_every_boundary() {
             );
         }
         assert!(
-            box_.min.x - region.min.x >= LIB_FILTERS_PAD_X - f32::EPSILON
-                && region.max.x - box_.max.x >= LIB_FILTERS_PAD_X - f32::EPSILON,
+            box_.min.x - region.min.x >= size::LIB_FILTERS_PAD_X - f32::EPSILON
+                && region.max.x - box_.max.x >= size::LIB_FILTERS_PAD_X - f32::EPSILON,
             "{field:?} is {:?} in a bay spanning {} to {}",
             box_,
             region.min.x,

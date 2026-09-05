@@ -8429,35 +8429,6 @@ const LOAD_ARROW: f32 = size::BASE * 0.5;
 
 // -- the library's two filter fields ------------------------------------
 
-/// **The `.lib-filters` row's own padding and the gap between the two fields
-/// in it**: `.lib-filters`'s `padding: 6px 9px; gap: 5px`.
-///
-/// **Transcribed here rather than in `room::size`**, which is where every
-/// other number this crate copies out of the mock lives and where
-/// `tests/transcribed_constants_cite_the_mock.rs` reads them. These five carry
-/// that file's citation form all the same, and `tests/library.rs` holds them
-/// against `docs/manual/style.css` on their own — moving them to `room::size`
-/// beside `SCOPES_PAD_X` is the tidier home and changes nothing else.
-pub const LIB_FILTERS_PAD_X: f32 = 9.0;
-pub const LIB_FILTERS_PAD_Y: f32 = 6.0;
-pub const LIB_FILTERS_GAP: f32 = 5.0;
-
-/// `.field`'s `padding: 0 9px`, around the word in it at [`size::BASE`]. The
-/// vertical half of that declaration is zero, which is why the box below is
-/// the type's own height and its border and nothing else.
-pub const FIELD_PAD_X: f32 = 9.0;
-
-/// One field's box: [`size::BASE`] at [`size::LINE`] inside `.field`'s
-/// `border: 1px solid var(--c-line)` — **18.5**, which is [`size::XPILL_H`]'s
-/// arithmetic one bay along and for the same reason, a bordered capsule round
-/// one line of type.
-pub const FIELD_H: f32 = size::BASE * size::LINE + size::HAIRLINE * 2.0;
-
-/// The filter row's box: one field inside [`LIB_FILTERS_PAD_Y`], plus the one
-/// pixel of the rule under it — [`size::HAIRLINE`], which is
-/// `.lib-filters`'s own `border-bottom: 1px solid var(--c-hair)`.
-pub const LIB_FILTERS_H: f32 = LIB_FILTERS_PAD_Y * 2.0 + FIELD_H + size::HAIRLINE;
-
 /// **What the `holds` field reads with no filter set**, which is the mock's
 /// own `holds&hellip;` — the ellipsis is the placeholder saying the field is
 /// empty, and a field that *is* set reads the value instead. That is the whole
@@ -8932,8 +8903,8 @@ pub struct LibraryBay {
     /// questions in it.
     pub scopes: Option<Rect>,
     /// `.lib-filters`: the row of two fields between the scope row and the
-    /// list, one [`LIB_FILTERS_H`] tall and the full width of the bay, with its
-    /// own rule along the bottom of it.
+    /// list, one [`size::LIB_FILTERS_H`] tall and the full width of the bay,
+    /// with its own rule along the bottom of it.
     ///
     /// **`None` wherever [`scopes`](Self::scopes) is**, and that is one
     /// condition rather than two: a filter is a question about a listing, and a
@@ -9192,20 +9163,20 @@ impl LibraryBay {
     ///
     /// `.field` carries `flex: 1; min-width: 0` and nothing else has a width in
     /// the row, so the two share whatever is left of `.lib-filters`'s content
-    /// box after its one [`LIB_FILTERS_GAP`] — which is a division rather than
-    /// a measurement, and is why this bay still asks `egui` for nothing. The
+    /// box after its one [`size::LIB_FILTERS_GAP`] — which is a division rather
+    /// than a measurement, and is why this bay still asks `egui` for nothing. The
     /// chips one row up are the exception and stay the exception: a chip is as
     /// wide as the word in it and a field is not.
     pub fn field(&self, which: Field) -> Option<Rect> {
         let row = self.filters?;
-        let width = (row.width() - LIB_FILTERS_PAD_X * 2.0 - LIB_FILTERS_GAP) * 0.5;
+        let width = (row.width() - size::LIB_FILTERS_PAD_X * 2.0 - size::LIB_FILTERS_GAP) * 0.5;
         let at = match which {
-            Field::Holds => row.min.x + LIB_FILTERS_PAD_X,
-            Field::Layer => row.min.x + LIB_FILTERS_PAD_X + width + LIB_FILTERS_GAP,
+            Field::Holds => row.min.x + size::LIB_FILTERS_PAD_X,
+            Field::Layer => row.min.x + size::LIB_FILTERS_PAD_X + width + size::LIB_FILTERS_GAP,
         };
         Some(Rect::from_min_size(
-            Pos2::new(at, row.min.y + LIB_FILTERS_PAD_Y),
-            egui::vec2(width, FIELD_H),
+            Pos2::new(at, row.min.y + size::LIB_FILTERS_PAD_Y),
+            egui::vec2(width, size::FIELD_H),
         ))
     }
 
@@ -9248,9 +9219,9 @@ impl LibraryBay {
     /// can find.
     ///
     /// The `9` pixels of padding either side of the row and the
-    /// [`LIB_FILTERS_GAP`] between the two fields are **not** targets, and this
-    /// answers `None` for them: they are bare card, the way the gaps between
-    /// the scope chips are.
+    /// [`size::LIB_FILTERS_GAP`] between the two fields are **not** targets,
+    /// and this answers `None` for them: they are bare card, the way the gaps
+    /// between the scope chips are.
     pub fn filter(
         &self,
         holds: &[String],
@@ -9374,12 +9345,13 @@ fn library_box(region: Rect, chips: bool, total: usize) -> Option<LibraryBay> {
     // console that has been told about no library draws neither. The width
     // check is `list`'s below, stated on a row that has two boxes and a gap in
     // it: a row too narrow for two fields would draw two slivers and a rule.
-    let filters =
-        (chips && region.width() - LIB_FILTERS_PAD_X * 2.0 - LIB_FILTERS_GAP > 0.0).then(|| {
+    let filters = (chips
+        && region.width() - size::LIB_FILTERS_PAD_X * 2.0 - size::LIB_FILTERS_GAP > 0.0)
+        .then(|| {
             let top = under_head + size::SCOPES_H;
             Rect::from_min_max(
                 Pos2::new(region.min.x, top),
-                Pos2::new(region.max.x, top + LIB_FILTERS_H),
+                Pos2::new(region.max.x, top + size::LIB_FILTERS_H),
             )
         });
     let top = match (filters, scopes) {
@@ -9626,7 +9598,7 @@ fn scopes_into(ui: &Ui, pal: &Palette, bay: &LibraryBay, scopes: &[Scope], scope
 ///
 /// - `.lib-filters { display: flex; gap: 5px; padding: 6px 9px; border-bottom:
 ///   1px solid var(--c-hair) }` — two fields from the left of the row, one
-///   [`LIB_FILTERS_GAP`] apart, over a rule the row's bottom pixel.
+///   [`size::LIB_FILTERS_GAP`] apart, over a rule the row's bottom pixel.
 /// - `.field { border: 1px solid var(--c-line); border-radius: 999px; padding:
 ///   0 9px; color: var(--c-faint); flex: 1 }` — a word at [`size::BASE`] in a
 ///   bordered capsule, each field taking half of what is left.
@@ -9663,7 +9635,7 @@ fn filters_into(ui: &Ui, pal: &Palette, bay: &LibraryBay, at: Filters<'_>) {
         let galley = painter.layout_job(span_at(at.word(field), size::BASE, pal.faint));
         painter.galley(
             Pos2::new(
-                box_.min.x + FIELD_PAD_X,
+                box_.min.x + size::FIELD_PAD_X,
                 box_.center().y - galley.size().y * 0.5,
             ),
             galley,

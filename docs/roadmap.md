@@ -407,8 +407,21 @@ designed page and this bay's rather than a tidy-up; `.tally.off` went with it, t
 
 #### M5.3 — Library
 
-**Rows.** Four carry a `plan` panel badge: *List what the store holds*, *Read what one Set holds
-and declares*, *Load material into a deck*, *Send a Set to somebody, and take one in*.
+**Rows.** Three carry a `plan` panel badge: *Read what one Set holds and declares*, *Load material
+into a deck*, *Send a Set to somebody, and take one in*.
+
+***List what the store holds* was the fourth and is `has` now**, dropped from the count on
+2026-09-05. The two fields the mock has always drawn under the scope row are controls: they emit
+`Operation::ListSets` and the row reads `panel has library filters`. The badge had been honest
+rather than stale — the drawing existed and the route did not, because the bay took its listing as
+names off a directory read and constructed the operation nowhere. Why the fields **step** rather
+than take letters, and what that costs, is
+[ADR-0262](adr/0262-a-library-filter-field-steps-through-what-the-store-already-holds-rather-than-taking-letters.md);
+the bay's rows changed order in the same work and that is
+[ADR-0263](adr/0263-the-library-bay-lists-most-recent-first-because-the-listing-is-the-operations-and-not-the-surfaces.md).
+**What is left open is the console's text entry**: ADR-0262 refuses to invent one for this bay and
+says the control is a first cut, so the row being `has` is not the same as the fields being
+finished.
 
 **Exit.** No `plan` badge in the panel column of this bay's rows on
 [every operation](manual/operations.html).
@@ -449,8 +462,8 @@ notes under it: *A folder scope reads Sets, and a bundle is not a third thing*, 
 favourite, and where it does not travel*, *Where the presets come from, and why it is told rather
 than found*, *A Set has two forms, and loading one is packaging it*, and *How a Set reaches a deck*.
 *Every deck runs from its own copy* is here too, because a library load is what writes into
-`<store>/scratch/`. The mock tips four of the five scope chips, two stars and the `load → A` pill;
-`my sets`, the path, the two filters and the rows carry none.
+`<store>/scratch/`. The mock tips four of the five scope chips, the two filter fields, two stars
+and the `load → A` pill; `my sets`, the path and the rows carry none.
 
 #### M5.4 — Transport
 
