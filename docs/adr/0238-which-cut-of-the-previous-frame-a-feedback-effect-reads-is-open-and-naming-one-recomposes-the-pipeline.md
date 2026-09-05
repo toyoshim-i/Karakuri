@@ -5,7 +5,7 @@ status: accepted
 date: 2026-09-01
 supersedes: []
 superseded_by: []
-principles: [0036, 0051, 0067, 0068, 0085]
+principles: [0036, 0051, 0067, 0085, 0086]
 tags: [ir, engine, render, console, docs]
 ---
 
@@ -61,7 +61,7 @@ effect reads what it is handed, so which cut is handed to it is the picture.
 
 **And nothing in the vocabulary can say which.** A procedure declares the inputs it takes by name
 and type, and the Set binds them — that is `uses` plus `edge`, and a `.kir` may not name a node of a
-Set ([P-0068](../principles/0068-a-kir-never-names-a-node-of-a-set.md)). The types a slot may have
+Set ([P-0086](../principles/0086-a-procedure-knows-only-what-it-declares.md)). The types a slot may have
 are `ast::SlotTy`: `Geometry`, `Field`, `Camera`, `Source`. **None of them is a texture.** There is
 no declaration a procedure could write that means *the frame*, let alone *this cut of it*, and the
 `edge` record on the other side has nothing to bind.

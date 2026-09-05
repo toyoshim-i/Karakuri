@@ -5,7 +5,7 @@ status: accepted
 date: 2026-09-02
 supersedes: [0077]
 superseded_by: []
-principles: [0081]
+principles: [0086]
 tags: [engine, ui, format, operations]
 ---
 
@@ -59,10 +59,10 @@ at when nothing else says, and what a replay draws at when the stream carries no
 is no longer the authority. `--canvas` keeps its spelling and loses its finality.
 
 **This is safe because the picture does not depend on the size**, which is now a standing rule:
-[P-0081](../principles/0081-the-render-size-is-not-part-of-the-picture.md), *The render size is not
+[P-0086](../principles/0086-a-procedure-knows-only-what-it-declares.md), *The render size is not
 part of the picture*. Every mechanism that makes it true — `point_rate` as a fraction, the sub-pixel
 floor, letterboxing rather than stretching, and no ambient a procedure could ask the size with — is
-the price of this record rather than an independent nicety, and P-0081 is where that is written so a
+the price of this record rather than an independent nicety, and P-0086 is where that is written so a
 later change cannot quietly take one back.
 
 ## What this does not settle
@@ -101,7 +101,7 @@ a decision nobody was going to take.
 
 ## Consequences
 
-- **[P-0081](../principles/0081-the-render-size-is-not-part-of-the-picture.md) exists**, and it is
+- **[P-0086](../principles/0086-a-procedure-knows-only-what-it-declares.md) exists**, and it is
   what the mechanisms above answer to rather than each answering to itself.
 - **ADR-0077 is superseded** and annotated with the clause that reversed. Its `--canvas` flag, its
   refusal of `--size` as a way to say the canvas, and its `canvas` record all keep working.

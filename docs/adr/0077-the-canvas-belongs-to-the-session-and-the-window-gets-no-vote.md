@@ -23,7 +23,7 @@ tags: [engine, format, ui]
 > destination window may set it. What survives here is everything else: `--canvas` and its spelling,
 > `--size` refused as a way to say the canvas, the `canvas` record, the letterboxed preview and the
 > 1:1 snap key. The record keeps its authority only as a **default and a reference** — see ADR-0246,
-> and [P-0081](../principles/0081-the-render-size-is-not-part-of-the-picture.md), which is the rule
+> and [P-0086](../principles/0086-a-procedure-knows-only-what-it-declares.md), which is the rule
 > that made the reversal safe.
 
 ## Context

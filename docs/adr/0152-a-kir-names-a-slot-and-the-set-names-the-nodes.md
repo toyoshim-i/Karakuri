@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-21
 supersedes: []
 superseded_by: []
-principles: [0068]
+principles: [0086]
 tags: [ir, format, engine]
 ---
 
@@ -91,4 +91,4 @@ and nothing recorded which had been meant.
 ## Evidence
 
 Commits `fe0389a` (2026-08-20), `9765f6b`, `3c7556e`, `356fd33`, `6859853` (2026-08-21). Standing
-rule: [P-0068](../principles/0068-a-kir-never-names-a-node-of-a-set.md).
+rule: [P-0086](../principles/0086-a-procedure-knows-only-what-it-declares.md).
