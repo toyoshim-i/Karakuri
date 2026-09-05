@@ -18,6 +18,13 @@ tags: [process, docs, live, mcp]
 > — the rule they were cited for not stating — would make it false. The P-0079 mentions *were*
 > re-pointed, because P-0079 is the rule this record decided and P-0094 is where it now lives. The
 > retired numbers resolve in [INDEX.md](INDEX.md)'s *Retired numbers* table.
+>
+> **The lists are also shorter than the count in the argument below, and the count is right.** Four
+> of the files listed retired in pairs into two rules — P-0034 with P-0039, and P-0012 with P-0037 —
+> so entries that were distinct when this was written now collapse. *Eighteen* is the number of files
+> that existed on 2026-09-01 and is what the argument is about; the list is what is left of them.
+> Correcting the number instead would change what this record argued, which is the one thing a
+> pointer swap may not do ([ADR-0257](0257-a-pointer-inside-a-records-prose-is-metadata-too.md)).
 
 > **Annotated 2026-08-31, later the same day.** The MCP scope this record treats as settled — and
 > whose contradiction with the manual's rule 01 it left in *What this leaves undone* for the
@@ -188,8 +195,8 @@ failure this rule names, and *go on air* is the case P-0090 had already settled:
 instrument, the one operation that cannot be refused."*
 
 **And it is written with the case where it loses.**
-P-0070 knowingly adds
-unbudgeted risk to the live path — an audition can roll back an unrelated slot's build
+[P-0080](../principles/0080-an-operator-can-see-a-slots-own-material-without-putting-it-on-air.md)
+knowingly adds unbudgeted risk to the live path — an audition can roll back an unrelated slot's build
 ([ADR-0072](0072-auditioning-adds-a-draw-and-never-a-step.md)) — and keeps the control, because
 choosing between candidates cannot be done blind. A rule protecting a performance may not be used to
 remove what the performance is played with. That case is in the principle rather than left for

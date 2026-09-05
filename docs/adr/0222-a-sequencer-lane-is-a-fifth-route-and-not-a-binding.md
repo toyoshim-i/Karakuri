@@ -79,9 +79,9 @@ A step grid is **the beat clock subdivided**, not a fourth clock. A step index i
 `floor(beats × steps_per_beat) mod length` — a pure function of `Oscillator::beats`, which is
 already anchored so a tempo correction changes the rate from now on without moving beats that
 already happened. No new state, no scheduler, no event queue.
-[ADR-0255](0255-three-clocks-run-at-once-and-a-slower-ones-work-never-lands-on-a-faster-one.md) permits exactly this
+P-0069 permits exactly this
 on the beat clock — *selection among options already prepared* — and credits a transition with the
-same property. **Two caveats are recorded rather than waved away**: ADR-0255's stated period band for
+same property. **Two caveats are recorded rather than waved away**: P-0069's stated period band for
 the beat clock is 0.5–4 s and a 1/8 step at 128 BPM is 234 ms, so the principle as written does not
 say a subdivision is still that clock; and a step onset is observed at the next frame, because
 bindings and their kin resolve once per frame. The second is fine for a sequencer that writes values
