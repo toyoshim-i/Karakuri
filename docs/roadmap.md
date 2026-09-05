@@ -397,12 +397,22 @@ and declares*, *Load material into a deck*, *Send a Set to somebody, and take on
 **Exit.** No `plan` badge in the panel or key column of this bay's rows on
 [every operation](manual/operations.html).
 
-**Blocked on.** Half of one row. *Send a Set to somebody, and take one in* waits on a destination
-the vocabulary can carry: the taking-in half is built and reached — a `presets` row taken in and
-loaded on the one press — and `SetTransfer::Send { id }` names a Set the store already holds and no
-path at all, while the one control in this bay that takes letters takes a *name* and not a path.
-The missing sentence is where a package goes when no shell redirected it, and it belongs to the
-vocabulary rather than to this bay (`view::LibraryBay`). *Load material into a deck* is not
+**Blocked on. Nothing, as of 2026-09-05.** *Send a Set to somebody, and take one in* waited on a
+destination the vocabulary could carry, and
+[ADR-0260](adr/0260-sending-a-set-is-a-read-and-a-reads-answer-goes-where-the-surface-that-asked-puts-answers.md)
+answers it by refusing the premise: sending is a **read**, and a read's answer goes where the surface
+that asked puts answers, so the operation names no destination and none is owed. `SetTransfer` does
+not change. The vocabulary already holds three reads — `ReadSet`, `ListSets` and `ReadProcedure` —
+and names a place for none of them; the command line prints a package to stdout for the same reason
+it prints a listing there.
+
+**What is left of that row is a control rather than a decision**, and its *form* is open: a save
+sheet costs a dependency this workspace has none of and puts a modal operating-system window over a
+live instrument, and the clipboard costs no file name at all — ADR-0260 states both and chooses
+neither. The taking-in half is built and reached, a `presets` row taken in and loaded on the one
+press. **The claim this paragraph used to make about a letter-taking control in this bay was
+wrong**: the Library bay draws none, and the naming flow it was pointing at is the arrangement
+pill's, in the transport row. *Load material into a deck* is not
 blocked: `l` performs the operation
 ([ADR-0228](adr/0228-a-library-load-re-points-the-slots-source-and-never-installs-a-set.md)), and
 the control the page names is the drag from a row onto a strip, which the page carries as that

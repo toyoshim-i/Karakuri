@@ -287,6 +287,7 @@ number; new records continue from the end.
 | [ADR-0257](0257-a-pointer-inside-a-records-prose-is-metadata-too.md) | A pointer inside a record's prose is metadata too | 2026-09-05 | accepted |
 | [ADR-0258](0258-the-look-comes-before-the-fader-so-a-cell-draws-every-slot-and-says-which-nothing-it-is.md) | The look comes before the fader, so a cell draws every slot and says which nothing it is | 2026-09-05 | accepted |
 | [ADR-0259](0259-the-keyboard-is-addressed-to-the-bay-that-has-focus-and-a-global-letter-is-a-convenience-or-the-operators-own.md) | The keyboard is addressed to the bay that has focus, and a global letter is a convenience or the operator's own | 2026-09-05 | accepted |
+| [ADR-0260](0260-sending-a-set-is-a-read-and-a-reads-answer-goes-where-the-surface-that-asked-puts-answers.md) | Sending a Set is a read, and a read's answer goes where the surface that asked puts answers | 2026-09-05 | accepted |
 
 ## Retired numbers
 
