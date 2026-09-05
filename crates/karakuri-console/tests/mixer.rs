@@ -218,20 +218,51 @@ fn a_strip_is_the_mocks_own_boxes() {
 
     // **And the sum of them is the 215.5 the arrangement was written from.**
     // `lib.rs` derives the mixer's 316 as a bay head, `.mixer-strips`'s 6 + 6
-    // around a strip, and `.xfade`'s 61 — so a strip is this tall in both
-    // places or in neither, and what is left under the strips is the
-    // transition row this pass does not draw, plus the 23.5 the crossfader
-    // took with it when the mixer was decided to have none.
+    // around a strip, and `.xfade`'s 61.
     assert!(
         near(size::STRIP_H, 215.5),
         "a strip is {} tall",
         size::STRIP_H
     );
+
+    // **What is left under the strips, said in the terms it is made of.**
+    // `lib.rs` reserved 61 for `.xfade` and derived it as *"1px rule, 8 + 10
+    // padding, a 16.5 row, a 7px gap and an 18.5 row"* — of which the 16.5
+    // row and the 7px gap were the crossfader's and the mock no longer draws
+    // either. So the leftover is the transition row this console does draw
+    // (`size::XFADE_H`, the other four terms), plus those two, plus the half
+    // pixel the bay's own 27 + 227.5 + 61 was rounded up by.
+    //
+    // **This is a stronger statement than the 61.5 below it**, and both are
+    // asserted: the subtraction says the bay has room, and this says what the
+    // room is for. A change to `.xfade`'s padding, to the rule above it or to
+    // the pill in it moves `XFADE_H` and fails here, where the subtraction
+    // would go on passing against a bay height nobody re-derived.
+    //
+    // The crossfader's own row is a literal and not a constant: the mock
+    // stopped drawing it, so the stylesheet states no height for it and
+    // `lib.rs`'s sentence is the only place the 16.5 survives. Its **gap** is
+    // still `.xfade`'s own and is `size::XFADE_GAP`.
+    const CROSSFADER_ROW: f32 = 16.5;
+    let leftover = 316.0 - size::HEAD_H - size::STRIPS_PAD * 2.0 - size::STRIP_H;
+    assert!(
+        near(size::XFADE_H, 37.5),
+        "`.xfade` is {} tall here and the mock draws 37.5 of it",
+        size::XFADE_H
+    );
     assert!(
         near(
-            316.0 - size::HEAD_H - size::STRIPS_PAD * 2.0 - size::STRIP_H,
-            61.5
+            leftover,
+            size::XFADE_H + size::XFADE_GAP + CROSSFADER_ROW + 0.5
         ),
+        "the {leftover} the mixer has under its strips is not the transition row ({}) plus the \
+         crossfader's gap and row ({} + {CROSSFADER_ROW}) plus the half pixel the bay's own \
+         27 + 227.5 + 61 was rounded up by",
+        size::XFADE_H,
+        size::XFADE_GAP
+    );
+    assert!(
+        near(leftover, 61.5),
         "what the mixer has left under its strips is not the 61 `.xfade` was reserved — the \
          bay's own 27 + 227.5 + 61 was rounded up by the half pixel this is over"
     );
