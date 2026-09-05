@@ -351,27 +351,43 @@ condition. It is the mixer's under-draw, named in
 [ADR-0206](adr/0206-a-fader-marks-where-it-is-going-and-keeps-reaching-for-it.md), and whatever
 surface gives the mask's front a position closes it.
 
-**The bay's prose, as tooltips. Done, on 2026-09-03.** Two notes and half of a third — *Mixer*, *The
-mixer has no crossfader*, and the selection half of *Two focuses, and they do not look alike* — are
-on the controls they describe. Eleven tips written: the strip-count readout, deck A's strip (the
+**The bay's prose, as tooltips. Done on 2026-09-03, re-opened the day the transition row was built,
+and done again on 2026-09-05.** Two notes and half of a third — *Mixer*, *The mixer has no
+crossfader*, and the selection half of *Two focuses, and they do not look alike* — are on the
+controls they describe. Eleven tips on 2026-09-03: the strip-count readout, deck A's strip (the
 selection, which is why the strip has no capsule of its own), three trims, three faders, three
-meters, deck B's pending-fade number, and the transition row, which carries the crossfader argument
-whole and says where the wipe's shape and soft edge come from — the row itself and the arriving
+meters, deck B's pending-fade number, and the transition row, which carried the crossfader argument
+whole and said where the wipe's shape and soft edge come from — the row itself and the arriving
 deck's mask. (That tip said they were open questions while they were; it was rewritten when they
-were answered.) The meters are the only ones not sourced from the notes, which say nothing about a
+were answered.)
+
+**It re-opened on 2026-09-05**, because `74719c3` and `094804c` drew four capsules the mock had no
+tip for — the shape pill, the quantum pill, the length pill and `go` — and a bay whose prose is on
+its controls is a claim about the controls it has and not about the ones it had on the day it was
+closed. Four tips written the same day, sourced rather than invented: the three cycles and the words
+in them are `karakuri-console`'s `WIPE_SHAPES`, `QUANTA` and `FADE_BEATS`, and `go`'s two refusals
+are `TransitionRow::go`'s. The row's own tip keeps the argument — the crossfader, the wipe this bay
+cannot draw, and the soft edge, which is no control's anywhere — and what each setting *means* moved
+down onto the pill that sets it, as did the two decks a wipe names and the two ways it is refused.
+Moved and not copied: the row's tip is 705 characters shorter and no sentence it lost is still on
+it. The capsules carry more than that, because the cycles' own words and what each refusal names are
+read off the code rather than off the row.
+
+The meters are the only ones not sourced from the notes, which say nothing about a
 meter: they come from
 [ADR-0043](adr/0043-the-meter-never-waits-and-the-deck-owns-it.md) and
 [ADR-0178](adr/0178-the-mixer-draws-four-tracks-and-as-many-strips-as-the-deck-has.md).
 
-**And it found the mock drawing what ADR-0178 rejected.** The fourth track carries a whole empty
+**And it found the mock drawing what ADR-0178 rejected.** The fourth track carried a whole empty
 strip — a name, a `tally off`, a trim, a fader and a meter — and that record's *Alternatives
 rejected* is precisely *"a well per track, empty where no deck fills it … A track nothing fills
 draws nothing at all"*, on the grounds that an empty strip asserts *there is a deck here and it is
 at zero*. `karakuri-console`'s `tests/mixer.rs` already holds the panel to the record and says so
 against the mock. **Four tips for that strip were written and then removed rather than kept**: a
 tooltip is what an operator reads, and one on a control the panel is decided never to draw is a
-reading nobody can take. What is owed is the mock losing that strip, which is a change to a designed
-page and is this bay's rather than a tidy-up.
+reading nobody can take. **The mock lost that strip on 2026-09-05**, which was a change to a
+designed page and this bay's rather than a tidy-up; `.tally.off` went with it, the one rule in
+`docs/manual/style.css` nothing else used.
 
 #### M5.3 — Library
 
