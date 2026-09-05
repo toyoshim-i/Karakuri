@@ -31,7 +31,11 @@ use common::{drawn_once, id_of, near, rect_of, solved, PLAUSIBLE, SMALLEST};
 use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::{Panel, GRAB};
 use karakuri_console::room::{size, Room};
-use karakuri_console::view::{library, mcp_pill, LibraryBay, Scope, View, DECK_LETTERS};
+use karakuri_console::view::{
+    library, mcp_pill, Field, Filters, LibraryBay, Scope, View, DECK_LETTERS, FIELD_H, FIELD_PAD_X,
+    HOLDS_UNSET, LAYERS, LAYER_UNSET, LIB_FILTERS_GAP, LIB_FILTERS_H, LIB_FILTERS_PAD_X,
+    LIB_FILTERS_PAD_Y,
+};
 use karakuri_layout::{Point, Rect};
 use karakuri_operation::gate::{Class, Open};
 
@@ -189,13 +193,50 @@ fn the_rows_and_the_foot_are_the_bays_own_geometry() {
         "the scope row does not span the bay: {scopes:?} in {region:?}"
     );
 
-    // The list: under the scope row, inside `.lib-list`'s padding on all four
+    // The filter row: under the scope row, its own height, the bay's full
+    // width — and the two fields sharing what is left of it after the padding
+    // and the one gap, which is `.field`'s `flex: 1`.
+    let filters = bay.filters.expect("the bay draws its filter row");
+    assert!(
+        near(filters.min.y, scopes.max.y) && near(filters.height(), LIB_FILTERS_H),
+        "the filter row is {filters:?} and the scope row ends at {}",
+        scopes.max.y
+    );
+    assert!(
+        near(filters.min.x, region.min.x) && near(filters.max.x, region.max.x),
+        "the filter row does not span the bay: {filters:?} in {region:?}"
+    );
+    let holds = bay.field(Field::Holds).expect("the `holds` field");
+    let layer = bay.field(Field::Layer).expect("the `layer` field");
+    assert!(
+        near(holds.width(), layer.width()) && near(holds.height(), FIELD_H),
+        "the two fields are {} and {} wide at {} tall",
+        holds.width(),
+        layer.width(),
+        holds.height()
+    );
+    assert!(
+        near(holds.min.x, filters.min.x + LIB_FILTERS_PAD_X)
+            && near(layer.max.x, filters.max.x - LIB_FILTERS_PAD_X)
+            && near(layer.min.x - holds.max.x, LIB_FILTERS_GAP),
+        "the fields are {holds:?} and {layer:?} in a row spanning {} to {}",
+        filters.min.x,
+        filters.max.x
+    );
+    assert!(
+        near(holds.min.y, filters.min.y + LIB_FILTERS_PAD_Y),
+        "the fields sit at {} in a row starting at {}",
+        holds.min.y,
+        filters.min.y
+    );
+
+    // The list: under the filter row, inside `.lib-list`'s padding on all four
     // sides, and up to the foot.
     assert!(
-        near(bay.list.min.y, scopes.max.y + size::LIB_LIST_PAD),
-        "the list starts at {} and the scope row ends at {}",
+        near(bay.list.min.y, filters.max.y + size::LIB_LIST_PAD),
+        "the list starts at {} and the filter row ends at {}",
         bay.list.min.y,
-        scopes.max.y
+        filters.max.y
     );
     assert!(
         near(bay.list.min.x, region.min.x + size::LIB_LIST_PAD)
@@ -314,6 +355,7 @@ fn the_foot_says_how_many_are_listed_of_how_many_there_are() {
     let room = region.height()
         - size::HEAD_H
         - size::SCOPES_H
+        - LIB_FILTERS_H
         - size::LIB_LIST_PAD * 2.0
         - size::LIB_FOOT_H;
     assert_eq!(
@@ -508,7 +550,8 @@ fn a_folded_or_soloed_or_short_bay_lists_nothing() {
     // Below 632 the solve stops honouring minima and scales everything down
     // together (`common::SMALLEST` says so), and that is where a bay too short
     // for a row exists at all.
-    let chrome = size::HEAD_H + size::SCOPES_H + size::LIB_FOOT_H + size::LIB_LIST_PAD * 2.0;
+    let chrome =
+        size::HEAD_H + size::SCOPES_H + LIB_FILTERS_H + size::LIB_FOOT_H + size::LIB_LIST_PAD * 2.0;
     let short = solved(Rect {
         h: 160.0,
         ..SMALLEST
@@ -524,10 +567,10 @@ fn a_folded_or_soloed_or_short_bay_lists_nothing() {
         "a bay with no room for one row listed some"
     );
 
-    // Twenty pixels of window taller is one row, which is what says the answer
-    // above is the room and not the window.
+    // A hundred and twenty-five pixels of window taller is one row, which is
+    // what says the answer above is the room and not the window.
     let barely = solved(Rect {
-        h: 250.0,
+        h: 285.0,
         ..SMALLEST
     });
     let region = to_egui(rect_of(&barely, "library"));
@@ -576,6 +619,13 @@ fn a_folded_or_soloed_or_short_bay_lists_nothing() {
 /// to leave it"* — and `docs/manual/operations.html` names the row as *Choose
 /// which scope the library shows*'s home.
 ///
+/// **The two filter fields one row down are the bay's other control**, and
+/// their own presses are asserted in
+/// [`the_filter_fields_answer_a_press_and_the_row_around_them_does_not`]. What
+/// this test adds about them is the same thing it adds about the chips: the
+/// ground **around** them is nobody's, so the row's padding and the gap between
+/// the two are swept here with everything else that is not a control.
+///
 /// **The pill is the one that is deliberately not**, and that is a
 /// specification and not a thing left unbuilt: *How a Set reaches a deck*
 /// settles that a load is *"a cursor and a key with no pointer anywhere in
@@ -603,7 +653,7 @@ fn a_folded_or_soloed_or_short_bay_lists_nothing() {
 /// with no scopes has no chip row at all, and asking it whether a chip takes a
 /// press is asking about a control nobody drew.
 #[test]
-fn the_scope_chips_answer_a_press_and_nothing_else_in_the_bay_does() {
+fn the_scope_chips_and_the_filter_fields_are_the_bays_controls_and_nothing_else_is() {
     let (view, mut panel) = showing_mock();
     let ctx = drawn_once();
     let bay = bay(&panel);
@@ -677,6 +727,19 @@ fn the_scope_chips_answer_a_press_and_nothing_else_in_the_bay_does() {
         chips[0].1.center().x,
         row.min.y + size::SCOPES_PAD_Y * 0.5,
     ));
+    // **The filter row's own ground**: its left padding and the gap between the
+    // two fields. `.field` is a capsule the same way `.scope` is, so what is
+    // between two of them belongs to nobody.
+    let filters = bay.filters.expect("the bay draws its filter row");
+    let holds = bay.field(Field::Holds).expect("the `holds` field");
+    points.push(egui::pos2(
+        filters.min.x + LIB_FILTERS_PAD_X * 0.5,
+        filters.center().y,
+    ));
+    points.push(egui::pos2(
+        holds.max.x + LIB_FILTERS_GAP * 0.5,
+        filters.center().y,
+    ));
     let (left, right) = (
         bay.foot.min.x + size::LIB_FOOT_PAD_X,
         bay.foot.max.x - size::LIB_FOOT_PAD_X,
@@ -711,9 +774,10 @@ fn the_scope_chips_answer_a_press_and_nothing_else_in_the_bay_does() {
     // quietly go away.
     assert_eq!(asked, points.len(), "not every point was asked");
     assert!(
-        points.len() >= 5 + 3 + 11 + 3,
-        "only {} points asked: the bay's corners, the scope row's ground, the foot's box and at \
-         least one row are the floor, and fewer is a sweep that has stopped covering the pill",
+        points.len() >= 5 + 3 + 2 + 11 + 3,
+        "only {} points asked: the bay's corners, the scope row's ground, the filter row's, the \
+         foot's box and at least one row are the floor, and fewer is a sweep that has stopped \
+         covering the pill",
         points.len()
     );
 }
@@ -1532,4 +1596,378 @@ fn strip() -> karakuri_console::view::Strip {
         mask_angle: 0.0,
         level: None,
     }
+}
+
+// ---------------------------------------------------------------------------
+// The two filter fields
+// ---------------------------------------------------------------------------
+
+/// **The five numbers the filter row is laid out from, against the stylesheet
+/// they were copied out of.**
+///
+/// `transcribed_constants_cite_the_mock.rs` is where every other transcription
+/// in this crate is held to `docs/manual/style.css`, and it reads `room.rs` and
+/// `lib.rs`. These five live in `view.rs` beside the row they lay out, so this
+/// is the check they owe — the same question that file asks, asked of one rule
+/// each rather than of a whole module. **Moving them into `room::size` makes
+/// this test redundant and it goes with them.**
+///
+/// It reads the stylesheet the way a person does — find the rule, find the
+/// declaration — rather than parsing CSS, because two rules and four
+/// declarations do not want a parser.
+#[test]
+fn the_filter_rows_numbers_are_the_mocks_own() {
+    let css = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/manual/style.css"),
+    )
+    .expect("the stylesheet");
+    let rule = |selector: &str| {
+        let at = css
+            .find(&format!("{selector} {{"))
+            .unwrap_or_else(|| panic!("{selector} is not in style.css any more"));
+        let rest = &css[at..];
+        let end = rest.find('}').expect("an unclosed rule in style.css");
+        rest[..end].to_owned()
+    };
+
+    let filters = rule(".lib-filters");
+    for want in ["padding: 6px 9px", "gap: 5px", "border-bottom: 1px"] {
+        assert!(
+            filters.contains(want),
+            "`.lib-filters` does not say `{want}` any more: {filters}"
+        );
+    }
+    let field = rule(".field");
+    for want in ["padding: 0 9px", "border: 1px"] {
+        assert!(
+            field.contains(want),
+            "`.field` does not say `{want}` any more: {field}"
+        );
+    }
+
+    for (name, transcribed, mock) in [
+        ("LIB_FILTERS_PAD_X", LIB_FILTERS_PAD_X, 9.0),
+        ("LIB_FILTERS_PAD_Y", LIB_FILTERS_PAD_Y, 6.0),
+        ("LIB_FILTERS_GAP", LIB_FILTERS_GAP, 5.0),
+        ("FIELD_PAD_X", FIELD_PAD_X, 9.0),
+    ] {
+        assert!(
+            near(transcribed, mock),
+            "{name} is {transcribed} and the rule it cites says {mock} — the stylesheet is the \
+             specification"
+        );
+    }
+    // The two derived ones: a field is one line of type inside a border either
+    // side, and the row is a field inside its padding over its own rule.
+    assert!(
+        near(FIELD_H, size::BASE * size::LINE + 2.0),
+        "a field is {FIELD_H} tall and the mock's is 16.5 inside two borders"
+    );
+    assert!(
+        near(LIB_FILTERS_H, 31.5),
+        "the filter row is {LIB_FILTERS_H} tall and the mock's is 6 + 18.5 + 6 + 1"
+    );
+}
+
+/// **Every layer of the vocabulary is one the `layer` field can be stepped
+/// to**, which is what makes `View::narrow` right to accept any of them.
+///
+/// The match is the enforcement rather than the assertion under it: a sixth
+/// variant on `karakuri_operation::Layer` does not compile here until somebody
+/// has decided what this field calls it and where in the cycle it goes.
+#[test]
+fn the_layer_field_steps_through_every_layer_there_is() {
+    use karakuri_operation::Layer;
+    for layer in [Layer::L1, Layer::L2, Layer::L3, Layer::L4, Layer::Field] {
+        let spelled = match layer {
+            Layer::L1 => "L1",
+            Layer::L2 => "L2",
+            Layer::L3 => "L3",
+            Layer::L4 => "L4",
+            Layer::Field => "FIELD",
+        };
+        let found = LAYERS
+            .iter()
+            .find(|(kind, _)| *kind == layer)
+            .unwrap_or_else(|| panic!("{layer:?} is not on the `layer` field's cycle"));
+        assert_eq!(found.1, spelled, "{layer:?} is spelled two ways");
+    }
+    assert_eq!(
+        LAYERS.len(),
+        5,
+        "the cycle has {} entries and the vocabulary has five layers",
+        LAYERS.len()
+    );
+}
+
+/// **A press on a field steps it, and the operation names where it arrived.**
+///
+/// The whole cycle of each field, both ways round the wrap, because the state a
+/// step cannot reach is the one a control quietly loses: `layer` from `FIELD`
+/// back to unset, and `holds` from the last candidate back to unset.
+///
+/// **`Operation::ListSets` carries both halves**, so a press on one field says
+/// what the *other* one is as well — which is what makes the pair a filter
+/// rather than two. That is asserted here by setting one and pressing the
+/// other.
+#[test]
+fn a_press_on_a_filter_field_steps_it_and_names_where_it_arrived() {
+    use karakuri_operation::Layer;
+    let panel = console(PLAUSIBLE);
+    let bay = bay(&panel);
+    let holds: Vec<String> = ["drift_shell", "soft_points"]
+        .iter()
+        .map(|s| (*s).to_owned())
+        .collect();
+    let at = |field: Field| {
+        let box_ = bay.field(field).expect("the field is drawn");
+        Point::new(box_.center().x, box_.center().y)
+    };
+
+    // The `layer` field, all the way round: unset, the five layers in order,
+    // and unset again.
+    let mut layer = None;
+    for want in [
+        Some(Layer::L1),
+        Some(Layer::L2),
+        Some(Layer::L3),
+        Some(Layer::L4),
+        Some(Layer::Field),
+        None,
+    ] {
+        let asked = bay
+            .filter(&holds, Filters { holds: None, layer }, at(Field::Layer))
+            .expect("the `layer` field did not answer a press on it");
+        assert_eq!(
+            asked,
+            karakuri_operation::Operation::ListSets {
+                holds: None,
+                layer: want
+            },
+            "the `layer` field stepped from {layer:?} to something else"
+        );
+        layer = want;
+    }
+
+    // The `holds` field, over the two candidates and back to unset — and with
+    // a layer set, which the operation has to carry through untouched.
+    let mut set = None;
+    for want in [Some("drift_shell"), Some("soft_points"), None] {
+        let asked = bay
+            .filter(
+                &holds,
+                Filters {
+                    holds: set,
+                    layer: Some(Layer::L4),
+                },
+                at(Field::Holds),
+            )
+            .expect("the `holds` field did not answer a press on it");
+        assert_eq!(
+            asked,
+            karakuri_operation::Operation::ListSets {
+                holds: want.map(str::to_owned),
+                layer: Some(Layer::L4)
+            },
+            "the `holds` field stepped from {set:?} to something else, or dropped the layer"
+        );
+        set = want;
+    }
+}
+
+/// **A `holds` field with nothing to step to asks the listing again**, which is
+/// the state every console in this crate that has not been handed candidates is
+/// in — and it is a question rather than a no-op, the same one a press on the
+/// chip that is already marked asks.
+#[test]
+fn a_holds_field_with_nothing_to_step_to_asks_the_listing_again() {
+    let panel = console(PLAUSIBLE);
+    let bay = bay(&panel);
+    let box_ = bay.field(Field::Holds).expect("the field is drawn");
+    assert_eq!(
+        bay.filter(
+            &[],
+            Filters::NONE,
+            Point::new(box_.center().x, box_.center().y)
+        ),
+        Some(karakuri_operation::Operation::ListSets {
+            holds: None,
+            layer: None
+        }),
+        "a press on `holds…` with no candidates behind it was not answered"
+    );
+}
+
+/// **The two fields answer a press and the row around them does not.**
+///
+/// The padding either side and the gap between them are bare card, exactly as
+/// the gaps between the scope chips are — and `claim` is asked as well as the
+/// offer, because a control that acts on a press `egui` was given is a control
+/// nobody can reach.
+#[test]
+fn the_filter_fields_answer_a_press_and_the_row_around_them_does_not() {
+    let mut panel = console(PLAUSIBLE);
+    let ctx = drawn_once();
+    let bay = bay(&panel);
+    let row = bay.filters.expect("the bay draws its filter row");
+    let mut view = View::new(karakuri_console::room::Room::Day);
+    view.scopes = SCOPES.to_vec();
+    view.library = mock();
+    view.holds = vec!["drift_shell".to_owned()];
+
+    for field in Field::ALL {
+        let box_ = bay.field(field).expect("the field is drawn");
+        let on = Point::new(box_.center().x, box_.center().y);
+        assert!(
+            bay.filter(&view.holds, view.filters(), on).is_some(),
+            "{field:?} did not answer a press in the middle of it"
+        );
+        assert_eq!(
+            claim(&mut panel, &ctx, &view, on),
+            Claim::Panel,
+            "{field:?} is drawn and `egui` was given the press on it"
+        );
+    }
+
+    // The gap between the two, which is 5 wide and bare card.
+    let holds = bay.field(Field::Holds).expect("the `holds` field");
+    let gap = Point::new(holds.max.x + LIB_FILTERS_GAP * 0.5, holds.center().y);
+    assert_eq!(
+        bay.filter(&view.holds, view.filters(), gap),
+        None,
+        "the gap between the two fields answered a press"
+    );
+    assert_eq!(
+        claim(&mut panel, &ctx, &view, gap),
+        Claim::Egui,
+        "the gap between the two fields is claimed by the panel"
+    );
+
+    // And the row's own left padding, which is 9 of it.
+    let pad = Point::new(row.min.x + 1.0, row.center().y);
+    assert_eq!(
+        bay.filter(&view.holds, view.filters(), pad),
+        None,
+        "the row's padding answered a press"
+    );
+}
+
+/// **Both fields clear every boundary's grab**, which the chip at the end of
+/// the scope row above them does not — `.lib-filters` is padded 9 in from each
+/// side edge against a `GRAB` of 6, and the row above and the list below are
+/// both the bay's own.
+#[test]
+fn the_filter_fields_clear_every_boundary() {
+    let panel = console(PLAUSIBLE);
+    let bay = bay(&panel);
+    let region = to_egui(rect_of(panel.layout(), "library"));
+
+    for field in Field::ALL {
+        let box_ = bay.field(field).expect("the field is drawn");
+        for probe in [
+            Point::new(box_.min.x + 1.0, box_.center().y),
+            Point::new(box_.max.x - 1.0, box_.center().y),
+            Point::new(box_.center().x, box_.min.y + 1.0),
+            Point::new(box_.center().x, box_.max.y - 1.0),
+        ] {
+            assert!(
+                !matches!(
+                    panel.layout().hit(probe, GRAB),
+                    karakuri_layout::Hit::Divider { .. }
+                ),
+                "a boundary grabs {probe:?}, which is inside {field:?}"
+            );
+        }
+        assert!(
+            box_.min.x - region.min.x >= LIB_FILTERS_PAD_X - f32::EPSILON
+                && region.max.x - box_.max.x >= LIB_FILTERS_PAD_X - f32::EPSILON,
+            "{field:?} is {:?} in a bay spanning {} to {}",
+            box_,
+            region.min.x,
+            region.max.x
+        );
+    }
+
+    // **And the pixel past the row's right-hand padding is still a
+    // boundary's**, which is what says the clearances above are clearances
+    // rather than the grab having gone missing.
+    let row = bay.filters.expect("the bay draws its filter row");
+    assert!(
+        matches!(
+            panel
+                .layout()
+                .hit(Point::new(row.max.x - 1.0, row.center().y), GRAB),
+            karakuri_layout::Hit::Divider { .. }
+        ),
+        "the pixel at the far end of the filter row is not the pane divider's, so nothing here \
+         measured a grab"
+    );
+}
+
+/// **What the fields read, and what `View::narrow` does with an answer.**
+///
+/// Three things the bay could get wrong and one of them is the reason
+/// `holds_at` is a position: a host that rewrites the candidates leaves the
+/// position pointing past the end, and what that has to read as is **unset**
+/// rather than the last candidate there is — a listing narrowed by something
+/// nobody chose is the failure this avoids.
+#[test]
+fn the_fields_read_what_is_set_and_a_stale_candidate_reads_as_unset() {
+    use karakuri_operation::Layer;
+    let mut view = View::new(karakuri_console::room::Room::Day);
+    assert_eq!(view.filters().holds_word(), HOLDS_UNSET);
+    assert_eq!(view.filters().layer_word(), LAYER_UNSET);
+
+    view.holds = vec!["drift_shell".to_owned(), "soft_points".to_owned()];
+    assert!(view.narrow(Some("soft_points"), Some(Layer::L4)));
+    assert_eq!(view.filters().holds_word(), "soft_points");
+    assert_eq!(view.filters().layer_word(), "L4");
+    assert!(
+        !view.narrow(Some("soft_points"), Some(Layer::L4)),
+        "narrowing to what it was already narrowed to moved something"
+    );
+
+    // **A `holds` this console cannot draw is refused, and refused whole**:
+    // the layer beside it is not written either.
+    assert!(
+        !view.narrow(Some("no_such_node"), Some(Layer::L1)),
+        "a filter the field cannot draw was accepted"
+    );
+    assert_eq!(view.filters().holds_word(), "soft_points");
+    assert_eq!(view.filters().layer_word(), "L4");
+
+    // **The candidates go, and the field reads unset** — not `drift_shell`,
+    // which is what clamping would have answered.
+    view.holds = vec!["drift_shell".to_owned()];
+    assert_eq!(view.filters().holds_word(), HOLDS_UNSET);
+    assert_eq!(view.filters().holds, None);
+    assert_eq!(
+        view.filters().layer,
+        Some(Layer::L4),
+        "the layer is the console's own and did not survive the candidates going"
+    );
+}
+
+/// **A console that was told about no library draws no filter row**, which is
+/// the scope row's own condition rather than a second one: a filter is a
+/// question about a listing, and there is no listing to ask it of.
+#[test]
+fn a_console_with_no_scopes_draws_no_filter_row() {
+    let panel = console(PLAUSIBLE);
+    let bay = library(panel.layout(), &[], &mock()).expect("the bay lists its rows");
+    assert_eq!(bay.scopes, None);
+    assert_eq!(
+        bay.filters, None,
+        "a bay with no scope row drew a filter row"
+    );
+    assert_eq!(bay.field(Field::Holds), None);
+    assert_eq!(
+        bay.filter(
+            &[],
+            Filters::NONE,
+            Point::new(bay.list.min.x, bay.list.min.y)
+        ),
+        None,
+        "a bay with no filter row answered a press on one"
+    );
 }

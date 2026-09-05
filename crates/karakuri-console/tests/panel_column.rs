@@ -337,6 +337,17 @@ fn sample(variant: &str) -> Operation {
         "SelectScope" => Operation::SelectScope {
             scope: karakuri_operation::Undecided,
         },
+        // **The two filter fields under those chips**, and this is the same
+        // row's other half: the chip says which library, the fields narrow what
+        // that library answers. Unlike `SelectScope` the payload carries
+        // everything the press decided — the two filters as they stand after
+        // the step — so nothing travels beside it and what this file sees is
+        // the whole answer. The value here is *any* `ListSets`, because what
+        // the badge claims is that an operator reaches the row.
+        "ListSets" => Operation::ListSets {
+            holds: None,
+            layer: None,
+        },
         other => panic!(
             "`{SRC}` constructs `Operation::{other}` and this file has no value for it — a \
              control started emitting an operation nobody accounted for. Add an arm here, and \
