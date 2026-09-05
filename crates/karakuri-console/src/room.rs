@@ -685,6 +685,38 @@ pub mod size {
     /// chips that fit in one row of it.
     pub const SCOPES_H: f32 = SCOPES_PAD_Y * 2.0 + SCOPE_H + HAIRLINE;
 
+    // -- the library's two filter fields ------------------------------------
+
+    /// `.lib-filters`'s `padding: 6px 9px` and its `gap: 5px`: the row of two
+    /// fields under the scope row, which narrows what the marked library
+    /// answers where the chips above it say *which* library is being read.
+    pub const LIB_FILTERS_PAD_X: f32 = 9.0;
+    pub const LIB_FILTERS_PAD_Y: f32 = 6.0;
+    pub const LIB_FILTERS_GAP: f32 = 5.0;
+
+    /// `.field`'s `padding: 0 9px`, around the word in it at [`BASE`]. The
+    /// vertical half of that declaration is zero, which is why the box below
+    /// is the type's own height and its border and nothing else.
+    pub const FIELD_PAD_X: f32 = 9.0;
+
+    /// One field's box: [`BASE`] at [`LINE`] inside its
+    /// `border: 1px solid var(--c-line)` — **18.5**, which is [`XPILL_H`]'s
+    /// arithmetic one bay along and for the same reason, a bordered capsule
+    /// round one line of type. The border is counted because the mock's box
+    /// model is the browser default (`content-box`) and this one is a real
+    /// border — [`MINI_H`]'s own sentence, at the console's own type size.
+    pub const FIELD_H: f32 = BASE * LINE + HAIRLINE * 2.0;
+
+    /// The filter row's box: one field inside [`LIB_FILTERS_PAD_Y`], plus the
+    /// one pixel of the rule under it — [`HAIRLINE`], which is
+    /// `.lib-filters`'s own border-bottom and the same pixel every other rule
+    /// in the mock is drawn at. **31.5**, which is [`SCOPES_H`]'s number one
+    /// row up and reached by different arithmetic: a field is two pixels of
+    /// border taller than a chip and stands inside a pixel less padding above
+    /// and below, so the two rows land on the same height without either
+    /// being read off the other.
+    pub const LIB_FILTERS_H: f32 = LIB_FILTERS_PAD_Y * 2.0 + FIELD_H + HAIRLINE;
+
     // -- the library's list -------------------------------------------------
 
     /// `.lib-list`'s `padding: 3px`: the ring of card the rows sit inside,
