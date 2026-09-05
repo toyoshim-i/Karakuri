@@ -510,7 +510,6 @@
   .tally.live { background: color-mix(in srgb, var(--c-pink) 18%, transparent); color: var(--c-pink); box-shadow: 0 0 10px var(--c-glowp); }
   .tally.priming { background: color-mix(in srgb, var(--c-sun) 20%, transparent); color: var(--c-sun); }
   .tally.alloc { background: var(--c-tint); color: var(--c-dim); }
-  .tally.off { color: var(--c-faint); }
 
   /* ── The first of the two animations in this document ─────────────────────
      A residency request that has been made and not granted. The chip shows
