@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-28
 supersedes: []
 superseded_by: []
-principles: [0026, 0031, 0044, 0085]
+principles: [0044, 0085, 0093]
 tags: [architecture, ui]
 ---
 
@@ -126,7 +126,7 @@ moment `src/` *could* reach a device. `docs/contributing.md` §3 names exactly t
 `Cargo.toml` says the same thing in the comment over those two lines — a surface, a device and an
 event loop are the example's and *"stay dev-dependencies so that nothing in `src/` can reach for
 one"*. Today that is not a rule anyone has to remember; it is a link error.
-[P-0026](../principles/0026-a-guarantee-is-structural-or-it-is-a-convention-that-says-so.md) permits
+[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md) permits
 a structural guarantee to become a convention only where it says so, and this would demote a
 cargo-enforced guarantee to a comment **in order to save one package**. That is the trade the
 principle exists to refuse.
@@ -164,7 +164,7 @@ going. It is a second answer to a settled question, which is the exact failure `
 written to end and which
 [ADR-0172](0172-the-frame-loop-is-the-engines-because-the-cli-is-scaffolding.md) found *"one crate
 over and out of reach of the thing that ended it"*.
-[P-0031](../principles/0031-a-name-means-one-thing-across-the-system.md) bites first — two spellings
+[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md) bites first — two spellings
 of a residency, two answers to what a store path is, two formats for a written-at time, and which you
 get depends only on which door you came in by. [P-0085](../principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md)
 bites second, and this time correctly: `setfile::written_at` and `mix::parse_residency` *are* the

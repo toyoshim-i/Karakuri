@@ -5,7 +5,7 @@ status: accepted
 date: 2026-09-01
 supersedes: []
 superseded_by: []
-principles: [0036, 0085, 0086, 0087, 0091]
+principles: [0085, 0086, 0087, 0091, 0093]
 tags: [ir, engine, render, console, docs]
 ---
 
@@ -167,7 +167,7 @@ payload is not the shape of the question).
 - The three blockers on M5.8 stay named apart. Two of them close by building; this one does not.
 - Nothing changes in the code, the specification or the manual. The rows stay `plan`, the payloads
   stay `Undecided`, and the roadmap entry stays where it is
-  ([P-0036](../principles/0036-an-invariant-that-is-not-yet-true-says-so.md) — the state of the
+  ([P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md) — the state of the
   question is stated rather than implied).
 - Whoever takes the decision supersedes this record with one that has a `Decision` section.
 

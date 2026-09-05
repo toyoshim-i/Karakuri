@@ -98,7 +98,7 @@ composite for it, which is what makes the first clause true rather than approxim
 ## Where it is not met
 
 **Stated because a rule in force says where it is not yet true**
-([P-0036](0036-an-invariant-that-is-not-yet-true-says-so.md)).
+([P-0093](0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)).
 
 **The console's cells were gated on `Residency::Live`, and that was the failure.** The gate sat in
 `Engine::aim` (`crates/karakuri/src/main.rs`) and the engine drew an Allocated or Priming slot into
@@ -113,5 +113,5 @@ there is a slot behind the cell rather than whether it is Live. The console's ce
 The prose in `crates/karakuri/src/main.rs` that described the old behaviour was corrected on
 2026-09-02. **A surface that draws the right thing and says it draws the old thing has not finished
 meeting this rule**
-([P-0023](0023-a-document-that-describes-replaced-behaviour-is-worse-than-none.md)), and the rejected
+([P-0093](0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)), and the rejected
 build's cell — black, or what went wrong — is owed on top of it.

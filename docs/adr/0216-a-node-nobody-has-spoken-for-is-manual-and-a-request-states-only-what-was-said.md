@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-29
 supersedes: []
 superseded_by: []
-principles: [0031, 0078, 0090]
+principles: [0078, 0090, 0093]
 tags: [engine, ui]
 ---
 
@@ -67,7 +67,7 @@ show them.
 
 **Rejected: leaving it unrepresented** — `Option<Authority>`, with `None` meaning nobody has spoken.
 Then *nobody has spoken* and *manual* are two spellings of one arrangement, which is exactly what
-[P-0031](../principles/0031-a-name-means-one-thing-across-the-system.md) is about, and every reader
+[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md) is about, and every reader
 downstream would have to decide again what `None` means.
 
 ### Why the request is sparse
@@ -84,7 +84,7 @@ anyone wrote one; it is wrong here because not every node has been spoken for.
 
 ### Where the value list lives
 
-**`karakuri-engine` declares its own `Authority`**, and this is not a second spelling in P-0031's
+**`karakuri-engine` declares its own `Authority`**, and this is not a second spelling in P-0093's
 sense — it is the fourth instance of a pairing this workspace already argued and documented.
 `karakuri-engine` does not depend on `karakuri-operation` and `karakuri-operation` depends on
 nothing at all by charter ([ADR-0180](0180-the-operation-vocabulary-is-a-crate-with-no-dependencies.md)),

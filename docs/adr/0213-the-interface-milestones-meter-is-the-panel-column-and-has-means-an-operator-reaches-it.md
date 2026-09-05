@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-28
 supersedes: []
 superseded_by: []
-principles: [0016, 0030, 0045, 0087]
+principles: [0030, 0087, 0093]
 tags: [docs, process, console]
 ---
 
@@ -95,19 +95,19 @@ operations are emitted by console controls today — `SetGain` and `SetOpacity` 
 `examples/panel.rs`. A milestone that has been running for weeks reads zero on its own meter, and
 the page has to say so in the one place it currently says the opposite: the legend and the count
 paragraph both assert the panel is not built, which is
-[P-0036](../principles/0036-an-invariant-that-is-not-yet-true-says-so.md) owed from the other end —
+[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md) owed from the other end —
 not a goal stated in the present tense, but a **failure** stated in the present tense after it
 stopped being the reason. Correcting them is part of this change and is
-[P-0023](../principles/0023-a-document-that-describes-replaced-behaviour-is-worse-than-none.md):
+[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md):
 the stale text is a defect of the changes that made it stale.
 
 ## Alternatives rejected
 
 **A hand-maintained checklist section in the roadmap.** The obvious answer, and the one that reads
 best on the day it is written: a list of what the panel still owes, ticked off as it lands. It is
-[P-0045](../principles/0045-generate-the-vocabulary-prose-drifts-from-code.md)'s *maintaining a
+[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)'s *maintaining a
 second copy of a list by hand* exactly, and
-[P-0016](../principles/0016-an-invariant-that-can-be-tested-is-tested.md)'s *invariants that live
+[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)'s *invariants that live
 only in a README and are enforced by review*. The decisive part is that **the second copy would
 carry no information the first does not**: the grouped `plan` badges above already are the board,
 one line per home, derived by a `grep` from the specification rather than written down beside it.

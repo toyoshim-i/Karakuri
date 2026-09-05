@@ -54,7 +54,7 @@
 //! (`docs/adr/0198-…`), why `karakuri_console::panel::Op` keeps its own type
 //! (`docs/adr/0197-…`), and why all six MCP tools do their own work. Said here
 //! because an invariant that is not yet true says so
-//! (`docs/principles/0036-…`): *every surface routes into the named operation*
+//! (`docs/principles/0093-…`): *every surface routes into the named operation*
 //! is true of the naming everywhere, and of the performing only where there is
 //! a record to perform.
 //!
@@ -180,7 +180,7 @@ pub mod gate;
 /// is a type — so the day the decision is made, replacing it is a compile
 /// error at every construction site rather than a search.
 ///
-/// `docs/principles/0036-an-invariant-that-is-not-yet-true-says-so.md`, applied
+/// `docs/principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md`, applied
 /// to a payload rather than to a sentence.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Undecided;
@@ -347,7 +347,7 @@ impl Residency {
 /// two different things here — `karakuri_engine::deck::Blend` is how a deck
 /// meets the mix, `karakuri_ir::ast::Blend` is how an L4's fragments meet each
 /// other — and a name means one thing across the system
-/// (`docs/principles/0031-…`). A third `Blend` would make it three.
+/// (`docs/principles/0093-…`). A third `Blend` would make it three.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BlendMode {
     Add,
@@ -1394,7 +1394,7 @@ operations! {
     /// verdicts are visible at once — a lane offering *accept* over a
     /// candidate the watchdog had already accepted would spell two different
     /// judgements the same way
-    /// (`docs/principles/0031-a-name-means-one-thing-across-the-system.md`).
+    /// (`docs/principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md`).
     ///
     /// **Addressed by the node rather than by the version, because a node has
     /// at most one unsettled version.** A write is not held anywhere: it is

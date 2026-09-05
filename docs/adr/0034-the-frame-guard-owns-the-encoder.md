@@ -5,7 +5,7 @@ status: accepted
 date: 2026-07-30
 supersedes: []
 superseded_by: []
-principles: [0026]
+principles: [0093]
 tags: [engine]
 ---
 
@@ -61,4 +61,4 @@ roadmap at decision time as "do this before there is more than one Set" and paid
 ## Evidence
 
 Session 2026-07-30T12:52Z, 2026-07-30T19:16Z. Standing rule:
-[P-0026](../principles/0026-a-guarantee-is-structural-or-it-is-a-convention-that-says-so.md).
+[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md).

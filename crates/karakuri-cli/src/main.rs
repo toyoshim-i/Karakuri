@@ -921,7 +921,7 @@ enum ParseOutcome {
     /// store as often as it reads one — a `.kset` has every part hashed and put
     /// — so `--bundle`, which reads as an export and nothing else, named half
     /// of it. `--package` and [`ParseOutcome::TakeIn`] are the two directions of
-    /// one row (P-0031: a name means one thing, and one thing has one name).
+    /// one row (P-0093: a name means one thing, and one thing has one name).
     ///
     /// [`ParseOutcome::ListSets`]'s variant for [`ParseOutcome::ListSets`]'s
     /// reason, and the reason is the whole of why it is here: packaging reads a

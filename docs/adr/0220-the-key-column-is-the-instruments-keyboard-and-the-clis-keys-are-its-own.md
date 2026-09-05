@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-29
 supersedes: []
 superseded_by: []
-principles: [0031, 0087]
+principles: [0087, 0093]
 tags: [docs, process, ui]
 ---
 

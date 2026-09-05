@@ -297,7 +297,7 @@
 //! field on a record. What one deck slot contributes to the mix is written **a deck slot's
 //! layer**, with its owner attached, and never bare; the two have to be disjoint by *name*
 //! and not merely in practice, which is
-//! `docs/principles/0031-a-name-means-one-thing-across-the-system.md`.
+//! `docs/principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md`.
 //! `docs/manual/concepts.html` disowns the loose reading outright — *"A deck is not a layer
 //! in an image editor"* — because a deck is running material with its own time, which is
 //! also why it has a residency rather than a visibility.

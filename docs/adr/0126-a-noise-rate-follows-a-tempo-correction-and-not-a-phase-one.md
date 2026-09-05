@@ -44,7 +44,7 @@ reason**: a seconds-relative mode, and a rate frozen at bind time.
 **They make two kinds of noise, and every existing `bind` record becomes ambiguous about which kind
 it asked for.** A record that could mean either thing is worse than a record that means one thing
 imperfectly — the same objection that keeps one record tag to one record shape
-([P-0031](../principles/0031-a-name-means-one-thing-across-the-system.md)).
+([P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)).
 
 ## What is given up, stated rather than glossed
 

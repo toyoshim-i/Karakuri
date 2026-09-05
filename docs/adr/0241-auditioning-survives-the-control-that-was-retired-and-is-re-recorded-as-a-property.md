@@ -5,7 +5,7 @@ status: accepted
 date: 2026-09-02
 supersedes: []
 superseded_by: []
-principles: [0036, 0080, 0087]
+principles: [0080, 0087, 0093]
 tags: [docs, process, ui, engine]
 ---
 
@@ -81,7 +81,7 @@ requirement with nothing standing for it.
 
 **Deleting nothing and letting P-0070 stand was rejected.** It is what ADR-0240 left behind, and it
 is the exact case
-[P-0066](../principles/0066-an-adr-is-a-description-of-history-corrected-but-never-revised.md) calls
+[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md) calls
 out: *leaving a wrong description is ruled out too*. `docs/principles/` is the present tense and is
 kept current by deletion and renumbering — a registry that keeps a rule naming a deleted method is a
 registry nobody can cite.
@@ -111,7 +111,7 @@ name they were sent to.
   present and unreachable rather than missing.
 
   Both are written into P-0080's *Where it is not met* under
-  [P-0036](../principles/0036-an-invariant-that-is-not-yet-true-says-so.md).
+  [P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md).
 - `Deck::set_preview` and `Deck::preview` are deleted, together with the five tests in
   `crates/karakuri-engine/tests/deck.rs` whose only subject they were. The `preview` field, the
   `auditioned` branches in `Frame::render` and the `Input::unity` arm that folds an audition are left

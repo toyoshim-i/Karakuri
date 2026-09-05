@@ -60,7 +60,7 @@ words in a map file are the manual's badges verbatim*.
 
 Rejected: **`position N`**, which is the shortest true word and means four other things in this
 system — a session's position on the grid, a slot's position along it, a node's position in a
-layout — where [P-0031](../principles/0031-a-name-means-one-thing-across-the-system.md) says a name
+layout — where [P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md) says a name
 means one thing. **`front N`**, which is the word the prose uses and which nothing else in the
 vocabulary or on the page says, so an operator reading the manual would not find it. **`mask N` with
 the shape taking a value word later**, which is the collision above.

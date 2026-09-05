@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-24
 supersedes: []
 superseded_by: []
-principles: [0031]
+principles: [0093]
 tags: [ui, naming]
 ---
 
@@ -28,7 +28,7 @@ the words showed how far:
 The manual calls a titled box a **bay** — sixteen times, and its stylesheet class is `.bay-head`.
 `karakuri-console` called the same thing a **pane**, twenty-six times. One thing, two words, and the
 two documents that have to agree are the operator's manual and the code the four surfaces call
-into. That is [P-0031](../principles/0031-a-name-means-one-thing-across-the-system.md).
+into. That is [P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md).
 
 The manual also had a hole. It names every bay and it has **no word at all** for the three columns
 those bays are stacked in — which was harmless while nothing addressed them, and stopped being
@@ -60,7 +60,7 @@ neither has a heading. A bay is a titled box; these are strips of readouts, and 
 the mixer's channel. They are **rows**.
 
 **A common noun is not an identifier.** The inspector's *n* subdivisions stay `panes`, which is
-what the manual already calls them, even though the side columns are panes too. P-0031 is about
+what the manual already calls them, even though the side columns are panes too. P-0093 is about
 names: `left-pane` and `inspector-1` are distinct and always will be. A generic noun used
 generically costs nothing, and the inspector's are always spoken of qualified.
 

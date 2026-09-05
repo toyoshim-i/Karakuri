@@ -66,7 +66,7 @@
 //! [ADR-0164](../../../docs/adr/0164-the-panel-is-budgeted-rather-than-forbidden-to-allocate.md)
 //! chose to **budget** the panel rather than forbid it to allocate — a budget
 //! is a guarantee only while something counts, which is
-//! [P-0026](../../../docs/principles/0026-a-guarantee-is-structural-or-it-is-a-convention-that-says-so.md).
+//! [P-0093](../../../docs/principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md).
 //! See
 //! [ADR-0217](../../../docs/adr/0217-the-counting-allocator-ships-because-a-written-number-nothing-checks-goes-stale.md),
 //! which also records what a cargo feature and a test target each lost on.
@@ -1442,7 +1442,7 @@ impl Readout {
             // **The words went with the route rather than being kept for
             // one.** A formatter for an outcome nothing produces is this file
             // claiming a route it has not got
-            // ([P-0063](../../../docs/principles/0063-source-cites-what-is-in-force-not-a-plan.md)),
+            // ([P-0093](../../../docs/principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)),
             // and the table it printed is not the one the startup legend
             // prints: that one is each region's *min and max*, once, before
             // anything has been dragged, and this was each region's solved
@@ -2859,7 +2859,7 @@ const ASKED_TO_PRIME: usize = 1;
 /// where nothing else can reach them. A second `--flag` vocabulary here would
 /// be a second answer to *how does an operator name material*, which is the
 /// failure this whole move exists to stop paying for
-/// ([P-0031](../../../docs/principles/0031-a-name-means-one-thing-across-the-system.md)).
+/// ([P-0093](../../../docs/principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)).
 /// So **material is two positional paths and nothing else**: enough to pick
 /// what plays, and no vocabulary to disagree with. The day the two programs
 /// share one, it comes from a package both can reach and this goes.
@@ -2877,7 +2877,7 @@ const ASKED_TO_PRIME: usize = 1;
 /// **defaults to** when the operator gives no pair at all, which is the whole
 /// of its reach into this type.
 ///
-/// P-0031 is about one name meaning one thing, and the failure it names would
+/// P-0093 is about one name meaning one thing, and the failure it names would
 /// be two ways to say *play this file*. Two ways to say *and the files are
 /// over here* is not that failure; refusing to have any way to say it is how
 /// [`Sources::under`]'s predecessor came to bake the build machine's own tree
@@ -3086,7 +3086,7 @@ fn running_from(dir: &std::path::Path, copies: &[Sources]) -> String {
 /// where they belong: an operator reading this is looking for how to play
 /// something, and the answer is still the pair on the first line. See
 /// [`Sources`] for why a flag that answers *where the data lives* is not the
-/// second material vocabulary P-0031 refuses.
+/// second material vocabulary P-0093 refuses.
 const USAGE: &str = "\
 usage: karakuri [--presets DIR] [--store DIR] [--mcp PORT] [GEOMETRY.kir RENDERER.kir]
 
@@ -6490,7 +6490,7 @@ fn pointed(view: &mut View, operation: &Operation) -> Option<String> {
 /// saying is that a deck of one picture repeated is not a mixer, and that is
 /// true of every slot rather than of deck B, so it is said once here and no
 /// constant states a reason that has gone
-/// ([P-0063](../../../docs/principles/0063-source-cites-what-is-in-force-not-a-plan.md)).
+/// ([P-0093](../../../docs/principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)).
 ///
 /// **`+ slot` rather than a table**, because a table of four numbers is four
 /// values with nothing to say about each other, and what is wanted is exactly
@@ -13190,7 +13190,7 @@ mod key_column {
     //! `karakuri-cli` documents its own keys in `BINDINGS` and has its own test
     //! that every key `Live::key` acts on is in it. Nothing here reads that
     //! package, and a second copy of its list here would be the thing
-    //! [P-0045](../../../docs/principles/0045-generate-the-vocabulary-prose-drifts-from-code.md)
+    //! [P-0093](../../../docs/principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)
     //! forbids.
     //!
     //! # What it cannot see, and which way each one fails

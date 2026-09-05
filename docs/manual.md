@@ -228,7 +228,7 @@ because a `uses` is written in the same breath as the procedure that declares it
 keyboard has never had a way to say a node's name. That is a debt against rule 01 and not an
 exception carved out of it; what it is waiting on is a way for a press to say a node's name,
 which the Inspector's node head is specified to give it
-([P-0036](principles/0036-an-invariant-that-is-not-yet-true-says-so.md): an invariant that is
+([P-0093](principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md): an invariant that is
 not yet true says so). **A set a model rewrote replays with no model
 attached**: `--record-session` writes a `procedure` record whenever a swap lands, so
 `--replay` rebuilds the slot at the frame it changed on. That was not true when this surface

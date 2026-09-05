@@ -96,7 +96,7 @@
 //!
 //! **What the pointer reaches is demonstrated rather than declared.** A list
 //! here of which rows have a control would be a second copy of one
-//! ([P-0045](../../../docs/principles/0045-generate-the-vocabulary-prose-drifts-from-code.md)),
+//! ([P-0093](../../../docs/principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)),
 //! and a copy of something nothing states. So [`reached_by_the_pointer`] asks
 //! a running panel, in **four passes**, because the pointer has two routes
 //! into this section and not one:
@@ -762,7 +762,7 @@ fn reached_by_the_pointer() -> BTreeSet<&'static str> {
 /// asks [`claim`] who a press on it belongs to, asks the pill what that press
 /// asks for, opens the menu with the answer, and then asks every row of the
 /// open menu the same question. A list here saying *the pill reaches the
-/// reset* would be the second copy of something nothing states (P-0045), and
+/// reset* would be the second copy of something nothing states (P-0093), and
 /// it would go on being true after the arm was deleted.
 ///
 /// # Three rows come out of one menu, and they are not all reached the same way

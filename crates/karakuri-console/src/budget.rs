@@ -207,7 +207,7 @@ pub const FRAME_INTERVAL: Duration = Duration::from_nanos(16_666_667);
 /// # A quarter, and the fraction is a preference
 ///
 /// Marked as
-/// [P-0056](../../../docs/principles/0056-mark-what-is-preference-so-it-can-be-revisited.md)
+/// [P-0093](../../../docs/principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)
 /// asks. **Forced**: the fraction is well under a half, because *most of the
 /// budget* is the failure the clause names and a half is not distinguishable
 /// from it. **Preference**: which fraction under a half.

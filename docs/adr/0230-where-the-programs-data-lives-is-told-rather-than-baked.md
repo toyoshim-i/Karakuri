@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-30
 supersedes: []
 superseded_by: []
-principles: [0023, 0027, 0031, 0045, 0048, 0085, 0088, 0090]
+principles: [0027, 0048, 0085, 0088, 0090, 0093]
 tags: [cli, distribution, environment, store, presets]
 ---
 
@@ -175,7 +175,7 @@ bay's two, and it went on saying it while bay after bay drew one — which is wh
 beside the thing it describes is worth"*, and *"a copy here is precisely how this legend came to
 name three controls while every one of them answered a press."* A line saying *presets: …* that a
 person maintains would be the sixth
-([P-0045](../principles/0045-generate-the-vocabulary-prose-drifts-from-code.md)). It prints the path
+([P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)). It prints the path
 the resolution returned, and it prints which entry returned it, because *where did that come from*
 is the whole question this record exists to answer.
 
@@ -199,15 +199,15 @@ where the parsers were held apart:
 > a.kir,b.kir` among them, and they live in its own `main.rs` where nothing else can reach them. A
 > second `--flag` vocabulary here would be a second answer to *how does an operator name material*,
 > which is the failure this whole move exists to stop paying for
-> ([P-0031](../principles/0031-a-name-means-one-thing-across-the-system.md)). So this is two
+> ([P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)). So this is two
 > positional paths and nothing else … **The day the two programs share one, it comes from a package
 > both can reach and this goes.**
 
 That paragraph is not contradicted by `--presets` and `--store`, and the distinction is the one
-P-0031 turns on. *How does an operator name material* keeps exactly one answer — **the positional
+P-0093 turns on. *How does an operator name material* keeps exactly one answer — **the positional
 pair, and nothing else** — and these two flags answer a different question, *where does this
 program's data live*, which had no answer at all. The paragraph gets that sentence added to it, on
-[P-0023](../principles/0023-a-document-that-describes-replaced-behaviour-is-worse-than-none.md)'s
+[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)'s
 terms: the change that makes a comment look wrong is the change that owes the correction, and a
 reader who finds *no vocabulary to disagree with* beside two new flags will either delete the flags
 or stop believing the comment. Note also what its last sentence predicted — *the day the two
@@ -226,7 +226,7 @@ precisely what an installer wants.
 where the presets are, and the two disagree the moment somebody sets both; whichever way that
 precedence is resolved, the rule lives in a paragraph rather than in a sentence an operator can
 read, which is
-[P-0031](../principles/0031-a-name-means-one-thing-across-the-system.md)'s failure in its ordinary
+[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)'s failure in its ordinary
 form. The search table is not a second answer in the same way, because it is *the default* — what
 happens when nobody has said anything — and it says out loud which entry answered.
 
@@ -316,7 +316,7 @@ whose whole definition is that it ships and is never written.
   binaries reach, and the day one program's default store changes it changes for the other or the
   change is a deliberate divergence somebody wrote. The doc comment that explained why the
   duplication had to stay goes with the duplication — leaving it beside a constant that is no longer
-  transcribed is P-0023's defect exactly.
+  transcribed is P-0093's defect exactly.
 - **A refusal becomes reachable from two programs, so it is one sentence.** `--store` was
   `karakuri-cli`'s alone and its refusals were written where they were used. With `karakuri` taking
   the same flag, P-0090 applies from the moment the second caller exists rather than after somebody
@@ -340,7 +340,7 @@ whose whole definition is that it ships and is never written.
 - **`karakuri-cli` gets the shared constants and no `--presets` flag.** Nothing in it reads a preset
   by name — it takes `.kir` paths and store ids — so the flag would name a directory the program
   never consults. A flag with nothing behind it is a vocabulary that means nothing, which is the
-  same count P-0031 charges against a second spelling.
+  same count P-0093 charges against a second spelling.
 - **The operation that switches a library scope is still owed, and it has no row.** `grep -i scope
   docs/manual/operations.html` finds nothing: the console page draws `favourites`, `my sets`,
   `presets`, `folder` and `+`, and every tooltip in that row that mentions MIDI says the same thing

@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-28
 supersedes: []
 superseded_by: []
-principles: [0031, 0090]
+principles: [0090, 0093]
 tags: [midi, vocabulary, surfaces, mixing, docs]
 ---
 
@@ -28,7 +28,7 @@ whether anything has asked for one, and nothing has.
 
 **This record takes the third option.** It is a decision rather than a continuation of ADR-0202's
 survey, which is why it is a record of its own: ADR-0202 correctly describes a moment when three
-options were open, and P-0066 says an argument that would have to change is a new record rather than
+options were open, and ADR-0151 says an argument that would have to change is a new record rather than
 an edit. Its front matter is annotated the way ADR-0185, ADR-0188, ADR-0197 and ADR-0198 were, and
 its prose is untouched.
 
@@ -62,7 +62,7 @@ control that **shows** an angle.
   ADR-0202 did, and repeating it now would be a survey mistaken for a decision. The mini is finished
   (ADR-0203) and it did not ask for a map target; leaving the row's reason written as a mechanism
   invites the next reader to re-derive the same three options from the same evidence.
-- **Fold this into ADR-0202 as an edit.** It is where a reader would look, and it is what P-0066
+- **Fold this into ADR-0202 as an edit.** It is where a reader would look, and it is what P-0093
   forbids: ADR-0202's argument is that the evidence does not separate three options, and that
   argument would have to change. The annotation is what connects them.
 - **A new principle.** The rules this applies already exist — a surface asks for what it can say
@@ -79,5 +79,5 @@ control that **shows** an angle.
 - **What stays open is named as a trigger rather than as work**: a control that shows an angle. If
   one is drawn, the choice between a float form and an angle-less operation is live again and this
   record is what it argues against.
-- **ADR-0202 is annotated and not revised** (P-0066), and `karakuri-midi`'s module documentation
+- **ADR-0202 is annotated and not revised** (P-0093), and `karakuri-midi`'s module documentation
   still states the same fact about the grammar, which this does not change.

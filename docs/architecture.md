@@ -211,7 +211,7 @@ it expects to need later. No LLM call is ever on a path a frame waits for.
 
 Three words each carry more than one sense. They are listed here because a decision written
 in a word that means two things cannot be recorded —
-[P-0031](principles/0031-a-name-means-one-thing-across-the-system.md) asks that names be
+[P-0093](principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md) asks that names be
 disjoint by name and not merely disjoint in practice.
 
 **`layer` carries three senses.**

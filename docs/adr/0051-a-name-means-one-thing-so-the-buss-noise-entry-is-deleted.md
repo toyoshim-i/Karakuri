@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-01
 supersedes: []
 superseded_by: []
-principles: [0031]
+principles: [0093]
 tags: [signal, format]
 ---
 
@@ -41,4 +41,4 @@ specifically so nothing is guessed, one place quietly filling in a default is ou
 ## Evidence
 
 Session 2026-08-01T03:17Z–05:31Z. Standing rule:
-[P-0031](../principles/0031-a-name-means-one-thing-across-the-system.md).
+[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md).

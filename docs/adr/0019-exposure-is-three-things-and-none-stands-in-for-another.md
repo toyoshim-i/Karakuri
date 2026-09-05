@@ -5,7 +5,7 @@ status: accepted
 date: 2026-07-26
 supersedes: []
 superseded_by: []
-principles: [0018]
+principles: [0093]
 tags: [engine, render]
 ---
 
@@ -54,4 +54,4 @@ tone mapper.
 ## Evidence
 
 Session 2026-07-26T02:20Z–02:24Z. Standing rule:
-[P-0018](../principles/0018-a-workaround-in-prose-is-a-missing-feature.md).
+[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md).

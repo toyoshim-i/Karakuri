@@ -5,7 +5,7 @@ status: accepted
 date: 2026-09-01
 supersedes: []
 superseded_by: []
-principles: [0018, 0023, 0027, 0031, 0044, 0048, 0066, 0085]
+principles: [0027, 0044, 0048, 0085, 0093]
 tags: [store, console, mcp, hot-swap, docs]
 ---
 
@@ -109,7 +109,7 @@ is that the argument was never about loading:
 > run.
 
 This is
-[P-0031](../principles/0031-a-name-means-one-thing-across-the-system.md) applied to a directory
+[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md) applied to a directory
 instead of a record tag — *"It is not enough to be disjoint in practice; they have to be disjoint by
 name"* — and `<letter><index>` is disjoint by construction, so the `unique_name` counter that used to
 scan for collisions is gone with the rule that needed it. The material's own name is kept beside the
@@ -143,7 +143,7 @@ the rule now needs.
 `scratch.rs`'s header carries the resolution and quotes the old rule under *"**This replaces the
 opposite rule**, which stood here until 2026-09-01"*, with the three things wrong with it. A comment
 describing replaced behaviour is a defect of the change that replaced it
-([P-0023](../principles/0023-a-document-that-describes-replaced-behaviour-is-worse-than-none.md):
+([P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md):
 *"Stale documentation is a defect of the change that made it stale, not housekeeping for later"*), and
 a rule that was argued rather than assumed is one somebody will re-propose, so it is kept where the
 re-proposal will land. `watch.rs`'s header is re-read the same way rather than cut: its *"Two slots
@@ -217,7 +217,7 @@ subsystem, check what it is made of"* read the other way round. It stays open be
 - **The edit history is untouched.** `history.rs`'s snapshots are keyed `(slot, layer, index)` and
   were already per slot, so seeding four copies files four chains exactly as before; what changes is
   that the four chains now describe four files instead of four readings of one.
-- **ADR-0088's front matter is annotated and its prose is untouched** ([P-0066](../principles/0066-an-adr-is-a-description-of-history-corrected-but-never-revised.md)),
+- **ADR-0088's front matter is annotated and its prose is untouched** ([P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)),
   the way ADR-0185, ADR-0188, ADR-0197, ADR-0198 and ADR-0202 were. Its `superseded_by` names this
   record and **its `status` stays `accepted`**, because what fell is one clause: the three places, the
   gate on a run that can write, the dissolved `--mcp` / `--load-set` exclusion and the finding about
@@ -229,7 +229,7 @@ subsystem, check what it is made of"* read the other way round. It stays open be
   `karakuri-cli`; both moved to `karakuri-environment` with
   [ADR-0215](0215-the-package-is-karakuri-environment-and-a-module-belongs-if-what-it-deals-with-is-outside-this-process.md).
   A principle is a live registry rather than a record, so a stale pointer in one is a defect and is
-  fixed rather than annotated (P-0023). The rule the file states is unchanged and it keeps its number.
+  fixed rather than annotated (P-0093). The rule the file states is unchanged and it keeps its number.
 - **No new principle is written here, and whether one is owed is the maintainer's.** The rule is the
   kind ADR-0000 says earns one — *"A rejection earns a principle only if a future proposal could
   violate it"* — and this proposal was made once already, by a record. What holds it today is
@@ -248,7 +248,7 @@ subsystem, check what it is made of"* read the other way round. It stays open be
 - **What an operator who wants two decks to move together does. There is no answer today, and this
   record does not invent one.** `docs/manual.md` currently answers with an instruction — make the
   same edit in each slot's file — which is an instruction rather than a mechanism, and
-  [P-0018](../principles/0018-a-workaround-in-prose-is-a-missing-feature.md) is what that is: *"When
+  [P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md) is what that is: *"When
   the fix for a defect is a sentence added to a prompt, a corpus, or a guide, the defect is still
   there and now it has a distribution channel."* Whether it is a defect at all depends on whether
   anyone wants the thing, which is Alternative c and is open.

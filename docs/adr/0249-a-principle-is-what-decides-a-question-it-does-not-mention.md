@@ -72,7 +72,7 @@ harder admits the same files with more argument attached.
 drawers instead of one, and a chapter cannot be sorted by altitude because two rules on one topic sit
 at different heights — *a test meant to catch something is run against the defect* and *do not use
 rewritten product data as a fixture* are both "testing" and only one is a creed. It also costs every
-principle its address, which [P-0063](../principles/0063-source-cites-what-is-in-force-not-a-plan.md)
+principle its address, which [P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)
 requires source to cite, and it breaks retirement: one rule cannot be deleted out of a six-rule
 chapter without editing the chapter.
 

@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-15
 supersedes: []
 superseded_by: []
-principles: [0045]
+principles: [0093]
 tags: [mcp, process]
 ---
 

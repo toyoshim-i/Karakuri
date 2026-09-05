@@ -241,7 +241,7 @@ are.
 addresses the finished instrument; a reviewer holding a diff has no question the future tense
 answers.
 
-**And it rots differently.** [P-0063](../principles/0063-source-cites-what-is-in-force-not-a-plan.md)
+**And it rots differently.** [P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)
 is the rule that source cites what is in force rather than a plan, and a roadmap is a plan by
 construction: a section describing the state of the work must be rewritten as the work moves, and
 the rule inside it is rewritten with it. A principle is current-only and deleted when it stops being

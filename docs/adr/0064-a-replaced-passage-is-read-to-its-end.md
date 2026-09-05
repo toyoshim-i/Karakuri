@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-02
 supersedes: []
 superseded_by: []
-principles: [0023]
+principles: [0093]
 tags: [docs, process]
 ---
 
@@ -47,4 +47,4 @@ of a paragraph is where the contradiction survives, because that is where nobody
 ## Evidence
 
 Session 2026-08-02T08:59Z, commit `5ad1d1b`. Standing rule:
-[P-0023](../principles/0023-a-document-that-describes-replaced-behaviour-is-worse-than-none.md).
+[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md).

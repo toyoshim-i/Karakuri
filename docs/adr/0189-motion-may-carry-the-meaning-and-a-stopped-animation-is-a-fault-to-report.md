@@ -160,14 +160,14 @@ roll, on a panel that repaints whole because `egui` is immediate mode.
 
 ### ADR-0188 is annotated, not rewritten
 
-[P-0066](../principles/0066-an-adr-is-a-description-of-history-corrected-but-never-revised.md) is
+[ADR-0151](0151-an-adr-is-a-description-of-history.md) is
 the test, and this is the case it names outright: *an argument that would have to change is a new
 record*. ADR-0188 correctly describes what was decided when it was written, including a clause that
 was believed and is not any more, and rewriting it would destroy the only account of how P-0075 came
 to be shaped this way.
 
 What it gets is what the front matter is for. Its `superseded_by` names this record — the only
-forward pointer the front matter has, and P-0066 names precisely those fields as where *what a
+forward pointer the front matter has, and ADR-0151 names precisely those fields as where *what a
 record later became* is written. Its `status` stays `accepted`, because what fell is one clause of
 one principle rather than the decision: the vocabulary, the derivation every frame, the refusal to
 keep the constraint in the surface, the rejection of a coined word, and the measured costs all
