@@ -109,12 +109,32 @@
               <div class="lib-filters"><span class="field">holds&hellip;</span><span class="field">layer&hellip;</span></div>
               <div class="lib-list">
                 <div class="lib-row cursor"><span class="star" data-tip="A favourite. Kept beside the Sets in the store rather than inside the Set file, so it survives a copy of this library and does not survive a copy of one Set: hand somebody a bundle and it arrives unstarred. Click to unstar. &#8853; MIDI: unassigned &mdash; no operation names a favourite yet, so there is nothing for a map to reach.">&#9733;</span><span>drift_night</span><span class="dim">16:09</span></div>
+                <!-- The block is one box rather than nine loose rows: it belongs to
+                     the row above it, and a reading drawn flat into this list would
+                     read as Sets nested under a Set. Existing tokens only &mdash;
+                     the well the staging rows stand on, at the list's own radius.
+                     What the Set under the cursor declares, open. One row per
+                     published key and never one per node, because there is no node
+                     to address in a file nothing is running: see "Reading a Set
+                     before you spend a load on it" under the notes. -->
+                <div style="background:var(--c-well);border-radius:8px;margin:2px 2px 3px">
+                <div class="lib-row" style="padding-left:18px" data-tip="What drift_night declares &mdash; the range a value is refused outside of &mdash; and not what this Set has anything turned to. Six controls, which is what the deck will publish once it is loaded: one per key rather than one per declaration, so a name two nodes declare is one row here and one knob there, over the part of the range both of them accept. A reading and not a pane: nothing in it can be pressed, turned, taken back or handed to an agent, because none of those are things a file has. &#8853; MIDI: unassigned &mdash; a reading is not an operation, so there is no target for a map line to name."><span class="addr">declares</span><span class="dim">6 knobs</span></div>
+                <div class="lib-row" style="padding-left:18px" data-tip="A declared range and the default that applies until something turns it, which is the shape every line here is drawn in &mdash; capacity included, because a procedure declares one the same way it declares a knob. There is no value beside it and there will not be one: a Set on disk has nothing turned to anything, and the number under your hand is the inspector's to show after the load."><span>radius</span><span class="dim">0 &ndash; 8 &middot; 2</span></div>
+                <div class="lib-row" style="padding-left:18px"><span>turbulence</span><span class="dim">0 &ndash; 3 &middot; 0.4</span></div>
+                <div class="lib-row" style="padding-left:18px"><span>amount</span><span class="dim">0 &ndash; 1 &middot; 0.5</span></div>
+                <div class="lib-row" style="padding-left:18px"><span>twist</span><span class="dim">&minus;2 &ndash; 2 &middot; 0</span></div>
+                <div class="lib-row" style="padding-left:18px"><span>hue</span><span class="dim">0 &ndash; 1 &middot; 0.5</span></div>
+                <div class="lib-row" style="padding-left:18px" data-tip="One row and two nodes declare it: soft_points and strand_strokes both have an exposure, so the Set publishes one control over both of them, over the part of the range both said they still look like themselves across. Which nodes those are is not drawn here, because a node is a thing a deck is running and this is a file &mdash; the inspector is where that control gets its reach and its mark, in the group that names no one node."><span>exposure</span><span class="dim">0 &ndash; 1 &middot; 0.4</span></div>
+                <div class="lib-row" style="padding-left:18px" data-tip="How many elements the geometry declares it can carry, and how many it takes when nobody says otherwise &mdash; the element count, drawn in the same range-and-default shape as a knob because that is how a procedure declares it. It is the declaration and not this Set's own number: a file may record a count of its own, and this reading does not carry one. Nothing on the panel does before a load, which is said in the notes rather than smoothed over."><span>capacity</span><span class="dim">16k &ndash; 1M &middot; 262144</span></div>
+                <div class="lib-row" style="padding-left:18px" data-tip="What the geometry emits, which is what a renderer drawn over it can consume. It is on the artifact's own card like everything else here, so a Set whose renderers want an attribute nothing in it emits can be seen not to fit before it is loaded rather than after."><span>emits</span><span class="dim">position, size, life</span></div>
+                <div class="lib-row" style="padding-left:18px" data-tip="Where the reading came from, and it is the whole of what it cost. Every line above is read off the metadata card the store keeps beside each artifact, so no source was fetched and nothing was compiled. A node whose artifact has no card declares nothing this can read &mdash; an ordinary state of a working store rather than a damaged one, because a card is derived rather than kept &mdash; and it is counted here rather than drawn as a blank row, since a knob missing from the list without a word is the one thing that would make this lie. Five nodes, and the built-in camera is not one of them: its radius, speed, height, field of view and two clipping distances are the Set's own numbers rather than a node's declarations, which is the same reason the inspector draws no rows under orbit."><span>5 nodes</span><span class="dim">all described</span></div>
+                </div>
                 <div class="lib-row"><span class="star">&#9733;</span><span>lattice_veil</span><span class="dim">15:52</span></div>
                 <div class="lib-row"><span class="star off" data-tip="Not a favourite. Click to star it &mdash; which writes beside the Sets and never into this one, so the file keeps its bytes and its time and the row does not jump to the top of a listing ordered by when it was written. &#8853; MIDI: unassigned.">&#9734;</span><span>glass_shell</span><span class="dim">15:31</span></div>
                 <div class="lib-row"><span class="star off">&#9734;</span><span>night01</span><span class="dim">14:58</span></div>
                 <div class="lib-row"><span class="star off">&#9734;</span><span>strand_bloom</span><span class="dim">14:12</span></div>
               </div>
-              <div class="lib-foot"><span>5 of 27</span><span class="sep"></span><span class="pill lav" data-tip="Load the Set under the cursor into deck A &mdash; the deck the selection is on, which is the same deck `x` reads and the reason the selection stays put while your hands are in this list. So a load is the cursor and a key and no pointer at all. A is on air here and nothing refuses the press: what may be asked for is the instrument's to decide, so the letter is what says where it lands before you press it. Select another deck and the letter follows. Dragging a row onto a strip is the same command with the deck named by the strip you drop on rather than by the selection. &#8853; MIDI: unassigned &mdash; every target a map can name carries a slot, a range or a word from a closed list, and a Set id is none of the three.">load &rarr; A</span></div>
+              <div class="lib-foot"><span>5 of 27</span><span class="sep"></span><span class="pill" data-tip="Read what the Set under the cursor holds and declares, opened under its row &mdash; every knob with its range and default, the element count, and what it emits. Open here, on drift_night, and a press closes it; move the cursor and the reading moves with it, so one row is open at a time and never a second list. It fetches no source and compiles nothing, which is why it is a press rather than a load: the answer is already beside the Sets, in the cards the store keeps. It carries no lit state of its own, because the block above it is the state: nine lines that were not there a moment ago say more than a chip changing colour, and the one colour this bay spends on an act is spent on the load beside it. &#8853; MIDI: unassigned &mdash; every target a map can name carries a slot, a range or a word from a closed list, and a Set id is none of the three.">read</span><span class="pill lav" data-tip="Load the Set under the cursor into deck A &mdash; the deck the selection is on, which is the same deck `x` reads and the reason the selection stays put while your hands are in this list. So a load is the cursor and a key and no pointer at all. A is on air here and nothing refuses the press: what may be asked for is the instrument's to decide, so the letter is what says where it lands before you press it. Select another deck and the letter follows. Dragging a row onto a strip is the same command with the deck named by the strip you drop on rather than by the selection. &#8853; MIDI: unassigned &mdash; every target a map can name carries a slot, a range or a word from a closed list, and a Set id is none of the three.">load &rarr; A</span></div>
             </div>
 
             <div class="bay">
@@ -2060,6 +2080,112 @@
           that walks it. The staging lane under this bay says what happened,
           on the deck it happened to, because a load is a build and a build is
           what that lane is about.
+        </p>
+      </div>
+
+      <div class="note">
+        <h3>Reading a Set before you spend a load on it</h3>
+        <p>
+          <em>Read what one Set holds and declares</em> is the other operation
+          that names a Set this library already keeps, and until now it had no
+          way in but a model's. <strong>Its operand is the cursor, which
+          is the same operand the pill beside it already uses</strong> &mdash;
+          so the route costs one chip in the foot and nothing else, which is
+          the argument <em>How a Set reaches a deck</em> won on and is won here
+          again. <code>read</code> opens what the row under the cursor
+          declares, underneath that row; a second press closes it; the arrow
+          keys move the cursor and the reading moves with it. <strong>One row
+          is open at a time</strong>, which is what keeps this a mode of the
+          list rather than a second list, and the height it costs lands on the
+          bay in this column that absorbs.
+        </p>
+        <p>
+          <strong>It is not a second inspector, and the difference is not a
+          matter of degree.</strong> The inspector groups by node because the
+          two things it draws beside a value &mdash; who is holding it, and
+          what authority the node is under &mdash; are one node's, and a
+          node is a thing a deck is running. <strong>Nothing here is
+          running</strong>, so there is no address to group under, no value to
+          show, nobody holding anything and no <code>man / sug / auto</code> to
+          set. What is left is what a procedure declares, and rule 05 is
+          untouched: mixing is between decks, shaping is inside one, and this
+          is neither. It is choosing, which is the act this bay exists for and
+          the one thing the list could not say enough about.
+        </p>
+        <p>
+          <strong>So it is one row per key, and never one per node.</strong>
+          A Set publishes one control per <em>key</em> rather than one per
+          declaration &mdash; a name two nodes declare is a single knob over
+          the part of the range both of them accept, which is
+          <a href="concepts.html">the default interface</a> and is what
+          <em>A control that names no one node</em> above is about. A Set file
+          carries no interface of its own today, so the default interface is
+          the interface every stored Set has, and it falls out of the cards
+          without opening anything. <strong>That is why this list is the list
+          the inspector will draw</strong>: the six names above are deck A's
+          six, in deck A's order, and <code>exposure</code> is one row here
+          for the same reason it is one knob there. Where each of them lands
+          among the node groups is a node fact and this reading has no room
+          for it. When a Set file learns to carry an interface the count
+          can go down and the names can change, and this reading changes its
+          source rather than its shape.
+        </p>
+        <p>
+          <strong>What it does not draw is the number beside each name</strong>
+          &mdash; the position a MIDI control is bound by. That number is the
+          deck's published interface in order, and printing it here would
+          be a promise about a map made before the load that put the interface
+          there. The count is in the head instead, because <em>how many knobs
+          will be under my hands</em> is the question a controller in the room
+          actually asks, and it is answerable without committing to which is
+          which.
+        </p>
+        <p>
+          <strong>And the chip itself does not light.</strong> A toggle usually
+          owes you a lit state, and this one pays that debt in a louder
+          currency: nine lines appear under the cursor, which is not a thing
+          anybody misses. Lighting it would also have spent this bay's one
+          accent on the smaller of its two acts &mdash; <code>load &rarr; A</code>
+          is lav because it is the press this bay exists for, and a second lav
+          chip beside it would make the colour mean two things at a width of
+          eight characters.
+        </p>
+        <p>
+          <strong>Every line is read off a card, which is the whole of what the
+          row promised.</strong> No source is fetched and nothing is compiled:
+          the params, the capacity and the emitted attributes are each a record
+          on the metadata card the store keeps beside an artifact, and a node
+          with no card is counted in the foot rather than drawn as a blank row.
+          <strong>The one figure that would cost more is deliberately absent</strong>
+          &mdash; how many bytes an element takes needs every source in the Set
+          fetched, checked and composed, because what a node allocates depends
+          on what reaches it. A model asking over MCP gets it and pays for it;
+          a press in a library list is not the place to spend that, and a
+          number that only sometimes appears is worse than one that never does.
+        </p>
+        <p>
+          <strong>Where this reading is thin, and it is thin in one place.</strong>
+          It shows what a procedure declares and never what the Set turned
+          anything to &mdash; and a Set file does record things: a capacity per
+          geometry, parameters, a salt, a camera and a layering. Four of those
+          five an operator can live without seeing until the deck is up. The
+          capacity is the one that bites, because it decides how heavy the load
+          about to be spent is, and the line above says the range the procedure
+          declares and the count it defaults to rather than the count this file
+          asks for. <strong>Nothing on this panel says that number before a
+          load</strong>, and it is written down here as owed rather than
+          answered by widening this reading into a second thing.
+        </p>
+        <p>
+          <strong>The key is empty and the map is empty, for two different
+          reasons.</strong> Which keys exist is
+          <a href="operations.html">the operations page</a>'s to say and
+          it names none for this row, so the chip is the only way in until it
+          does &mdash; which is a gap and not a decision. MIDI is a decision:
+          every target a map can name carries a slot, a range or a word from a
+          closed list, and a Set id is none of the three, which is the same
+          sentence that keeps <code>load &rarr; A</code> off a map and is the
+          same operand behind both.
         </p>
       </div>
 
