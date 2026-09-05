@@ -255,6 +255,6 @@ pending, so a settled strip costs exactly the galley it always cost.
 - **The chip is still not a control.** Nothing here is clickable, no claim rule was added, no
   `Operation` is emitted and `input.rs` is untouched. **That order is deliberate**: a control that
   could not yet say it is pending would look dead for exactly as long as one commit. What a press
-  asks for is the next change, and P-0076 already says it asks rather than forbids.
+  asks for is the next change, and P-0090 already says it asks rather than forbids.
 - **The console still draws no tooltips**, and the manual's third rule still wants one. P-0075's
   second clause is met on the surface instead, which is why the roll was worth its clip.

@@ -5,7 +5,7 @@ status: accepted
 date: 2026-07-25
 supersedes: []
 superseded_by: []
-principles: [0009]
+principles: [0090]
 tags: [ir, engine, determinism]
 ---
 
@@ -56,4 +56,4 @@ reproduce.
 ## Evidence
 
 Session 2026-07-25T12:03Z–12:24Z; the branchless lowering at 2026-07-25T14:24Z. Standing
-rule: [P-0009](../principles/0009-what-a-binding-can-express-is-not-baked-into-the-engine.md).
+rule: [P-0090](../principles/0090-a-surface-offers-it-never-decides.md).

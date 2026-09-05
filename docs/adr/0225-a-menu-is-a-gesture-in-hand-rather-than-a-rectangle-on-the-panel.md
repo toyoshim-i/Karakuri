@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-30
 supersedes: []
 superseded_by: []
-principles: [0027, 0061, 0076, 0085]
+principles: [0027, 0085, 0090]
 tags: [console, ui]
 ---
 
@@ -196,7 +196,7 @@ the program owns an instance of, exactly as `Panel` holds a drag in hand — and
 because those really are a file and a directory.
 
 That split also keeps the typed name honest.
-[P-0076](../principles/0076-a-surface-owns-the-affordance-never-the-authority.md): the buffer takes
+[P-0090](../principles/0090-a-surface-offers-it-never-decides.md): the buffer takes
 whatever the keyboard produces and checks none of it, and a name that is not one path component is
 refused where the file is written.
 
@@ -245,7 +245,7 @@ refused where the file is written.
   — which is to say another instance of this record's own sentence, and another record when it is
   needed.
 - **`checked_name` and `mcp::checked_id` say the same three things and are two functions.**
-  [P-0061](../principles/0061-a-refusal-a-person-can-reach-from-two-surfaces-is-one-sentence.md) is
+  [P-0090](../principles/0090-a-surface-offers-it-never-decides.md) is
   kept today only because the pill is the sole surface that can name an arrangement: `checked_id` is
   private to `karakuri-environment`'s `mcp` module and its sentences say `id` and `<store>/sets/`, so
   it can neither be called nor quoted from the program. **The day an arrangement name gets a second

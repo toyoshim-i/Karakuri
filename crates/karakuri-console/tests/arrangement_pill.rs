@@ -527,7 +527,7 @@ fn save_means_the_name_in_use_and_asks_for_one_where_there_is_none() {
 /// **Nothing typed is checked**, which is the half that matters: a name that
 /// is not one path component is refused where the file is written, in one
 /// sentence, and a pill that dropped the characters it did not like would be a
-/// rule an operator could only find by experiment (P-0076, P-0061).
+/// rule an operator could only find by experiment (P-0090).
 #[test]
 fn typing_fills_the_name_and_nothing_in_it_is_checked() {
     let mut arr = Arrangement::NONE;

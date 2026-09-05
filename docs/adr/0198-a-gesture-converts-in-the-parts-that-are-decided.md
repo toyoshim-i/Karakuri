@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-27
 supersedes: []
 superseded_by: [0205]
-principles: [0028, 0074]
+principles: [0090]
 tags: [cli, keys, vocabulary, surfaces]
 ---
 
@@ -52,7 +52,7 @@ window snap, the save, the latency offset, quit — are the surface's own state,
 surface is the only thing that holds it**. `Operation::SelectDeck` says as much at its own
 definition. The route ADR-0196 established is therefore the right one for a router and is not a
 target for a key handler; what a key handler owes is that **the records it writes have one
-derivation**, which is P-0028 and is a smaller claim than *every key is an operation handed to
+derivation**, which is P-0090 and is a smaller claim than *every key is an operation handed to
 `operate`*.
 
 ### 2. A gesture whose own record is owed converts in the parts that are decided
@@ -128,4 +128,4 @@ interface on purpose.
 - **Two more findings for the operations page.** There is no `SetMask`, so `wipe`'s mask record is
   the one part of that gesture nothing in the vocabulary names — the same gap the console's mask
   mini already reports from the other side. And `s` and `h`/`?` have no row at all.
-- **No new principle.** P-0028 and P-0074 are what this applies.
+- **No new principle.** P-0090 is what this applies.

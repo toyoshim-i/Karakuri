@@ -64,7 +64,7 @@ is not* — is unsayable at that address.
 
 **The variant has two shapes and both were already here.** It names one of three, which is
 `Operation::SetResidency`'s and `Operation::SetBlendMode`'s shape and
-[P-0074](../principles/0074-an-operation-says-what-it-wants-never-which-way-to-move.md)'s
+[P-0090](../principles/0090-a-surface-offers-it-never-decides.md)'s
 requirement — the vocabulary owns the value list, a surface asks for a destination and never for a
 step, and the console's three-word chip is an affordance built over the three. And it carries a
 `deck: u8` beside a `NodeAt`, which is `Operation::WriteProcedure`'s shape and `NodeAt`'s own

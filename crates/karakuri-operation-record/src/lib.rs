@@ -1,7 +1,7 @@
 //! **Where an operation becomes a record.**
 //!
-//! [P-0028](../../../docs/principles/0028-every-control-ends-in-the-same-record.md)
-//! is *every control ends in the same record*: a panel fader, a key press, a
+//! [P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)
+//! puts every control at the same record: a panel fader, a key press, a
 //! mapped MIDI message and an MCP call are the same thing exactly because all
 //! four write the same [`Record`] and the deck is moved by the decode. A
 //! surface emits an [`Operation`] and applies nothing
@@ -648,7 +648,7 @@ pub enum Written {
     /// A list rather than one record, and **`Operation::Crossfade` is what it
     /// was built for**: four records — the incoming deck silenced, put on air,
     /// and the two scheduled moves — out of one press, which is the whole of
-    /// what P-0028 claims. One control, however many records the deck needs to
+    /// what P-0090 claims. One control, however many records the deck needs to
     /// be told.
     ///
     /// It was written before anything answered more than one, against the day
@@ -755,7 +755,7 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
         // words for a correction with no shift and no confidence: *"The first
         // one in a stream is what sets the session tempo … a correction with
         // `shift` 0.0 and `confidence` 0.0 is a free-running tempo being
-        // stated."* P-0028 names `--bpm` as the flag with no record behind it;
+        // stated."* P-0090 names `--bpm` as the flag with no record behind it;
         // this is the record it was waiting for, and nothing routes through it
         // yet.
         Operation::SetFreeRunTempo { bpm } => one(Record::Tempo {
@@ -1864,7 +1864,7 @@ mod tests {
         assert_eq!(karakuri_operation::WipeKind::Radial.name(), "radial");
     }
 
-    /// **A free-running tempo being stated**, which closes the gap P-0028
+    /// **A free-running tempo being stated**, which closes the gap P-0090
     /// names: *"`--bpm` exists and the v0.2 vocabulary has no tempo record."*
     /// It has one now, and `Record::Tempo`'s own documentation says what shape
     /// a statement takes rather than a correction — no shift, no confidence.

@@ -81,7 +81,7 @@
 //!
 //! [`no_such_slot`], [`no_such_renderer`] and [`nothing_to_save`] are refusals,
 //! and
-//! `docs/principles/0061-a-refusal-a-person-can-reach-from-two-surfaces-is-one-sentence.md`
+//! `docs/principles/0090-a-surface-offers-it-never-decides.md`
 //! says a refusal a person can reach from two surfaces is one sentence. These
 //! are reached from four — the keys, [`mcp`], [`midi`] and a replayed record
 //! through [`mix`] — and [`accepted_save`] is the sentence beside them that is
@@ -212,7 +212,7 @@ pub const SAVE_WAIT: std::time::Duration = std::time::Duration::from_secs(5);
 /// each surface reached different controls; it stopped being tolerable when
 /// `save_set` made one control reachable from two of them: the refusals are
 /// the same sentences whoever meets them — see
-/// `docs/principles/0061-a-refusal-a-person-can-reach-from-two-surfaces-is-one-sentence.md`.
+/// `docs/principles/0090-a-surface-offers-it-never-decides.md`.
 /// `mcp.rs`, `midi.rs` and
 /// `mix.rs` all call this now. Each of them pins it with an `assert_eq!`
 /// against this function rather than trusting this comment — see

@@ -217,7 +217,7 @@ impl Authority {
     ///
     /// **A list is not a cycle**, on [`crate::deck::Blend::ALL`]'s terms: the
     /// console's `man / sug / auto` chip is an affordance built over the three
-    /// (`docs/principles/0074-…`), and the cycle belongs to whoever draws it.
+    /// (`docs/principles/0090-a-surface-offers-it-never-decides.md`), and the cycle belongs to whoever draws it.
     pub const ALL: [Authority; 3] = [
         Authority::Manual,
         Authority::Suggesting,
@@ -1036,7 +1036,7 @@ pub enum PublishError {
 /// `docs/adr/0223-a-wildcard-write-is-refused-where-the-nodes-it-lands-on-disagree.md`.
 ///
 /// **The sentence is here and nowhere else**, which is
-/// `docs/principles/0061-a-refusal-a-person-can-reach-from-two-surfaces-is-one-sentence.md`:
+/// `docs/principles/0090-a-surface-offers-it-never-decides.md`:
 /// a `--param`, a published control and a `param` record are the same wildcard
 /// and reach it through the one entry point, [`Set::write_param`].
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
@@ -3466,7 +3466,7 @@ impl Set {
     /// than the Set an authority was recorded against.
     ///
     /// A destination and never a step, which is
-    /// `docs/principles/0074-an-operation-says-what-it-wants-never-which-way-to-move.md`:
+    /// `docs/principles/0090-a-surface-offers-it-never-decides.md`:
     /// a control that cycles the three is an affordance built over this.
     pub fn set_authority(&mut self, layer: Kind, index: u32, authority: Authority) -> bool {
         let Some(slot) = self.nodes_of(layer).nth(index as usize) else {
@@ -3515,7 +3515,7 @@ impl Set {
     /// so the wildcard and the address cannot come to mean different things on
     /// the two paths — and, since it is the one entry point, the place the
     /// refusal below belongs
-    /// (`docs/principles/0061-a-refusal-a-person-can-reach-from-two-surfaces-is-one-sentence.md`).
+    /// (`docs/principles/0090-a-surface-offers-it-never-decides.md`).
     ///
     /// **A bare name is refused where the nodes it lands on are not under one
     /// authority**, and the refusal names them: see [`CrossesAuthority`]. It is
@@ -3707,7 +3707,7 @@ impl Set {
     /// `false` that means *nothing publishes that name* would lose the sentence
     /// on the one route the decision was about
     /// (`docs/adr/0223-a-wildcard-write-is-refused-where-the-nodes-it-lands-on-disagree.md`,
-    /// `docs/principles/0061-a-refusal-a-person-can-reach-from-two-surfaces-is-one-sentence.md`).
+    /// `docs/principles/0090-a-surface-offers-it-never-decides.md`).
     /// The two answers are two types now: *there is no such control* and *this
     /// control spans two authorities* are not the same news.
     pub fn set_published(&mut self, name: &str, value: f32) -> Result<bool, CrossesAuthority> {

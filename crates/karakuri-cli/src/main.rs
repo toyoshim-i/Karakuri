@@ -32,7 +32,7 @@ use karakuri_environment::{
 // watcher, the MCP server, the mixer and the MIDI map — the material types
 // those read a slot off a disk through, the layer spelling a Set file and a
 // `--param` share, the save path's own values, the operator's name for a tone
-// map, and the sentences P-0061 says belong where every surface can reach them.
+// map, and the sentences P-0090 says belong where every surface can reach them.
 // Four more are reached only from the tests below and are brought in there.
 use karakuri_environment::compile::{sort_slot, Material, Named, Placed};
 use karakuri_environment::mix::{op_name, op_wire_names, parse_op};
@@ -4345,7 +4345,7 @@ fn build(
                 // **The refusal is the engine's sentence, printed rather than
                 // reworded** — a `--param` and a `param` record reach the same
                 // wall in the same words, which is
-                // `docs/principles/0061-a-refusal-a-person-can-reach-from-two-surfaces-is-one-sentence.md`.
+                // `docs/principles/0090-a-surface-offers-it-never-decides.md`.
                 // Unreachable in a run today, because nothing grants a node's
                 // authority yet and a Set nobody has spoken for lands
                 // uniformly; the day a grant arrives, this line is what an
@@ -5590,7 +5590,7 @@ impl Live {
     ///   derivation**, which is the whole of why the two surfaces cannot drift.
     ///   Which way to step is still the keyboard's — a cycle and a nudge are
     ///   translations a surface makes, never operations
-    ///   (`docs/principles/0074-…`).
+    ///   (`docs/principles/0090-a-surface-offers-it-never-decides.md`).
     /// - **Its record is owed, so it keeps its present path** — each with the
     ///   reason written at the function it ends in: `b` ([`Live::tap`]), `,`
     ///   and `.` ([`Live::shift_octave`]). All three
@@ -5718,7 +5718,7 @@ impl Live {
     /// **The toggle is the key's affordance and not an operation**, which is
     /// why the slot is a parameter and the focus is filled in by the caller:
     /// what reaches the deck is `SetResidency` naming one of three
-    /// (`docs/principles/0074-…`). A control surface says which state it wants
+    /// (`docs/principles/0090-a-surface-offers-it-never-decides.md`). A control surface says which state it wants
     /// on the line and does not come through here at all — it used to, and the
     /// state it landed in was this function's to decide.
     fn toggle_on_air(&mut self, slot: usize) {
@@ -6134,7 +6134,7 @@ impl Live {
     /// reading, and `Current::tempo` is it. A cycle is still this surface's
     /// own: `Sync::ALL`, the skipping and the refusals are translations a
     /// keyboard makes, and what comes out of them is a destination
-    /// (P-0074).
+    /// (P-0090).
     fn cycle_sync(&mut self) {
         let slot = self.focus;
         let current = self.deck.transport(slot).sync();
@@ -6473,7 +6473,7 @@ impl Live {
     /// same terms. Those were two `if`s here and they are the `Wipe` arm's
     /// now, because the sentence belongs beside the records it governs rather
     /// than on one of the surfaces that can reach them
-    /// ([P-0076](../../../docs/principles/0076-a-surface-owns-the-affordance-never-the-authority.md)
+    /// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)
     /// — a rule held in one surface binds none of the other three). What the
     /// conversion needed to keep it is a reading, which is the third this
     /// gesture takes: `karakuri_operation_record::Current::mix`, handed over
@@ -6741,8 +6741,8 @@ impl Live {
 
     /// **A surface's operation, as the records it writes — and then written.**
     ///
-    /// [P-0028](../../../docs/principles/0028-every-control-ends-in-the-same-record.md)
-    /// is *every control ends in the same record*, and this is where a key
+    /// [P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)
+    /// puts every control at the same record, and this is where a key
     /// press ends: the operation is named, `karakuri-operation-record` says
     /// what it writes, and [`Live::record`] writes it and reads it back the way
     /// every other record here is read back. A console fader and a mapped MIDI

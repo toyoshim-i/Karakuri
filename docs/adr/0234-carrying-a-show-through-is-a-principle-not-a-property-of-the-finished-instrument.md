@@ -116,11 +116,11 @@ A reading of the whole registry finds more of them —
 [P-0004](../principles/0004-a-live-set-is-never-mutated-in-place.md),
 [P-0069](../principles/0069-the-three-clocks-never-collapse-into-each-other.md),
 [P-0072](../principles/0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md),
-[P-0076](../principles/0076-a-surface-owns-the-affordance-never-the-authority.md),
 [P-0082](../principles/0082-looking-never-writes-back.md),
 [P-0084](../principles/0084-a-confident-wrong-automatic-judgement-is-worse-than-not-judging.md),
 [P-0087](../principles/0087-name-the-property-never-the-shape.md),
-[P-0088](../principles/0088-no-number-is-trusted-further-than-its-instrument-has-been-checked.md) — which is the
+[P-0088](../principles/0088-no-number-is-trusted-further-than-its-instrument-has-been-checked.md),
+[P-0090](../principles/0090-a-surface-offers-it-never-decides.md) — which is the
 argument rather than a longer list. **A property that eighteen files are instances of is being
 rediscovered per file**, and the eighteenth had to make it again from nothing.
 
@@ -174,9 +174,9 @@ otherwise be had every time: **the instrument refuses what it cannot do, and nev
 unwise.** A refusal at the door is answer one and the best of the three — nothing that was on air
 changed, the diagnostic says why
 ([P-0083](../principles/0083-a-refusal-carries-what-the-next-attempt-needs.md)), every route meets the same
-sentence ([P-0061](../principles/0061-a-refusal-a-person-can-reach-from-two-surfaces-is-one-sentence.md)).
+sentence ([P-0090](../principles/0090-a-surface-offers-it-never-decides.md)).
 A refusal of something the instrument *can* do, on the ground that it might go badly, is the second
-failure this rule names, and *go on air* is the case P-0076 had already settled: *"in a live
+failure this rule names, and *go on air* is the case P-0090 had already settled: *"in a live
 instrument, the one operation that cannot be refused."*
 
 **And it is written with the case where it loses.**
@@ -318,7 +318,7 @@ make broader. The general rule earns its own number; the instances keep their ed
   either wrong as written or means something narrower than it says**, and there is a third reading
   worth putting in front of whoever decides: rule 01 may be true *of the vocabulary* — every
   operation is named once and any surface may route into that name — while what a given surface
-  publishes is a separate question, which is very nearly what P-0076 already says about affordance
+  publishes is a separate question, which is very nearly what P-0090 already says about affordance
   and authority. **This record does not make that change.** `docs/manual/index.html` is capped, so
   amending rule 01 means removing or merging one of the seven, and that is the maintainer's to do
   and not a side effect of naming a principle.

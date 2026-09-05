@@ -5,7 +5,7 @@ status: superseded
 date: 2026-08-11
 supersedes: []
 superseded_by: [0246]
-principles: [0028]
+principles: [0090]
 tags: [engine, format, ui]
 ---
 

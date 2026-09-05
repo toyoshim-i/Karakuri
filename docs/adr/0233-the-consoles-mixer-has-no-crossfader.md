@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-31
 supersedes: []
 superseded_by: []
-principles: [0023, 0028, 0056, 0066, 0076, 0085]
+principles: [0023, 0056, 0066, 0085, 0090]
 tags: [ui, console, mixing]
 ---
 
@@ -29,11 +29,11 @@ control over machinery the console cannot reach … **It is 61 of the bay's 316 
 **Two records had already decided things about it.**
 [ADR-0219](0219-the-crossfader-spans-the-selection-and-the-one-after-it.md) fixed which two decks it
 spans — *the deck that is selected and the one after it, which is exactly what `x` means on the
-keyboard* — on [P-0076](../principles/0076-a-surface-owns-the-affordance-never-the-authority.md)'s
+keyboard* — on [P-0090](../principles/0090-a-surface-offers-it-never-decides.md)'s
 grounds, *a surface owns the affordance, never the authority*: which two decks a control spans is an
 affordance over an operation that names both outright, so the page could settle it and the
 vocabulary was untouched. And it recorded, separately and on
-[P-0028](../principles/0028-every-control-ends-in-the-same-record.md)'s terms, that **the mark is a
+[P-0090](../principles/0090-a-surface-offers-it-never-decides.md)'s terms, that **the mark is a
 readout**: one number derived from two recorded ones, where *"a draggable mark would have to invert
 a projection that is not invertible — inventing the split between two `SetOpacity` records by a law
 no record names."*
@@ -138,7 +138,7 @@ mixer with four."* Whatever a crossfader is worth on a two-channel mixer, the ve
 one was never drawn and the version that was drawn covers half the deck.
 
 **Nothing in the vocabulary changes.** `Operation::Crossfade` keeps everything it has, and that is
-P-0076 read in the direction it is usually read the other way: removing an affordance is the
+P-0090 read in the direction it is usually read the other way: removing an affordance is the
 surface's to do, and the operation is not the surface's to touch.
 
 ## Alternatives
@@ -167,11 +167,11 @@ constrains the sum, one hand cannot put both decks at black or both at full, and
 the whole reason the shape exists on hardware. **It is the strongest of the four** and it is the one
 a future proposal should be built from.
 
-**It loses today on P-0028 and on the record it would have to invent.** A drag is *"two opacities
+**It loses today on P-0090 and on the record it would have to invent.** A drag is *"two opacities
 written at once"*, and the pair a mark's position implies is not recoverable — one position is
 infinitely many pairs, so the control would have to pick one by a law no record names and no operator
 chose. Making it real means a *record* for a constrained pair, which is a vocabulary change and not
-an affordance; the console does not get to make one by drawing a control (P-0076), and the
+an affordance; the console does not get to make one by drawing a control (P-0090), and the
 operations page would owe it a row before anything drew it
 ([ADR-0226](0226-m5-closes-when-the-manual-is-implemented-and-the-meter-is-progress-rather-than-completion.md)).
 
@@ -202,7 +202,7 @@ control rather than less: assignable ends (ADR-0219's own rejected alternative, 
 every hardware DJ mixer) or a two-dimensional blend over four decks.
 
 **It loses twice.** Assignable ends lost in ADR-0219 on cost against need — new console state that
-P-0028 wants ending in a record nothing else asks for, to serve what two `SelectDeck` presses already
+P-0090 wants ending in a record nothing else asks for, to serve what two `SelectDeck` presses already
 do — and nothing in this record improves that trade. A four-way blend is alternative b made
 four times harder: one position standing for four opacities, with three more degrees of freedom for
 the law that would have to invent them. **Widening a control whose narrow form had no function does

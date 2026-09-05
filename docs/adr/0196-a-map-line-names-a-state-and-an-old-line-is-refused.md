@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-27
 supersedes: []
 superseded_by: []
-principles: [0074, 0085]
+principles: [0085, 0090]
 tags: [midi, vocabulary, surfaces]
 ---
 
@@ -16,7 +16,7 @@ tags: [midi, vocabulary, surfaces]
 `karakuri-midi` had a vocabulary of its own: eight `Action`s, declared engine-neutral, which is
 why three of them were affordances rather than destinations — `ToggleOnAir`, `TogglePriming`,
 `CycleBlend`. That is the worked example
-[P-0074](../principles/0074-an-operation-says-what-it-wants-never-which-way-to-move.md) is written
+[P-0090](../principles/0090-a-surface-offers-it-never-decides.md) is written
 around: *the two rules — be engine-neutral, and have no toggles — are not jointly satisfiable
 unless the vocabulary owns the lists.*
 
@@ -88,7 +88,7 @@ blend modes is twelve where one cycle was four. With preview and tap, `examples/
 **thirty notes**, and its own prose describes a four-fader surface with a row of pads under it —
 which is not a device with thirty pads. The file now says so, in the section that grew: take the
 ones your hands need, or put the rest on the controller's own banks; what is not on offer is a pad
-that means *next*. That is P-0074's cost on this surface, and stating it is better than leaving an
+that means *next*. That is P-0090's cost on this surface, and stating it is better than leaving an
 operator to count.
 
 ### 3. The exhaustiveness moves to `written`, and `note -> tap` keeps its behaviour
@@ -124,7 +124,7 @@ the arm and the note that the arm is what goes the day the record a tap owes is 
   wildcard — which is the same thing with a comment on it. The exhaustiveness has a home now.
 - **Keep the pad count down by mapping a subset in the example.** A file that shows two of three
   residencies teaches a grammar that does not exist, and the count is the honest consequence of
-  P-0074. It is written down instead.
+  P-0090. It is written down instead.
 - **Give `Map::operation` a readback so a pad could still toggle.** Rejected at ADR-0192 and
   rejected again here for the same reason: it ends `Map::operation` being a pure function of one
   message, which is this crate's whole test story.
@@ -154,5 +154,5 @@ the arm and the note that the arm is what goes the day the record a tap owes is 
   in**: the two badges that changed changed their text and not their kind.
 - **`karakuri-console`'s `panel::Op` and `karakuri-cli`'s key handler have still not moved.** They
   are the two surfaces left, and each is a change of its own — the order ADR-0186 and ADR-0192 took.
-- **No new principle.** P-0074 is what this applies; the only rule it adds is local to the format
+- **No new principle.** P-0090 is what this applies; the only rule it adds is local to the format
   and is stated in `karakuri-midi`'s module documentation.

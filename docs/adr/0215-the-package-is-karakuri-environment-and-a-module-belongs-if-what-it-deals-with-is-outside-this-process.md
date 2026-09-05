@@ -153,7 +153,7 @@ takes a `Checked` and returns `Vec<Line>`; `mix.rs` converts between engine type
 vocabulary and `Record`s. Neither touches a device or a file. Both are entirely *the record of what
 happened*: `meta.rs` produces `<hash>.meta.ndjson`, and `mix.rs` is the record vocabulary for the
 faders, the blend modes, residency and the look — the state
-[P-0028](../principles/0028-every-control-ends-in-the-same-record.md) requires every control to end
+[P-0090](../principles/0090-a-surface-offers-it-never-decides.md) requires every control to end
 in. A test with only the first clause would have left both of them in the command line, which is
 wrong, and that is the reason the sentence has two halves.
 

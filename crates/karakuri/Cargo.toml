@@ -55,7 +55,7 @@ karakuri-layout = { version = "0.1.0", path = "../karakuri-layout" }
 
 # **What the operator asked for**, and where it becomes a record. A control on
 # the panel emits an `Operation`, `karakuri-operation-record` turns it into a
-# `Record`, and this program is what moves the deck with it — P-0028, every
+# `Record`, and this program is what moves the deck with it — P-0090, every
 # control ends in the same record.
 karakuri-operation = { version = "0.1.0", path = "../karakuri-operation" }
 karakuri-operation-record = { version = "0.1.0", path = "../karakuri-operation-record" }

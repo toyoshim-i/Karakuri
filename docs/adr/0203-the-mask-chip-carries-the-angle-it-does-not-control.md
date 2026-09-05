@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-28
 supersedes: []
 superseded_by: []
-principles: [0074, 0078]
+principles: [0078, 0090]
 tags: [ui, console, vocabulary, mixing]
 ---
 
@@ -121,7 +121,7 @@ constant.
   cancels. It closed with *"nothing routes one today … so the first surface to make that press is
   where this is decided again"*. **This is that surface, and the decision is that it routes through
   the record like everything else.** The alternative — the harness calling `Deck::set_mask_shape`
-  directly to keep the wipe alive — is a second route to the deck for one control, which is P-0028
+  directly to keep the wipe alive — is a second route to the deck for one control, which is P-0090
   broken to save a case that ADR-0201 already priced; it would also drop the softness, since the
   shape setter does not carry one. The manual's tooltip says what a press costs rather than leaving
   an operator to find out.

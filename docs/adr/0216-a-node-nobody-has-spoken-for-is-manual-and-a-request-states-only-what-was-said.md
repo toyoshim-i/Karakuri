@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-29
 supersedes: []
 superseded_by: []
-principles: [0031, 0076, 0078]
+principles: [0031, 0078, 0090]
 tags: [engine, ui]
 ---
 
@@ -61,7 +61,7 @@ agree with it.
 would make the console's whole authority row a thing an operator has to go and undo before playing.
 
 **Rejected: `Suggesting`.** Softer and the same shape. It makes a proposal stream the resting state
-of material nobody asked to be proposed at, and P-0076 is why that is not a small thing: a surface
+of material nobody asked to be proposed at, and P-0090 is why that is not a small thing: a surface
 owns the affordance and never the authority, so there is no place for the console to quietly not
 show them.
 

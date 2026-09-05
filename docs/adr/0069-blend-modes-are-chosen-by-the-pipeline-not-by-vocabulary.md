@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-08
 supersedes: []
 superseded_by: []
-principles: [0028]
+principles: [0090]
 tags: [render, engine]
 ---
 

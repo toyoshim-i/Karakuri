@@ -115,8 +115,8 @@
 //! And **records exist**: a mixer control emits an operation,
 //! `karakuri-operation-record` turns it into a `Record`, and [`apply`] is what
 //! moves the deck with it, because
-//! [P-0028](../../../docs/principles/0028-every-control-ends-in-the-same-record.md)
-//! is that every control ends in the same record. No record reaches a disk,
+//! [P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)
+//! puts every control at the same record. No record reaches a disk,
 //! and no record stream drives time.
 //!
 //! # What is not wired, and what each would be for
@@ -1657,7 +1657,7 @@ impl Readout {
                 //
                 // **A press names the chip; it does not step.** `e` steps and
                 // wraps because a bare press cannot say *which*, and this one
-                // can — P-0074's division met by two surfaces rather than an
+                // can — P-0090's division met by two surfaces rather than an
                 // inconsistency between them. What comes back is `Chosen`: the
                 // chip, and `Operation::SelectScope` beside it, because that
                 // operation's payload is `Undecided` and cannot carry a chip.
@@ -1704,7 +1704,7 @@ impl Readout {
                     // on the moves after it: there is no gesture here, only
                     // one operation naming where the cycle arrived. Both go
                     // down the same path a fader's does — `Acted::Emitted`,
-                    // then a record, then the deck — because P-0028 is that
+                    // then a record, then the deck — because P-0090 is that
                     // every control ends in the same record, and a chip that
                     // reached the deck another way would be a second route for
                     // the same change.
@@ -1868,7 +1868,7 @@ impl Readout {
     ///
     /// An empty name arrives here as an empty name and is refused there, which
     /// is the rule this file keeps everywhere: the surface owns the affordance
-    /// and never the authority (P-0076).
+    /// and never the authority (P-0090).
     fn named(&mut self) -> Acted {
         let Some(typed) = self.view.arrangement.naming() else {
             return Acted::Nothing;
@@ -1913,7 +1913,7 @@ impl Readout {
     /// console's own shape asks for a [`Op`], `Panel` performs it, and what
     /// comes back is an [`Outcome`]. A control over the mix emits an
     /// [`Operation`], [`written`] turns it into a `Record` and [`apply`] moves
-    /// the deck with it — P-0028, *every control ends in the same record*. A
+    /// the deck with it — P-0090, and every control ends at the same record. A
     /// reader who has just met those two will reach for the second here,
     /// because it is the one every new control has taken for a year.
     ///
@@ -1956,7 +1956,7 @@ impl Readout {
         // **What the pill says it did, in the words a refusal says it in.**
         // `Class::title` and `Class::opened_at` are the gate's own strings, so
         // the sentence a model is refused with and the sentence an operator
-        // reads at the pill name one thing the same way (P-0061).
+        // reads at the pill name one thing the same way (P-0090).
         println!(
             "{}: `{}` — {} is {} to a model. {}. the operator opens it at {}.",
             pill.class.bay(),
@@ -3698,7 +3698,7 @@ struct Engine {
     /// row's tone map capsule and its exposure track — so a press becomes
     /// `Operation::SetTonemap` or `SetExposure`, which become one
     /// `Record::Look`, which [`apply`] writes here; the next frame hands this
-    /// to `compose` and the present pass uploads it. That is P-0028 on this
+    /// to `compose` and the present pass uploads it. That is P-0090 on this
     /// value exactly: the control ends in the record every other surface's
     /// does, and nothing calls `Present::set_tonemap` behind its back.
     ///
@@ -5632,7 +5632,7 @@ fn keep_arrangement(root: &std::path::Path, panel: &Panel, name: &str) -> (Strin
 /// path, and a path never reaches that call from here.
 ///
 /// **The surface owns the affordance and never the authority**
-/// ([P-0076](../../../docs/principles/0076-a-surface-owns-the-affordance-never-the-authority.md)):
+/// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)):
 /// the pill takes whatever is typed and this is where it meets the wall, so a
 /// name refused by a hand and a name refused by anything else that ever
 /// reaches this operation meet the same one. A pill that silently dropped the
@@ -5641,7 +5641,7 @@ fn keep_arrangement(root: &std::path::Path, panel: &Panel, name: &str) -> (Strin
 /// that quietly declines.
 ///
 /// **It says the same three things `mcp::checked_id` says about a Set id**,
-/// which is [P-0061](../../../docs/principles/0061-a-refusal-a-person-can-reach-from-two-surfaces-is-one-sentence.md)
+/// which is [P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)
 /// as far as it can be kept today and no further: that function is private to
 /// `karakuri-environment`'s `mcp` module and its sentences say `id` and
 /// `<store>/sets/`, so it cannot be called from here and could not be quoted
@@ -6269,7 +6269,7 @@ fn inspector(deck: &Deck, names: &[String], out: &mut Vec<view::Pane>) {
             // whether the Set in this slot is closed form and whether it reads
             // `beats`, put through `Transport::allows`. The console is handed
             // the three answers rather than the two properties, because what
-            // may be asked for is not a surface's to work out (P-0076) and a
+            // may be asked for is not a surface's to work out (P-0090) and a
             // third copy of that rule in a crate with no material in it is a
             // rule that can start disagreeing.
             //
@@ -6311,7 +6311,7 @@ fn tally(residency: Residency) -> view::Tally {
 /// two lists are made to agree.
 ///
 /// `karakuri-operation` owns its own copy of every list a destination is drawn
-/// from, which is the cost P-0074 says the vocabulary pays: *"The two rules —
+/// from, which is the cost P-0090 says the vocabulary pays: *"The two rules —
 /// be engine-neutral, and have no toggles — are not jointly satisfiable unless
 /// the vocabulary owns the lists."* A copy needs somewhere the two meet, and
 /// this is that place for this list, on the harness side of the seam — the
@@ -6399,7 +6399,7 @@ fn look(look: &Look) -> view::Look {
 ///
 /// **The refusal to route around it is what made that cheap.** A surface owns
 /// the affordance and never the authority
-/// ([P-0076](../../../docs/principles/0076-a-surface-owns-the-affordance-never-the-authority.md)),
+/// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)),
 /// so this file never wrote a `Record::Transport` of its own for a `SetSync` —
 /// computing the anchor here would have been a window binary taking a decision
 /// about a file format, and the printed line was the right answer until the
@@ -6591,7 +6591,7 @@ fn played(gfx: &mut Gfx, operation: &Operation) -> Option<String> {
 /// for why the master out is deliberately not in it). Handing both in is what
 /// keeps this one function the only place a record becomes a movement — a
 /// second `apply_look` beside it would be the second route into the engine
-/// that P-0028 exists to refuse.
+/// that P-0090 exists to refuse.
 fn apply(record: &Record, deck: &mut Deck, look: &mut Look) -> Option<String> {
     // **A slot the deck has not got is refused rather than indexed.**
     // `Deck::set_gain` indexes its slots, a panic reachable from an event
@@ -6673,7 +6673,7 @@ fn apply(record: &Record, deck: &mut Deck, look: &mut Look) -> Option<String> {
         // that setter. Reaching for `Deck::set_mask_shape` instead, to keep a
         // running wipe alive, would be this file decoding a record by picking
         // two fields out of it and dropping the softness on the floor: a
-        // second route to the deck, where P-0028 is that every control ends in
+        // second route to the deck, where P-0090 is that every control ends in
         // the same record. **So a shape press stops a wipe on that deck**, and
         // that is not a fault here — it is the honest limit
         // `docs/principles/0078-the-operator-wins-and-an-automatic-writer-yields-to-a-hand.md`
@@ -7002,7 +7002,7 @@ fn reading(operation: &Operation, deck: &Deck, look: &Look) -> Current {
 /// record that has to name one. The mirror image of it is `view::Mixer::mask`,
 /// which turns the console's own word into the same vocabulary — three names
 /// for three shapes, which is the cost `karakuri-operation` pays for depending
-/// on nothing (P-0074).
+/// on nothing (P-0090).
 fn wipe_kind(kind: MaskKind) -> karakuri_operation::WipeKind {
     match kind {
         MaskKind::None => karakuri_operation::WipeKind::None,
@@ -7744,7 +7744,7 @@ impl App {
     ///   what is owed is what the [`Outcome`] says happened.
     /// - **A fader's operation is performed here**, because it is the *deck*
     ///   that moves and the panel has no deck (ADR-0156). It becomes a record
-    ///   and the record moves the deck — P-0028, which is what makes this
+    ///   and the record moves the deck — P-0090, which is what makes this
     ///   fader the same control as a key press and a MIDI knob rather than a
     ///   third way of writing a gain. The next frame's strips are read back off
     ///   the deck by [`mixer`], so what the fader shows is what the deck says
@@ -7858,7 +7858,7 @@ impl App {
                     // **Every record, in the order it was written.** One
                     // today for each of the four, and a list because
                     // `Crossfade` is four and `Wipe` is up to six — one
-                    // control is not one record (P-0028, ADR-0194).
+                    // control is not one record (P-0090, ADR-0194).
                     if let Written::Records(records) = &written {
                         for record in records {
                             if let Some(line) =
@@ -8511,7 +8511,7 @@ impl ApplicationHandler for App {
                     // list is spelled nowhere"* — and its own doc says where
                     // the stepping goes: *"The key steps and this does not …
                     // that is the translator's arithmetic rather than this
-                    // operation's payload"* (P-0074). So the surface moves its
+                    // operation's payload"* (P-0090). So the surface moves its
                     // own pointer, exactly as the four deck keys do, and the
                     // operation is emitted through the same route so that the
                     // press is recorded as `Silent(Surface)` rather than as
@@ -9682,7 +9682,7 @@ fn measure_audio(open: &mut Option<audio::Audio>, deck: &mut Deck, interval: Opt
 /// # Why it does not go through `written`
 ///
 /// Every other control on this panel emits an `Operation`, `written` turns it
-/// into a `Record` and [`apply`] moves the deck with it — P-0028. A tap
+/// into a `Record` and [`apply`] moves the deck with it — P-0090. A tap
 /// **does** end in a record: `karakuri_environment::audio` writes a
 /// `Record::Tempo` for it and applies it to the session's oscillator, which is
 /// the same record a replay would hand the engine. What it cannot do is come
@@ -11246,7 +11246,7 @@ mod tests {
     // -- the arrangement pill's half of the family ----------------------
 
     /// **A name that is not one path component is refused here**, which is the
-    /// authority the pill deliberately does not hold (P-0076).
+    /// authority the pill deliberately does not hold (P-0090).
     ///
     /// The negative control is the point: a check that refused everything
     /// would pass an assertion that only ever looked for a refusal, so the
@@ -11725,7 +11725,7 @@ mod tests {
     ///    that a row moved out of the class fails here rather than making this
     ///    test quietly vacuous.
     /// 2. On a run nobody has touched it is **refused**, and the sentence is
-    ///    `gate::refusal`'s own **by equality** — P-0061, *a refusal a person
+    ///    `gate::refusal`'s own **by equality** — P-0090, *a refusal a person
     ///    can reach from two surfaces is one sentence*, asserted against the
     ///    function rather than with a `contains`. It names the Mixer bay,
     ///    because a model that is told only *no* reports the instrument as

@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-30
 supersedes: []
 superseded_by: []
-principles: [0013, 0028, 0048, 0085]
+principles: [0013, 0048, 0085, 0090]
 tags: [store, format, console, sequencer]
 ---
 
@@ -122,7 +122,7 @@ somebody will re-propose each of them.
 
 The most plausible of the two, because the machinery is already pointing that way. Every control
 already ends in a record
-([P-0028](../principles/0028-every-control-ends-in-the-same-record.md)), the master out has one as
+([P-0090](../principles/0090-a-surface-offers-it-never-decides.md)), the master out has one as
 of this morning, and `Record::MasterOut`'s own documentation anticipates growth: *"there is nothing
 else about the master chain a stream can say yet, so a record that carried more would be recording
 defaults nobody chose. It grows the day an effect lands in the chain."*

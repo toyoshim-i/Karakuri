@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-16
 supersedes: []
 superseded_by: []
-principles: [0052]
+principles: [0090]
 tags: [ir, format, ui]
 ---
 
@@ -57,4 +57,4 @@ into an interface.
 ## Evidence
 
 Session 2026-08-16T05:00Z–05:03Z. Standing rule:
-[P-0052](../principles/0052-publishing-is-a-choice-of-attention-not-of-authority.md).
+[P-0090](../principles/0090-a-surface-offers-it-never-decides.md).

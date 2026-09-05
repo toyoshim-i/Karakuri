@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-30
 supersedes: []
 superseded_by: []
-principles: [0023, 0027, 0031, 0045, 0048, 0061, 0085, 0088]
+principles: [0023, 0027, 0031, 0045, 0048, 0085, 0088, 0090]
 tags: [cli, distribution, environment, store, presets]
 ---
 
@@ -121,7 +121,7 @@ module there owns the constants, the resolution and the refusal sentences; `kara
 transcriptions of one string** — `karakuri-cli`'s private `DEFAULT_STORE`
 (`crates/karakuri-cli/src/main.rs:365`) and `karakuri`'s `const STORE`, doc comment and all. The
 refusal sentences go with them for
-[P-0061](../principles/0061-a-refusal-a-person-can-reach-from-two-surfaces-is-one-sentence.md)'s
+[P-0090](../principles/0090-a-surface-offers-it-never-decides.md)'s
 reason: *a mistake that can be made from more than one surface is refused in one sentence, from one
 function*, and a mistyped path is now a mistake two programs can make. What does **not** move is
 either parser. `karakuri-cli` has thirty-odd flags and `karakuri` takes two positional paths, and
@@ -319,7 +319,7 @@ whose whole definition is that it ships and is never written.
   transcribed is P-0023's defect exactly.
 - **A refusal becomes reachable from two programs, so it is one sentence.** `--store` was
   `karakuri-cli`'s alone and its refusals were written where they were used. With `karakuri` taking
-  the same flag, P-0061 applies from the moment the second caller exists rather than after somebody
+  the same flag, P-0090 applies from the moment the second caller exists rather than after somebody
   notices two spellings, and the module owning the constant owns the sentence.
 - **The startup account gets one more derived line and no more prose.** Which candidate answered is
   a fact the resolution already holds; printing it costs a field and nothing may transcribe it.

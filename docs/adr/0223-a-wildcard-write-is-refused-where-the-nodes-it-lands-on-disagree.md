@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-30
 supersedes: []
 superseded_by: []
-principles: [0027, 0061, 0076, 0078]
+principles: [0027, 0078, 0090]
 tags: [engine, agents, vocabulary, docs]
 ---
 
@@ -74,10 +74,10 @@ the refusal names each of those nodes and what it is under.**
 with a hint naming the two ways out.
 
 **It is in the one entry point**, which is
-[P-0061](../principles/0061-a-refusal-a-person-can-reach-from-two-surfaces-is-one-sentence.md): a
+[P-0090](../principles/0090-a-surface-offers-it-never-decides.md): a
 `--param`, a `param` record on replay, a rebuild's restatement and a published control are the same
 wildcard and meet the same wall in the same words. It is not in a surface, which is
-[P-0076](../principles/0076-a-surface-owns-the-affordance-never-the-authority.md) — the rule lives
+[P-0090](../principles/0090-a-surface-offers-it-never-decides.md) — the rule lives
 where the write lands, so the panel, a key, a map and a model all meet it.
 
 **Refused whole, before anything is written.** The check runs before the walk that would write, so a
@@ -152,7 +152,7 @@ imposed on every Set to answer a question about agents.
 
 **And it does not actually close the hole.** A wildcard stays spellable — `--param exposure=2.0` is
 one, and an author may publish one deliberately — so a rule at the place the write lands would still
-be owed, which is P-0076. (c) is an *affordance* change offered in place of an authority rule, and
+be owed, which is P-0090. (c) is an *affordance* change offered in place of an authority rule, and
 the affordance is not where the authority lives.
 
 ### Introducing the asker now, with the operator as the only value
