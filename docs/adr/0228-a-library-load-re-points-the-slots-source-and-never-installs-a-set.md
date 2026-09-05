@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-30
 supersedes: []
 superseded_by: []
-principles: [0005, 0085, 0091]
+principles: [0085, 0091, 0094]
 tags: [engine, console, store, hot-swap]
 ---
 
@@ -37,7 +37,7 @@ the one function that puts a built Set in a slot, and it says of itself:
 So the missing piece was never a way to *install* a Set. It was a way to **re-point a slot's source**:
 a loaded Set compiled on the build worker, swapped at a frame boundary, judged against the budget and
 rolled back on its own if it costs too much, exactly as an edited file is
-([P-0005](../principles/0005-a-swap-happens-on-a-frame-boundary-and-an-over-budget-set-rolls-back-on-its-own.md)).
+([P-0094](../principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)).
 Anything that handed a built Set straight into a slot would put back the hole that comment describes —
 a live change with no watchdog attached to it.
 
@@ -146,7 +146,7 @@ it as the refusal it is:
 > to guarantee.
 
 The failure is also the worst-timed one available: an expensive Set loaded mid-set takes the show down
-and leaves nothing to put back, which is precisely the case the watchdog and P-0005 were written for.
+and leaves nothing to put back, which is precisely the case the watchdog and P-0094 were written for.
 `install` keeps its one caller — a replay following a `procedure` record, *"reading back what a run
 already did"* — and this decision does not widen it.
 

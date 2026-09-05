@@ -58,7 +58,7 @@ use crate::Operation;
 /// **A class of operations the operator can open**, and the bay whose head
 /// opens it. ADR-0235 names four and each has a bay.
 ///
-/// The classes are drawn off P-0079's question — *what does this do at its
+/// The classes are drawn off P-0094's question — *what does this do at its
 /// worst, on the frame it goes wrong, while the operator's attention is on the
 /// room?* — and **not off the nouns**. That is why
 /// [`Operation::WriteProcedure`] is open although it rewrites what a live deck
@@ -159,7 +159,7 @@ pub enum Unclassed {
     /// [`Operation::Quit`]. *"It does not risk stopping the performance, it
     /// stops it."*
     Quitting,
-    /// [`Operation::SelectDeck`]. Closed by P-0079's second half: it decides
+    /// [`Operation::SelectDeck`]. Closed by P-0094's second half: it decides
     /// which deck the operator's *next key press* lands on.
     Selection,
     /// The sequencer's lanes. A lane emits operations, so one pointed at a
@@ -458,7 +458,7 @@ pub fn standing(operation: &Operation, running: Running<'_>) -> Standing {
 
         // ----- The mix faders ----------------------------------------------
         //
-        // The class P-0079 already worked: none of its three answers is
+        // The class P-0094 already worked: none of its three answers is
         // available, and it is what the audience is looking at.
         Operation::SetGain { .. } => Standing::Closed(Class::MixFaders),
         Operation::SetOpacity { .. } => Standing::Closed(Class::MixFaders),
@@ -507,7 +507,7 @@ pub fn standing(operation: &Operation, running: Running<'_>) -> Standing {
         // **Twenty-three rows, and `WriteProcedure` is the case that decides
         // how the classes are drawn.** It rewrites the contents of a deck that
         // is in live mode and it stays open, because the class is not the noun:
-        // it is P-0079's question with the noun as its subject, and a procedure
+        // it is P-0094's question with the noun as its subject, and a procedure
         // rewrite is priced by the check pass, compiled off the frame path,
         // installed at a frame boundary, measured for thirty frames and rolled
         // back to the parked previous version if it costs too much. *"Its worst
@@ -530,7 +530,7 @@ pub fn standing(operation: &Operation, running: Running<'_>) -> Standing {
         Operation::RestoreProcedure { .. } => Standing::Open,
         // **The nine that arrange the console are the closest call on this
         // side.** Folding away the bay holding the fader an operator is
-        // reaching for is a real hazard, and it is P-0079's third answer with
+        // reaching for is a real hazard, and it is P-0094's third answer with
         // the controls intact: it is the largest visible change the panel can
         // make, and it is undone by one key the operator's hand is already
         // near.

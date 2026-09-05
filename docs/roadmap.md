@@ -707,7 +707,7 @@ Nothing in this section is blocked.
   and manual intervention instantly demoting to `Suggest` whichever agent was moving the
   control — *which* agent that is depends on the undecided granularity above. **What the
   demotion writes is decided**: `Operation::SetAuthority` on the node, and
-  [P-0078](principles/0078-the-operator-wins-and-an-automatic-writer-yields-to-a-hand.md) is
+  [P-0094](principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md) is
   the rule it is the standing case of
 - Generation queue with priority and cost awareness
 - **`parent`, recorded from the first generated artifact**, or the genealogy has a hole at its root

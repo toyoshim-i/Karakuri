@@ -80,7 +80,7 @@ judges candidates on, so watching a heavy slot can roll back an unrelated slot's
 ([ADR-0072](../adr/0072-auditioning-adds-a-draw-and-never-a-step.md)). Every loaded slot is watched
 here, so that is four draws rather than one, and it is unbudgeted risk on the live path added
 knowingly. It is the case
-[P-0079](0079-nothing-takes-the-show-down-and-nothing-takes-it-away-from-the-operator.md) loses, and
+[P-0094](0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md) loses, and
 it loses for the reason written there: a rule protecting a performance may not be used to remove what
 the performance is played with. The answer to the cost is to pay it and write it down
 ([P-0085](0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md)), not to remove the look or hide

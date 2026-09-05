@@ -46,7 +46,7 @@ the source three of those four declare nothing and two are not this principle's 
 The picture is the engine's output, *"already accounted for by the governor, and counting it here
 would count it twice"*; the beat grid moves because the panel is being redrawn for something else
 rather than because anything decided it must, which is precisely what
-[P-0077](../principles/0077-continuous-motion-is-how-a-stopped-panel-announces-itself.md) is still
+[P-0094](../principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md) is still
 waiting for; the mixer's readouts change when a hand changes them, and *what the operator does costs
 what it costs*. What is left is the mixer bay, with three presentations inside it at one rate.
 
@@ -204,7 +204,7 @@ how a number nobody decided becomes a number everybody cites. It is named as owe
 - **Nothing arbitrates, and nothing needs to.** No scheduler exists; with one region declaring there
   is nothing to choose between, and choosing between one region and nothing is an abstraction with
   one call site. What P-0072 still has unbuilt is the policy, not the inputs.
-- **P-0077 is untouched.** Its forced clause — something is moving continuously while the console is
+- **P-0094 is untouched.** Its forced clause — something is moving continuously while the console is
   live, and a scheduler may not stop it — has no holder still: the mixer's declaration runs only
   while something is pending, and the beat grid moves without declaring. The scheduler that would
   have to refuse the economy is what it is waiting for, and this record does not bring one.

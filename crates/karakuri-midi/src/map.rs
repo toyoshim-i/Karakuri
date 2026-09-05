@@ -46,7 +46,7 @@
 //!
 //! `cc -> mask-position N` is the front of a deck's mask, `[0, 1]`, and a hand
 //! on it stops the wipe that was carrying it
-//! ([P-0078](../../../docs/principles/0078-the-operator-wins-and-an-automatic-writer-yields-to-a-hand.md)).
+//! ([P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)).
 //! **The mask's other row has no line here**, and the reason is in this
 //! grammar rather than in the vocabulary:
 //! [`karakuri_operation::Operation::SetMaskShape`] carries an angle as well as

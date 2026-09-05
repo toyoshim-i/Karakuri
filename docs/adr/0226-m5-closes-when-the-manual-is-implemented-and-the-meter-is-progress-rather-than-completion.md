@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-30
 supersedes: []
 superseded_by: []
-principles: [0030, 0087, 0093]
+principles: [0087, 0093, 0094]
 tags: [process, docs, console]
 ---
 
@@ -135,9 +135,9 @@ and both answer a hand today — five of the fourteen `built` panel badges name 
 Outputs dot is drawn and pressable with its badge left `nothing` deliberately, because the dot
 folds the program view and the row names choosing among sinks.
 
-**It is P-0030's sentence taken at the width of the panel.** ADR-0213 used *"a window that opens
+**It is P-0094's sentence taken at the width of the panel.** ADR-0213 used *"a window that opens
 and cannot be touched is a demo, not a tool"*
-([P-0030](../principles/0030-an-instrument-says-what-it-did.md)) to define one badge — an operation
+([P-0094](../principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)) to define one badge — an operation
 is claimed when a person who launched the instrument can perform it. *Make it an app you can use*
 is the same test asked of every badge at once.
 

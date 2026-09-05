@@ -2032,7 +2032,7 @@ file that names its `.kir` files by relative path and lives beside them
 [described below](#the-authoring-form). It is read and resolved; nothing writes one, because it
 is a file a person authors. The distinction is load-bearing rather than
 cosmetic: a swap happens on a frame boundary and an over-budget Set rolls back on its own
-([P-0005](principles/0005-a-swap-happens-on-a-frame-boundary-and-an-over-budget-set-rolls-back-on-its-own.md)),
+([P-0094](principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)),
 which holds only because nothing is left to resolve at the moment of the swap. A form that walked
 the filesystem while swapping could fail halfway — a neighbour missing, or changed since the file
 was written — and a swap that can partially fail is not a swap. So the store holds `.kbset` and

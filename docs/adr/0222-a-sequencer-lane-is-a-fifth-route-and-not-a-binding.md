@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-29
 supersedes: []
 superseded_by: []
-principles: [0078, 0090, 0092]
+principles: [0090, 0092, 0094]
 tags: [architecture, signal, ui]
 ---
 
@@ -39,7 +39,7 @@ opacity, which is `Deck::set_opacity` and `Record::Opacity`, classified `Vocabul
 **The repository already held three accounts of a lane and nobody had noticed.** The console page
 says *a lane is a binding* in its Sequencer note and *the sequencer is a fifth route* in its rules —
 drawn as `sequencer → command` beside the pointer, the keys, MIDI and MCP — and
-[P-0078](../principles/0078-the-operator-wins-and-an-automatic-writer-yields-to-a-hand.md) names *a
+[P-0094](../principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md) names *a
 follower, **a sequencer lane** and **a signal binding*** as separate entries.
 
 ## Decision
@@ -47,9 +47,9 @@ follower, **a sequencer lane** and **a signal binding*** as separate entries.
 **A sequencer lane is a fifth route into `karakuri-operation`, not a signal binding.** It emits
 operations on the beat, the way the pointer, the keys, a MIDI map and MCP emit them.
 
-### What decides it is P-0078, and the binding reading fails it structurally
+### What decides it is P-0094, and the binding reading fails it structurally
 
-P-0078: *moving a control by hand stops whatever automatic thing was moving it… a control that had
+P-0094: *moving a control by hand stops whatever automatic thing was moving it… a control that had
 to be held against a writer that reasserts itself sixty times a second is not a control at all — it
 is a display that moves when you push it.*
 
@@ -60,7 +60,7 @@ asymmetry is visible in one grep: `Deck::set_gain`, `set_opacity` and `set_mask_
 `cancel` explicitly, and **`cancel` does not appear in `binding.rs` even once**. There is no site for
 it, because a binding is a per-frame projection and not a writer competing with a hand.
 
-**So a lane built as a binding is precisely the control P-0078 rules out**, and it would have been
+**So a lane built as a binding is precisely the control P-0094 rules out**, and it would have been
 found only after it was built. `TakeParamBack` is the vocabulary's escape hatch and is not an
 answer: the principle is about the hand, and that is a deliberate operation.
 
@@ -93,13 +93,13 @@ and would not be for one that fires events.
 it loses before any of this: the bus refused to carry `noise`'s four fields for the same reason.
 
 **A lane is a binding** — the roadmap's other settled half, and the console page's Sequencer note. It
-loses on P-0078 as above, and it cannot express three of the four lanes the mock draws.
+loses on P-0094 as above, and it cannot express three of the four lanes the mock draws.
 
 **A source kind on the binding, shaped like `noise`.** The near miss, and worth recording because it
 is the right shape for the wrong question: `Record::Bind` already carries `noise: Option<BindNoise>`
 *because a noise generator is the one signal with parameters of its own*, and a pattern is the
 second such thing. It would give per-lane distinctness for free and need no bus name. It still loses
-to P-0078 — the cancel problem is the binding's, not the source's — but if a lane ever needs to
+to P-0094 — the cancel problem is the binding's, not the source's — but if a lane ever needs to
 drive a Set parameter continuously rather than on a step, this is the shape.
 
 ## Consequences
@@ -122,7 +122,7 @@ drive a Set parameter continuously rather than on a step, this is the shape.
   diagnostic rather than a silent `lin`. Under this decision the question disappears: a route does
   not carry a curve.
 - **The largest thing left is not the sequencer's.** Three of four mock lanes need a way to drive a
-  deck fader from something that is not a hand, and P-0078 already names that hole — *none of them
+  deck fader from something that is not a hand, and P-0094 already names that hole — *none of them
   writes a mix control yet* — for the follower and for agents as much as for this bay.
 - **`--seq` is taken** by the CLI's frame-sequence render, so a command-line spelling has to be
   something else.

@@ -340,7 +340,7 @@ pub struct Transition {
 /// puts the deck it reveals under `over` and on air, and writing either at a
 /// deck that is already there is where a choice the operator made gets written
 /// over
-/// ([P-0079](../../../docs/principles/0079-nothing-takes-the-show-down-and-nothing-takes-it-away-from-the-operator.md)).
+/// ([P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)).
 ///
 /// **One reading and not two.** A blend mode and a residency are two
 /// operations, two records and two rows of the manual, and they are one
@@ -791,7 +791,7 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
         // whether a running move is cancelled, and that is the deck's rule
         // rather than this crate's: `Record::Mask` carries a state and not an
         // ask, so nothing downstream of here can tell the two apart. See
-        // `docs/principles/0078-the-operator-wins-and-an-automatic-writer-yields-to-a-hand.md`.
+        // `docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md`.
         Operation::SetMaskShape { deck, kind, angle } => match current.mask {
             Some(mask) => one(Record::Mask {
                 slot: *deck,
@@ -985,7 +985,7 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
         // wipe *over*, and under `max` it is a third thing; both are
         // legitimate, and a gesture that forced `over` every time would take
         // the choice away from the hand that made it
-        // ([P-0079](../../../docs/principles/0079-nothing-takes-the-show-down-and-nothing-takes-it-away-from-the-operator.md):
+        // ([P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md):
         // a rule protecting a performance may not remove what the performance
         // is played with). That is what makes `m` in front of `c` mean
         // something, and the sentence is here rather than on a surface because
@@ -2211,7 +2211,7 @@ mod tests {
     /// wipe *on* rather than a wipe *over*, a different picture and a
     /// legitimate one, and a gesture that forced `over` every time would take
     /// it back from the hand that chose it
-    /// ([P-0079](../../../docs/principles/0079-nothing-takes-the-show-down-and-nothing-takes-it-away-from-the-operator.md)).
+    /// ([P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)).
     /// The put-on-air is the same shape with nothing at stake but the byte: a
     /// deck already live is told so again.
     ///

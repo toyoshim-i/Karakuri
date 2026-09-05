@@ -5,7 +5,7 @@ status: accepted
 date: 2026-07-31
 supersedes: []
 superseded_by: []
-principles: [0027]
+principles: [0094]
 tags: [engine]
 ---
 
@@ -47,4 +47,4 @@ stored in a struct (the borrow is still held), and a panic between `begin_frame`
 ## Evidence
 
 Session 2026-07-31T12:18Z. Standing rule:
-[P-0027](../principles/0027-a-silently-wrong-image-loses-to-a-loud-failure.md).
+[P-0094](../principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md).

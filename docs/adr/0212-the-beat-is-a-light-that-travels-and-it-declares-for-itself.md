@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-28
 supersedes: []
 superseded_by: []
-principles: [0077, 0091]
+principles: [0091, 0094]
 tags: [ui, perf]
 ---
 
@@ -13,7 +13,7 @@ tags: [ui, perf]
 
 ## Context
 
-[P-0077](../principles/0077-continuous-motion-is-how-a-stopped-panel-announces-itself.md) marks two
+[P-0094](../principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md) marks two
 things apart, as [P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md) asks.
 
 > **Forced.** Something is moving continuously while the console is live, and a scheduler may not
@@ -30,12 +30,12 @@ commit that landed
 [ADR-0210](0210-a-declared-cost-is-one-panel-pass-written-down-and-held-against-the-run.md), says
 the beat grid *"moves because the panel is being redrawn for something else rather than because
 anything decided it must"* and declares nothing. So on a console with nothing pending, nothing
-declares, no frame is asked for, and the panel goes still — which is exactly the state P-0077 says
-must be visible as a fault rather than looking calm. The one thing on the panel that P-0077 wanted
+declares, no frame is asked for, and the panel goes still — which is exactly the state P-0094 says
+must be visible as a fault rather than looking calm. The one thing on the panel that P-0094 wanted
 was the one thing riding on somebody else's frames.
 
 ADR-0210 asserted the two schedulability conditions over one declaring region and said what they
-were written for: *"the arbitration arrives with the second declaring region, which P-0077 wants to
+were written for: *"the arbitration arrives with the second declaring region, which P-0094 wants to
 be the beat."* This is that region, and it is the first time either sum has more than one term.
 
 ## Decision
@@ -106,7 +106,7 @@ no row at all, and there is no light on a grid that is not there.
 
 **Nothing else is asked, and that is the whole content of the declaration.** A beat that declared
 only while something was pending would be the panel's liveness signal going quiet exactly when
-there is nothing else to say the panel is alive — the state P-0077 exists to make visible.
+there is nothing else to say the panel is alive — the state P-0094 exists to make visible.
 
 ### The cost is the same constant, and the reason it is holds here too
 
@@ -159,7 +159,7 @@ dot and the bar beside it to come from different arithmetic and disagree"*. The 
 there.
 
 **Keep the flip and declare it.** The smallest change: leave the presentation alone and give the
-transport row a staleness so the flip stops riding on somebody else's frames. It satisfies P-0077's
+transport row a staleness so the flip stops riding on somebody else's frames. It satisfies P-0094's
 **forced** clause and fails its stated preference, which is the whole reason the preference is
 written down. It is also a poor declaration: a flip changes twice a second at 128 BPM, so a
 staleness fine enough to land it on time asks for frames that draw the same picture eleven times out
@@ -204,15 +204,15 @@ inside a row exactly as the tally is a presentation inside a bay.
 
 ## Consequences
 
-- **P-0077's forced clause holds in its own right**, and its *Where it holds* says so. Something is
+- **P-0094's forced clause holds in its own right**, and its *Where it holds* says so. Something is
   moving continuously while the console is live, it moves because a declaration asked for the frames
   rather than because something else did, and it does not stop when nothing is pending. **What is
   still absent is the scheduler** — there is nothing to refuse the economy the rule forbids, and
   that has not changed. The preference is now met as well: the light is somewhere at every instant.
 - **A live console never declares nothing, and that is P-0072's first clause narrowing on purpose.**
-  P-0077 anticipates it: *"It also rules out the converse economy — a panel designed so that nothing
+  P-0094 anticipates it: *"It also rules out the converse economy — a panel designed so that nothing
   moves when nothing is pending, on the argument that a still panel costs nothing."* The price is
-  1.26 ms every 24.7, which is about 5% of a frame, and P-0077 says what it buys: *"it is the
+  1.26 ms every 24.7, which is about 5% of a frame, and P-0094 says what it buys: *"it is the
   cheapest thing the console has to say this is live … and it is the only statement that still works
   when whatever would otherwise report the fault is itself the thing that has stopped."*
 - **`examples/panel.rs`'s zero now needs a fourth fold.** Its still-panel reading was reachable with

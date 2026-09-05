@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-31
 supersedes: []
 superseded_by: []
-principles: [0005, 0027, 0078, 0079, 0083, 0090, 0091]
+principles: [0083, 0090, 0091, 0094]
 tags: [mcp, live, vocabulary, surfaces, docs]
 ---
 
@@ -60,7 +60,7 @@ panel's 42. `gap` means *nothing — this surface cannot reach it at all*.
 **Two passes this week read the 57 as a deliberate scope, and both were reading the page correctly.**
 [ADR-0234](0234-carrying-a-show-through-is-a-principle-not-a-property-of-the-finished-instrument.md)
 called them *"not a backlog; they are a stance, and a stance that is nowhere stated"*, and
-[P-0079](../principles/0079-nothing-takes-the-show-down-and-nothing-takes-it-away-from-the-operator.md)
+[P-0094](../principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)
 then stated it under *What it settles → MCP's scope*. Neither invented the narrowness; both found it
 written and gave it the reason it was missing.
 
@@ -79,23 +79,23 @@ of the program. It becomes a **default and a permission**: the operator opens a 
 then reach it.
 
 That is
-[P-0078](../principles/0078-the-operator-wins-and-an-automatic-writer-yields-to-a-hand.md) in a form
-nobody had applied here. P-0078 is about a hand landing on a control an automatic writer is moving,
+[P-0094](../principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md) in a form
+nobody had applied here. P-0094 is about a hand landing on a control an automatic writer is moving,
 and it already refuses to let the surface decide — *"a hand is a hand on all four routes"*. The same
 rule read the other way is this: **what a model may reach is the operator's to say, and it is said by
-an operator's hand rather than by a constant compiled into the server.** And it is what P-0079 asks
+an operator's hand rather than by a constant compiled into the server.** And it is what P-0094 asks
 for in the clause it states most flatly: *"the price is never the operator's. Safety here is bought
 with design, with time, with budget and with loudness. It is never bought with the operator's
 authority."* A permanent scope is bought with the operator's authority — it decides, ahead of every
 show and on behalf of every operator, that this instrument's model may not be trusted with a fader
 even by someone who wants it to be.
 
-### How this stands with P-0079's own worked case
+### How this stands with P-0094's own worked case
 
-A reader meets P-0079 first, so this has to be exact. **P-0079's argument is not wrong and is no
+A reader meets P-0094 first, so this has to be exact. **P-0094's argument is not wrong and is no
 longer the whole rule.** What it argued is that the line falls *per operation* and not per actor:
-`write_procedure` is priced before it is built (P-0067), lands at a frame boundary and rolls back on
-its own (P-0005), and reports what it did (`swap_outcome`), while *"a write to a mix control has none
+`write_procedure` is priced before it is built (P-0091), lands at a frame boundary and rolls back on
+its own (P-0094), and reports what it did (`swap_outcome`), while *"a write to a mix control has none
 of the three: it is unpriced, it lands immediately, it does not roll back, and it changes what the
 audience is looking at."*
 
@@ -104,7 +104,7 @@ it no longer decides whether a class is reachable.** The three answers are why a
 default* — they are the argument for the default rather than a ceiling on what may ever be permitted.
 The missing half was always the same one: the three answers ask what the mechanism does at its worst
 *with nobody watching*, and an operator who has just opened a class is watching. **A hand in the room
-is the fourth answer, and it is the one P-0079 named its own exit through** — *"the answer that would
+is the fourth answer, and it is the one P-0094 named its own exit through** — *"the answer that would
 let a model turn a knob is not a bigger tool list, it is per-node authority … an operator granting a
 node, which puts a hand back in the loop rather than removing the hazard."* This is that exit, taken
 one level up: **a class of operations rather than a node of a Set**, because the mix faders, the
@@ -126,7 +126,7 @@ diagnostic written for a human turned out to be a specification for a model."* A
 a tool learns nothing and plans around a hole it cannot name. A model that is refused is told the
 class is closed, that the operator can open it, and which class it is — which it can act on, and can
 report to the person sitting there. That is also
-[P-0027](../principles/0027-a-silently-wrong-image-loses-to-a-loud-failure.md) in the register it
+[P-0094](../principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md) in the register it
 applies to a tool surface: a missing tool is the plausible-looking output — everything reads as
 working, nothing is logged, and what is wrong is invisible in exactly the way a black frame from an
 out-of-range `textureLoad` is.
@@ -167,7 +167,7 @@ not built is a backlog like every other column's.
 
 ### Four classes are closed by default
 
-Named by the maintainer, and each argued from P-0079's question — *what does this do at its worst, on
+Named by the maintainer, and each argued from P-0094's question — *what does this do at its worst, on
 the frame it goes wrong, while the operator's attention is on the room?* — rather than asserted. The
 operations are `karakuri-operation`'s, which is the vocabulary all four surfaces route into.
 
@@ -179,7 +179,7 @@ it *"the sharpest gap"* because it is a **uniform write** rather than a rebuild 
 where a procedure rewrite goes through the swap machinery. `Publish` is here for a different reason
 and belongs to the same rule: narrowing a live deck's published interface takes controls out from
 under the operator's hand and renumbers every MIDI binding after the one it removed, which is
-P-0079's *"buying the safety back from the operator"* performed by a model.
+P-0094's *"buying the safety back from the operator"* performed by a model.
 
 **Two in that list have an unobvious class and are named for it.**
 
@@ -195,11 +195,11 @@ P-0079's *"buying the safety back from the operator"* performed by a model.
   contents; it is how a slot *becomes* live, and how one stops being live. Leaving it open while
   closing the contents would be a hole big enough to walk the whole class through — a model cannot
   write a live deck's material, so it takes the deck off air, writes it, and puts it back — and its own
-  worst case is the one P-0033 calls not a recovery but the failure: a slot taken off air in front of a
+  worst case is the one P-0094 calls not a recovery but the failure: a slot taken off air in front of a
   room.
 
 **2. The mix faders.** `SetGain`, `SetOpacity`, `SetBlendMode`, `FadeDeck`, `Crossfade`, `Wipe`,
-`SetMaskShape`, `SetMaskPosition`, and `SetMasterOut`. This is the class P-0079 already worked: none
+`SetMaskShape`, `SetMaskPosition`, and `SetMasterOut`. This is the class P-0094 already worked: none
 of the three answers is available, and it is what the audience is looking at. `SetMasterOut` is here
 rather than with the master effects because it is a level and not an effect — it is also the largest
 single reach in the vocabulary, one number at the entry to the master chain that blacks out the whole
@@ -233,7 +233,7 @@ rule rather than as words that were spoken.
   paragraph named the clock beside the mix, and it was right to.
 - **`Quit`.** The sharpest case in the vocabulary and in none of the four classes: it does not risk
   stopping the performance, it stops it. It has no first answer, no second and no third.
-- **`SelectDeck`.** A console pointer that writes no record, and the reason it is closed is P-0079's
+- **`SelectDeck`.** A console pointer that writes no record, and the reason it is closed is P-0094's
   second half rather than its first: it decides which deck the operator's *next key press* lands on.
   Its worst case is the operator putting the wrong thing on air with their own hand.
 - **The sequencer's lanes.** `PointLane`, `SetLaneMute`, `SetStep`, `SetPatternGrid`,
@@ -297,7 +297,7 @@ of the node it is drawing with, while the audience watches. If the class were re
 *the contents of a live deck* — this would be the first thing closed, and the only thing MCP does
 today would be the first casualty of a decision whose stated goal is to connect more.
 
-So the class is not the noun. **It is P-0079's question with the noun as its subject: unpriced,
+So the class is not the noun. **It is P-0094's question with the noun as its subject: unpriced,
 immediate, irreversible writes to what a live deck draws.** `write_procedure` fails to be one of
 those on every count — priced by the check pass before it is built, compiled off the frame path,
 installed at a frame boundary, measured for thirty frames and rolled back to the parked previous
@@ -324,10 +324,10 @@ being reachable, which is the difference this record exists to make.
 
 ### a. Keep it as a scope, and argue only about which operations are in it
 
-The position both of this week's passes landed on, and it is coherent: P-0079 gives it a reason, the
+The position both of this week's passes landed on, and it is coherent: P-0094 gives it a reason, the
 reason is per operation, and a seventh tool now has something to be argued against. It loses on the
 maintainer's own ground — the rule was always *every operation, four ways in*, and a scope makes rule
-01 permanently false in the one column that never had a `plan` row. It also fails on P-0079's own
+01 permanently false in the one column that never had a `plan` row. It also fails on P-0094's own
 terms, because the safety is bought with the operator's authority: it settles, for every operator and
 every show, that no hand in the room is enough.
 
@@ -339,12 +339,12 @@ never has to be written. It loses on three counts and the maintainer replaced it
 **Rule 01 says reachable, and an unadvertised tool is not reachable** — the contradiction this
 decision exists to end would have survived under a new name. **A refusal says why and an absence
 cannot** (P-0083): the model learns nothing, and neither does the person sitting beside it, who is the
-one who can open the class. **And a shortened list is P-0027's silently wrong picture in the register
+one who can open the class. **And a shortened list is P-0094's silently wrong picture in the register
 of a tool surface** — nothing is broken, nothing is logged, and the model reports back that the
 instrument cannot do a thing it can do. It also makes `tools()` stateful and makes the list a model
 read at the start of a session untrue by the middle of it, for nothing.
 
-### c. Per-node authority alone, which is the exit P-0079 already named
+### c. Per-node authority alone, which is the exit P-0094 already named
 
 Grant a model a node with `SetAuthority` and let the existing rule 06 machinery carry the whole
 question. It is the right mechanism for what it addresses and it cannot address this: **authority is
@@ -358,7 +358,7 @@ live for a model at all.
 ### d. Open everything and rely on the session record to undo it
 
 The record is the timeline and a replay reconstructs it, so in principle a bad write is walkable
-back. It loses to P-0079's ordering — *where more than one answer is available, take the earliest* —
+back. It loses to P-0094's ordering — *where more than one answer is available, take the earliest* —
 and it does not actually have the second answer: walking history is not automatic, it does not happen
 on the frame it goes wrong, and *"a mechanism whose recovery plan is the operator noticing"* is the
 exact shape the principle is named against.

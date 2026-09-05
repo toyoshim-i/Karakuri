@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-30
 supersedes: []
 superseded_by: []
-principles: [0005, 0085, 0087, 0093]
+principles: [0085, 0087, 0093, 0094]
 tags: [store, format, distribution, naming]
 ---
 
@@ -92,7 +92,7 @@ holds and the form that travels.**
 check and atomic set swapping stops being possible.*
 
 **A swap happens on a frame boundary and an over-budget Set rolls back on its own**
-([P-0005](../principles/0005-a-swap-happens-on-a-frame-boundary-and-an-over-budget-set-rolls-back-on-its-own.md)):
+([P-0094](../principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)):
 pipelines are double-buffered and exchanged only between frames, the governor rolls a Set back
 without anyone asking, and the Set it replaced is parked unstepped so it returns where it left off.
 **That holds only because nothing is left to resolve at the moment of the swap.** Let a form that

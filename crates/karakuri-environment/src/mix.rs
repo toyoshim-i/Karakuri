@@ -486,7 +486,7 @@ pub fn current_transition(
 /// put-on-air only where the slot is not already live. That is the decision
 /// `karakuri-cli`'s `c` made for itself while it built those records by hand;
 /// the conversion has no deck to ask, so what it needs is this
-/// ([P-0079](../../../docs/principles/0079-nothing-takes-the-show-down-and-nothing-takes-it-away-from-the-operator.md):
+/// ([P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md):
 /// safety is never bought with the operator's authority).
 ///
 /// **What the deck reports, not what it was asked for.** `Deck::residency`
@@ -1334,7 +1334,7 @@ mod tests {
     /// see. A wipe under `max` is a wipe *on* rather than a wipe *over* — a
     /// different picture and a legitimate one — and the gesture that decides
     /// whether it survives is the one this module hands the reading to
-    /// ([P-0079](../../../docs/principles/0079-nothing-takes-the-show-down-and-nothing-takes-it-away-from-the-operator.md)).
+    /// ([P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)).
     ///
     /// **Decoded rather than counted**, because what is at stake is a
     /// `Change::Blend` reaching the deck: a record that decodes to *the mode

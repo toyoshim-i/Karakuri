@@ -879,7 +879,7 @@ proc wash {
     /// into the wrong one of the two setters passes every other test in this
     /// file. `set_mask_position` writes the number `Control::MaskPosition` is
     /// carrying, so a hand on it stops the move
-    /// (`docs/principles/0078-the-operator-wins-and-an-automatic-writer-yields-to-a-hand.md`);
+    /// (`docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md`);
     /// `set_mask_shape` writes no position, so there is nothing under its hand
     /// and a shape chosen mid-wipe changes what is being wiped rather than
     /// stopping it.

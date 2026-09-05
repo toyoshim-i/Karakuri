@@ -839,7 +839,7 @@ fn list_sets_skips_what_the_layout_does_not_claim() {
 /// be named.
 ///
 /// That is the store's invariant rather than a tidiness rule. A swap happens on
-/// a frame boundary and an over-budget Set rolls back on its own (P-0005),
+/// a frame boundary and an over-budget Set rolls back on its own (P-0094),
 /// which holds only because nothing is left to resolve at the moment of the
 /// swap — so the two files here are exactly the two that would break it: an
 /// authoring `.kset`, which names its parts by relative path and would send a

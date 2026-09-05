@@ -5,7 +5,7 @@ status: accepted
 date: 2026-07-31
 supersedes: []
 superseded_by: []
-principles: [0030]
+principles: [0094]
 tags: [ui, process]
 ---
 
@@ -61,4 +61,4 @@ different experiences, and only one of them is how the choice is actually made.
 ## Evidence
 
 Session 2026-07-31T12:42Z–13:27Z. Standing rule:
-[P-0030](../principles/0030-an-instrument-says-what-it-did.md).
+[P-0094](../principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md).

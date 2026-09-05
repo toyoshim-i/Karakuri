@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-31
 supersedes: []
 superseded_by: []
-principles: [0043, 0078, 0085, 0087, 0090, 0091, 0092]
+principles: [0085, 0087, 0090, 0091, 0092, 0094]
 tags: [operations, console, transitions, automation, architecture]
 ---
 
@@ -158,9 +158,9 @@ sentence with the principle's names attached. ADR-0222 has already walked this e
 step grid: *"A step grid is **the beat clock subdivided**, not a fourth clock… No new state, no
 scheduler, no event queue."*
 
-### P-0043 is the precedent for the shape, and the control map is the thing already standing in it
+### P-0094 is the precedent for the shape, and the control map is the thing already standing in it
 
-[Nothing external enters the render process](../principles/0043-nothing-external-enters-the-render-process.md)
+[Nothing external enters the render process](../principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)
 settles the shape by worked example — *a GPL library runs as a **separate program** behind a generic
 interface* — and the generic interface, here, is the operation vocabulary. `karakuri-midi` is what
 already sits in that position and its header says so: *"It produces a
@@ -178,7 +178,7 @@ The maintainer's, on 2026-08-31, in five parts.
 This is the framing every other part follows from, and it is recorded because the alternative
 reading is the natural one: the three rows are not blocked on a missing curve feature. They are
 ordinary asynchronous requests whose records nobody had finished describing. The render path forbids
-synchronous work (P-0001), so a control dispatches an operation ASAP and it lands later — and
+synchronous work (P-0091), so a control dispatches an operation ASAP and it lands later — and
 P-0075's *asked for, and waiting* is the panel's whole vocabulary for that, already drawn on two
 faders.
 
@@ -341,7 +341,7 @@ which is exactly how ADR-0255 describes their relationship.
 
 **And it puts the feature in the one place it cannot be taken back out of.** A helper on the control
 map can be deleted, replaced, or run in a second process; a scheduler inside `deck.rs` is on the
-critical path of every frame whether or not anybody is automating anything. P-0043's worked example
+critical path of every frame whether or not anybody is automating anything. P-0094's worked example
 is the general form of the answer — a thing that does not need to be in the render process is a
 separate program behind a generic interface — and the generic interface already exists and is the
 operation vocabulary.
@@ -395,7 +395,7 @@ to show for it.
   panel's own strip can ask for one, which is the first time the drawing and the gesture are on the
   same surface.
 - **The next automatic writer will be the second one, and
-  [P-0078](../principles/0078-the-operator-wins-and-an-automatic-writer-yields-to-a-hand.md) already
+  [P-0094](../principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md) already
   ruled it.** *"The transition
   is the only automatic writer that exists. A follower, a sequencer lane and a signal binding are all
   named in the plan and none of them writes a mix control yet. This is written down now rather than
@@ -424,7 +424,7 @@ to show for it.
   those is chosen here. The maintainer's own sentence is conditional — *if that sort of thing were
   added* — and this record keeps it conditional.
 - **Whether an automation helper and a sequencer lane are one thing is not settled.** ADR-0222 put a
-  lane on the beat clock emitting operations, off the render path, for P-0078's reason; the shape
+  lane on the beat clock emitting operations, off the render path, for P-0094's reason; the shape
   described here is the same shape with a curve where the lane has steps. Whether that is one
   mechanism with two front ends or two mechanisms is a question for whoever builds the first of them,
   and it is a real one — that record's *"the largest thing left is not the sequencer's"* is this

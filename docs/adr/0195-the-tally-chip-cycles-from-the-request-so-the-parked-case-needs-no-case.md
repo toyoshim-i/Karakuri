@@ -87,7 +87,7 @@ It loses on the parked slot, and it loses loudly. The chip shows `alloc`, so the
 **a press meant to take a prime request back puts the deck on air.** That is the most expensive
 mistake this panel can make — it is the operation the manual describes as the one that always
 lands, since nothing demotes a Live slot
-([P-0033](../principles/0033-the-governor-never-takes-a-live-slot-off-air.md)) — and it happens in
+([P-0094](../principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)) — and it happens in
 front of an audience, from the control whose whole reason for animating is to say *your request is
 still waiting*.
 

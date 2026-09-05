@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-11
 supersedes: []
 superseded_by: []
-principles: [0030]
+principles: [0094]
 tags: [ui]
 ---
 

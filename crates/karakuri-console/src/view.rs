@@ -2511,7 +2511,7 @@ const BEAT_STEPS: u64 = BEAT_PITCH as u64;
 /// second**. One beat of travel is one [`BEAT_PITCH`], so this is the light
 /// moving by one pixel and no more, which is the coarsest step that reads as a
 /// movement rather than as a sequence of positions
-/// ([P-0077](../../../docs/principles/0077-continuous-motion-is-how-a-stopped-panel-announces-itself.md)).
+/// ([P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)).
 ///
 /// **Stated at the mock's tempo, and it is the one number here that the music
 /// moves.** A beat is 468.75 ms at 128.0 BPM and 375 ms at 160, so the same
@@ -3010,7 +3010,7 @@ pub enum AudioAsk {
     ///
     /// **Nothing is refused here.** A device that has gone away since the list
     /// was read is refused where it is opened, out loud, with the list as it
-    /// is then (P-0027, P-0090): this control cannot see a device and must not
+    /// is then (P-0094, P-0090): this control cannot see a device and must not
     /// pretend to.
     Operation(Operation),
 }
@@ -3995,7 +3995,7 @@ fn pill_text(arr: &Arrangement) -> String {
 /// of the console, so a menu hanging down has the whole window; where a store
 /// holds more arrangements than that window is tall, the card lists as many as
 /// fit and says `n of m` in the Library bay's own foot. Truncating in silence
-/// is the failure P-0027 is about, and this is that bay's answer to the same
+/// is the failure P-0094 is about, and this is that bay's answer to the same
 /// question rather than a second one.
 fn menu_card(
     pill: &Rect,
@@ -4309,7 +4309,7 @@ const EXPOSURE_PRESSES: f32 = EXPOSURE_STOPS * 4.0;
 /// other cannot** — and one pixel is the coarsest step that still reads as a
 /// movement rather than as a sequence of positions, which is
 /// [`BEAT_STALENESS`]' own rule about the beat's travel
-/// ([P-0077](../../../docs/principles/0077-continuous-motion-is-how-a-stopped-panel-announces-itself.md)).
+/// ([P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)).
 ///
 /// A width picked for looks would have been a number with nothing behind it,
 /// which is what the mock's `width: 48px` says here as well.
@@ -9769,7 +9769,7 @@ impl DeckHead {
 /// chips at all, where it used to draw chips cut in half by
 /// [`inspector_into`]'s clip rectangle — which is a picture of a control that
 /// cannot be pressed
-/// ([P-0027](../../../docs/principles/0027-a-silently-wrong-image-loses-to-a-loud-failure.md)).
+/// ([P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)).
 pub fn deck_head(ctx: &egui::Context, at: &InspectorPane, pane: &Pane) -> Option<DeckHead> {
     // Fonts are not valid until `egui` has run a pass, exactly as in
     // [`transport`], [`outputs`] and [`mixer`] — and on the frame before the
@@ -10918,7 +10918,7 @@ impl View {
     ///
     /// **The transport row**, whenever the beat grid is drawn: the light
     /// travels the grid once a bar and it is the panel's continuous motion,
-    /// which [P-0077](../../../docs/principles/0077-continuous-motion-is-how-a-stopped-panel-announces-itself.md)
+    /// which [P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)
     /// says is how a stopped panel announces itself. It declares
     /// [`BEAT_STALENESS`] and **it does not ask whether anything is pending**,
     /// which is the whole point of it: a signal that only ran while something
@@ -11011,7 +11011,7 @@ impl View {
     /// [`View::picture`] and not a second rule.
     ///
     /// **Nothing else is asked, and that is the declaration's whole content.**
-    /// P-0077's forced clause is that *something is moving continuously while
+    /// P-0094's forced clause is that *something is moving continuously while
     /// the console is live*, so a beat that declared only while something was
     /// pending would be the signal going quiet at the moment it is worth
     /// having. It is also why this is not folded into
@@ -11079,7 +11079,7 @@ impl View {
     /// **With an engine behind it and the transport row on screen this never
     /// answers `None`**, because the beat is moving and says so
     /// ([`View::transport_declares`],
-    /// [P-0077](../../../docs/principles/0077-continuous-motion-is-how-a-stopped-panel-announces-itself.md)).
+    /// [P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)).
     /// That is ADR-0164's still-panel clause narrowing rather than failing: a panel
     /// with something moving on it is a panel with something changing on it,
     /// and the reason it is moving is a declaration rather than an accident.

@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-30
 supersedes: []
 superseded_by: []
-principles: [0027, 0048, 0085, 0088, 0090, 0093]
+principles: [0048, 0085, 0088, 0090, 0093, 0094]
 tags: [cli, distribution, environment, store, presets]
 ---
 
@@ -133,7 +133,7 @@ the flag**, exactly as `karakuri-cli` already refuses a missing `--store` — *"
 nothing has ever been kept there, and nothing was created to find that out. Check `--store`"*
 (`listed_sets_at`, `crates/karakuri-cli/src/main.rs:2546`). A path an operator typed is theirs;
 quietly using something else instead is
-[P-0027](../principles/0027-a-silently-wrong-image-loses-to-a-loud-failure.md)'s failure exactly —
+[P-0094](../principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)'s failure exactly —
 *a silently wrong image loses to a loud failure* — and the wrong presets directory is a silently
 wrong picture with a plausible one on screen.
 
@@ -158,7 +158,7 @@ existence.** A cargo workspace builds its example binaries into `<target>/<profi
 a debug build of the panel sits in `<target>/<profile>` — so candidate 3 *exists* for every
 `cargo run` in this repository, holds four hundred object files and no presets, and would win over
 entry 4 every time. The program would resolve a presets root, print it, and then fail to open
-`drift_shell.kir` inside it: a silently wrong answer followed by a puzzle, which is P-0027 again
+`drift_shell.kir` inside it: a silently wrong answer followed by a puzzle, which is P-0094 again
 and one candidate lower down the same table. Asking for one `.kir` costs one directory read per
 candidate and is the only thing that tells two directories sharing a name apart. **A typed
 `--presets` is still plain existence** — an empty library an operator named is an empty library
@@ -183,7 +183,7 @@ is the whole question this record exists to answer.
 `<presets>/drift_shell.kir` + `<presets>/soft_points.kir` — the same pair, resolved against a root
 that was found rather than baked. **With no presets root there is no default pair**, and the program
 refuses, naming `--presets` and saying the two paths may be given positionally instead. A black
-window with a working process behind it is the failure P-0027 rules out; a refusal that names both
+window with a working process behind it is the failure P-0094 rules out; a refusal that names both
 ways forward is the one it asks for.
 
 **4. `karakuri` gains `--store DIR`, defaulting to the shared constant**, and its `STORE` const goes

@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-26
 supersedes: []
 superseded_by: []
-principles: [0077, 0087]
+principles: [0087, 0094]
 tags: [ui, docs]
 ---
 
@@ -87,7 +87,7 @@ not exist on a panel that has continuous motion on it — and this one does and 
 row's beat indicator is the thing that has been moving regularly, which is a large part of why it
 matters. The condition is not free, though, and it has a price a scheduler will be tempted by, so it
 is written down as a rule of its own:
-[P-0077](../principles/0077-continuous-motion-is-how-a-stopped-panel-announces-itself.md).
+[P-0094](../principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md).
 
 ### The intermediate position, and why it was rejected
 
@@ -120,9 +120,9 @@ it happening rather than into how it should look when it does:
   the frame.
 - When a panel cannot meet a staleness it declared, it is over budget, and the answer to over budget
   is that **the instrument says so**.
-  [P-0030](../principles/0030-an-instrument-says-what-it-did.md) — *an instrument that goes silent
+  [P-0094](../principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md) — *an instrument that goes silent
   is unusable* — and
-  [P-0027](../principles/0027-a-silently-wrong-image-loses-to-a-loud-failure.md) — a plausible
+  [P-0094](../principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md) — a plausible
   wrong picture loses to a loud failure — are the two rules that decide it, and they decide it
   against the appearance.
 
@@ -185,7 +185,7 @@ and this one does not start the habit.
   presentation the residency chip uses is still undecided, and the deciding grounds are now space,
   legibility and the design language rather than a clause. `docs/roadmap.md` carries it.
 - **A second principle,
-  [P-0077](../principles/0077-continuous-motion-is-how-a-stopped-panel-announces-itself.md).** One
+  [P-0094](../principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md).** One
   decision with two consequences rather than two decisions: if the freeze is what tells the operator
   the panel is not current, then something on the panel has to be moving for the freeze to be
   visible at all, and that motion is not spare budget. It rules out the obvious economy — a

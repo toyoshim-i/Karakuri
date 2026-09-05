@@ -5,7 +5,7 @@ status: superseded
 date: 2026-08-22
 supersedes: []
 superseded_by: [0129]
-principles: [0043, 0085]
+principles: [0085, 0094]
 tags: [process]
 ---
 
@@ -38,7 +38,7 @@ check not being run.
   reach is a real benefit. It is not enough. It makes one vendor's convention a fact about a
   repository whose stated position is that the workspace closes over `cargo`
   ([P-0085](../principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md)) and that nothing external
-  enters ([P-0043](../principles/0043-nothing-external-enters-the-render-process.md)). And it decays
+  enters ([P-0094](../principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)). And it decays
   in an obvious direction: the second tool wants its own file, and the argument that admitted the
   first admits every one after it.
 - **A `.gitignore` entry so a local one cannot be committed.** Cheap, and it still writes a vendor

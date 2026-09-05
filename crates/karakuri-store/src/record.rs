@@ -240,7 +240,7 @@ pub enum Record {
     /// already resolved, and `<store>/sets/` holds `.kbset` and only `.kbset`
     /// because a swap that can partially fail is not a swap
     /// (`docs/adr/0231-a-sets-two-forms-take-two-extensions-and-the-store-holds-only-the-resolved-one.md`,
-    /// `docs/principles/0005-a-swap-happens-on-a-frame-boundary-and-an-over-budget-set-rolls-back-on-its-own.md`).
+    /// `docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md`).
     ///
     /// **This is therefore the one variant that can only appear in a file the
     /// store will not hold**, and it is refused for a reason none of its

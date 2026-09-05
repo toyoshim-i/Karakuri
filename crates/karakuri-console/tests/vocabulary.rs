@@ -141,7 +141,7 @@
 //! - **Reachability is `crates/karakuri/src/main.rs`'s, and this crate cannot
 //!   depend on it** (ADR-0156). The window loop is what turns a `winit` press
 //!   into [`Panel::press`] and draws the panel in front of somebody, and
-//!   ADR-0213's definition is P-0030's sentence — *a window that opens and
+//!   ADR-0213's definition is P-0094's sentence — *a window that opens and
 //!   cannot be touched is a demo, not a tool*. **So this file checks the
 //!   necessary half and not the sufficient one**, exactly as `panel_column.rs`
 //!   does one column along. The sufficient half for the one `has` row is a

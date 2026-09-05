@@ -437,7 +437,7 @@ impl Watch {
     ///
     /// So a load says *look at these files instead* and lets go. Everything
     /// after that is the path an edit already takes: compiled on this thread,
-    /// offered on the same channel, swapped at a frame boundary (P-0005),
+    /// offered on the same channel, swapped at a frame boundary (P-0094),
     /// judged for `JUDGE_FRAMES` against the budget, and rolled back on its
     /// own if it costs too much — with the deck resuming the Set it was
     /// playing at the `t` it was parked at. **The library gets the watchdog

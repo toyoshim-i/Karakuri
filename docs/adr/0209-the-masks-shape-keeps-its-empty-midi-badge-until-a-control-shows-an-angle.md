@@ -56,7 +56,7 @@ control that **shows** an angle.
   day it lands, which is the tidiest grammar of the three. It loses because it changes a row that
   landed two days ago and moves the angle somewhere worse: to a reading, on a crate that reads
   nothing back by construction, or to a default — which is precisely the fault ADR-0201 was written
-  to avoid and P-0078 makes worse rather than better, since `Record::Mask` is a state and a replay
+  to avoid and P-0094 makes worse rather than better, since `Record::Mask` is a state and a replay
   cannot tell a squared-off front from a hand on one.
 - **Keep the question open and decide when the console's mask mini is finished.** This is what
   ADR-0202 did, and repeating it now would be a survey mistaken for a decision. The mini is finished

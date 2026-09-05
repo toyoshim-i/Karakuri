@@ -198,7 +198,7 @@ pub enum Layering {
 /// granted, and a build that came up any other way would hand every node of
 /// every Set to an agent nobody asked for. It is also the only default that
 /// leaves
-/// `docs/principles/0078-the-operator-wins-and-an-automatic-writer-yields-to-a-hand.md`
+/// `docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md`
 /// true of a Set that has just been built.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Authority {
@@ -1030,7 +1030,7 @@ pub enum PublishError {
 /// **Refused whole rather than landed on the nodes that permit it.** A control
 /// that moved three renderers of four and looked like it moved all of them is
 /// exactly
-/// `docs/principles/0027-a-silently-wrong-image-loses-to-a-loud-failure.md`, and
+/// `docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md`, and
 /// the addressed write is never refused — so what is taken away is one spelling
 /// and not the reach. Argued in
 /// `docs/adr/0223-a-wildcard-write-is-refused-where-the-nodes-it-lands-on-disagree.md`.
@@ -3521,7 +3521,7 @@ impl Set {
     /// authority**, and the refusal names them: see [`CrossesAuthority`]. It is
     /// checked before anything is written, so a refused write moves nothing —
     /// half of a wildcard landing is the plausible wrong picture
-    /// `docs/principles/0027-a-silently-wrong-image-loses-to-a-loud-failure.md`
+    /// `docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md`
     /// rules out.
     ///
     /// **The addressed form is not checked, and that is what this decision
@@ -5128,7 +5128,7 @@ proc probe_l4 {
         /// — which is rule 06's *"there is no switch that hands the whole
         /// instrument to an agent"* at the width of a key. Landing on the
         /// permitted nodes instead is the alternative that lost, to
-        /// `docs/principles/0027-a-silently-wrong-image-loses-to-a-loud-failure.md`,
+        /// `docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md`,
         /// and the assertion that the values did not move is what holds that
         /// half.
         ///
@@ -5226,7 +5226,7 @@ proc probe_shared_l4 {
                 radius(&set),
                 vec![(Kind::L1, 0, 2.0), (Kind::L4, 0, 2.0)],
                 "a refused write moves nothing — landing on the permitted node is the \
-                 silently partial control P-0027 rules out"
+                 silently partial control P-0094 rules out"
             );
 
             // And the reach is not what was taken away.

@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-28
 supersedes: []
 superseded_by: [0209]
-principles: [0078, 0090]
+principles: [0090, 0094]
 tags: [midi, vocabulary, surfaces, mixing]
 ---
 
@@ -108,7 +108,7 @@ decision before that writer exists is choosing between two grammars on no eviden
 
 - **Add both rows and let the shape target default the angle to 0.** One line of code, and it is the
   defect: a pad pressed mid-wipe would square the front to horizontal, and the record it wrote would
-  be a picture nobody asked for that replays perfectly. P-0078 is what makes it worse rather than
+  be a picture nobody asked for that replays perfectly. P-0094 is what makes it worse rather than
   better — `Record::Mask` is a state, so nothing downstream can tell a restated front from a hand on
   it, and the wipe stops as well.
 - **Add both rows and let the shape target carry the angle in the range slot** — `mask-shape 0
@@ -118,7 +118,7 @@ decision before that writer exists is choosing between two grammars on no eviden
   format with two rules.
 - **Hold `mask-position` back until the shape can land with it.** Two rows arriving together reads
   tidier and is the shape of ADR-0201. But the position is not blocked by anything, it is the one
-  control in the mixer strip a fader could never reach before this, and P-0078's *the operator wins*
+  control in the mixer strip a fader could never reach before this, and P-0094's *the operator wins*
   has its hole exactly there — a wipe an operator cannot stop half way. Waiting would trade a
   control that works for a symmetry nobody performs with.
 - **A new principle.** Nothing here is a rule a future proposal would violate. The rule already

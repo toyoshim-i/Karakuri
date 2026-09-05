@@ -1840,7 +1840,7 @@ fn call_tool(request: &Value, state: &mut State) -> Result<Called, String> {
 /// was not refused yesterday. The day a `load_set` tool lands it is refused
 /// with *which decks are live was not read* until somebody wires the reading,
 /// which is
-/// `docs/principles/0027-a-silently-wrong-image-loses-to-a-loud-failure.md`'s
+/// `docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md`'s
 /// answer rather than a guess that the deck is idle.
 fn audited<'a>(operation: &'a Operation, state: &State) -> Result<Allowed<'a>, String> {
     gate::audit(operation, state.opening.read(), gate::Running::unread())
