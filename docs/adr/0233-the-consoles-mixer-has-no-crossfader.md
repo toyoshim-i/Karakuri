@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-31
 supersedes: []
 superseded_by: []
-principles: [0019, 0023, 0028, 0056, 0066, 0076]
+principles: [0023, 0028, 0056, 0066, 0076, 0085]
 tags: [ui, console, mixing]
 ---
 
@@ -61,7 +61,7 @@ conclusion from the other end — from redundancy rather than from what a crossf
 > Dragging it would be two opacities written at once, and both those faders are on the strips
 > already; **a third control over the same two numbers is a second way to say one thing.**
 
-That is [P-0019](../principles/0019-prefer-the-mechanism-that-already-exists.md) written about a
+That is [P-0085](../principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md) written about a
 fader: *before a feature gets a subsystem, check what it is made of*. A crossfader is made of the
 two channel faders, and both of them are built — `SetGain` and `SetOpacity` are two of the panel
 column's seventeen `has` badges, emitted by `panel.rs`, while the crossfader's own badge has never
@@ -153,7 +153,7 @@ picture on the screen.
 **It loses because the picture is of two controls already on the screen**, six inches up and in the
 same bay, each drawn with its own value and its own meter. The derived number answers *how far
 across is the pair* for a pair the operator chose, and no gesture anywhere reads it. That is
-P-0019's test failed rather than passed: the mechanism that already exists is the two faders, and
+P-0085's test failed rather than passed: the mechanism that already exists is the two faders, and
 this is a third rendering of them.
 
 **And an inert fader is worse than no fader.** A track with a handle on it is the strongest *drag

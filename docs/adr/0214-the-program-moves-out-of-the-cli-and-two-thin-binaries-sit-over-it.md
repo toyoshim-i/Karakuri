@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-28
 supersedes: []
 superseded_by: []
-principles: [0019, 0026, 0031, 0044, 0058]
+principles: [0026, 0031, 0044, 0085]
 tags: [architecture, ui]
 ---
 
@@ -146,14 +146,14 @@ has none by design."*
 
 **It is worth recording that it was re-proposed anyway, in the session that wrote this record**, and
 how. The argument was
-[P-0019](../principles/0019-prefer-the-mechanism-that-already-exists.md) — prefer the mechanism that
+[P-0085](../principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md) — prefer the mechanism that
 already exists — and it is a good argument on its face: `karakuri-cli` already has the audio, the
 MIDI, the MCP server, the store, the records and the flags, so the application is *"the mechanism
 that already exists"* and a `[lib]` line is the whole of the work. What caught it was
 [P-0044](../principles/0044-doubt-a-conclusion-that-contradicts-a-position-already-taken.md): **when
 a judgement about this design collides with a stance the project has taken repeatedly, the thing to
 re-examine is the judgement, not the stance.** The stance had been taken twice by name and stated a
-third time in `README.md`. P-0019 is about not building a subsystem where a filter would do; it is
+third time in `README.md`. P-0085 is about not building a subsystem where a filter would do; it is
 not a licence to make the destination depend on the scaffolding, and reading it as one was the
 failure. The mechanism that already exists here is the *code*, and this decision keeps all of it —
 what it declines to keep is the *package boundary* it happens to sit behind.
@@ -166,7 +166,7 @@ written to end and which
 over and out of reach of the thing that ended it"*.
 [P-0031](../principles/0031-a-name-means-one-thing-across-the-system.md) bites first — two spellings
 of a residency, two answers to what a store path is, two formats for a written-at time, and which you
-get depends only on which door you came in by. [P-0019](../principles/0019-prefer-the-mechanism-that-already-exists.md)
+get depends only on which door you came in by. [P-0085](../principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md)
 bites second, and this time correctly: `setfile::written_at` and `mix::parse_residency` *are* the
 mechanism that already exists, and writing them again is the heavier design arriving first.
 
@@ -202,7 +202,7 @@ crate boundary, because `cfg(test)` is set when the *defining* crate's tests com
 consumer's do, and it noted that *"Two more types in `karakuri-cli` carry the same idiom and will hit
 the same wall the day either moves."* That day is this one.
 
-[P-0058](../principles/0058-before-v1-compatibility-is-a-bill-not-an-argument.md) is why the number
+[P-0085](../principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md) is why the number
 is written down and is not an argument: before v1 the bill is estimated honestly when a fork is
 presented, **and it does not decide the recommendation.** Sixteen thousand lines is a large number
 and it is the wrong thing to weigh this on. What is weighed is the five costs above, each of which

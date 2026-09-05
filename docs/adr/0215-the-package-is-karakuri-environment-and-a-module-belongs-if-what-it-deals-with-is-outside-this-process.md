@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-28
 supersedes: []
 superseded_by: []
-principles: [0013, 0031, 0058, 0060, 0066]
+principles: [0013, 0031, 0060, 0066, 0085]
 tags: [architecture, vocabulary]
 ---
 
@@ -263,7 +263,7 @@ The cost of a rename is therefore annotation, not revision, and 21 annotations i
 [P-0066](../principles/0066-an-adr-is-a-description-of-history-corrected-but-never-revised.md).
 
 **What decided the swap was the meaning, and not the bill.** That is
-[P-0058](../principles/0058-before-v1-compatibility-is-a-bill-not-an-argument.md) working as
+[P-0085](../principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md) working as
 intended: before v1 the bill is estimated honestly and then set aside, and a rename that was right
 would have been paid for. This one was not right, and it would have been just as wrong if the count
 had been zero.

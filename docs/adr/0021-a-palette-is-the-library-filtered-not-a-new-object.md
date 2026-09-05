@@ -5,7 +5,7 @@ status: superseded
 date: 2026-07-26
 supersedes: []
 superseded_by: [0133]
-principles: [0019]
+principles: [0085]
 tags: [store, process]
 ---
 
@@ -54,4 +54,4 @@ attention.
 ## Evidence
 
 Session 2026-07-26T02:29Z–02:39Z. Standing rule:
-[P-0019](../principles/0019-prefer-the-mechanism-that-already-exists.md).
+[P-0085](../principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md).

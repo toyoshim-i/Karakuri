@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-16
 supersedes: []
 superseded_by: []
-principles: [0019]
+principles: [0085]
 tags: [cli, format]
 ---
 
@@ -37,7 +37,7 @@ filename, so `a.kir,b.kir,` is refused for naming a renderer with no name.
 geometry and its renderers. Rejected: it introduces grammar for something the existing grammar
 already reads, and the same list has to exist in the Set file and the session stream anyway, where
 it needed no new record either. This is
-[P-0019](../principles/0019-prefer-the-mechanism-that-already-exists.md) applied to a command line.
+[P-0085](../principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md) applied to a command line.
 
 **Keep the refusal and require a Set file for a stack.** Rejected for the reason
 [ADR-0111](0111-a-name-lives-in-the-set-file-and-may-be-written-on-the-command-line.md) had already

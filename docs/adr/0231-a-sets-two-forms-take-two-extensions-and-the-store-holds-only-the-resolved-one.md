@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-30
 supersedes: []
 superseded_by: []
-principles: [0005, 0019, 0026, 0031, 0058, 0060, 0066]
+principles: [0005, 0026, 0031, 0060, 0066, 0085]
 tags: [store, format, distribution, naming]
 ---
 
@@ -136,7 +136,7 @@ store's own comment on the constant is where that reasoning now lives:
 That is the shape [P-0026](../principles/0026-a-guarantee-is-structural-or-it-is-a-convention-that-says-so.md)
 asks for — the guarantee is structural, carried by the name a file has rather than by a rule
 somebody remembers — and
-[P-0019](../principles/0019-prefer-the-mechanism-that-already-exists.md)'s test is passed rather
+[P-0085](../principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md)'s test is passed rather
 than dodged: the mechanism already existed and was asked what it was made of before anything was
 built.
 
@@ -235,7 +235,7 @@ extension is for. The cost is real and is paid in `ls`.
   the new spelling and the store's copy cannot parse. So nothing working is lost. The disappearance
   is silent either way, which is why it belongs in a comment a reader of `list_sets` will meet.
 - **Before v1 the bill is stated and is not the argument**
-  ([P-0058](../principles/0058-before-v1-compatibility-is-a-bill-not-an-argument.md)). Every
+  ([P-0085](../principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md)). Every
   `.set.ndjson` on any disk anywhere becomes an unlisted file. The honest count of what that breaks
   in the world is one file on one machine, and the honest count of what it breaks in the repository
   is the test fixtures — `crates/karakuri-store/tests/store.rs` alone spelled the suffix twelve

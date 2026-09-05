@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-31
 supersedes: []
 superseded_by: []
-principles: [0019, 0028, 0031, 0036, 0074, 0076, 0079]
+principles: [0028, 0031, 0036, 0074, 0076, 0079, 0085]
 tags: [architecture, surfaces, midi, mcp, vocabulary, live]
 ---
 
@@ -275,7 +275,7 @@ MIDI already has and it needs no new question answered.
 **It is not rejected — it is refused as premature.** A file per surface may well be right, and so may
 one table with a surface column; what decides it is where an opening has to be read from, whether a
 map travels with an arrangement, and what a keyboard map is when the operator has not written one.
-[P-0019](../principles/0019-prefer-the-mechanism-that-already-exists.md) says check what a feature is
+[P-0085](../principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md) says check what a feature is
 made of before it gets a subsystem, and the honest answer today is that three of the four maps have
 nothing in them. It is in *What this leaves undone*.
 

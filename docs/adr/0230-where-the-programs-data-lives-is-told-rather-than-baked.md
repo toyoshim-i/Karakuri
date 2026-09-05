@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-30
 supersedes: []
 superseded_by: []
-principles: [0019, 0023, 0027, 0031, 0045, 0048, 0055, 0061]
+principles: [0023, 0027, 0031, 0045, 0048, 0055, 0061, 0085]
 tags: [cli, distribution, environment, store, presets]
 ---
 
@@ -286,7 +286,7 @@ removes an error path, the Library's `presets` scope draws an empty list instead
 whatever a person drops in afterwards is picked up.
 
 **A program that creates an empty library has answered a question nobody asked**
-([P-0019](../principles/0019-prefer-the-mechanism-that-already-exists.md) is where that test is
+([P-0085](../principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md) is where that test is
 written down), and it destroys the one piece of information the failure carried: *nothing was
 installed here* and *nothing has been put here yet* become the same empty directory, and the first
 of the two is very often a mistyped `--presets`. This workspace has already decided this twice, in

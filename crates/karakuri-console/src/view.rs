@@ -4102,7 +4102,7 @@ const CARET: char = '▏';
 /// The menu has no term in the stylesheet, because the mock draws no menu: it
 /// is the Library bay's list, which is the one list this console already
 /// draws, at the same `.lib-row` box and inside the same `.lib-list` padding
-/// (P-0019). It sits on a card with the panel's own shadow under it, which is
+/// (P-0085). It sits on a card with the panel's own shadow under it, which is
 /// what says it is above the bays rather than inside one.
 fn arrangement_into(ui: &Ui, pal: &Palette, pill: &ArrangementPill, arr: &Arrangement) {
     let painter = ui.painter();

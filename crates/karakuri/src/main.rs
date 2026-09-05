@@ -4549,7 +4549,7 @@ impl Engine {
         // allocated slot contributes nothing to the mix, draws nothing, and
         // steps nothing. The strip reads ALLOC, the cell reads `off`, and the
         // slot costs its buffers and no frame time. That is
-        // [P-0019](../../../docs/principles/0019-prefer-the-mechanism-that-already-exists.md):
+        // [P-0085](../../../docs/principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md):
         // *a slot with nothing in it* is a residency this deck already has a
         // word for.
         //

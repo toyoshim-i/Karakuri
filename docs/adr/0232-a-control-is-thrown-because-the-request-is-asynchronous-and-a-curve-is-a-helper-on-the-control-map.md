@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-31
 supersedes: []
 superseded_by: []
-principles: [0001, 0019, 0028, 0043, 0069, 0074, 0075, 0076, 0078]
+principles: [0001, 0028, 0043, 0069, 0074, 0075, 0076, 0078, 0085]
 tags: [operations, console, transitions, automation, architecture]
 ---
 
@@ -214,7 +214,7 @@ control the resolved instant **is** the grid's position, read off the oscillator
 P-0076 in the form the panel already stated it: *"computing the anchor here would have been a window
 binary taking a decision about a file format."* A caller that wants the next bar calls `quantise`,
 and a caller that wants the next bar is a caller that holds an engine.
-[P-0019](../principles/0019-prefer-the-mechanism-that-already-exists.md) is passed rather than
+[P-0085](../principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md) is passed rather than
 dodged: the mechanism existed and was asked what it was made of.
 
 **And the panel hands in nothing at all today, which is this decision working rather than an

@@ -5,7 +5,7 @@ status: superseded
 date: 2026-08-22
 supersedes: []
 superseded_by: [0129]
-principles: [0043, 0006]
+principles: [0043, 0085]
 tags: [process]
 ---
 
@@ -37,7 +37,7 @@ check not being run.
 - **A pointer-only `CLAUDE.md`.** It buys **reach** — a session sees the rule without being told — and
   reach is a real benefit. It is not enough. It makes one vendor's convention a fact about a
   repository whose stated position is that the workspace closes over `cargo`
-  ([P-0006](../principles/0006-the-workspace-stays-closed-to-rust.md)) and that nothing external
+  ([P-0085](../principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md)) and that nothing external
   enters ([P-0043](../principles/0043-nothing-external-enters-the-render-process.md)). And it decays
   in an obvious direction: the second tool wants its own file, and the argument that admitted the
   first admits every one after it.

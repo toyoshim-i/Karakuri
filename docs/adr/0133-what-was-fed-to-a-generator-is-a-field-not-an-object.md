@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-22
 supersedes: [0021]
 superseded_by: []
-principles: [0019]
+principles: [0085]
 tags: [store, process, docs]
 ---
 
@@ -42,7 +42,7 @@ already have addresses?**
   ADR-0021 killed, and killing it was right. Nothing here revives it.
 - **The field** is a list of hashes of artifacts the store already holds, in a record that already
   exists, using content addressing that is already there. That is
-  [P-0019](../principles/0019-prefer-the-mechanism-that-already-exists.md) rather than a violation of
+  [P-0085](../principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md) rather than a violation of
   it, and ADR-0021's own accepted half kept `origin` and `parent` for exactly that reason.
 
 ADR-0021's argument was written against a subsystem and reads as though it also disposes of the

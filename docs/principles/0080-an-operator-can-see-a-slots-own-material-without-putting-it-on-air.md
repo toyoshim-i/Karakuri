@@ -83,7 +83,7 @@ knowingly. It is the case
 [P-0079](0079-nothing-takes-the-show-down-and-nothing-takes-it-away-from-the-operator.md) loses, and
 it loses for the reason written there: a rule protecting a performance may not be used to remove what
 the performance is played with. The answer to the cost is to pay it and write it down
-([P-0058](0058-before-v1-compatibility-is-a-bill-not-an-argument.md)), not to remove the look or hide
+([P-0085](0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md)), not to remove the look or hide
 it behind a flag. An operator may still turn a cell off by hand; nothing else may.
 
 ## Where it holds
