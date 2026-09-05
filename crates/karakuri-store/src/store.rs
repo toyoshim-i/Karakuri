@@ -165,7 +165,7 @@ impl Store {
     /// this one, which names them by content address and needs nothing from the
     /// filesystem around it. A swap happens on a frame boundary and an
     /// over-budget Set rolls back on its own
-    /// (`docs/principles/0005-a-swap-happens-on-a-frame-boundary-and-an-over-budget-set-rolls-back-on-its-own.md`),
+    /// (`docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md`),
     /// and that holds only because **nothing is left to resolve at the moment
     /// of the swap**. Let the authoring form into the store and a load walks
     /// the filesystem while swapping: a neighbour may be missing, may have
@@ -459,7 +459,7 @@ impl Store {
     /// **So a file under `sets/` that does not carry that suffix has no id at
     /// all**, and an id is the only route a Set has to a deck: nothing can ask
     /// for what cannot be named. That is what keeps a swap atomic
-    /// (`docs/principles/0005-a-swap-happens-on-a-frame-boundary-and-an-over-budget-set-rolls-back-on-its-own.md`) —
+    /// (`docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md`) —
     /// the authoring form of a Set names its parts by relative path, so loading
     /// one would resolve against the filesystem mid-swap, and a swap that can
     /// partially fail is not a swap. The listing is where that wall stands,

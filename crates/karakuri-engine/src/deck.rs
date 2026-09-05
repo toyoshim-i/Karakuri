@@ -252,7 +252,7 @@
 //! deck are not in the compute budget and fall inside the window `swap.rs`'s
 //! watchdog judges candidates on, so a heavy off-air slot can roll back an
 //! unrelated slot's build (ADR-0072). It is the case
-//! `docs/principles/0079-nothing-takes-the-show-down-and-nothing-takes-it-away-from-the-operator.md`
+//! `docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md`
 //! loses, and it loses for the reason written there: a rule protecting a
 //! performance may not be used to remove what the performance is played with.
 //! What bounds it is that a draw is a raster pass over element state that is
@@ -1591,7 +1591,7 @@ impl Deck {
     /// what is being wiped rather than a hand on the control that is moving.
     /// It writes no position, so there is nothing for it to be a hand on. See
     /// "The operator wins" in [`crate::transition`], and
-    /// `docs/principles/0078-the-operator-wins-and-an-automatic-writer-yields-to-a-hand.md`
+    /// `docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md`
     /// for where that holds.
     ///
     /// Split from [`Deck::set_mask_position`] rather than left as one setter

@@ -141,7 +141,7 @@ quietly declines the last of something is a rule an operator can only find by ex
 
 **And it would refuse the one operation that is never refused.** A console that blocked *go on air*
 while a prime request was parked would contradict the engine outright: the governor never takes a
-Live slot off air ([P-0033](../principles/0033-the-governor-never-takes-a-live-slot-off-air.md) —
+Live slot off air ([P-0094](../principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md) —
 which, read exactly, forbids automatic demotion and does not speak to granting requests), and
 `deck.rs`'s module doc supplies the other half: *effective Live and requested Live are the same set
 of slots.* A Live request lands. A surface is not entitled to a rule the instrument does not have.

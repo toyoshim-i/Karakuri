@@ -65,7 +65,7 @@
 //! and the rule is meant to hold for every one that follows it.
 //!
 //! It is
-//! `docs/principles/0078-the-operator-wins-and-an-automatic-writer-yields-to-a-hand.md`,
+//! `docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md`,
 //! which carries the whole of it — including the one write that does not
 //! cancel and why it is not an exception: `Deck::set_mask_shape` writes no
 //! position, so there is no control under its hand.

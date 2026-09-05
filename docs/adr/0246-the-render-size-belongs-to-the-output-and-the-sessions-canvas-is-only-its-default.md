@@ -51,7 +51,7 @@ it belongs to, and it is what that output is actually rendered at. Two outputs m
 **The operator, or the destination window, decides it.** A projector window fullscreen on a 4K
 display renders at what that window is, unless the operator says otherwise — and the operator may
 always say otherwise, because a thermal budget is a reason to send 1080p into a 4K window and
-[P-0079](../principles/0079-nothing-takes-the-show-down-and-nothing-takes-it-away-from-the-operator.md)
+[P-0094](../principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)
 is that rule.
 
 **The session's `canvas` record degrades to a default and a reference.** It is what an output starts
@@ -88,7 +88,7 @@ so, and no output can be given a size of its own without contradicting the recor
 
 **Let the window decide and give the operator no say.** It is the simplest reading of *the
 destination decides*, and it hands the show to whatever display got plugged in. An operator whose
-machine cannot afford 4K must be able to say so, and P-0079 forbids a rule that takes that away.
+machine cannot afford 4K must be able to say so, and P-0094 forbids a rule that takes that away.
 
 **Drop the session `canvas` record entirely, since it is no longer the authority.** A replay of a run
 whose outputs no longer exist still has to draw at something, and a reproduction that picks its own

@@ -298,7 +298,7 @@ pub enum Change<'a> {
     /// ([ADR-0188](../../../docs/adr/0188-a-pending-transition-says-it-is-pending-and-no-surface-holds-the-rule.md)).
     ///
     /// **And the beat ends it for as long as the console is live**, which is
-    /// [P-0077](../../../docs/principles/0077-continuous-motion-is-how-a-stopped-panel-announces-itself.md)
+    /// [P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)
     /// arriving in this arm: something has to be moving whether or not
     /// anything is happening, or a panel that has stopped and a panel that is
     /// idle are the same picture. So `None` here is now a console with **no

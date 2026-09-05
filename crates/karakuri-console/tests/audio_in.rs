@@ -348,7 +348,7 @@ fn an_open_card_keeps_the_pointer_and_a_shut_one_gives_the_boundary_back() {
 /// for it and no press on it can ask for an input that does not exist.
 ///
 /// An empty card would be indistinguishable from one that failed to open,
-/// which is the failure P-0027 is about.
+/// which is the failure P-0094 is about.
 #[test]
 fn a_machine_with_no_inputs_gets_a_card_that_says_so_rather_than_an_empty_one() {
     let (panel, ctx) = console(PLAUSIBLE);

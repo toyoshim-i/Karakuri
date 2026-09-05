@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-01
 supersedes: []
 superseded_by: []
-principles: [0033]
+principles: [0094]
 tags: [engine]
 ---
 
@@ -50,4 +50,4 @@ a governor pulling a slot off air during a set is **the worst behaviour it could
 ## Evidence
 
 Session 2026-08-01T06:01Z, 2026-08-01T07:22Z. Standing rule:
-[P-0033](../principles/0033-the-governor-never-takes-a-live-slot-off-air.md).
+[P-0094](../principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md).

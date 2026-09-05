@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-31
 supersedes: []
 superseded_by: []
-principles: [0079, 0085, 0090, 0093]
+principles: [0085, 0090, 0093, 0094]
 tags: [architecture, surfaces, midi, mcp, vocabulary, live]
 ---
 
@@ -165,7 +165,7 @@ a rule *held by* that surface. A per-surface lock is exactly what P-0090 rules o
 entry in a common layer is not, because the layer is the same code for all four.
 
 **Why there is an audit at all is not this record's**, and it is worth saying so plainly: that is
-[P-0079](../principles/0079-nothing-takes-the-show-down-and-nothing-takes-it-away-from-the-operator.md)
+[P-0094](../principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)
 and ADR-0235, which asked *what does this do at its worst, on the frame it goes wrong* of each class
 and closed four of them. **This record decides only where the mechanism lives**, and it changes
 nothing about which operations are in which class or what a refusal says.

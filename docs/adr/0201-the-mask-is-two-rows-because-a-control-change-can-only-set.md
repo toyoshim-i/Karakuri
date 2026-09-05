@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-27
 supersedes: []
 superseded_by: []
-principles: [0078]
+principles: [0094]
 tags: [vocabulary, midi, mixing, console]
 ---
 
@@ -78,7 +78,7 @@ operation exists because a surface can ask for it, and nothing asks for this.
   written for the one caller there was — `wipe`, which writes position 0 before scheduling. That
   exemption stops being safe the moment a surface can write a position, and **the split is what
   turns an exemption into a rule**:
-  [P-0078](../principles/0078-the-operator-wins-and-an-automatic-writer-yields-to-a-hand.md), which
+  [P-0094](../principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md), which
   also records where it stops holding.
 - **`wipe` writes six records where it wrote five.** The mask was one hand-built record; it is now
   two operations, each writing `Record::Mask` whole. That is what routing it honestly costs, and it
@@ -111,5 +111,5 @@ operation exists because a surface can ask for it, and nothing asks for this.
 - **Leave the position out and let the wipe own it.** The mask would then be a shape control and the
   front would be reachable only by scheduling a move — which is the instrument saying *you may start
   a wipe and you may not stop one half way*. It also leaves `Control::MaskPosition` as the only
-  transition control with no manual writer, so P-0078 would have a hole exactly where the rule is
+  transition control with no manual writer, so P-0094 would have a hole exactly where the rule is
   hardest.

@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-30
 supersedes: []
 superseded_by: []
-principles: [0027, 0085, 0090]
+principles: [0085, 0090, 0094]
 tags: [console, ui]
 ---
 
@@ -113,7 +113,7 @@ the window is too short for the list.** That is
 [P-0085](../principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md) taken literally: a menu of
 filed names *is* a list of names, the console already draws exactly one of those in the Library bay,
 and a second set of numbers for the same box is a second answer waiting to disagree. The foot is
-[P-0027](../principles/0027-a-silently-wrong-image-loses-to-a-loud-failure.md) — a list that ends
+[P-0094](../principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md) — a list that ends
 because the window did, saying `12 of 40`, is a different thing from a list that is short, and the
 count is what tells them apart.
 

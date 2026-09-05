@@ -221,7 +221,7 @@ pub struct NodeAt {
 /// spanning a node the operator kept and a node an agent acts on would hand the
 /// first over through the second. Landing on the permitted nodes instead was
 /// the alternative, and it lost to
-/// `docs/principles/0027-a-silently-wrong-image-loses-to-a-loud-failure.md`:
+/// `docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md`:
 /// see
 /// `docs/adr/0223-a-wildcard-write-is-refused-where-the-nodes-it-lands-on-disagree.md`.
 /// **A surface owns none of this**
@@ -864,7 +864,7 @@ operations! {
     /// wipe *on* rather than a wipe *over*, a different picture and one they
     /// may have chosen, and a gesture is not where an operator's choice is
     /// taken back
-    /// (`docs/principles/0079-nothing-takes-the-show-down-and-nothing-takes-it-away-from-the-operator.md`).
+    /// (`docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md`).
     /// A deck already live is not told so again. What decides it is a reading
     /// of where the deck already sits in the mix, which is
     /// `karakuri_operation_record::Current::mix`, so the condition is one
@@ -923,7 +923,7 @@ operations! {
     /// moving it stops — which is the rule reaching the one control that had
     /// an exemption from it. `karakuri_engine::deck::Deck` is where that is
     /// written and
-    /// [P-0078](../../../docs/principles/0078-the-operator-wins-and-an-automatic-writer-yields-to-a-hand.md)
+    /// [P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)
     /// is the rule itself. [`Operation::SetMaskShape`] does not cancel,
     /// because it writes no position.
     SetMaskPosition {

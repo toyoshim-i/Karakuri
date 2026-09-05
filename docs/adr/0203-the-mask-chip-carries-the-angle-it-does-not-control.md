@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-28
 supersedes: []
 superseded_by: []
-principles: [0078, 0090]
+principles: [0090, 0094]
 tags: [ui, console, vocabulary, mixing]
 ---
 
@@ -113,8 +113,8 @@ constant.
   `view::next_shape` is the only statement of the order in the crate, and `tests/mask.rs` carries
   the copy it is checked against — with a `match` in the test, so a fourth shape does not compile
   until it is in both.
-- **A shape press stops a running wipe, and that is P-0078's stated limit rather than a new one.**
-  [P-0078](../principles/0078-the-operator-wins-and-an-automatic-writer-yields-to-a-hand.md) says
+- **A shape press stops a running wipe, and that is P-0094's stated limit rather than a new one.**
+  [P-0094](../principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md) says
   `Deck::set_mask_shape` does not cancel *"and the exemption is now a split"*, and then says where
   that stops holding: `Record::Mask` is a **state**, so nothing downstream can tell a shape change
   that restated the front from a hand that moved it, and the decode applies the whole state and

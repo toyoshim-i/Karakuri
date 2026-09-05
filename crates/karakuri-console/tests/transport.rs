@@ -751,9 +751,9 @@ fn at_the_instant_of_a_beat_the_grid_is_the_mocks_picture() {
 
 /// **Between two beats the light is on both dots, and the halo goes with
 /// it** — which is the half of this presentation the mock's still picture
-/// cannot show and the whole of what P-0077 asked for.
+/// cannot show and the whole of what P-0094 asked for.
 ///
-/// [P-0077](../../../docs/principles/0077-continuous-motion-is-how-a-stopped-panel-announces-itself.md)
+/// [P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)
 /// prefers continuous movement to a discrete flip because a flip proves
 /// liveness *across an interval* — an observer knows the panel was alive
 /// between two flips — where movement proves it *at every instant*. So the

@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-30
 supersedes: []
 superseded_by: []
-principles: [0027, 0078, 0090]
+principles: [0090, 0094]
 tags: [engine, agents, vocabulary, docs]
 ---
 
@@ -104,11 +104,11 @@ cannot reach the kept renderer through it, and neither can anything else.
 the operator or an agent is asking, and nothing in this workspace can say. That is named in
 [Consequences](#consequences) as what this leaves undone.
 
-### And this is not P-0078 stood on its head
+### And this is not P-0094 stood on its head
 
-[P-0078](../principles/0078-the-operator-wins-and-an-automatic-writer-yields-to-a-hand.md) says the
+[P-0094](../principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md) says the
 operator wins, and a refusal an operator can meet reads at first like its opposite. It is not, on
-two counts. P-0078 is about a *writer that fights back* — an automatic thing reasserting itself over
+two counts. P-0094 is about a *writer that fights back* — an automatic thing reasserting itself over
 a hand — and nothing here writes anything: the wildcard is refused for everybody at once, and the
 last write stands. And the hand is not stopped: the addressed form is always available, and
 `--publish NAME=L4:0:key[…]` narrows the interface to one node. The operator loses one *spelling* of
@@ -120,7 +120,7 @@ split it into.
 ### b. Land it only on the nodes whose authority allows it, silently partial
 
 The cheapest, and it keeps every published control working after a partial grant. **It loses to
-[P-0027](../principles/0027-a-silently-wrong-image-loses-to-a-loud-failure.md)**, which is about
+[P-0094](../principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)**, which is about
 exactly this: a control that moves three renderers of four and looks like it moved all of them is
 the plausible wrong picture, and the operator finds out mid-set. A fader is what a VJ reaches for
 when material has gone wrong, and one that moves *most* of what it is drawn over is worse than one

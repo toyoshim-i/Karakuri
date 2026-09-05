@@ -5,7 +5,7 @@ status: accepted
 date: 2026-07-31
 supersedes: []
 superseded_by: []
-principles: [0027]
+principles: [0094]
 tags: [engine, render]
 ---
 
@@ -52,4 +52,4 @@ A slot is included in the sum only when `residency == Live && weight != 0.0`. Ze
 ## Evidence
 
 Session 2026-07-31T11:37Z–12:18Z. Standing rule:
-[P-0027](../principles/0027-a-silently-wrong-image-loses-to-a-loud-failure.md).
+[P-0094](../principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md).

@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-31
 supersedes: []
 superseded_by: []
-principles: [0005, 0027, 0033, 0043, 0077, 0078, 0079, 0087, 0091]
+principles: [0087, 0091, 0094]
 tags: [process, docs, live, mcp]
 ---
 
@@ -20,16 +20,16 @@ tags: [process, docs, live, mcp]
 > readings offered below is the one taken. Two counts here are also true only of the morning they
 > were taken: `wire_input` landed the same day, so the tools are seven and the column is 7 `has` /
 > 57 `gap`. What this record argues — that the philosophy needed a principle, and that the scope had
-> a conclusion with no reason attached — is untouched, and P-0079 is what the decision was argued
+> a conclusion with no reason attached — is untouched, and P-0094 is what the decision was argued
 > against.
 
-> **Annotated 2026-09-02.** The principle this record cites as the case where P-0079 loses —
+> **Annotated 2026-09-02.** The principle this record cites as the case where P-0094 loses —
 > P-0070, *Auditioning is a prerequisite, not a convenience* — was retired that day and
 > re-recorded as
 > [P-0080](../principles/0080-an-operator-can-see-a-slots-own-material-without-putting-it-on-air.md),
 > *An operator can see a slot's own material without putting it on air*
 > ([ADR-0241](0241-auditioning-survives-the-control-that-was-retired-and-is-re-recorded-as-a-property.md)).
-> **The argument below is untouched and read it as written**: what P-0079 loses to is the
+> **The argument below is untouched and read it as written**: what P-0094 loses to is the
 > requirement, which did not move; only the mechanism P-0070 had named as *where it holds* did.
 > The sentence *"the first time this one is cited to delete a control is the argument it has to
 > already have answered"* was tested within two days —
@@ -150,7 +150,7 @@ are a stance**, and a stance that is nowhere stated.
 ## Decision
 
 **The philosophy is named as a principle**:
-[P-0079](../principles/0079-nothing-takes-the-show-down-and-nothing-takes-it-away-from-the-operator.md)
+[P-0094](../principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)
 — *Nothing takes the show down, and nothing takes it away from the operator.*
 
 It is written to do one job: **give a decision something to be checked against.** Three parts carry
@@ -282,7 +282,7 @@ make broader. The general rule earns its own number; the instances keep their ed
 ## Consequences
 
 - **The principle exists at
-  [P-0079](../principles/0079-nothing-takes-the-show-down-and-nothing-takes-it-away-from-the-operator.md),
+  [P-0094](../principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md),
   and with it the registry is seventy-seven files under seventy-nine numbers.** ADR-0000 said
   `principles/` should grow no index *"until it passes roughly forty files"*; it passed forty some
   time ago and has none. Nothing about this record changes that, and this bullet is the
@@ -292,7 +292,7 @@ make broader. The general rule earns its own number; the instances keep their ed
   changes is that the six now have a stated reason, and a seventh has something to be argued
   against.
 - **The eight and the ten keep their arguments.** They are instances, not consequences: each was
-  decided in its own domain against its own alternative, and P-0079 is the sentence they turn out to
+  decided in its own domain against its own alternative, and P-0094 is the sentence they turn out to
   share. Reading it does not make any of them redundant, and none of them acquires a pointer to it
   here — a principle cites the ADRs that decided it, and this ADR is the place the relationship is
   written down.
@@ -301,7 +301,7 @@ make broader. The general rule earns its own number; the instances keep their ed
   a sequencer lane writing a mix control, an output plugin, or a seventh MCP tool. Each of them now
   states which of the three answers it gives before it is built, rather than after somebody
   rediscovers the rule in review.
-- **`docs/adr/INDEX.md` gains this row and gains nothing else.** P-0079 does not belong in *Standing
+- **`docs/adr/INDEX.md` gains this row and gains nothing else.** P-0094 does not belong in *Standing
   rules with no record yet* — that section is for a principle whose *"reasoning is still only in the
   code and the specification"*, and this one's reasoning is this record.
 
@@ -314,7 +314,7 @@ make broader. The general rule earns its own number; the instances keep their ed
   page](../manual/operations.html) says the opposite of the MCP half — *"A model can rewrite a whole
   procedure and cannot turn one knob … touches nothing in the mix, the clock or what is on air"* —
   and its MCP column is **6 of 64 with no `plan` rows**, so the other 58 are not waiting to be built.
-  The maintainer confirmed the narrow scope today, for the reason P-0079 now states. **So rule 01 is
+  The maintainer confirmed the narrow scope today, for the reason P-0094 now states. **So rule 01 is
   either wrong as written or means something narrower than it says**, and there is a third reading
   worth putting in front of whoever decides: rule 01 may be true *of the vocabulary* — every
   operation is named once and any surface may route into that name — while what a given surface
@@ -323,15 +323,15 @@ make broader. The general rule earns its own number; the instances keep their ed
   amending rule 01 means removing or merging one of the seven, and that is the maintainer's to do
   and not a side effect of naming a principle.
 - **Whether the six tools are the right six**, now that there is something to check them against.
-  P-0079 says the test is per operation — does this operation have a bounded worst case on a route
+  P-0094 says the test is per operation — does this operation have a bounded worst case on a route
   with no hand in the room — and nobody has run the other 58 rows through it. Some of them will pass:
   reading is answer one by construction, and four of the six are questions already.
 - **What per-node authority does to this**, which is the exit named in the Decision and is unbuilt.
   ADR-0211 settled the address and the operations page records that *"what is missing is a writer"*
   — nothing sets a node's authority, so nothing has to survive a rebuild yet. The day something does,
   the question *may a model turn a knob on a node an operator granted it* is asked for the first
-  time, and P-0079 plus rule 06 are what it is asked against.
+  time, and P-0094 plus rule 06 are what it is asked against.
 - **The scheduler P-0072 and P-0077 both wait on.** P-0077 records that its forced clause has nothing
   to bind because there is no scheduler, and that the economy it forbids becomes available the day
-  something has to choose. That day is also the first test of P-0079's *take the earliest answer*
+  something has to choose. That day is also the first test of P-0094's *take the earliest answer*
   ordering against a component that has to choose between real costs.

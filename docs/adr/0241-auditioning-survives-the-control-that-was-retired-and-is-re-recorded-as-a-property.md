@@ -66,7 +66,7 @@ curve the audience gets, at *any residency*, and *without stepping it*
 ([P-0082](../principles/0082-looking-never-writes-back.md)). The cost is also kept
 where P-0070 put it: an audition adds an unbudgeted draw inside the watchdog's judging window
 ([ADR-0072](0072-auditioning-adds-a-draw-and-never-a-step.md)), that bill is paid rather than argued,
-and [P-0079](../principles/0079-nothing-takes-the-show-down-and-nothing-takes-it-away-from-the-operator.md)
+and [P-0094](../principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)
 loses to it on purpose.
 
 **What it named that was a mechanism rather than a property.** *One output, switched away from the

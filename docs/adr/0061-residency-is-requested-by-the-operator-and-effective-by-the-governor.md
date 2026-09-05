@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-02
 supersedes: []
 superseded_by: []
-principles: [0033]
+principles: [0094]
 tags: [engine, ui]
 ---
 
@@ -22,7 +22,7 @@ Two fields. **Requested** is the operator's and only the operator writes it. **E
 recomputed by the governor on every pass. A slot whose requested level is Priming and whose effective
 level is Allocated is **parked**: the request stands, and it starts on its own when room appears.
 
-This is what lets [P-0033](../principles/0033-the-governor-never-takes-a-live-slot-off-air.md) hold
+This is what lets [P-0094](../principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md) hold
 without the governor having to remember anything: it never destroys an intention, it only declines to
 grant one right now.
 

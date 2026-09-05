@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-26
 supersedes: []
 superseded_by: []
-principles: [0077, 0087, 0091]
+principles: [0087, 0091, 0094]
 tags: [ui, decks, performance]
 ---
 
@@ -235,10 +235,10 @@ pending, so a settled strip costs exactly the galley it always cost.
 
 - **P-0075 holds somewhere.** Its *Where it holds: nowhere yet* is corrected: the mixer strip's
   residency chip is the first user, the phase is a value on `View`, and the price is declared.
-- **P-0077 is still not held, and the beat is still the only continuous thing.** Read from the
+- **P-0094 is still not held, and the beat is still the only continuous thing.** Read from the
   source rather than assumed: the roll runs **only while a slot is parked**, so a console with
   nothing pending has no continuous motion of its own and the beat grid remains what a stop would be
-  visible against. P-0077's forced clause — *something is moving continuously while the console is
+  visible against. P-0094's forced clause — *something is moving continuously while the console is
   live, and a scheduler may not stop it* — is untouched by this change, and its *nowhere yet* is
   narrowed rather than closed: one region now declares a cost and a staleness, which was one of the
   three things it said were missing.

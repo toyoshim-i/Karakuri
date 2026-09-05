@@ -105,7 +105,7 @@ never grow, and the fix does not itself allocate on the frame path.
   be is the engine's to say** — the reason `Record::Blend` carries its mode as a `String` in the
   first place. It is also a format change to fix a frame-path cost, which is the wrong document to
   pay in.
-- **Give P-0001 a clause for a small allocation.** One paragraph, and every number in `mix.rs` is
+- **Give P-0091 a clause for a small allocation.** One paragraph, and every number in `mix.rs` is
   already inside any threshold anyone would write. But there is no measured threshold to write:
   `contributing.md` says every performance number here is host-side and biased high, and the figures
   in `mix.rs` are read off the code rather than measured on a surface at all. An exception in the
@@ -134,7 +134,7 @@ never grow, and the fix does not itself allocate on the frame path.
 - **A session recorded through a surface is no longer a different size from one recorded through
   the console**, which emits per change rather than per message. The two were previously off by the
   device's message rate.
-- **P-0001 holds on the MIDI path without a clause**, and `mix.rs`'s open question is closed by this
+- **P-0091 holds on the MIDI path without a clause**, and `mix.rs`'s open question is closed by this
   rather than by a threshold. The measured figures stay on the page: what a sweep *would* allocate
   is why the coalescer is there, and a reader who removes it should meet the number.
 - **`Map::is_continuous` is public API on `karakuri-midi` with one caller.** It is a pure function of

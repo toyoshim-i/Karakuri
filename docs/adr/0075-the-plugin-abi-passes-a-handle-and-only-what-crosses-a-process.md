@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-11
 supersedes: []
 superseded_by: []
-principles: [0043]
+principles: [0094]
 tags: [engine, process]
 ---
 
@@ -51,4 +51,4 @@ undefined behaviour that cannot be caught there.
 ## Evidence
 
 Session 2026-08-11T08:53Z. Standing rule:
-[P-0043](../principles/0043-nothing-external-enters-the-render-process.md).
+[P-0094](../principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md).

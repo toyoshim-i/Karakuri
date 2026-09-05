@@ -5,7 +5,7 @@ status: accepted
 date: 2026-09-01
 supersedes: []
 superseded_by: []
-principles: [0027, 0044, 0048, 0085, 0093]
+principles: [0044, 0048, 0085, 0093, 0094]
 tags: [store, console, mcp, hot-swap, docs]
 ---
 
@@ -159,7 +159,7 @@ the fact, that an edit had reached a deck the operator was not editing.
 
 It is a warning about an accident that can no longer happen, which is why it is a price rather than a
 regression — the failure it announced is the failure this rule removes, and
-[P-0027](../principles/0027-a-silently-wrong-image-loses-to-a-loud-failure.md)'s *"half-applied and
+[P-0094](../principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)'s *"half-applied and
 silent is the same failure wearing different clothes"* is what the shared file was. But the honest
 statement of the trade is that a late warning has been exchanged for an early one: **the obligation to
 speak survives and moves to startup.** The operator is told which file belongs to which deck before

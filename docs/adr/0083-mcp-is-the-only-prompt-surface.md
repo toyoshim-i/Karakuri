@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-11
 supersedes: []
 superseded_by: []
-principles: [0043, 0093]
+principles: [0093, 0094]
 tags: [process, mcp]
 ---
 
@@ -77,5 +77,5 @@ loaded and probably out of sight, and the chat client is on the machine you are 
 ## Evidence
 
 Session 2026-08-11T17:12Z–17:25Z. Standing rules:
-[P-0043](../principles/0043-nothing-external-enters-the-render-process.md),
+[P-0094](../principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md),
 [P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md).

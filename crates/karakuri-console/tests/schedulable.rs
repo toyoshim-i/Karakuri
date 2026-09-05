@@ -37,7 +37,7 @@
 //!
 //! **The transport row** declares whenever the beat grid is drawn: the light
 //! travels the grid once a bar, it is the panel's continuous motion, and
-//! [P-0077](../../../docs/principles/0077-continuous-motion-is-how-a-stopped-panel-announces-itself.md)
+//! [P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)
 //! says that is how a stopped panel announces itself — so it declares whether
 //! or not anything is pending, which is what separates it from the other one
 //! ([ADR-0212](../../../docs/adr/0212-the-beat-is-a-light-that-travels-and-it-declares-for-itself.md)).
@@ -350,7 +350,7 @@ fn a_folded_region_is_in_neither_sum_and_unfolding_puts_it_back() {
 /// That is every test in this crate. Put an engine behind it and the beat
 /// declares whether or not anything is pending, which is
 /// `the_beat_declares_while_the_console_is_live_and_nothing_is_pending` below
-/// and is P-0077 rather than a regression here.
+/// and is P-0094 rather than a regression here.
 #[test]
 fn a_still_panel_is_zero_in_both_sums() {
     let panel = arrangement();
@@ -381,7 +381,7 @@ fn a_still_panel_is_zero_in_both_sums() {
 /// **The beat declares while the console is live, and it does not ask whether
 /// anything is pending.**
 ///
-/// [P-0077](../../../docs/principles/0077-continuous-motion-is-how-a-stopped-panel-announces-itself.md)'s
+/// [P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)'s
 /// forced clause is that *something is moving continuously while the console
 /// is live, and a scheduler may not stop it*. A beat that declared only while
 /// a slot was parked or a fade was armed would be the panel's liveness signal

@@ -74,7 +74,7 @@ quantity.
   like the picture. It loses because every arithmetic operation after it is then wrong —
   blending, the meter's mean, the probe's readback — and nothing in the type system
   distinguishes a display-referred texture from a linear one. The failure is silent and
-  plausible, which is the class [P-0027](../principles/0027-a-silently-wrong-image-loses-to-a-loud-failure.md)
+  plausible, which is the class [P-0094](../principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)
   rules out.
 
 - **A per-Set encode, so each `VideoSource` hands L5 something displayable.** Rejected on

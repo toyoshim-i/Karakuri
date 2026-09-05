@@ -153,7 +153,7 @@
 //!   AI-native — and `karakuri_environment::mcp` is the server. Same shape as
 //!   MIDI: **no operation names opening it**, and a panel that opened one
 //!   silently would be the opposite of
-//!   [P-0030](../../../docs/principles/0030-an-instrument-says-what-it-did.md).
+//!   [P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md).
 //! - **Replay.** Rendering a recorded session back. This is offline work and
 //!   an instrument is not where it belongs; `karakuri-cli --replay` is the
 //!   right home for it and no row asks the panel for it.
@@ -672,7 +672,7 @@ struct Costs {
     /// engine behind it — 24.7 ms, about forty a second, whether or not
     /// anything is pending
     /// ([ADR-0212](../../../docs/adr/0212-the-beat-is-a-light-that-travels-and-it-declares-for-itself.md),
-    /// [P-0077](../../../docs/principles/0077-continuous-motion-is-how-a-stopped-panel-announces-itself.md)).
+    /// [P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)).
     /// So this window's `None` now needs the transport row folded away as
     /// well, which is a **fourth** fold and is the arm below saying so.
     declared: Option<Duration>,
@@ -824,7 +824,7 @@ impl Costs {
             // picture, the preview row, the mixer bay **and the transport
             // row** folded away — the first two stop the texels and the last
             // two stop the two declarations (ADR-0193) — and with any one of
-            // the four on screen it is not. The fourth is P-0077 arriving:
+            // the four on screen it is not. The fourth is P-0094 arriving:
             // the beat is a light travelling the grid, it declares for as
             // long as it is drawn, and a console claiming to show a live
             // instrument has something moving on it (ADR-0212).
@@ -860,7 +860,7 @@ impl Costs {
                         true =>
                             "the beat grid is a light travelling the transport row, \
                                  and it moves for as long as the console is live rather \
-                                 than while something is pending (P-0077, ADR-0212)",
+                                 than while something is pending (P-0094, ADR-0212)",
                         false =>
                             "something on this panel is parked and the mixer's tally \
                                   is rolling toward a residency nobody granted (ADR-0190)",
@@ -898,7 +898,7 @@ impl Costs {
                 println!(
                     "  it is P-0091 from here — anything that must be live declares its \
                      price — and this is the price, measured. Two regions declare it: the \
-                     transport row for as long as the beat grid is drawn (P-0077, \
+                     transport row for as long as the beat grid is drawn (P-0094, \
                      ADR-0212) and the mixer bay while something in it is pending. \
                      Nothing in this run schedules, caches the panel to a texture or \
                      arbitrates between the two; the number is what the next decision gets \
@@ -1169,7 +1169,7 @@ impl Costs {
                      the loop awake on their own; fold the preview row away as well \
                      and nothing is making texels — and the window still draws, because \
                      the beat grid declares a deadline of its own for as long as it is on \
-                     screen (P-0077, ADR-0212) and the mixer bay declares another while \
+                     screen (P-0094, ADR-0212) and the mixer bay declares another while \
                      deck B is parked. `ControlFlow::Wait` blocks when all three are gone, \
                      which is a fourth fold, and it is what ADR-0164's remaining clauses \
                      for.",
@@ -2821,7 +2821,7 @@ const SEED_SALT: u32 = 7;
 /// budget says what the operator would be spending if they did. **If an
 /// operator puts all four on air the governor will not stop them**: it never
 /// takes a Live slot off air
-/// ([P-0033](../../../docs/principles/0033-the-governor-never-takes-a-live-slot-off-air.md)),
+/// ([P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)),
 /// so what happens is `Report::over_budget` and priming suspended — a warning
 /// on the legend's governor line and a decision left with the person who made
 /// it. That is the governor doing its job rather than this file second-guessing
@@ -5806,7 +5806,7 @@ fn mixer(deck: &Deck, names: &[String], out: &mut Vec<view::Strip>) {
         // nothing could change any of them; a library Set loaded into deck
         // B would then have left every strip reading the pair this program was
         // launched with, which is a readout that is wrong and says nothing
-        // (P-0027). Empty for a slot nobody named, which draws no name at all
+        // (P-0094). Empty for a slot nobody named, which draws no name at all
         // rather than somebody else's.
         let name = names.get(slot).map_or("", String::as_str);
         if strip.name != name {
@@ -6324,7 +6324,7 @@ fn tally(residency: Residency) -> view::Tally {
 /// `BlendMode` and not the engine's word: a `&str` handed through would draw
 /// the new mode's name on a chip, and the chip would cycle three ways past a
 /// state no operation can name and no MIDI map can reach, with nothing saying
-/// so. Failing here is the loud failure P-0027 asks for.
+/// so. Failing here is the loud failure P-0094 asks for.
 ///
 /// **It stays this program's, and that is now settled rather than pending.**
 /// The console cannot depend on the engine (ADR-0156), and
@@ -6406,7 +6406,7 @@ fn look(look: &Look) -> view::Look {
 /// computing the anchor here would have been a window binary taking a decision
 /// about a file format, and the printed line was the right answer until the
 /// conversion existed
-/// ([P-0027](../../../docs/principles/0027-a-silently-wrong-image-loses-to-a-loud-failure.md)).
+/// ([P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)).
 /// What changed is the conversion, not this file's authority: the anchor is
 /// still the engine's policy and this window still only reads a tempo.
 ///
@@ -6678,7 +6678,7 @@ fn apply(record: &Record, deck: &mut Deck, look: &mut Look) -> Option<String> {
         // second route to the deck, where P-0090 is that every control ends in
         // the same record. **So a shape press stops a wipe on that deck**, and
         // that is not a fault here — it is the honest limit
-        // `docs/principles/0078-the-operator-wins-and-an-automatic-writer-yields-to-a-hand.md`
+        // `docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md`
         // states about the record stream, met by the first surface to make the
         // press
         // ([ADR-0203](../../../docs/adr/0203-the-mask-chip-carries-the-angle-it-does-not-control.md)).
@@ -7169,7 +7169,7 @@ struct Gfx {
     /// not become wrong; `l` moves one slot's material and leaves the other
     /// where it was, and a single name would then have both strips reading the
     /// launch pair with the picture showing something else. That is a readout
-    /// that is wrong and silent, which is the one thing P-0027 refuses.
+    /// that is wrong and silent, which is the one thing P-0094 refuses.
     ///
     /// Rewritten where the slot is: [`played`], on the press, which is also
     /// where the store is read. Nothing on the frame path touches it.
@@ -7877,7 +7877,7 @@ impl App {
                         // startup and the anchor's `B128 +0.25` would go on
                         // reading the scrub the deck had when the window
                         // opened — a picture of a value that has moved, which
-                        // is exactly what P-0027 is about. It is re-read here,
+                        // is exactly what P-0094 is about. It is re-read here,
                         // on the press that moved it: a press is where this
                         // file already reads a directory, and it is not a
                         // frame.
@@ -9364,7 +9364,7 @@ const DT: f32 = karakuri_engine::set::DT;
 ///    once, and the run continues. Exiting would mean a laptop with its
 ///    microphone switched off cannot open the panel at all.
 /// 2. **A device that was named and is not there.** A different case, and
-///    [P-0027](../../../docs/principles/0027-a-silently-wrong-image-loses-to-a-loud-failure.md)
+///    [P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)
 ///    is why: somebody said *that one*, and going quietly on with a different
 ///    one — or with none — is the silently wrong picture. It cannot happen
 ///    *here*, because nothing names an input at launch; it happens at the
@@ -9412,7 +9412,7 @@ fn listening(session_bpm: f32) -> (Option<audio::Audio>, String) {
 /// Split out from [`listening`] because it is the whole of the judgement and
 /// none of the device: a machine with no inputs and a machine whose default
 /// vanished are two sentences, and the difference between them is the
-/// difference between P-0084 and P-0027. Being a function of an error and a
+/// difference between P-0084 and P-0094. Being a function of an error and a
 /// string, it is checkable where no input can be opened at all — which is
 /// every machine a test runs on, whatever it happens to have plugged in.
 ///
@@ -9470,7 +9470,7 @@ fn told(open: Option<&audio::Audio>) -> AudioIn {
 /// This is the second of [`listening`]'s three cases and the only one that can
 /// arrive during a set: the card lists what the host had **at the press that
 /// opened it**, and an interface unplugged between that press and this one is
-/// a name the operator picked that is not there any more. P-0027 — the refusal
+/// a name the operator picked that is not there any more. P-0094 — the refusal
 /// is printed with the list as it is *now*, and **the input that was already
 /// open stays open**: dropping it would answer a mistyped pick by taking away
 /// the room, which is the one thing nobody asked for.
@@ -9483,7 +9483,7 @@ fn told(open: Option<&audio::Audio>) -> AudioIn {
 /// A `BeatSource::Process` reaches here and is declined in one sentence: the
 /// panel has no control that names one and `--tempo-source` is
 /// `karakuri-cli`'s. It is answered rather than ignored, because an operation
-/// that arrives and does nothing at all is the failure P-0027 is about.
+/// that arrives and does nothing at all is the failure P-0094 is about.
 fn attached(
     open: &mut Option<audio::Audio>,
     session_bpm: f32,
@@ -9582,7 +9582,7 @@ const NO_ROOM_FOR_AN_OFFSET: &str = "offset: no audio input — the offset is th
 ///   way"*, which `karakuri_environment::audio` enforces and this reports: a
 ///   press that asked for 205 and got 200 is a control at the end of its
 ///   travel, and a control that answers the same number twice with nothing
-///   said is indistinguishable from a broken one (P-0030).
+///   said is indistinguishable from a broken one (P-0094).
 fn offset_said(asked: f32, now: f32) -> String {
     let sense = match now < 0.0 {
         true => "the picture waits for the music",
@@ -9620,7 +9620,7 @@ fn offset_said(asked: f32, now: f32) -> String {
 /// before an operation is built — see [`NO_ROOM_FOR_AN_OFFSET`]. This arm
 /// answers the case an operation arrives from anywhere else in that state,
 /// because an operation that arrives and does nothing at all is the failure
-/// P-0027 is about.
+/// P-0094 is about.
 fn nudged(open: &mut Option<audio::Audio>, operation: &Operation) -> Option<String> {
     let Operation::SetLatencyOffset { ms } = *operation else {
         return None;
@@ -9668,7 +9668,7 @@ fn measure_audio(open: &mut Option<audio::Audio>, deck: &mut Deck, interval: Opt
 
     // **A correction worth saying out loud is one that is a decision rather
     // than a trim** — acquiring, re-acquiring, a tap, an octave — which is
-    // `karakuri-cli`'s rule and is here for P-0030's reason: an operator who
+    // `karakuri-cli`'s rule and is here for P-0094's reason: an operator who
     // cannot see the grid decide cannot tell a lock from a coincidence. A trim
     // happens on every frame once locked and says nothing.
     let reason = open.reason();
@@ -9931,7 +9931,7 @@ mod tests {
     ///
     /// 1. **No device at all is not a fault** (P-0084): the sentence says
     ///    `none` is a state, and says what goes on answering.
-    /// 2. **A device that was named and is not there is loud** (P-0027): the
+    /// 2. **A device that was named and is not there is loud** (P-0094): the
     ///    sentence carries the list, so an operator who picked a cable that has
     ///    gone is holding the right names rather than an invitation to go and
     ///    look.
@@ -10067,7 +10067,7 @@ mod tests {
     /// The second is the one a control is silent about by default: the value
     /// is clamped in `karakuri_environment::audio` and a press at the end of
     /// the travel would otherwise print the same number as the press before it
-    /// with nothing said, which is P-0030's *an instrument says what it did*
+    /// with nothing said, which is P-0094's *an instrument says what it did*
     /// read from the far end.
     #[test]
     fn the_offset_says_which_way_it_points_and_says_when_it_was_held_at_the_bound() {
@@ -11754,7 +11754,7 @@ mod tests {
         readout.panel.solve();
 
         // A write to a mix fader: unpriced, immediate, irreversible, and what
-        // the audience is looking at — P-0079's three answers, all missing.
+        // the audience is looking at — P-0094's three answers, all missing.
         let write = Operation::SetGain { deck: 0, gain: 0.5 };
         assert_eq!(
             standing(&write, Running::unread()),

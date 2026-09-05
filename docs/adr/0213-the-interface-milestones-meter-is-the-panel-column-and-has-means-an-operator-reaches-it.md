@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-28
 supersedes: []
 superseded_by: []
-principles: [0030, 0087, 0093]
+principles: [0087, 0093, 0094]
 tags: [docs, process, console]
 ---
 
@@ -70,7 +70,7 @@ grep -o 'rt plan">panel <b>[^<]*' docs/manual/operations.html | sed 's/.*<b>//' 
 **`has` means the operator reaches it.** Not *a control exists somewhere in this workspace* and not
 *a cargo target can be made to emit it*: the row is claimed the day a person who launched the
 instrument can perform that operation from the panel in front of them. That is
-[P-0030](../principles/0030-an-instrument-says-what-it-did.md)'s sentence used as a definition —
+[P-0094](../principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)'s sentence used as a definition —
 *a window that opens and cannot be touched is a demo, not a tool* — and it is what the README
 already says the manual is for: *"for somebody who wants to play the instrument rather than build
 it"*.
@@ -131,7 +131,7 @@ twenty matches; fifteen are prose in doc comments and **five are emissions** —
 `view.rs:3399`, `:3467` and `:3535`. So five rows would flip: *Gain*, *Opacity*, *Blend mode*,
 *Put a deck on air, prime it, or take it off*, and *Set a deck's mask shape*.
 
-It lost twice. It lost to P-0030 and to the README's statement of who the manual is for: nobody can
+It lost twice. It lost to P-0094 and to the README's statement of who the manual is for: nobody can
 play a set from `cargo run --example panel`, so a page written for a player would be asserting a
 route none of its readers has. And it lost to
 [P-0087](../principles/0087-name-the-property-never-the-shape.md), which is the sharper of the two.

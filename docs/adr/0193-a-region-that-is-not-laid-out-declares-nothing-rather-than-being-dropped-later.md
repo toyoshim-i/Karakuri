@@ -139,7 +139,7 @@ reason). The fold is a fact the console holds, an operator caused, and a test ca
   about folding it away stops that: the slot is parked whether or not the chip is on screen"* was a
   sentence about this defect, printed as though it were the design.
 - **A second declaring region carries its own node the same way**, and the answer is the soonest of
-  them. The beat is the candidate ([P-0077](../principles/0077-continuous-motion-is-how-a-stopped-panel-announces-itself.md)),
+  them. The beat is the candidate ([P-0094](../principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)),
   and it is in the transport row, which folds.
 - **Nothing here schedules.** Neither schedulability condition is checked anywhere yet, and no region
   declares a **cost**. This changes which regions declare a staleness and not what is done with one.

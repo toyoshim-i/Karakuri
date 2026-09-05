@@ -41,7 +41,7 @@
 //!
 //! [`presets`] refuses a `--presets` that is not there rather than searching
 //! past it. `karakuri-cli` refuses a missing `--store` the same way, for
-//! `docs/principles/0027-silently-wrong-loses-to-loud-failure.md`'s reason: a
+//! `docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md`'s reason: a
 //! program that quietly played something else would leave the operator
 //! reading a window that disagrees with the command line they typed, with
 //! nothing anywhere saying which one won.
@@ -238,7 +238,7 @@ fn searched(exe_dir: Option<&Path>, workspace: &Path) -> Option<Presets> {
 /// existence test it would win over the development entry every time, and the
 /// program would resolve a presets root, print it, and then fail to open
 /// `drift_shell.kir` inside it: silently wrong material, then a puzzle
-/// (P-0027). One directory read per candidate is what makes the two
+/// (P-0094). One directory read per candidate is what makes the two
 /// directories that share a name distinguishable by what is in them, which is
 /// the only thing that tells them apart — and it is a *narrower* question now
 /// than it was, so nothing that failed it before passes it now.
@@ -523,7 +523,7 @@ mod tests {
 
     /// **A typed path that is not there is refused by name**, rather than
     /// searched past — which would play material the operator did not name and
-    /// say nothing about it (P-0027).
+    /// say nothing about it (P-0094).
     #[test]
     fn a_typed_presets_path_that_is_not_there_is_refused_naming_the_flag() {
         let tmp = tempfile::tempdir().expect("tempdir");

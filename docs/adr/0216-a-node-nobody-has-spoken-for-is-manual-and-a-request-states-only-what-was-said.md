@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-29
 supersedes: []
 superseded_by: []
-principles: [0078, 0090, 0093]
+principles: [0090, 0093, 0094]
 tags: [engine, ui]
 ---
 
@@ -49,7 +49,7 @@ somebody's hand on it. That is the whole of the argument and the other three rea
 agree with it.
 
 - It is the only default that leaves
-  [P-0078](../principles/0078-the-operator-wins-and-an-automatic-writer-yields-to-a-hand.md) — *the
+  [P-0094](../principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md) — *the
   operator wins* — true of a freshly built Set without anybody having to act to make it true.
 - `karakuri_operation::Authority` declares `Manual` first, and a vocabulary's order is not nothing:
   the crate was written to the manual, and this is the manual's order.

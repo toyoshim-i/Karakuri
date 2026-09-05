@@ -67,7 +67,7 @@ here is *"host-side and biased high"*. The second is the plugin host — `docs/p
 [ADR-0074](0074-a-plugin-boundary-is-drawn-by-the-deterministic-path.md),
 [ADR-0075](0075-the-plugin-abi-passes-a-handle-and-only-what-crosses-a-process.md),
 [P-0092](../principles/0092-the-same-inputs-produce-the-same-frame.md) and
-[P-0043](../principles/0043-nothing-external-enters-the-render-process.md), where *"what the host
+[P-0094](../principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md), where *"what the host
 says"* is a specified behaviour. The third is `cpal`'s audio host: `karakuri-audio/src/device.rs:153`
 is `let host = cpal::default_host();` and line 413 is `fn pick(host: &cpal::Host, …)`. The fourth is
 a network hostname: `karakuri-cli/src/mcp.rs:805` is `let host = rest.split(':').next()…`, matched on
@@ -108,7 +108,7 @@ modules that would move **into** the package, so `karakuri-session` would name t
 one of the things it contains.
 
 **`instrument` is the whole thing.** 91 word occurrences;
-[P-0030](../principles/0030-an-instrument-says-what-it-did.md) is named for it,
+[P-0094](../principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md) is named for it,
 [ADR-0045](0045-the-cli-is-an-instrument-not-a-demo.md) is titled with it, and
 `docs/manual/index.html` uses it five times. Every bare-noun use means the system entire — *"the only
 instrument that can read this"*, *"nothing in this instrument can set a position"*, *"no switch that
