@@ -139,7 +139,7 @@ the display, which is ADR-0164 in one number: *"the panel's absolute budget does
 frame lengthens. The extra time belongs to the engine."* `FRAME_INTERVAL` is the one that moves.
 
 **`SMALL_PART` is a quarter and the fraction is a preference**
-([P-0056](../principles/0056-mark-what-is-preference-so-it-can-be-revisited.md)). Forced: well under
+([P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)). Forced: well under
 a half, because *most of the budget* is the failure the clause names. Chosen: a quarter. A tenth is
 1.67 ms against a pass measured at 1.26 whose runs already spread by 0.29 — a rule that passes by
 less than the measurement moves by is a rule about this laptop. A quarter leaves a factor of 3.3.

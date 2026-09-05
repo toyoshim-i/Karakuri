@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-29
 supersedes: []
 superseded_by: []
-principles: [0016, 0026, 0036, 0088]
+principles: [0088, 0093]
 tags: [performance, architecture, ui]
 ---
 
@@ -44,7 +44,7 @@ true, and `crates/karakuri-console/tests/schedulable.rs` asserts both of
 [ADR-0164](0164-the-panel-is-budgeted-rather-than-forbidden-to-allocate.md)'s
 schedulability conditions against that constant.
 
-[P-0026](../principles/0026-a-guarantee-is-structural-or-it-is-a-convention-that-says-so.md) is the
+[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md) is the
 rule: *a guarantee is structural, or it is a convention that says so.* **ADR-0164 chose to budget
 the panel rather than forbid it to allocate, and a budget is a guarantee only while something
 counts.** Compile the counter out of the shipped build and the budget quietly becomes a convention,
@@ -66,7 +66,7 @@ and this repository already keeps one such distinction painfully: every host-clo
 says so beside itself because a reader who subtracts two figures taken differently gets a result
 that looks like a finding. Worse, it puts the guard exactly where the recorded failure was — the
 number would be checked only by whoever remembered to pass the flag, which is
-[P-0016](../principles/0016-an-invariant-that-can-be-tested-is-tested.md)'s *invariants enforced by
+[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)'s *invariants enforced by
 review*.
 
 **Move the harness to a test target.** A test can open a window, so this is not impossible. It loses
@@ -83,7 +83,7 @@ record decided.
 
 - **A player's run pays a thread-local increment per allocation, and that cost is not measured
   here.** It is stated rather than estimated, which is
-  [P-0036](../principles/0036-an-invariant-that-is-not-yet-true-says-so.md)'s clause: the claim that
+  [P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)'s clause: the claim that
   it is negligible is not made. What can be said is that the instrument it sits inside is the only
   thing able to measure it, which is an argument for keeping it rather than a defence of the cost.
 - **The counter is now load-bearing rather than incidental**, so removing it later means retiring

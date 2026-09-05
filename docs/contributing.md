@@ -374,8 +374,10 @@ re-point the ADRs that cited it
 a description that was wrong is corrected, and annotating a record with what it later became is
 welcome. An argument that would have to change is a new record, which is what buys the permission to
 stop maintaining a catalogue this size — `ls docs/adr/0*.md | wc -l`, and it only grows. See
-[P-0066](principles/0066-an-adr-is-a-description-of-history-corrected-but-never-revised.md), which
-carries the test for the cases that are not obvious.
+[P-0093](principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)'s
+*Where it does not reach*, and
+[ADR-0151](adr/0151-an-adr-is-a-description-of-history.md), which carries the test for the cases
+that are not obvious.
 
 The present tense lives in the other documents; `docs/principles/` is where a rule that still stands
 is kept current, by deletion and renumbering rather than by editing.
@@ -403,8 +405,8 @@ grep -rEo 'ADR-[0-9]{4}|P-[0-9]{4}' --include='*.rs' crates/ | wc -l    # what i
 ```
 
 **Watch the first and expect it near zero**; each hit it returns is a comment to read, because a
-schedule cited from code is what P-0063 forbids. See
-[P-0063](principles/0063-source-cites-what-is-in-force-not-a-plan.md) and
+schedule cited from code is what P-0093 forbids. See
+[P-0093](principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md) and
 [ADR-0149](adr/0149-source-cites-what-is-in-force-not-a-plan.md).
 
 **Hook it from where the work is, or nobody will find it.** `INDEX.md` makes a record

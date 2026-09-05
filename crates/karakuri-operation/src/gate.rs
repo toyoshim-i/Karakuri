@@ -23,7 +23,7 @@
 //! besides, so the check and the sentence are written once and no future route
 //! needs a new dependency to reach them. The day the map layer is a crate this
 //! module moves into it whole.
-//! ([P-0036](../../../docs/principles/0036-an-invariant-that-is-not-yet-true-says-so.md):
+//! ([P-0093](../../../docs/principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md):
 //! *every surface reaches the vocabulary through a map* is the shape being
 //! named, not the shape that exists.)
 //!
@@ -35,7 +35,7 @@
 //! A caller in another crate **cannot** reach the performer without having
 //! been through here; forgetting the check is a compile error rather than a
 //! review comment.
-//! ([P-0026](../../../docs/principles/0026-a-guarantee-is-structural-or-it-is-a-convention-that-says-so.md).)
+//! ([P-0093](../../../docs/principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md).)
 //!
 //! # Closed by default is the type's own default
 //!

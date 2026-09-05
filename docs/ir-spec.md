@@ -74,7 +74,7 @@ specification is a **kind** — the `layer` field on a record names one, and so 
 bare use in the prose below. The other sense is *what one deck slot contributes to the
 mix*, and it is **never written bare**: it is always *a deck slot's layer*, with its owner
 attached. The two have to be disjoint **by name** rather than merely in practice, which is
-[P-0031](principles/0031-a-name-means-one-thing-across-the-system.md). A third sense is not
+[P-0093](principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md). A third sense is not
 this file's at all — an architecture *model position*, `L0` through `L5`, of which only `L1`
 through `L4` are kinds — and [manual/concepts.html](manual/concepts.html) disowns the loose
 reading outright: *"A deck is not a layer in an image editor."*
@@ -2280,7 +2280,7 @@ Everything else a Set file holds — `capacity`, `param`, `bind`, `camera`, `see
 named differs.**
 
 **`part` is a `t` of its own and not a `slot` carrying a `path` instead of a `proc`.**
-[P-0031](principles/0031-a-name-means-one-thing-across-the-system.md) rules out precisely that
+[P-0093](principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md) rules out precisely that
 — *"reusing a tag for a differently shaped record in a different file"* — and the bill would be
 paid by every reader that dispatches on `t` alone: a decoder meeting `slot` would have to know
 which file it came out of before it knew whether `proc` was there, and the one that forgot to

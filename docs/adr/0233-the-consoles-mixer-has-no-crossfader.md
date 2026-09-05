@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-31
 supersedes: []
 superseded_by: []
-principles: [0023, 0056, 0066, 0085, 0090]
+principles: [0085, 0090, 0093]
 tags: [ui, console, mixing]
 ---
 
@@ -128,7 +128,7 @@ also an argument for the control the note rejected** — one you *hold* — rath
 so bringing it back would mean revisiting the redundancy paragraph on **one hand and a constrained
 sum**, not on the number of values a drag writes at once. That is the ground a future proposal has
 to win on, and it is written down here so the proposal does not have to be reconstructed
-([P-0056](../principles/0056-mark-what-is-preference-so-it-can-be-revisited.md): the forced part and
+([P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md): the forced part and
 the chosen part are marked, so this is a one-clause revision rather than a reopened decision).
 
 **And a two-way control was a partial view of this mixer in any case.** A deck is one to four slots
@@ -227,7 +227,7 @@ not give the wide form one.**
   another session's; this record states what it means.
 - **The console page's note is describing a control that will not exist**, and rewriting or removing
   it is part of this change rather than housekeeping after it
-  ([P-0023](../principles/0023-a-document-that-describes-replaced-behaviour-is-worse-than-none.md)).
+  ([P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)).
   The tooltip on `.xtrack` and the note *The crossfader is the bay's, never a strip's* are both
   confident and specific, which is the expensive kind of stale. That edit is being made in another
   session in parallel with this record.
@@ -242,7 +242,7 @@ not give the wide form one.**
   decision reversed, so it is **annotated and not superseded**: `superseded_by` points a reader at
   the record that answered the same question differently, and nothing answers *which two decks does
   the crossfader span* any more — the question is void, not re-decided. That is
-  [P-0066](../principles/0066-an-adr-is-a-description-of-history-corrected-but-never-revised.md)'s
+  [P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)'s
   test applied as written — the sentence changes what a reader can find out, not what the record says
   happened — and it is the form ADR-0229's open item took when ADR-0231 closed it.
 - **The one sentence ADR-0219 said was still owed by the page is not owed any more.** *"Which

@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-23
 supersedes: []
 superseded_by: []
-principles: [0066]
+principles: [0093]
 tags: [process, docs]
 ---
 
@@ -69,7 +69,7 @@ counting five instances of. It is a principle instead, and both documents point 
 
 ## Consequences
 
-`P-0066` is the rule. `INDEX.md` and `contributing.md` §4 cite it rather than restating it.
+`P-0093` is the rule. `INDEX.md` and `contributing.md` §4 cite it rather than restating it.
 
 The wider cost is worth recording: this misreading suppressed work for a day. Repairs I could
 see and did not make, and the sub-agent briefs I wrote saying a directory was off-limits, were

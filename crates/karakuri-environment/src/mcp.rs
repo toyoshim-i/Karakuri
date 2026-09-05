@@ -111,7 +111,7 @@ use karakuri_ir::Kind;
 // `karakuri_operation::Layer` is spelled in full everywhere below, because
 // `Layer` in this file is already `karakuri_store::record::Layer` and a name
 // means one thing across the system
-// (`docs/principles/0031-a-name-means-one-thing-across-the-system.md`). That
+// (`docs/principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md`). That
 // there are three spellings of one list — the compiler's `Kind`, the record's
 // `Layer` and the vocabulary's — is the cost `karakuri-operation` states it
 // pays on purpose, and this package is where two of them are checked against
@@ -468,7 +468,7 @@ const LAYERS: [Kind; 5] = [Kind::L1, Kind::L2, Kind::L3, Kind::L4, Kind::Field];
 /// [`crate::setfile::layer_named`], which is exact rather than case-folded.
 /// Both moved in from separate binaries under ADR-0215 and the collision was
 /// left visible rather than fixed: merging them is a redesign — deciding which
-/// spellings the one function accepts — and not a boundary move. P-0031 (a name
+/// spellings the one function accepts — and not a boundary move. P-0093 (a name
 /// means one thing across the system) is the question to answer.
 fn layer_named(name: &str) -> Option<Kind> {
     Some(match name.to_ascii_uppercase().as_str() {
@@ -1612,7 +1612,7 @@ fn wired_input(args: &Value, slots: &Slots) -> Result<Operation, String> {
         // **`Operation::WireInput`'s `slot` is the *input*, and this surface's
         // `slot` is the deck's.** One word for two things is what the schema's
         // `input` exists to avoid
-        // (`docs/principles/0031-a-name-means-one-thing-across-the-system.md`),
+        // (`docs/principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md`),
         // and this line is where the two spellings meet.
         slot: input,
         to,

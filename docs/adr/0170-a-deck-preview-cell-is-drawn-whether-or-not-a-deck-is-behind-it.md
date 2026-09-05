@@ -91,4 +91,4 @@ filling the track is available again and this record is the argument to weigh ag
 - `picture_rect`'s own derivation called `.program-body`'s `gap: 8px` a 9. The arithmetic
   everywhere was right and only the sentence was wrong; it is corrected rather than left, being a
   fact that was never true rather than an argument that changed
-  ([P-0066](../principles/0066-an-adr-is-a-description-of-history-corrected-but-never-revised.md)).
+  ([P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)).

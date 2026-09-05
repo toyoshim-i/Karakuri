@@ -5,7 +5,7 @@ status: accepted
 date: 2026-07-25
 supersedes: []
 superseded_by: []
-principles: [0031]
+principles: [0093]
 tags: [format, store]
 ---
 
@@ -41,4 +41,4 @@ the current files happen to have.
 ## Evidence
 
 Session 2026-07-25T12:59Z. Standing rule:
-[P-0031](../principles/0031-a-name-means-one-thing-across-the-system.md).
+[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md).

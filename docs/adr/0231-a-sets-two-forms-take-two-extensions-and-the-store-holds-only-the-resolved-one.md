@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-30
 supersedes: []
 superseded_by: []
-principles: [0005, 0026, 0031, 0066, 0085, 0087]
+principles: [0005, 0085, 0087, 0093]
 tags: [store, format, distribution, naming]
 ---
 
@@ -133,7 +133,7 @@ store's own comment on the constant is where that reasoning now lives:
 > **This is not a new check.** The suffix was always stripped to find an id, so an id could never
 > exist without it; what changed is that the check now means something.
 
-That is the shape [P-0026](../principles/0026-a-guarantee-is-structural-or-it-is-a-convention-that-says-so.md)
+That is the shape [P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)
 asks for — the guarantee is structural, carried by the name a file has rather than by a rule
 somebody remembers — and
 [P-0085](../principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md)'s test is passed rather
@@ -148,7 +148,7 @@ what was true.
 **And it deliberately adds no constant for `.kset`.** Nothing in this workspace reads one: there is
 no authoring form, no resolver and no filter, so a `const KSET` would be a claim about a design
 rather than part of one —
-[P-0031](../principles/0031-a-name-means-one-thing-across-the-system.md)'s closing rule, *delete
+[ADR-0051](0051-a-name-means-one-thing-so-the-buss-noise-entry-is-deleted.md)'s closing rule, *delete
 what nothing reads*, applied before the thing exists rather than after.
 
 **A file whose extension and contents disagree is refused, not repaired**, and the contents are the
@@ -245,7 +245,7 @@ extension is for. The cost is real and is paid in `ls`.
   stripped it, and two literals could drift into *"a store that writes files it cannot list — and an
   id that exists on disk under one spelling and nowhere in the listing is the worst shape that
   disagreement can take, because neither side is wrong on its own."* Renaming was the moment that
-  cost nothing extra to fix, and it is P-0031's ordinary form: one name, one place.
+  cost nothing extra to fix, and it is P-0093's ordinary form: one name, one place.
 - **This landed while it was being written**, in another session and in one sweep:
   `Store::SET_FILE_SUFFIX` and both doc comments quoted above, the specification's *Set file
   format*, the manual, the console page, the roadmap, the fixtures, and both copies of the P-0048
@@ -258,7 +258,7 @@ extension is for. The cost is real and is paid in `ls`.
 - **ADR-0229's open item gains a pointer and keeps its reasoning.** That record's *The extension is
   not chosen* bullet is annotated with the record that closed it and is not otherwise touched:
   adding what a record later became is annotation rather than revision, and the test
-  ([P-0066](../principles/0066-an-adr-is-a-description-of-history-corrected-but-never-revised.md))
+  ([P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md))
   is *does the edit change what the record says happened, or what a reader can find out about it?*
   Nothing else in `docs/adr/` changes, and every other record keeps its `.set.ndjson` spellings.
 - **The Library's tree gets a rule it can state.** ADR-0229's part 6 says only the Set extension

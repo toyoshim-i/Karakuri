@@ -446,7 +446,7 @@ pub struct Current {
     /// control along.
     ///
     /// **It is a convention, and this is where it says so**
-    /// ([P-0026](../../../docs/principles/0026-a-guarantee-is-structural-or-it-is-a-convention-that-says-so.md)).
+    /// ([P-0093](../../../docs/principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)).
     /// The structural half is the reading: `karakuri_environment::mix`'s
     /// `current_tempo` takes the oscillator rather than an `f32`, so a caller
     /// cannot hand in a tempo the range has never held without writing one

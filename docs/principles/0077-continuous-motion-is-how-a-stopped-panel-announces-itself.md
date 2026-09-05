@@ -39,7 +39,7 @@ trusted.
 
 ## What it asks of the presentation, and how much of that is preference
 
-Marked as [P-0056](0056-mark-what-is-preference-so-it-can-be-revisited.md) asks: the forced part and
+Marked as [P-0093](0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md) asks: the forced part and
 the chosen part, separately.
 
 **Forced.** Something is moving continuously while the console is live, and a scheduler may not stop

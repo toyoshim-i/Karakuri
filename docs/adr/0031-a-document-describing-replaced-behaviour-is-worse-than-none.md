@@ -5,7 +5,7 @@ status: accepted
 date: 2026-07-27
 supersedes: []
 superseded_by: []
-principles: [0023]
+principles: [0093]
 tags: [docs, process]
 ---
 
@@ -50,4 +50,4 @@ including its own comments, and rewrites it as history or deletes it.
 ## Evidence
 
 Session 2026-07-27T09:22Z. Standing rule:
-[P-0023](../principles/0023-a-document-that-describes-replaced-behaviour-is-worse-than-none.md).
+[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md).

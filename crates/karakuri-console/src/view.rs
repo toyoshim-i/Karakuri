@@ -1405,7 +1405,7 @@ fn above_caption(slot: Rect) -> Rect {
 /// one and a rectangle that quietly included the caption would put texels over
 /// the letter. Renaming the field is a ripple through six test files and the
 /// program's frame path, so the clash is written down here instead
-/// ([P-0031](../../../docs/principles/0031-a-name-means-one-thing-across-the-system.md)
+/// ([P-0093](../../../docs/principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)
 /// is the rule it is in tension with, and this is the report rather than the
 /// fix).
 pub fn caption_of(image: Rect) -> Rect {

@@ -94,7 +94,7 @@ gap.**
 Program bay's height was a rounded 16:9 from the day it was derived, and two sentences said
 otherwise — `picture_rect`'s *"exactly 466 x 262, which is 16:9"* and `lib.rs`'s *"466 at 16:9 is
 262"*. Neither was ever true; both are corrected under
-[P-0066](../principles/0066-an-adr-is-a-description-of-history-corrected-but-never-revised.md)'s
+[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)'s
 test for a fact that was never true rather than an argument that changed.
 
 **The test below already knew.** It checks the picture's ratio with a tolerance of `0.01` where

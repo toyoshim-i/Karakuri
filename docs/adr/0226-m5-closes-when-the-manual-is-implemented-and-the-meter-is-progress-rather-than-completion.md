@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-30
 supersedes: []
 superseded_by: []
-principles: [0016, 0030, 0087]
+principles: [0030, 0087, 0093]
 tags: [process, docs, console]
 ---
 
@@ -97,7 +97,7 @@ folded*.
 
 **Three tests already hold the panel against the page**, so this exit condition asks for no
 instrument that does not exist —
-[P-0016](../principles/0016-an-invariant-that-can-be-tested-is-tested.md) is met by what is already
+[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md) is met by what is already
 running rather than by a promise:
 
 - `crates/karakuri-console/tests/panel_column.rs` — the panel column against the operations this

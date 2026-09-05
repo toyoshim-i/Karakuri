@@ -1,7 +1,7 @@
 # Karakuri — Vision and Roadmap
 
 **This file tracks milestones and implementation status. It is not a manual and not a design document.**
-Before implementing any task here, contributors and coding agents MUST review the mandatory engineering invariants in [principles/](principles/) and adhere to the ADR lifecycle in [Principle 0066](principles/0066-an-adr-is-a-description-of-history-corrected-but-never-revised.md) (when changing behaviour governed by an ADR, create a new superseding ADR rather than revising history).
+Before implementing any task here, contributors and coding agents MUST review the mandatory engineering invariants in [principles/](principles/) and adhere to the ADR lifecycle in [Principle 0066](principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md) (when changing behaviour governed by an ADR, create a new superseding ADR rather than revising history).
 The code and what the words mean is [architecture.md](architecture.md); the language is [ir-spec.md](ir-spec.md); how to play it is [manual.md](manual.md) and [manual/](manual/); why a thing was decided is [adr/](adr/); milestones that closed are kept whole in [history/](history/). Where a later milestone constrains earlier code, that is stated under **Demands on earlier work**.
 
 **No count, figure or percentage is written into this file.** Every one that ever was went stale,
@@ -831,7 +831,7 @@ makes the command line test tooling and scopes it out of the instrument's princi
 written for the person playing the instrument does not reach it. **The prose that narrated the old behaviour is corrected**, on 2026-09-02: the *Three of the four
 preview cells are off at a time* paragraph is gone, the doc on `ON_AIR` reads *"every cell draws its
 own slot whatever its residency"*, and the deck's fullness doc says each resting slot is *"still
-drawn into its own cell"*. P-0023 is met here and this paragraph said otherwise until 2026-09-03.
+drawn into its own cell"*. P-0093 is met here and this paragraph said otherwise until 2026-09-03.
 **What P-0080 still records under *Where it is not met* is one clause**: the rejected build's cell —
 black, or the sentence saying what went wrong. [The console page](manual/console.html) specifies it
 under *What a deck preview cell shows, and when* and says of it *"neither can happen yet, so nothing

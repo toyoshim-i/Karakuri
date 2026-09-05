@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-30
 supersedes: []
 superseded_by: []
-principles: [0031, 0064, 0087]
+principles: [0064, 0087, 0093]
 tags: [engine, colour, mixing, console, ui]
 ---
 
@@ -34,7 +34,7 @@ balances against the others), and the tone mapper's `exposure`. `deck.rs` says s
 field and `present.rs` said so at its tonemap buffer, where the third was still described as *L5's
 future per-Set gain* although `Deck::set_gain` had landed. **A fourth level with no home is exactly
 how a name comes to mean two things**, which is
-[P-0031](../principles/0031-a-name-means-one-thing-across-the-system.md).
+[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md).
 
 ## Decision
 

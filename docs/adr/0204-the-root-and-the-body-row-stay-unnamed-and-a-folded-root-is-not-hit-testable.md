@@ -162,7 +162,7 @@ and it is the shape of the rule the guard is written to hold: the answer is abou
   `docs/roadmap.md`'s item 3 loses this from what it is waiting on and carries the cost instead.
   Two of ADR-0197's four gaps are still open — `Reset` and `Report` have no row, and *Move a
   boundary* is a gesture — and both are still page questions.
-- **ADR-0197's front matter is annotated and its prose is untouched** (P-0066), the way ADR-0185 and
+- **ADR-0197's front matter is annotated and its prose is untouched** (P-0093), the way ADR-0185 and
   ADR-0188 were annotated with what they later became.
 - **What this does not reach: the controls the view derives from a rectangle.** `view::outputs` and
   `view::mixer` read `Layout::rect` and are `None` only where the rectangle is too small to hold the

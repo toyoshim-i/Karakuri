@@ -388,7 +388,7 @@ pub fn current_transport(transport: &Transport) -> karakuri_operation_record::Tr
 /// clamp would fire without first writing down a tempo no session ever
 /// reported. Asking for the grid rather than a number is what makes that
 /// structural instead of a hope
-/// ([P-0026](../../../docs/principles/0026-a-guarantee-is-structural-or-it-is-a-convention-that-says-so.md)),
+/// ([P-0093](../../../docs/principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)),
 /// and what is left over is held by
 /// [`tests::a_sync_mode_writes_exactly_what_the_engine_would_engage`].
 pub fn current_tempo(grid: &Oscillator) -> f32 {
@@ -436,7 +436,7 @@ pub fn current_mask(mask: Mask) -> karakuri_operation_record::Mask {
 /// reach the oscillator, and a conversion that divided by a quantum of its own
 /// would be a second grid. Asking for the oscillator and the quantum instead
 /// of a beat count is what makes that structural rather than a hope
-/// ([P-0026](../../../docs/principles/0026-a-guarantee-is-structural-or-it-is-a-convention-that-says-so.md)),
+/// ([P-0093](../../../docs/principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)),
 /// which is [`current_tempo`]'s arrangement exactly.
 ///
 /// **A caller with no opinion about the grid gives a quantum of 0**, which
@@ -1755,7 +1755,7 @@ mod tests {
     /// charter (ADR-0180, ADR-0194), so an engine under it would be a
     /// serialiser and a `wgpu` every surface pays for. The agreement is
     /// therefore a convention, and this is the place that enforces it
-    /// (P-0026) — the only crate in the workspace that can see the policy and
+    /// (P-0093) — the only crate in the workspace that can see the policy and
     /// the conversion at once, which is the argument
     /// [`the_vocabularys_copy_of_a_list_spells_it_the_way_the_store_reads_it`]
     /// makes about the name lists, one field along.

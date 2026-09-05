@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-27
 supersedes: []
 superseded_by: [0204]
-principles: [0036, 0090]
+principles: [0090, 0093]
 tags: [console, vocabulary, surfaces, layout]
 ---
 

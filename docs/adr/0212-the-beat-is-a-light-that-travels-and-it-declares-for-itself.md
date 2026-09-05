@@ -14,7 +14,7 @@ tags: [ui, perf]
 ## Context
 
 [P-0077](../principles/0077-continuous-motion-is-how-a-stopped-panel-announces-itself.md) marks two
-things apart, as [P-0056](../principles/0056-mark-what-is-preference-so-it-can-be-revisited.md) asks.
+things apart, as [P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md) asks.
 
 > **Forced.** Something is moving continuously while the console is live, and a scheduler may not
 > stop it to make room.

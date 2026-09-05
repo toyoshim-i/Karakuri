@@ -165,7 +165,7 @@ and there is no key — so this changes no bytes today.
   `karakuri-operation`'s, and `karakuri-cli` owns neither, so no `impl From` is allowed there at all.
   They are plain functions — `mix::blend_mode`, `mix::residency`, `mix::sync`, `mix::tonemap` —
   exactly as `panel.rs`'s `blend_mode` already was. That bullet of ADR-0180 is history rather than a
-  rule ([P-0066](../principles/0066-an-adr-is-a-description-of-history-corrected-but-never-revised.md)).
+  rule ([P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)).
 - **`Tonemap`, `Sync` and `Residency` got a `name()`**, on `BlendMode::name`'s terms and for its
   argument — a value added to the enum does not compile until it has a name — because a record
   carries the *name* and the conversion had nowhere else to get it. Without it this crate would have

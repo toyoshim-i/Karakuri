@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-19
 supersedes: []
 superseded_by: []
-principles: [0056, 0090]
+principles: [0090, 0093]
 tags: [format, ir]
 ---
 
@@ -61,4 +61,4 @@ separate design decision, because a `.kir` cannot name them without binding the 
 ## Evidence
 
 Session 2026-08-19T14:15Z–14:21Z. Standing rule:
-[P-0056](../principles/0056-mark-what-is-preference-so-it-can-be-revisited.md).
+[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md).

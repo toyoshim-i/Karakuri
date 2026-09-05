@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-28
 supersedes: []
 superseded_by: []
-principles: [0031, 0066, 0085, 0087, 0092]
+principles: [0085, 0087, 0092, 0093]
 tags: [architecture, vocabulary]
 ---
 
@@ -56,7 +56,7 @@ code, both outside `src/`: `karakuri-console/examples/panel.rs:474` and
 naming anything in this system**, and adopting it as one costs nothing that is currently in use.
 
 The five nouns it was weighed against are not free, and
-[P-0031](../principles/0031-a-name-means-one-thing-across-the-system.md) is the rule each of them
+[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md) is the rule each of them
 loses to: *it is not enough to be disjoint in practice; they have to be disjoint by name.*
 
 **`host` — 217 word occurrences, of which about 99 are the bare noun, in four live senses.** The
@@ -123,7 +123,7 @@ centre of a picture**, which is a real recurring noun here
 ([ADR-0037](0037-tone-mapping-is-a-uniform-and-the-default-is-chosen-by-looking.md)'s comparison
 table, `karakuri-engine/src/present.rs:70`, `karakuri-engine/tests/meter.rs` where `let core =
 measure(&gpu, &core_view)`, and `examples/beat_strands.kir`'s *"the blue core and the violet
-shell"*). None of that is fatal. **`core` does not lose on P-0031. It loses on P-0087**, and that
+shell"*). None of that is fatal. **`core` does not lose on P-0093. It loses on P-0087**, and that
 argument is below.
 
 ## The boundary test, applied
@@ -229,7 +229,7 @@ the dependency graph that the dependency graph contradicts.
 
 **`karakuri-host`, `karakuri-shell`, `karakuri-program`, `karakuri-session`, `karakuri-instrument`.**
 Each on its measurement above, and each on
-[P-0031](../principles/0031-a-name-means-one-thing-across-the-system.md). Two of them —
+[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md). Two of them —
 `karakuri-host` and `karakuri-shell` — would collide with senses that are live **inside the files
 being moved**, which is the worst case the principle describes: not two subsystems that happen to be
 disjoint, but one file where both meanings sit and the reader has to work out which door they came in
@@ -251,7 +251,7 @@ decks and composites them; `swap.rs`, with the watchdog and the rollback; `set.r
 something that *drives* something else. The new package, by contrast, is what an engine is **plugged
 into** — a disk, a device, a port, a socket, another process, and the record of what happened. Naming
 it `engine` would mean two crates are engines and the one that actually drives is not called one,
-which is P-0031 arriving by the back door in the same move that was supposed to clean the vocabulary
+which is P-0093 arriving by the back door in the same move that was supposed to clean the vocabulary
 up.
 
 **An objection was raised against the swap on cost, and it was withdrawn. That is worth recording as
@@ -260,7 +260,7 @@ either spelling — and a rename stops every one of those references resolving. 
 reading [docs/contributing.md](../contributing.md) §4, which says an ADR is a description of history,
 that the past is not revised, and that **annotating a record with what it later became is welcome**.
 The cost of a rename is therefore annotation, not revision, and 21 annotations is not a reason. See
-[P-0066](../principles/0066-an-adr-is-a-description-of-history-corrected-but-never-revised.md).
+[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md).
 
 **What decided the swap was the meaning, and not the bill.** That is
 [P-0085](../principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md) working as

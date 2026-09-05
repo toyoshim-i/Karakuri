@@ -35,7 +35,7 @@ backwards."*
 `docs/roadmap.md`'s *What the three words mean, and where* separates the three senses of `layer`,
 the two of `authority` and the three of `slot`, and says outright that it takes none of the
 decisions. This record is written in those terms, which is what it is for —
-[P-0031](../principles/0031-a-name-means-one-thing-across-the-system.md) makes a decision written in
+[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md) makes a decision written in
 a word that means two things a defect rather than a wording preference.
 
 ## Decision
@@ -170,7 +170,7 @@ engine, the record format or any surface that would receive *the L4s of deck 2*.
 carries three senses (a `kind`, an architecture row `L0`–`L5`, and what one deck slot contributes to
 the mix), and the four-properties sentence never said which; `docs/roadmap.md`'s *What the three
 words mean, and where* is what made that visible. A decision taken in that word would have been
-unrecordable in P-0031's sense — disjoint in practice at best, and not by name.
+unrecordable in P-0093's sense — disjoint in practice at best, and not by name.
 
 **What it was reaching for was probably the third sense** — hand a whole deck's contribution to an
 agent — which is the per-slot alternative above, and it loses there.

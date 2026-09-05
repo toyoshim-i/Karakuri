@@ -184,6 +184,6 @@ to `docs/roadmap.md`, where the open work is, and they are recorded there as con
 - **The console still cannot teach a key binding**, which is rule 01's keyboard surface with no
   teaching path. Hooked from the roadmap's deferred keyboard-map entry beside the tooltip mechanism
   both learn paths wait on.
-- **ADR-0198's front matter is annotated and its prose is untouched** (P-0066), the way ADR-0185 and
+- **ADR-0198's front matter is annotated and its prose is untouched** (P-0093), the way ADR-0185 and
   ADR-0188 were.
 - **No new principle.** P-0075 is what this applies; the rest is a decision about one page.

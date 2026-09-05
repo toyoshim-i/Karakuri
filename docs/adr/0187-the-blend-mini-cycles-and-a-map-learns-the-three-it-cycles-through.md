@@ -138,7 +138,7 @@ later is one reconstructed from transcripts.
 
 - **ADR-0185's blend bullet is corrected rather than revised** — the record says what was concluded,
   that the premise was false, and points here
-  ([P-0066](../principles/0066-an-adr-is-a-description-of-history-corrected-but-never-revised.md)).
+  ([P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)).
   `docs/roadmap.md` said the same thing in two places and both are now what remains open, which is
   the MIDI half.
 - **`docs/manual/console.html` listed four blend modes** — *"add, over, screen, multiply"* — where

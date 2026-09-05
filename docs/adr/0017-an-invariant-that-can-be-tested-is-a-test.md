@@ -5,7 +5,7 @@ status: accepted
 date: 2026-07-25
 supersedes: []
 superseded_by: []
-principles: [0016]
+principles: [0093]
 tags: [process, engine]
 ---
 
@@ -45,4 +45,4 @@ Where an invariant can be mechanically checked, it is checked.
 ## Evidence
 
 Session 2026-07-25T12:56Z, 2026-07-25T13:22Z, 2026-07-25T14:37Z. Standing rule:
-[P-0016](../principles/0016-an-invariant-that-can-be-tested-is-tested.md).
+[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md).

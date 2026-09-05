@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-31
 supersedes: []
 superseded_by: []
-principles: [0031, 0036, 0079, 0085, 0090]
+principles: [0079, 0085, 0090, 0093]
 tags: [architecture, surfaces, midi, mcp, vocabulary, live]
 ---
 
@@ -215,7 +215,7 @@ second copy of the table. That is what ADR-0235 asked for and this is the struct
 the vocabulary through a map* is the shape being named, not the shape that exists. It is true of MIDI
 today and of nothing else. The keyboard's assignment is a `const` and a `match`, the panel emits from
 the arm the press landed in, and MCP has neither a map nor an audit.
-[P-0036](../principles/0036-an-invariant-that-is-not-yet-true-says-so.md) is the rule that makes that
+[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md) is the rule that makes that
 sentence mandatory rather than decorative — *an invariant is a claim, and a claim has a truth value on
 a date* — and its second half is the instruction: the clause is a marker, not a resting place.
 
@@ -255,7 +255,7 @@ the whole mechanism gone."* The map is one layer, so the check is written once i
 ### c. There is no layer — *map* is MIDI's word for a file and nothing more
 
 The conservative reading, and it has
-[P-0031](../principles/0031-a-name-means-one-thing-across-the-system.md) behind it: a name means one
+[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md) behind it: a name means one
 thing, and *map* today means `karakuri-midi`'s `Map`, a pure function from a hardware message to an
 operation. Widening it to cover an audit and an automation helper risks the failure that principle is
 named for.
@@ -264,7 +264,7 @@ named for.
 control map already sits"* is a claim about a position, and a position that holds a translation table
 and a timed emitter is not a translation table. Refusing the name leaves that sentence pointing at a
 crate rather than at an architecture, and leaves the opening setting with nowhere to be. Naming it is
-what makes P-0031 satisfiable rather than what threatens it: *map* means **the layer between a surface
+what makes P-0093 satisfiable rather than what threatens it: *map* means **the layer between a surface
 and the vocabulary**, one thing, and `karakuri-midi::Map` is its first and only instance.
 
 ### d. One map per surface, decided now
@@ -301,7 +301,7 @@ nothing in them. It is in *What this leaves undone*.
   were about all four. Under this record it becomes true of the architecture and stays false of the
   build until the other three maps exist. **The manual is another writer's and this record proposes
   no edit to rule 01** — ADR-0235 already found it stands as written, and it still does; what is owed
-  is that the sentence's scope is now larger than the code, which is P-0036's clause and belongs
+  is that the sentence's scope is now larger than the code, which is P-0093's clause and belongs
   wherever the map is described rather than in the seven rules.
 - **The tooltip icon is the console page's and is a specification task already owed.** ADR-0235 handed
   that page four bay heads to specify; this record adds nothing to the count, because the per-control
