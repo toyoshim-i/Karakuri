@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-31
 supersedes: []
 superseded_by: []
-principles: [0001, 0043, 0069, 0078, 0085, 0087, 0090]
+principles: [0043, 0069, 0078, 0085, 0087, 0090, 0091]
 tags: [operations, console, transitions, automation, architecture]
 ---
 

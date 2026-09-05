@@ -5,7 +5,7 @@ status: accepted
 date: 2026-09-01
 supersedes: []
 superseded_by: []
-principles: [0036, 0067, 0085, 0086, 0087]
+principles: [0036, 0085, 0086, 0087, 0091]
 tags: [ir, engine, render, console, docs]
 ---
 
@@ -150,7 +150,7 @@ payload is not the shape of the question).
   are taken. Today the chain has no members and the fold is fixed.
 - **What a procedure may read.** A fifth `SlotTy`, or some other notation for a frame input, and the
   `edge` form that binds it. Both are language changes with a check pass behind them
-  ([P-0067](../principles/0067-the-language-is-bounded-so-a-procedure-can-be-priced-before-it-runs.md)):
+  ([P-0091](../principles/0091-cost-is-known-before-it-is-paid.md)):
   whatever is added has to be priceable before it runs, and a retained target is a cost the estimate
   does not currently carry.
 - **The memory a held cut costs.** One frame-sized `Rgba16Float` per retained cut, in the VRAM budget

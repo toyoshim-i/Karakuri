@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-03
 supersedes: []
 superseded_by: []
-principles: [0001]
+principles: [0091]
 tags: [store, engine, determinism]
 ---
 

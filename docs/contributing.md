@@ -15,7 +15,7 @@ already stopped agreeing on which four were foundational, which is what moved th
 
 Start with these, and read the rest before changing anything they touch:
 
-- [Nothing allocates or compiles a shader on the render thread](principles/0001-nothing-allocates-or-compiles-a-shader-on-the-render-thread.md)
+- [Cost is known before it is paid](principles/0091-cost-is-known-before-it-is-paid.md)
 - [Simulation time comes from a record, never from a clock](principles/0002-simulation-time-comes-from-a-record-never-from-a-clock.md)
 - [Compaction preserves order](principles/0003-compaction-preserves-order.md)
 - [A live Set is never mutated in place](principles/0004-a-live-set-is-never-mutated-in-place.md)

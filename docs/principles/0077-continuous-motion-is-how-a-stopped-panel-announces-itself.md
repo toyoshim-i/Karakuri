@@ -25,7 +25,7 @@ while it is failing, which is the shape
 [P-0030](0030-an-instrument-says-what-it-did.md) both refuse in their own domains: a plausible
 still surface, with the failure suppressed.
 
-Under [P-0072](0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md) the
+Under [P-0091](0091-cost-is-known-before-it-is-paid.md) the
 continuous region declares a cost and a staleness like anything else, and it is scheduled like
 anything else. What it is not is **the first thing dropped**: a budget that cannot afford it is a
 budget that is over, and the answer to over budget is that the panel is over budget rather than

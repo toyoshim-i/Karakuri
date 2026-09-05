@@ -41,7 +41,7 @@ That is the whole argument. A build with the counter compiled out is a build in 
 sentence goes stale the same way, and the numbers it holds are not decoration:
 `karakuri-console`'s `budget.rs` names this file five times as what keeps `PANEL_PASS`'s 1.26 ms
 true, and `crates/karakuri-console/tests/schedulable.rs` asserts both of
-[P-0072](../principles/0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md)'s
+[ADR-0164](0164-the-panel-is-budgeted-rather-than-forbidden-to-allocate.md)'s
 schedulability conditions against that constant.
 
 [P-0026](../principles/0026-a-guarantee-is-structural-or-it-is-a-convention-that-says-so.md) is the

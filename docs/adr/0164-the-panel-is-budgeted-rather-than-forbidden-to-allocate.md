@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-24
 supersedes: []
 superseded_by: []
-principles: [0072]
+principles: [0091]
 tags: [ui, performance]
 ---
 
@@ -14,7 +14,7 @@ tags: [ui, performance]
 ## Context
 
 `docs/roadmap.md` said the panel "must not allocate on the render frame path", carrying
-[P-0001](../principles/0001-nothing-allocates-or-compiles-a-shader-on-the-render-thread.md)
+[P-0091](../principles/0091-cost-is-known-before-it-is-paid.md)
 across to the interface. Then `egui` was chosen and measured: **184 allocations and 226.2 kB per
 frame with every bay empty**, 0.268 ms median and 1.571 ms worst on this machine. Immediate mode
 rebuilds the whole frame's shapes every time it draws, because there is no retained tree — that is
@@ -32,7 +32,7 @@ wrong thing.
 ## Decision
 
 **The engine's frame path keeps P-0001 unchanged. The panel gets a budget instead of a
-prohibition**, stated as [P-0072](../principles/0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md).
+prohibition**, stated as [P-0091](../principles/0091-cost-is-known-before-it-is-paid.md).
 
 Three things make it a rule rather than a hope.
 

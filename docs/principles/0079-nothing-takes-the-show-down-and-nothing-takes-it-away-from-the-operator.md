@@ -9,9 +9,9 @@ Three answers carry a show through. A mechanism that can give none of them does 
 1. **It cannot happen.** The hazard is refused or bounded at a moment where refusing is free — before
    the show, before the frame, outside the process. A procedure is priced by the check pass so an
    expensive mistake is *refused* rather than survived
-   ([P-0067](0067-the-language-is-bounded-so-a-procedure-can-be-priced-before-it-runs.md)); the
+   ([P-0091](0091-cost-is-known-before-it-is-paid.md)); the
    unbounded stall is moved off the frame path rather than made rare
-   ([P-0001](0001-nothing-allocates-or-compiles-a-shader-on-the-render-thread.md)); the network, the
+   (the same rule); the network, the
    secrets and the foreign binary stay outside, because their worst case cannot be bounded from
    inside ([P-0043](0043-nothing-external-enters-the-render-process.md)).
 2. **It undoes itself, and it puts the show back where it was.** Where the hazard cannot be refused
@@ -136,7 +136,7 @@ and where it must touch the live picture it may only put it back where it was.
 continuous motion loses because it pays with answer three: it sells the one signal that says the
 frame is in trouble, at the moment the trouble starts (P-0077). A budget that cannot afford the
 liveness signal is a budget that is over, and *over budget* is the report, not a look.
-[P-0072](0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md) is the same rule for
+[P-0091](0091-cost-is-known-before-it-is-paid.md) is the same rule for
 the console: what must be live during a performance is named, and each named thing declares what it
 costs and how stale it may get, ahead of the frame that pays.
 
@@ -194,14 +194,11 @@ here costs nothing; putting it in the manual would have cost one of the seven.
 
 **Everywhere, which is the claim, so here is what it is a property of rather than a list of what it
 covers.** These are instances and were written before it: the three answers in
-[P-0001](0001-nothing-allocates-or-compiles-a-shader-on-the-render-thread.md),
 [P-0004](0004-a-live-set-is-never-mutated-in-place.md),
 [P-0005](0005-a-swap-happens-on-a-frame-boundary-and-an-over-budget-set-rolls-back-on-its-own.md),
 [P-0027](0027-a-silently-wrong-image-loses-to-a-loud-failure.md),
 [P-0043](0043-nothing-external-enters-the-render-process.md),
-[P-0067](0067-the-language-is-bounded-so-a-procedure-can-be-priced-before-it-runs.md),
 [P-0069](0069-the-three-clocks-never-collapse-into-each-other.md),
-[P-0072](0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md),
 [P-0077](0077-continuous-motion-is-how-a-stopped-panel-announces-itself.md),
 [P-0082](0082-looking-never-writes-back.md),
 [P-0084](0084-a-confident-wrong-automatic-judgement-is-worse-than-not-judging.md),

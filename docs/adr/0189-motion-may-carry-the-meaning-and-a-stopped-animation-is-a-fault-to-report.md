@@ -102,7 +102,7 @@ of it. A blink frozen at its bright phase is a lamp that reads as *landed* and s
 of the truth; a roll frozen halfway is unmistakably halfway.
 
 Its justification was not any of the three fallen cases but **this project's own mechanism**:
-[P-0072](../principles/0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md) has
+[ADR-0164](0164-the-panel-is-budgeted-rather-than-forbidden-to-allocate.md) has
 every live region declare a cost and a staleness and be *scheduled into what is left*, so a
 scheduler this repository has not written yet could starve a pending animation **while it is on
 screen and being watched** — not an accident to guard against, but a decision the panel takes under

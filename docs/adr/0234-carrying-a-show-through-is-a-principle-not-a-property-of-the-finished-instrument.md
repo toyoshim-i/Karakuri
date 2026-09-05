@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-31
 supersedes: []
 superseded_by: []
-principles: [0001, 0005, 0027, 0033, 0043, 0067, 0077, 0078, 0079, 0087]
+principles: [0005, 0027, 0033, 0043, 0077, 0078, 0079, 0087, 0091]
 tags: [process, docs, live, mcp]
 ---
 

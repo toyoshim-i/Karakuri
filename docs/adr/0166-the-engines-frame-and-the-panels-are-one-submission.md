@@ -55,7 +55,7 @@ ms a frame, 10.7 % of a second spent drawing**, where what one frame costs did n
 and only how many frames pay it did.
 
 Nothing here schedules, caches the panel to a texture, or declares a cost. That is
-[P-0072](../principles/0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md)'s
+[ADR-0164](0164-the-panel-is-budgeted-rather-than-forbidden-to-allocate.md)'s
 remaining clauses, and the number above is what they get decided on.
 
 ## Alternatives

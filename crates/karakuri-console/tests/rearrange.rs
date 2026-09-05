@@ -453,8 +453,8 @@ fn folding_the_row_works_in_both_arrangements() {
 
 /// **A frame on which nothing moved marks nothing dirty and asks for nothing.**
 ///
-/// [P-0072](../../../docs/principles/0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md)'s
-/// first clause, at the one place in the console that writes to the arrangement
+/// [ADR-0164](../../../docs/adr/0164-the-panel-is-budgeted-rather-than-forbidden-to-allocate.md)'s
+/// still-panel clause, at the one place in the console that writes to the arrangement
 /// on every frame. Two halves, and the second is the one the injection is
 /// about:
 ///

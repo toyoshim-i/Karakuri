@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-24
 supersedes: []
 superseded_by: []
-principles: [0072]
+principles: [0091]
 tags: [ui, performance]
 ---
 
@@ -13,8 +13,8 @@ tags: [ui, performance]
 
 ## Context
 
-[P-0072](../principles/0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md)'s
-first clause says a panel with nothing changing on it does no per-frame work. Implementing it
+[ADR-0164](0164-the-panel-is-budgeted-rather-than-forbidden-to-allocate.md)'s
+still-panel clause says a panel with nothing changing on it does no per-frame work. Implementing it
 means the loop stops drawing unless something asks, and **the failure that invites is silent**: a
 change reaches the model, nothing asks for a frame, and a control goes on showing a value that is
 no longer true. Nothing crashes and nothing logs. An over-repainting panel wastes a budget; an

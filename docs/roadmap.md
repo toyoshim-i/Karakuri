@@ -1012,7 +1012,7 @@ host's `winit` events.
 **The panel measures itself rather than being measured here.** `crates/karakuri` installs a
 counting `#[global_allocator]` and holds each run against its own `WRITTEN_ALLOCS`, saying so
 when the two part company (ADR-0217); `karakuri-console`'s `tests/schedulable.rs` holds both of
-P-0072's schedulability conditions and `tests/parked.rs` holds the still panel's zero. Take any
+ADR-0164's schedulability conditions and `tests/parked.rs` holds the still panel's zero. Take any
 figure from them as an order of magnitude rather than a quantity two of them can be subtracted
 from.
 

@@ -1,7 +1,7 @@
-//! **P-0072's two schedulability conditions, asserted over what this console
+//! **ADR-0164's two schedulability conditions, asserted over what this console
 //! declares.**
 //!
-//! [P-0072](../../../docs/principles/0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md)
+//! [ADR-0164](../../../docs/adr/0164-the-panel-is-budgeted-rather-than-forbidden-to-allocate.md)
 //! states them and states what is done with them in the same breath:
 //!
 //! ```text
@@ -17,7 +17,7 @@
 //! over budget at runtime would be discovering it during a performance.
 //!
 //! **The first says there is enough capacity on average.** The second is the
-//! one P-0072 says gets forgotten: an update is not divisible, so a region
+//! one ADR-0164 says gets forgotten: an update is not divisible, so a region
 //! costing most of the budget is a traffic jam of one — every frame it runs,
 //! nothing else can, and the readouts that had to be live miss their
 //! deadlines.
@@ -48,12 +48,12 @@
 //! readouts and whatever is pending — and two of the four still declare
 //! nothing and are not this principle's business at all: the picture is the
 //! engine's output and *"counting it here would count it twice"*, and the
-//! mixer's readouts change when a hand changes them, which P-0072 does not
+//! mixer's readouts change when a hand changes them, which ADR-0210 does not
 //! budget. `a_declaration_names_a_region_of_this_arrangement` holds the count
 //! where the next person will see it move.
 //!
 //! **This is the first time either sum has had two terms**, which is the
-//! moment P-0072 wrote the arithmetic for: `Σ (cost / staleness)` reads
+//! moment ADR-0164 wrote the arithmetic for: `Σ (cost / staleness)` reads
 //! **0.0889** and `max(cost)` is still one number, because both regions
 //! declare the same whole panel pass (ADR-0210).
 //!
@@ -214,14 +214,14 @@ fn small_part() -> Duration {
 
 /// **Both conditions hold for this console, at the most it can ever declare.**
 ///
-/// This is the assertion P-0072 asks for, and the numbers it comes out at are
+/// This is the assertion ADR-0164 asks for, and the numbers it comes out at are
 /// in the messages so that a failure says how far out it is rather than that
 /// it is out.
 ///
 /// **Raising a declared cost past what the budget allows fails it**, which is
 /// the defect this was run against: `PANEL_PASS` at 5 ms breaks the second
 /// condition alone, and at 40 ms it breaks both — the second is the binding
-/// one on this console by a factor of eight, which is P-0072's own point about
+/// one on this console by a factor of eight, which is ADR-0164's own point about
 /// which of the two gets forgotten.
 ///
 /// **With two regions declaring, the first sum is two terms**: 1.26 ms every
@@ -338,7 +338,7 @@ fn a_folded_region_is_in_neither_sum_and_unfolding_puts_it_back() {
 
 /// **A still panel declares nothing, and both sums are zero.**
 ///
-/// P-0072's first clause in the arithmetic: a panel with nothing changing on
+/// ADR-0164's still-panel clause in the arithmetic: a panel with nothing changing on
 /// it is paid for once and not again, so there is nothing to schedule and
 /// nothing to be over budget with. It is the direction worth having a test
 /// for — an animation is the most likely thing to take it away by accident.
@@ -539,14 +539,14 @@ fn every_declared_cost_is_one_whole_panel_pass() {
 /// **A declaration names a region of this arrangement**, and there is exactly
 /// one of them.
 ///
-/// P-0072's unit of deferral is a region and never a slice of time, so a
+/// ADR-0210's unit of deferral is a region and never a slice of time, so a
 /// declaration has to be answerable by the layout — which is what makes
 /// ADR-0193's *is this laid out* a question with an answer, and what a
 /// scheduler would need to know which rectangle it was spending on.
 ///
 /// The count is asserted so that the second live region is a line somebody
 /// changes on purpose: it is the moment `max(cost)` stops being one number,
-/// the moment `Σ` stops being one term, and the moment P-0072's deterministic
+/// the moment `Σ` stops being one term, and the moment ADR-0164's deterministic
 /// tie-break has anything to break.
 #[test]
 fn a_declaration_names_a_region_of_this_arrangement() {

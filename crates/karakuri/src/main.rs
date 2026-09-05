@@ -227,8 +227,9 @@
 //!
 //! # The loop sleeps, and what wakes it is a decision made elsewhere
 //!
-//! [P-0072](../../../docs/principles/0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md)'s
-//! first clause: a panel with nothing changing on it does no per-frame work.
+//! [ADR-0164](../../../docs/adr/0164-the-panel-is-budgeted-rather-than-forbidden-to-allocate.md)'s
+//! still-panel clause: a panel with nothing changing on it does no per-frame
+//! work.
 //! **Whether a frame is owed is `karakuri_console::repaint`'s to answer**, not
 //! this file's — the same seam the model came out of the window loop through,
 //! and for the same reason: an event handler cannot be called from a test, and
@@ -328,8 +329,8 @@ const WINDOW: (f64, f64) = (1440.0, 900.0);
 /// What was here drove the window for 180 frames and reported what one of them
 /// cost; the loop had to spin for the sample to fill, so the number described
 /// a program that no longer exists the moment the loop stops spinning.
-/// [P-0072](../../../docs/principles/0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md)'s
-/// first clause claims that nothing is drawn at all while nothing is
+/// [ADR-0164](../../../docs/adr/0164-the-panel-is-budgeted-rather-than-forbidden-to-allocate.md)'s
+/// still-panel clause claims that nothing is drawn at all while nothing is
 /// happening, so that is what is counted: frames drawn in three seconds of an
 /// untouched window, and what they allocated.
 ///
@@ -410,7 +411,7 @@ const WRITTEN_ON: &str = "2026-08-31";
 /// rather than an omission: the bytes move with the allocation count, so a
 /// verdict on them would be the same verdict twice. The second is
 /// [`PANEL_PASS`] — what one update of a live region costs, declared under
-/// [P-0072](../../../docs/principles/0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md)
+/// [P-0091](../../../docs/principles/0091-cost-is-known-before-it-is-paid.md)
 /// and read by `tests/schedulable.rs` rather than by anything at runtime. It
 /// is a different claim from an allocation count and it is the one a
 /// schedulability condition is asserted against, so it gets its own verdict.
@@ -593,8 +594,8 @@ impl Cost {
 }
 
 /// What was drawn while nobody was touching the window. **This is the number**
-/// P-0072's first clause is about, and the clause says every field of it is
-/// zero.
+/// ADR-0164's still-panel clause is about, and the clause says every field of
+/// it is zero.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 struct Still {
     frames: usize,
@@ -828,12 +829,12 @@ impl Costs {
             // long as it is drawn, and a console claiming to show a live
             // instrument has something moving on it (ADR-0212).
             (false, true) => println!(
-                "  so P-0072's first clause holds here: no per-frame work is done to \
-                 redraw what nobody has touched and nothing has moved."
+                "  so ADR-0164's still-panel clause holds here: no per-frame work is \
+                 done to redraw what nobody has touched and nothing has moved."
             ),
             (false, false) => match self.declared {
-                // **The panel said it needed them**, and that is P-0072's
-                // second clause working rather than its first failing: the
+                // **The panel said it needed them**, and that is ADR-0164's
+                // second clause working rather than its still-panel one failing: the
                 // parked deck's tally declares a staleness and the window
                 // serves it. Measured on 2026-08-26 with the picture and the
                 // preview row folded away and the mixer bay on screen: 28.0
@@ -848,9 +849,9 @@ impl Costs {
                 // allocations before that change, which is the defect that
                 // record closes.
                 Some(staleness) => println!(
-                    "  so P-0072's first clause does NOT hold here, and the reason is a \
-                     declaration rather than a fault: {}, and the soonest staleness \
-                     declared is {:.1} ms — about {:.0} frames a second. Folding the \
+                    "  so ADR-0164's still-panel clause does NOT hold here, and the \
+                     reason is a declaration rather than a fault: {}, and the soonest \
+                     staleness declared is {:.1} ms — about {:.0} frames a second. Folding the \
                      region that draws it ends its term: a region that is not laid out \
                      declares nothing (ADR-0193).",
                     match staleness == view::BEAT_STALENESS {
@@ -869,9 +870,9 @@ impl Costs {
                 ),
                 // Nothing live, nothing declared, and frames drawn anyway.
                 None => println!(
-                    "  so P-0072's first clause does NOT hold here — something is asking \
-                     for frames on an untouched window, nothing on the panel is making \
-                     texels and nothing has declared a staleness, so the likeliest \
+                    "  so ADR-0164's still-panel clause does NOT hold here — something \
+                     is asking for frames on an untouched window, nothing on the panel is \
+                     making texels and nothing has declared a staleness, so the likeliest \
                      something is an `egui` repaint delay answered immediately instead of \
                      waited out."
                 ),
@@ -883,11 +884,11 @@ impl Costs {
             // it.
             (true, _) => {
                 println!(
-                    "  so P-0072's first clause has stopped holding, and the reason is the \
-                     engine: there is a live frame in the Program bay — the picture, deck \
-                     A auditioning in the preview row under it, or both — so every one of \
-                     those frames was asked for by what is live rather than by anybody \
-                     touching the window."
+                    "  so ADR-0164's still-panel clause has stopped holding, and the \
+                     reason is the engine: there is a live frame in the Program bay — the \
+                     picture, deck A auditioning in the preview row under it, or both — so \
+                     every one of those frames was asked for by what is live rather than \
+                     by anybody touching the window."
                 );
                 println!(
                     "  that is {rate:.1} frames a second, against 0 with the engine out — \
@@ -895,7 +896,7 @@ impl Costs {
                      below and did not change."
                 );
                 println!(
-                    "  it is P-0072's second clause from here — what moves declares its \
+                    "  it is P-0091 from here — anything that must be live declares its \
                      price — and this is the price, measured. Two regions declare it: the \
                      transport row for as long as the beat grid is drawn (P-0077, \
                      ADR-0212) and the mixer bay while something in it is pending. \
@@ -920,7 +921,7 @@ impl Costs {
             // this vector exists: the immediate-mode pass, plus the panel's
             // own texture and geometry uploads and the recording of its render
             // pass. Not `engine`, which is the governor's and would be counted
-            // twice (P-0072); not `wait`, which is doing nothing on purpose;
+            // twice (ADR-0210); not `wait`, which is doing nothing on purpose;
             // and **not `submit`**, which is larger than all of this together
             // and carries the engine's half of the frame as well, so charging
             // it to a region would charge a region for a frame it did not ask
@@ -1070,7 +1071,7 @@ impl Costs {
                     allocs[n / 2]
                 ),
             }
-            // **What P-0072 calls a cost, measured and held against what
+            // **What P-0091 calls a cost, measured and held against what
             // declares it.** `budget::PANEL_PASS` is a constant somebody wrote
             // down — ADR-0164 refuses a schedule made of measurements, because
             // one reorders itself with the machine's noise — and a constant
@@ -1090,7 +1091,7 @@ impl Costs {
             println!(
                 "  drawing the panel is a median {:.3} ms of that — the egui pass, its \
                  texture and geometry uploads and the recording of its render pass, which \
-                 is what one update of a live region costs under P-0072. The submission is \
+                 is what one update of a live region costs under P-0091. The submission is \
                  not in it: it carries the engine's half of the frame as well. \
                  `karakuri_console::budget::PANEL_PASS` declares {:.3} ms,",
                 draw[n / 2],
@@ -1170,7 +1171,7 @@ impl Costs {
                      the beat grid declares a deadline of its own for as long as it is on \
                      screen (P-0077, ADR-0212) and the mixer bay declares another while \
                      deck B is parked. `ControlFlow::Wait` blocks when all three are gone, \
-                     which is a fourth fold, and it is what P-0072's remaining clauses are \
+                     which is a fourth fold, and it is what ADR-0164's remaining clauses \
                      for.",
                 false =>
                     "the loop is on `ControlFlow::Wait` from here: it does nothing at all \
@@ -1751,7 +1752,7 @@ impl Readout {
     ///
     /// **Opening the card is where the host is read**, and it is the only
     /// place: a listing of a machine's inputs is a device enumeration, which
-    /// is not a thing to do on a frame path (P-0072) — the same rule under
+    /// is not a thing to do on a frame path (P-0091) — the same rule under
     /// which the Library bay's names and the arrangement pill's are read on a
     /// press. So the list a hand is about to read is the list as of the press
     /// that opened it, an interface plugged in a minute ago included.
@@ -1993,7 +1994,7 @@ impl Readout {
     /// where the key *steps* and would go somewhere else, a press **names**,
     /// and naming the library you are already reading is asking it again. What
     /// the caller does with that is re-read the listing, which is where a
-    /// directory read belongs (P-0072) and is not on this side of the seam.
+    /// directory read belongs (P-0091) and is not on this side of the seam.
     ///
     /// It cannot refuse for the other reason either: the chip came out of
     /// `View::scopes`, so it is on the row by construction.
@@ -3289,7 +3290,8 @@ fn number_for<T: std::str::FromStr>(
 ///
 /// This window draws a frame when something changed it or when `egui` asked for
 /// one after a delay it named, and on no other occasion — [`App::about_to_wait`]
-/// is where that rule lives, and it is P-0072's first clause as the operating
+/// is where that rule lives, and it is ADR-0164's still-panel clause as the
+/// operating
 /// system sees it. `karakuri-cli` has no such rule: it draws continuously, so
 /// what a model asks for is taken up on the next frame, which is always a
 /// millisecond away.
@@ -4912,7 +4914,7 @@ fn transport(
 ///
 /// Called from `resumed`, before the first frame. A listing is a directory
 /// read and a frame path does not do those
-/// ([P-0072](../../../docs/principles/0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md)),
+/// ([P-0091](../../../docs/principles/0091-cost-is-known-before-it-is-paid.md)),
 /// and nothing in `karakuri-console`'s `src/` could do it anyway: opening a
 /// store is `karakuri-store`'s and the crate depends on neither it nor the
 /// engine (ADR-0156). What crosses into the console is a list of names.
@@ -5091,7 +5093,7 @@ fn why_nothing(scope: Scope) -> &'static str {
 /// names, and this is the one place it is filled.
 ///
 /// **On the press that changed the scope and at startup, never on a frame.** A
-/// listing is a directory read (P-0072), which is the same rule [`library`]
+/// listing is a directory read (P-0091), which is the same rule [`library`]
 /// states one scope down and the reason this is not called from the frame
 /// handler.
 ///
@@ -5316,7 +5318,7 @@ fn preset_press(deck: u8, taken: TakenIn) -> [Operation; 2] {
 /// **Nothing here is on the frame path.** A store read, a `setfile::load` that
 /// checks every procedure, and up to a handful of small writes — on the press,
 /// which is where this file already reads a directory (`arrangement`), and
-/// never on a frame (P-0072). The compile is the worker's.
+/// never on a frame (P-0091). The compile is the worker's.
 ///
 /// # The scratch name carries the slot, and it is the directory's rule now
 ///
@@ -7228,7 +7230,8 @@ struct App {
     /// says so as a `repaint_delay` on the frame's `ViewportOutput`. Turning
     /// that into an immediate `request_redraw` would turn a 250 ms animation
     /// into a spin at whatever rate this loop can manage — which is the cost
-    /// P-0072's first clause is about, arrived at from the one direction that
+    /// ADR-0164's still-panel clause is about, arrived at from the one direction
+    /// that
     /// looks like obeying it. So the delay is added to the clock here and
     /// `about_to_wait` sleeps until it.
     ///
@@ -7900,8 +7903,8 @@ impl App {
     /// outside `to_egui` and `missed`.**
     ///
     /// Three answers and three actions: ask for a frame, note a deadline, or
-    /// do nothing at all — and the third is the one P-0072's first clause is
-    /// made of.
+    /// do nothing at all — and the third is the one ADR-0164's still-panel
+    /// clause is made of.
     ///
     /// It takes the two fields rather than `&mut self` so that a caller
     /// holding `self.gfx` can still reach `self.egui_due`.
@@ -8182,8 +8185,8 @@ impl ApplicationHandler for App {
     /// nothing.**
     ///
     /// `Wait` is a window that costs the machine nothing at all until somebody
-    /// touches it, which is P-0072's first clause as the operating system sees
-    /// it. `WaitUntil` is the soonest of the three things that are owed at a
+    /// touches it, which is ADR-0164's still-panel clause as the operating
+    /// system sees it. `WaitUntil` is the soonest of the three things that are owed at a
     /// time rather than on an event: the frame `egui` asked for after a delay,
     /// the reading `Costs` takes once the window has been still long enough,
     /// and — on a run with `--mcp` — the wake that takes what a model asked for
@@ -8305,7 +8308,7 @@ impl ApplicationHandler for App {
                 // **A press that named a scope is a listing to read**, and
                 // it is read here because this is where the store is: a scope
                 // *is* a listing on this side, and a directory read is not a
-                // thing to do on a frame (P-0072). It is read on **every**
+                // thing to do on a frame (P-0091). It is read on **every**
                 // chip press and not only on one that moved the mark, which is
                 // the one place this parts company with `e`: the key steps and
                 // so a press that changed nothing asked for nothing, where a
@@ -8520,7 +8523,7 @@ impl ApplicationHandler for App {
                     // **The listing is re-read here**, on the press that
                     // changed the scope: a scope *is* a listing on this side
                     // (`listing`), and a directory read is not a thing to do
-                    // on a frame (P-0072).
+                    // on a frame (P-0091).
                     Key::Character("e") => {
                         if self.readout.view.step_scope() {
                             println!(
@@ -8849,7 +8852,7 @@ impl ApplicationHandler for App {
                     // **The one thing in this program that adds a Set**, so the
                     // bay that lists them is re-read on the frame it landed —
                     // and only on that frame. A directory read is not a thing to
-                    // do per frame (P-0072), and a bay still listing what it
+                    // do per frame (P-0091), and a bay still listing what it
                     // listed before a save is a readout that is wrong and
                     // silent.
                     println!(
@@ -9262,10 +9265,10 @@ impl ApplicationHandler for App {
                 // and asked for without `Costs::owes`.**
                 //
                 // Nothing used to ask for a frame at this point, and that was
-                // P-0072's first clause holding: a panel with nothing changing
+                // ADR-0164's still-panel clause holding: a panel with nothing changing
                 // on it drew nothing. A picture that moves is something
                 // changing on it, so the clause stops holding the moment the
-                // engine runs — which is expected, is what the rest of P-0072
+                // engine runs — which is expected, is what the rest of ADR-0164
                 // exists for, and is **not fixed here**. There is no scheduler
                 // in this file, the panel is not cached to a texture, and
                 // `karakuri_console::repaint` has not been given a fourth
@@ -9450,7 +9453,7 @@ fn unopened(selector: &str, why: &audio::AudioError) -> String {
 /// One line, and it is a function rather than an assignment for the reason
 /// [`transport`] is one: it is the seam, and there is exactly one place the
 /// answer is derived. The card's list is **not** here — it is read on the
-/// press that opens the card and nowhere else (P-0072), so a reading taken
+/// press that opens the card and nowhere else (P-0091), so a reading taken
 /// every frame would be a directory read on the frame path with a microphone
 /// in place of the directory.
 fn told(open: Option<&audio::Audio>) -> AudioIn {

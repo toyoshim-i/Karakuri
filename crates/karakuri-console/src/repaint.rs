@@ -1,7 +1,7 @@
 //! **When the panel is drawn again, and when the window sleeps.**
 //!
-//! [P-0072](../../../docs/principles/0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md)'s
-//! first clause and nothing else: *a panel with nothing changing on it is paid
+//! [ADR-0164](../../../docs/adr/0164-the-panel-is-budgeted-rather-than-forbidden-to-allocate.md)'s
+//! still-panel clause and nothing else: *a panel with nothing changing on it is paid
 //! for once and not again.* A window loop that drives itself pays that price on
 //! every frame nobody is touching, and the price is the panel's rather than a
 //! fixed one:
@@ -20,7 +20,7 @@
 //! [`Change::Animating`] carries the soonest staleness out of them and turns
 //! that into a deadline. The **cost** reaches nothing here and is not meant
 //! to: both schedulability conditions are arithmetic over the declarations and
-//! `tests/schedulable.rs` asserts them, which is what P-0072 asks for in place
+//! `tests/schedulable.rs` asserts them, which is what ADR-0164 asks for in place
 //! of a stage discovering them. What is still absent is arbitration — nothing
 //! chooses between the two, and nothing has to: `Σ (cost / staleness)` is
 //! 0.0889 against 1.0, so the frame that meets the sooner deadline meets the
@@ -44,7 +44,7 @@
 //! # Which way it errs, and where
 //!
 //! Towards drawing. Every arm below that could be argued either way is
-//! [`Repaint::Now`], and each is on a gesture the operator is making — P-0072
+//! [`Repaint::Now`], and each is on a gesture the operator is making — ADR-0210
 //! budgets the frames nobody is touching and says outright that *what the
 //! operator does costs what it costs*. What is **not** allowed to err that way
 //! is a frame with nobody touching the window, which is the whole of the
@@ -77,7 +77,8 @@ use crate::panel::Outcome;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Repaint {
     /// Nothing on screen is changing. Sleep until something arrives — this is
-    /// P-0072's first clause, and it is the answer to most of what happens.
+    /// ADR-0164's still-panel clause, and it is the answer to most of what
+    /// happens.
     Never,
     /// What is on screen is not what should be. Draw at the first
     /// opportunity.
@@ -216,8 +217,8 @@ pub enum Change<'a> {
     /// [`Change`] a caller raises **every frame** rather than on a gesture,
     /// because the bit is re-derived from the geometry every frame, so an arm
     /// that answered [`Repaint::Now`] regardless would ask for a frame on
-    /// every frame and would cost the still panel the whole of P-0072's first
-    /// clause.
+    /// every frame and would cost the still panel the whole of ADR-0164's
+    /// still-panel clause.
     Rearranged {
         /// Whether the bit actually changed — `crate::view::rearrange`'s
         /// answer.
@@ -260,7 +261,7 @@ pub enum Change<'a> {
     /// The `Some` arm errs towards drawing, which is this module's stated
     /// direction: the caller is the one that applies the operation, and this
     /// cannot know that it did. It is a frame on a gesture an operator is
-    /// making, which P-0072 does not budget.
+    /// making, which ADR-0210 does not budget.
     Emitted(Option<&'a Operation>),
     /// **Something on the panel is moving**, with the soonest staleness any
     /// live region on it declares — and `None` for a panel where nothing is.
@@ -288,8 +289,8 @@ pub enum Change<'a> {
     /// the *governor* has not found room, which happens between frames and
     /// reaches this console through no event at all. So the frame that draws
     /// the panel is the only place that can notice, and the arm that answers
-    /// for a panel with nothing pending is the one carrying P-0072's first
-    /// clause.
+    /// for a panel with nothing pending is the one carrying ADR-0164's
+    /// still-panel clause.
     ///
     /// **A parked slot ends the still panel for as long as it is parked**, and
     /// that is the honest cost rather than an accident: `egui` is immediate
@@ -341,7 +342,7 @@ impl Change<'_> {
             // A button the panel claimed is the start or the end of that
             // gesture and is drawn for the same reason — and where it is not
             // (a press over a boundary that never becomes a drag) it is one
-            // frame on the operator's own action, which P-0072 does not
+            // frame on the operator's own action, which ADR-0210 does not
             // budget.
             Change::Pointer(Claim::Panel) => Repaint::Now,
 
