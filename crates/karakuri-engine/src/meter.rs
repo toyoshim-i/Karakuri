@@ -76,7 +76,7 @@
 //! for the GPU.** [`Meters::collect`] polls with `wgpu::PollType::Poll`, which
 //! processes whatever has already finished and returns, and reads whichever
 //! results have arrived. The render-thread rule
-//! (`docs/principles/0001-nothing-allocates-or-compiles-a-shader-on-the-render-thread.md`)
+//! (`docs/principles/0091-cost-is-known-before-it-is-paid.md`)
 //! is absolute and
 //! the rest of this engine is built around it — `swap.rs` moved both building
 //! *and dropping* a Set onto a worker rather than pay a stall, and

@@ -111,7 +111,7 @@ pub struct Audio {
     /// band count, so a stream with more bands than a reader knows about still
     /// decodes, and `record.rs` argues that at length. Building a fresh one per
     /// frame would put a heap allocation on the render thread, which
-    /// `docs/principles/0001-nothing-allocates-or-compiles-a-shader-on-the-render-thread.md`
+    /// `docs/principles/0091-cost-is-known-before-it-is-paid.md`
     /// forbids without a size qualifier and deliberately: "one
     /// small allocation" is the argument that ends with a hitch nobody can
     /// account for. `Vec::clear` keeps the buffer, so the only allocation is

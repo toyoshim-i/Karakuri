@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-16
 supersedes: []
 superseded_by: []
-principles: [0003]
+principles: [0092]
 tags: [ir, engine, render]
 ---
 

@@ -51,7 +51,7 @@ Three facts about that answer shaped the surface:
   so both are drawn the same way; what separates them is that the value under the knob is moving in
   the second case.
 - **The console cannot say when.** `start` and `beats` are on the beat clock and
-  `crates/karakuri-console/src/` has no beat count and no clock at all (ADR-0156, P-0002). So the
+  `crates/karakuri-console/src/` has no beat count and no clock at all (ADR-0156, P-0092). So the
   strip carries the destination and nothing else about the move.
 
 ## Decision

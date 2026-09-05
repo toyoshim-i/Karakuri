@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-31
 supersedes: []
 superseded_by: []
-principles: [0043, 0069, 0078, 0085, 0087, 0090, 0091]
+principles: [0043, 0078, 0085, 0087, 0090, 0091, 0092]
 tags: [operations, console, transitions, automation, architecture]
 ---
 
@@ -146,9 +146,9 @@ frame, and `crates/karakuri-console/tests/armed.rs` asserts each of them. **So t
 *thrown and not landed* exists.** What was missing was never the picture; it was the conversion
 under it.
 
-### P-0069 is the frame that makes the helper obviously right
+### ADR-0255 is the frame that makes the helper obviously right
 
-[The three clocks](../principles/0069-the-three-clocks-never-collapse-into-each-other.md) fixes what
+[The three clocks](0255-three-clocks-run-at-once-and-a-slower-ones-work-never-lands-on-a-faster-one.md) fixes what
 may happen on each: the frame clock is *"GPU execution and parameter evaluation. Nothing else"*, and
 the beat/bar clock is *"Variant switching, parameter morphs, transitions — **selection** among
 options already prepared."* An automation helper runs on the slower clock and **emits operations**;
@@ -331,13 +331,13 @@ a conversion problem.
 
 **It loses on the one sentence the maintainer put it in: guaranteeing timing on the render path
 means becoming synchronous.** A transition today is *a function of `beats` and nothing else* —
-P-0069's own words for why the middle clock is statable at all, *"so the same records give the same
+ADR-0255's own words for why the middle clock is statable at all, *"so the same records give the same
 fade frame for frame on a machine running at a different rate, and a tempo correction mid-fade is
 correct rather than a glitch."* An authored envelope that must hit its points is either that same
 pure function of `beats`, in which case it is a `Curve` and not an envelope, or it is a thing with
 state that has to be advanced at a moment somebody promised — and the frame clock's charter is *GPU
-execution and parameter evaluation. Nothing else.* The rule this breaks is P-0001 from the other end,
-which is exactly how P-0069 describes their relationship.
+execution and parameter evaluation. Nothing else.* The rule this breaks is P-0091 from the other end,
+which is exactly how ADR-0255 describes their relationship.
 
 **And it puts the feature in the one place it cannot be taken back out of.** A helper on the control
 map can be deleted, replaced, or run in a second process; a scheduler inside `deck.rs` is on the

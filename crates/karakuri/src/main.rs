@@ -3327,7 +3327,7 @@ const SERVED: Duration = Duration::from_millis(100);
 
 /// **One simulation step per frame drawn, and no clock anywhere.**
 ///
-/// [P-0002](../../../docs/principles/0002-simulation-time-comes-from-a-record-never-from-a-clock.md)
+/// [P-0092](../../../docs/principles/0092-the-same-inputs-produce-the-same-frame.md)
 /// says simulation time comes from a record and never from a clock. There is
 /// no record here — this program is not a session — so the honest
 /// third option is neither: a fixed count per frame, which makes the picture's
@@ -3575,7 +3575,7 @@ impl Presented {
     /// as somebody keeps hold of a divider.
     ///
     /// A reallocation, so it is the frame's first act and not something done
-    /// mid-pass ([P-0001](../../../docs/principles/0001-nothing-allocates-or-compiles-a-shader-on-the-render-thread.md)
+    /// mid-pass ([P-0091](../../../docs/principles/0091-cost-is-known-before-it-is-paid.md)
     /// is about the render thread, and this is that thread; what it costs is
     /// paid on the frames a size changed and on no others).
     ///
@@ -4506,7 +4506,7 @@ impl Engine {
         // path changed: `install_if_ready` polls the same channel with
         // `try_recv` either way, and everything a rebuild costs — the file
         // read, the four validation stages, the compile and `Set::build` — is
-        // on the worker thread this spawns (P-0001).
+        // on the worker thread this spawns (P-0091).
         //
         // **In slot order, and the loop is the whole of what four slots
         // took**: a `Vec` of `HotSwap` is what `Deck::new` has always taken,
@@ -6918,7 +6918,7 @@ fn reading(operation: &Operation, deck: &Deck, look: &Look) -> Current {
     // rather than an `f32`, so this window cannot hand in a tempo the session
     // never ran at — and it reads the grid rather than a clock, which is what
     // lets the record be replayed
-    // ([P-0002](../../../docs/principles/0002-simulation-time-comes-from-a-record-never-from-a-clock.md)).
+    // ([P-0092](../../../docs/principles/0092-the-same-inputs-produce-the-same-frame.md)).
     //
     // **No slot check, unlike the three below.** The tempo is the session's,
     // so a `SetSync` naming a slot the deck has not got is a record with a slot
@@ -7243,7 +7243,7 @@ struct App {
     ///
     /// It is here because this file owns the window and the clock and `src/`
     /// owns neither — every `Instant::now` in this crate is in this file, and
-    /// `view::Phase` is a `Duration` for exactly that reason (P-0002). What
+    /// `view::Phase` is a `Duration` for exactly that reason (P-0092). What
     /// crosses the seam is `now - this`, which is a number.
     ///
     /// **Where the origin is does not matter**, which is why it is taken at

@@ -55,7 +55,7 @@
 //!
 //! **Bounded is not the same as allowed, and it is the message count that is
 //! now gone.** The figures above are what a sweep *would* cost and are why:
-//! [P-0001](../../../docs/principles/0001-nothing-allocates-or-compiles-a-shader-on-the-render-thread.md)
+//! [P-0091](../../../docs/principles/0091-cost-is-known-before-it-is-paid.md)
 //! says the frame path allocates no heap memory, with no clause for a small
 //! one, so the question a byte-sized allocation per message raised was settled
 //! by taking away the *per message* rather than by writing the clause.

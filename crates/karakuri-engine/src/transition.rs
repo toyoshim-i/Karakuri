@@ -12,7 +12,7 @@
 //! ## On the beat clock, and what that costs
 //!
 //! Of the three clocks this system runs on — see
-//! `docs/principles/0069-the-three-clocks-never-collapse-into-each-other.md` —
+//! `docs/adr/0255-three-clocks-run-at-once-and-a-slower-ones-work-never-lands-on-a-faster-one.md` —
 //! the middle one, beat and bar, half a second to four, is for variant
 //! switching, parameter morphs and transitions. The
 //! transport got there first: `Sync::Beat` already derives a slot's `t` from

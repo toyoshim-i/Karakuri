@@ -5,7 +5,7 @@ status: accepted
 date: 2026-07-25
 supersedes: []
 superseded_by: []
-principles: [0003]
+principles: [0092]
 tags: [engine, determinism]
 ---
 
@@ -62,4 +62,4 @@ non-order-preserving compaction would then have been legal.
 Session 2026-07-25T11:44Z. Implemented as a recursive hierarchical scan, depth
 `ceil(log64(capacity))`, verified against a CPU reference at 64 / 65 / 4096 / 262144
 elements (2026-07-25T15:00Z). Standing rule:
-[P-0003](../principles/0003-compaction-preserves-order.md).
+[P-0092](../principles/0092-the-same-inputs-produce-the-same-frame.md).

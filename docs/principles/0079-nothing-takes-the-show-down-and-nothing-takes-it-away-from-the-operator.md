@@ -194,11 +194,9 @@ here costs nothing; putting it in the manual would have cost one of the seven.
 
 **Everywhere, which is the claim, so here is what it is a property of rather than a list of what it
 covers.** These are instances and were written before it: the three answers in
-[P-0004](0004-a-live-set-is-never-mutated-in-place.md),
 [P-0005](0005-a-swap-happens-on-a-frame-boundary-and-an-over-budget-set-rolls-back-on-its-own.md),
 [P-0027](0027-a-silently-wrong-image-loses-to-a-loud-failure.md),
 [P-0043](0043-nothing-external-enters-the-render-process.md),
-[P-0069](0069-the-three-clocks-never-collapse-into-each-other.md),
 [P-0077](0077-continuous-motion-is-how-a-stopped-panel-announces-itself.md),
 [P-0082](0082-looking-never-writes-back.md),
 [P-0084](0084-a-confident-wrong-automatic-judgement-is-worse-than-not-judging.md),

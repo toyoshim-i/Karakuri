@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-22
 supersedes: []
 superseded_by: []
-principles: [0059, 0090]
+principles: [0090, 0092]
 tags: [format, determinism, store]
 ---
 
@@ -75,4 +75,4 @@ head, so the dependency never has to exist.
 ## Evidence
 
 Session 2026-08-22T00:51Z–01:39Z. Standing rule:
-[P-0059](../principles/0059-a-replay-is-a-sandbox.md).
+[P-0092](../principles/0092-the-same-inputs-produce-the-same-frame.md).

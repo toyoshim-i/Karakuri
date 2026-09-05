@@ -1150,7 +1150,7 @@ operations! {
     /// [`Curve`]'s terms, that nothing anywhere holds yet.
     ///
     /// **An eighth at 128 BPM is 234 ms**, which is faster than the band
-    /// `docs/principles/0069-the-three-clocks-never-collapse-into-each-other.md`
+    /// `docs/adr/0255-three-clocks-run-at-once-and-a-slower-ones-work-never-lands-on-a-faster-one.md`
     /// writes the beat clock's rule for. ADR-0222 records that caveat rather
     /// than waving it away, and this is the row a hand would first feel it
     /// through, because it is the one that chooses the subdivision.
