@@ -57,6 +57,6 @@ and it is not made here.**
 
 **An L1 alternative is still expensive.** `Set::step` walks every source, so alternatives that
 differ at L1 are stepped whether selected or not. Separate simulations are the point for those
-rather than an inefficiency (P-0062), but nothing yet lets one be parked while another runs —
+rather than an inefficiency (P-0092), but nothing yet lets one be parked while another runs —
 so a pool of L1 alternatives inside one Set is not the cheap thing an L4 pool is, and the
 roadmap should stop implying it would be.

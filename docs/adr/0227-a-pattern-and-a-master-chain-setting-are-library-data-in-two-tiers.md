@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-30
 supersedes: []
 superseded_by: []
-principles: [0013, 0048, 0085, 0090]
+principles: [0048, 0085, 0090, 0092]
 tags: [store, format, console, sequencer]
 ---
 
@@ -128,7 +128,7 @@ else about the master chain a stream can say yet, so a record that carried more 
 defaults nobody chose. It grows the day an effect lands in the chain."*
 
 **None of that makes the stream the library, and
-[P-0013](../principles/0013-a-set-is-a-projection-and-a-session-is-the-timeline.md) is why.** *A
+[ADR-0007](0007-a-set-file-is-a-projection-and-a-session-stream-is-the-timeline.md) is why.** *A
 Set file is a state projection with no time in it. A session stream is the timeline.* **Keeping
 them apart is what stops saving a Set from saving a performance** — and the mirror is what is
 wanted here: keeping them apart is what stops a pattern from existing only inside a performance.

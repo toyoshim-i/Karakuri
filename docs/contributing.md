@@ -16,9 +16,7 @@ already stopped agreeing on which four were foundational, which is what moved th
 Start with these, and read the rest before changing anything they touch:
 
 - [Cost is known before it is paid](principles/0091-cost-is-known-before-it-is-paid.md)
-- [Simulation time comes from a record, never from a clock](principles/0002-simulation-time-comes-from-a-record-never-from-a-clock.md)
-- [Compaction preserves order](principles/0003-compaction-preserves-order.md)
-- [A live Set is never mutated in place](principles/0004-a-live-set-is-never-mutated-in-place.md)
+- [The same inputs produce the same frame](principles/0092-the-same-inputs-produce-the-same-frame.md)
 - [A check you have not watched fail is guessing](principles/0089-a-check-you-have-not-watched-fail-is-guessing.md)
 - [Only reviewed work enters history](principles/0017-only-reviewed-work-enters-history.md)
 

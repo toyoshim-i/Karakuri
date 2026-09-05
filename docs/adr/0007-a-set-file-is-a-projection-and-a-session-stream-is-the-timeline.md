@@ -5,7 +5,7 @@ status: accepted
 date: 2026-07-25
 supersedes: []
 superseded_by: []
-principles: [0013]
+principles: [0092]
 tags: [format, store]
 ---
 
@@ -47,4 +47,4 @@ and dropping the ticks. Not a second authoring path — a derivation.
 
 Session 2026-07-25T12:06Z–12:24Z; enforcement in `karakuri-store` the same day
 (`StoreError::TickInSet`). Standing rule:
-[P-0013](../principles/0013-a-set-is-a-projection-and-a-session-is-the-timeline.md).
+[P-0092](../principles/0092-the-same-inputs-produce-the-same-frame.md).

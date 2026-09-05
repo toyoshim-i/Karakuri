@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-30
 supersedes: []
 superseded_by: []
-principles: [0013, 0048, 0085, 0086, 0090]
+principles: [0048, 0085, 0086, 0090, 0092]
 tags: [store, format, console, distribution, security]
 ---
 
@@ -112,7 +112,7 @@ is a content address and the source lives in the store, *"so a rewrite costs one
 few kilobytes once, however many times the same procedure comes back."* A night of rewrites inlined
 whole would bloat a recording, and a session is written per swap rather than per file. **The two
 files answer different questions and are allowed different answers** —
-[P-0013](../principles/0013-a-set-is-a-projection-and-a-session-is-the-timeline.md), *a Set file is
+[ADR-0007](0007-a-set-file-is-a-projection-and-a-session-stream-is-the-timeline.md), *a Set file is
 a state projection with no time in it; a session stream is the timeline.*
 
 **6. The store gains hierarchy and the Library is a tree.** Presets ship inside the platform's

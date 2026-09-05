@@ -142,7 +142,7 @@ beat; this is where the second one is either free or a second clock.
 **It is a `Duration` and not an `Instant`, and that is the seam rather than a preference.**
 `crates/karakuri-console/src/` reads no clock; the transport row's doc already argues the general
 case — *"an `Instant` here would put a clock in it, and then the row would be reading wall time in a
-repository whose first principle is that nothing does"* (P-0002) — and every `Instant::now` in the
+repository whose first principle is that nothing does"* (P-0092) — and every `Instant::now` in the
 crate is in `examples/panel.rs`, which owns the window. An `Instant` is a reading; a `Duration` is a
 number, and a number is what a caller writes and a **test chooses**. `tests/parked.rs` asserts the
 displacement at 100 ms and 200 ms without a window, a device or a clock.

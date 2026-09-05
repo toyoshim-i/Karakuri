@@ -142,7 +142,7 @@ impl ElementStorage {
 }
 
 /// The fixed simulation step. **Not** the real frame delta — see
-/// `docs/principles/0002-simulation-time-comes-from-a-record-never-from-a-clock.md`.
+/// `docs/principles/0092-the-same-inputs-produce-the-same-frame.md`.
 /// Public because the session clock a
 /// binding reads has to advance by exactly this: an oscillator on a different
 /// step would drift away from the `t` the Sets are running at, and the drift

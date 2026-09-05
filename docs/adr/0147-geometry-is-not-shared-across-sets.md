@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-23
 supersedes: []
 superseded_by: []
-principles: [0062]
+principles: [0092]
 tags: [engine, deck, design]
 ---
 

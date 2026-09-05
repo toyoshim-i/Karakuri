@@ -843,7 +843,7 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
         //
         // **Nothing here reads a clock**, which is what makes this record
         // replayable at all
-        // ([P-0002](../../../docs/principles/0002-simulation-time-comes-from-a-record-never-from-a-clock.md)):
+        // ([P-0092](../../../docs/principles/0092-the-same-inputs-produce-the-same-frame.md)):
         // the anchor is written down at the instant the operator asked, and
         // `Transport::set` puts it back without recomputing it from the machine
         // the replay is running on.

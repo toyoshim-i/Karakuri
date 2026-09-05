@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-11
 supersedes: []
 superseded_by: []
-principles: [0042, 0085]
+principles: [0085, 0092]
 tags: [process, engine]
 ---
 
@@ -50,5 +50,5 @@ is missing: Syphon absent on Windows means **the feature does not exist there**;
 ## Evidence
 
 Session 2026-08-11T08:50Z–09:03Z, `docs/plugins.md`. Standing rules:
-[P-0042](../principles/0042-a-boundary-is-drawn-by-the-deterministic-path.md),
+[P-0092](../principles/0092-the-same-inputs-produce-the-same-frame.md),
 [P-0085](../principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md).

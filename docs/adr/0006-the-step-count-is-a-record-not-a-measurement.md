@@ -5,7 +5,7 @@ status: accepted
 date: 2026-07-25
 supersedes: []
 superseded_by: []
-principles: [0002]
+principles: [0092]
 tags: [engine, determinism, format]
 ---
 
@@ -53,4 +53,4 @@ catch-up turns a load spike into a death spiral. `t` advances by `steps * dt`.
 ## Evidence
 
 Session 2026-07-25T12:03Z–12:24Z. Standing rule:
-[P-0002](../principles/0002-simulation-time-comes-from-a-record-never-from-a-clock.md).
+[P-0092](../principles/0092-the-same-inputs-produce-the-same-frame.md).

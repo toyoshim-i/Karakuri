@@ -5,7 +5,7 @@ status: accepted
 date: 2026-07-26
 supersedes: []
 superseded_by: []
-principles: [0004]
+principles: [0092]
 tags: [engine, determinism]
 ---
 
@@ -42,4 +42,4 @@ content-addressed, so an unsaved intermediate simply never exists.
 ## Evidence
 
 Session 2026-07-26T07:22Z–07:24Z. Sharpens
-[P-0004](../principles/0004-a-live-set-is-never-mutated-in-place.md).
+[P-0092](../principles/0092-the-same-inputs-produce-the-same-frame.md).

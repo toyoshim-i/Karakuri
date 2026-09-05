@@ -5,7 +5,7 @@ status: accepted
 date: 2026-07-25
 supersedes: []
 superseded_by: []
-principles: [0007]
+principles: [0092]
 tags: [ir, determinism, engine]
 ---
 
@@ -63,4 +63,4 @@ is `seed`.
 ## Evidence
 
 Session 2026-07-25T11:43Z–11:50Z. First commit `003a74d`. The rule that survives is
-[P-0007](../principles/0007-an-element-is-never-identified-by-its-buffer-slot.md).
+[P-0092](../principles/0092-the-same-inputs-produce-the-same-frame.md).

@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-28
 supersedes: []
 superseded_by: []
-principles: [0013, 0031, 0066, 0085, 0087]
+principles: [0031, 0066, 0085, 0087, 0092]
 tags: [architecture, vocabulary]
 ---
 
@@ -66,7 +66,7 @@ dominant one is the CPU side of the GPU boundary and it is everywhere: `karakuri
 here is *"host-side and biased high"*. The second is the plugin host — `docs/plugins.md`,
 [ADR-0074](0074-a-plugin-boundary-is-drawn-by-the-deterministic-path.md),
 [ADR-0075](0075-the-plugin-abi-passes-a-handle-and-only-what-crosses-a-process.md),
-[P-0042](../principles/0042-a-boundary-is-drawn-by-the-deterministic-path.md) and
+[P-0092](../principles/0092-the-same-inputs-produce-the-same-frame.md) and
 [P-0043](../principles/0043-nothing-external-enters-the-render-process.md), where *"what the host
 says"* is a specified behaviour. The third is `cpal`'s audio host: `karakuri-audio/src/device.rs:153`
 is `let host = cpal::default_host();` and line 413 is `fn pick(host: &cpal::Host, …)`. The fourth is
@@ -101,7 +101,7 @@ line away from a paragraph about the bay. The two documents this record sits bet
 about what the word means.
 
 **`session` is defined, and the collision is whole-to-part.**
-[P-0013](../principles/0013-a-set-is-a-projection-and-a-session-is-the-timeline.md) says a session is
+[ADR-0007](0007-a-set-file-is-a-projection-and-a-session-stream-is-the-timeline.md) says a session is
 the timeline — the Set, plus a `tick` every frame, plus every edit at its frame position — and the
 word appears on 1,071 lines of this repository. `karakuri-cli/src/session.rs` is one of the thirteen
 modules that would move **into** the package, so `karakuri-session` would name the container after

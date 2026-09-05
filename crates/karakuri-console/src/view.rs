@@ -2147,7 +2147,7 @@ pub fn rearrange(panel: &mut Panel, canvas: (u32, u32)) -> bool {
 /// A `Deck` here would put the engine in this crate's dependencies; an
 /// `Instant` here would put a clock in it, and then the row would be reading
 /// wall time in a repository whose first principle is that nothing does
-/// ([P-0002](../../../docs/principles/0002-simulation-time-comes-from-a-record-never-from-a-clock.md)).
+/// ([P-0092](../../../docs/principles/0092-the-same-inputs-produce-the-same-frame.md)).
 ///
 /// **It carries what cannot be derived and nothing that can.** The beat within
 /// the bar and the bar number are arithmetic on [`Transport::beats`] and are
@@ -5145,7 +5145,7 @@ const TRIM_LABEL: &str = "g";
 /// case — *"an `Instant` here would put a clock in it, and then the row would
 /// be reading wall time in a repository whose first principle is that nothing
 /// does"*
-/// ([P-0002](../../../docs/principles/0002-simulation-time-comes-from-a-record-never-from-a-clock.md))
+/// ([P-0092](../../../docs/principles/0092-the-same-inputs-produce-the-same-frame.md))
 /// — and every `Instant::now` in this crate is in `crates/karakuri/src/main.rs`, which
 /// owns the window. An `Instant` is a *reading*; a `Duration` is a number, and
 /// a number is what a caller writes and a test chooses. So this arrives per
@@ -10591,7 +10591,7 @@ pub struct View {
     /// argument for why this is a value and not an `Instant`.
     ///
     /// **The same seam as [`View::transport`]**, and the one this crate is
-    /// least able to cross: a clock in `src/` is P-0002 broken in the file
+    /// least able to cross: a clock in `src/` is P-0092 broken in the file
     /// whose own doc says so. [`Phase::ZERO`] until somebody says otherwise,
     /// which is every test in this crate and is a console with no clock behind
     /// it — a panel drawn at the origin of every animation on it.
