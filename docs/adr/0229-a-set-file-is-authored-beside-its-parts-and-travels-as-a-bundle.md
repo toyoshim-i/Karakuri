@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-30
 supersedes: []
 superseded_by: []
-principles: [0013, 0048, 0076, 0085, 0086]
+principles: [0013, 0048, 0085, 0086, 0090]
 tags: [store, format, console, distribution, security]
 ---
 
@@ -205,7 +205,7 @@ arrangement name meets. Its own documentation is the argument, and the reasoning
 > reaches that call from here.
 
 It is the surface's job rather than the store's —
-[P-0076](../principles/0076-a-surface-owns-the-affordance-never-the-authority.md), *a surface owns
+[P-0090](../principles/0090-a-surface-offers-it-never-decides.md), *a surface owns
 the affordance and never the authority* — and it is **refused out loud rather than sanitised**,
 because a name quietly repaired is a rule an operator can only find by experiment.
 `mcp::checked_id` (`crates/karakuri-environment/src/mcp.rs`) is the same wall on the other surface,

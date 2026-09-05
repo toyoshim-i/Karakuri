@@ -6,9 +6,9 @@
 //! `Operation::SetBlendMode` naming the mode it **arrived at**.
 //!
 //! **The cycle is the affordance and the operation is the destination**, which
-//! is P-0074's own worked example — *"a mini that cycles the blend is one
-//! control emitting three. The operator sees a toggle; the vocabulary never
-//! does."* So what is asserted here is a named destination per press, the wrap
+//! is the affordance P-0090 leaves to whoever draws the control: a mini that
+//! cycles the blend is one control emitting three, the operator sees a toggle
+//! and the vocabulary never does. So what is asserted here is a named destination per press, the wrap
 //! from the last mode back to the first, and that the operation names the
 //! **strip's own deck** rather than a fixed one.
 //!

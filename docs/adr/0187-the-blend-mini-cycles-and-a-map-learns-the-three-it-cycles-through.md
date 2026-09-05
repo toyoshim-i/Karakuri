@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-26
 supersedes: []
 superseded_by: []
-principles: [0074]
+principles: [0090]
 tags: [ui, vocabulary, decks]
 ---
 
@@ -20,7 +20,7 @@ with a tooltip in the mock that says *click to cycle* and nothing behind it.
 
 **The reason it stayed dead was a misreading of a principle, and that is the first thing this record
 corrects.** ADR-0185's consequences said the mock's tooltip and
-[P-0074](../principles/0074-an-operation-says-what-it-wants-never-which-way-to-move.md) disagree —
+[P-0090](../principles/0090-a-surface-offers-it-never-decides.md) disagree —
 the tooltip cycles, and a vocabulary has no cycles — and concluded that the chip must **name** one
 of three, by a menu or by three targets. `docs/roadmap.md` said it twice, once as work and once as a
 decision nobody had taken.
@@ -45,7 +45,7 @@ wrapping — and emits `Operation::SetBlendMode { deck, blend }` naming the **de
 step, because there is no step in the vocabulary to name.
 
 The cycle is `view::after`, four lines in `karakuri-console` and nothing at all in
-`karakuri-operation`. That division is P-0074's: the vocabulary owns the three values, and whoever
+`karakuri-operation`. That division is P-0090's: the vocabulary owns the three values, and whoever
 draws the control owns the order a pointer walks them in.
 
 **The console translates and applies nothing**, which is ADR-0185's shape unchanged: the panel emits
@@ -107,7 +107,7 @@ trade.
   it, which means claiming a press in order to throw it away — *"claiming a press in order to throw
   it away would put the rule and the act out of step."*
 
-The cycle costs none of the three, and P-0074 names it.
+The cycle costs none of the three, and P-0090 names it.
 
 ### What a MIDI map learns from this chip
 

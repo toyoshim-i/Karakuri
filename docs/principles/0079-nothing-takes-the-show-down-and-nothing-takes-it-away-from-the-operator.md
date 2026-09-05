@@ -68,7 +68,7 @@ before a live action, a lock while something is pending, a mode that will not le
 a state the machine dislikes, a "safe" setting that removes the control instead of costing it. Each
 of these makes a show safer by making it less playable, which is the trade this rule exists to
 refuse — and each of them fails on its own terms as well, because a rule held in one surface binds
-none of the other three ([P-0076](0076-a-surface-owns-the-affordance-never-the-authority.md)).
+none of the other three ([P-0090](0090-a-surface-offers-it-never-decides.md)).
 
 **Not a licence for an automatic actor to be careful on the operator's behalf.** An automatic actor
 that decides a request is unwise has taken the show away, which is the second half of the rule and
@@ -83,12 +83,12 @@ A refusal at the door is one of the three answers and is the best of them: an ov
 an ABI version mismatch, a wipe with no shape chosen. All three share the properties that make a
 refusal safe — nothing that was on air changed, the diagnostic says *why* rather than only *what*
 ([P-0083](0083-a-refusal-carries-what-the-next-attempt-needs.md)), and every route meets the same wall in the
-same sentence ([P-0061](0061-a-refusal-a-person-can-reach-from-two-surfaces-is-one-sentence.md)).
+same sentence ([P-0090](0090-a-surface-offers-it-never-decides.md)).
 A refusal that leaves the show exactly where it was has cost the operator nothing but a message.
 
 What is forbidden is refusing an operation the instrument *can* perform, on the ground that
 performing it might go badly. *Go on air* is the canonical case: it is the request that always
-arrives, and P-0076 already records what a console blocking it would be — "in a live instrument, the
+arrives, and P-0090 already records what a console blocking it would be — "in a live instrument, the
 one operation that cannot be refused". A dangerous thing an operator asked for is a dangerous thing
 the operator gets, made as legible as this system can make it.
 
@@ -208,8 +208,7 @@ covers.** These are instances and were written before it: the three answers in
 [P-0087](0087-name-the-property-never-the-shape.md)
 and [P-0088](0088-no-number-is-trusted-further-than-its-instrument-has-been-checked.md); the never-from-the-operator
 clause in [P-0033](0033-the-governor-never-takes-a-live-slot-off-air.md),
-[P-0052](0052-publishing-is-a-choice-of-attention-not-of-authority.md),
-[P-0076](0076-a-surface-owns-the-affordance-never-the-authority.md) and
+[P-0090](0090-a-surface-offers-it-never-decides.md) and
 [P-0078](0078-the-operator-wins-and-an-automatic-writer-yields-to-a-hand.md); and the boundary in
 [P-0080](0080-an-operator-can-see-a-slots-own-material-without-putting-it-on-air.md).
 

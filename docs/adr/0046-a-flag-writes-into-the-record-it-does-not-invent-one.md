@@ -5,7 +5,7 @@ status: accepted
 date: 2026-07-31
 supersedes: []
 superseded_by: []
-principles: [0028]
+principles: [0090]
 tags: [process, format]
 ---
 
@@ -47,4 +47,4 @@ record's shape, makes the later replacement mechanical.
 ## Evidence
 
 Session 2026-07-31T13:27Z, 2026-07-31T23:48Z. Standing rule:
-[P-0028](../principles/0028-every-control-ends-in-the-same-record.md).
+[P-0090](../principles/0090-a-surface-offers-it-never-decides.md).

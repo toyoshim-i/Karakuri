@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-25
 supersedes: []
 superseded_by: []
-principles: [0074]
+principles: [0090]
 tags: [ui, architecture]
 ---
 
@@ -67,7 +67,7 @@ all five; a guessed payload is worse than a named gap, which is this repository'
 about not declaring what does not exist. Being a type, the day a decision lands, replacing it is a
 compile error at every construction site rather than a search.
 
-## The contradiction this found, and P-0074
+## The contradiction this found, and P-0090
 
 `karakuri-midi::Action`'s doc says it is **engine-neutral on purpose**: *"No `Residency`, no
 `Blend`, no `Record`: this crate names the gesture and `karakuri-cli` decides what it is worth."*
@@ -85,8 +85,8 @@ over*, so the only gesture left to it is *step it*.** The two rules are not join
 unless the vocabulary owns the value lists. So it does — blend modes, sync modes, tone map
 operators, curves, wipe shapes are enumerations here — and the cost is stated rather than hidden:
 they are third spellings of lists that exist twice already, converted by one `From` per list in the
-one place every control already ends (P-0028). That is
-[P-0074](../principles/0074-an-operation-says-what-it-wants-never-which-way-to-move.md).
+one place every control already ends (P-0090). That is
+[P-0090](../principles/0090-a-surface-offers-it-never-decides.md).
 
 `Action::Preview { slot: Option<u8> }` was already right and for the right reason — *"direct rather
 than a cycle: a surface has a pad per slot and reaching slot 3 through three presses is a

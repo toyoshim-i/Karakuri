@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-22
 supersedes: []
 superseded_by: []
-principles: [0059, 0028]
+principles: [0059, 0090]
 tags: [format, determinism, store]
 ---
 

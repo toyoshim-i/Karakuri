@@ -189,7 +189,7 @@
 //!    **The fourth is the first control with a state that can be pending**,
 //!    and it is still only an affordance: it names a destination and refuses
 //!    nothing, because what may be asked belongs where the record is applied
-//!    ([P-0076](../../../docs/principles/0076-a-surface-owns-the-affordance-never-the-authority.md)).
+//!    ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
 //!    So this rule holds it unchanged too.
 //!
 //!    **The fifth is the first control that carries a value it does not
@@ -375,7 +375,7 @@
 //! **The chip does not cycle where the key does.** `e` steps to the next scope
 //! and wraps, because a bare press cannot say *which*; a pointer press can, so
 //! it names the chip it landed on and no arithmetic happens anywhere. That is
-//! P-0074's division met by two surfaces rather than an inconsistency between
+//! P-0090's division met by two surfaces rather than an inconsistency between
 //! them.
 //!
 //! **Four questions, one derivation.** The mixer bay is laid out once per

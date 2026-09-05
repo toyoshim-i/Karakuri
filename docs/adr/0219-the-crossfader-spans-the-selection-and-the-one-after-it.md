@@ -5,7 +5,7 @@ status: superseded
 date: 2026-08-29
 supersedes: []
 superseded_by: [0233]
-principles: [0028, 0076]
+principles: [0090]
 tags: [ui]
 ---
 
@@ -28,7 +28,7 @@ a name, a tooltip, and an answer to this question.
 **The panel's crossfader spans the deck that is selected and the one after it, which is exactly what
 `x` means on the keyboard, so the two are one gesture rather than two that disagree.**
 
-[P-0076](../principles/0076-a-surface-owns-the-affordance-never-the-authority.md) is what makes this
+[P-0090](../principles/0090-a-surface-offers-it-never-decides.md) is what makes this
 the page's to decide: *a surface owns the affordance, never the authority.* Which two decks a control
 spans is an affordance over an operation that names both explicitly; the vocabulary is untouched.
 And [the operations page](../manual/operations.html) states the standing that lets it be written
@@ -49,7 +49,7 @@ operation.
 
 **Assignable ends** — the convention on every hardware DJ mixer, where the operator says which two
 channels the crossfader spans. It is a real design and it loses on cost against need: it is a new
-piece of console state, and [P-0028](../principles/0028-every-control-ends-in-the-same-record.md)
+piece of console state, and [P-0090](../principles/0090-a-surface-offers-it-never-decides.md)
 wants state to end in a record, so it would want a record nothing else asks for — to serve a need
 that two `SelectDeck` presses already meet.
 
@@ -60,7 +60,7 @@ that two `SelectDeck` presses already meet.
   selection }`, the keyboard cannot say it at all, and the tooltip's *"Click an end to ask for a
   crossfade"* leaves it open.
 - **The crossfader's mark stays a readout**, decided separately and on
-  [P-0028](../principles/0028-every-control-ends-in-the-same-record.md)'s terms: it is one number
+  [P-0090](../principles/0090-a-surface-offers-it-never-decides.md)'s terms: it is one number
   derived from the two channel faders' recorded values, and a draggable mark would have to invert a
   projection that is not invertible — inventing the split between two `SetOpacity` records by a law
   no record names. That answers the tension

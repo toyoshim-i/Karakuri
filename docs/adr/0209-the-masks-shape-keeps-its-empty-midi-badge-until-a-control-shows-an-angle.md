@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-28
 supersedes: []
 superseded_by: []
-principles: [0074, 0031]
+principles: [0031, 0090]
 tags: [midi, vocabulary, surfaces, mixing, docs]
 ---
 
@@ -47,7 +47,7 @@ control that **shows** an angle.
 - **A float form in the map grammar**, so a line could read `note 62 -> mask-shape 0 linear 0.785`.
   It is the only option that leaves `SetMaskShape` exactly as ADR-0201 wrote it, and it is a small
   parser change. It loses on the format's own discipline: a value in a map line is a word out of a
-  list [the vocabulary owns](../principles/0074-an-operation-says-what-it-wants-never-which-way-to-move.md),
+  list [the vocabulary owns](../principles/0090-a-surface-offers-it-never-decides.md),
   and **a number is the one kind of value that can be checked against nothing** — so the refusal an
   operator gets for a typo stops being *write one of these* and becomes silence, or a wipe at an
   angle nobody meant. It also raises a question no surface can answer today: the angle is in
@@ -66,7 +66,7 @@ control that **shows** an angle.
   forbids: ADR-0202's argument is that the evidence does not separate three options, and that
   argument would have to change. The annotation is what connects them.
 - **A new principle.** The rules this applies already exist — a surface asks for what it can say
-  (ADR-0192), an operation names a value out of a list the vocabulary owns (P-0074) — and this is a
+  (ADR-0192), an operation names a value out of a list the vocabulary owns (P-0090) — and this is a
   decision about one row rather than a rule anybody could violate.
 
 ## Consequences

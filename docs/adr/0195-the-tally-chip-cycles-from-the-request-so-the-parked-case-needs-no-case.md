@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-27
 supersedes: []
 superseded_by: []
-principles: [0074, 0076]
+principles: [0090]
 tags: [ui, decks, vocabulary]
 ---
 
@@ -108,7 +108,7 @@ rules that agree today.
 **A lock in the panel** — forbidding every operation but the withdrawal while a transition is
 pending — is
 [ADR-0188](0188-a-pending-transition-says-it-is-pending-and-no-surface-holds-the-rule.md) and
-P-0076, decided before this chip had a pointer at all. **Three targets or a picker** instead of a
+P-0090, decided before this chip had a pointer at all. **Three targets or a picker** instead of a
 cycle is ADR-0187's measurement, and the residency words are wider than the blend's: `PRIM` beside
 `ALLOC` alone is 85.125 against a 53-wide row.
 

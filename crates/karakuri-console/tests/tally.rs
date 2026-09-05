@@ -18,7 +18,7 @@
 //! to take a request back would put the deck on air.
 //!
 //! That is the affordance a surface owns and not a lock it holds
-//! ([P-0076](../../../docs/principles/0076-a-surface-owns-the-affordance-never-the-authority.md)):
+//! ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)):
 //! the chip refuses nothing, and `karakuri-cli`'s `w` — `toggle_priming`,
 //! which reads `Deck::requested_residency` to choose its direction — is the
 //! same choice on another surface.

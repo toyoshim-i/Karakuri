@@ -902,7 +902,7 @@ fn reached_through_a_painted_control() -> BTreeSet<&'static str> {
 
     // **Step three**: the caller performs it, which is what an `Op` arriving
     // from a control means — the pill holds no authority and applies nothing
-    // (P-0076).
+    // (P-0090).
     for row in 0..open.rows {
         match open.ask(&view.arrangement, point_of(open.row(row).center())) {
             Some(Ask::Panel(op)) => {
@@ -1011,7 +1011,7 @@ fn reached_through_the_program_bays_head() -> BTreeSet<&'static str> {
 
     // **Step two**: what the press asks for, off the same derivation `claim`
     // hit-tested. **Step three**: the caller performs it — the pill holds no
-    // authority and applies nothing (P-0076).
+    // authority and applies nothing (P-0090).
     let op = head.op();
     let outcome = p.op(op);
     p.solve();

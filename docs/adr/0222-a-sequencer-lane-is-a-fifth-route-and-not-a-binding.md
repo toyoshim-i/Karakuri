@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-29
 supersedes: []
 superseded_by: []
-principles: [0028, 0069, 0078]
+principles: [0069, 0078, 0090]
 tags: [architecture, signal, ui]
 ---
 
@@ -68,7 +68,7 @@ answer: the principle is about the hand, and that is a deliberate operation.
 
 - **The three fader lanes exist.** They emit `SetOpacity`, which is what a hand on the strip emits,
   so a hand and a lane meet at `Live::operate` where every other conflict is already resolved.
-- **P-0028 is satisfied by construction** — a lane's write ends in the same record every other
+- **P-0090 is satisfied by construction** — a lane's write ends in the same record every other
   control ends in, rather than in a second path that produces values without records.
 - **The console page's own rule stands**: a step sequencer is a fifth route and works for the same
   reason the other four do, which is the sentence that turned out to be right.

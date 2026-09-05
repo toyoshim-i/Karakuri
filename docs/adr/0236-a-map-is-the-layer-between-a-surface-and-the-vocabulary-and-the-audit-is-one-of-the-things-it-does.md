@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-31
 supersedes: []
 superseded_by: []
-principles: [0028, 0031, 0036, 0074, 0076, 0079, 0085]
+principles: [0031, 0036, 0079, 0085, 0090]
 tags: [architecture, surfaces, midi, mcp, vocabulary, live]
 ---
 
@@ -156,12 +156,12 @@ those operations.** Not because of where it lives, but because rule 01 is true: 
 from the surface it would govern. `PointLane` gates nothing, so it can be a row and is one. The
 opening gates, so it cannot be.
 
-**This is [P-0076](../principles/0076-a-surface-owns-the-affordance-never-the-authority.md) applied
+**This is [P-0090](../principles/0090-a-surface-offers-it-never-decides.md) applied
 one level out.** That principle says a control decides *what a press asks for* and never *what may be
 asked*, and that a constraint lives where the record is applied so every way in meets the same wall.
 The opening is a constraint on **what may be asked, by whom**, and the map is where a surface's
 askings are already translated — so it is the one place a rule about a surface can live without being
-a rule *held by* that surface. A per-surface lock is exactly what P-0076 rules out; a per-surface
+a rule *held by* that surface. A per-surface lock is exactly what P-0090 rules out; a per-surface
 entry in a common layer is not, because the layer is the same code for all four.
 
 **Why there is an audit at all is not this record's**, and it is worth saying so plainly: that is
@@ -226,7 +226,7 @@ a date* — and its second half is the instruction: the clause is a marker, not 
 The reading ADR-0235 offered first, and it has a real argument: rule 01 would then cover it, an
 operator could open a class from the keyboard as well as from the bay head, and the setting would
 write a record like everything else
-([P-0028](../principles/0028-every-control-ends-in-the-same-record.md)) — which is not nothing, since
+([P-0090](../principles/0090-a-surface-offers-it-never-decides.md)) — which is not nothing, since
 *the operator opened the mix to a model at 23:40* is exactly the sort of thing a session should be
 able to say.
 
@@ -245,7 +245,7 @@ under this alternative all three become rows, each one reachable from the surfac
 Put the check in `karakuri-environment::mcp`, beside `asked()`, where the only caller that needs it
 lives. It is the smallest change on this page and needs no new concept at all.
 
-**It loses to P-0076 and to ADR-0235's own finding.** A rule held by one surface binds one surface —
+**It loses to P-0090 and to ADR-0235's own finding.** A rule held by one surface binds one surface —
 *"a lock held in the panel makes the instrument behave differently depending on which hand touched
 it"* — and the lane is the proof rather than the hypothetical: a second automatic route already
 decided (ADR-0222) would arrive with no audit on it, and the fix would be a second copy of the table
@@ -313,11 +313,11 @@ nothing in them. It is in *What this leaves undone*.
   operation names it*, and each is map configuration under this record rather than a hole in the
   vocabulary. That is a re-reading of two existing notes and not a new decision; whoever next reaches
   for a 65th row should reach here first.
-- **[P-0074](../principles/0074-an-operation-says-what-it-wants-never-which-way-to-move.md) is
+- **[P-0090](../principles/0090-a-surface-offers-it-never-decides.md) is
   unaffected and worth checking rather than assuming.** *An operation says what it wants,
   never which way to move* is a rule about the vocabulary, and the opening is not in the vocabulary —
   but the toggle that draws it is still a control, and a control that means *the next state after this
-  one* is the affordance P-0074 permits over operations it does not own. The pill can be a toggle; the
+  one* is the affordance P-0090 permits over operations it does not own. The pill can be a toggle; the
   thing it writes still names a state.
 
 ### What this leaves undone

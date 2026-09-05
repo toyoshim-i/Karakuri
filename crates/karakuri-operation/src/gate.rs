@@ -273,7 +273,7 @@ impl Open {
 
     /// This opening with one class set. **Names a state and never a
     /// direction**, which is
-    /// [P-0074](../../../docs/principles/0074-an-operation-says-what-it-wants-never-which-way-to-move.md)
+    /// [P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)
     /// applied to a setting the vocabulary does not own: a bay-head pill can be
     /// a toggle, and what it writes still says which state it means.
     pub fn with(self, class: Class, open: bool) -> Open {
@@ -340,7 +340,7 @@ pub fn audit<'a>(
 /// is nothing to refuse.
 ///
 /// A free function, because
-/// [P-0061](../../../docs/principles/0061-a-refusal-a-person-can-reach-from-two-surfaces-is-one-sentence.md)
+/// [P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)
 /// says a refusal a person can reach from two surfaces is one sentence — and
 /// this one will be reachable from a second automatic route the day a lane
 /// exists (ADR-0222). Asserted by equality against this function rather than by
@@ -971,7 +971,7 @@ mod tests {
         }
     }
 
-    /// equality against [`refusal`] rather than by a `contains` — P-0061.
+    /// equality against [`refusal`] rather than by a `contains` — P-0090.
     #[test]
     fn a_closed_operation_is_refused_in_the_one_sentence() {
         let operation = Operation::SetOpacity {

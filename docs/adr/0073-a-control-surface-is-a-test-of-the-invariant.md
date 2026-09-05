@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-10
 supersedes: []
 superseded_by: []
-principles: [0028]
+principles: [0090]
 tags: [process, format, determinism]
 ---
 

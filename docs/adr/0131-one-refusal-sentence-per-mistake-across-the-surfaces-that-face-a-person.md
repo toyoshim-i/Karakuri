@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-22
 supersedes: []
 superseded_by: []
-principles: [0061]
+principles: [0090]
 tags: [mcp, midi, mix, messages]
 ---
 

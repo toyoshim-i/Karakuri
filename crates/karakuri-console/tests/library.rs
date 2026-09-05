@@ -800,7 +800,7 @@ fn a_load_is_a_cursor_and_a_key_with_no_pointer_anywhere_in_it() {
 /// wrap* because *"a bare press cannot type a name"*, and a pointer press
 /// **can** — it lands on one capsule and on no other. So the chip that was
 /// pressed is the chip that is asked for, which is
-/// [P-0074](../../../docs/principles/0074-an-operation-says-what-it-wants-never-which-way-to-move.md)'s
+/// [P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)'s
 /// division met by two surfaces rather than an inconsistency between them.
 ///
 /// **The operation beside it still carries `Undecided`**, and that is asserted

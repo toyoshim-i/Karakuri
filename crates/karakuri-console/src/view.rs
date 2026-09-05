@@ -886,7 +886,7 @@ impl McpPill {
     /// **What a press asks for**, and it is a state rather than a direction:
     /// the opening handed in, with this one class set the other way.
     ///
-    /// [`Open::with`] *"names a state and never a direction"* (P-0074), and the
+    /// [`Open::with`] *"names a state and never a direction"* (P-0090), and the
     /// toggle is this method choosing which state it means — the same
     /// affordance-over-a-named-thing [`Outputs::op`] and [`ProgramHead::op`]
     /// have, one layer out of the vocabulary.
@@ -3009,7 +3009,7 @@ pub enum AudioAsk {
     ///
     /// **Nothing is refused here.** A device that has gone away since the list
     /// was read is refused where it is opened, out loud, with the list as it
-    /// is then (P-0027, P-0076): this control cannot see a device and must not
+    /// is then (P-0027, P-0090): this control cannot see a device and must not
     /// pretend to.
     Operation(Operation),
 }
@@ -3557,8 +3557,8 @@ pub enum Menu {
     /// **Nothing in it is checked.** A name that is not one path component is
     /// refused where the record is applied, in one sentence, by whoever writes
     /// the file — the surface owns the affordance and never the authority
-    /// ([P-0076](../../../docs/principles/0076-a-surface-owns-the-affordance-never-the-authority.md),
-    /// [P-0061](../../../docs/principles/0061-a-refusal-a-person-can-reach-from-two-surfaces-is-one-sentence.md)).
+    /// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md),
+    /// [P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
     /// A pill that quietly dropped the characters it did not like would be a
     /// rule an operator could only find by experiment.
     Naming(String),
@@ -3689,7 +3689,7 @@ pub enum Item {
 /// Every arm is either a move of this control's own state or one named
 /// operation, and never a change to the arrangement made here: the pill asks,
 /// and whoever applies the record decides
-/// ([P-0076](../../../docs/principles/0076-a-surface-owns-the-affordance-never-the-authority.md)).
+/// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
 /// **Nothing is refused in this list.** A name nothing is filed under and a
 /// file that disagrees with itself are both refused where the bytes are, in
 /// one sentence each, and this control cannot see either.
@@ -4435,9 +4435,9 @@ impl LookRow {
     /// [`Mixer::blend`]'s exactly
     /// ([ADR-0187](../../../docs/adr/0187-the-blend-mini-cycles-and-a-map-learns-the-three-it-cycles-through.md))
     /// and so is the division it rests on: the cycle is [`next_tonemap`] here
-    /// and nothing at all in `karakuri-operation`, which is P-0074's *"a
-    /// toggle is an affordance, built over operations by whoever draws the
-    /// control"*.
+    /// and nothing at all in `karakuri-operation`, which is P-0090's
+    /// division: a toggle is an affordance, built over operations by whoever
+    /// draws the control.
     ///
     /// **What a map is offered is the four values, not the cycle** — the same
     /// sentence ADR-0187 wrote about three, and the reason the manual's row
@@ -4515,7 +4515,7 @@ impl LookRow {
 ///
 /// [`after`]'s division, one row up: the cycle is four lines here and nothing
 /// in `karakuri-operation`, which owns the four operators and not the order a
-/// pointer walks them in (P-0074).
+/// pointer walks them in (P-0090).
 ///
 /// **A match rather than an index into [`TONEMAPS`]**, for [`after`]'s reason:
 /// a fifth operator does not compile until somebody says what follows it. The
@@ -4524,7 +4524,7 @@ impl LookRow {
 /// cycle, which is `tests/blend.rs`'s own measurement.
 ///
 /// **`karakuri-cli` has this function over the engine's `TonemapOp`** and in
-/// this order. Two crates naming the same order is what P-0074 costs a
+/// this order. Two crates naming the same order is what P-0090 costs a
 /// vocabulary that depends on nothing, and the test above is what stops the
 /// two drifting on this side.
 fn next_tonemap(tonemap: Tonemap) -> Tonemap {
@@ -5436,7 +5436,8 @@ pub struct Level {
 /// **The blend chip is the third, and it cycles.** A press on it emits
 /// [`Operation::SetBlendMode`] naming the mode after this one ([`Mixer::blend`]),
 /// and nothing here applies that either. It is one control emitting three
-/// operations, which is P-0074's own worked example of an affordance — see
+/// operations, which is the affordance P-0090 leaves to whoever draws the
+/// control — see
 /// [ADR-0187](../../../docs/adr/0187-the-blend-mini-cycles-and-a-map-learns-the-three-it-cycles-through.md).
 ///
 /// **The tally chip is the fourth, and it cycles too.** A press on it emits
@@ -5621,8 +5622,9 @@ pub struct Strip {
     /// stating: a fourth engine blend mode with no operation variant stops
     /// compiling **at the harness**, rather than drawing a word on a chip no
     /// control can reach and no map can ask for. That is the vocabulary doing
-    /// its job — P-0074's *"the two rules … are not jointly satisfiable unless
-    /// the vocabulary owns the lists."*
+    /// its job — P-0090's price, paid rather than avoided: a vocabulary that
+    /// names a destination has to own the lists a destination is drawn from,
+    /// or it is back to toggles (ADR-0180).
     ///
     /// The mock's own tooltip lists four — *"add, over, screen, multiply"* —
     /// and there are three. The disagreement was the mock's to settle and
@@ -6095,12 +6097,12 @@ impl<'a> Mixer<'a> {
     /// comes out is [`Operation::SetBlendMode`] naming the **destination** —
     /// never a step, because there is no step in the vocabulary to name.
     ///
-    /// That is P-0074's own worked example rather than an exception to it:
-    /// *"A toggle is an affordance, built over operations by whoever draws the
-    /// control, and it belongs there … a mini that cycles the blend is one
-    /// control emitting three. The operator sees a toggle; the vocabulary
-    /// never does."* The cycle is [`after`], which is four lines in this file
-    /// and nothing at all in `karakuri-operation`.
+    /// That is the affordance P-0090 leaves to whoever draws the control
+    /// rather than an exception to it: a toggle is built over operations by
+    /// whoever draws them, and a mini that cycles the blend is one control
+    /// emitting three — the operator sees a toggle and the vocabulary never
+    /// does. The cycle is [`after`], which is four lines in this file and
+    /// nothing at all in `karakuri-operation`.
     ///
     /// **What a MIDI map is offered is the three values, not the cycle** —
     /// [ADR-0187](../../../docs/adr/0187-the-blend-mini-cycles-and-a-map-learns-the-three-it-cycles-through.md),
@@ -6150,8 +6152,8 @@ impl<'a> Mixer<'a> {
     /// [`Operation::SetResidency`] naming that **destination**. The
     /// affordance is the blend chip's ([`Mixer::blend`], ADR-0187) and so is
     /// the division it rests on: the cycle is [`next`] here and nothing at all
-    /// in `karakuri-operation`, which is P-0074's *"a toggle is an affordance,
-    /// built over operations by whoever draws the control"*.
+    /// in `karakuri-operation`, which is P-0090's division: a toggle is an
+    /// affordance, built over operations by whoever draws the control.
     ///
     /// **The step is taken from [`Strip::requested`] and not from
     /// [`Strip::tally`]**, and that is the decision rather than a detail. The
@@ -6164,7 +6166,7 @@ impl<'a> Mixer<'a> {
     /// the deck on air.
     ///
     /// That is what
-    /// [P-0076](../../../docs/principles/0076-a-surface-owns-the-affordance-never-the-authority.md)
+    /// [P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)
     /// permits a surface: *"a press on a control whose transition is pending
     /// may ask for the withdrawal"* — a control choosing which destination a
     /// press names, arrived at out of one rule rather than a branch, and
@@ -6219,8 +6221,8 @@ impl<'a> Mixer<'a> {
     /// is the blend chip's ([`Mixer::blend`], ADR-0187) and the tally's
     /// (ADR-0195), and so is the division under it: the cycle is
     /// [`next_shape`] here and nothing at all in `karakuri-operation`, which
-    /// is P-0074's *"a toggle is an affordance, built over operations by
-    /// whoever draws the control"*.
+    /// is P-0090's division: a toggle is an affordance, built over operations
+    /// by whoever draws the control.
     ///
     /// **The order starts at `None`**, which is
     /// `karakuri_engine::deck::MaskKind::ALL`'s and is written down there:
@@ -6730,8 +6732,8 @@ fn grabbed(fader: Fader, knob: Knob, p: Pos2) -> Option<Grab> {
 /// first — and the whole of the affordance the blend chip is.
 ///
 /// It is four lines here and nothing at all in `karakuri-operation`, which is
-/// P-0074's division: *"A toggle is an affordance, built over operations by
-/// whoever draws the control, and it belongs there."* The vocabulary owns the
+/// P-0090's division: a toggle is an affordance, built over operations by
+/// whoever draws the control, and it belongs there. The vocabulary owns the
 /// three values; this owns the order a pointer walks them in.
 ///
 /// **A match rather than an index into [`BlendMode::ALL`]**, for the reason
@@ -6755,7 +6757,7 @@ fn after(blend: BlendMode) -> BlendMode {
 ///
 /// [`after`]'s division, one control along: the cycle is three lines here and
 /// nothing in `karakuri-operation`, which owns the three values and not the
-/// order a pointer walks them in (P-0074).
+/// order a pointer walks them in (P-0090).
 ///
 /// **A match rather than an index into [`Tally::ALL`]**, for [`after`]'s
 /// reason: a fourth residency does not compile until somebody says what
@@ -6786,7 +6788,7 @@ fn next(tally: Tally) -> Tally {
 /// The mirror image of it is `crates/karakuri/src/main.rs`'s `tally`, which turns the
 /// *engine's* `Residency` into a [`Tally`] on the way in. Three names for
 /// three states is the cost `karakuri-operation` pays for depending on nothing
-/// (P-0074), and this is one of the two places it is paid.
+/// (P-0090), and this is one of the two places it is paid.
 fn residency(tally: Tally) -> Residency {
     match tally {
         Tally::Live => Residency::Live,
@@ -6800,7 +6802,7 @@ fn residency(tally: Tally) -> Residency {
 ///
 /// [`after`]'s division, one control along: the cycle is three lines here and
 /// nothing in `karakuri-operation`, which owns the three shapes and not the
-/// order a pointer walks them in (P-0074).
+/// order a pointer walks them in (P-0090).
 ///
 /// **A match, for [`after`]'s reason**: a fourth shape does not compile until
 /// somebody says what follows it. Unlike [`after`] and [`next`] the price is
@@ -7794,7 +7796,7 @@ impl Scope {
 ///
 /// **This is the first thing in the workspace that knows which chip.** A key
 /// press cannot type a name, so `e` steps and the arithmetic is the
-/// translator's ([P-0074]); a map line names a word from a closed list and
+/// translator's ([P-0090]); a map line names a word from a closed list and
 /// this list is not closed; a model has no chip in front of it. A *pointer*
 /// press is none of those — it lands on one capsule and on no other, which is
 /// a way of naming a member of a growable list that did not exist here
@@ -7807,7 +7809,7 @@ impl Scope {
 /// So the press works with the payload as it stands, and the proposal is
 /// written down where a maintainer reads it rather than performed here.
 ///
-/// [P-0074]: ../../../docs/principles/0074-an-operation-says-what-it-wants-never-which-way-to-move.md
+/// [P-0090]: ../../../docs/principles/0090-a-surface-offers-it-never-decides.md
 #[derive(Debug, Clone, PartialEq)]
 pub struct Chosen {
     /// **The chip the pointer was on**, which is a value of the row this
@@ -8229,7 +8231,7 @@ impl LibraryBay {
     ///
     /// **It does not cycle.** The chip that was pressed is the chip that is
     /// asked for, where `e` steps to the next one and wraps — and that is not
-    /// two answers to one question, it is P-0074's own division: a bare press
+    /// two answers to one question, it is P-0090's own division: a bare press
     /// cannot say *which* and this one can, so the key does the arithmetic and
     /// the pointer does not.
     ///
@@ -9051,7 +9053,7 @@ pub const SYNCS: [Sync; 3] = [Sync::Free, Sync::Tempo, Sync::Beat];
 /// instead of offering it"*. Whether a mode is honourable is
 /// `karakuri_engine::deck::Deck::sync_allowed`'s and arrives here as
 /// [`Pane::allows`] — the surface owns the affordance and never the authority
-/// ([P-0076](../../../docs/principles/0076-a-surface-owns-the-affordance-never-the-authority.md)),
+/// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)),
 /// so this chooses which destination to name and refuses nothing.
 ///
 /// # Landing back on `at` is a state and not a failure
@@ -9134,7 +9136,7 @@ pub struct Pane {
     /// properties instead would put a third copy of `Transport::allows`' rule
     /// in a crate that owns no material, and a control is not the authority on
     /// what it may ask for
-    /// ([P-0076](../../../docs/principles/0076-a-surface-owns-the-affordance-never-the-authority.md)).
+    /// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
     ///
     /// **A property of the Set, so it moves when a build lands in the slot** —
     /// the engine says so at `sync_allowed`, and it is why this is read beside
@@ -9630,12 +9632,13 @@ impl DeckHead {
     /// [`Mixer::blend`]'s and [`LookRow::tonemap`]'s exactly
     /// ([ADR-0187](../../../docs/adr/0187-the-blend-mini-cycles-and-a-map-learns-the-three-it-cycles-through.md)),
     /// and so is the division it rests on: the cycle is [`next_sync`] here and
-    /// nothing at all in `karakuri-operation`, which is P-0074's *"a toggle is
-    /// an affordance, built over operations by whoever draws the control"*.
+    /// nothing at all in `karakuri-operation`, which is P-0090's division: a
+    /// toggle is an affordance, built over operations by whoever draws the
+    /// control.
     ///
     /// **The skip is the one thing this cycle has that the other two do not**,
     /// and it is not a refusal: what may be asked for is the engine's
-    /// ([P-0076](../../../docs/principles/0076-a-surface-owns-the-affordance-never-the-authority.md)),
+    /// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)),
     /// and this chip is choosing which of the destinations *it* offers to
     /// name, out of a reading somebody else took. A mode this material cannot
     /// honour is passed over rather than handed on to be refused, which is the
@@ -9672,7 +9675,7 @@ impl DeckHead {
     /// one state it can never arrive at is the state it is in. That is a fault
     /// of the affordance and not a gap in the vocabulary, and it is why there
     /// is no `ReAnchor` variant here to name — an operation whose meaning is
-    /// *again* is the shape P-0074 rules out
+    /// *again* is the shape P-0090 rules out
     /// ([ADR-0218](../../../docs/adr/0218-re-anchoring-is-set-sync-naming-the-mode-the-deck-is-in-and-a-cycle-cannot-say-it.md)).
     ///
     /// **A free deck has no anchor and loses nothing.** `Free` is the absence
@@ -9692,13 +9695,13 @@ impl DeckHead {
     ///
     /// # The one control on this panel that moves by an amount
     ///
-    /// Every other control here names a destination, which is P-0074's rule,
+    /// Every other control here names a destination, which is P-0090's rule,
     /// and the vocabulary says at the variant why this one does not: *"it is
     /// relative because nothing in this instrument can set a position"*.
     /// Scrubbing moves closed-form material by an amount; accumulating
     /// material cannot be moved to a position at all, so an absolute
     /// `at_beat` would be an operation that does not exist for two thirds of
-    /// the material. So this is not the exception to P-0074 it looks like —
+    /// the material. So this is not the exception to P-0090 it looks like —
     /// there is no destination in the language for it to name.
     ///
     /// **Signed and unbounded**, which is the deck head's own spelling: the
@@ -10870,7 +10873,7 @@ impl View {
     /// [`Operation::SelectScope`]'s own instruction: *"The key steps and this
     /// does not … that is the translator's arithmetic rather than this
     /// operation's payload"*
-    /// ([P-0074](../../../docs/principles/0074-an-operation-says-what-it-wants-never-which-way-to-move.md)).
+    /// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
     /// A bare press cannot type a name and here it does not have to: the
     /// scopes are a short row of chips in front of you, so stepping says
     /// *which* by showing you.

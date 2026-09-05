@@ -6,8 +6,8 @@
 //! known ticks.
 //!
 //! With this, `tick` finally has a writer and the record stream is the whole
-//! path — *every control ends in the same record*
-//! (`docs/principles/0028-every-control-ends-in-the-same-record.md`) stops being a target. What a session
+//! path — every control ending at the same record
+//! (`docs/principles/0090-a-surface-offers-it-never-decides.md`) stops being a target. What a session
 //! reproduces is the *performance*: the same material, the same frames, the
 //! same fader moves at the same instants, and the same audio, without a
 //! microphone.

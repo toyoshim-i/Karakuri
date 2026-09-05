@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-28
 supersedes: []
 superseded_by: [0209]
-principles: [0078, 0074]
+principles: [0078, 0090]
 tags: [midi, vocabulary, surfaces, mixing]
 ---
 
@@ -123,7 +123,7 @@ decision before that writer exists is choosing between two grammars on no eviden
   control that works for a symmetry nobody performs with.
 - **A new principle.** Nothing here is a rule a future proposal would violate. The rule already
   exists twice — a surface asks for what it can say (ADR-0192), and an operation names a value out
-  of a list the vocabulary owns (P-0074) — and this is those two meeting a field neither list can
+  of a list the vocabulary owns (P-0090) — and this is those two meeting a field neither list can
   hold. What is owed is a decision, and it is named above rather than ruled on.
 
 ## Consequences

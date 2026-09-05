@@ -17,7 +17,7 @@ after the move finishes, is this.
 **And it rules out the surface deciding.** A hand is a hand on all four routes: a pointer on a
 fader, a key, a mapped control change and an MCP call are the same write and cancel the same move.
 The rule lives where the write lands, not where the gesture started, which is
-[P-0076](0076-a-surface-owns-the-affordance-never-the-authority.md) applied to this — a panel that
+[P-0090](0090-a-surface-offers-it-never-decides.md) applied to this — a panel that
 cancelled and a pad that did not would be one instrument behaving two ways.
 
 ## What it does not rule out

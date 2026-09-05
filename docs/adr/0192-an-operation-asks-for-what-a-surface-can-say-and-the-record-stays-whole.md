@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-26
 supersedes: []
 superseded_by: []
-principles: [0074]
+principles: [0090]
 tags: [vocabulary, midi, mixing]
 ---
 
@@ -120,7 +120,7 @@ has no control on any surface and no row on the page.
   ([P-0066](../principles/0066-an-adr-is-a-description-of-history-corrected-but-never-revised.md));
   this record is where it stopped being the decision in force.
 - **No new principle.**
-  [P-0074](../principles/0074-an-operation-says-what-it-wants-never-which-way-to-move.md) is
+  [P-0090](../principles/0090-a-surface-offers-it-never-decides.md) is
   untouched — this is not about direction. The rule this states is narrower and lives in the
   vocabulary's own prose at the two variants: an operation carries what a surface can say, and the
   translator completes the record.

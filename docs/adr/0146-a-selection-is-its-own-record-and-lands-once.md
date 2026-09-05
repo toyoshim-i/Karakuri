@@ -72,7 +72,7 @@ statement and wants its own spelling — `Record::Preview`'s null-for-the-mix is
 would take.
 
 **`no_such_renderer` is not a second spelling of `mcp.rs`'s index refusal**, and was judged
-against [P-0061](../principles/0061-a-refusal-a-person-can-reach-from-two-surfaces-is-one-sentence.md)
+against [P-0090](../principles/0090-a-surface-offers-it-never-decides.md)
 rather than assumed. They answer different questions — one is *does this slot's file list
 hold an L4 at index n*, the other is *does the Set now playing draw with n+1 renderers* — and
 a hot swap can make them legitimately disagree. Only one surface reaches the second.

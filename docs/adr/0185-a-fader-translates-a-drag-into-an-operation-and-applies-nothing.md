@@ -69,7 +69,7 @@ whatever was moving the control.
 
 ### The harness applies it, and says the shortcut is its own
 
-P-0028 is *every control ends in the same record*, and that is what makes a console fader the same
+P-0090 is *every control ends in the same record*, and that is what makes a console fader the same
 thing as a key press and a MIDI knob. **Where `Operation` becomes `Record` is not decided** — it
 needs `karakuri-operation` and `karakuri-store`, neither of which depends on the other, and it is
 the centre of the record design rather than a side effect of a fader.
@@ -104,7 +104,7 @@ having:
 ## Consequences
 
 - **The blend mini needs an affordance, and this bullet stated the reason wrongly.** It said the
-  mock and P-0074 disagree — the mock's tooltip says *click to cycle*, and a vocabulary has no
+  mock and P-0090 disagree — the mock's tooltip says *click to cycle*, and a vocabulary has no
   cycles — and concluded that the mini must **name** one of three, by a menu or three targets, which
   made it a question about who owns the pointer. **The premise was never true** (corrected
   2026-08-26): P-0074 forbids a cycle *operation*, and its second paragraph names *"a mini that

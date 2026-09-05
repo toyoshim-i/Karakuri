@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-27
 supersedes: []
 superseded_by: []
-principles: [0028]
+principles: [0090]
 tags: [vocabulary, architecture, records]
 ---
 
@@ -13,7 +13,7 @@ tags: [vocabulary, architecture, records]
 
 ## Context
 
-[P-0028](../principles/0028-every-control-ends-in-the-same-record.md) is *every control ends in the
+[P-0090](../principles/0090-a-surface-offers-it-never-decides.md) is *every control ends in the
 same record*. What makes a console fader the same thing as a key press and a mapped MIDI knob is
 that all three write the same `Record` and the deck is moved by the decode — so an `Operation` has
 to become a `Record` somewhere, and **there was nowhere**.
@@ -60,7 +60,7 @@ under, and every one of those operations names a deck. So they are not a convers
 written; they are a gap in the *session* vocabulary. `SetCompositing` is the same shape —
 `Record::Merge` is what a Set says about its own layering, and *"nothing in a stream says that the
 Set in slot 3 composites."* And `Crossfade` is four records and `Wipe` is five, so **one control is
-not one record**; P-0028 is about where they end, not how many there are.
+not one record**; P-0090 is about where they end, not how many there are.
 
 ## Decision
 

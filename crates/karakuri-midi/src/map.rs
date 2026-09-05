@@ -24,7 +24,7 @@
 //! ## A line names a state, never a step
 //!
 //! **The value word is the grammar**, and it is what
-//! [P-0074](../../../docs/principles/0074-an-operation-says-what-it-wants-never-which-way-to-move.md)
+//! [P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)
 //! costs on this surface: a pad says `residency 2 live`, not *flip slot 2*. A
 //! surface that could only step has no way to *arrive*, and two surfaces
 //! stepping one control disagree about where they are — so a pad that means
@@ -567,7 +567,7 @@ fn parse_target(to: &str) -> Result<Target, String> {
 ///
 /// The list is `karakuri_operation`'s — [`Residency::ALL`], [`BlendMode::ALL`]
 /// — rather than a second list here, which is what
-/// [P-0074](../../../docs/principles/0074-an-operation-says-what-it-wants-never-which-way-to-move.md)
+/// [P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)
 /// buys: a vocabulary that names destinations has to own the values a
 /// destination is drawn from, and a map file is then offered them without a
 /// parser's copy to keep in step. The words are the same ones the record
@@ -941,7 +941,7 @@ mod tests {
     }
 
     /// **A pad names a state, and every state the vocabulary holds is
-    /// writable.** The defect this is against is the one P-0074 describes: a
+    /// writable.** The defect this is against is the one P-0090 describes: a
     /// map that could only say *step it* leaves `allocated` and `max`
     /// unreachable from a surface, and two surfaces stepping one control
     /// disagree about where they are. The words are read off

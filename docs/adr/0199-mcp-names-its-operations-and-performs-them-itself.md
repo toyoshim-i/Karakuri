@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-27
 supersedes: []
 superseded_by: []
-principles: [0028, 0031]
+principles: [0031, 0090]
 tags: [cli, mcp, vocabulary, surfaces]
 ---
 
@@ -151,5 +151,5 @@ because the other three surfaces each found one.
   procedure rows, three library rows and nothing in *Mixing*, *Transport and tempo* or *Decks*.
   `WriteParam` is `Silent(NoRecord)` — `Record::Param` is a Set file's and has nowhere to put a
   deck — so the gap is in the session record vocabulary and not in this server.
-- **No new principle.** P-0028 is what this applies, and P-0031 is why `karakuri_operation::Layer`
+- **No new principle.** P-0090 is what this applies, and P-0031 is why `karakuri_operation::Layer`
   is spelled in full in a file where `Layer` already means the record's.

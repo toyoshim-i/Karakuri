@@ -557,7 +557,7 @@ pub enum Dragged {
     /// Nothing was written anywhere: the value is the engine's, this crate has
     /// no engine (ADR-0156), and *applying* it is the caller's — a record, and
     /// the same record every other surface's control ends in
-    /// ([P-0028](../../../docs/principles/0028-every-control-ends-in-the-same-record.md)).
+    /// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
     ///
     /// **One value and not two.** Which deck and which control are inside the
     /// operation already, and a copy of either beside it would be two

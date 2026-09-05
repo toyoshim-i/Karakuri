@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-26
 supersedes: []
 superseded_by: [0189]
-principles: [0076, 0087]
+principles: [0087, 0090]
 tags: [ui, vocabulary, decks]
 ---
 
@@ -53,9 +53,9 @@ staleness like anything else that moves. One phase for the whole panel, arriving
 engine already holds.
 
 **Where a constraint lives is
-[P-0076](../principles/0076-a-surface-owns-the-affordance-never-the-authority.md).** A surface owns
+[P-0090](../principles/0090-a-surface-offers-it-never-decides.md).** A surface owns
 what a press asks for and never what may be asked. The withdrawal the maintainer wanted is available
-as an **affordance** — a press on a pending control asks for the withdrawal, which is P-0074's
+as an **affordance** — a press on a pending control asks for the withdrawal, which is P-0090's
 division applied one control along — and no authority moves to get it.
 
 ### The blink is an example, not the rule, and that was a correction
@@ -132,7 +132,7 @@ says this frame, and a value the console kept would be the first exception.
 
 ### The console holding the constraint
 
-Rejected, on the two arguments now in P-0076.
+Rejected, on the two arguments now in P-0090.
 
 **A rule that binds one surface binds none.** A lock in the panel makes a pad do what a chip
 refuses, and an operator finds that out by experiment, mid-set — the failure

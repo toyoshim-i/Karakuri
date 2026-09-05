@@ -10,7 +10,7 @@
 //! ## It is the third surface, and it obeys the same rule as the other two
 //!
 //! Keys, then MIDI, now this. The invariant
-//! (`docs/principles/0028-every-control-ends-in-the-same-record.md`)
+//! (`docs/principles/0090-a-surface-offers-it-never-decides.md`)
 //! is that everything an
 //! operator moves goes through a record, is read back, and only then applied —
 //! so that an agent is structurally incapable of doing anything a human could
@@ -53,7 +53,7 @@
 //!
 //! ## The seventh tool is a hole in the first paragraph of this file
 //!
-//! `Record::Procedure` closed the material half of P-0028 for a *procedure*.
+//! `Record::Procedure` closed the material half of P-0090 for a *procedure*.
 //! `wire_input` reopens a strip of it: `written` answers
 //! `Silent(Silent::NoRecord)` for `WireInput`, because `Record::Edge` is a
 //! **Set file's** record and has no `slot` to carry the deck a live rewiring
@@ -752,7 +752,7 @@ struct State {
     /// [`crate::Opening`] and [`audited`]. A parameter of [`serve`] and not a
     /// value this module chooses: a server that decided its own opening would
     /// be the surface holding the authority, which is the shape
-    /// `docs/principles/0076-a-surface-owns-the-affordance-never-the-authority.md`
+    /// `docs/principles/0090-a-surface-offers-it-never-decides.md`
     /// rules out. **Nor can a caller forget it**: it is positional, so a run
     /// that does not mention an opening does not compile.
     opening: crate::Opening,
@@ -1592,7 +1592,7 @@ fn written_procedure(args: &Value, slots: &Slots) -> Result<Operation, String> {
 /// `docs/principles/0084-…`'s failure exactly: a warning that fires on healthy
 /// material. The names are refused where the Set is built, in the sentence
 /// `--edge` meets there too
-/// (`docs/principles/0061-a-refusal-a-person-can-reach-from-two-surfaces-is-one-sentence.md`).
+/// (`docs/principles/0090-a-surface-offers-it-never-decides.md`).
 ///
 /// **The deck is checked last**, after all four arguments have been read, on
 /// [`written_procedure`]'s terms: an argument this tool cannot do without is
@@ -6023,7 +6023,7 @@ mod tests {
     /// names a closed operation today** — ADR-0235 puts all seven in the open
     /// set — so the seam is the only place this is reachable until the
     /// floodgate opens. Asserted by equality against
-    /// `karakuri_operation::gate::refusal`, which is P-0061: one refusal, one
+    /// `karakuri_operation::gate::refusal`, which is P-0090: one refusal, one
     /// sentence, and no second spelling of it in this crate.
     #[test]
     fn a_closed_operation_is_refused_at_the_seam_every_tool_crosses() {

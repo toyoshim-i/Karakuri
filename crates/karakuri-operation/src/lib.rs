@@ -128,7 +128,7 @@
 //!
 //! The conversion is one function per list in `karakuri-cli` — `mix::blend_mode`
 //! and its three neighbours — in the one place every control already ends
-//! (`docs/principles/0028-every-control-ends-in-the-same-record.md`), and that
+//! (`docs/principles/0090-a-surface-offers-it-never-decides.md`), and that
 //! package's `mix.rs` is where the two copies of each list are checked against
 //! each other, because it is the only crate in the workspace that depends on
 //! the engine and on this one at once. **Functions rather than the `From` impls
@@ -225,7 +225,7 @@ pub struct NodeAt {
 /// see
 /// `docs/adr/0223-a-wildcard-write-is-refused-where-the-nodes-it-lands-on-disagree.md`.
 /// **A surface owns none of this**
-/// (`docs/principles/0076-a-surface-owns-the-affordance-never-the-authority.md`):
+/// (`docs/principles/0090-a-surface-offers-it-never-decides.md`):
 /// the rule lives where the write lands, so every route meets it, and an
 /// addressed [`ParamAt`] meets nothing — it says which node it means.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -319,7 +319,7 @@ impl Residency {
     /// surface needs from the vocabulary is *which values exist*, and a control
     /// that steps through them is an affordance built over the three operations
     /// they name
-    /// (`docs/principles/0074-an-operation-says-what-it-wants-never-which-way-to-move.md`).
+    /// (`docs/principles/0090-a-surface-offers-it-never-decides.md`).
     /// `karakuri-midi`'s map reads it to decide what a `residency N <word>` line
     /// may end in, so a value added here is offered to a map file rather than
     /// waiting for a parser's second list to catch up.
@@ -364,7 +364,7 @@ impl BlendMode {
     /// **A list is not a cycle, and this crate does not own the cycle.** A
     /// control that steps through these is an affordance built over the three
     /// operations they name, and it belongs to whoever draws the control
-    /// (`docs/principles/0074-…`). What this is for is the two things a
+    /// (`docs/principles/0090-a-surface-offers-it-never-decides.md`). What this is for is the two things a
     /// surface genuinely needs from the vocabulary: *which values exist*, and
     /// *in what order they are conventionally shown*. The mixer strip's blend
     /// chip does its own arithmetic over this
@@ -509,7 +509,7 @@ impl WipeKind {
 /// **Three destinations and no toggle**, which is [`Residency`]'s shape and
 /// [`BlendMode`]'s: an operation names one of them outright, and a control that
 /// steps through them is an affordance built over the three
-/// (`docs/principles/0074-an-operation-says-what-it-wants-never-which-way-to-move.md`).
+/// (`docs/principles/0090-a-surface-offers-it-never-decides.md`).
 /// The console draws that affordance as `man / sug / auto` on a node head, and
 /// those three words are a surface's abbreviations rather than this list —
 /// exactly as the status line's `LIVE`/`prim`/`park` is not [`Residency::name`].
@@ -1185,7 +1185,7 @@ operations! {
     ///
     /// `signal` is a name on the bus (`energy`, `beat`, `band3`, `noise`) and
     /// is a `String` rather than a list, because that bus is open by design:
-    /// `docs/principles/0009-what-a-binding-can-express-is-not-baked-into-the-engine.md`.
+    /// `docs/principles/0090-a-surface-offers-it-never-decides.md`.
     ///
     /// **A step sequencer is not one more name on that bus, and this
     /// documentation said it was planned as one.** ADR-0222 surveyed the bay
@@ -1262,7 +1262,7 @@ operations! {
     /// three, which is [`Operation::SetResidency`]'s shape and
     /// [`Operation::SetBlendMode`]'s — the vocabulary owns the value list, so a
     /// surface asks for a destination rather than for a step
-    /// (`docs/principles/0074-…`). And it addresses a node of a deck's Set,
+    /// (`docs/principles/0090-a-surface-offers-it-never-decides.md`). And it addresses a node of a deck's Set,
     /// which is [`Operation::WriteProcedure`]'s shape: a `deck` beside a
     /// [`NodeAt`], which is *"one address shape for within a Set and one for
     /// which Set"*.
@@ -1332,7 +1332,7 @@ operations! {
     /// **The key steps and this does not.** `e` moves to the next scope and
     /// wraps, and that is the translator's arithmetic rather than this
     /// operation's payload —
-    /// [P-0074](../../../docs/principles/0074-an-operation-says-what-it-wants-never-which-way-to-move.md).
+    /// [P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md).
     /// Whatever a scope turns out to be named by, this names one.
     SelectScope { scope: Undecided } => "Choose which scope the library shows",
 

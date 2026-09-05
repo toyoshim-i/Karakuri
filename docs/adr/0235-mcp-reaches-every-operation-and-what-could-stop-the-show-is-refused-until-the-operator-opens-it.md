@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-31
 supersedes: []
 superseded_by: []
-principles: [0005, 0027, 0061, 0067, 0074, 0076, 0078, 0079, 0083]
+principles: [0005, 0027, 0067, 0078, 0079, 0083, 0090]
 tags: [mcp, live, vocabulary, surfaces, docs]
 ---
 
@@ -132,7 +132,7 @@ working, nothing is logged, and what is wrong is invisible in exactly the way a 
 out-of-range `textureLoad` is.
 
 **One refusal, one sentence.**
-[P-0061](../principles/0061-a-refusal-a-person-can-reach-from-two-surfaces-is-one-sentence.md): this
+[P-0090](../principles/0090-a-surface-offers-it-never-decides.md): this
 refusal will be reachable from more than one surface the moment a second automatic route exists, so
 it is written once, in one function, and asserted by equality against that function rather than by a
 `contains`.
@@ -384,7 +384,7 @@ prompt costs it at the moment they have least.
 - **The audit is one function over an `Operation`, called from one place.** It reads the operation and
   who asked for it, not a tool name — which is what keeps a second route (a lane, a follower, a
   second server) from arriving with its own copy of the table. Its refusal is one sentence from one
-  function (P-0061), asserted by equality.
+  function (P-0090), asserted by equality.
 - **Some rows are audited against engine state, not against a table.** `LoadSet` is the known one and
   `SetResidency` is why it cannot be avoided by closing the class harder. This is the sharpest new
   cost in the design: the audit is not a pure function of the operation.

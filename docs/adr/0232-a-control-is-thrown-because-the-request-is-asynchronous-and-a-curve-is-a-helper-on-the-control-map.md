@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-31
 supersedes: []
 superseded_by: []
-principles: [0001, 0028, 0043, 0069, 0074, 0076, 0078, 0085, 0087]
+principles: [0001, 0043, 0069, 0078, 0085, 0087, 0090]
 tags: [operations, console, transitions, automation, architecture]
 ---
 
@@ -71,7 +71,7 @@ was the seventh member of that arm and left it: *"What was actually missing was 
 [`Current::tempo`] is it."* The panel's own account of that day is worth keeping, because it is this
 one in miniature — the sync chip was *"a reachable affordance over an unwritable record"*, the
 refusal to route around it kept the cost low
-([P-0076](../principles/0076-a-surface-owns-the-affordance-never-the-authority.md)), and *"what
+([P-0090](../principles/0090-a-surface-offers-it-never-decides.md)), and *"what
 changed is the conversion, not this file's authority."*
 
 ### The two functions that say they are temporary
@@ -211,7 +211,7 @@ grid.**
 an operator who wants a cut does not want to wait for the bar."* So for a panel with no quantum
 control the resolved instant **is** the grid's position, read off the oscillator exactly as
 `mix::current_tempo` is read off it today, and the window computes nothing and decides nothing —
-P-0076 in the form the panel already stated it: *"computing the anchor here would have been a window
+P-0090 in the form the panel already stated it: *"computing the anchor here would have been a window
 binary taking a decision about a file format."* A caller that wants the next bar calls `quantise`,
 and a caller that wants the next bar is a caller that holds an engine.
 [P-0085](../principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md) is passed rather than
@@ -228,7 +228,7 @@ controls it hands in what that control says, and until then the honest answer is
 is not.** `Live::fade_slot` said *"this function is what goes the day the conversion lands"* and this
 is that day; `cycle_renderer` keeps only the part that was always its own — *"Which renderer to move
 to is the keyboard's own translation and stays here whatever happens to the record"* — and gives up
-its `mix::select_record` call. [P-0028](../principles/0028-every-control-ends-in-the-same-record.md)
+its `mix::select_record` call. [P-0090](../principles/0090-a-surface-offers-it-never-decides.md)
 is what that is worth: the records stop being derived beside the conversion, which is *"exactly the
 drift `karakuri-operation-record` exists to end"* in the words of the test that guards it.
 
@@ -289,7 +289,7 @@ is why that order is not available.
 
 **And it makes every press read three values where a hand names one.** The vocabulary's rule is that
 *an operation says what it wants*
-([P-0074](../principles/0074-an-operation-says-what-it-wants-never-which-way-to-move.md)) — a
+([P-0090](../principles/0090-a-surface-offers-it-never-decides.md)) — a
 destination, and the affordance belongs to whoever draws the control. `f` is one key and it would
 have to name a quantum and a length it did not ask about; the pad on `examples/surface.map` that
 would map to a fade cannot say three numbers at all, because *a note is a press*. The three settings

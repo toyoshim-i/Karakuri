@@ -229,7 +229,7 @@ pub enum Change<'a> {
     ///
     /// The mixer's two faders are what raise it: a drag on one emits
     /// [`karakuri_operation::Operation::SetGain`] or `SetOpacity`, the caller
-    /// turns it into a record and applies it to the deck (P-0028), and the
+    /// turns it into a record and applies it to the deck (P-0090), and the
     /// strip is drawn from what the deck says on the next frame.
     ///
     /// # Why it is not [`Change::Pointer`], which already covers the event

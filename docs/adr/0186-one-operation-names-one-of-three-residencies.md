@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-26
 supersedes: []
 superseded_by: []
-principles: [0074]
+principles: [0090]
 tags: [vocabulary, decks]
 ---
 
@@ -55,7 +55,7 @@ already do. It is a sixth copy of a list that exists elsewhere and that is the s
 back to toggles. `karakuri-operation` still has **no dependencies at all** — `std` only — which
 mirroring rather than importing is what preserves.
 
-This is [P-0074](../principles/0074-an-operation-says-what-it-wants-never-which-way-to-move.md)
+This is [P-0090](../principles/0090-a-surface-offers-it-never-decides.md)
 applied, not amended: *an operation says what it wants, never which way to move*. **No new
 principle.** The rule already covered this; what changed is that P-0074 cited `SetOnAir { deck,
 on_air: bool }` as its worked example of naming a destination, and that citation is now the wrong

@@ -245,7 +245,7 @@ pub enum Change {
 /// the one place the two copies of each are made to agree.
 ///
 /// `karakuri-operation` owns a copy of every list a destination is drawn from,
-/// which is the cost P-0074 says the vocabulary pays: *"The two rules — be
+/// which is the cost P-0090 says the vocabulary pays: *"The two rules — be
 /// engine-neutral, and have no toggles — are not jointly satisfiable unless
 /// the vocabulary owns the lists."* A copy needs somewhere the two meet, and
 /// this is that place: this package is where the two are seen together,
@@ -899,7 +899,7 @@ mod tests {
     /// value cannot say
     /// *set blend to over*, and the cost is stated rather than hidden: they
     /// are third spellings of lists the engine and the store already hold
-    /// (P-0074, ADR-0180). A record carries the **name**, so a level spelled
+    /// (P-0090, ADR-0180). A record carries the **name**, so a level spelled
     /// `prime` here and `priming` there is a record that decodes to a refusal
     /// on replay and moves nothing in the mix — a failure that would show up
     /// as a session replaying differently and nowhere earlier.

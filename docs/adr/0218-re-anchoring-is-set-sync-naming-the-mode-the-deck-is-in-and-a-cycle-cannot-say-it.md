@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-29
 supersedes: []
 superseded_by: []
-principles: [0074]
+principles: [0090]
 tags: [ui, vocabulary]
 ---
 
@@ -38,7 +38,7 @@ cycles has no way to say that."*
 **Re-anchoring is `SetSync { deck, sync }` naming the mode the deck is already in. No new operation,
 and the fault is in the two cycling affordances rather than in the vocabulary.**
 
-[P-0074](../principles/0074-an-operation-says-what-it-wants-never-which-way-to-move.md) is the rule
+[P-0090](../principles/0090-a-surface-offers-it-never-decides.md) is the rule
 and it predicted this exactly: *"a surface that can only step has no way to arrive."* `SetSync`
 already names a destination; a cycle is an affordance built over it, and this is the one case where
 the affordance is **structurally unable to express** something the operation can say. That is a
@@ -60,7 +60,7 @@ somebody will re-propose it. It names no destination `SetSync` cannot already na
 variant, a row on [every operation](../manual/operations.html), a `TITLES` entry and an update to
 the both-ways test that holds the page and the type together. Worse, it would be an operation whose
 *meaning* is "again", which is the shape
-[P-0074](../principles/0074-an-operation-says-what-it-wants-never-which-way-to-move.md) rules out —
+[P-0090](../principles/0090-a-surface-offers-it-never-decides.md) rules out —
 two surfaces asking for "again" disagree about what state they are re-asking for, in the same way
 two surfaces stepping one control disagree about where they are.
 
