@@ -4991,7 +4991,7 @@ proc signed_defaults {
     /// sentence says.
     ///
     /// **The three uniform cases are the negative control**
-    /// (`docs/principles/0025-…`): a check that refused every landing would
+    /// (`docs/principles/0089-a-check-you-have-not-watched-fail-is-guessing.md`): a check that refused every landing would
     /// pass the mixed case on its own, and today every node of every Set is
     /// `Manual`, so an over-eager rule would refuse every `--param` in the
     /// program and this is the assertion that would not let it.

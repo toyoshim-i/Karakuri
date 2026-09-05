@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-26
 supersedes: []
 superseded_by: []
-principles: [0025, 0047, 0072]
+principles: [0072, 0089]
 tags: [console, decks, testing]
 ---
 
@@ -108,7 +108,7 @@ the park, then the reason, then that both residencies cross the seam into the st
 **The reason is asserted because three of the four ways to satisfy `Deck::is_parked` mean the
 example forgot to do something.** `Unmeasured` and `CommittedUnknown` are a probe that never ran;
 `NoPrimingNeeded` is a closed-form Set that never wanted warming. Only `NoHeadroom` is the budget
-refusing, which is the thing being demonstrated. Run against its defects (P-0025), on its own:
+refusing, which is the thing being demonstrated. Run against its defects (P-0089), on its own:
 
 - Delete the `set_compute_budget_ms` call: *"the request was granted rather than parked — governor:
   9.75 / 16.70 ms live + 5.01 priming [host clock]"*.
@@ -124,7 +124,7 @@ already does exactly this and is right to. It loses because the example is not a
 presentation, it is the program: a panel showing a parked chip that no `Deck` ever parked is a
 drawing of a state the engine never entered, and the next person to change `Deck::govern` would
 break the real path with the picture still looking correct.
-[P-0047](../principles/0047-a-fixture-the-product-can-rewrite-is-not-a-fixture.md) is the same
+[P-0089](../principles/0089-a-check-you-have-not-watched-fail-is-guessing.md) is the same
 argument from the other side — a test owns its inputs, and this window's input is an engine. The
 tempting version is not the `Strip`, which nobody would write here, but
 `HotSwap::set_measured_cost`: it is public, it is documented for *"a caller that has a number from

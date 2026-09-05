@@ -5,7 +5,7 @@ status: accepted
 date: 2026-07-25
 supersedes: []
 superseded_by: []
-principles: [0011]
+principles: [0089]
 tags: [codegen]
 ---
 
@@ -54,4 +54,4 @@ the bug.
 ## Evidence
 
 Session 2026-07-25T14:37Z–15:00Z. Standing rule:
-[P-0011](../principles/0011-generated-names-cannot-be-captured.md).
+[P-0089](../principles/0089-a-check-you-have-not-watched-fail-is-guessing.md).

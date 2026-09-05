@@ -5,7 +5,7 @@ status: accepted
 date: 2026-07-31
 supersedes: []
 superseded_by: []
-principles: [0025]
+principles: [0089]
 tags: [process]
 ---
 
@@ -51,4 +51,4 @@ Carried forward into every subsequent brief, verbatim:
 ## Evidence
 
 Session 2026-07-31T12:18Z, 15:37Z, 16:00Z. Sharpens
-[P-0025](../principles/0025-a-test-meant-to-catch-something-is-run-against-the-defect.md).
+[P-0089](../principles/0089-a-check-you-have-not-watched-fail-is-guessing.md).

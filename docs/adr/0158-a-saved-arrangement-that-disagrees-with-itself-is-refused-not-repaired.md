@@ -25,7 +25,7 @@ parent pointers hangs** — `visible()` and `is_ancestor()` walk *up* — and a 
 the three, because it leaves nothing to read afterwards.
 
 Deserialisation was returning `Ok` for all of them, which is
-[P-0024](../principles/0024-nothing-checks-clean-and-comes-up-short-at-runtime.md) exactly: the
+[P-0089](../principles/0089-a-check-you-have-not-watched-fail-is-guessing.md) exactly: the
 check ran clean and the program came up short later.
 
 ## Decision

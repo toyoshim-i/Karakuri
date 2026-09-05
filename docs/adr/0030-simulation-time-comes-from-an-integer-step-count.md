@@ -5,7 +5,7 @@ status: accepted
 date: 2026-07-27
 supersedes: []
 superseded_by: []
-principles: [0002, 0025]
+principles: [0002, 0089]
 tags: [engine, determinism]
 ---
 
@@ -68,4 +68,4 @@ must not be knowingly wrong.)
 
 Session 2026-07-27T03:58Z. Standing rules:
 [P-0002](../principles/0002-simulation-time-comes-from-a-record-never-from-a-clock.md),
-[P-0025](../principles/0025-a-test-meant-to-catch-something-is-run-against-the-defect.md).
+[P-0089](../principles/0089-a-check-you-have-not-watched-fail-is-guessing.md).

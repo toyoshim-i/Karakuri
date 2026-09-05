@@ -65,7 +65,7 @@ zero.
 
 ## Consequences
 
-- **A geometry test asserted nothing, and P-0025 is what caught it.** The house style states a
+- **A geometry test asserted nothing, and P-0089 is what caught it.** The house style states a
   region's arithmetic in terms of the `size::` constants — which means a test of that arithmetic
   cannot catch a *wrong constant*: transcribing `.transport`'s `gap: 14px` as 10 left the test
   green, because it compared the layout against the same 10. The constants are now asserted against

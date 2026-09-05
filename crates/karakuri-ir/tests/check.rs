@@ -648,7 +648,7 @@ proc probe {
 /// elements every step forever, which reads as a procedure that draws
 /// nothing rather than as a mistake. That is exactly the shape this pass
 /// exists to refuse — see
-/// `docs/principles/0024-nothing-checks-clean-and-comes-up-short-at-runtime.md`.
+/// `docs/principles/0089-a-check-you-have-not-watched-fail-is-guessing.md`.
 #[test]
 fn a_spawn_block_without_a_spawn_rate_param_is_rejected() {
     let src = r#"
