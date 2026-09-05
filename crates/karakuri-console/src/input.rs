@@ -83,7 +83,7 @@
 //!    describing itself to an operator has to say what a pointer reaches, and
 //!    a sentence saying it is where the count goes stale. What they are is
 //!    still written here, because a name is not a number and there is nowhere
-//!    else the thirty-one sit together: the Outputs row's sink
+//!    else the thirty-three sit together: the Outputs row's sink
 //!    ([`crate::view::outputs`]), a mixer strip's fader knob
 //!    ([`crate::view::Mixer::grab`]), its blend chip
 //!    ([`crate::view::Mixer::blend`]), its tally chip
@@ -99,9 +99,10 @@
 //!    arrows ([`crate::view::deck_head`]), the Master bay's out
 //!    ([`crate::view::MasterRow::grab`]), the Program bay head's `solo`
 //!    ([`crate::view::program_head`]), the four deck preview cells under it
-//!    ([`crate::view::ProgramBay::preview`]) and the Library bay's scope chips
-//!    ([`crate::view::LibraryBay::chip`]). The rule did not change to hold
-//!    any of the thirty that came after the first, which is what it was
+//!    ([`crate::view::ProgramBay::preview`]), the Library bay's scope chips
+//!    ([`crate::view::LibraryBay::chip`]) and the two filter fields under them
+//!    ([`crate::view::LibraryBay::filter`]). The rule did not change to hold
+//!    any of the thirty-two that came after the first, which is what it was
 //!    written for — and each is asked exactly the way the first is: the
 //!    derivation that draws it, asked whether the point is on it, with nothing
 //!    stored.
@@ -360,7 +361,7 @@
 //! derivation hands back a value and the program holding the run's opening
 //! writes it; this rule's only business with them is that a press on one is the
 //! panel's and not `egui`'s, which is the same business it has with the other
-//! twenty-six.
+//! twenty-eight.
 //!
 //! **And so are the Library bay's scope chips**, which are the four preview
 //! cells' arrangement one column over: the bay is derived once and walked once
@@ -380,6 +381,22 @@
 //! it names the chip it landed on and no arithmetic happens anywhere. That is
 //! P-0090's division met by two surfaces rather than an inconsistency between
 //! them.
+//!
+//! **The two filter fields one row under them step where the chips name**, and
+//! that is the same division read the other way round. A chip is one of a row
+//! of capsules and a pointer lands on exactly one, so it names; a field is one
+//! box standing for a list of values, so a press on it can only move along that
+//! list — which is `e`'s arithmetic at a pointer, and P-0090 forbids neither.
+//! What it forbids is an operation that says *step*, and
+//! [`crate::view::LibraryBay::filter`] emits none: what leaves is
+//! `Operation::ListSets` naming both filters as they will stand.
+//!
+//! **They are the one control here a boundary's grab does not reach and the
+//! chips beside them do.** `.lib-filters` is `padding: 6px 9px` inside the bay,
+//! so a field is 9 off each side edge against a [`GRAB`] of 6, where the chip
+//! at the end of the scope row overruns the bay entirely. The row above and the
+//! list below are both the bay's own, so there is no boundary up or down
+//! either.
 //!
 //! **Four questions, one derivation.** The mixer bay is laid out once per
 //! event and asked for every control it has — a knob, a blend chip, a tally
@@ -415,15 +432,15 @@ use karakuri_operation::gate::Class;
 use crate::panel::{Panel, GRAB};
 use crate::view::{
     arrangement, audio_in, deck_head, inspector, library, look, master, mcp_pill, mixer, outputs,
-    program_bay, program_head, transition, Scope, View,
+    program_bay, program_head, transition, Field, Scope, View,
 };
 
 /// **What each of rule 4's derivations answers for**, one entry per probe in
 /// [`claim`] and in that order: the Outputs sink, the audio-in pill, the
 /// arrangement pill, the look group's two, a strip's four, the transition
 /// row's four, the Master bay's one, a deck head's four, the Program bay
-/// head's `solo`, the four deck preview cells, the Library bay's scope chips,
-/// and the four class pills.
+/// head's `solo`, the four deck preview cells, the Library bay's scope chips
+/// and its two filter fields, and the four class pills.
 ///
 /// **It is a table and not a sentence because [`claim`] asks its probes out of
 /// an array of exactly this length.** A derivation added to rule 4 without an
@@ -442,7 +459,28 @@ use crate::view::{
 /// is values of [`Scope`] — so the number of chips a pointer can reach is the
 /// number of scopes that exist, and the day a fifth is added this rises with
 /// it rather than being a four somebody has to remember.
-const CLAIMS: [usize; 12] = [1, 1, 1, 2, 4, 4, 1, 4, 1, 4, Scope::ALL.len(), 4];
+///
+/// **The filter row's entry is two and is a constant**, unlike the scope row
+/// above it: the row is `holds` and `layer` because
+/// [`karakuri_operation::Operation::ListSets`] carries two things to narrow by,
+/// and a third would be a change to the vocabulary rather than a longer slice
+/// the host handed in. [`Field::ALL`] is the same two, and it is what the probe
+/// walks.
+const CLAIMS: [usize; 13] = [
+    1,
+    1,
+    1,
+    2,
+    4,
+    4,
+    1,
+    4,
+    1,
+    4,
+    Scope::ALL.len(),
+    Field::ALL.len(),
+    4,
+];
 
 /// **How many controls rule 4 hit-tests**, summed over [`CLAIMS`].
 ///
@@ -678,6 +716,24 @@ pub fn claim(panel: &mut Panel, ctx: &egui::Context, view: &View, p: Point) -> C
                 library(panel.layout(), &view.scopes, &view.library)
                     .is_some_and(|bay| bay.chip(ctx, &view.scopes, p).is_some())
             };
+            // **The Library bay's two filter fields**, one row under the
+            // chips, and the bay is derived again rather than shared with the
+            // probe above it — `any` short-circuits, so the second derivation
+            // is only ever paid by a press that got past the chips, and a bay
+            // held across two probes would be a value living longer than the
+            // question it answers.
+            //
+            // **It asks `egui` for nothing**, where the chips ask it for a word
+            // width apiece: `.field` is `flex: 1`, so where the two fields are
+            // is a division of the row rather than a measurement of what is in
+            // them — `LibraryBay::field`. So this is the cheapest probe in rule
+            // 4 after the preview cells, and it is asked here rather than
+            // earlier because the row it is in is drawn only where the chips
+            // above it are.
+            let on_filter = || {
+                library(panel.layout(), &view.scopes, &view.library)
+                    .is_some_and(|bay| bay.filter(&view.holds, view.filters(), p).is_some())
+            };
             // **The four class pills, one derivation asked four times**, which
             // is a deck head's arrangement rather than a strip's: they are in
             // four different regions and cannot be one laid-out box, but they
@@ -713,6 +769,7 @@ pub fn claim(panel: &mut Panel, ctx: &egui::Context, view: &View, p: Point) -> C
                 &on_solo,
                 &on_cells,
                 &on_scope,
+                &on_filter,
                 &on_mcp,
             ];
             match probes.iter().any(|probe| probe()) {

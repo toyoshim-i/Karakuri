@@ -1668,6 +1668,27 @@ impl Readout {
                 {
                     return (claim, self.chose(chosen));
                 }
+                // **The Library bay's two filter fields**, one row under the
+                // chips and derived from the same call for the same reason:
+                // where the second field is depends on how wide the row is, and
+                // a second derivation would put the box a press lands on
+                // somewhere the border is not.
+                //
+                // **A press steps the field; it does not name a value.** A chip
+                // is one of a row and a pointer lands on exactly one, so it
+                // names; a field is one box standing for a list, so a press on
+                // it moves along that list and the operation names where it
+                // arrived — `LibraryBay::filter`, and `TransitionRow::shape`'s
+                // affordance three bays along. What comes back is a whole
+                // `Operation::ListSets`: unlike `SelectScope` this payload can
+                // carry everything the press decided, so there is no `Chosen`
+                // here and nothing beside the operation.
+                if let Some(operation) =
+                    library_bay(self.panel.layout(), &self.view.scopes, &self.view.library)
+                        .and_then(|bay| bay.filter(&self.view.holds, self.view.filters(), at))
+                {
+                    return (claim, self.narrowed(operation));
+                }
                 // **The transition row's four capsules, derived once for all
                 // of them**, exactly as `claim` does it: the three settings
                 // are laid end to end from the block's left padding and `go`
@@ -2050,6 +2071,61 @@ impl Readout {
             }
         );
         Acted::Emitted(Some(chosen.operation))
+    }
+
+    /// **A press on one of the Library bay's two filter fields**, and it is
+    /// [`Readout::chose`]'s shape one row down: the surface performs its own
+    /// pointer and emits the operation for the record it is owed, which is
+    /// `Silent(Question)` — *it asks rather than changes*.
+    ///
+    /// **The operation carries everything, where `SelectScope` carries
+    /// nothing.** `Operation::ListSets { holds, layer }` is exactly the state
+    /// the two fields are in, so this applies it rather than guessing at it and
+    /// there is no value travelling beside it. `View::narrow` is the one door
+    /// into that state and is where a `holds` this console cannot draw is
+    /// refused — which nothing here can hand it, because the value came out of
+    /// `LibraryBay::filter` stepping the same candidates.
+    ///
+    /// **The listing is not read here.** It is a directory read
+    /// ([P-0091](../../../docs/principles/0091-cost-is-known-before-it-is-paid.md))
+    /// and the store is the window's rather than the readout's, so the caller
+    /// re-reads on `Operation::ListSets` exactly as it does on
+    /// `Operation::SelectScope` — one branch, two operations, because a scope
+    /// and a filter are the same question asked of different halves.
+    ///
+    /// **A filter set while the bay is reading something else is said out
+    /// loud**, and it is the one thing about this row that would otherwise be
+    /// silent: the operation is *List what the store holds*, and `presets`,
+    /// `favourites` and `folder` are not the store. The press is still a real
+    /// question — it is answered the moment `my sets` is marked again — and a
+    /// press that appears to do nothing is what this line exists to prevent.
+    fn narrowed(&mut self, operation: Operation) -> Acted {
+        let Operation::ListSets { holds, layer } = &operation else {
+            unreachable!("the filter fields emit `ListSets` and nothing else");
+        };
+        let moved = self.view.narrow(holds.as_deref(), *layer);
+        let at = self.view.filters();
+        println!(
+            "filter: `{}` / `{}` — {}",
+            at.holds_word(),
+            at.layer_word(),
+            match (self.view.scope(), moved) {
+                (Some(Scope::MySets), true) =>
+                    "the listing under it is what the store holds, narrowed, and the cursor is \
+                     back at the top of it",
+                // **A step that arrived where it already was**, which is the
+                // `holds` field on a store whose Sets name no node: the press
+                // asks for the listing again, and that is `Readout::chose`'s
+                // answer for the chip that is already marked.
+                (Some(Scope::MySets), false) =>
+                    "already what this bay is narrowed to, so this asks the store that same \
+                     question again",
+                _ =>
+                    "this narrows `my sets`, which is not the library this bay is reading — \
+                      mark that scope and the rows follow",
+            }
+        );
+        Acted::Emitted(Some(operation))
     }
 
     /// A press on the Outputs row's one control. **The dot says what it did**
@@ -4990,7 +5066,29 @@ fn transport(
     })
 }
 
-/// **What the Library bay lists**: the name of every Set the store holds.
+/// **What the store holds, summarised**: every Set in it, most recent first,
+/// with what each one is made of.
+///
+/// # It asks `setfile::summarise` and not `Store::list_sets`, and that is the
+/// whole of what the filter fields needed
+///
+/// This used to be `Store::list_sets().map(|entry| entry.id)` — a directory
+/// read and a name per file — and `view::LibraryBay` said beside the two
+/// undrawn filter fields that *"nothing in the store answers it: `list_sets`
+/// reads names off a directory and no index anywhere says what a Set holds"*.
+/// The second half of that was already wrong:
+/// [`karakuri_environment::setfile::summarise`] reads what each Set holds, node
+/// by node, and `karakuri-environment`'s MCP `list_sets` has been narrowing on
+/// it. So the reading moves here, one Set file per row on top of the directory
+/// read, and [`narrows`] is the same retain the tool does.
+///
+/// **Most recent first, which `Store::list_sets` is not.**
+/// `docs/manual/operations.html`'s row says the listing is most recent first
+/// and the MCP tool sorts for it; the bay was showing ascending id, so the
+/// panel and the tool answered one operation two ways. The tie-break is the id
+/// and it is not decoration — two Sets written inside one tick of a coarse
+/// filesystem clock carry the same mtime, and a sort whose keys tie leaves
+/// whatever order the entries arrived in.
 ///
 /// # Read once, and by the side of the seam that may read a disk
 ///
@@ -5019,7 +5117,7 @@ fn transport(
 /// Either way the answer is a list, and an empty one is a bay with nothing in
 /// it — which is what `view::library` draws for it, and is honest: a store
 /// this run could not read holds nothing it can name.
-fn library(root: &std::path::Path) -> Vec<String> {
+fn library(root: &std::path::Path) -> Vec<setfile::SetSummary> {
     if !root.is_dir() {
         println!(
             "library: no store at {}, so the bay lists nothing",
@@ -5027,9 +5125,12 @@ fn library(root: &std::path::Path) -> Vec<String> {
         );
         return Vec::new();
     }
-    let sets = Store::open(root).and_then(|store| store.list_sets());
+    let sets = Store::open(root).and_then(|store| setfile::summarise(&store));
     match sets {
-        Ok(sets) => sets.into_iter().map(|entry| entry.id).collect(),
+        Ok(mut sets) => {
+            sets.sort_by(|a, b| b.written.cmp(&a.written).then_with(|| a.id.cmp(&b.id)));
+            sets
+        }
         Err(e) => {
             // Said rather than swallowed, for the reason every other failure
             // in this file is said: a bay that is empty because the store
@@ -5038,6 +5139,104 @@ fn library(root: &std::path::Path) -> Vec<String> {
             println!("library: {} could not be listed: {e}", root.display());
             Vec::new()
         }
+    }
+}
+
+/// **The record's layer a vocabulary layer names.**
+///
+/// A third spelling of a list that already has two conversions in
+/// `karakuri-environment` — `setfile::kind_of` and `mcp.rs`'s pair — and it is
+/// here because both of those are private to that crate and neither is on its
+/// way out. What crosses the seam is the summary, whose nodes carry a
+/// `karakuri_store::record::Layer`, and what a filter carries is a
+/// `karakuri_operation::Layer`; the comparison has to happen on one side.
+///
+/// **Exhaustive with no wildcard**, which is what makes it a table rather than
+/// a guess: a sixth layer does not compile until somebody says which it is.
+fn recorded(layer: karakuri_operation::Layer) -> karakuri_store::record::Layer {
+    use karakuri_operation::Layer as Asked;
+    use karakuri_store::record::Layer as Written;
+    match layer {
+        Asked::L1 => Written::L1,
+        Asked::L2 => Written::L2,
+        Asked::L3 => Written::L3,
+        Asked::L4 => Written::L4,
+        Asked::Field => Written::Field,
+    }
+}
+
+/// **Does this Set pass the filter row?** — the same retain
+/// `karakuri-environment`'s MCP `list_sets` applies, and deliberately so: one
+/// operation narrowed two ways is two answers to *what does this store hold*.
+///
+/// **A Set matches, not a node.** With both filters given the question is
+/// *which of the Sets that hold this also have something on that layer*, so
+/// each half is answered against the whole Set — a Set whose `drift_shell` is a
+/// geometry and whose deformation is called something else is exactly what that
+/// question is looking for.
+///
+/// `holds` is matched case-insensitively against what each node is called,
+/// because an operator who read `drift_shell` in one row and stepped to
+/// `Drift_Shell` in another is not asking a different question. **The fields
+/// step through the names as the store spells them**, so today the fold changes
+/// no answer; it is here because the tool's does and the two must not come
+/// apart the day either field takes letters.
+fn narrows(
+    set: &setfile::SetSummary,
+    holds: Option<&str>,
+    layer: Option<karakuri_operation::Layer>,
+) -> bool {
+    let held = holds.map(str::to_ascii_lowercase);
+    held.as_ref().is_none_or(|holds| {
+        set.nodes
+            .iter()
+            .any(|node| node.name.to_ascii_lowercase().contains(holds))
+    }) && layer.is_none_or(|layer| {
+        let want = recorded(layer);
+        set.nodes.iter().any(|node| node.layer == want)
+    })
+}
+
+/// **What the `holds` field can be stepped to**: every name a node in this
+/// store's Sets carries, once each and in one order.
+///
+/// **The unnarrowed listing's**, which is `view::View::holds`' own instruction
+/// and the reason this takes the summaries before [`narrows`] has been near
+/// them: candidates read off a filtered listing shrink as the filter bites, and
+/// a step would then wander somewhere it could not come back from.
+///
+/// **Sorted, and not in the order the Sets were written.** The candidates are a
+/// list somebody steps through one press at a time, so the order has to hold
+/// still while they do it — where the rows above are ordered by recency and
+/// move whenever anything is saved. `BTreeSet` is the sort and the deduplication
+/// in one pass.
+fn holds_choices(sets: &[setfile::SetSummary]) -> Vec<String> {
+    sets.iter()
+        .flat_map(|set| set.nodes.iter().map(|node| node.name.clone()))
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect()
+}
+
+/// **What the filter row is narrowing to, in words**, or `None` where it is
+/// narrowing nothing.
+///
+/// The console draws the two values and this says what they mean, which is the
+/// division every other readout on this panel makes: a field reads `L4` and a
+/// line says the listing under it is the Sets that hold one.
+///
+/// **`layer` arrives already spelled**, out of `view::Filters::layer_word` —
+/// the word the field itself is drawing. A `{:?}` here would print `Field`
+/// where the field reads `FIELD`, which is a readout and a sentence about it
+/// disagreeing in the one place a reader can see both.
+fn narrowing(holds: Option<&str>, layer: Option<&str>) -> Option<String> {
+    match (holds, layer) {
+        (None, None) => None,
+        (Some(holds), None) => Some(format!("holding a node called `{holds}`")),
+        (None, Some(layer)) => Some(format!("holding a {layer} node")),
+        (Some(holds), Some(layer)) => Some(format!(
+            "holding both a node called `{holds}` and a {layer} node"
+        )),
     }
 }
 
@@ -5192,8 +5391,35 @@ fn listing(
             "  library: this console was handed no scopes, so there is no library to list",
         );
     };
-    view.library = match scope {
+    // **`my sets` is the one scope the filter row narrows**, and that is
+    // `Operation::ListSets`'s own scope rather than a shortcut here: the row is
+    // *List what the **store** holds*, and the other three listings are not the
+    // store — `presets` is a told directory of files, and the last two answer
+    // nothing at all. So the candidates are emptied for them, which is what
+    // makes `View::filters` read both fields as unset there rather than the bay
+    // hiding rows under a filter it is not applying. The filter comes back with
+    // the scope, because the position it is kept as is still there.
+    let held = match scope {
         Scope::MySets => library(store),
+        _ => Vec::new(),
+    };
+    view.holds = holds_choices(&held);
+    // **Copied out rather than borrowed across the write below**: `filters`
+    // borrows `View::holds`, and the listing is written into the same `View`.
+    let (holds, layer, spelled) = {
+        let at = view.filters();
+        (
+            at.holds.map(str::to_owned),
+            at.layer,
+            at.layer.is_some().then(|| at.layer_word().to_owned()),
+        )
+    };
+    view.library = match scope {
+        Scope::MySets => held
+            .iter()
+            .filter(|set| narrows(set, holds.as_deref(), layer))
+            .map(|set| set.id.clone())
+            .collect(),
         Scope::Presets => presets_listing(presets)
             .into_iter()
             .map(|preset| preset.id)
@@ -5203,13 +5429,45 @@ fn listing(
         // which it is.
         Scope::Favourites | Scope::Folder => Vec::new(),
     };
-    match view.library.len() {
-        0 => format!(
+    // **Only where the filter was applied.** `layer` survives a scope change —
+    // it is the console's own value and not a position in a listing — so a bay
+    // reading `presets` under a set `layer` field would otherwise report a
+    // narrowing that narrowed nothing. What says so out loud is the press:
+    // `Readout::narrowed`.
+    let narrowed = matches!(scope, Scope::MySets)
+        .then(|| narrowing(holds.as_deref(), spelled.as_deref()))
+        .flatten();
+    match (view.library.len(), narrowed) {
+        // **A filter that hid everything is a different nothing from an empty
+        // library**, and it is the one kind `why_nothing` cannot name: the
+        // store is not empty, and what to do about it is press a field rather
+        // than save a Set. It is the sentence the MCP tool answers the same
+        // case with, for the same reason.
+        (0, Some(narrowed)) => format!(
+            "  library: `{}` lists nothing — none of the {} Set{} here {narrowed}, so the \
+             filter row is what to press rather than `k`",
+            scope.name(),
+            held.len(),
+            match held.len() {
+                1 => "",
+                _ => "s",
+            }
+        ),
+        (0, None) => format!(
             "  library: `{}` lists nothing — {}",
             scope.name(),
             why_nothing(scope)
         ),
-        listed => format!(
+        (listed, Some(narrowed)) => format!(
+            "  library: `{}` lists {listed} of {} Set{}, {narrowed}",
+            scope.name(),
+            held.len(),
+            match held.len() {
+                1 => "",
+                _ => "s",
+            }
+        ),
+        (listed, None) => format!(
             "  library: `{}` lists {listed} Set{}",
             scope.name(),
             match listed {
@@ -8796,7 +9054,16 @@ impl ApplicationHandler for App {
                 // pointer *names* — and naming the library you are already
                 // reading is asking it again, which is a question this console
                 // had no way to put before.
-                if matches!(acted, Acted::Emitted(Some(Operation::SelectScope { .. }))) {
+                // **And a press that narrowed one is the same question asked
+                // of the other half**, so it is the same branch: a scope and a
+                // filter both change what the store is being asked, and the
+                // answer to either is a directory read this side owns.
+                if matches!(
+                    acted,
+                    Acted::Emitted(Some(
+                        Operation::SelectScope { .. } | Operation::ListSets { .. }
+                    ))
+                ) {
                     println!(
                         "{}",
                         listing(&mut self.readout.view, &self.store, self.presets.as_ref())
@@ -11244,15 +11511,19 @@ mod tests {
             root.display()
         );
 
-        // And with two Sets in it, both names come back — in the order
-        // `list_sets` sorts them, which is the order the bay draws.
+        // And with two Sets in it, both names come back — **most recent
+        // first**, which is what the operation's own row says a listing is and
+        // what the MCP tool already answered. `morph01` is written second and
+        // is first here either way the clock falls: on a fine one it is the
+        // more recent, and on a coarse one the two mtimes tie and the tie-break
+        // is the id ascending.
         let store = Store::open(&root).expect("a store to list");
         for id in ["night01", "morph01"] {
             store
                 .write_set(id, &[])
                 .unwrap_or_else(|e| panic!("writing {id}: {e}"));
         }
-        let listed = library(&root);
+        let listed: Vec<String> = library(&root).into_iter().map(|set| set.id).collect();
         assert_eq!(
             listed,
             vec!["morph01".to_owned(), "night01".to_owned()],
@@ -11376,7 +11647,10 @@ mod tests {
             taken.said
         );
         assert_eq!(
-            library(&root),
+            library(&root)
+                .into_iter()
+                .map(|set| set.id)
+                .collect::<Vec<_>>(),
             vec!["beat_cloud".to_owned()],
             "the preset was taken in and `my sets` does not list it"
         );
@@ -13023,6 +13297,192 @@ mod tests {
             Some(Scope::Presets),
             "a press on the marked chip stepped somewhere"
         );
+    }
+
+    /// **A press on one of the Library bay's two filter fields, through the
+    /// window loop's own routing** — the half of the badge ADR-0213 makes a
+    /// badge mean, one row under
+    /// [`a_press_on_a_scope_chip_names_the_library_the_bay_reads`].
+    ///
+    /// `karakuri-console`'s `tests/library.rs` asserts everything up to the
+    /// operation with no window anywhere: where the two fields are, that each
+    /// steps its own cycle, that the operation names where it arrived and
+    /// carries the other field untouched, and that nothing between them takes a
+    /// press. **This is the half that says an operator reaches it** — a control
+    /// demonstrated in that crate and never wired here would pass there and be
+    /// a lie the page tells on its own authority, which is exactly what
+    /// `press_handler` was written after.
+    ///
+    /// **What is asserted is the whole press.** The operation that leaves is
+    /// `ListSets` carrying the step; `View::narrow` has been called, so the
+    /// field the panel draws next frame reads the new value; and the library
+    /// cursor is back at the top, because the listing under a narrower filter
+    /// is one this cursor has never seen.
+    ///
+    /// **Both fields, because the operation carries both halves**: the press on
+    /// `layer` has to come back with the `holds` the press before it set, and a
+    /// route that rebuilt the operation from one field would lose it.
+    ///
+    /// A CPU test: a `Readout` takes no device.
+    #[test]
+    fn a_press_on_a_filter_field_asks_the_store_for_a_narrower_listing() {
+        use karakuri_console::view::Field;
+        use karakuri_operation::Layer;
+
+        let ctx = drawn_once();
+        let mut readout = Readout::new(1440.0, 900.0);
+        readout.panel.solve();
+        // A console told what libraries there are, handed the listing for the
+        // one it opens on and told what that listing's Sets are made of —
+        // which is what `listing` does on this side of the seam.
+        readout.view.scopes = Scope::ALL.to_vec();
+        readout.view.library = vec!["drift_night".to_owned(), "lattice_veil".to_owned()];
+        readout.view.holds = vec!["drift_shell".to_owned(), "soft_points".to_owned()];
+        assert!(readout.view.select_scope(Scope::MySets));
+        // **The cursor is somewhere other than the top**, so that the move back
+        // to it is a move and not the state it was already in.
+        assert!(readout.view.walk(1, 2), "the cursor did not move");
+
+        // The box, asked of the derivation that draws it rather than
+        // remembered — the rule the whole of `input` is written to.
+        let field = |readout: &mut Readout, which: Field| {
+            readout.panel.solve();
+            let at = library_bay(
+                readout.panel.layout(),
+                &readout.view.scopes,
+                &readout.view.library,
+            )
+            .expect("the bay lists its rows")
+            .field(which)
+            .expect("the bay draws its filter fields");
+            Point::new(at.center().x, at.center().y)
+        };
+
+        let at = field(&mut readout, Field::Holds);
+        assert_eq!(readout.pointer(&ctx, Pointer::Moved(at)).0, Claim::Panel);
+        let (claim, did) = readout.pointer(&ctx, Pointer::Down);
+        assert_eq!(claim, Claim::Panel);
+        assert_eq!(
+            did,
+            Acted::Emitted(Some(Operation::ListSets {
+                holds: Some("drift_shell".to_owned()),
+                layer: None,
+            })),
+            "the press did not reach the `holds` field"
+        );
+        assert!(
+            !readout.panel.dragging(),
+            "the press took a boundary in hand"
+        );
+        readout.pointer(&ctx, Pointer::Up);
+        assert_eq!(
+            readout.view.filters().holds,
+            Some("drift_shell"),
+            "the press was routed and the field it stepped does not read it"
+        );
+        assert_eq!(
+            readout.view.cursor_row(),
+            0,
+            "the listing narrowed and the cursor is still pointing into the one it left"
+        );
+
+        // **And the field beside it, which has to carry the first one
+        // through**: what leaves is the pair as it now stands.
+        let at = field(&mut readout, Field::Layer);
+        assert_eq!(readout.pointer(&ctx, Pointer::Moved(at)).0, Claim::Panel);
+        assert_eq!(
+            readout.pointer(&ctx, Pointer::Down).1,
+            Acted::Emitted(Some(Operation::ListSets {
+                holds: Some("drift_shell".to_owned()),
+                layer: Some(Layer::L1),
+            })),
+            "the press did not reach the `layer` field, or it dropped the filter beside it"
+        );
+        readout.pointer(&ctx, Pointer::Up);
+        assert_eq!(readout.view.filters().layer, Some(Layer::L1));
+        assert_eq!(readout.view.filters().holds, Some("drift_shell"));
+    }
+
+    /// **The filter row narrows what the bay lists, through the summary.**
+    ///
+    /// The other half of the same press: `a_press_on_a_filter_field_…` says the
+    /// operation reaches `View::narrow`, and this says the listing that comes
+    /// back afterwards is a narrower one — which is the whole point, and was
+    /// impossible while this side asked `Store::list_sets` for names.
+    ///
+    /// **It is the same retain the MCP tool applies**, over the same
+    /// `setfile::summarise`, which is what keeps one operation from being
+    /// answered two ways by two surfaces.
+    ///
+    /// A CPU test: a store, a `View`, and no window.
+    #[test]
+    fn the_filter_row_narrows_my_sets_through_the_summary() {
+        use karakuri_operation::Layer;
+        use karakuri_store::hash::Hash;
+        use karakuri_store::ndjson::Line;
+        use karakuri_store::record::Layer as Written;
+
+        let root = scratch_dir("filter-listing");
+        let store = Store::open(&root).expect("a store to list");
+        let slot = |layer: Written, name: &str| {
+            Line::new(Record::Slot {
+                layer,
+                index: 0,
+                name: Some(name.to_owned()),
+                proc_hash: Hash::of(name.as_bytes()),
+            })
+        };
+        store
+            .write_set("night01", &[slot(Written::L1, "drift_shell")])
+            .expect("a Set to list");
+        store
+            .write_set("veil02", &[slot(Written::L4, "soft_points")])
+            .expect("a second Set to list");
+
+        let mut view = View::new(Room::Day);
+        view.scopes = Scope::ALL.to_vec();
+        assert!(view.select_scope(Scope::MySets));
+
+        // Unnarrowed: both Sets, and the candidates are what their nodes are
+        // called — sorted, deduplicated, and read off the *unfiltered* listing.
+        let said = listing(&mut view, &root, None);
+        assert_eq!(view.library.len(), 2, "the bay lists {:?}", view.library);
+        assert_eq!(
+            view.holds,
+            vec!["drift_shell".to_owned(), "soft_points".to_owned()],
+            "the `holds` field can be stepped to {:?}",
+            view.holds
+        );
+        assert!(!said.contains("holding"), "{said}");
+
+        // Narrowed by what a node is called.
+        assert!(view.narrow(Some("drift_shell"), None));
+        let said = listing(&mut view, &root, None);
+        assert_eq!(view.library, vec!["night01".to_owned()], "{said}");
+        assert!(
+            said.contains("1 of 2") && said.contains("drift_shell"),
+            "{said}"
+        );
+
+        // And by which layer a Set uses, which is the other half of the row and
+        // is answered against the whole Set rather than against one node.
+        assert!(view.narrow(None, Some(Layer::L4)));
+        let said = listing(&mut view, &root, None);
+        assert_eq!(view.library, vec!["veil02".to_owned()], "{said}");
+        assert!(said.contains("L4"), "{said}");
+
+        // **A filter that matched nothing is a different nothing from an empty
+        // store**, and the line says which: the store is not empty, and what to
+        // do about it is press a field rather than save a Set.
+        assert!(view.narrow(Some("drift_shell"), Some(Layer::L4)));
+        let said = listing(&mut view, &root, None);
+        assert!(view.library.is_empty(), "the bay lists {:?}", view.library);
+        assert!(
+            said.contains("none of the 2 Sets here") && !said.contains(why_nothing(Scope::MySets)),
+            "{said}"
+        );
+
+        std::fs::remove_dir_all(&root).expect("clean up");
     }
 
     /// **A press on the Program bay's `solo` pill, through the window loop's
@@ -15207,6 +15667,10 @@ mod press_handler {
         // The Library bay's scope chips, walked once for the same reason: a
         // chip is as wide as the word in it.
         ("LibraryBay", "chip", "library_bay", "bay"),
+        // And its two filter fields, one row under them, derived from the same
+        // call for the same reason — one offer, because which of the two the
+        // point is on is inside `filter` where the boxes are.
+        ("LibraryBay", "filter", "library_bay", "bay"),
         // **The transition row's four, and the reason this module exists.**
         // These are the offers that were made, claimed and never asked
         // between `74719c3` and `094804c`. Deleting this row's branch from the

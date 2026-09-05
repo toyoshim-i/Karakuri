@@ -258,8 +258,8 @@ use egui::{Color32, CornerRadius, FontFamily, FontId, Pos2, Rect, Stroke, Stroke
 use karakuri_layout::{Axis, Hit, NodeId};
 use karakuri_operation::gate::{Class, Open};
 use karakuri_operation::{
-    Authority, BeatSource, BlendMode, Operation, Residency, Sync, Tonemap, TransitionSetting,
-    Undecided, WipeKind,
+    Authority, BeatSource, BlendMode, Layer, Operation, Residency, Sync, Tonemap,
+    TransitionSetting, Undecided, WipeKind,
 };
 
 use crate::budget::{Declared, PANEL_PASS};
@@ -8427,6 +8427,173 @@ const LOAD_PILL: &str = "load";
 /// right-pointing small triangle is about as wide as it is tall.
 const LOAD_ARROW: f32 = size::BASE * 0.5;
 
+// -- the library's two filter fields ------------------------------------
+
+/// **The `.lib-filters` row's own padding and the gap between the two fields
+/// in it**: `.lib-filters`'s `padding: 6px 9px; gap: 5px`.
+///
+/// **Transcribed here rather than in `room::size`**, which is where every
+/// other number this crate copies out of the mock lives and where
+/// `tests/transcribed_constants_cite_the_mock.rs` reads them. These five carry
+/// that file's citation form all the same, and `tests/library.rs` holds them
+/// against `docs/manual/style.css` on their own — moving them to `room::size`
+/// beside `SCOPES_PAD_X` is the tidier home and changes nothing else.
+pub const LIB_FILTERS_PAD_X: f32 = 9.0;
+pub const LIB_FILTERS_PAD_Y: f32 = 6.0;
+pub const LIB_FILTERS_GAP: f32 = 5.0;
+
+/// `.field`'s `padding: 0 9px`, around the word in it at [`size::BASE`]. The
+/// vertical half of that declaration is zero, which is why the box below is
+/// the type's own height and its border and nothing else.
+pub const FIELD_PAD_X: f32 = 9.0;
+
+/// One field's box: [`size::BASE`] at [`size::LINE`] inside `.field`'s
+/// `border: 1px solid var(--c-line)` — **18.5**, which is [`size::XPILL_H`]'s
+/// arithmetic one bay along and for the same reason, a bordered capsule round
+/// one line of type.
+pub const FIELD_H: f32 = size::BASE * size::LINE + size::HAIRLINE * 2.0;
+
+/// The filter row's box: one field inside [`LIB_FILTERS_PAD_Y`], plus the one
+/// pixel of the rule under it — [`size::HAIRLINE`], which is
+/// `.lib-filters`'s own `border-bottom: 1px solid var(--c-hair)`.
+pub const LIB_FILTERS_H: f32 = LIB_FILTERS_PAD_Y * 2.0 + FIELD_H + size::HAIRLINE;
+
+/// **What the `holds` field reads with no filter set**, which is the mock's
+/// own `holds&hellip;` — the ellipsis is the placeholder saying the field is
+/// empty, and a field that *is* set reads the value instead. That is the whole
+/// of the difference between the two states, because `.field` has one rule in
+/// `style.css` and no set variant: inventing a second colour for it would be a
+/// reading the mock never took.
+pub const HOLDS_UNSET: &str = "holds…";
+
+/// The same one field along, and the mock's `layer&hellip;`.
+pub const LAYER_UNSET: &str = "layer…";
+
+/// **The layers the `layer` field steps through, in the order it steps them.**
+///
+/// **Curated here because the vocabulary has no list to cycle**, which is
+/// [`WIPE_SHAPES`]' whole argument three bays along: `karakuri_operation::Layer`
+/// is an enum with no `ALL` and no word for a member, so a control that cycles
+/// it has to say which order and which spelling. The spellings are the five
+/// the MCP `list_sets` tool takes and the five the Inspector's `.addr` writes —
+/// `L1:0`, `L4` — so a filter an operator sets by pressing and a filter a model
+/// sets by name are the same five words.
+///
+/// **Exhaustive over [`Layer`], and that is load-bearing rather than tidy**:
+/// [`View::narrow`] refuses a `holds` it cannot draw and accepts any layer,
+/// which is only true while every layer is here. A sixth variant added to the
+/// vocabulary does not fail to compile here — an array is not a match — so the
+/// day one lands, this is the line to read, and `tests/library.rs` counts them.
+pub const LAYERS: [(Layer, &str); 5] = [
+    (Layer::L1, "L1"),
+    (Layer::L2, "L2"),
+    (Layer::L3, "L3"),
+    (Layer::L4, "L4"),
+    (Layer::Field, "FIELD"),
+];
+
+/// **Which of the two filter fields a press landed on.**
+///
+/// Two rather than an index, for [`Knob`]'s reason: the two fields ask
+/// different halves of one operation, and a caller that had to remember which
+/// of them `0` was would be carrying the row's order around with it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Field {
+    /// `holds…` — what a node in the Set is called.
+    Holds,
+    /// `layer…` — which layer the Set has a node on.
+    Layer,
+}
+
+impl Field {
+    /// The two, left to right, in the order `.lib-filters` draws them.
+    pub const ALL: [Field; 2] = [Field::Holds, Field::Layer];
+}
+
+/// **What the two filter fields are narrowing the listing to**, read off the
+/// console for the frame that draws them and the press that changes them.
+///
+/// It is [`Operation::ListSets`]'s two payload fields, borrowed: `holds` points
+/// into [`View::holds`], which is the row of candidates the host handed in, so
+/// nothing is cloned to draw a frame and the `String` is built once, at the
+/// press, where the operation is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Filters<'a> {
+    /// Part of a node's name, or `None` for a field nobody has set.
+    pub holds: Option<&'a str>,
+    /// Which layer a Set must hold a node on, or `None`.
+    pub layer: Option<Layer>,
+}
+
+impl Filters<'_> {
+    /// Nothing narrowed at all, which is where a run begins and is every test
+    /// in this crate that does not say otherwise.
+    pub const NONE: Filters<'static> = Filters {
+        holds: None,
+        layer: None,
+    };
+
+    /// What the `holds` field reads: the filter, or [`HOLDS_UNSET`].
+    pub fn holds_word(&self) -> &str {
+        self.holds.unwrap_or(HOLDS_UNSET)
+    }
+
+    /// What the `layer` field reads: the layer's word out of [`LAYERS`], or
+    /// [`LAYER_UNSET`].
+    pub fn layer_word(&self) -> &str {
+        match self.layer {
+            None => LAYER_UNSET,
+            Some(layer) => LAYERS
+                .iter()
+                .find(|(kind, _)| *kind == layer)
+                .map_or(LAYER_UNSET, |(_, word)| *word),
+        }
+    }
+
+    /// The word this field reads.
+    pub fn word(&self, field: Field) -> &str {
+        match field {
+            Field::Holds => self.holds_word(),
+            Field::Layer => self.layer_word(),
+        }
+    }
+}
+
+/// **Where the `holds` filter goes when the field is pressed**: the next
+/// candidate along, and off the end back to nothing.
+///
+/// `choices` is [`View::holds`] — the node names the host read off the store —
+/// and a filter that is not among them steps to the first, which is the state a
+/// host that rewrote the candidates leaves behind.
+///
+/// **With no candidates at all it stays `None`**, and the press is still
+/// answered: what it asks for is the listing again, unnarrowed, which is the
+/// same question `LibraryBay::chip` answers when the chip already marked is
+/// pressed.
+fn stepped_holds(choices: &[String], at: Option<&str>) -> Option<String> {
+    let next = match at {
+        None => 0,
+        Some(at) => choices
+            .iter()
+            .position(|choice| choice == at)
+            .map_or(0, |at| at + 1),
+    };
+    choices.get(next).cloned()
+}
+
+/// The same one field along, over [`LAYERS`] — the next layer, and off the end
+/// back to nothing.
+fn stepped_layer(at: Option<Layer>) -> Option<Layer> {
+    let next = match at {
+        None => 0,
+        Some(at) => LAYERS
+            .iter()
+            .position(|(kind, _)| *kind == at)
+            .map_or(0, |at| at + 1),
+    };
+    LAYERS.get(next).map(|(kind, _)| *kind)
+}
+
 /// **One chip in the Library bay's scope row**, and it names *which library is
 /// being read* rather than a place a Set can be.
 ///
@@ -8609,11 +8776,6 @@ fn chip_width(ctx: &egui::Context, name: &str) -> f32 {
 /// - **The `.path` row**, `~/sets/tour-2026/night-b › opening`. It is the
 ///   walk *inside* a folder scope, so it says nothing until that scope can be
 ///   asked for a listing at all.
-/// - **The `.lib-filters` fields**, `holds…` and `layer…`. Two text controls,
-///   and the vocabulary has the operation they would emit —
-///   `Operation::ListSets { holds, layer }` — but nothing in the store answers
-///   it: `list_sets` reads names off a directory and no index anywhere says
-///   what a Set *holds*.
 /// - **`.lib-row`'s `.star`.** A favourite is a fact about a Set that nothing
 ///   in this workspace keeps — there is no such field on a `SetEntry`, no
 ///   record that carries one, and no metadata card that mentions one. Drawing
@@ -8638,6 +8800,21 @@ fn chip_width(ctx: &egui::Context, name: &str) -> f32 {
 ///   and hands it in, the way every other derived value in this module
 ///   arrives. Writing a second spelling here would be the kind of second
 ///   answer this repository deletes rather than adds.
+/// # The `.lib-filters` fields are here, and the passage that said they could
+/// not be was wrong rather than stale
+///
+/// It read: *"nothing in the store answers it: `list_sets` reads names off a
+/// directory and no index anywhere says what a Set holds"*. The first half is
+/// true of `karakuri_store::Store::list_sets` and the second was already false
+/// when it was written — `karakuri_environment::setfile::summarise` reads what
+/// each Set holds, node by node, off the Set file and the cards behind it, and
+/// `karakuri-environment`'s MCP `list_sets` has been applying both filters
+/// against it. What was missing was that this bay's host asked the *store* for
+/// a list of names instead of asking that. It does not any more, and the two
+/// fields are [`LibraryBay::field`] and [`LibraryBay::filter`] — drawn, hit
+/// tested, and stepping rather than taking letters, which is that method's
+/// argument and the one thing about them a maintainer may want back.
+///
 /// # What is in the mock's bay and is here, which is the load route
 ///
 /// **`.lib-row.cursor` and the `load → A` pill in the foot.** These two are
@@ -8754,6 +8931,17 @@ pub struct LibraryBay {
     /// of empty card with a rule under it would be a scope row with no
     /// questions in it.
     pub scopes: Option<Rect>,
+    /// `.lib-filters`: the row of two fields between the scope row and the
+    /// list, one [`LIB_FILTERS_H`] tall and the full width of the bay, with its
+    /// own rule along the bottom of it.
+    ///
+    /// **`None` wherever [`scopes`](Self::scopes) is**, and that is one
+    /// condition rather than two: a filter is a question about a listing, and a
+    /// console nobody has told what libraries there are has no listing to ask
+    /// it of. It is also `None` in a bay too narrow to hold two fields, which
+    /// is `list`'s own rule stated on a row that has a `gap` in the middle of
+    /// it — see `library_box`.
+    pub filters: Option<Rect>,
     /// `.lib-list`'s content box: the region under the bay head and the scope
     /// row and above the foot, inside [`size::LIB_LIST_PAD`], where the rows
     /// are laid from the top with no gap between them.
@@ -8999,6 +9187,91 @@ impl LibraryBay {
                 operation: Operation::SelectScope { scope: Undecided },
             })
     }
+
+    /// **One filter field's box**, or `None` for a bay with no filter row.
+    ///
+    /// `.field` carries `flex: 1; min-width: 0` and nothing else has a width in
+    /// the row, so the two share whatever is left of `.lib-filters`'s content
+    /// box after its one [`LIB_FILTERS_GAP`] — which is a division rather than
+    /// a measurement, and is why this bay still asks `egui` for nothing. The
+    /// chips one row up are the exception and stay the exception: a chip is as
+    /// wide as the word in it and a field is not.
+    pub fn field(&self, which: Field) -> Option<Rect> {
+        let row = self.filters?;
+        let width = (row.width() - LIB_FILTERS_PAD_X * 2.0 - LIB_FILTERS_GAP) * 0.5;
+        let at = match which {
+            Field::Holds => row.min.x + LIB_FILTERS_PAD_X,
+            Field::Layer => row.min.x + LIB_FILTERS_PAD_X + width + LIB_FILTERS_GAP,
+        };
+        Some(Rect::from_min_size(
+            Pos2::new(at, row.min.y + LIB_FILTERS_PAD_Y),
+            egui::vec2(width, FIELD_H),
+        ))
+    }
+
+    /// **What a press at `p` on the filter row asks the store for**, or `None`
+    /// where there is no field under it.
+    ///
+    /// # The field steps, and the operation names where it arrived
+    ///
+    /// [`TransitionRow::shape`]'s affordance, in a bay where it costs an
+    /// explanation rather than a sentence. What
+    /// [`Operation::ListSets`] carries is free text and a layer — *"narrowed by
+    /// what a node is called or by which layer a Set uses"* — and **this
+    /// console has one letter-taking flow**, [`Menu::Naming`], which ADR-0221
+    /// bounds to one path component of a name. A filter is not a name, so
+    /// typing into these two would be a second letter-taking flow, and what
+    /// that flow *is* is a decision about the console rather than about this
+    /// bay ([`Chosen`]'s rule, one control up: the first control that wants a
+    /// thing is not where it is decided).
+    ///
+    /// So the fields **step**, over two closed lists, and the operation names
+    /// the destination — never a step, because there is no step in the
+    /// vocabulary to name (P-0090). `layer` steps [`LAYERS`], which is the
+    /// console's own curation of an enum with no list in it. `holds` steps
+    /// [`View::holds`], which is the host's answer to *what are this store's
+    /// Sets made of* and arrives across the same seam as the listing itself —
+    /// this crate reads no store (ADR-0156). Both wrap through **unset**, so
+    /// every state either field can be in is one the press can leave.
+    ///
+    /// **A press with nothing to step to is answered all the same**, and that
+    /// is the state a `holds` field has on a store whose Sets name no node: it
+    /// asks for the listing again, which is a real question and the one
+    /// [`LibraryBay::chip`] already answers for the chip that is marked.
+    ///
+    /// # One derivation, asked twice
+    ///
+    /// [`crate::input::claim`]'s rule 4 asks this and so does the caller that
+    /// acts on the press, exactly as they both ask [`LibraryBay::chip`]. The
+    /// whole field is the target, its border included, which is
+    /// [`Outputs::sink`]'s rule about a padding being what makes a word a hand
+    /// can find.
+    ///
+    /// The `9` pixels of padding either side of the row and the
+    /// [`LIB_FILTERS_GAP`] between the two fields are **not** targets, and this
+    /// answers `None` for them: they are bare card, the way the gaps between
+    /// the scope chips are.
+    pub fn filter(
+        &self,
+        holds: &[String],
+        at: Filters<'_>,
+        p: karakuri_layout::Point,
+    ) -> Option<Operation> {
+        let p = Pos2::new(p.x, p.y);
+        let which = Field::ALL
+            .into_iter()
+            .find(|field| self.field(*field).is_some_and(|box_| box_.contains(p)))?;
+        Some(match which {
+            Field::Holds => Operation::ListSets {
+                holds: stepped_holds(holds, at.holds),
+                layer: at.layer,
+            },
+            Field::Layer => Operation::ListSets {
+                holds: at.holds.map(str::to_owned),
+                layer: stepped_layer(at.layer),
+            },
+        })
+    }
 }
 
 /// **The Library bay's rows, derived** — see [`LibraryBay`] for what is drawn
@@ -9095,9 +9368,24 @@ fn library_box(region: Rect, chips: bool, total: usize) -> Option<LibraryBay> {
             Pos2::new(region.max.x, under_head + size::SCOPES_H),
         )
     });
-    let top = match scopes {
-        Some(scopes) => scopes.max.y,
-        None => under_head,
+    // **The filter row is the scope row's condition and not a second one.**
+    // Both are the bay's head rather than its body — one says which library is
+    // being read and the other narrows what that library answers — so a
+    // console that has been told about no library draws neither. The width
+    // check is `list`'s below, stated on a row that has two boxes and a gap in
+    // it: a row too narrow for two fields would draw two slivers and a rule.
+    let filters =
+        (chips && region.width() - LIB_FILTERS_PAD_X * 2.0 - LIB_FILTERS_GAP > 0.0).then(|| {
+            let top = under_head + size::SCOPES_H;
+            Rect::from_min_max(
+                Pos2::new(region.min.x, top),
+                Pos2::new(region.max.x, top + LIB_FILTERS_H),
+            )
+        });
+    let top = match (filters, scopes) {
+        (Some(filters), _) => filters.max.y,
+        (None, Some(scopes)) => scopes.max.y,
+        (None, None) => under_head,
     };
     let list = Rect::from_min_max(
         Pos2::new(region.min.x + size::LIB_LIST_PAD, top + size::LIB_LIST_PAD),
@@ -9117,6 +9405,7 @@ fn library_box(region: Rect, chips: bool, total: usize) -> Option<LibraryBay> {
     let rows = fits.min(total);
     (fits > 0).then_some(LibraryBay {
         scopes,
+        filters,
         list,
         rows,
         total,
@@ -9318,6 +9607,74 @@ fn scopes_into(ui: &Ui, pal: &Palette, bay: &LibraryBay, scopes: &[Scope], scope
     // and the same hairline the bay head above it and the foot below it are
     // both drawn with. It is inside the row rather than under it, which is
     // what keeps the list's top where [`library_box`] put it.
+    let rule = row.max.y - size::HAIRLINE * 0.5;
+    painter.line_segment(
+        [Pos2::new(row.min.x, rule), Pos2::new(row.max.x, rule)],
+        Stroke::new(size::HAIRLINE, pal.hair),
+    );
+}
+
+/// **The filter row, painted**: two fields and the rule under them.
+///
+/// Where the row goes and where each field in it goes are [`library`]'s and
+/// [`LibraryBay::field`]'s, so this paints and derives nothing —
+/// [`scopes_into`]'s rule one row up, and it is stricter here because the
+/// fields are hit-tested and a second division would put a capsule a press
+/// lands on somewhere the border is not.
+///
+/// Term for term from `style.css`:
+///
+/// - `.lib-filters { display: flex; gap: 5px; padding: 6px 9px; border-bottom:
+///   1px solid var(--c-hair) }` — two fields from the left of the row, one
+///   [`LIB_FILTERS_GAP`] apart, over a rule the row's bottom pixel.
+/// - `.field { border: 1px solid var(--c-line); border-radius: 999px; padding:
+///   0 9px; color: var(--c-faint); flex: 1 }` — a word at [`size::BASE`] in a
+///   bordered capsule, each field taking half of what is left.
+///
+/// **A set field and an unset one differ in the word alone**, which is
+/// [`HOLDS_UNSET`]'s sentence: `style.css` gives `.field` one rule and no set
+/// variant, so `L4` where `layer…` was is the whole of the mark. `.scope.sel`'s
+/// wash is not borrowed for it — that mark says *this is where a press lands*
+/// about a chip a press moves between, and every press here lands on the field
+/// it is already on.
+///
+/// **A word too long for its field is clipped rather than elided**, which is
+/// `.lib-row`'s answer one box down and for the same reason: `.field` sets
+/// `min-width: 0` and no `text-overflow`, so there is no ellipsis to draw. A
+/// node name is what can be long enough for it.
+fn filters_into(ui: &Ui, pal: &Palette, bay: &LibraryBay, at: Filters<'_>) {
+    let Some(row) = bay.filters else {
+        return;
+    };
+    let painter = ui.painter().with_clip_rect(row);
+    for field in Field::ALL {
+        let Some(box_) = bay.field(field) else {
+            continue;
+        };
+        painter.rect_stroke(
+            box_,
+            // `border-radius: 999px` on a box this short is a capsule, drawn
+            // as half its own height — [`pill_at`]'s reason.
+            CornerRadius::same((box_.height() * 0.5) as u8),
+            Stroke::new(size::HAIRLINE, pal.line),
+            StrokeKind::Inside,
+        );
+        let painter = painter.with_clip_rect(box_);
+        let galley = painter.layout_job(span_at(at.word(field), size::BASE, pal.faint));
+        painter.galley(
+            Pos2::new(
+                box_.min.x + FIELD_PAD_X,
+                box_.center().y - galley.size().y * 0.5,
+            ),
+            galley,
+            pal.faint,
+        );
+    }
+
+    // `border-bottom: 1px solid var(--c-hair)` — the row's own bottom pixel,
+    // and the same hairline the scope row above it draws. It is inside the row
+    // rather than under it, which is what keeps the list's top where
+    // [`library_box`] put it.
     let rule = row.max.y - size::HAIRLINE * 0.5;
     painter.line_segment(
         [Pos2::new(row.min.x, rule), Pos2::new(row.max.x, rule)],
@@ -11230,6 +11587,25 @@ pub struct View {
     /// be this crate asserting that a presets root and a folder exist on a
     /// machine it cannot look at.
     pub scopes: Vec<Scope>,
+    /// **What the `holds` field can be stepped to**, in the order it steps
+    /// them — and **empty** for a console nobody has told, which is every test
+    /// in this crate that does not say otherwise and is a field a press asks
+    /// the listing again through.
+    ///
+    /// **The same seam as [`View::scopes`]**, two rows up in the same bay:
+    /// `holds` is matched against what a Set's nodes are called, which is
+    /// `karakuri_environment::setfile::summarise`'s reading of the store, and
+    /// this crate reads no store (ADR-0156). So the host says what there is to
+    /// narrow by and the console steps through it.
+    ///
+    /// **Written on the same read as [`View::library`]** and off the same
+    /// summary, because the two are one directory read: the rows are the Sets
+    /// that matched and these are the names any of them could be matched by.
+    /// **They are the candidates of the *unnarrowed* listing**, so the row a
+    /// press steps to does not depend on what the field is already set to —
+    /// candidates read off a filtered listing would shrink as the filter bit,
+    /// and a step would then wander somewhere it could not come back from.
+    pub holds: Vec<String>,
     /// **What the Staging lane lists this frame**: one candidate per deck slot
     /// whose newest build has a verdict outstanding or whose file no longer
     /// agrees with its picture — and **empty** for a console with no engine
@@ -11389,6 +11765,27 @@ pub struct View {
     /// wherever the host puts it: see [`View::select_scope`], which is how a
     /// program that opens on `my sets` says so.
     scope: usize,
+    /// **Which of [`View::holds`] the `holds` field is set to**, or `None` for
+    /// a field nobody has set — the fifth of this console's pointers.
+    ///
+    /// **A position and not a `String`**, for [`View::scope`]'s reason one
+    /// field along: what the field can be set to is the row of candidates the
+    /// host handed in, so what a pointer into it can be is a place in that row.
+    ///
+    /// **A stale position reads as unset rather than as the last candidate**,
+    /// where [`View::scope`] and [`View::cursor_row`] both clamp. The two of
+    /// them point at something drawn — a chip, a row — and the nearest one is
+    /// the right answer; this one *narrows a listing*, and clamping it would
+    /// leave the bay hiding Sets under a filter nobody chose.
+    holds_at: Option<usize>,
+    /// **Which layer the `layer` field is set to**, or `None`.
+    ///
+    /// **A value and not a position**, where [`View::holds_at`] beside it is a
+    /// position, and it is [`View::transition`]'s distinction below: the layers
+    /// are the console's own closed list ([`LAYERS`]) and cannot change under
+    /// this pointer, where the `holds` candidates are a reading of a store that
+    /// can.
+    layer: Option<Layer>,
     /// **What the next fade, crossfade or wipe means** — the wipe's front
     /// shape and angle, the grid it starts on and how long it lasts — and the
     /// fourth of this console's pointers.
@@ -11453,6 +11850,17 @@ impl View {
             // row. Room for the four the mock draws, so a host that says so
             // at startup does not grow it — `mixer`'s reason, one row up.
             scopes: Vec::with_capacity(Scope::ALL.len()),
+            // And nothing to narrow by, which is the same console again: the
+            // `holds` field is drawn wherever the scope row is and a press on
+            // it asks for the listing over again until a host says what this
+            // store's Sets are made of. No capacity is reserved, for
+            // `library`'s reason one field up.
+            holds: Vec::new(),
+            // Neither field set, which is the whole library rather than a
+            // narrowed one — where a run begins, and every test in this crate
+            // that does not say otherwise.
+            holds_at: None,
+            layer: None,
             // Nothing outstanding on any slot, which is a console with no
             // engine behind it and is also every ordinary frame of one that
             // has. Room for as many rows as a deck can ever have slots, so
@@ -11659,6 +12067,65 @@ impl View {
         // [`View::select_scope`], where this is argued.
         self.cursor_row = 0;
         true
+    }
+
+    /// **What the two filter fields are narrowing the listing to** — see
+    /// [`Filters`], and [`LibraryBay::filter`] for what a press on one of them
+    /// asks.
+    ///
+    /// Answered against [`View::holds`] rather than read back bare, which is
+    /// [`View::scope`]'s rule with the opposite answer at the end of it: a host
+    /// that handed candidates and then none leaves a position past the end, and
+    /// **what that resolves to is unset**. So a scope whose listing has no
+    /// summaries behind it — `presets`, whose rows are files rather than Sets
+    /// this store holds — draws `holds…` and narrows nothing, and the filter is
+    /// in force again when a scope that has candidates comes back.
+    pub fn filters(&self) -> Filters<'_> {
+        Filters {
+            holds: self
+                .holds_at
+                .and_then(|at| self.holds.get(at))
+                .map(String::as_str),
+            layer: self.layer,
+        }
+    }
+
+    /// **Narrow the listing to `holds` and `layer`, and answer whether that
+    /// moved anything.**
+    ///
+    /// **A `holds` this console cannot draw is refused**, which is
+    /// [`View::select_scope`]'s rule and the same reasoning: the field reads
+    /// the value, so a filter that is not among [`View::holds`] is a word the
+    /// bay would draw with no way to step off it. The layers are not refused,
+    /// because [`LAYERS`] is every layer there is.
+    ///
+    /// **It refuses the pair or neither**, so a call that would have set the
+    /// layer and dropped the `holds` on the floor sets nothing. The one caller
+    /// hands back an [`Operation::ListSets`] this bay built, so the refusal is
+    /// a caller's error rather than a state — as [`View::select_scope`]'s is.
+    ///
+    /// The `bool` is [`View::select`]'s: a caller repaints on a move and not on
+    /// a press.
+    pub fn narrow(&mut self, holds: Option<&str>, layer: Option<Layer>) -> bool {
+        let holds_at = match holds {
+            None => None,
+            Some(want) => match self.holds.iter().position(|held| held == want) {
+                Some(at) => Some(at),
+                None => return false,
+            },
+        };
+        let moved = self.filters() != (Filters { holds, layer });
+        self.holds_at = holds_at;
+        self.layer = layer;
+        if moved {
+            // **The cursor goes back to the top of a listing it has never
+            // seen**, which is [`View::select_scope`]'s reason word for word:
+            // [`View::library`] is about to be rewritten by whoever answers the
+            // narrowing, and a cursor left where it was would point at the
+            // fifteenth row of a list of three.
+            self.cursor_row = 0;
+        }
+        moved
     }
 
     /// **What the next fade, crossfade or wipe means** — see
@@ -11920,6 +12387,10 @@ impl View {
         let strips = self.mixer.as_slice();
         let sets = self.library.as_slice();
         let scopes = self.scopes.as_slice();
+        // **The fifth pointer, read once for the frame** beside the two slices
+        // it borrows from — `draw` takes `&mut self`, and a filter read inside
+        // the arm below would be a second borrow of `holds`.
+        let narrowed = self.filters();
         // **The two pointers, read once for the frame** beside the readings
         // they are drawn against — `draw` takes `&mut self` and the arms below
         // borrow these slices, so a pointer read inside an arm would be a
@@ -12069,6 +12540,12 @@ impl View {
                             // where everything under it is what that library
                             // holds.
                             scopes_into(ui, &pal, &bay, scopes, scope);
+                            // **And the filter row between them and the
+                            // rows**, for the scope row's reason: it belongs
+                            // to the bay's head — it narrows what the library
+                            // being read answers, where everything under it is
+                            // what came back.
+                            filters_into(ui, &pal, &bay, narrowed);
                             library_into(ui, &pal, &bay, sets, cursor_row, load);
                         }
                     }
