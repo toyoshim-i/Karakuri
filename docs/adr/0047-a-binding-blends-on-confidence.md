@@ -5,7 +5,7 @@ status: accepted
 date: 2026-07-31
 supersedes: []
 superseded_by: []
-principles: [0029]
+principles: [0084]
 tags: [signal, engine]
 ---
 
@@ -60,4 +60,4 @@ unexciting demo.
 ## Evidence
 
 Session 2026-07-31T16:00Z, 2026-07-31T23:48Z. Standing rule:
-[P-0029](../principles/0029-a-consumer-branches-only-on-confidence.md).
+[P-0084](../principles/0084-a-confident-wrong-automatic-judgement-is-worse-than-not-judging.md).

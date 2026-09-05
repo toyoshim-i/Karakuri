@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-02
 supersedes: []
 superseded_by: []
-principles: [0029]
+principles: [0084]
 tags: [signal, determinism]
 ---
 

@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-08
 supersedes: []
 superseded_by: []
-principles: [0039, 0040]
+principles: [0040, 0084]
 tags: [ui, engine]
 ---
 
@@ -64,5 +64,5 @@ This milestone reached that same answer three times: the tempo octave, semi-auto
 ## Evidence
 
 Session 2026-08-08T18:09Z–19:35Z, commit `15dec5a`. Standing rules:
-[P-0039](../principles/0039-a-warning-that-fires-on-healthy-material-teaches-the-operator-to-ignore-warnings.md),
+[P-0084](../principles/0084-a-confident-wrong-automatic-judgement-is-worse-than-not-judging.md),
 [P-0040](../principles/0040-a-check-the-compiler-may-assume-away-is-not-a-check.md).
