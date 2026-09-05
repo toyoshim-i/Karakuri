@@ -331,6 +331,9 @@ answered. The rule in §2 does not change, but who applies it does.
   one test's evidence.** Run that test with the defect in place, not the suite around it.
 - **`cargo check -p <crate>` answers "does this compile"** without building or running a test,
   which is often the whole question.
+- **Divide the work by file, not by phase.** Three commits that all touch one crate can only be
+  done in order; the same work split by file runs in parallel and lands as it finishes. Decided in
+  [ADR-0115](adr/0115-split-work-by-file-not-by-phase.md).
 
 ### Running Workspace Linter (Clippy)
 ```sh
