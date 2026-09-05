@@ -291,6 +291,12 @@ number; new records continue from the end.
 A superseded record keeps its row above. A **deleted principle** is recorded here, and its number is
 never reused.
 
+**A record naming a retired number in plain text is doing it on purpose.** An ADR describes what was
+decided when it was written, so it names the file that existed then; the link is removed because the
+file is gone, and this table is where the number resolves. Where a record's pointer can be moved to
+the rule that replaced it without making the sentence false, it was moved — that is ADR-0059. Where
+it cannot, the number stays, unlinked.
+
 | Retired | Was | Replaced by | Why |
 | --- | --- | --- | --- |
 | P-0015 | One record tag is one record shape | [P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md), via P-0031 | The same rule holds for any name, not only a record tag — found when `"noise"` meant two things at two confidences. **P-0031 was itself retired on 2026-09-05**, and its row is below |

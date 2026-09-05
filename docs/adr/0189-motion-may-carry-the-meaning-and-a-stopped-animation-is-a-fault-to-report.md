@@ -15,7 +15,7 @@ tags: [ui, docs]
 
 [ADR-0188](0188-a-pending-transition-says-it-is-pending-and-no-surface-holds-the-rule.md) settled
 what a control has to say while its request stands and has not been granted, and wrote it as
-[P-0075](../principles/0075-a-pending-transition-shows-where-it-is-where-it-is-going-and-that-it-has-not-arrived.md):
+P-0075:
 where it is, where it is going, and that it has not arrived. The presentation was deliberately left
 open — the file states **clauses a presentation is checked against** rather than a picture, which is
 [P-0087](../principles/0087-name-the-property-never-the-shape.md) applied.

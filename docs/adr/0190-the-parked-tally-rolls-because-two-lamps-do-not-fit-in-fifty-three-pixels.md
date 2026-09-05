@@ -15,7 +15,7 @@ tags: [ui, decks, performance]
 
 [ADR-0188](0188-a-pending-transition-says-it-is-pending-and-no-surface-holds-the-rule.md) decided
 what a control has to say while a request of the operator's stands and has not been granted, and
-wrote it as [P-0075](../principles/0075-a-pending-transition-shows-where-it-is-where-it-is-going-and-that-it-has-not-arrived.md):
+wrote it as P-0075:
 **where it is, where it is going, and that it has not arrived.**
 [ADR-0189](0189-motion-may-carry-the-meaning-and-a-stopped-animation-is-a-fault-to-report.md) then
 deleted the clause that would have forced every frame of the animation to say all three on its own,

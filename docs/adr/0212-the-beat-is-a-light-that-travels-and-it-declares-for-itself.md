@@ -144,7 +144,7 @@ choosing, and `budget::SMALL_PART`'s quarter is what to revisit then.
 
 **Share `View::phase`, which is what everything else that moves on this panel uses.** The tidier
 answer — one phase panel-wide is
-[P-0075](../principles/0075-a-pending-transition-shows-where-it-is-where-it-is-going-and-that-it-has-not-arrived.md)'s
+P-0075's
 own rule, and `Phase`'s documentation says outright that the console *"is about to have the beat …
 and this is where the second one is either free or a second clock"*. It lost on what the two phases
 **mean**. P-0075 asks for one phase because *everything pending moves together*, and two controls
