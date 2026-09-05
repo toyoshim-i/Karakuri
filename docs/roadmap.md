@@ -295,8 +295,15 @@ output's rather than this bay's ([ADR-0246](adr/0246-the-render-size-belongs-to-
 
 #### M5.2 — Mixer
 
-**Rows.** Three carry a `plan` panel badge: *Choose the wipe shape, the quantum, the length*, *Fade
-a deck out or in*, *Wipe the next deck in*. Four more carry a `plan` key badge and no `plan` panel
+**Rows.** None carries a `plan` panel badge any more. *Choose the wipe shape, the quantum, the
+length* and *Wipe the next deck in* are built, and ***Fade a deck out or in* is a `gap`**, decided on
+2026-09-05: a fade is an opacity moved over a few seconds and the fader is already the control for
+moving one, so a capsule asking for the same move would take permanent room on a strip to save the
+gesture the strip is built around. What it would have bought is the one thing a hand cannot do —
+landing the move on the beat rather than near it — and that is not worth a control here. The
+argument an operator reads is *Nothing on a strip starts a fade* on
+[the console page](manual/console.html), beside *The mixer has no crossfader*, which is the same
+shape of decision and the precedent for the `gap`. Four more carry a `plan` key badge and no `plan` panel
 badge: *Gain*, *Opacity*, *Blend mode*, and *Crossfade to the next deck*, whose panel cell is a
 `gap` and whose only owed route is `x`.
 
