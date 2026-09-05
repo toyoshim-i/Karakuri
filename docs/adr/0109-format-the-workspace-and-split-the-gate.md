@@ -5,7 +5,7 @@ status: superseded
 date: 2026-08-19
 supersedes: []
 superseded_by: [0114]
-principles: [0054]
+principles: [0089]
 tags: [process]
 ---
 
@@ -65,4 +65,4 @@ pointed one step further than it went.
 ## Evidence
 
 Session 2026-08-19T10:31Z–11:01Z. Standing rule:
-[P-0054](../principles/0054-a-gate-that-takes-minutes-stops-being-a-gate.md).
+[P-0089](../principles/0089-a-check-you-have-not-watched-fail-is-guessing.md).

@@ -51,7 +51,7 @@ cannot see, and when a declaration is wrong it is wrong somewhere a person can r
 **Schedulability is arithmetic and a test asserts it.** `Σ(cost/staleness) ≤ budget/interval` and
 `max(cost) ≤ a small part of the budget`. The second matters as much as the first because an update
 is not divisible: a region costing most of the budget blocks everything else on every frame it
-runs. This is [P-0024](../principles/0024-nothing-checks-clean-and-comes-up-short-at-runtime.md)
+runs. This is [P-0089](../principles/0089-a-check-you-have-not-watched-fail-is-guessing.md)
 applied to a frame budget — a bay that breaks it fails a test rather than a performance.
 
 **And when it still does not fit, the rate steps down deliberately.** `PresentMode::Fifo` already

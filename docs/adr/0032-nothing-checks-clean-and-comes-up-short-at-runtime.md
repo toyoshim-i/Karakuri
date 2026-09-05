@@ -5,7 +5,7 @@ status: accepted
 date: 2026-07-30
 supersedes: []
 superseded_by: []
-principles: [0024]
+principles: [0089]
 tags: [ir, process]
 ---
 
@@ -52,4 +52,4 @@ else references it.
 ## Evidence
 
 Session 2026-07-27T09:22Z, 2026-07-30T12:52Z. Standing rule:
-[P-0024](../principles/0024-nothing-checks-clean-and-comes-up-short-at-runtime.md).
+[P-0089](../principles/0089-a-check-you-have-not-watched-fail-is-guessing.md).

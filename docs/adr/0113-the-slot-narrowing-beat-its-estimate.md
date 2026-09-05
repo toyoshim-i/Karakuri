@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-19
 supersedes: []
 superseded_by: []
-principles: [0025]
+principles: [0089]
 tags: [engine, codegen]
 ---
 

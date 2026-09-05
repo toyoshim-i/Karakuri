@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-15
 supersedes: []
 superseded_by: []
-principles: [0050]
+principles: [0089]
 tags: [process]
 ---
 
@@ -31,7 +31,7 @@ had failed, so nothing under test was what I thought was under test — and I re
 of the command block. **The tell was in the number: 140, where the suite has 147.**
 
 This sits one layer below *watch a test fail before trusting it*
-([P-0025](../principles/0025-a-test-meant-to-catch-something-is-run-against-the-defect.md)). The
+([P-0089](../principles/0089-a-check-you-have-not-watched-fail-is-guessing.md)). The
 tests were correct. **The thing they ran against was not.**
 
 ## Decision
@@ -45,4 +45,4 @@ Each of the four commits was then checked out individually and its suite run gre
 ## Evidence
 
 Session 2026-08-15T16:11Z, commits `6422f72`, `0b439ca`, `b12c696`, `3c5e166`. Standing rule:
-[P-0050](../principles/0050-verify-the-thing-you-think-you-are-verifying.md).
+[P-0089](../principles/0089-a-check-you-have-not-watched-fail-is-guessing.md).

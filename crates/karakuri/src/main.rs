@@ -4673,7 +4673,7 @@ impl Engine {
     ///
     /// **A number computed from the measurement rather than a constant**,
     /// because a constant is the fixture the product cannot produce
-    /// ([P-0047](../../../docs/principles/0047-a-fixture-the-product-can-rewrite-is-not-a-fixture.md)
+    /// ([P-0089](../../../docs/principles/0089-a-check-you-have-not-watched-fail-is-guessing.md)
     /// read from the other side): a budget typed in here parks the request on
     /// this machine and admits it on a faster one, and a *measurement* typed in
     /// — `HotSwap::set_measured_cost` is public and would take one — is this
@@ -11251,7 +11251,7 @@ mod tests {
     /// The negative control is the point: a check that refused everything
     /// would pass an assertion that only ever looked for a refusal, so the
     /// names that must be *accepted* are asserted beside the ones that must
-    /// not (P-0025).
+    /// not (P-0089).
     #[test]
     fn a_typed_arrangement_name_is_refused_where_the_file_is_written() {
         for good in ["night", "four_deck", "set-2", "A9"] {
@@ -14011,9 +14011,9 @@ mod gpu {
 
     /// **A real Set reads out into a pane**, which is the seven reads
     /// [`inspector`] makes held against a Set this program actually builds
-    /// rather than against a fixture it wrote itself (P-0047 — *a fixture the
-    /// product can rewrite is not a fixture*, and this window's input is the
-    /// product).
+    /// rather than against a fixture it wrote itself (P-0089 — the criterion is
+    /// not that it probably will not change but that it *can*, and this
+    /// window's input is the product).
     ///
     /// It is the one place the resolution in [`node_of`] is checked end to
     /// end: this deck's Sets have the **default** interface, so every control

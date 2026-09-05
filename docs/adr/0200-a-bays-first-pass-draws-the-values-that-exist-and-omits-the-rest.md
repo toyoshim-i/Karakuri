@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-27
 supersedes: []
 superseded_by: []
-principles: [0047]
+principles: [0089]
 tags: [ui, console]
 ---
 
@@ -47,7 +47,7 @@ The ones with no value at all are already settled, and
 [ADR-0191](0191-the-panels-parked-deck-is-parked-by-the-governor-or-it-is-a-drawing-of-one.md) is
 where: *a panel showing a parked chip that no `Deck` ever parked is a drawing of a state the engine
 never entered*, with
-[P-0047](../principles/0047-a-fixture-the-product-can-rewrite-is-not-a-fixture.md) as the same
+[P-0089](../principles/0089-a-check-you-have-not-watched-fail-is-guessing.md) as the same
 argument from the other side — a test owns its inputs, and this window's input is the program. A
 star nothing can make true is that chip.
 

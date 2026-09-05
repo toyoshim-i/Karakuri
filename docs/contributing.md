@@ -19,8 +19,7 @@ Start with these, and read the rest before changing anything they touch:
 - [Simulation time comes from a record, never from a clock](principles/0002-simulation-time-comes-from-a-record-never-from-a-clock.md)
 - [Compaction preserves order](principles/0003-compaction-preserves-order.md)
 - [A live Set is never mutated in place](principles/0004-a-live-set-is-never-mutated-in-place.md)
-- [Nothing checks clean and comes up short at runtime](principles/0024-nothing-checks-clean-and-comes-up-short-at-runtime.md)
-- [A test meant to catch something is run against the defect](principles/0025-a-test-meant-to-catch-something-is-run-against-the-defect.md)
+- [A check you have not watched fail is guessing](principles/0089-a-check-you-have-not-watched-fail-is-guessing.md)
 - [Only reviewed work enters history](principles/0017-only-reviewed-work-enters-history.md)
 - [Run what the question needs, when it is asked](principles/0057-run-what-the-question-needs-when-it-is-asked.md)
 
@@ -329,7 +328,7 @@ answered. The rule in §2 does not change, but who applies it does.
   <name>` runs one. Broaden only once it passes; a green suite is a slower way to learn the
   same fact, and a red one tells you less.
 - **Running a test against its injected defect
-  ([P-0025](principles/0025-a-test-meant-to-catch-something-is-run-against-the-defect.md)) is
+  ([P-0089](principles/0089-a-check-you-have-not-watched-fail-is-guessing.md)) is
   one test's evidence.** Run that test with the defect in place, not the suite around it.
 - **`cargo check -p <crate>` answers "does this compile"** without building or running a test,
   which is often the whole question.

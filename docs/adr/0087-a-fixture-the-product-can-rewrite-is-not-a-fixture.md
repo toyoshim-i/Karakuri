@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-15
 supersedes: []
 superseded_by: []
-principles: [0047]
+principles: [0089]
 tags: [process]
 ---
 
@@ -42,4 +42,4 @@ content is.
 ## Evidence
 
 Session 2026-08-15T07:06Z, commit `105997a`. Standing rule:
-[P-0047](../principles/0047-a-fixture-the-product-can-rewrite-is-not-a-fixture.md).
+[P-0089](../principles/0089-a-check-you-have-not-watched-fail-is-guessing.md).
