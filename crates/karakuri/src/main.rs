@@ -66,7 +66,7 @@
 //! [ADR-0164](../../../docs/adr/0164-the-panel-is-budgeted-rather-than-forbidden-to-allocate.md)
 //! chose to **budget** the panel rather than forbid it to allocate — a budget
 //! is a guarantee only while something counts, which is
-//! [P-0093](../../../docs/principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md).
+//! [`docs/contributing.md` §4](../../../docs/contributing.md).
 //! See
 //! [ADR-0217](../../../docs/adr/0217-the-counting-allocator-ships-because-a-written-number-nothing-checks-goes-stale.md),
 //! which also records what a cargo feature and a test target each lost on.
@@ -1442,7 +1442,7 @@ impl Readout {
             // **The words went with the route rather than being kept for
             // one.** A formatter for an outcome nothing produces is this file
             // claiming a route it has not got
-            // ([P-0093](../../../docs/principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)),
+            // ([`docs/contributing.md` §4](../../../docs/contributing.md)),
             // and the table it printed is not the one the startup legend
             // prints: that one is each region's *min and max*, once, before
             // anything has been dragged, and this was each region's solved
@@ -1919,7 +1919,7 @@ impl Readout {
     /// because it is the one every new control has taken for a year.
     ///
     /// **It must not be routed as an `Operation`, and
-    /// [ADR-0236](../../docs/adr/0236-a-map-is-the-layer-between-a-surface-and-the-vocabulary-and-the-audit-is-one-of-the-things-it-does.md)
+    /// [ADR-0236](../../../docs/adr/0236-a-map-is-the-layer-between-a-surface-and-the-vocabulary-and-the-audit-is-one-of-the-things-it-does.md)
     /// is explicit about it.** The opening is configuration of the *map* — the
     /// layer every surface reaches the vocabulary through — and not a member of
     /// the vocabulary the map addresses. The rule is narrower than *map
@@ -2584,9 +2584,9 @@ impl Readout {
 /// program says to anybody.
 ///
 /// The order is the order they print in — the arrangement's keys, then the
-/// deck and the library, then the five that address the room, then `esc`, then
-/// the three that are live only while the arrangement pill is asking for a
-/// name.
+/// deck, then the six that address the mix on it, then the library, then the
+/// five that address the room, then `esc`, then the three that are live only
+/// while the arrangement pill is asking for a name.
 ///
 /// **`p` is the latency offset here and was the report until 2026-08-31.**
 /// The page specifies the offset as `o` and `p`; a badge naming two keys with
@@ -2614,6 +2614,35 @@ const KEYS: &[(&str, &str)] = &[
     (
         "3",
         "select deck D — bound whatever the deck has, and this deck has a slot for it",
+    ),
+    // **The six that address the mix, all of them on the selected deck**, and
+    // the one place a key here is spelled twice over: `\` is two characters in
+    // this table, because that is how the arm's own `Key::Character("\\")`
+    // reads to
+    // `key_column::bound`, which takes this file's text as it is written. The
+    // page's badge spells it the same way for the same reason, and the legend
+    // therefore prints two characters for a key that is one.
+    (
+        "[",
+        "the selected deck's trim, a tenth down — the level material arrives at, colour only",
+    ),
+    (
+        "]",
+        "and a tenth up — not held at 1.0, because the mix is HDR",
+    ),
+    ("\\\\", "the trim back to 1.0"),
+    (
+        ";",
+        "the selected deck's fader, a tenth down — the one of the two that silences under every \
+         blend mode",
+    ),
+    (
+        "'",
+        "and a tenth up — held inside 0 and 1, which a proportion of a blend is",
+    ),
+    (
+        "m",
+        "the blend mode: the next of add, over and max, and it wraps",
     ),
     (
         "e",
@@ -2740,7 +2769,7 @@ fn knob_word(knob: Knob) -> &'static str {
 /// letter, and the master out by the bay it is in.
 ///
 /// The master out names no deck — it is one level on the whole fold
-/// ([ADR-0224](../../docs/adr/0224-out-and-exposure-are-two-levels-that-multiply-in-different-places.md))
+/// ([ADR-0224](../../../docs/adr/0224-out-and-exposure-are-two-levels-that-multiply-in-different-places.md))
 /// — so a line that said *deck A* over it would be naming a slot nothing in
 /// the gesture ever touched. `Knob::deck` is what answers, and this is the
 /// only caller: everything that *acts* takes the deck out of the operation.
@@ -2859,7 +2888,7 @@ const ASKED_TO_PRIME: usize = 1;
 /// where nothing else can reach them. A second `--flag` vocabulary here would
 /// be a second answer to *how does an operator name material*, which is the
 /// failure this whole move exists to stop paying for
-/// ([P-0093](../../../docs/principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)).
+/// ([`docs/contributing.md` §4](../../../docs/contributing.md)).
 /// So **material is two positional paths and nothing else**: enough to pick
 /// what plays, and no vocabulary to disagree with. The day the two programs
 /// share one, it comes from a package both can reach and this goes.
@@ -4675,8 +4704,8 @@ impl Engine {
     ///
     /// **A number computed from the measurement rather than a constant**,
     /// because a constant is the fixture the product cannot produce
-    /// ([P-0089](../../../docs/principles/0089-a-check-you-have-not-watched-fail-is-guessing.md)
-    /// read from the other side): a budget typed in here parks the request on
+    /// (`docs/contributing.md` §3, *a check you have not watched fail is
+    /// guessing*, read from the other side): a budget typed in here parks the request on
     /// this machine and admits it on a faster one, and a *measurement* typed in
     /// — `HotSwap::set_measured_cost` is public and would take one — is this
     /// file writing down the number the probe exists to take.
@@ -6342,6 +6371,132 @@ fn blend_mode(blend: Blend) -> BlendMode {
     }
 }
 
+/// **The next blend mode round the cycle**, wrapping from the last back to the
+/// first — what one press of `m` asks a deck's blend to become.
+///
+/// **The key names where it arrives and never a step**, which is
+/// [`Operation::SetBlendMode`]'s own shape: there is no step in the vocabulary
+/// to name, so the cycle is this surface's arithmetic and the operation
+/// carries the destination
+/// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
+/// That is `karakuri_console::view::Mixer::blend`'s affordance at a key instead
+/// of at a chip — one control emitting three operations — and it is the same
+/// three round the same way
+/// ([ADR-0187](../../../docs/adr/0187-the-blend-mini-cycles-and-a-map-learns-the-three-it-cycles-through.md)).
+///
+/// **A match rather than an index into [`BlendMode::ALL`]**, which is the
+/// console's reason at its own cycle: a fourth mode does not compile until
+/// somebody says what follows it. The price is that the order is written twice
+/// — here and in `ALL` — and
+/// [`tests::m_cycles_the_three_modes_in_the_order_the_chip_cycles_them`] walks
+/// `ALL` through this and asserts they are one order.
+fn after_blend(blend: BlendMode) -> BlendMode {
+    match blend {
+        BlendMode::Add => BlendMode::Over,
+        BlendMode::Over => BlendMode::Max,
+        BlendMode::Max => BlendMode::Add,
+    }
+}
+
+/// **One press of a gain key.** Linear and additive, because a fader is: the
+/// same press means the same amount wherever the trim is standing, rather than
+/// a proportion of wherever it happens to be.
+///
+/// **A tenth, because that is what the other keyboard steps by.**
+/// `docs/manual/operations.html` names `[ ] \` and says nothing about how far
+/// a press goes, so the size comes from `karakuri-cli`'s own `GAIN_STEP` —
+/// which `docs/manual.md` documents as *"focused slot gain down / up"* — and
+/// it is copied rather than shared because neither binary may depend on the
+/// other (ADR-0214). A page that decides otherwise moves this constant.
+const GAIN_STEP: f32 = 0.1;
+
+/// One press of an opacity key, and [`GAIN_STEP`]'s sentence one control
+/// along: `karakuri-cli`'s `OPACITY_STEP`, which is the same tenth, and the
+/// console's page is silent about this one too.
+const OPACITY_STEP: f32 = 0.1;
+
+/// **Where a gain key takes the trim it is standing on**, or `None` for a key
+/// that is not one of the three.
+///
+/// [`offset_step`]'s shape one bay along: the arm reads the step out of the
+/// letter rather than carrying a literal per arm, so which way each key goes
+/// is a value this file can be asked about without a window.
+///
+/// # What the page does not say, and where each answer comes from
+///
+/// The row names the three letters and stops. So `[` down, `]` up and `\` back
+/// to unity are `karakuri-cli`'s `'['`, `']'` and `'\\'` — *"focused slot gain
+/// down / up / back to 1.0"* in `docs/manual.md` — taken whole rather than
+/// invented here, because two keyboards that disagree about which bracket goes
+/// down is the one mistake an operator makes in the dark and cannot see.
+///
+/// # Floored and not ceilinged, and the clamp is the surface's
+///
+/// A negative gain would subtract one slot's light from another's, which is a
+/// blend mode rather than a level; above 1.0 is ordinary, because the pipeline
+/// is HDR
+/// ([P-0064](../../../docs/principles/0064-the-pipeline-is-linear-hdr-and-srgb-is-encoded-once-at-final-output.md)).
+/// It is clamped **here** rather than left to `Deck::set_gain` for
+/// `karakuri-cli`'s `clamp_gain` reason: this decides what the *record* says,
+/// so a session replays the value that took effect rather than one the engine
+/// quietly corrected.
+///
+/// **So `\` is a destination and the other two are steps**, and all three
+/// leave as the same absolute [`Operation::SetGain`] — an absolute value can
+/// express every step and a step cannot express a setting.
+fn gain_key(key: &str, from: f32) -> Option<f32> {
+    let asked = match key {
+        "[" => from - GAIN_STEP,
+        "]" => from + GAIN_STEP,
+        "\\" => 1.0,
+        _ => return None,
+    };
+    Some(asked.max(0.0))
+}
+
+/// **Where an opacity key takes the fader it is standing on**, or `None` for a
+/// key that is not one of the two — [`gain_key`]'s function on the other
+/// control.
+///
+/// `;` down and `'` up are `karakuri-cli`'s, for the reason written there: the
+/// page names the pair and not the direction.
+///
+/// **Held inside `[0, 1]` where the gain is only floored**, which is the
+/// difference the vocabulary already draws between the two: opacity is a
+/// proportion of a blend and there is no such thing as 1.4 of one, where gain
+/// is a level into an HDR mix. The clamp is this surface's for [`gain_key`]'s
+/// reason — it decides what the record says.
+fn opacity_key(key: &str, from: f32) -> Option<f32> {
+    let asked = match key {
+        ";" => from - OPACITY_STEP,
+        "'" => from + OPACITY_STEP,
+        _ => return None,
+    };
+    Some(asked.clamp(0.0, 1.0))
+}
+
+/// **The slot a press or a record names, as an index this deck has**, or
+/// `None` where it has not got one.
+///
+/// `Deck::gain` and `Deck::set_gain` index their slots, and a panic reachable
+/// from an event handler aborts this process rather than unwinding (see the
+/// module documentation), so every route from a letter or a record to the deck
+/// asks this first. `mix::change`'s whole reason for taking a `slot_count` is
+/// that a stream may name a slot that is not there.
+///
+/// **Nothing in this file can produce one**: the strips are the deck's own
+/// count, and `View::select` refuses a deck the mixer draws no strip for — so
+/// this is the guard rather than the message, and the real sentence is
+/// `karakuri-cli`'s `no_such_slot`.
+///
+/// **One derivation and not one per caller**, which is what makes the key arms
+/// and [`apply`] refuse the same slot: a press reads the deck before it names
+/// a destination and the record writes it afterwards, and a guard on only the
+/// second of the two would be a read that panicked on its way to a refusal.
+fn held(deck: &Deck, slot: u8) -> Option<usize> {
+    (usize::from(slot) < deck.slot_count()).then_some(usize::from(slot))
+}
+
 /// **The engine's look, as the console reads it** — [`blend_mode`]'s function
 /// one row up, on the value every sink is drawn under.
 ///
@@ -6490,7 +6645,7 @@ fn pointed(view: &mut View, operation: &Operation) -> Option<String> {
 /// saying is that a deck of one picture repeated is not a mixer, and that is
 /// true of every slot rather than of deck B, so it is said once here and no
 /// constant states a reason that has gone
-/// ([P-0093](../../../docs/principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)).
+/// ([`docs/contributing.md` §4](../../../docs/contributing.md)).
 ///
 /// **`+ slot` rather than a table**, because a table of four numbers is four
 /// values with nothing to say about each other, and what is wanted is exactly
@@ -6595,18 +6750,15 @@ fn played(gfx: &mut Gfx, operation: &Operation) -> Option<String> {
 /// second `apply_look` beside it would be the second route into the engine
 /// that P-0090 exists to refuse.
 fn apply(record: &Record, deck: &mut Deck, look: &mut Look) -> Option<String> {
-    // **A slot the deck has not got is refused rather than indexed.**
-    // `Deck::set_gain` indexes its slots, a panic reachable from an event
-    // handler aborts this process rather than unwinding (see the module
-    // documentation), and `mix::change`'s whole reason for taking a
-    // `slot_count` is that a stream may name a slot that is not there. Nothing
-    // in this file can produce one — the strips are the deck's own count — so
-    // this is the guard rather than the message, and the real sentence is
-    // `karakuri-cli`'s `no_such_slot`.
-    let held = |slot: u8| (usize::from(slot) < deck.slot_count()).then_some(usize::from(slot));
+    // **A slot the deck has not got is refused rather than indexed**, and the
+    // guard is [`held`] rather than a closure here, because the key arms in
+    // `window_event` need the same answer one step earlier: a press reads the
+    // trim it is stepping from before it can name where it is going, so a
+    // guard on the record alone would be a read that panicked on its way to a
+    // refusal. The argument for refusing at all is at that function.
     match *record {
         Record::Gain { slot, value } => {
-            let slot = held(slot)?;
+            let slot = held(deck, slot)?;
             deck.set_gain(slot, value);
             Some(format!(
                 "  fader: deck {} trim -> SetGain {{ deck: {slot}, gain: {value:.3} }} \
@@ -6616,7 +6768,7 @@ fn apply(record: &Record, deck: &mut Deck, look: &mut Look) -> Option<String> {
             ))
         }
         Record::Opacity { slot, value } => {
-            let slot = held(slot)?;
+            let slot = held(deck, slot)?;
             deck.set_opacity(slot, value);
             Some(format!(
                 "  fader: deck {} fader -> SetOpacity {{ deck: {slot}, opacity: {value:.3} }} \
@@ -6634,7 +6786,7 @@ fn apply(record: &Record, deck: &mut Deck, look: &mut Look) -> Option<String> {
         // only ever emits one of `BlendMode::ALL`, so this is the guard rather
         // than the message.
         Record::Blend { slot, ref mode } => {
-            let slot = held(slot)?;
+            let slot = held(deck, slot)?;
             let blend = Blend::from_name(mode)?;
             deck.set_blend(slot, blend);
             Some(format!(
@@ -6656,7 +6808,7 @@ fn apply(record: &Record, deck: &mut Deck, look: &mut Look) -> Option<String> {
         // it. The report is dropped here rather than printed: the line below
         // says what the deck ended up at, which is the half this window shows.
         Record::Residency { slot, ref level } => {
-            let slot = held(slot)?;
+            let slot = held(deck, slot)?;
             let residency = mix::parse_residency(level)?;
             deck.set_residency(slot, residency);
             deck.govern();
@@ -6695,7 +6847,7 @@ fn apply(record: &Record, deck: &mut Deck, look: &mut Look) -> Option<String> {
             position,
             softness,
         } => {
-            let slot = held(slot)?;
+            let slot = held(deck, slot)?;
             let shape = MaskKind::from_name(kind)?;
             deck.set_mask(slot, Mask::new(shape, angle, position, softness));
             Some(format!(
@@ -6756,7 +6908,7 @@ fn apply(record: &Record, deck: &mut Deck, look: &mut Look) -> Option<String> {
         // zero and is deliberately open above 1.0, through the same
         // `clamp_gain` the per-slot gain goes through, because the mix is HDR
         // and this level is applied to values a tone mapper has not seen —
-        // [P-0064](../../docs/principles/0064-the-pipeline-is-linear-hdr-and-srgb-is-encoded-once-at-final-output.md).
+        // [P-0064](../../../docs/principles/0064-the-pipeline-is-linear-hdr-and-srgb-is-encoded-once-at-final-output.md).
         // A clamp here would be a second opinion about a range the setter
         // already holds, which is the rule the whole conversion is written
         // under.
@@ -6805,7 +6957,7 @@ fn apply(record: &Record, deck: &mut Deck, look: &mut Look) -> Option<String> {
             anchor_bpm,
             scrub_beats,
         } => {
-            let slot = held(slot)?;
+            let slot = held(deck, slot)?;
             let mode = EngineSync::from_name(sync)?;
             deck.set_transport(slot, mode, anchor_bpm, scrub_beats)
                 .ok()?;
@@ -8723,6 +8875,102 @@ impl ApplicationHandler for App {
                         App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
                         return;
                     }
+                    // **The trim, and the three keys the page specifies for
+                    // it.** `Operation::SetGain` is absolute and the key
+                    // steps, which is `SetLatencyOffset`'s arrangement on a
+                    // different value and the same sentence: an absolute value
+                    // can express every step and a step cannot express a
+                    // setting, and the strip's trim has to be able to reach
+                    // it. So the press reads the level it is standing on and
+                    // names where it is going — [`gain_key`], which is also
+                    // where the three letters' directions come from, because
+                    // `docs/manual/operations.html` names them and stops.
+                    //
+                    // **Read off the deck and not off the strip**, which is
+                    // the source [`mixer`] reads: `view::Strip::gain` is that
+                    // same reading copied once a frame, and a scheduled fade
+                    // landing between the frame and the press would leave a
+                    // step counted from a number the deck has already left
+                    // behind. The strips follow afterwards because they are
+                    // read back off the deck, which is what
+                    // `a_drag_moves_the_deck_and_the_strip_follows_the_deck`
+                    // asserts about the fader beside this key.
+                    //
+                    // **The selected deck and not a slot in the key**, which
+                    // is the split every deck-addressed control on this panel
+                    // makes and `k`'s own sentence: the deck an operator means
+                    // is the one they have already selected with `0`–`3`, and
+                    // a model has no selection and names the slot in the call.
+                    Key::Character("[") | Key::Character("]") | Key::Character("\\") => {
+                        let Key::Character(name) = key.logical_key.as_ref() else {
+                            unreachable!("the arm this is in")
+                        };
+                        let deck = self.readout.view.selection();
+                        // **The guard rather than the message**, which is
+                        // [`held`]'s own sentence: the selection is inside the
+                        // deck's slots by construction, and this is what keeps
+                        // a read that would index out of them from being a
+                        // panic in an event handler.
+                        let Some(slot) = held(&gfx.engine.deck, deck) else {
+                            return;
+                        };
+                        let gain =
+                            gain_key(name, gfx.engine.deck.gain(slot)).expect("the arm this is in");
+                        let acted = Acted::Emitted(Some(Operation::SetGain { deck, gain }));
+                        let repaint =
+                            App::performed(gfx, &mut self.readout, &acted, Repaint::Never);
+                        App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
+                        return;
+                    }
+                    // **The fader, and it is the other control rather than the
+                    // same one twice** — *"opacity at zero silences under
+                    // every blend mode, gain at zero does not silence
+                    // `over`"*, which is why the page draws two rows and this
+                    // file binds two pairs. Everything in the arm above is
+                    // this arm's as well: absolute operation, stepping key,
+                    // the reading taken off the deck, the selected deck. What
+                    // differs is the clamp, and it is [`opacity_key`]'s.
+                    Key::Character(";") | Key::Character("'") => {
+                        let Key::Character(name) = key.logical_key.as_ref() else {
+                            unreachable!("the arm this is in")
+                        };
+                        let deck = self.readout.view.selection();
+                        let Some(slot) = held(&gfx.engine.deck, deck) else {
+                            return;
+                        };
+                        let opacity = opacity_key(name, gfx.engine.deck.opacity(slot))
+                            .expect("the arm this is in");
+                        let acted = Acted::Emitted(Some(Operation::SetOpacity { deck, opacity }));
+                        let repaint =
+                            App::performed(gfx, &mut self.readout, &acted, Repaint::Never);
+                        App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
+                        return;
+                    }
+                    // **The blend, and this one names rather than steps.**
+                    // `Operation::SetBlendMode` carries a mode and there is no
+                    // step in the vocabulary to name, so the cycle is this
+                    // surface's arithmetic — [`after_blend`], which is
+                    // `karakuri_console::view::Mixer::blend`'s affordance at a
+                    // key instead of at a chip, and the same three round the
+                    // same way (ADR-0187).
+                    //
+                    // **The mode the deck is on, through [`blend_mode`]**,
+                    // which is the one place the engine's list and the
+                    // vocabulary's are made to agree — so a fourth engine mode
+                    // stops this compiling rather than sending the cycle past
+                    // a state no operation can name.
+                    Key::Character("m") => {
+                        let deck = self.readout.view.selection();
+                        let Some(slot) = held(&gfx.engine.deck, deck) else {
+                            return;
+                        };
+                        let blend = after_blend(blend_mode(gfx.engine.deck.blend(slot)));
+                        let acted = Acted::Emitted(Some(Operation::SetBlendMode { deck, blend }));
+                        let repaint =
+                            App::performed(gfx, &mut self.readout, &acted, Repaint::Never);
+                        App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
+                        return;
+                    }
                     // **The beat, tapped.** The one key on this panel
                     // that reaches the room rather than the deck or the
                     // arrangement, and the first of three that need an input
@@ -10131,6 +10379,393 @@ mod tests {
         assert_eq!(nudged(&mut open, &Operation::TapBeat), None);
     }
 
+    /// **The legend this window prints for one key**, or a panic naming the
+    /// key that is not in it.
+    ///
+    /// [`KEYS`] is what the loop prints on startup, so it is the one place
+    /// this program tells an operator in words what a press does. That makes
+    /// it something the three tests below can check a constant *against*: a
+    /// step size compared with a second literal is a copy of itself, and a
+    /// step size compared with the sentence the operator reads is a
+    /// measurement.
+    fn legend(key: &str) -> &'static str {
+        KEYS.iter()
+            .find(|(name, _)| *name == key)
+            .map(|(_, line)| *line)
+            .unwrap_or_else(|| panic!("`{key}` is not in the legend this window prints at all"))
+    }
+
+    /// Two levels are the same trim, allowing for the arithmetic: a tenth is
+    /// not a `f32`, so `0.5 - GAIN_STEP` and `0.4` are two different numbers
+    /// and neither of them is wrong.
+    fn same(got: f32, want: f32) -> bool {
+        (got - want).abs() <= 1e-6
+    }
+
+    /// **"A key steps it"** — `docs/manual/operations.html`'s Gain row, which
+    /// names `[ ] \` and stops. Which bracket goes down, how far a press goes
+    /// and what the third one does are decided somewhere else, so all three
+    /// are worth measuring rather than reading.
+    ///
+    /// **The directions are `karakuri-cli`'s, taken whole** — [`gain_key`]'s
+    /// own sentence, and the reason they are worth an assertion at all: two
+    /// keyboards that disagree about which bracket goes down is the one
+    /// mistake an operator makes in the dark and cannot see. The size is
+    /// [`GAIN_STEP`], and the legend [`KEYS`] prints beside `[` calls it *a
+    /// tenth*, so the constant is checked against something this program says
+    /// out loud rather than against a literal written twice.
+    ///
+    /// **Linear and additive, over several levels rather than one.** A step
+    /// written as a proportion of wherever the trim happens to be reads
+    /// correct at whichever single level a test picked and is wrong at every
+    /// other one, and the levels above 1.0 are where that shows.
+    ///
+    /// **The two ends are different ends, and that is the decision in here.**
+    /// The floor is real — a negative gain would subtract one slot's light
+    /// from another's, which is a blend mode rather than a level — and there
+    /// is no ceiling, because the pipeline is HDR
+    /// ([P-0064](../../../docs/principles/0064-the-pipeline-is-linear-hdr-and-srgb-is-encoded-once-at-final-output.md)),
+    /// which the legend for `]` says in as many words: *"not held at 1.0,
+    /// because the mix is HDR"*. A trim clamped at unity here would look like
+    /// tidiness and would quietly cap the mix.
+    ///
+    /// **Held at the floor it says nothing**, which is where this differs from
+    /// the offset three tests up: `offset_said` has a sentence for a press
+    /// that asked past the bound and this route has none — what an operator
+    /// gets is the absolute value the operation carries, printed twice. That
+    /// is asserted as it is rather than as it might be.
+    #[test]
+    fn the_gain_keys_step_the_trim_a_tenth_each_way_and_the_backslash_names_unity() {
+        // Every level that says something different: under the default, at it,
+        // and above it — above 1.0 is an ordinary place for an HDR trim to be
+        // standing, and it is the level a proportional step gets wrong.
+        for from in [0.35_f32, 0.5, 1.0, 1.4, 3.0] {
+            let down = gain_key("[", from).expect("`[` is one of the three keys the page names");
+            let up = gain_key("]", from).expect("`]` is one of the three keys the page names");
+            assert!(
+                same(down, from - GAIN_STEP),
+                "`[` took a trim standing at {from} to {down}, which is not one step of \
+                 {GAIN_STEP} down — the bracket that goes down is the one `karakuri-cli` goes \
+                 down with, and two keyboards that disagree about it is the mistake nobody \
+                 can see"
+            );
+            assert!(
+                same(up, from + GAIN_STEP),
+                "`]` took a trim standing at {from} to {up}, which is not one step of \
+                 {GAIN_STEP} up"
+            );
+            assert!(
+                down < from && from < up,
+                "at {from} the two brackets did not go opposite ways: `[` gave {down} and `]` \
+                 gave {up}"
+            );
+            assert_eq!(
+                gain_key("\\", from),
+                Some(1.0),
+                "`\\` is a destination and not a step, so from {from} it names 1.0 and nothing \
+                 else"
+            );
+        }
+
+        // **The step against the sentence the operator reads**, and the guard
+        // that keeps that comparison worth making: without the second
+        // assertion the first is a constant checked against a literal.
+        assert_eq!(
+            GAIN_STEP,
+            0.1,
+            "the window prints `{}` for `[` and the arm steps by {GAIN_STEP} — an operator \
+             reading the legend is told a tenth and gets something else",
+            legend("[")
+        );
+        assert!(
+            legend("[").contains("a tenth"),
+            "the legend for `[` no longer calls the step a tenth, so the assertion above is \
+             comparing the constant against nothing: {}",
+            legend("[")
+        );
+
+        // **Floored, and it holds there in silence.** A press at the bottom of
+        // the travel asks below zero and gets zero, which is the clamp
+        // `gain_key` makes rather than one `Deck::set_gain` would make later —
+        // it decides what the *record* says, so a session replays the value
+        // that took effect.
+        assert_eq!(
+            gain_key("[", 0.05),
+            Some(0.0),
+            "a press that asked below zero came out negative, and a negative gain subtracts \
+             one slot's light from another's — a blend mode rather than a level"
+        );
+        assert_eq!(
+            gain_key("[", 0.0),
+            Some(0.0),
+            "a press at the floor did not hold at the floor"
+        );
+
+        // **And not ceilinged**, which is the half a clamp would have got
+        // wrong quietly: `]` at unity is an ordinary press into the HDR mix.
+        let over = gain_key("]", 1.0).expect("`]` is one of the three keys the page names");
+        assert!(
+            over > 1.0 && same(over, 1.0 + GAIN_STEP),
+            "`]` at 1.0 came out at {over} — the trim was capped at unity, and the mix is HDR"
+        );
+        assert!(
+            legend("]").contains("not held at 1.0"),
+            "the legend for `]` no longer says the trim is uncapped, so the assertion above \
+             and the window disagree about which of them is the specification: {}",
+            legend("]")
+        );
+        assert!(
+            same(
+                gain_key("]", 4.0).expect("`]` is one of the three keys the page names"),
+                4.0 + GAIN_STEP
+            ),
+            "a trim already well above unity stopped stepping up"
+        );
+        // And `\` comes back down from up there, which is what makes it the
+        // way out of a mix somebody has pushed: a destination, not a step.
+        assert_eq!(gain_key("\\", 4.0), Some(1.0));
+    }
+
+    /// **"A key steps it"** one control along, and the difference between the
+    /// two is the whole of this test.
+    ///
+    /// `docs/manual/operations.html`'s Opacity row names `; '` and is silent
+    /// about the direction for [`gain_key`]'s reason, so `;` down and `'` up
+    /// are `karakuri-cli`'s. The step is [`OPACITY_STEP`], and the legend
+    /// [`KEYS`] prints calls it *a tenth* exactly as the trim's does.
+    ///
+    /// **The clamp is this surface's and it is the reason for the test.**
+    /// Opacity is a proportion of a blend and there is no such thing as 1.4 of
+    /// one, where gain is a level into an HDR mix — the legend says as much at
+    /// the key: *"held inside 0 and 1, which a proportion of a blend is"*. It
+    /// is clamped here rather than left to `Deck::set_opacity`, because this
+    /// decides what the **record** says: a session replays the value that took
+    /// effect rather than one the engine quietly corrected.
+    ///
+    /// So the two ends are asserted **against the trim's**, which is the shape
+    /// a clamp copied from one control to the other would break: at 1.0 the
+    /// fader holds and the trim does not.
+    #[test]
+    fn the_opacity_keys_step_the_fader_a_tenth_each_way_and_are_held_inside_zero_and_one() {
+        for from in [0.15_f32, 0.3, 0.5, 0.85] {
+            let down = opacity_key(";", from).expect("`;` is one of the two keys the page names");
+            let up = opacity_key("'", from).expect("`'` is one of the two keys the page names");
+            assert!(
+                same(down, from - OPACITY_STEP),
+                "`;` took a fader standing at {from} to {down}, which is not one step of \
+                 {OPACITY_STEP} down"
+            );
+            assert!(
+                same(up, from + OPACITY_STEP),
+                "`'` took a fader standing at {from} to {up}, which is not one step of \
+                 {OPACITY_STEP} up"
+            );
+            assert!(
+                down < from && from < up,
+                "at {from} the pair did not go opposite ways: `;` gave {down} and `'` gave {up}"
+            );
+        }
+
+        assert_eq!(
+            OPACITY_STEP,
+            0.1,
+            "the window prints `{}` for `;` and the arm steps by {OPACITY_STEP}",
+            legend(";")
+        );
+        assert!(
+            legend(";").contains("a tenth"),
+            "the legend for `;` no longer calls the step a tenth, so the assertion above is \
+             comparing the constant against nothing: {}",
+            legend(";")
+        );
+
+        // **Both ends, and both of them hold.** A press at either end of the
+        // travel asks past it and gets the end.
+        assert_eq!(
+            opacity_key(";", 0.05),
+            Some(0.0),
+            "a press that asked below zero came out negative — there is no less than none of \
+             a layer"
+        );
+        assert_eq!(
+            opacity_key(";", 0.0),
+            Some(0.0),
+            "a press at the bottom of the travel did not hold there"
+        );
+        assert_eq!(
+            opacity_key("'", 0.95),
+            Some(1.0),
+            "a press that asked past one came out above it — there is no 1.05 of a blend"
+        );
+        assert_eq!(
+            opacity_key("'", 1.0),
+            Some(1.0),
+            "a press at the top of the travel did not hold there"
+        );
+        assert!(
+            legend("'").contains("held inside 0 and 1"),
+            "the legend for `'` no longer says the fader is held inside its two ends: {}",
+            legend("'")
+        );
+
+        // **The two controls part company at 1.0, and that is the assertion a
+        // clamp copied across would fail.** The same press, at the same level,
+        // on the two keys the page draws two rows for: the fader holds and the
+        // trim goes on up.
+        assert_eq!(
+            opacity_key("'", 1.0),
+            Some(1.0),
+            "the fader is no longer held at one"
+        );
+        assert_ne!(
+            gain_key("]", 1.0),
+            Some(1.0),
+            "the trim is now held at one as well, so the two controls have been made the same \
+             control — and the page draws two rows because they are not: *opacity at zero \
+             silences under every blend mode, gain at zero does not silence `over`*"
+        );
+    }
+
+    /// **Each pair answers for its own letters and for nothing else** — which
+    /// is what [`gain_key`] and [`opacity_key`] both state in their first
+    /// line: *"or `None` for a key that is not one of the three"*, and *"not
+    /// one of the two"*.
+    ///
+    /// It matters because of the arms that call them. `window_event` matches
+    /// the letters first and then `expect`s the answer — *"the arm this is
+    /// in"* — so a helper that answered for a letter its arm does not match is
+    /// a helper nobody would notice, and one that stopped answering for a
+    /// letter its arm *does* match is a panic in an event handler, which
+    /// aborts this process rather than unwinding.
+    ///
+    /// **The two are crossed on purpose.** The mix keys sit next to each other
+    /// on one keyboard and are two controls the page draws two rows for, so
+    /// `;` is asked of [`gain_key`] and `\` of [`opacity_key`]: a pair widened
+    /// by one letter would move the wrong value and read correct.
+    #[test]
+    fn neither_pair_of_mix_keys_answers_for_a_letter_that_is_not_its_own() {
+        // The guard first: both helpers answer for their own, or the loops
+        // below are satisfied by a function that answers for nothing at all.
+        for key in ["[", "]", "\\"] {
+            assert!(
+                gain_key(key, 0.5).is_some(),
+                "`{key}` is a key the trim's arm matches and `gain_key` answered nothing for \
+                 it — the arm `expect`s that answer, and a panic in an event handler aborts \
+                 this process"
+            );
+        }
+        for key in [";", "'"] {
+            assert!(
+                opacity_key(key, 0.5).is_some(),
+                "`{key}` is a key the fader's arm matches and `opacity_key` answered nothing \
+                 for it"
+            );
+        }
+
+        // The other pair's letters first, then the rest of the mix row, then
+        // keys from elsewhere on this keyboard.
+        for key in [";", "'", "m", "e", "o", "p", "b", ",", ".", "0", "3", "\n"] {
+            assert_eq!(
+                gain_key(key, 0.5),
+                None,
+                "`{key}` is not one of the three the trim's arm matches and `gain_key` claimed \
+                 it was"
+            );
+        }
+        for key in [
+            "[", "]", "\\", "m", "e", "o", "p", "b", ",", ".", "0", "3", "\n",
+        ] {
+            assert_eq!(
+                opacity_key(key, 0.5),
+                None,
+                "`{key}` is not one of the two the fader's arm matches and `opacity_key` \
+                 claimed it was"
+            );
+        }
+    }
+
+    /// **One press of `m` is one step round the cycle, and the last mode wraps
+    /// to the first** — `docs/manual/operations.html`'s Blend mode row: *"The
+    /// key cycles the three; a map names the one it wants."*
+    ///
+    /// [`after_blend`] is a match rather than an index into [`BlendMode::ALL`],
+    /// so a fourth mode does not compile until somebody says what follows it,
+    /// and the price of a match is that the order is written twice — here and
+    /// in `ALL`. This is the measurement that keeps the two copies from
+    /// drifting rather than a comment promising they will not, and
+    /// [`after_blend`]'s own documentation names this test as the thing that
+    /// does it.
+    ///
+    /// **The same three round the same way as the chip** (ADR-0187), which is
+    /// what makes a key and a pointer one control rather than two.
+    /// `karakuri_console::view::after` is private to that crate and cannot be
+    /// called from here, so the two are held together by the array they are
+    /// both walked against: `karakuri-console/tests/blend.rs` walks `ALL`
+    /// through the chip exactly as this walks `ALL` through [`after_blend`],
+    /// and a cycle that drifted would fail on one side or the other.
+    ///
+    /// **And `ALL` is the engine's own order**, taken through [`blend_mode`]
+    /// rather than assumed: the cycle a key walks and the list a deck holds
+    /// are the same three in the same order, or one press would step to a mode
+    /// the deck reads as a different one.
+    ///
+    /// **The wrap is not a special case in the assertion.** The loop's last
+    /// step is `max` and the answer it expects is `ALL[0]`, reached by the
+    /// same modulo every other step uses, so a cycle that ran off the end
+    /// fails here rather than in a test of its own that could be forgotten.
+    #[test]
+    fn m_cycles_the_three_modes_in_the_order_the_chip_cycles_them() {
+        for (step, from) in BlendMode::ALL.into_iter().enumerate() {
+            let want = BlendMode::ALL[(step + 1) % BlendMode::ALL.len()];
+            assert_eq!(
+                after_blend(from),
+                want,
+                "one press of `m` on a deck reading `{}` arrived somewhere other than `{}`",
+                from.name(),
+                want.name()
+            );
+        }
+
+        // The guard on the loop above: it has to have walked every mode there
+        // is, or a cycle with a hole in it passes by never being asked about
+        // the mode in the hole.
+        assert_eq!(
+            BlendMode::ALL.len(),
+            3,
+            "`BlendMode::ALL` is no longer the three this walks, and the wrap it asserts is a \
+             different wrap"
+        );
+
+        // **The engine's list and the vocabulary's are one order**, which is
+        // the half `ALL` alone cannot say. The key reads the deck through
+        // [`blend_mode`] before it steps, so if the two lists disagreed the
+        // cycle would be walking a different three from the one the deck is
+        // standing in.
+        assert_eq!(
+            Blend::ALL.map(blend_mode),
+            BlendMode::ALL,
+            "the engine's modes and the vocabulary's are no longer one order, so the cycle a \
+             press walks is not the cycle a deck holds"
+        );
+
+        // **And the legend names the same three in the same order**, which is
+        // the copy an operator actually reads: *"the blend mode: the next of
+        // add, over and max, and it wraps"*. A cycle that changed order would
+        // leave the window telling them a different one.
+        let line = legend("m");
+        let mut at = 0;
+        for mode in BlendMode::ALL {
+            let found = line[at..].find(mode.name()).unwrap_or_else(|| {
+                panic!(
+                    "the legend for `m` does not name `{}` after the modes before it — it \
+                     lists a different cycle from the one a press walks: {line}",
+                    mode.name()
+                )
+            });
+            at += found + mode.name().len();
+        }
+    }
+
     /// **Every verdict the engine can report says what it does to the lane,
     /// and a row leaves it only when the file and the picture agree.**
     ///
@@ -11254,7 +11889,7 @@ mod tests {
     /// The negative control is the point: a check that refused everything
     /// would pass an assertion that only ever looked for a refusal, so the
     /// names that must be *accepted* are asserted beside the ones that must
-    /// not (P-0089).
+    /// not (`docs/contributing.md` §3).
     #[test]
     fn a_typed_arrangement_name_is_refused_where_the_file_is_written() {
         for good in ["night", "four_deck", "set-2", "A9"] {
@@ -13190,7 +13825,7 @@ mod key_column {
     //! `karakuri-cli` documents its own keys in `BINDINGS` and has its own test
     //! that every key `Live::key` acts on is in it. Nothing here reads that
     //! package, and a second copy of its list here would be the thing
-    //! [P-0093](../../../docs/principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)
+    //! [`docs/contributing.md` §4](../../../docs/contributing.md)
     //! forbids.
     //!
     //! # What it cannot see, and which way each one fails
@@ -13354,6 +13989,34 @@ mod key_column {
         ("1", &["Select a deck"]),
         ("2", &["Select a deck"]),
         ("3", &["Select a deck"]),
+        // **The mix, on whichever deck that selection is on**, which is why
+        // these six sit under it: nothing in the letter says a slot, so the
+        // deck a press moves is the ring on the strips and the row above is
+        // how it got there.
+        //
+        // **Three rows and six keys, because two of the three are a pair of
+        // steps and one is three.** The page's row is the operation and not
+        // the press — *Gain* is one row whichever of `[`, `]` and `\` asked
+        // for it — so every key of a pair names the same row, exactly as `o`
+        // and `p` both name *Nudge the latency offset* and `,` and `.` both
+        // name *Halve or double the grid*.
+        //
+        // **`\` is spelled with two characters here for `super::KEYS`'
+        // reason**, which is [`bound`]'s: the key is read out of this file's
+        // text and a Rust escape is not undone on the way. The page's badge
+        // says `\\` and this says the same, so the two agree on the thing they
+        // are compared on.
+        //
+        // **The panel column of all three rows was already `has`**, and stays
+        // so: the strips draw a trim, a fader and a blend chip, and these keys
+        // are a second way to the same three operations rather than a claim
+        // about a control. This is the key column and nothing else.
+        ("[", &["Gain"]),
+        ("]", &["Gain"]),
+        ("\\\\", &["Gain"]),
+        (";", &["Opacity"]),
+        ("'", &["Opacity"]),
+        ("m", &["Blend mode"]),
         // The load, whose two operands are the library cursor and the
         // selection above. Free on both keyboards when it was chosen.
         //
@@ -13610,6 +14273,165 @@ mod key_column {
              operation nothing checks the badge of and is told to nobody; an entry with no arm \
              is a legend naming a key an operator presses to no effect"
         );
+    }
+    /// **This file's code, down to the first test, as one line with its
+    /// comments cut** — [`bound`]'s two cuts, and then the newlines go too.
+    ///
+    /// The joining is the point: where `rustfmt` chose to wrap a call says
+    /// nothing about what the call is, and a check written against the wrapped
+    /// shape would fail the day a name got longer.
+    fn code() -> String {
+        let path = workspace().join(SRC);
+        let text = fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("{} holds the arms and is unreadable: {e}", path.display()));
+        let mut kept = String::new();
+        for line in text.lines() {
+            let line = line.trim();
+            if line == TESTS {
+                break;
+            }
+            if line.starts_with("//") {
+                continue;
+            }
+            let code = match line.find("//") {
+                Some(at) => &line[..at],
+                None => line,
+            };
+            kept.push_str(code.trim());
+            kept.push(' ');
+        }
+        kept
+    }
+
+    /// **One arm of the window loop's `match`**, from the pattern `head` names
+    /// to wherever the next arm begins.
+    ///
+    /// The end is the next [`CHARACTER`] or [`NAMED`], which is the same two
+    /// shapes [`bound`] counts arms by — and it is `Key::Character("` with the
+    /// quote rather than without, so the `let Key::Character(name) = …` inside
+    /// two of these arms is not mistaken for the arm after them.
+    fn arm(code: &str, head: &str) -> String {
+        let at = code.find(head).unwrap_or_else(|| {
+            panic!("{SRC} has no arm beginning `{head}` — the `match` has been rewritten")
+        });
+        let rest = &code[at + head.len()..];
+        let end = match (rest.find(CHARACTER), rest.find(NAMED)) {
+            (Some(a), Some(b)) => a.min(b),
+            (Some(a), None) => a,
+            (None, Some(b)) => b,
+            (None, None) => rest.len(),
+        };
+        rest[..end].to_owned()
+    }
+
+    /// **The three mix arms act on the deck the operator selected, and read
+    /// the value they step from off that deck.**
+    ///
+    /// This is the half `gpu::a_mix_key_moves_the_deck_the_operator_selected…`
+    /// cannot reach, and the reason is written there: the arms are inline in
+    /// `App::window_event`, behind a `Window` and an `ActiveEventLoop` that no
+    /// test binary can build, so that test asserts the chain and this one
+    /// asserts the arms are wired to it. **Neither alone is the claim.**
+    ///
+    /// It is in this module because the machinery is: [`bound`] already
+    /// answers *which keys does this program bind* by reading this file as
+    /// text, for the reason written at [`SRC`] — the `match` is a `match`, not
+    /// a table. What is new is *what the arm does with the key*, and it is
+    /// three claims:
+    ///
+    /// - **The deck is the selection.** Every deck-addressed control on this
+    ///   panel splits the same way — the deck an operator means is the one
+    ///   they selected with `0`–`3` — and an arm carrying a literal would move
+    ///   deck A from every press, correctly and on the wrong strip.
+    /// - **The reading is the deck's, not a strip's.** `view::Strip` is that
+    ///   same reading copied once a frame, so a step counted from it is a step
+    ///   counted from a number the deck may already have left behind.
+    /// - **[`super::held`] guards the read.** `Deck::gain` indexes its slots
+    ///   and a panic reachable from an event handler takes this process with
+    ///   it rather than unwinding, so the guard is the whole of what stands
+    ///   between the two.
+    ///
+    /// A CPU test, deliberately: it reads a file, and a machine with no
+    /// adapter still has an answer about what these arms say.
+    #[test]
+    fn the_three_mix_arms_act_on_the_selected_deck_and_read_it_off_the_deck() {
+        let code = code();
+        let arms = [
+            (
+                r#"Key::Character("\\") => {"#,
+                "gfx.engine.deck.gain(slot)",
+                "Operation::SetGain { deck, gain }",
+                "the trim",
+            ),
+            (
+                r#"Key::Character("'") => {"#,
+                "gfx.engine.deck.opacity(slot)",
+                "Operation::SetOpacity { deck, opacity }",
+                "the fader",
+            ),
+            (
+                r#"Key::Character("m") => {"#,
+                "gfx.engine.deck.blend(slot)",
+                "Operation::SetBlendMode { deck, blend }",
+                "the blend",
+            ),
+        ];
+        for (head, reading, operation, what) in arms {
+            let body = arm(&code, head);
+            assert!(
+                !body.is_empty(),
+                "{what}'s arm came back empty, so everything below it is asserting nothing"
+            );
+            assert!(
+                body.contains("let deck = self.readout.view.selection();"),
+                "{what}'s arm does not take its deck from the selection, so a press moves \
+                 whichever deck the arm decided on rather than the one the operator picked \
+                 with `0`-`3`: {body}"
+            );
+            assert!(
+                body.contains("held(&gfx.engine.deck, deck)"),
+                "{what}'s arm reads a slot without asking `held` for it first — `Deck::gain` \
+                 indexes its slots and a panic in an event handler aborts this process rather \
+                 than unwinding: {body}"
+            );
+            assert!(
+                body.contains(reading),
+                "{what}'s arm does not step from `{reading}`, so the level it counts from is \
+                 not the one the deck is holding: {body}"
+            );
+            assert!(
+                body.contains(operation),
+                "{what}'s arm does not build `{operation}` — the deck it names is not the \
+                 `deck` it selected: {body}"
+            );
+            assert!(
+                !body.to_lowercase().contains("strip"),
+                "{what}'s arm reaches for a strip, which is the deck's reading copied once a \
+                 frame: {body}"
+            );
+        }
+
+        // **The floor under all three**, and it is the assertion that keeps
+        // the rest honest: a `code()` that had stopped matching this file
+        // would hand `arm` a haystack with no arms in it, and `arm` panics
+        // there rather than returning nothing — but a *head* that matched
+        // something else entirely would not, so the bodies are checked for
+        // being one arm each rather than the rest of the file.
+        for (head, _, _, what) in arms {
+            let body = arm(&code, head);
+            assert!(
+                body.len() < 1200,
+                "{what}'s arm came back {} characters long, which is not one arm — the shape \
+                 `arm` cuts at has changed and every assertion above is being made against \
+                 whatever followed",
+                body.len()
+            );
+            assert!(
+                body.contains("App::performed(gfx, &mut self.readout, &acted, Repaint::Never)"),
+                "{what}'s arm does not end at the tail every press goes through, so `arm` is \
+                 not returning the arm: {body}"
+            );
+        }
     }
 
     /// **And every key the legend prints has its rows written down**, both
@@ -14014,7 +14836,8 @@ mod gpu {
 
     /// **A real Set reads out into a pane**, which is the seven reads
     /// [`inspector`] makes held against a Set this program actually builds
-    /// rather than against a fixture it wrote itself (P-0089 — the criterion is
+    /// rather than against a fixture it wrote itself (`docs/contributing.md` §3
+    /// — the criterion is
     /// not that it probably will not change but that it *can*, and this
     /// window's input is the product).
     ///
@@ -15260,6 +16083,278 @@ mod gpu {
         engine.deck.set_gain(0, 0.5);
         mixer(&engine.deck, &material, &mut after);
         assert_eq!(after[0].gain, 0.5);
+    }
+    /// **A mix key moves the deck the operator selected, and leaves the other
+    /// three exactly where they were** — the three key routes closed on a real
+    /// deck, which is why this is here rather than beside the helpers' own
+    /// tests.
+    ///
+    /// `tests::the_gain_keys_step_the_trim_…` and the two beside it assert
+    /// [`gain_key`], [`opacity_key`] and [`after_blend`] with no deck
+    /// anywhere, which is the point of those three. This is the other end of
+    /// the same chain, and it needs a device because a `Deck` does: four slots
+    /// exist, the selection is one of them, the level the press steps from is
+    /// read off that slot, the operation becomes a `Record` and the record
+    /// moves one slot.
+    ///
+    /// **What separates it from a plausible wrong answer is which deck it
+    /// lands on.** Deck C is selected — not the default and not the last, so a
+    /// selection ignored in either direction lands somewhere this test can see
+    /// — and no two slots are seeded alike, which is `tests/blend.rs`'s rule
+    /// at the far end of the same chain. **Both halves are asserted**: the one
+    /// slot that moved and the three that did not, because only the second
+    /// catches a route that acted on a deck of its own.
+    ///
+    /// **And the level comes off the deck rather than off `view::Strip`**,
+    /// which the arms' own comment claims and nothing measured. A strip is
+    /// that same reading copied once a frame, so the two disagree the moment
+    /// anything moves the deck without the frame having run again — a
+    /// scheduled fade landing between the two is one way and the only one the
+    /// comment names, but it is the *staleness* that matters and not how it
+    /// arose, so it is made here the cheap way. What is asserted is that the
+    /// two sources give different answers and that the deck's is the one that
+    /// lands right.
+    ///
+    /// # What this cannot reach, and what does
+    ///
+    /// The three arms are inline in `App::window_event`, behind a `Window` and
+    /// an `ActiveEventLoop` that no test binary can build, so **nothing here
+    /// enters them**. What is asserted is the chain they are made of, in their
+    /// order, through their own functions.
+    /// `key_column::the_three_mix_arms_act_on_the_selected_deck_and_read_it_off_the_deck`
+    /// is the other half — it reads those arms out of this file's text and
+    /// holds them to this chain — and the claim is the two together. Neither
+    /// alone is it, and saying so is cheaper than a test that looks like it
+    /// covers the arm and does not.
+    #[test]
+    fn a_mix_key_moves_the_deck_the_operator_selected_and_leaves_the_others_alone() {
+        const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
+        const W: u32 = 1440;
+        const H: u32 = 900;
+        /// Deck C.
+        const SELECTED: u8 = 2;
+        /// Two levels are the same level, allowing for the arithmetic: a tenth
+        /// is not an `f32`, so `0.6 + GAIN_STEP` and `0.7` are two different
+        /// numbers and neither of them is wrong.
+        const CLOSE: f32 = 1e-6;
+
+        let gpu = Gpu::headless().expect("no GPU");
+        let mut renderer =
+            egui_wgpu::Renderer::new(&gpu.device, FORMAT, egui_wgpu::RendererOptions::default());
+        let mut panel = Panel::new(W as f32, H as f32);
+        panel.solve();
+        let mut engine = Engine::new(
+            &gpu,
+            &mut renderer,
+            &shipped_slots(),
+            panel.layout(),
+            1.0,
+            None,
+        );
+        let material = vec![shipped().material(); engine.deck.slot_count()];
+        let here = usize::from(SELECTED);
+        assert!(
+            here < engine.deck.slot_count(),
+            "this deck has {} slots and the test selects deck {SELECTED}, so there is nothing \
+             here to move",
+            engine.deck.slot_count()
+        );
+
+        // **No two slots alike, in all three values.** An answer read off the
+        // wrong slot is then a wrong answer rather than the right one by luck,
+        // and the blends are seeded so the selected deck's next mode is not
+        // where it already was.
+        let seeded = [
+            (0.20_f32, 0.90_f32, Blend::Add),
+            (0.40, 0.70, Blend::Max),
+            (0.60, 0.50, Blend::Over),
+            (0.80, 0.30, Blend::Add),
+        ];
+        for (slot, (gain, opacity, blend)) in seeded.iter().copied().enumerate() {
+            engine.deck.set_gain(slot, gain);
+            engine.deck.set_opacity(slot, opacity);
+            engine.deck.set_blend(slot, blend);
+        }
+
+        // The console, with the strips the frame would have written into it —
+        // `View::select` refuses a deck the mixer draws no strip for, so the
+        // selection cannot be made before the readings are there.
+        let mut readout = Readout::new(W as f32, H as f32);
+        mixer(&engine.deck, &material, &mut readout.view.mixer);
+        assert_eq!(
+            readout.view.mixer.len(),
+            engine.deck.slot_count(),
+            "the view is not holding one strip per slot, so the selection below is being made \
+             against something other than this deck"
+        );
+        assert_eq!(
+            readout.view.selection(),
+            0,
+            "a run no longer opens on deck A, so selecting deck C proves nothing about a route \
+             that ignores the selection"
+        );
+        assert!(
+            readout.view.select(SELECTED),
+            "deck C could not be selected on a four-slot deck"
+        );
+        assert_eq!(readout.view.selection(), SELECTED);
+
+        /// Every value the three keys can move, per slot — the whole of what a
+        /// press is allowed to have touched.
+        fn snapshot(deck: &Deck) -> Vec<(f32, f32, Blend)> {
+            (0..deck.slot_count())
+                .map(|slot| (deck.gain(slot), deck.opacity(slot), deck.blend(slot)))
+                .collect()
+        }
+
+        // -- the trim -------------------------------------------------------
+
+        let was = snapshot(&engine.deck);
+        let deck = readout.view.selection();
+        let slot = held(&engine.deck, deck).expect("the selection is a slot this deck has");
+        let gain = gain_key("]", engine.deck.gain(slot)).expect("`]` is one of the trim's keys");
+        let record = super::tests::only_record(&Operation::SetGain { deck, gain });
+        assert!(apply(&record, &mut engine.deck, &mut engine.look).is_some());
+        let now = snapshot(&engine.deck);
+        assert!(
+            (now[here].0 - (was[here].0 + GAIN_STEP)).abs() <= CLOSE,
+            "`]` with deck C selected took its trim from {} to {} rather than one step of \
+             {GAIN_STEP} up",
+            was[here].0,
+            now[here].0
+        );
+        for other in (0..now.len()).filter(|slot| *slot != here) {
+            assert_eq!(
+                now[other], was[other],
+                "a press of `]` with deck C selected moved deck {other} as well — the route is \
+                 not addressed to the deck the operator picked"
+            );
+        }
+
+        // -- the fader ------------------------------------------------------
+
+        let was = snapshot(&engine.deck);
+        let opacity =
+            opacity_key("'", engine.deck.opacity(slot)).expect("`'` is one of the fader's keys");
+        let record = super::tests::only_record(&Operation::SetOpacity { deck, opacity });
+        assert!(apply(&record, &mut engine.deck, &mut engine.look).is_some());
+        let now = snapshot(&engine.deck);
+        assert!(
+            (now[here].1 - (was[here].1 + OPACITY_STEP)).abs() <= CLOSE,
+            "`'` with deck C selected took its fader from {} to {} rather than one step of \
+             {OPACITY_STEP} up",
+            was[here].1,
+            now[here].1
+        );
+        for other in (0..now.len()).filter(|slot| *slot != here) {
+            assert_eq!(
+                now[other], was[other],
+                "a press of `'` with deck C selected moved deck {other} as well"
+            );
+        }
+
+        // -- the blend ------------------------------------------------------
+
+        let was = snapshot(&engine.deck);
+        let blend = after_blend(blend_mode(engine.deck.blend(slot)));
+        assert_ne!(
+            blend,
+            blend_mode(was[here].2),
+            "deck C's next mode is the one it is already on, so the assertion below would pass \
+             on a press that did nothing"
+        );
+        let record = super::tests::only_record(&Operation::SetBlendMode { deck, blend });
+        assert!(apply(&record, &mut engine.deck, &mut engine.look).is_some());
+        let now = snapshot(&engine.deck);
+        assert_eq!(
+            blend_mode(now[here].2),
+            blend,
+            "`m` with deck C selected did not arrive at the mode the cycle names"
+        );
+        for other in (0..now.len()).filter(|slot| *slot != here) {
+            assert_eq!(
+                now[other], was[other],
+                "a press of `m` with deck C selected moved deck {other} as well"
+            );
+        }
+
+        // -- the guard ------------------------------------------------------
+
+        // **[`held`] is what stands between an event handler and an abort**,
+        // and this is the device half of that sentence: `Deck::gain` indexes
+        // its slots, so the thing the guard refuses is a real panic and not a
+        // supposed one. A panic here would take the process with it rather
+        // than unwinding into a message — see the module documentation — which
+        // is why the arms ask before they read.
+        let past = engine.deck.slot_count();
+        for slot in 0..past {
+            assert_eq!(
+                held(&engine.deck, slot as u8),
+                Some(slot),
+                "slot {slot} is one this deck has and the guard refused it, so every press \
+                 would return without doing anything"
+            );
+        }
+        assert_eq!(
+            held(&engine.deck, past as u8),
+            None,
+            "the guard let a selection past this deck's {past} slots through"
+        );
+        assert_eq!(held(&engine.deck, u8::MAX), None);
+        let quiet = std::panic::take_hook();
+        std::panic::set_hook(Box::new(|_| {}));
+        let read =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| engine.deck.gain(past)));
+        std::panic::set_hook(quiet);
+        assert!(
+            read.is_err(),
+            "reading past this deck's slots answered {read:?} instead of panicking, so the \
+             guard above is standing in front of nothing and this test says nothing about why \
+             it is there"
+        );
+
+        // -- the reading is the deck's, not the strip's ----------------------
+
+        // The strips as a frame would have left them, and then the deck moved
+        // with no frame in between — which is what a scheduled fade landing
+        // between the two does, arrived at the cheap way because it is the
+        // staleness that matters rather than how it arose.
+        let mut strips = Vec::new();
+        mixer(&engine.deck, &material, &mut strips);
+        assert_eq!(
+            strips[here].gain,
+            engine.deck.gain(here),
+            "the strips were just read off the deck and already disagree with it"
+        );
+        engine.deck.set_gain(here, 0.25);
+        assert_ne!(
+            strips[here].gain,
+            engine.deck.gain(here),
+            "the deck moved and the copy the console is holding moved with it, so there is no \
+             stale reading here to tell the two sources apart"
+        );
+        let off_the_deck = gain_key("]", engine.deck.gain(here)).expect("`]` is a trim key");
+        let off_the_strip = gain_key("]", strips[here].gain).expect("`]` is a trim key");
+        assert_ne!(
+            off_the_deck, off_the_strip,
+            "a step counted from the deck and a step counted from the strip came out at the \
+             same place, so this test cannot tell which source a press used"
+        );
+        let record = super::tests::only_record(&Operation::SetGain {
+            deck,
+            gain: off_the_deck,
+        });
+        assert!(apply(&record, &mut engine.deck, &mut engine.look).is_some());
+        assert!(
+            (engine.deck.gain(here) - (0.25 + GAIN_STEP)).abs() <= CLOSE,
+            "a press stepping from the deck's own reading landed at {} rather than at {}",
+            engine.deck.gain(here),
+            0.25 + GAIN_STEP
+        );
+        assert!(
+            (engine.deck.gain(here) - off_the_strip).abs() > CLOSE,
+            "the press landed where a step off the stale strip would have put it"
+        );
     }
 
     /// **Every slot is its own simulation of the one procedure**, which is
