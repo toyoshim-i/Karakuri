@@ -45,4 +45,4 @@ Where an invariant can be mechanically checked, it is checked.
 ## Evidence
 
 Session 2026-07-25T12:56Z, 2026-07-25T13:22Z, 2026-07-25T14:37Z. Standing rule:
-[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md).
+`docs/contributing.md` §4.

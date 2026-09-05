@@ -215,7 +215,7 @@ second copy of the table. That is what ADR-0235 asked for and this is the struct
 the vocabulary through a map* is the shape being named, not the shape that exists. It is true of MIDI
 today and of nothing else. The keyboard's assignment is a `const` and a `match`, the panel emits from
 the arm the press landed in, and MCP has neither a map nor an audit.
-[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md) is the rule that makes that
+`docs/contributing.md` §4 is the rule that makes that
 sentence mandatory rather than decorative — *an invariant is a claim, and a claim has a truth value on
 a date* — and its second half is the instruction: the clause is a marker, not a resting place.
 
@@ -255,7 +255,7 @@ the whole mechanism gone."* The map is one layer, so the check is written once i
 ### c. There is no layer — *map* is MIDI's word for a file and nothing more
 
 The conservative reading, and it has
-[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md) behind it: a name means one
+`docs/contributing.md` §4 behind it: a name means one
 thing, and *map* today means `karakuri-midi`'s `Map`, a pure function from a hardware message to an
 operation. Widening it to cover an audit and an automation helper risks the failure that principle is
 named for.

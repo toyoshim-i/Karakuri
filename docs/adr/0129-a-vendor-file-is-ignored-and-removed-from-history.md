@@ -53,7 +53,7 @@ so nothing in the other session's working state could shift underneath it.
 **One commit disappeared and one message changed.** The commit whose only content was deleting the
 file became empty and was dropped. The commit that added it described it in its message, and a message
 describing a file that no longer exists is the same defect as a comment describing replaced behaviour
-([P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)) — so
+(`docs/contributing.md` §4) — so
 that paragraph was rewritten rather than left.
 
 ## What is not done, and why

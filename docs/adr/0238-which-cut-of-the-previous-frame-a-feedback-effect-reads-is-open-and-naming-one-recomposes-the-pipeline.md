@@ -167,7 +167,7 @@ payload is not the shape of the question).
 - The three blockers on M5.8 stay named apart. Two of them close by building; this one does not.
 - Nothing changes in the code, the specification or the manual. The rows stay `plan`, the payloads
   stay `Undecided`, and the roadmap entry stays where it is
-  ([P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md) — the state of the
+  (`docs/contributing.md` §4 — the state of the
   question is stated rather than implied).
 - Whoever takes the decision supersedes this record with one that has a `Decision` section.
 

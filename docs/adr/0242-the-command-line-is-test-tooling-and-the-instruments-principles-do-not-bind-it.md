@@ -83,7 +83,7 @@ and the watch loop run on today.
 
 - **P-0080 loses its `karakuri-cli` gap** and states its scope in the rule itself. What remains under
   its *Where it is not met* is one entry, the console's residency gate
-  ([P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)).
+  (`docs/contributing.md` §4).
 - **Every other `docs/principles/` file inherits this line**, which is the point and also the risk:
   no file names its scope today, so a reader deciding whether a rule reaches `karakuri-cli` is
   applying *who the rule is written for* by hand. A rule whose reach is not obvious should say, the

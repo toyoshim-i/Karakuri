@@ -450,7 +450,7 @@ Handed over precisely, because the pages are another writer's:
   surface may reach a class of operations cannot itself be one of those operations**, since rule 01
   would make it reachable from the surface it governs. What survives of the item above it is
   `SetAuthority` alone, which is a genuine row and still open.
-  [P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md).)*
+  `docs/contributing.md` §4.)*
 - **Whether the clock, `Quit`, `SelectDeck` and the lane rows are closed as this record classes
   them.** They are the rule applied past the examples it was given, and each is one line to move.
 - **What "inputs and outputs" covers.** Read here as the instrument's signal I/O — the beat source,

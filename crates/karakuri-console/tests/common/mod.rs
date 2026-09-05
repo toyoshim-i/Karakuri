@@ -370,7 +370,7 @@ pub fn showing(strips: &[karakuri_console::view::Strip]) -> karakuri_console::vi
 /// The reading itself is [`mock_transport`], which is what `tests/transport.rs`
 /// and `tests/arrangement_pill.rs` ask for: three files wanting one console's
 /// tempo is one console's tempo, written once
-/// ([P-0093](../../../../docs/principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)).
+/// (`docs/contributing.md` §4).
 pub fn running() -> karakuri_console::view::View {
     let mut view = karakuri_console::view::View::new(karakuri_console::room::Room::Day);
     view.transport = Some(mock_transport());

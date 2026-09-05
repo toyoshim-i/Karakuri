@@ -266,7 +266,7 @@ on the slower clock.
 > record also takes up the question left open below about a helper and a sequencer lane, and answers
 > it only this far: they are the same job of the same layer, with steps where the helper has a curve,
 > and whether they are one mechanism or two is still open.
-> [P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md).
+> `docs/contributing.md` §4.
 
 ## Alternatives
 

@@ -34,7 +34,7 @@ balances against the others), and the tone mapper's `exposure`. `deck.rs` says s
 field and `present.rs` said so at its tonemap buffer, where the third was still described as *L5's
 future per-Set gain* although `Deck::set_gain` had landed. **A fourth level with no home is exactly
 how a name comes to mean two things**, which is
-[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md).
+`docs/contributing.md` §4.
 
 ## Decision
 

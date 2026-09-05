@@ -14,7 +14,7 @@ tags: [ui, perf]
 ## Context
 
 [P-0094](../principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md) marks two
-things apart, as [P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md) asks.
+things apart, as `docs/contributing.md` §4 asks.
 
 > **Forced.** Something is moving continuously while the console is live, and a scheduler may not
 > stop it to make room.

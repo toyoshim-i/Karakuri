@@ -31,7 +31,7 @@ current.
 **It goes stale in a way nothing detects.** A milestone closes, its section is rewritten to
 say it closed, and the sentence the comment was pointing at is gone or now means something
 else. Nothing fails. The comment still reads plausibly, which is worse than a broken link —
-this repository already has [P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)
+this repository already has `docs/contributing.md` §4
 for that failure in prose, and a comment citing a moved plan is the same failure with a
 compiler in the room that cannot see it.
 

@@ -133,7 +133,7 @@ store's own comment on the constant is where that reasoning now lives:
 > **This is not a new check.** The suffix was always stripped to find an id, so an id could never
 > exist without it; what changed is that the check now means something.
 
-That is the shape [P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)
+That is the shape `docs/contributing.md` §4
 asks for — the guarantee is structural, carried by the name a file has rather than by a rule
 somebody remembers — and
 [P-0085](../principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md)'s test is passed rather
@@ -258,7 +258,7 @@ extension is for. The cost is real and is paid in `ls`.
 - **ADR-0229's open item gains a pointer and keeps its reasoning.** That record's *The extension is
   not chosen* bullet is annotated with the record that closed it and is not otherwise touched:
   adding what a record later became is annotation rather than revision, and the test
-  ([P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md))
+  (`docs/contributing.md` §4)
   is *does the edit change what the record says happened, or what a reader can find out about it?*
   Nothing else in `docs/adr/` changes, and every other record keeps its `.set.ndjson` spellings.
 - **The Library's tree gets a rule it can state.** ADR-0229's part 6 says only the Set extension

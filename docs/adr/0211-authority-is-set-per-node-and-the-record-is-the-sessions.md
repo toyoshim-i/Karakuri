@@ -35,7 +35,7 @@ backwards."*
 `docs/roadmap.md`'s *What the three words mean, and where* separates the three senses of `layer`,
 the two of `authority` and the three of `slot`, and says outright that it takes none of the
 decisions. This record is written in those terms, which is what it is for —
-[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md) makes a decision written in
+`docs/contributing.md` §4 makes a decision written in
 a word that means two things a defect rather than a wording preference.
 
 ## Decision

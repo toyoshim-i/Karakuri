@@ -41,7 +41,7 @@
 //! is a field of thirteen record types across all three files, so no rename of it is a
 //! rename of one field. What the prose does instead is **never write the deck one bare**:
 //! it is *a deck slot*, everywhere, so
-//! `docs/principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md`'s *"they have to be
+//! `docs/contributing.md` §4's *"they have to be
 //! disjoint by name"* is met by the sentence where the field cannot meet it.
 //!
 //! **A wire field can be renamed, and one has been.** [`Record::Transport`]'s scrub was
@@ -225,7 +225,7 @@ pub enum Record {
     /// **A `t` of its own rather than a `slot` carrying a path instead of a
     /// `proc`**, which is the shape anybody reaching for "the same record with
     /// one field swapped" arrives at.
-    /// `docs/principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md` rules
+    /// `docs/contributing.md` §4 rules
     /// out precisely that — *"reusing a tag for a differently shaped record in
     /// a different file"* — and the bill for ignoring it is paid by every
     /// reader that dispatches on `t` alone: a decoder meeting `slot` would have
@@ -871,7 +871,7 @@ pub enum Record {
     /// word `offset` already names the operator's *latency* offset — the
     /// milliseconds of `--latency-offset-ms` — and one word for two controls on
     /// one panel is what
-    /// `docs/principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md`
+    /// `docs/contributing.md` §4
     /// forbids. The beat side had a name it was not using: its control is the
     /// scrub, its operation is `ScrubDeck`, and `Transport`'s own field doc
     /// already called it *"the operator's scrub"*. Keeping the old spelling on
@@ -1699,7 +1699,8 @@ mod tests {
     }
 
     /// **`slot` and `part` are two tags and not one tag with two shapes**,
-    /// which is what P-0093 asks of a name and what a decoder dispatching on
+    /// which is what `docs/contributing.md` §4 asks of a name and what a
+    /// decoder dispatching on
     /// `t` alone depends on.
     ///
     /// The failure this defends against is silent: give a `slot` an optional

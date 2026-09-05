@@ -56,7 +56,7 @@ code, both outside `src/`: `karakuri-console/examples/panel.rs:474` and
 naming anything in this system**, and adopting it as one costs nothing that is currently in use.
 
 The five nouns it was weighed against are not free, and
-[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md) is the rule each of them
+`docs/contributing.md` §4 is the rule each of them
 loses to: *it is not enough to be disjoint in practice; they have to be disjoint by name.*
 
 **`host` — 217 word occurrences, of which about 99 are the bare noun, in four live senses.** The
@@ -229,7 +229,7 @@ the dependency graph that the dependency graph contradicts.
 
 **`karakuri-host`, `karakuri-shell`, `karakuri-program`, `karakuri-session`, `karakuri-instrument`.**
 Each on its measurement above, and each on
-[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md). Two of them —
+`docs/contributing.md` §4. Two of them —
 `karakuri-host` and `karakuri-shell` — would collide with senses that are live **inside the files
 being moved**, which is the worst case the principle describes: not two subsystems that happen to be
 disjoint, but one file where both meanings sit and the reader has to work out which door they came in
@@ -260,7 +260,7 @@ either spelling — and a rename stops every one of those references resolving. 
 reading [docs/contributing.md](../contributing.md) §4, which says an ADR is a description of history,
 that the past is not revised, and that **annotating a record with what it later became is welcome**.
 The cost of a rename is therefore annotation, not revision, and 21 annotations is not a reason. See
-[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md).
+`docs/contributing.md` §4.
 
 **What decided the swap was the meaning, and not the bill.** That is
 [P-0085](../principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md) working as

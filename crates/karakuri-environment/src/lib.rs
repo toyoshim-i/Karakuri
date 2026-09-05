@@ -154,7 +154,7 @@ pub mod watch;
 /// not built; until they are, a run holds a handle that stays
 /// [`Open::CLOSED`](karakuri_operation::gate::Open::CLOSED) and every closed
 /// class is refused, which is the state ADR-0235 says a run starts in.
-/// `docs/principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md`.
+/// `docs/contributing.md` §4.
 #[derive(Debug, Clone, Default)]
 pub struct Opening(std::sync::Arc<std::sync::RwLock<karakuri_operation::gate::Open>>);
 

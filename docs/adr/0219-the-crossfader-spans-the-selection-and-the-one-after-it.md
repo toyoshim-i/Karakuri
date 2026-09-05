@@ -71,4 +71,4 @@ that two `SelectDeck` presses already meet.
   crossfader, so nothing spans two decks and the sentence owed above is owed by nobody. This is
   annotation and not supersession — the subject went, the decision was not reversed, and no record
   answers *which two decks* differently
-  ([P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)).
+  (`docs/contributing.md` §4).

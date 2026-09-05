@@ -46,7 +46,7 @@ the surface it writes to. The transfer is the hardware's, from an `Rgba8UnormSrg
 destination format, so no shader in the workspace spells linear-to-sRGB on a render target
 at all. A second encode would require a second sRGB-format target, which is a visible thing
 to review rather than a line buried in a fragment shader — this is
-[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)
+`docs/contributing.md` §4
 satisfied on the structural side.
 
 Values above 1.0 are part of the contract and not an overflow to be clamped. They are the
@@ -100,7 +100,7 @@ quantity.
 - `crates/karakuri-engine/tests/tonemap.rs` renders through an `Rgba8UnormSrgb` target
   precisely so the hardware encode is inside what is asserted, which makes the second half
   of this rule tested rather than reviewed
-  ([P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)).
+  (`docs/contributing.md` §4).
 - Bloom is not written yet. When it is, it reads the HDR target before the present pass and
   is bound by this record rather than free to choose its own format.
 
