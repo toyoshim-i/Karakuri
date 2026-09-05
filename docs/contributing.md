@@ -18,7 +18,6 @@ Start with these, and read the rest before changing anything they touch:
 - [Cost is known before it is paid](principles/0091-cost-is-known-before-it-is-paid.md)
 - [The same inputs produce the same frame](principles/0092-the-same-inputs-produce-the-same-frame.md)
 - [A check you have not watched fail is guessing](principles/0089-a-check-you-have-not-watched-fail-is-guessing.md)
-- [Only reviewed work enters history](principles/0017-only-reviewed-work-enters-history.md)
 
 **Why** each is the way it is, and what was rejected on the way, is in [docs/adr/](adr/). A rule that
 stops being true is deleted and re-recorded under a new number rather than edited — see
@@ -331,6 +330,21 @@ answered. The rule in §2 does not change, but who applies it does.
   one test's evidence.** Run that test with the defect in place, not the suite around it.
 - **`cargo check -p <crate>` answers "does this compile"** without building or running a test,
   which is often the whole question.
+- **Cut the seam serially before anything fans out.** The shared types several passes must agree
+  on — the binding layout above all — are settled first and published as a contract rather than as
+  a text to be grepped. Fanning out by crate before the seam exists earns parallelism and loses more
+  to the merge, because agents invent incompatible types
+  ([ADR-0016](adr/0016-agents-leave-work-in-the-tree-and-the-reviewer-commits.md)).
+- **Nothing reaches `origin` unreviewed, and the review is the directing side's.** A worker reports
+  what it changed and what it doubted; whoever is directing reads the diff, runs what the question
+  needs, and pushes back what is wrong. ADR-0016 met this by having agents leave work in the tree
+  for the reviewer to commit; the practice since is that a worker commits and the review happens
+  before the push, which the *Commit; do not push* rule above is what makes safe. **What must not
+  change is that a defect is caught by a reader and not by `origin`** — and that the worker
+  *reports* rather than papers over, which is the behaviour this selects for: on one day it caught a
+  valid procedure rejected by a rule the brief itself got wrong, a seam that made two unaddable
+  costs addable, and a requirement that had to be walked back, each reported by the agent that was
+  told to do it.
 - **Divide the work by file, not by phase.** Three commits that all touch one crate can only be
   done in order; the same work split by file runs in parallel and lands as it finishes. Decided in
   [ADR-0115](adr/0115-split-work-by-file-not-by-phase.md).
