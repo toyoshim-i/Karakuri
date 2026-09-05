@@ -116,7 +116,7 @@ to `docs/roadmap.md`, where the open work is, and they are recorded there as con
    two minis.
 2. **An armed transition's destination**, `g>` / `o>` / `w>`. **This one is not a gap but a rule
    already broken**:
-   [P-0075](../principles/0075-a-pending-transition-shows-where-it-is-where-it-is-going-and-that-it-has-not-arrived.md)
+   P-0075
    requires that *"The destination is identifiable from the surface itself. Not from a tooltip
    alone, and not from a log"*, and the status line is that log. **It is being closed as this
    lands**: `view::Strip` carries `gain_to` and `opacity_to` now, and their documentation cites that

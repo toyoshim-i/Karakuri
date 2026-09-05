@@ -52,7 +52,7 @@ ordinary arithmetic:
   back, and the roll stops because the two halves agree again.
 
 That is exactly what
-[P-0076](../principles/0076-a-surface-owns-the-affordance-never-the-authority.md) permits a surface
+P-0076 permits a surface
 and marks the boundary of: *"a press on a control whose transition is pending may ask for the
 withdrawal"* — **a control choosing which destination a press names, which is an affordance and not
 a lock**. The chip refuses nothing; every destination is handed over and the engine decides. P-0076

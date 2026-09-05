@@ -13,7 +13,7 @@ tags: [ui, decks, transitions]
 
 ## Context
 
-[P-0075](../principles/0075-a-pending-transition-shows-where-it-is-where-it-is-going-and-that-it-has-not-arrived.md)
+P-0075
 says that a control whose request has been made and not granted has three things to say and must
 say all three — **where it is, where it is going, and that it has not arrived** — and that the
 destination is identifiable *from the surface itself*, "not from a tooltip alone, and not from a

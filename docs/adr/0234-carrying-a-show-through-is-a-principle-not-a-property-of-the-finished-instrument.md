@@ -11,6 +11,14 @@ tags: [process, docs, live, mcp]
 
 # Carrying a show through is a principle, not a property of the finished instrument
 
+> **Annotated 2026-09-05.** **The principle numbers in the lists below are retired and are named on
+> purpose.** This record's argument is that eight principles are instances of a rule none of them
+> states; that claim is about those eight files, so re-pointing them at
+> [P-0094](../principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)
+> — the rule they were cited for not stating — would make it false. The P-0079 mentions *were*
+> re-pointed, because P-0079 is the rule this record decided and P-0094 is where it now lives. The
+> retired numbers resolve in [INDEX.md](INDEX.md)'s *Retired numbers* table.
+
 > **Annotated 2026-08-31, later the same day.** The MCP scope this record treats as settled — and
 > whose contradiction with the manual's rule 01 it left in *What this leaves undone* for the
 > maintainer to decide — was decided that evening, and rule 01 won:
@@ -94,28 +102,28 @@ paragraph exists so that nobody records one.
 
 Each of these decides a case of the same question and none of them says what the question is:
 
-- [P-0001](../principles/0001-nothing-allocates-or-compiles-a-shader-on-the-render-thread.md) — the
+- P-0001 — the
   unbounded stall is moved off the frame path rather than made rare
-- [P-0005](../principles/0005-a-swap-happens-on-a-frame-boundary-and-an-over-budget-set-rolls-back-on-its-own.md)
+- P-0005
   — recovery is automatic *"because this runs in front of an audience"*
-- [P-0027](../principles/0027-a-silently-wrong-image-loses-to-a-loud-failure.md) — a fader to zero
+- P-0027 — a fader to zero
   has to work *"on exactly the material that is broken"*
-- [P-0033](../principles/0033-the-governor-never-takes-a-live-slot-off-air.md) — automatic demotion
+- P-0033 — automatic demotion
   is *"the worst behaviour it could have — there is no recovery from it and no way to explain it to
   an audience"*
-- [P-0043](../principles/0043-nothing-external-enters-the-render-process.md) — a hazard whose worst
+- P-0043 — a hazard whose worst
   case cannot be bounded from inside the process stays outside it
-- [P-0067](../principles/0067-the-language-is-bounded-so-a-procedure-can-be-priced-before-it-runs.md)
+- P-0067
   — *"the promise that a model can write badly without taking the show down"*
-- [P-0077](../principles/0077-continuous-motion-is-how-a-stopped-panel-announces-itself.md) — the
+- P-0077 — the
   budget may not be balanced by selling the signal that says the frame is in trouble
-- [P-0078](../principles/0078-the-operator-wins-and-an-automatic-writer-yields-to-a-hand.md) — the
+- P-0078 — the
   control an operator reaches for when something is wrong is the one the automatic writer is holding
 
 A reading of the whole registry finds more of them —
-[P-0004](../principles/0004-a-live-set-is-never-mutated-in-place.md),
-[P-0069](../principles/0069-the-three-clocks-never-collapse-into-each-other.md),
-[P-0072](../principles/0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md),
+P-0004,
+P-0069,
+P-0072,
 [P-0082](../principles/0082-looking-never-writes-back.md),
 [P-0084](../principles/0084-a-confident-wrong-automatic-judgement-is-worse-than-not-judging.md),
 [P-0087](../principles/0087-name-the-property-never-the-shape.md),
@@ -180,7 +188,7 @@ failure this rule names, and *go on air* is the case P-0090 had already settled:
 instrument, the one operation that cannot be refused."*
 
 **And it is written with the case where it loses.**
-[P-0070](../principles/0070-auditioning-is-a-prerequisite-not-a-convenience.md) knowingly adds
+P-0070 knowingly adds
 unbudgeted risk to the live path — an audition can roll back an unrelated slot's build
 ([ADR-0072](0072-auditioning-adds-a-draw-and-never-a-step.md)) — and keeps the control, because
 choosing between candidates cannot be done blind. A rule protecting a performance may not be used to

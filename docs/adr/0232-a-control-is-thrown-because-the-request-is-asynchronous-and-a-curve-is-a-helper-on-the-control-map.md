@@ -129,7 +129,7 @@ would need synchrony *if it lived on the render path*. It does not have to live 
 
 ### The two principles that already covered this, because he was right and they do
 
-[P-0001](../principles/0001-nothing-allocates-or-compiles-a-shader-on-the-render-thread.md) is the
+P-0001 is the
 constraint from the engine's end, and the clause is the one that matters here: it rules out sizing a
 buffer from what a record asks for at the moment it asks, because **"the record schedules the work,
 and the work lands later."** That sentence is the whole of *why a control is thrown*, written down
