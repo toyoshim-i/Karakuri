@@ -119,7 +119,7 @@ fn settled() -> Strip {
 /// residency request the governor has not granted, and a fade armed on each of
 /// the two faders.
 ///
-/// Three presentations, and P-0075 has them move together off one phase — so
+/// Three presentations, and ADR-0190 has them move together off one phase — so
 /// this is what makes the point that they are one declaration and not three.
 fn pending() -> Strip {
     Strip {

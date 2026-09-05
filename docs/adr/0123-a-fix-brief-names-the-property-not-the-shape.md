@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-22
 supersedes: []
 superseded_by: []
-principles: [0060]
+principles: [0087]
 tags: [process]
 ---
 
@@ -42,4 +42,4 @@ possible, **which one is canonical**.
 ## Evidence
 
 Session 2026-08-22T04:57Z. Standing rule:
-[P-0060](../principles/0060-name-the-property-not-the-shape.md).
+[P-0087](../principles/0087-name-the-property-never-the-shape.md).

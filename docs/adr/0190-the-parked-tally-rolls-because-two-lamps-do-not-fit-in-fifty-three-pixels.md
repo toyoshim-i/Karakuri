@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-26
 supersedes: []
 superseded_by: []
-principles: [0072, 0075, 0077]
+principles: [0072, 0077, 0087]
 tags: [ui, decks, performance]
 ---
 
@@ -152,7 +152,7 @@ displacement at 100 ms and 200 ms without a window, a device or a clock.
 `view::Strip` gained `requested` beside `tally`, and **no `parked: bool`**. A third field would be
 the same fact stored twice, and the copy is the one that goes stale — a harness could write two
 residencies that disagree and a flag that says they do not, and nothing in the crate could tell. One
-derivation with several readers is this crate's habit, and it is P-0075's *derived every frame,
+derivation with several readers is this crate's habit, and it is P-0087's *derived every frame,
 never stored* read one level down, in the surface rather than in the engine.
 
 `Strip::pending()` answers **the destination word** rather than a `bool`, because P-0075's second
@@ -165,8 +165,8 @@ for, and may never put one above it"*, and *"effective Live and requested Live a
 slots"* — so `requested != effective` is exactly `is_parked` on every frame the engine can produce.
 They differ only in what a **second** kind of disagreement would do to them. Matching the pair, a
 surface would draw a settled chip over any other outstanding request: an under-draw, silent, and the
-exact failure P-0075 exists to name. The presentation was never about *parked*; it is about a
-request that has not landed, which is [P-0060](../principles/0060-name-the-property-not-the-shape.md)
+exact failure P-0087 exists to name. The presentation was never about *parked*; it is about a
+request that has not landed, which is [P-0087](../principles/0087-name-the-property-never-the-shape.md)
 — the property rather than the one shape it currently takes.
 
 `park` is still the word, and it is still the status line's: `karakuri-cli` spells it out in prose

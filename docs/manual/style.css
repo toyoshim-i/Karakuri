@@ -517,7 +517,7 @@
      the residency the slot is actually *in* and rolls part of the way toward
      the one it was asked for, once a second, and falls back — it never lands,
      because landing is what arrival looks like. What has to be said is
-     P-0075; that it is a roll rather than two indicators is ADR-0190, and the
+     P-0087; that it is a roll rather than two indicators is ADR-0190, and the
      reason is arithmetic: `prim` beside `alloc` is 85.125 wide against a
      strip 53 wide inside its padding, and 57.125 with every pixel of padding
      taken out of both. There is no version of two lamps on this row.
@@ -564,7 +564,7 @@
   /* ── The second animation, and it is the same one said on a track ─────────
      A fade is scheduled on the beat grid, so with the default quantum it is
      armed up to a bar before it runs, and until it lands the fader has a
-     value and a destination that disagree. That is P-0075 again, and on a
+     value and a destination that disagree. That is P-0087 again, and on a
      control whose whole idiom is *position* it is said differently
      (ADR-0206): the fill and the knob go on saying where the control is, `i`
      is a hairline where the knob would be if the move had landed, and `em` is

@@ -27,7 +27,7 @@ Three answers carry a show through. A mechanism that can give none of them does 
    is legible as stopped because something on it was moving
    ([P-0077](0077-continuous-motion-is-how-a-stopped-panel-announces-itself.md)); a deferred request
    says it has not arrived rather than reading as a discarded one
-   ([P-0075](0075-a-pending-transition-shows-where-it-is-where-it-is-going-and-that-it-has-not-arrived.md)).
+   ([P-0087](0087-name-the-property-never-the-shape.md)).
 
 **Where more than one answer is available, take the earliest.** A refusal before the show costs
 nothing; a rollback costs a swap the operator asked for; loudness costs their attention at the
@@ -183,7 +183,7 @@ and *there is no switch that hands the whole instrument to an agent* (06).
 
 A promise cannot be checked against a patch. A mechanism reaches the mechanisms it names and no
 further, and it names two shapes rather than the property behind them
-([P-0060](0060-name-the-property-not-the-shape.md)). A rule of the surface binds the surface. **The
+([P-0087](0087-name-the-property-never-the-shape.md)). A rule of the surface binds the surface. **The
 fourth register is this one** — the same sentence in the form a decision is held against — and this
 file does not move into any of the other three. `docs/manual/index.html` in particular is capped by
 its own rule, "adding one means removing or merging one", because it is what an operator holds in
@@ -205,10 +205,10 @@ covers.** These are instances and were written before it: the three answers in
 [P-0067](0067-the-language-is-bounded-so-a-procedure-can-be-priced-before-it-runs.md),
 [P-0069](0069-the-three-clocks-never-collapse-into-each-other.md),
 [P-0072](0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md),
-[P-0075](0075-a-pending-transition-shows-where-it-is-where-it-is-going-and-that-it-has-not-arrived.md),
 [P-0077](0077-continuous-motion-is-how-a-stopped-panel-announces-itself.md),
-[P-0082](0082-looking-never-writes-back.md)
-and [P-0084](0084-a-confident-wrong-automatic-judgement-is-worse-than-not-judging.md); the never-from-the-operator
+[P-0082](0082-looking-never-writes-back.md),
+[P-0084](0084-a-confident-wrong-automatic-judgement-is-worse-than-not-judging.md)
+and [P-0087](0087-name-the-property-never-the-shape.md); the never-from-the-operator
 clause in [P-0033](0033-the-governor-never-takes-a-live-slot-off-air.md),
 [P-0052](0052-publishing-is-a-choice-of-attention-not-of-authority.md),
 [P-0076](0076-a-surface-owns-the-affordance-never-the-authority.md) and

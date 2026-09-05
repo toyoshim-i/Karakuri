@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-28
 supersedes: []
 superseded_by: []
-principles: [0075]
+principles: [0087]
 tags: [console, vocabulary, surfaces, docs, cli]
 ---
 

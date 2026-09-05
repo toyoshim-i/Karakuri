@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-31
 supersedes: []
 superseded_by: []
-principles: [0001, 0005, 0027, 0033, 0043, 0060, 0067, 0077, 0078, 0079]
+principles: [0001, 0005, 0027, 0033, 0043, 0067, 0077, 0078, 0079, 0087]
 tags: [process, docs, live, mcp]
 ---
 
@@ -65,7 +65,7 @@ is a statement about the finished instrument, and the question a reviewer has is
 front of them. **A description of one mechanism does not reach the next mechanism**: the README's
 sentence is true of the swap watchdog and says nothing about a scheduler, a tool list or an input
 that goes quiet. And it names the shapes rather than the property, which is
-[P-0060](../principles/0060-name-the-property-not-the-shape.md) happening in the entrance document —
+[P-0087](../principles/0087-name-the-property-never-the-shape.md) happening in the entrance document —
 delete or replace the swap watchdog and the sentence goes with it, while the rule it was an instance
 of is untouched and now unstated.
 
@@ -118,10 +118,10 @@ A reading of the whole registry finds more of them —
 [P-0037](../principles/0037-check-a-measurement-against-another-measurement.md),
 [P-0069](../principles/0069-the-three-clocks-never-collapse-into-each-other.md),
 [P-0072](../principles/0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md),
-[P-0075](../principles/0075-a-pending-transition-shows-where-it-is-where-it-is-going-and-that-it-has-not-arrived.md),
 [P-0076](../principles/0076-a-surface-owns-the-affordance-never-the-authority.md),
 [P-0082](../principles/0082-looking-never-writes-back.md),
-[P-0084](../principles/0084-a-confident-wrong-automatic-judgement-is-worse-than-not-judging.md) — which is the
+[P-0084](../principles/0084-a-confident-wrong-automatic-judgement-is-worse-than-not-judging.md),
+[P-0087](../principles/0087-name-the-property-never-the-shape.md) — which is the
 argument rather than a longer list. **A property that eighteen files are instances of is being
 rediscovered per file**, and the eighteenth had to make it again from nothing.
 
@@ -219,7 +219,7 @@ a decision the maintainer can state and defend in conversation, written down as 
 58 of 64 rows resting on a reason that is nowhere on the page or in either ADR behind it. That is
 not a hypothetical cost — it is the state of the page today, and it is why this record exists.
 
-The second cost is the one P-0060 describes. Eighteen files rediscover the property one domain at a
+The second cost is the one P-0087 describes. Eighteen files rediscover the property one domain at a
 time; the eighteenth had nothing to cite and made the argument again. The next mechanism — a
 scheduler for P-0072's arbitration, a second automatic writer, a follower, a sequencer lane — will
 either make it a nineteenth time or, more likely, settle it by accident. P-0078 names exactly that

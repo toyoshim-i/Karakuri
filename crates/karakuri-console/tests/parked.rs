@@ -5,7 +5,7 @@
 //! is what it was asked to do, and the mixer's tally is the first control on
 //! this panel whose readback can disagree with what was asked for. What it has
 //! to say then is
-//! [P-0075](../../../docs/principles/0075-a-pending-transition-shows-where-it-is-where-it-is-going-and-that-it-has-not-arrived.md)'s
+//! [P-0087](../../../docs/principles/0087-name-the-property-never-the-shape.md)'s
 //! — where it is, where it is going, and that it has not arrived — and the
 //! presentation is
 //! [ADR-0190](../../../docs/adr/0190-the-parked-tally-rolls-because-two-lamps-do-not-fit-in-fifty-three-pixels.md)'s:
@@ -288,10 +288,10 @@ fn a_settled_strip_is_still_and_asks_for_nothing() {
 /// **The displacement is a function of the phase the view was handed**, and
 /// this asserts it at phases chosen here.
 ///
-/// That is the point of the phase being a value rather than a clock: P-0075
-/// says outright that *"a presentation driven by a value is also a
-/// presentation a test can assert at a phase it chose, which one reading wall
-/// time is not"*. There is no sampling here and no tolerance for one.
+/// That is the point of the phase being a value rather than a clock: a test
+/// *chooses* the phase it asserts at and never catches one, which is
+/// [ADR-0189](../../../docs/adr/0189-motion-may-carry-the-meaning-and-a-stopped-animation-is-a-fault-to-report.md)'s
+/// own argument. There is no sampling here and no tolerance for one.
 ///
 /// Two phases, and each is a different thing about the curve:
 ///

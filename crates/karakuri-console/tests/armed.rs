@@ -4,7 +4,7 @@
 //! `Deck::transitions_on` is what a surface asks — so with the default quantum
 //! a fade is due up to a bar after the key that asked for it, and until it
 //! lands the control has a value and a destination that disagree. That is
-//! [P-0075](../../../docs/principles/0075-a-pending-transition-shows-where-it-is-where-it-is-going-and-that-it-has-not-arrived.md)
+//! [P-0087](../../../docs/principles/0087-name-the-property-never-the-shape.md)
 //! exactly, one control along from the residency chip, and the presentation is
 //! [ADR-0206](../../../docs/adr/0206-a-fader-marks-where-it-is-going-and-keeps-reaching-for-it.md)'s:
 //! **the knob and the fill go on saying where the control is, a hairline mark
@@ -16,8 +16,8 @@
 //! 1. **An armed move draws its destination and a settled fader draws
 //!    nothing** — the mark is where the knob would be if the move had landed,
 //!    and a fader nothing is moving costs what it always cost.
-//! 2. **The value drawn is still the deck's own.** P-0075's first clause: a
-//!    pending move never overwrites the truth with a wish, and here the truth
+//! 2. **The value drawn is still the deck's own.** The first of P-0087's
+//!    three: a pending move never overwrites the truth with a wish, and here the truth
 //!    does not so much as shift — the knob, the fill and the number are
 //!    identical to the same strip with nothing armed, at every phase.
 //! 3. **The destination is identifiable from the surface**, off the track and
@@ -27,8 +27,8 @@
 //!    one paints.
 //! 4. **The reach never covers the gap**, in either direction, and rests at
 //!    nothing. Covering it is what arrival looks like.
-//! 5. **Both faders and the chip above them move off one phase.** P-0075 asks
-//!    for that outright, and it is what stops a strip with two fades on it
+//! 5. **Both faders and the chip above them move off one phase.** ADR-0190
+//!    asks for that outright, and it is what stops a strip with two fades on it
 //!    reading as two things going wrong.
 //! 6. **The panel declares a staleness while something is armed and none when
 //!    nothing is** — including for the one move this track cannot draw, a gain
@@ -240,8 +240,8 @@ fn an_armed_fader_marks_its_destination_and_a_settled_one_marks_nothing() {
 
 /// **The value drawn is the deck's own, and the mark does not move it.**
 ///
-/// P-0075's first clause is that a pending transition never overwrites the
-/// truth with a wish, and on a fader the wrong answer is easy to write and
+/// The first of P-0087's three is that a pending transition never overwrites
+/// the truth with a wish, and on a fader the wrong answer is easy to write and
 /// looks plausible: draw the fill at the destination, or slide the knob toward
 /// it, and the strip is showing a value the deck is not at. The operator is
 /// about to reach for that knob.
@@ -275,8 +275,8 @@ fn the_value_drawn_is_the_decks_own_at_every_phase() {
 /// **The destination is read off the track, in the same reading the knob's own
 /// position is — and no type was added to say it.**
 ///
-/// P-0075's second clause is written as *from the surface itself* precisely so
-/// that a tooltip cannot satisfy it, and **this console draws no tooltips at
+/// ADR-0188 writes the destination clause as *from the surface itself*
+/// precisely so that a tooltip cannot satisfy it, and **this console draws no tooltips at
 /// all**: a tooltip needs `egui` to own a widget where this console paints,
 /// and who owns the pointer is undecided. Half of what is being said would
 /// otherwise be delivered by a mechanism that does not exist.
@@ -378,7 +378,7 @@ fn the_reach_never_covers_the_gap_and_rests_at_nothing() {
 /// **Both faders and the chip above them are the same curve at the same rate,
 /// off the phase the view was handed.**
 ///
-/// P-0075 asks for it outright — *"two controls moving out of step looks
+/// ADR-0190 asks for it outright — *"two controls moving out of step looks
 /// broken rather than informative"* — and a strip can have a fade on each
 /// fader at once, which is what makes this a claim about this bay rather than
 /// about the panel in general. A period of its own on either one would be

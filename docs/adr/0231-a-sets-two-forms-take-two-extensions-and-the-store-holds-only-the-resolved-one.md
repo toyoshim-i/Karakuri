@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-30
 supersedes: []
 superseded_by: []
-principles: [0005, 0026, 0031, 0060, 0066, 0085]
+principles: [0005, 0026, 0031, 0066, 0085, 0087]
 tags: [store, format, distribution, naming]
 ---
 
@@ -198,7 +198,7 @@ reader meeting `sets/opening.kpack` in a store would reasonably conclude it was 
 sent to them, which it is not.
 
 **`.kbset` names the property and `.kpack` names the shape.** That sentence is
-[P-0060](../principles/0060-name-the-property-not-the-shape.md)'s — *a shape is one instance of a
+[P-0087](../principles/0087-name-the-property-never-the-shape.md)'s — *a shape is one instance of a
 property* — and it applies here in its own terms rather than by analogy: being packed is one
 instance of being resolved, and naming the instance would leave the property with nothing carrying
 its name. **What does not transfer is the rest of that principle**, whose recorded case is a fix

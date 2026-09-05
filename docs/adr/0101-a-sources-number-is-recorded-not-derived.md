@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-16
 supersedes: []
 superseded_by: []
-principles: [0053]
+principles: [0087]
 tags: [ir, format, determinism]
 ---
 
@@ -73,4 +73,4 @@ source named there is simply unreferenceable.
 ## Evidence
 
 Session 2026-08-16T10:54Z–11:18Z. Standing rule:
-[P-0053](../principles/0053-a-value-that-must-be-stable-is-recorded-not-derived.md).
+[P-0087](../principles/0087-name-the-property-never-the-shape.md).

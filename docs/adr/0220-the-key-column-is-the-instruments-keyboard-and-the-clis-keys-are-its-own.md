@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-29
 supersedes: []
 superseded_by: []
-principles: [0031, 0060]
+principles: [0031, 0087]
 tags: [docs, process, ui]
 ---
 
@@ -41,7 +41,7 @@ programs and no operator would ever have both, because `karakuri-cli` has no pan
 **And the clincher is specific to this column: a key badge is an instruction to press something.**
 With eight colliding letters, *any program in this workspace* and *the command line* both tell a
 reader standing at the panel to press a letter that does something else in front of them. That is
-[P-0060](../principles/0060-name-the-property-not-the-shape.md) one column along — *which program
+[P-0087](../principles/0087-name-the-property-never-the-shape.md) one column along — *which program
 happens to bind the letter* is the shape, and *the operator presses it and the thing happens* is the
 property.
 

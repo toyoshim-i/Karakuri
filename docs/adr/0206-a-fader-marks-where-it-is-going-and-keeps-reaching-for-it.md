@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-28
 supersedes: []
 superseded_by: []
-principles: [0072, 0075]
+principles: [0072, 0087]
 tags: [ui, decks, transitions]
 ---
 
@@ -31,7 +31,7 @@ nobody had touched.
 the same rule on the residency chip, and P-0075's *Where it holds* named that chip as its only
 user. This is the second, and it is a **value on a track** rather than a word in a capsule, which
 is why the presentation is a different one and why P-0075 states clauses rather than a picture
-([P-0060](../principles/0060-name-the-property-not-the-shape.md)).
+([P-0087](../principles/0087-name-the-property-never-the-shape.md)).
 
 ### What the deck can answer, asked before anything was drawn
 
@@ -47,7 +47,7 @@ Three facts about that answer shaped the surface:
 - **Armed and running are one state.** A transition is in the list from the instant it is scheduled
   until the beat it finishes on, and `Transition::value_at` deliberately writes nothing before its
   start — *"a fade scheduled for the next bar must not take the control away from the operator in
-  the meantime"*. Both are *a request that has not arrived*, which is the relation P-0075 is about,
+  the meantime"*. Both are *a request that has not arrived*, which is the relation P-0087 is about,
   so both are drawn the same way; what separates them is that the value under the knob is moving in
   the second case.
 - **The console cannot say when.** `start` and `beats` are on the beat clock and

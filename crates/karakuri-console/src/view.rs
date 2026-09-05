@@ -221,7 +221,7 @@
 //! to do, and while they disagree the chip's word rolls part of the way toward
 //! the request and falls back, once a second, and never lands — see
 //! [`Strip::pending`], [`roll_at`] and [`tally_into`], and
-//! [P-0075](../../../docs/principles/0075-a-pending-transition-shows-where-it-is-where-it-is-going-and-that-it-has-not-arrived.md)
+//! [P-0087](../../../docs/principles/0087-name-the-property-never-the-shape.md)
 //! for what that has to say. **A press on it cycles from the residency that
 //! was *requested*** ([`Mixer::tally`]), which is what makes a parked chip's
 //! press the withdrawal of its own prime request with no case in the code for
@@ -5121,11 +5121,10 @@ const TRIM_LABEL: &str = "g";
 ///
 /// # One phase, panel-wide, because two clocks drift and one does not
 ///
-/// [P-0075](../../../docs/principles/0075-a-pending-transition-shows-where-it-is-where-it-is-going-and-that-it-has-not-arrived.md)
-/// asks for exactly this: *"Everything pending moves together. Two controls
-/// moving out of step looks broken rather than informative, and it is not a
-/// smaller cost either: N independent animations are N deadlines for a
-/// scheduler to service where one phase is one."* Two strips parked at once
+/// [ADR-0190](../../../docs/adr/0190-the-parked-tally-rolls-because-two-lamps-do-not-fit-in-fifty-three-pixels.md)
+/// decided exactly this: *"two controls moving out of step looks broken
+/// rather than informative, and N animations are N deadlines where one phase
+/// is one."* Two strips parked at once
 /// are two rolls, and they are the same roll because they are read off the
 /// same number.
 ///
@@ -5193,15 +5192,15 @@ impl Phase {
 /// going**, and the period every other number in the presentation is a
 /// fraction of.
 ///
-/// One second, which is P-0075's own *"once a second"* and is the rate that
-/// reads as *waiting* rather than as a fault. See
+/// One second, which is the roll's *"about once a second"* and is the rate
+/// that reads as *waiting* rather than as a fault. See
 /// [ADR-0190](../../../docs/adr/0190-the-parked-tally-rolls-because-two-lamps-do-not-fit-in-fifty-three-pixels.md).
 ///
 /// **Two users, one rate, and that is the rule rather than a coincidence**:
 /// the tally's word rolling toward a residency, and a fader's fill reaching
 /// toward a scheduled value ([`Reach`],
 /// [ADR-0206](../../../docs/adr/0206-a-fader-marks-where-it-is-going-and-keeps-reaching-for-it.md)).
-/// P-0075 asks for one phase panel-wide because two controls moving out of
+/// ADR-0190 asks for one phase panel-wide because two controls moving out of
 /// step looks broken rather than informative, and a second period here is how
 /// that would happen with nothing failing to compile.
 pub const ROLL_PERIOD: Duration = Duration::from_millis(1000);
@@ -5213,7 +5212,8 @@ pub const ROLL_PERIOD: Duration = Duration::from_millis(1000);
 /// keeps being made* rather than as a chip that wobbles — and it is what makes
 /// most of a parked strip's frames the strip's settled appearance, so the
 /// operator reads the effective residency off a still chip nearly two thirds
-/// of the time (P-0075's first clause).
+/// of the time — the first of the three things P-0087 asks a pending control
+/// to say, which is where it *is*.
 pub const ROLL_TRAVEL: Duration = Duration::from_millis(400);
 
 /// **How far toward the destination the moving thing gets**: a fraction of the
@@ -5506,7 +5506,7 @@ pub struct Strip {
     ///
     /// # Why the strip carries both and derives nothing else
     ///
-    /// [P-0075](../../../docs/principles/0075-a-pending-transition-shows-where-it-is-where-it-is-going-and-that-it-has-not-arrived.md)
+    /// [P-0087](../../../docs/principles/0087-name-the-property-never-the-shape.md)
     /// asks a pending control to say three things — where it is, where it is
     /// going, and that it has not arrived — and the first two *are* these two
     /// values. The third is [`Strip::pending`], which is a comparison of them.
@@ -5516,8 +5516,8 @@ pub struct Strip {
     /// stale: the harness could write a `tally` and a `requested` that
     /// disagree and a `parked` that says they do not, and nothing in this
     /// crate could tell. One derivation with several readers is this crate's
-    /// habit — [`StripBox::fader_at`] is the same shape — and it is P-0075's
-    /// *derived every frame, never stored* read one level down, in the surface
+    /// habit — [`StripBox::fader_at`] is the same shape — and it is P-0087's
+    /// *a pending state is derived every frame* read one level down, in the surface
     /// rather than in the engine.
     ///
     /// **Two fields rather than one `Tally` grown into a pair.** `Tally` is
@@ -5549,15 +5549,15 @@ pub struct Strip {
     /// the same seam every other field on this type is on: **the console has
     /// no beat count**, so a start in beats and a length in beats are two
     /// numbers it could not turn into anything a strip draws. What it can draw
-    /// is where the control is going, which is P-0075's second clause and the
-    /// whole of what the fader is being asked to say.
+    /// is where the control is going, which is the second of the three things
+    /// P-0087 asks for and the whole of what the fader is being asked to say.
     ///
     /// **Armed and running are the same state here, deliberately.** A
     /// transition is in the deck's list from the moment it is scheduled until
     /// the beat it finishes on, and `Deck::transitions_on` answers with it
     /// throughout — so a fade quantised to the next bar and a fade halfway
     /// through are both *a request that has not arrived*, which is exactly the
-    /// relation P-0075 is about. What separates them on the surface is that
+    /// relation P-0087 is about. What separates them on the surface is that
     /// the value under the knob is moving in the second case, and the mark
     /// stands still in both.
     ///
@@ -5683,8 +5683,9 @@ impl Strip {
     ///
     /// The one derivation the pending presentation reads, and it answers a
     /// *word* rather than a `bool` because that is what the surface has to
-    /// draw: P-0075's second clause is that the destination is identifiable
-    /// from the surface itself, so the thing worth deriving is the destination
+    /// draw: the second of P-0087's three is where the control is going, which
+    /// ADR-0188 states as *identifiable from the surface itself* — so the thing
+    /// worth deriving is the destination
     /// and not the fact that there is one.
     ///
     /// # Why it is an inequality and not the engine's pair
@@ -5700,11 +5701,11 @@ impl Strip {
     /// They differ in what a **second** kind of disagreement would do to them.
     /// Written as the engine's pair, a surface matching `Priming` over
     /// `Allocated` draws a settled chip over any other outstanding request —
-    /// an under-draw, silent, and exactly the failure P-0075 exists to name.
+    /// an under-draw, silent, and exactly the failure the rule exists to name.
     /// Written as an inequality it draws the new one without being taught,
     /// because the presentation was never about *parked*: it is about a
     /// request that has not landed, which is
-    /// [P-0060](../../../docs/principles/0060-name-the-property-not-the-shape.md)
+    /// [P-0087](../../../docs/principles/0087-name-the-property-never-the-shape.md)
     /// — the property rather than the one shape it currently takes.
     ///
     /// **`park` is still the word**, and it is the status line's: `karakuri-cli`
@@ -5829,7 +5830,7 @@ pub struct Meter {
 /// how far this frame's attempt to get there has reached.
 ///
 /// The presentation
-/// [P-0075](../../../docs/principles/0075-a-pending-transition-shows-where-it-is-where-it-is-going-and-that-it-has-not-arrived.md)
+/// [P-0087](../../../docs/principles/0087-name-the-property-never-the-shape.md)
 /// is met with on a track, decided in
 /// [ADR-0206](../../../docs/adr/0206-a-fader-marks-where-it-is-going-and-keeps-reaching-for-it.md):
 /// **the knob and the fill go on saying where the control is, a mark says
@@ -6947,8 +6948,8 @@ fn strip_into(ui: &Ui, pal: &Palette, strip: &Strip, at: StripBox, phase: Phase)
         pal.faint,
     );
     // **The same displacement for both faders and for the chip above them**,
-    // because it is the same phase: P-0075's *everything pending moves
-    // together*, which on this strip is three presentations reading one
+    // because it is the same phase: ADR-0190's *one phase, not one per
+    // animation*, which on this strip is three presentations reading one
     // number. A strip with a fade on each fader reaches twice, in step.
     let rolled = roll_at(phase);
     fader_into(

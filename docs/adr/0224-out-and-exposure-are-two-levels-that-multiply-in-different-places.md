@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-30
 supersedes: []
 superseded_by: []
-principles: [0031, 0051, 0064]
+principles: [0031, 0064, 0087]
 tags: [engine, colour, mixing, console, ui]
 ---
 
@@ -63,7 +63,7 @@ the folded one.
 ### Why two values in the same place lost
 
 **A second scalar multiplying where the first already multiplies cannot justify itself.**
-[P-0051](../principles/0051-an-existing-field-is-not-a-fact-about-the-design.md) cuts both ways here
+[P-0087](../principles/0087-name-the-property-never-the-shape.md) cuts both ways here
 and it is worth saying which way each: `exposure` existing does not prove `out` is not a second
 thing — that is the leak-from-the-current-shape half — but a field is still owed a reason to exist,
 and *two numbers you can multiply together beforehand* is not one. Under this decision the second

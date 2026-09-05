@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-26
 supersedes: []
 superseded_by: []
-principles: [0075, 0077]
+principles: [0077, 0087]
 tags: [ui, docs]
 ---
 
@@ -18,7 +18,7 @@ what a control has to say while its request stands and has not been granted, and
 [P-0075](../principles/0075-a-pending-transition-shows-where-it-is-where-it-is-going-and-that-it-has-not-arrived.md):
 where it is, where it is going, and that it has not arrived. The presentation was deliberately left
 open — the file states **clauses a presentation is checked against** rather than a picture, which is
-[P-0060](../principles/0060-name-the-property-not-the-shape.md) applied.
+[P-0087](../principles/0087-name-the-property-never-the-shape.md) applied.
 
 One of those clauses was **“It reads as unsettled in a single frame.”** Every instant of the
 animation had to say *not yet*, justified by three cases in which a surface is caught at one
@@ -65,7 +65,7 @@ the clause forbade the technique rather than protecting anything.
 It rules out any presentation whose meaning is carried by change rather than by state — a fade, a
 pulse, a travelling highlight, a lamp that simply blinks — which is most of the useful ones. What
 would have survived it is the narrow set whose every phase is separately distinguishable from rest,
-and that set is **a shape**. P-0060 is the rule against writing a shape into a principle, and
+and that set is **a shape**. P-0087 is the rule against writing a shape into a principle, and
 P-0075 opens by citing it: a clause that admits one family of animations and excludes the rest
 reinvents the same failure the file was written to avoid, one level down.
 

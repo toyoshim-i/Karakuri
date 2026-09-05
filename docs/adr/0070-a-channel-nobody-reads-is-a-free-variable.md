@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-08
 supersedes: []
 superseded_by: []
-principles: [0038]
+principles: [0087]
 tags: [render, engine]
 ---
 
@@ -47,4 +47,4 @@ writer.
 ## Evidence
 
 Session 2026-08-08T16:42Z–17:51Z, commit `55016f2`. Standing rule:
-[P-0038](../principles/0038-an-unread-value-is-a-free-variable.md).
+[P-0087](../principles/0087-name-the-property-never-the-shape.md).

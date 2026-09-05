@@ -5,7 +5,7 @@ status: accepted
 date: 2026-09-02
 supersedes: []
 superseded_by: []
-principles: [0060, 0080]
+principles: [0080, 0087]
 tags: [operations, ui]
 ---
 

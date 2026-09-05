@@ -21,7 +21,7 @@
 //! of the console the operator plays them on, with no artifact in it. It is
 //! filed under a **name the operator picked**, because a name is the one handle
 //! that does not move when something unrelated moves
-//! (`docs/principles/0053-a-value-that-must-be-stable-is-recorded-not-derived.md`),
+//! (`docs/principles/0087-name-the-property-never-the-shape.md`),
 //! and the name rule is a Set id's rule for the same reason it is a Set id's:
 //! it becomes one path component. See
 //! `docs/adr/0221-an-arrangement-is-named-by-the-operator-and-kept-in-a-fourth-place.md`.

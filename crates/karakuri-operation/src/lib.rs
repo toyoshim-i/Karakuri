@@ -664,7 +664,7 @@ pub enum SetTransfer {
 /// A sum rather than `{ recording: bool, id: Option<String> }`, because that
 /// shape has a field that means nothing in one of its two states, and a
 /// payload nobody reads is a free variable
-/// (`docs/principles/0038-…`).
+/// (`docs/principles/0087-name-the-property-never-the-shape.md`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Recording {
     /// Begin one, under this id or under a stamp.
@@ -1526,7 +1526,7 @@ operations! {
     /// *ordinarily* filed under a stamp nobody chose and an arrangement is
     /// not, because the whole of what a name is for here is that the operator
     /// will look for it again
-    /// (`docs/principles/0053-a-value-that-must-be-stable-is-recorded-not-derived.md`).
+    /// (`docs/principles/0087-name-the-property-never-the-shape.md`).
     /// A surface with nobody there to type one passes
     /// `karakuri_environment::history::stamped_id`, the same stamp
     /// `accepted_save` reaches for — so the fallback is the *caller's* and

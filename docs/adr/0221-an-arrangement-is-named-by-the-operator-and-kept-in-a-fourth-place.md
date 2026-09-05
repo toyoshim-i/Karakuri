@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-29
 supersedes: []
 superseded_by: []
-principles: [0048, 0053, 0085]
+principles: [0048, 0085, 0087]
 tags: [console, store, format]
 ---
 
@@ -70,7 +70,7 @@ the naming rule, the stamp fallback, the refusal that keeps a name to one path c
 (`mcp::checked_id`) and the listing that skips a name the layout does not claim all exist and were
 built for a Set. Nothing here is new machinery; it is the same handle on a different kind of file.
 
-[P-0053](../principles/0053-a-value-that-must-be-stable-is-recorded-not-derived.md) is the rest, and
+[P-0087](../principles/0087-name-the-property-never-the-shape.md) is the rest, and
 it is what rules the alternatives out. A name is **recorded** — assigned once, by the person who
 will look for it — and every alternative below derives one from where the thing currently sits.
 
@@ -110,7 +110,7 @@ reset.
 **A content address, the way an artifact gets one.** The heaviest alternative and the one that
 arrives first, because the store already has a `Hash` and a `put_artifact` that is idempotent, and
 because it makes two identical arrangements one file for free.
-[P-0053](../principles/0053-a-value-that-must-be-stable-is-recorded-not-derived.md) names this exact
+[P-0087](../principles/0087-name-the-property-never-the-shape.md) names this exact
 failure — *"a content hash moves on every character"*. Move one divider and save, and the
 arrangement you have been calling `four_deck` all week is under a different address; there is
 nothing to overwrite, so every save is a new file and the store fills with the arrangement's own

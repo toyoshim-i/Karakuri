@@ -13160,7 +13160,7 @@ mod key_column {
     //! instrument's keyboard**, which is this file's `match` on
     //! `key.logical_key`. That is ADR-0213's definition one column along — the
     //! property is *the operator at the panel presses it*, and *which cargo
-    //! target binds a letter* is the shape ([P-0060](../../../docs/principles/0060-name-the-property-not-the-shape.md)).
+    //! target binds a letter* is the shape ([P-0087](../../../docs/principles/0087-name-the-property-never-the-shape.md)).
     //! This is the check that definition owes, both ways round, in the shape
     //! `karakuri-environment/src/mcp.rs` uses for the MCP column and
     //! `karakuri-console/tests/panel_column.rs` for the panel one.
@@ -13232,7 +13232,7 @@ mod key_column {
     //! - **Putting one back cannot be bound at all.** Nothing at a key press
     //!   says *which* arrangement, and *the most recent* is a handle derived
     //!   from where a file sits, which is the failure
-    //!   [P-0053](../../../docs/principles/0053-a-value-that-must-be-stable-is-recorded-not-derived.md)
+    //!   [P-0087](../../../docs/principles/0087-name-the-property-never-the-shape.md)
     //!   is about and the one ADR-0221 rejected a slot number over.
     //! - **So a save key alone would keep arrangements nothing can put back.**
     //!   This program has no control that lists them and no way to show an

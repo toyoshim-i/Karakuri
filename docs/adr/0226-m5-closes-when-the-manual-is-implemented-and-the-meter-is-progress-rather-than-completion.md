@@ -5,7 +5,7 @@ status: accepted
 date: 2026-08-30
 supersedes: []
 superseded_by: []
-principles: [0016, 0030, 0060]
+principles: [0016, 0030, 0087]
 tags: [process, docs, console]
 ---
 
@@ -218,7 +218,7 @@ the rise is the method working rather than failing (see the first consequence be
 this record takes has no denominator in it: **no `designed` badge left in the column** is true or
 false whatever the page's length.
 
-That is [P-0060](../principles/0060-name-the-property-not-the-shape.md) one level up from where
+That is [P-0087](../principles/0087-name-the-property-never-the-shape.md) one level up from where
 ADR-0213 used it: a count of badges is the shape, and *nothing the specification describes is
 unreachable* is the property.
 
