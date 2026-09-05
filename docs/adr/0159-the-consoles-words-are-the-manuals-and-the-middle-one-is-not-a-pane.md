@@ -28,7 +28,7 @@ the words showed how far:
 The manual calls a titled box a **bay** — sixteen times, and its stylesheet class is `.bay-head`.
 `karakuri-console` called the same thing a **pane**, twenty-six times. One thing, two words, and the
 two documents that have to agree are the operator's manual and the code the four surfaces call
-into. That is [P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md).
+into. That is `docs/contributing.md` §4.
 
 The manual also had a hole. It names every bay and it has **no word at all** for the three columns
 those bays are stacked in — which was harmless while nothing addressed them, and stopped being

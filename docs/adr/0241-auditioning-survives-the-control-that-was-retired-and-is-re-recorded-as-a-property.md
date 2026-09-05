@@ -81,7 +81,7 @@ requirement with nothing standing for it.
 
 **Deleting nothing and letting P-0070 stand was rejected.** It is what ADR-0240 left behind, and it
 is the exact case
-[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md) calls
+`docs/contributing.md` §4 calls
 out: *leaving a wrong description is ruled out too*. `docs/principles/` is the present tense and is
 kept current by deletion and renumbering — a registry that keeps a rule naming a deleted method is a
 registry nobody can cite.
@@ -111,7 +111,7 @@ name they were sent to.
   present and unreachable rather than missing.
 
   Both are written into P-0080's *Where it is not met* under
-  [P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md).
+  `docs/contributing.md` §4.
 - `Deck::set_preview` and `Deck::preview` are deleted, together with the five tests in
   `crates/karakuri-engine/tests/deck.rs` whose only subject they were. The `preview` field, the
   `auditioned` branches in `Frame::render` and the `Input::unity` arm that folds an audition are left

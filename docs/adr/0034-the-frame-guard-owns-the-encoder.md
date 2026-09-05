@@ -61,4 +61,4 @@ roadmap at decision time as "do this before there is more than one Set" and paid
 ## Evidence
 
 Session 2026-07-30T12:52Z, 2026-07-30T19:16Z. Standing rule:
-[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md).
+`docs/contributing.md` §4.

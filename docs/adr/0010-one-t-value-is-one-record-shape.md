@@ -41,4 +41,4 @@ the current files happen to have.
 ## Evidence
 
 Session 2026-07-25T12:59Z. Standing rule:
-[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md).
+`docs/contributing.md` §4.

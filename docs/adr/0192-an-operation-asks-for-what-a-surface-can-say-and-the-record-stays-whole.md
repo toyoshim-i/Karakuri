@@ -117,7 +117,7 @@ has no control on any surface and no row on the page.
   which is the same order ADR-0186 took.
 - **ADR-0180's bullet is now history rather than a rule.** *"Tone map and exposure is two-in-one and
   stays one variant"* was right when it landed and is not edited
-  ([P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md));
+  (`docs/contributing.md` §4);
   this record is where it stopped being the decision in force.
 - **No new principle.**
   [P-0090](../principles/0090-a-surface-offers-it-never-decides.md) is

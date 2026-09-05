@@ -97,7 +97,7 @@ folded*.
 
 **Three tests already hold the panel against the page**, so this exit condition asks for no
 instrument that does not exist —
-[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md) is met by what is already
+`docs/contributing.md` §4 is met by what is already
 running rather than by a promise:
 
 - `crates/karakuri-console/tests/panel_column.rs` — the panel column against the operations this

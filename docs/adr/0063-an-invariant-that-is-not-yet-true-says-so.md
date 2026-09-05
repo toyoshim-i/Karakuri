@@ -47,4 +47,4 @@ that replaced it ([ADR-0031](0031-a-document-describing-replaced-behaviour-is-wo
 ## Evidence
 
 Session 2026-08-02T06:13Z; closed at 2026-08-03T04:00Z (`12c4d66`) and 2026-08-03T14:12Z (`768b4d3`).
-Standing rule: [P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md).
+Standing rule: `docs/contributing.md` §4.

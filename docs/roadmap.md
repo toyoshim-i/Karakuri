@@ -1,7 +1,7 @@
 # Karakuri — Vision and Roadmap
 
 **This file tracks milestones and implementation status. It is not a manual and not a design document.**
-Before implementing any task here, contributors and coding agents MUST review the mandatory engineering invariants in [principles/](principles/) and adhere to the ADR lifecycle in [Principle 0066](principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md) (when changing behaviour governed by an ADR, create a new superseding ADR rather than revising history).
+Before implementing any task here, contributors and coding agents MUST review the mandatory engineering invariants in [principles/](principles/) and adhere to the ADR lifecycle in [contributing.md](contributing.md) §4 (when changing behaviour governed by an ADR, create a new superseding ADR rather than revising history).
 The code and what the words mean is [architecture.md](architecture.md); the language is [ir-spec.md](ir-spec.md); how to play it is [manual.md](manual.md) and [manual/](manual/); why a thing was decided is [adr/](adr/); milestones that closed are kept whole in [history/](history/). Where a later milestone constrains earlier code, that is stated under **Demands on earlier work**.
 
 **No count, figure or percentage is written into this file.** Every one that ever was went stale,

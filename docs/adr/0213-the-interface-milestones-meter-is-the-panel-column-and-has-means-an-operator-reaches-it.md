@@ -95,19 +95,19 @@ operations are emitted by console controls today — `SetGain` and `SetOpacity` 
 `examples/panel.rs`. A milestone that has been running for weeks reads zero on its own meter, and
 the page has to say so in the one place it currently says the opposite: the legend and the count
 paragraph both assert the panel is not built, which is
-[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md) owed from the other end —
+`docs/contributing.md` §4 owed from the other end —
 not a goal stated in the present tense, but a **failure** stated in the present tense after it
 stopped being the reason. Correcting them is part of this change and is
-[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md):
+`docs/contributing.md` §4:
 the stale text is a defect of the changes that made it stale.
 
 ## Alternatives rejected
 
 **A hand-maintained checklist section in the roadmap.** The obvious answer, and the one that reads
 best on the day it is written: a list of what the panel still owes, ticked off as it lands. It is
-[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)'s *maintaining a
+`docs/contributing.md` §4's *maintaining a
 second copy of a list by hand* exactly, and
-[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)'s *invariants that live
+`docs/contributing.md` §4's *invariants that live
 only in a README and are enforced by review*. The decisive part is that **the second copy would
 carry no information the first does not**: the grouped `plan` badges above already are the board,
 one line per home, derived by a `grep` from the specification rather than written down beside it.

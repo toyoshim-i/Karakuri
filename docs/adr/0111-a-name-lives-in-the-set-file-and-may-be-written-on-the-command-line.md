@@ -61,4 +61,4 @@ separate design decision, because a `.kir` cannot name them without binding the 
 ## Evidence
 
 Session 2026-08-19T14:15Z–14:21Z. Standing rule:
-[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md).
+`docs/contributing.md` §4.

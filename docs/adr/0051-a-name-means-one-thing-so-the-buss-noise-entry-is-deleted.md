@@ -41,4 +41,4 @@ specifically so nothing is guessed, one place quietly filling in a default is ou
 ## Evidence
 
 Session 2026-08-01T03:17Z–05:31Z. Standing rule:
-[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md).
+`docs/contributing.md` §4.

@@ -448,9 +448,8 @@ re-point the ADRs that cited it
 **An ADR is a description of history**, and that decides what may be edited: the past is not revised,
 a description that was wrong is corrected, and annotating a record with what it later became is
 welcome. An argument that would have to change is a new record, which is what buys the permission to
-stop maintaining a catalogue this size — `ls docs/adr/0*.md | wc -l`, and it only grows. See
-[P-0093](principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)'s
-*Where it does not reach*, and
+stop maintaining a catalogue this size — `ls docs/adr/0*.md | wc -l`, and it only grows. See *Where this
+does not reach* below, and
 [ADR-0151](adr/0151-an-adr-is-a-description-of-history.md), which carries the test for the cases
 that are not obvious.
 
@@ -480,9 +479,8 @@ grep -rEo 'ADR-[0-9]{4}|P-[0-9]{4}' --include='*.rs' crates/ | wc -l    # what i
 ```
 
 **Watch the first and expect it near zero**; each hit it returns is a comment to read, because a
-schedule cited from code is what P-0093 forbids. See
-[P-0093](principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md) and
-[ADR-0149](adr/0149-source-cites-what-is-in-force-not-a-plan.md).
+schedule cited from code is what *A statement is held true by the thing it describes* below
+forbids. See [ADR-0149](adr/0149-source-cites-what-is-in-force-not-a-plan.md).
 
 **Hook it from where the work is, or nobody will find it.** `INDEX.md` makes a record
 *findable*; it does not make anyone *look*. A record that changes what is planned or what is
@@ -495,6 +493,87 @@ that settles a standing rule gets a principle, which is the working set people a
 This is not decoration. Nineteen records were written on 2026-08-22 and 2026-08-23 and
 fourteen of them were reachable from nothing outside `docs/adr/` — the reasoning was all
 there, and the plan did not know any of it had happened.
+
+### A statement is held true by the thing it describes, or it is deleted
+
+**Where one fact is stated twice and the two can disagree, make them one thing or delete one.** It
+applies to a comment, a document, a name in the program and a number written in prose alike. There
+are three ways to make a statement hold, and this is the order to reach for them in.
+
+1. **Generated.** Where the fact exists as data in the program, publish the generated form. The
+   builtins and signatures handed to a model come from `Builtin::ALL` and `signature()` in
+   [`karakuri-ir`](../crates/karakuri-ir/src/builtin.rs) — the checker's own table — so the moment
+   they went stale compilation would fail, and
+   [`mcp.rs`](../crates/karakuri-environment/src/mcp.rs) serves them out of that rather than out of
+   a second copy. **A vocabulary list maintained by hand** is what this replaces.
+2. **Tested.** Where an invariant can be checked mechanically, a test checks it.
+   [`no_clock_access.rs`](../crates/karakuri-signal/tests/no_clock_access.rs) scans
+   `karakuri-signal`'s own source for `Instant::now` and its kin, which makes *rendering reads only
+   the local oscillator* a property of the crate rather than a claim about it, and
+   `karakuri-codegen/tests/naga_test.rs` puts generated WGSL through a compiler. **An invariant
+   asserted in a README and enforced by review** is what this replaces: everything it was meant to
+   catch was found by a test a reviewer had already read past.
+3. **Structural.** [`deck.rs`](../crates/karakuri-engine/src/deck.rs)'s frame guard owns the
+   encoder, so a second `begin_frame` is an `E0499` and a frame cannot be built from two generations
+   of Sets. **Never claim the compiler enforces something it does not:** a brief asserted the borrow
+   checker made a mid-frame swap impossible, and it did not, because the command encoder belongs to
+   the caller and borrows nothing — a review demonstrated it by recording two Sets of different
+   capacity into a single submit, and the guard that closed it is what makes the `E0499` true.
+
+**A guarantee is structural, or it says which convention holds it** and points at what enforces it.
+`karakuri-store`'s `ndjson.rs` keeps an unknown record verbatim rather than re-serialising it, and
+says that this is a convention and where it is held.
+
+**Where none of the three is possible, the statement dates itself.** A claim that is not yet true
+says which parts hold today, which costs a clause and buys the reader the ability to trust the rest,
+and it is a marker rather than a resting place. A settled section marks which of its parts are
+**forced** and which are **chosen**, so a wrong one is a one-clause revision instead of a reopened
+decision — [ir-spec.md](ir-spec.md)'s *Multiple L1 sources, and `source`* marks two clauses
+*preference rather than force*, which is exactly what made one of them a one-clause revision when it
+turned out to be wrong.
+
+**Write against these, each of which has happened here:**
+
+- **A comment describing replaced behaviour.** The sharpest sat *inside the function implementing
+  the change* — *t is constant across a frame's substeps*, in `VideoSource::render`. Two more were
+  wrong rather than stale, both saying the tail of the draw range holds the dead elements when it
+  holds the newest live ones, so anyone who believes them optimises by truncating the range and
+  drops living elements.
+- **A workaround written in prose**, which is a missing feature with a distribution channel. *Set
+  exposure to 0.05* is a tone mapper written in English, and since the right value follows the
+  element count it ends as a table — 0.05 at 262144 and 0.5 at 16384 — while one Set authored at
+  0.05 and another at 1.6 do not mix.
+- **A name meaning two things.** `{"t":"param"}` was used for two differently shaped records; and a
+  `noise` signed at confidence 0.1 on the bus stood against a declared generator mapped to `[0,1]`
+  at confidence 1.0. **It is not enough to be disjoint in practice; they have to be disjoint by
+  name.** The bus entry was deleted rather than reconciled, because completeness already came from
+  the unknown-name arm.
+- **A goal stated in the present tense.** *The record stream is the only path that mutates engine
+  state*, written unconditionally while `Record::Tick` was never constructed anywhere.
+- **A source comment citing a plan**, which is the rule above and the two `grep` commands that keep
+  its ratio from going stale in silence.
+
+**Where this does not reach.** This guide is the entry document — the ADR and principle rules are
+first revealed here — so it **quotes in full on purpose**, and a passage here that restates a rule
+stated elsewhere is not a second copy to be reported as drift. `docs/adr/` is history: a record is
+corrected where it was wrong and annotated with what it became, and it is never brought into step
+with the present. **What this rule forbids is an independent copy that drifts unnoticed**; a
+quotation that names what it quotes is checkable and is allowed.
+
+Decided in [ADR-0010](adr/0010-one-t-value-is-one-record-shape.md),
+[ADR-0017](adr/0017-an-invariant-that-can-be-tested-is-a-test.md),
+[ADR-0019](adr/0019-exposure-is-three-things-and-none-stands-in-for-another.md),
+[ADR-0020](adr/0020-a-corpus-expresses-taste-and-never-a-missing-feature.md),
+[ADR-0031](adr/0031-a-document-describing-replaced-behaviour-is-worse-than-none.md),
+[ADR-0034](adr/0034-the-frame-guard-owns-the-encoder.md),
+[ADR-0051](adr/0051-a-name-means-one-thing-so-the-buss-noise-entry-is-deleted.md),
+[ADR-0063](adr/0063-an-invariant-that-is-not-yet-true-says-so.md),
+[ADR-0064](adr/0064-a-replaced-passage-is-read-to-its-end.md),
+[ADR-0083](adr/0083-mcp-is-the-only-prompt-surface.md),
+[ADR-0111](adr/0111-a-name-lives-in-the-set-file-and-may-be-written-on-the-command-line.md),
+[ADR-0121](adr/0121-moving-code-leaves-its-reasoning-behind.md),
+[ADR-0149](adr/0149-source-cites-what-is-in-force-not-a-plan.md) and
+[ADR-0151](adr/0151-an-adr-is-a-description-of-history.md).
 
 ---
 

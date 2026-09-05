@@ -23,7 +23,7 @@
 //!
 //! There is no list in this crate of the operations its controls emit, and a
 //! list written here would be the second copy of one
-//! ([P-0093](../../../docs/principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)).
+//! (`docs/contributing.md` §4).
 //! So the set is **read out of this crate's own source**, and the criterion is
 //! stated here rather than left for a reader to infer from a regex.
 //!
@@ -174,7 +174,8 @@ const NOWHERE: &str = "&mdash;";
 ///
 /// # It was written to delete itself, and it did
 ///
-/// A list here is a second copy of something ([P-0093]), so it was held
+/// A list here is a second copy of something (`docs/contributing.md` §4), so
+/// it was held
 /// against both of its halves by
 /// [`the_unreachable_exemption_is_still_the_state_of_the_page`]: the operation
 /// had to still be emitted, and its badge had to still **not** be `has`. The
@@ -187,8 +188,6 @@ const NOWHERE: &str = "&mdash;";
 /// lives, because this package deliberately holds no dependency on it —
 /// `Cargo.toml` says so at length, and reaching for one to spell a one-line
 /// exemption would undo the closing of ADR-0156 that manifest records.
-///
-/// [P-0093]: ../../../docs/principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md
 const UNREACHABLE: [&str; 0] = [];
 
 fn workspace() -> PathBuf {

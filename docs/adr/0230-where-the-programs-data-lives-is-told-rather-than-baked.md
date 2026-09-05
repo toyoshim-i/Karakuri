@@ -175,7 +175,7 @@ bay's two, and it went on saying it while bay after bay drew one — which is wh
 beside the thing it describes is worth"*, and *"a copy here is precisely how this legend came to
 name three controls while every one of them answered a press."* A line saying *presets: …* that a
 person maintains would be the sixth
-([P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)). It prints the path
+(`docs/contributing.md` §4). It prints the path
 the resolution returned, and it prints which entry returned it, because *where did that come from*
 is the whole question this record exists to answer.
 
@@ -199,7 +199,7 @@ where the parsers were held apart:
 > a.kir,b.kir` among them, and they live in its own `main.rs` where nothing else can reach them. A
 > second `--flag` vocabulary here would be a second answer to *how does an operator name material*,
 > which is the failure this whole move exists to stop paying for
-> ([P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)). So this is two
+> (`docs/contributing.md` §4). So this is two
 > positional paths and nothing else … **The day the two programs share one, it comes from a package
 > both can reach and this goes.**
 
@@ -207,7 +207,7 @@ That paragraph is not contradicted by `--presets` and `--store`, and the distinc
 P-0093 turns on. *How does an operator name material* keeps exactly one answer — **the positional
 pair, and nothing else** — and these two flags answer a different question, *where does this
 program's data live*, which had no answer at all. The paragraph gets that sentence added to it, on
-[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)'s
+`docs/contributing.md` §4's
 terms: the change that makes a comment look wrong is the change that owes the correction, and a
 reader who finds *no vocabulary to disagree with* beside two new flags will either delete the flags
 or stop believing the comment. Note also what its last sentence predicted — *the day the two
@@ -226,7 +226,7 @@ precisely what an installer wants.
 where the presets are, and the two disagree the moment somebody sets both; whichever way that
 precedence is resolved, the rule lives in a paragraph rather than in a sentence an operator can
 read, which is
-[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md)'s failure in its ordinary
+`docs/contributing.md` §4's failure in its ordinary
 form. The search table is not a second answer in the same way, because it is *the default* — what
 happens when nobody has said anything — and it says out loud which entry answered.
 

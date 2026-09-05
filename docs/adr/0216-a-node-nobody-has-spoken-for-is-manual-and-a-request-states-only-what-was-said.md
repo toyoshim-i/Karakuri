@@ -67,7 +67,7 @@ show them.
 
 **Rejected: leaving it unrepresented** — `Option<Authority>`, with `None` meaning nobody has spoken.
 Then *nobody has spoken* and *manual* are two spellings of one arrangement, which is exactly what
-[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md) is about, and every reader
+`docs/contributing.md` §4 is about, and every reader
 downstream would have to decide again what `None` means.
 
 ### Why the request is sparse

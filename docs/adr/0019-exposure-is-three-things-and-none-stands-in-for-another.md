@@ -54,4 +54,4 @@ tone mapper.
 ## Evidence
 
 Session 2026-07-26T02:20Z–02:24Z. Standing rule:
-[P-0093](../principles/0093-a-statement-is-held-true-by-the-thing-it-describes-or-it-is-deleted.md).
+`docs/contributing.md` §4.
