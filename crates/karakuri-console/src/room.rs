@@ -576,6 +576,61 @@ pub mod size {
         + MINI_H
         + STRIP_GAP_Y * 5.0;
 
+    // -- the mixer's transition row -----------------------------------------
+
+    /// `.xfade`'s `padding: 8px 10px 10px`: the ring of card the transition
+    /// row sits inside, under the strips. Three numbers and not two — the
+    /// block is the one in the mixer whose bottom padding is not its top, as
+    /// `.stage-list` is one bay along — so the box is asymmetric down the
+    /// column and even across it. `lib.rs`'s 316 for this bay is written from
+    /// the same 8 and 10 (*"`.xfade` (1px rule, 8 + 10 padding, …)"*), so the
+    /// padding a rectangle is inset by here and the height the arrangement
+    /// reserves are one derivation or neither.
+    pub const XFADE_PAD_TOP: f32 = 8.0;
+    pub const XFADE_PAD_X: f32 = 10.0;
+    pub const XFADE_PAD_BOTTOM: f32 = 10.0;
+
+    /// `.xfade`'s `gap: 7px`, between the two rows the block used to hold.
+    /// **Nothing draws it**, and it is transcribed because something reads
+    /// it: `lib.rs` reserved 61 for this block and 23.5 of that was the
+    /// crossfader's — this gap and a [`PILL_H`] row — so the reservation can
+    /// only be checked against the mock in terms that name the gap.
+    /// `tests/mixer.rs` is where that check is.
+    pub const XFADE_GAP: f32 = 7.0;
+
+    /// `.xrow`'s `gap: 8px`: between two pills of the transition row, and it
+    /// is **between** them and nowhere else — [`STRIP_GAP`]'s reading, one
+    /// row down. What is outside them is [`XFADE_PAD_X`].
+    pub const XROW_GAP: f32 = 8.0;
+
+    /// **One pill of the transition row**: [`BASE`] at [`LINE`] inside its
+    /// `border: 1px solid var(--c-line)` — **18.5**, which is the box
+    /// [`MINI_H`] and [`REND_H`] are, at the console's own type size.
+    ///
+    /// **It is two pixels taller than [`PILL_H`], and that is the border
+    /// rather than a second reading of the row.** `PILL_H` transcribes a pill
+    /// as *what an inline span is* and leaves the border out; this counts it,
+    /// because the mock's box model is the browser default (`content-box`)
+    /// and a pill's is a real border — `MINI_H`'s own sentence, and `REND_H`
+    /// says it again for a chip at this size.
+    /// **`lib.rs`'s derivation of this bay is written from the 18.5** —
+    /// *"a 16.5 row, a 7px gap and an 18.5 row"*, where the 18.5 is this row
+    /// — so the pill this console draws here and the pill the bay's height
+    /// was reserved for are one number. The bay-head pills are not changed to
+    /// match, which is a transcription worth revisiting and not this row's to
+    /// revisit.
+    pub const XPILL_H: f32 = BASE * LINE + HAIRLINE * 2.0;
+
+    /// **The transition row's box**: one [`XPILL_H`] pill inside
+    /// [`XFADE_PAD_TOP`] and [`XFADE_PAD_BOTTOM`], plus the one pixel of the
+    /// rule above it — [`HAIRLINE`], which is `.xfade`'s own
+    /// `border-top: 1px solid var(--c-hair)` and the same pixel every other
+    /// rule in the mock is drawn at. **37.5**, which is what `lib.rs` says
+    /// the block is in the mock now that the crossfader has gone from it, so
+    /// the rectangle this console carves and the height the mock draws are
+    /// one derivation or neither.
+    pub const XFADE_H: f32 = HAIRLINE + XFADE_PAD_TOP + XPILL_H + XFADE_PAD_BOTTOM;
+
     // -- the master bay's out row -------------------------------------------
 
     /// `.master-body`'s `padding: 8px 10px 10px`: the ring of card the bay's

@@ -296,6 +296,22 @@ fn sample(variant: &str) -> Operation {
         "AttachBeatSource" => Operation::AttachBeatSource {
             source: karakuri_operation::BeatSource::AudioInput("default".to_owned()),
         },
+        // **The Mixer bay's transition row**, and the one emission in this
+        // list that names no deck *and* no slot of anything: the three
+        // settings decide what the next fade, crossfade or wipe means
+        // wherever it lands. Three pills emit it — the shape, the quantum and
+        // the length — and one operation is one row however many controls
+        // name it, which is what `dedup_by_key` below is for and is the same
+        // arrangement `SetSync` is in.
+        //
+        // **The row's panel badge went `has` and its key badge did not.** The
+        // page's key column for this row reads `z n j`, and those three keys
+        // are bound elsewhere in the program the panel runs inside; the badge
+        // stays `plan` until that is worked through, which is a decision about
+        // the keyboard and not about this control.
+        "SetTransition" => Operation::SetTransition {
+            setting: karakuri_operation::TransitionSetting::Quantum { beats: 4.0 },
+        },
         // **The Library bay's scope chips**, and the one emission in this list
         // whose payload cannot say what the control chose: `SelectScope`
         // carries `Undecided`, deliberately, because *"an enum of the four
