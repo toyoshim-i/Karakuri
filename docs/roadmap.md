@@ -283,8 +283,10 @@ texture from, stays the image and never the image plus its label.
 
 **The risk badge is not drawn, and it is not a drawing that is owed.** Its five bands are specified
 in [the console page](manual/console.html), under *What a deck preview cell shows, and when* and on
-deck A's caption tooltip; the panel draws no dot because nothing in this workspace estimates what a
-slot costs. What would produce that estimate is under *Performance discipline*, below.
+deck A's caption tooltip; the panel draws no dot because nothing a deck can reach estimates what a
+slot costs. What would produce that estimate is `karakuri-engine`'s `estimate` module, which is built
+and wired to nothing — see *The preparation slot is the measurement* under *Performance discipline*,
+below.
 
 **The bay's prose, as tooltips.** Three notes now. *Program, sized by height* is the height drag and
 the letterbox, the picture being the `program view` sink and on screen exactly when that sink is on,
@@ -1289,17 +1291,19 @@ this one and has no answer yet.
 
 #### The preparation slot is the measurement
 
-**Decided, not built, and it is what would produce the risk badge's estimate.** Today a reference
+**Built, and not wired — it is what would produce the risk badge's estimate.** Today a reference
 measurement is the hint that admits a Set into a slot at all. The slot is then **drawn small while it
 prepares**, and that small draw is a second measurement — a higher-confidence estimate of what the
 same material costs at full size, on this machine, in this environment, rather than a number carried
 from elsewhere.
 
-**`Topology` decides the extrapolation, and it is known at compile time.**
-`karakuri_ir::ast::Topology` is `Points | Lines | Fullscreen`. A `Fullscreen` procedure's cost is the
-pixel count, so it scales with the target's area. A `Points` procedure is dominated by primitive
-work, so it does not. `Lines` is unmeasured and its scaling is not known. (The maintainer says
-*segments*; the enum says `Lines`.)
+**`Topology` looked like the discriminator and is not**, which took a measurement to settle. This
+item said *a `Fullscreen` procedure's cost is the pixel count so it scales with the target's area; a
+`Points` procedure is dominated by primitive work so it does not; `Lines` is unmeasured*. The
+fragment stage tracks the area for **all three**, and what decides whether a procedure looks
+invariant is its coverage rather than its enum — see *The rule that follows from the language* below,
+and [ADR-0266](adr/0266-two-rungs-and-a-fit-because-a-frame-is-an-invariant-part-plus-a-fragment-part.md),
+which rejects the per-topology branch and says what it would have got wrong.
 
 **The small draw has a floor under it now**, which cuts both ways for this.
 [ADR-0245](adr/0245-the-sub-pixel-compensation-is-paid-in-the-colour-because-alpha-is-coverage.md)
@@ -1311,10 +1315,12 @@ smaller past that point stops getting cheaper and stops saying anything new. `te
 measures the pair: a 112x63 render of the panel's own material went from 0.6x the whole 720p frame
 to 1.1x of it.
 
-**Built on 2026-09-06, and its extrapolation is wrong — this is where to resume.**
-`crates/karakuri-engine/src/estimate.rs` draws a Set at `PREPARATION_RESOLUTION` (640x360), rewinds
-it, restores the viewport and returns milliseconds. What it does with the number is scale it by the
-area ratio, one rule for every topology, and **that is the part to replace**.
+**Built on 2026-09-06, and the area-ratio extrapolation it shipped with was replaced the same day**
+by [ADR-0266](adr/0266-two-rungs-and-a-fit-because-a-frame-is-an-invariant-part-plus-a-fragment-part.md).
+`crates/karakuri-engine/src/estimate.rs` now draws a Set at **two** rungs — half and a quarter of the
+target's height — solves `a + b·area` through them, rewinds and restores the viewport, and returns
+either the fit or a named refusal. It is still exported from `lib.rs` and wired to nothing; wiring it
+to `Deck::govern` is undecided and is where to resume.
 
 **The rule that follows from the language rather than from a machine.** A frame is three parts: the
 simulation over `capacity`, the vertex stage per primitive, and the fragment stage over covered
@@ -1326,11 +1332,27 @@ discriminator**: what decides whether a procedure looks invariant or looks area-
 coverage, `capacity × rate²`, which a param can move. The same procedure sits on either side of any
 rule keyed on the enum.
 
-**Two terms need two rungs.** One draw at one size gives `a + b·A` and no way to separate them, and
-scaling that sum by the area ratio scales `a` with it — which for per-element material is most of the
-frame. Measured on one machine, the shipped corpus overshot by very nearly the whole area ratio and
-every `Points` and `Lines` slot landed in the badge's last band, which is why `estimate` is not wired
-to `Deck::govern`. Take the second rung, fit, and extrapolate the fragment term alone.
+**Two terms need two rungs, and that is what it does now.** One draw at one size gives `a + b·A` and
+no way to separate them, and scaling that sum by the area ratio scales `a` with it — which for
+per-element material is most of the frame. Measured on one machine, the shipped corpus overshot by
+very nearly the whole area ratio and every `Points` and `Lines` slot landed in the badge's last band.
+ADR-0266 takes the second rung, fits, and extrapolates the fragment term alone.
+
+**What that decision leaves undone**, because a consequence recorded only in the record is one the
+next person meets rather than reads:
+
+- **`estimate` refuses every `Points` and `Lines` Set** with `Unfit::FloorUnknown` and draws nothing,
+  because `point_rate` is a per-element vertex expression the CPU side never reads and the floor
+  below is therefore not a number it can compute. `estimate_above_floor` takes the floor from a
+  caller that knows it. **Closing this is a static analysis of the `point_rate` expression against
+  its params' declared ranges, and it is not written.**
+- **The fit is noisier per call than the number it replaced**, by about fivefold on the difference
+  between the two rungs, and on a host clock that is the clock rather than the fit: driven with the
+  full-size truth interleaved, one unchanged configuration measured 8.85 to 28.00 ms **at the same
+  size**, which `examples/small_draw.rs` would discard on its own spread limit. What the fit does
+  with that is refuse — about half the attempts on dense material returned
+  `Unfit::FragmentTermNegative` rather than a wrong number — which is the design working and is the
+  second reason nothing is wired to the governor yet.
 
 **Numbers taken here are not a basis for a decision.** Development is one unified-memory Metal
 machine; a tile-based renderer's binning behaviour and its thermal drift are that machine's and not
@@ -1361,11 +1383,14 @@ measuring.
 target cheaply matters, and it is the premise the risk badge's bands are read against — *blue* is the
 ordinary state of good material precisely because two at 60 Hz is the ordinary case.
 
-**What is thin.** How small *small* is, what it is drawn into, and how the extrapolation's confidence
-is expressed are all unstated — and the floor above puts a bound on the first of them that nobody has
-yet turned into a number. So is what happens to a `Lines` slot, whose scaling nobody has
-measured. And every one of these numbers was taken at a resolution nobody chose — the panel's
-`CANVAS` constant. What replaces it is the output's own size
+**What is thin.** How small *small* is now follows from the target — half and a quarter of its
+height, both above ADR-0245's floor — and `Lines` is measured: at the declared maximum stroke width
+the fragment term is 67 ms of an 87 ms frame, so it tracks the area like everything else. **How the
+extrapolation's confidence is expressed is still unstated**, and it is the live question: the fit
+either answers or names a refusal, and there is nothing between those two. A third rung's residual is
+what would say whether the cost is affine at all, and it is deferred in ADR-0266 on what it costs and
+on this machine's spread. And every one of these numbers was taken at a resolution nobody chose — the
+panel's `CANVAS` constant. What replaces it is the output's own size
 ([ADR-0246](adr/0246-the-render-size-belongs-to-the-output-and-the-sessions-canvas-is-only-its-default.md)),
 which makes an extrapolation a per-output question rather than a global one.
 

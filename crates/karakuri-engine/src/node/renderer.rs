@@ -31,14 +31,24 @@ pub(crate) struct Renderer {
     /// **What this node draws**, carried from the checked procedure rather
     /// than reduced to a flag.
     ///
-    /// Two readers, and they ask different questions of it. The draw asks
-    /// whether there is a primitive to size at all — a fullscreen L4 consumes
-    /// nothing, which the check pass enforces, so a Set whose only renderer is
-    /// one has nothing reading its element buffers and skips the L1 passes
-    /// entirely. [`crate::estimate`] asks the three-way question instead:
-    /// `Fullscreen` and `Lines` cost the target's area and `Points` does not,
-    /// so a small draw extrapolates one way or the other by this field. A
-    /// `bool` answered the first and could not answer the second.
+    /// Two readers. The draw asks whether there is a primitive to size at all
+    /// — a fullscreen L4 consumes nothing, which the check pass enforces, so a
+    /// Set whose only renderer is one has nothing reading its element buffers
+    /// and skips the L1 passes entirely. [`crate::estimate`] asks the same
+    /// question for a different reason: a procedure with no `vertex` block
+    /// emits no `point_rate`, so there is no primitive that can fall under a
+    /// pixel and ADR-0245's sub-pixel floor does not apply to it.
+    ///
+    /// **Neither reader asks a three-way question**, and this comment claimed
+    /// one did until ADR-0266: *`Fullscreen` and `Lines` cost the target's area
+    /// and `Points` does not, so a small draw extrapolates one way or the other
+    /// by this field*. Nothing ever branched that way, and the rule that
+    /// replaced the extrapolation says it never should — what decides whether a
+    /// procedure's cost tracks the target's area is its coverage,
+    /// `capacity × rate²`, which a param moves at any time. The full value is
+    /// still carried rather than reduced to a `bool` because
+    /// [`crate::estimate::Estimate`] reports it, so a number can be read
+    /// against what was drawn.
     topology: karakuri_ir::Topology,
     param_names: Vec<String>,
 }
