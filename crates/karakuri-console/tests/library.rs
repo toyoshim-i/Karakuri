@@ -610,11 +610,12 @@ fn a_folded_or_soloed_or_short_bay_lists_nothing() {
 }
 
 // ---------------------------------------------------------------------------
-// The scope chips are the only controls here, and nothing is stored
+// Which of this bay's parts answer a press, and nothing is stored
 // ---------------------------------------------------------------------------
 
-/// **The scope chips answer a press, and so do the two filter fields and the
-/// `read` chip — and nothing else in this bay does.**
+/// **The scope chips answer a press, and so do the two filter fields, the
+/// `read` chip and the rows of the list — and nothing else in this bay
+/// does.**
 ///
 /// The mock draws four scope chips, two filter fields, a `+`, a row cursor,
 /// the `read` chip and the `load → A` pill. **The chips are the first of them
@@ -640,14 +641,20 @@ fn a_folded_or_soloed_or_short_bay_lists_nothing() {
 /// is that the foot's *ground* is still nobody's: the count, the space either
 /// side of it and the gap between the two capsules take no press.
 ///
-/// **The pill is the one that is deliberately not**, and that is a
-/// specification and not a thing left unbuilt: *How a Set reaches a deck*
-/// settles that a load is *"a cursor and a key with no pointer anywhere in
-/// it"*, and the panel's own route to that row is the drag — *"a second route
-/// to the same command, and never the first"* — which the operations page
-/// still marks *designed* rather than reached. So the two claims in this file
-/// are separate tests, because they are separate sentences: this one, and
-/// [`a_load_is_a_cursor_and_a_key_with_no_pointer_anywhere_in_it`].
+/// **The rows are the fourth, and they are the newest.** A press on one takes
+/// that Set in hand — `LibraryBay::take`, and `crate::panel::Panel::carry` —
+/// which is the drag *How a Set reaches a deck* specifies: *"Dragging a row
+/// onto a strip is a second route to the same command, and never the first."*
+/// What a row press asks for is `carry.rs`'s; what this test adds is that the
+/// list's own ground under the last row is still nobody's.
+///
+/// **The pill is the one part of this bay that is deliberately not a
+/// control**, and that is a specification rather than something left unbuilt:
+/// the same note settles that the *key*'s route is *"a cursor and a key with
+/// no pointer anywhere in it"*, and the pill is what says where that key
+/// lands. So the two claims in this file are separate tests, because they are
+/// separate sentences: this one, and
+/// [`the_load_pill_takes_no_press_and_a_row_is_where_the_drag_begins`].
 ///
 /// # The bay's corners do not reach the pill, and the two numbers say why
 ///
@@ -667,7 +674,7 @@ fn a_folded_or_soloed_or_short_bay_lists_nothing() {
 /// with no scopes has no chip row at all, and asking it whether a chip takes a
 /// press is asking about a control nobody drew.
 #[test]
-fn the_scope_chips_the_filter_fields_and_the_read_chip_are_the_bays_controls_and_nothing_else_is() {
+fn the_chips_the_fields_the_read_chip_and_the_rows_are_the_bays_controls_and_nothing_else_is() {
     let (view, mut panel) = showing_mock();
     let ctx = drawn_once();
     let bay = bay(&panel);
@@ -784,12 +791,17 @@ fn the_scope_chips_the_filter_fields_and_the_read_chip_are_the_bays_controls_and
         swept >= 5,
         "only {swept} points of the foot's ground were swept, and the two capsules cannot be          most of a row this wide"
     );
-    for index in 0..bay.rows {
-        let at = bay.row(index);
-        points.push(egui::pos2(at.min.x + size::LIB_ROW_PAD_X, at.center().y));
-        points.push(egui::pos2(at.center().x, at.center().y));
-        points.push(egui::pos2(at.max.x - size::LIB_ROW_PAD_X, at.center().y));
-    }
+    // **The list's own ground under the last row**, which is where the rows
+    // stop and the foot has not started: a `.lib-row` is a stride and the list
+    // is whatever is left of the bay, so what is below the last of them is
+    // nobody's. The rows themselves are the panel's and are asked below.
+    let last = bay.row(bay.rows - 1);
+    let ground = egui::pos2(last.center().x, last.max.y + size::LIB_ROW_H * 0.5);
+    assert!(
+        ground.y < bay.foot.min.y,
+        "the sweep is asking about the foot rather than about the list's ground"
+    );
+    points.push(ground);
 
     let mut asked = 0;
     for p in &points {
@@ -801,6 +813,24 @@ fn the_scope_chips_the_filter_fields_and_the_read_chip_are_the_bays_controls_and
         );
         asked += 1;
     }
+    // **And every drawn row is the panel's**, asked at three points across it:
+    // a press on one takes that Set in hand, and a row that went to `egui`
+    // would be the one gesture this bay exists for reaching nothing at all.
+    for index in 0..bay.rows {
+        let at = bay.row(index);
+        for probe in [
+            egui::pos2(at.min.x + size::LIB_ROW_PAD_X, at.center().y),
+            at.center(),
+            egui::pos2(at.max.x - size::LIB_ROW_PAD_X, at.center().y),
+        ] {
+            assert_eq!(
+                claim(&mut panel, &ctx, &view, Point::new(probe.x, probe.y)),
+                Claim::Panel,
+                "the console gave `egui` a press on row {index} at {probe:?}"
+            );
+        }
+    }
+
     // **And the `read` chip is the panel's**, asked at the same two pixels in
     // from its own left edge the chips above are — its right-hand end is the
     // gap before the load pill and its bottom rim is under the boundary's
@@ -818,37 +848,37 @@ fn the_scope_chips_the_filter_fields_and_the_read_chip_are_the_bays_controls_and
     // quietly go away.
     assert_eq!(asked, points.len(), "not every point was asked");
     assert!(
-        points.len() >= 5 + 3 + 2 + 5 + 3,
-        "only {} points asked: the bay's corners, the scope row's ground, the filter row's, the \
-         foot's ground and at least one row are the floor, and fewer is a sweep that has stopped \
+        points.len() >= 1 + 5 + 3 + 2 + 5,
+        "only {} points asked: the list's own ground, the bay's corners, the scope row's ground, \
+         the filter row's and the foot's are the floor, and fewer is a sweep that has stopped \
          covering the foot",
         points.len()
     );
 }
 
-/// **A load is a cursor and a key with no pointer anywhere in it.**
+/// **The load pill takes no press, and a row is where the drag begins.**
 ///
-/// `console.html`'s sentence, stated on its own because it is its own
-/// decision. The `load → A` pill is a **readout** — *"what the control owes
-/// instead is to say where it lands before the press"* — and the panel's route
-/// to *Load material into a deck* is the drag from a row onto a strip, which
-/// that page calls *"a second route to the same command, and never the first"*
-/// and the operations page carries as this row's panel badge, marked
-/// *designed* — *"this surface is meant to reach it and does not yet"*.
+/// `console.html`'s two sentences about the same row, and they are one test
+/// because they are one decision taken twice. The `load → A` pill is a
+/// **readout** — *"what the control owes instead is to say where it lands
+/// before the press"* — and the *key*'s route is *"a cursor and a key with no
+/// pointer anywhere in it"*, so a press on the pill would add a pointer to the
+/// one gesture that page describes as having none, and it would name the deck
+/// from the selection, which is exactly what `l` already does.
 ///
-/// **So a pill that does nothing when it is pressed is the specification and
-/// not an oversight**, and what would be the oversight is the opposite: a
-/// press on it would name the deck from the selection, which is exactly what
-/// the *key* does, so it would add a pointer to the one gesture both pages
-/// describe as having none — and it would leave the gesture that *is*
-/// specified still undrawn. This test is what fails the day somebody wires it.
+/// **The panel's own route is the drag**, which that page calls *"a second
+/// route to the same command, and never the first"* — *"it names both operands
+/// in the one gesture, which makes it the only way to load a deck without
+/// selecting it first"*. So the row a hand presses is the panel's and the
+/// capsule beside it is not, and that asymmetry is the specification rather
+/// than a thing left unbuilt. What a row press then asks for is `carry.rs`'s.
 ///
 /// The pill's own box is asked rather than the foot's middle, because the box
 /// is where a press would land: it is measured off the same galley the paint
 /// lays out, so the rectangle asserted here and the capsule drawn are one
 /// statement.
 #[test]
-fn a_load_is_a_cursor_and_a_key_with_no_pointer_anywhere_in_it() {
+fn the_load_pill_takes_no_press_and_a_row_is_where_the_drag_begins() {
     let (mut view, mut panel) = showing_mock();
     let ctx = drawn_once();
     let bay = bay(&panel);
@@ -874,32 +904,37 @@ fn a_load_is_a_cursor_and_a_key_with_no_pointer_anywhere_in_it() {
     // the plainest evidence this was never meant to be a control**: every
     // capsule on this console that *is* one clears the grab, and this one does
     // not.
-    let mut points: Vec<egui::Pos2> = (0..=6)
+    let points: Vec<egui::Pos2> = (0..=6)
         .map(|step| {
             let t = step as f32 / 6.0;
             egui::pos2(pill.min.x + pill.width() * t, pill.center().y)
         })
         .collect();
-    // **And every row of the list**, which is where a drag onto a strip would
-    // begin — the gesture this row is owed and has not got.
-    for index in 0..bay.rows {
-        let at = bay.row(index);
-        points.push(egui::pos2(at.min.x + size::LIB_ROW_PAD_X, at.center().y));
-        points.push(at.center());
-    }
     assert!(
         bay.rows > 0,
-        "the bay drew no rows, so no row was asked about"
+        "the bay drew no rows, so the contrast below is measuring nothing"
     );
 
     for p in &points {
         assert_eq!(
             claim(&mut panel, &ctx, &view, Point::new(p.x, p.y)),
             Claim::Egui,
-            "the console took the pointer at {p:?} — a load answers the keyboard and this bay \
-             owes a drag, not a button"
+            "the console took the pointer at {p:?} — the pill says where a load lands and the \
+             key is what puts it there"
         );
     }
+
+    // **And the contrast, on the row the drag does begin on**, so that this
+    // cannot pass by a bay that takes no press anywhere: the capsule is
+    // `egui`'s and the row two lines above it is the panel's, in one console
+    // in one state.
+    let first = bay.row(0).center();
+    assert_eq!(
+        claim(&mut panel, &ctx, &view, Point::new(first.x, first.y)),
+        Claim::Panel,
+        "the row the drag begins on went to `egui`, so the sweep above is measuring a bay that \
+         takes no press at all"
+    );
 }
 
 /// **A press names the chip it landed on, and never the next one.**

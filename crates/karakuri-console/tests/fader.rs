@@ -344,7 +344,7 @@ fn both_ends_of_both_faders_are_exactly_reachable() {
         asked(panel.moved(point(egui::pos2(floor.x - 400.0, floor.y)))),
         Some(0.0)
     );
-    panel.released();
+    panel.released(None);
 
     // The tall one: a column, filling from the **bottom**, and its fill sits
     // `VFADER_INSET` inside the well at both ends.
@@ -399,7 +399,7 @@ fn a_drag_emits_the_right_operation_for_the_right_deck() {
             "the trim of strip {slot} emitted the wrong operation"
         );
         assert_eq!(
-            panel.released(),
+            panel.released(None),
             Some(Released::Let {
                 knob: Knob::Trim { deck }
             })
@@ -415,7 +415,7 @@ fn a_drag_emits_the_right_operation_for_the_right_deck() {
             "the fader of strip {slot} emitted the wrong operation"
         );
         assert_eq!(
-            panel.released(),
+            panel.released(None),
             Some(Released::Let {
                 knob: Knob::Fader { deck }
             })
@@ -483,7 +483,7 @@ fn a_drag_in_hand_keeps_its_claim_while_the_pointer_leaves_the_strip() {
         claim(&mut panel, &ctx, &showing(&strips), away),
         Claim::Panel
     );
-    assert!(panel.released().is_some());
+    assert!(panel.released(None).is_some());
     assert_eq!(
         claim(&mut panel, &ctx, &showing(&strips), away),
         Claim::Egui
@@ -550,7 +550,7 @@ fn the_cursor_during_a_fader_drag_is_not_a_resize() {
     assert_eq!(panel.in_hand(), Some(InHand::Fader));
 
     // Let go, and the boundary has its cursor back.
-    panel.released();
+    panel.released(None);
     assert_eq!(cursor(&mut panel), egui::CursorIcon::ResizeHorizontal);
 }
 
@@ -686,7 +686,7 @@ fn the_value_the_strip_draws_comes_back_from_the_deck() {
         "the bay moved while a drag was in hand and nothing had been applied"
     );
 
-    assert!(panel.released().is_some());
+    assert!(panel.released(None).is_some());
 
     // Nothing was applied, so nothing moved. Asked again, from the same
     // values, it is the same bay.
@@ -771,7 +771,7 @@ fn a_drag_that_moves_nothing_asks_for_no_frame() {
 
     // The press itself is the same rule: taking hold of a knob and letting go
     // without moving tells nobody anything.
-    panel.released();
+    panel.released(None);
     take(&mut panel, &bay, fader.center());
     assert_eq!(panel.moved(point(fader.center())), None);
 }

@@ -284,7 +284,8 @@ use karakuri_console::view::{
     deck_head as deck_head_row, inspector as inspector_pane, library as library_bay,
     look as look_row, master as master_row, mcp_pill, mixer as mixer_bay, outputs, picture_rect,
     preview_rects, program_head, transition as transition_row, Ask, AudioAsk, AudioIn, Chosen, Go,
-    Kind, McpPill, Picture, Read, Reading, Scope, TransitionSettings, View, DECKS, DECK_LETTERS,
+    Kind, McpPill, Picture, Read, Reading, Scope, Taken, TransitionSettings, View, DECKS,
+    DECK_LETTERS,
 };
 // **How many slots a deck can hold**, which is how many this one has — see
 // [`SLOTS`]. Not re-exported at the crate root, and asked of the module that
@@ -1345,23 +1346,64 @@ impl Readout {
         format!("  drag: asked {asked:.1}, landed {landed:.1}{stop} [{sizes}]")
     }
 
-    fn released(&mut self) {
-        match self.panel.released() {
+    /// **The pointer went up**, and what the gesture it ended asked for.
+    ///
+    /// `onto` is which deck's strip the pointer is over — the caller's answer,
+    /// because a strip's geometry is `karakuri-console`'s view and not its
+    /// model (`Panel::released`). Two of the three drags do not read it.
+    ///
+    /// **It answers an `Acted` where it used to answer nothing**, and the drop
+    /// is why: a boundary coming to rest and a fader being let go both ask for
+    /// nothing — everything either of them wanted was asked for while it was
+    /// moving — and a carry asks for its whole operation here or nowhere.
+    fn released(&mut self, onto: Option<u8>) -> Acted {
+        match self.panel.released(onto) {
             Some(Released::Rests { split, index, at }) => {
-                println!("release: {} rests at {at:.1}", self.pair(split, index))
+                println!("release: {} rests at {at:.1}", self.pair(split, index));
+                Acted::Nothing
             }
             Some(Released::Gone { split, index }) => {
-                println!("release: {} is gone", self.pair(split, index))
+                println!("release: {} is gone", self.pair(split, index));
+                Acted::Nothing
             }
             // **No value in the line, because there is none to print.** Where
             // a fader came to rest is the deck's, and the last thing the drag
             // asked for was printed when it was asked for.
-            Some(Released::Let { knob }) => println!(
-                "release: {} lets go of the {}",
-                knob_where(knob),
-                knob_word(knob)
-            ),
-            None => {}
+            Some(Released::Let { knob }) => {
+                println!(
+                    "release: {} lets go of the {}",
+                    knob_where(knob),
+                    knob_word(knob)
+                );
+                Acted::Nothing
+            }
+            // **A Set was let go over a strip**, and the load leaves by the
+            // door every other control's operation leaves by — `played` is
+            // what performs it and says what the deck did about it, exactly as
+            // it does for `l`. The line here is the *gesture* ending: two ways
+            // in, one name, and the same sentences after the naming.
+            Some(Released::Dropped(operation)) => {
+                if let Operation::LoadSet { deck, set } = &operation {
+                    println!(
+                        "release: `{set}` was let go over deck {}",
+                        deck_letter(*deck)
+                    );
+                }
+                Acted::Emitted(Some(operation))
+            }
+            // **A carry let go over nothing asks for nothing**, and it says so
+            // rather than saying nothing: a row picked up, carried and then
+            // silently forgotten reads as a panel that missed the press. The
+            // cursor is left on the row that was taken, which is where `l`
+            // would load from next.
+            Some(Released::Nowhere { set }) => {
+                println!(
+                    "release: `{set}` was let go over nothing, so nothing was loaded — a drop \
+                     names its deck by landing on that deck's strip"
+                );
+                Acted::Nothing
+            }
+            None => Acted::Nothing,
         }
     }
 
@@ -1727,6 +1769,34 @@ impl Readout {
                 }) {
                     return (claim, self.asked_to_read(ask));
                 }
+                // **A row of the Library bay's list, and this is the one press
+                // on this panel that asks for nothing at all.** What it does
+                // is take a Set in hand: `console.html`'s *How a Set reaches a
+                // deck* has the panel's route to that row as a drag —
+                // *"Dragging a row onto a strip … names both operands in the
+                // one gesture"* — and a press names one of the two. The
+                // operation is built where the second one is, which is the
+                // release, over whatever strip the pointer is then on.
+                //
+                // **The bay is derived a fourth time**, for the reason it is
+                // derived a third: each of these is a question about one
+                // laid-out bay, and a value held across all of them would
+                // outlive the question it answers.
+                //
+                // **The listing goes in with the point**, exactly as it does
+                // for the `read` chip above: what a row means is a name this
+                // program read out of the store and handed over, and the
+                // console reads no store (ADR-0156).
+                if let Some(taken) = library_bay(
+                    self.panel.layout(),
+                    &self.view.scopes,
+                    &self.view.library,
+                    self.view.opened(),
+                )
+                .and_then(|bay| bay.take(&self.view.library, at))
+                {
+                    return (claim, self.took(at, taken));
+                }
                 // **The transition row's four capsules, derived once for all
                 // of them**, exactly as `claim` does it: the three settings
                 // are laid end to end from the block's left padding and `go`
@@ -1837,7 +1907,24 @@ impl Readout {
                     }
                 }
             }
-            (Pointer::Up, Claim::Panel) => self.released(),
+            // **Where a drop names its deck.** A carry is the one gesture here
+            // whose destination is not known until the button comes up, so the
+            // bay is laid out *now* and asked which strip the pointer is over
+            // — `Mixer::dropped`, the same derivation the frame drew and the
+            // same one `claim` hit-tests the knobs and chips of. It is asked
+            // only with a carry in hand: a boundary and a fader each come to
+            // rest without a destination, and laying out the mixer on every
+            // release would be two galley lookups per strip to answer a
+            // question nobody asked.
+            (Pointer::Up, Claim::Panel) => {
+                let onto = match self.panel.in_hand() {
+                    Some(InHand::Carrying) => mixer_bay(ctx, self.panel.layout(), &self.view.mixer)
+                        .as_ref()
+                        .and_then(|bay| bay.dropped(at)),
+                    _ => None,
+                };
+                did = self.released(onto);
+            }
             (Pointer::Down | Pointer::Up | Pointer::Wheel, _) => {}
         }
         (claim, did)
@@ -2200,6 +2287,45 @@ impl Readout {
                 Acted::Nothing
             }
         }
+    }
+
+    /// **A press on a row of the Library bay's list**, which takes that Set in
+    /// hand and asks for nothing.
+    ///
+    /// # The mark on the row is the whole of what a carry can draw
+    ///
+    /// `docs/manual/console.html` draws no drag affordance and no drop target
+    /// — no ghost under the pointer, no lit strip — and this program draws
+    /// what that page draws. What it *does* draw is `.lib-row.cursor`, and the
+    /// row a hand is on is exactly what that mark is for, so the press moves
+    /// it: the row taken is the row marked, for the length of the carry and
+    /// afterwards.
+    ///
+    /// **Afterwards is deliberate.** The cursor is the operand `l` reads
+    /// (`view::View::cursor_row`), so a drop that landed and a carry that was
+    /// let go over nothing both leave the keyboard aimed at the Set the hand
+    /// last touched — *two ways in, one name*, met at the pointer this bay
+    /// keeps rather than only at the operation.
+    ///
+    /// **It emits nothing, and there is nothing for it to emit.** Moving this
+    /// cursor has no row on `docs/manual/operations.html` and is not owed one:
+    /// *"The cursor moves on the arrow keys and gets no row on the operations
+    /// page, which is a decision and not an omission"* — a pointer that names
+    /// a row instead of stepping to it is the same pointer, which is what
+    /// `view::View::point_at` is.
+    fn took(&mut self, p: Point, taken: Taken) -> Acted {
+        let Taken { row, set } = taken;
+        // **The mark first, and the hand after it.** Both are this console's
+        // own pointers and neither is an operation, so the order is only about
+        // the borrow — but the mark is what says the press was seen.
+        self.view.point_at(row);
+        println!(
+            "press ({:.0}, {:.0}): `{set}` is in hand — let it go over a strip to load it there, \
+             or anywhere else to load nothing",
+            p.x, p.y
+        );
+        self.panel.carry(p, set);
+        Acted::Nothing
     }
 
     /// A press on the Outputs row's one control. **The dot says what it did**
@@ -2739,7 +2865,11 @@ impl Readout {
         println!();
         println!(
             "the pointer, and this file no longer keeps a list of what it reaches. a press \n\
-             in a gap takes the boundary and it follows the pointer. everywhere else \n\
+             in a gap takes the boundary and it follows the pointer. a press on a LIBRARY \n\
+             row takes that Set in hand and nothing happens until you let it go: over a \n\
+             mixer strip it loads that deck, anywhere else it loads nothing. that is the \n\
+             second way in to the same command `l` performs, and the only one that names \n\
+             both the Set and the deck in one gesture. everywhere else \n\
              `karakuri_console::input::claim` decides, and the {CONTROLS} controls its rule \n\
              4 hit-tests are painted shapes with no widget behind them — nothing but that \n\
              rule knows a press landed on one. the number is that crate's own constant, \n\
@@ -9360,17 +9490,71 @@ impl ApplicationHandler for App {
                 if matches!(acted, Acted::Emitted(Some(Operation::ReadSet { .. }))) {
                     println!("{}", read_reading(&mut self.readout.view, &self.store));
                 }
+                // **A Set dropped out of `presets` is taken in before it is
+                // loaded**, which is `l`'s two-moment press arriving at the
+                // pointer: a preset row names a file and a load names an id,
+                // and taking it in is what gives the Set the id the load needs
+                // (ADR-0229). Two routes to one row have to reach the same
+                // place — `console.html`'s *two ways in, one name* — and a
+                // drop that skipped this would name a Set this store does not
+                // hold and be refused where the key succeeds.
+                //
+                // **Here rather than in the console**, for the reason every
+                // other store question is here: `karakuri-console` reaches no
+                // disk at all (ADR-0156), so the drop names the row it was
+                // dragged from and this side turns that into the two rows of
+                // the vocabulary one gesture performs. `taking_in` and
+                // `preset_press` are the key's own two helpers, so this is a
+                // second caller and not a second answer.
+                let mut took = Repaint::Never;
+                let acted = match (&acted, self.readout.view.scope()) {
+                    (
+                        Acted::Emitted(Some(Operation::LoadSet { deck, set })),
+                        Some(Scope::Presets),
+                    ) => {
+                        let (deck, row) = (*deck, set.clone());
+                        match taking_in(&self.store, self.presets.as_ref(), &row) {
+                            Ok(taken) => {
+                                println!("  take in: {}", taken.said);
+                                let [take, load] = preset_press(deck, taken);
+                                took = App::performed(
+                                    gfx,
+                                    &mut self.readout,
+                                    &Acted::Emitted(Some(take)),
+                                    Repaint::Never,
+                                );
+                                Acted::Emitted(Some(load))
+                            }
+                            // Which of the two acts failed is the whole of what
+                            // this adds — `l`'s own sentence, one surface over.
+                            Err(e) => {
+                                println!(
+                                    "  take in: `{row}` was not taken into the store: {e}\n  \
+                                     take in: so nothing was loaded, and what is on deck {} is \
+                                     still running",
+                                    deck_letter(deck)
+                                );
+                                Acted::Nothing
+                            }
+                        }
+                    }
+                    _ => acted,
+                };
                 // **A press on a control earns its frame from what it did**,
                 // and not from the claim: `Change::Pointer(Claim::Panel)` is
                 // already a frame, but the operation the dot asked for is the
                 // thing that moved every region in the Program bay, and it is
                 // the outcome that says so.
+                // **One frame asked for, however many operations the press
+                // emitted** — `l`'s rule at the pointer, and `Repaint::soonest`
+                // is what combines them.
                 let repaint = App::performed(
                     gfx,
                     &mut self.readout,
                     &acted,
                     Change::Pointer(claim).repaint(),
-                );
+                )
+                .soonest(took);
                 App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
             }
             WindowEvent::MouseWheel { .. } => {
@@ -14041,6 +14225,150 @@ mod tests {
         assert_eq!(readout.view.filters().holds, Some("drift_shell"));
     }
 
+    /// **A Set dragged from a library row onto a mixer strip loads the strip
+    /// it was let go over** — the whole gesture, through the same
+    /// `Readout::pointer` a hand goes through.
+    ///
+    /// # Why it is here and can be nowhere else
+    ///
+    /// `karakuri-console` has both halves of the gesture and cannot put them
+    /// together: `carry.rs` there presses the model and the view directly, and
+    /// hands the destination in itself, because that crate has no press
+    /// handler to ask. **The property that matters is which *moment* resolves
+    /// the deck**, and that is this file's: the press is over the Library bay,
+    /// where there is no strip at all, and the release is over one. So a
+    /// destination taken at the press names nothing and the drop is cancelled,
+    /// and a destination taken at the release names the strip under the hand.
+    ///
+    /// **Deleting the `Mixer::dropped` ask from the release arm is the
+    /// injection this was watched to fail against**, and moving it into the
+    /// press arm is the second — the first answers `Nowhere` for every drop
+    /// and the second answers it for every drop that began in the library,
+    /// which is all of them.
+    ///
+    /// # What it asserts, in the order a hand does it
+    ///
+    /// 1. A press on the third row is the panel's, and it emits nothing:
+    ///    half a gesture names one operand.
+    /// 2. **The cursor mark follows the hand**, which is the whole of what
+    ///    this console can draw for a carry — the mock draws no ghost and no
+    ///    drop target.
+    /// 3. Every move on the way is `Acted::Nothing`, over two strips that are
+    ///    not the one it lands on.
+    /// 4. The release over strip C asks for `LoadSet` naming **deck C** and
+    ///    the Set from row 2 — not the selection, which is deck A throughout,
+    ///    and not the row the cursor started on.
+    /// 5. **A second carry let go over nothing asks for nothing**, which is
+    ///    the outcome no other drag on this panel has.
+    ///
+    /// A CPU test: a `Readout` takes no device.
+    #[test]
+    fn a_drop_on_a_strip_loads_the_strip_it_was_let_go_over() {
+        let ctx = drawn_once();
+        let mut readout = Readout::new(1440.0, 900.0);
+        readout.panel.solve();
+        readout.view.scopes = Scope::ALL.to_vec();
+        readout.view.library = vec![
+            "drift_night".to_owned(),
+            "lattice_veil".to_owned(),
+            "glass_shell".to_owned(),
+        ];
+        readout.view.mixer = (0..4)
+            .map(|slot| view::Strip {
+                name: format!("slot{slot}"),
+                tally: view::Tally::Live,
+                requested: view::Tally::Live,
+                gain: 0.5,
+                gain_to: None,
+                opacity: 0.5,
+                opacity_to: None,
+                blend: BlendMode::Over,
+                mask: view::Mask::None,
+                mask_angle: 0.0,
+                level: None,
+            })
+            .collect();
+        assert_eq!(
+            readout.view.selection(),
+            0,
+            "the selection is not deck A, so a drop naming deck C could be naming the selection"
+        );
+
+        // The rectangles, off the derivations that draw them — the rule the
+        // whole of `input` is written to, and the reason a test presses where
+        // the paint painted.
+        let row = |readout: &mut Readout, index: usize| {
+            readout.panel.solve();
+            let at = library_bay(
+                readout.panel.layout(),
+                &readout.view.scopes,
+                &readout.view.library,
+                readout.view.opened(),
+            )
+            .expect("the bay lists its rows")
+            .row(index);
+            Point::new(at.center().x, at.center().y)
+        };
+        let strip = |readout: &mut Readout, deck: u8| {
+            readout.panel.solve();
+            let at = mixer_bay(&ctx, readout.panel.layout(), &readout.view.mixer)
+                .expect("the mixer bay draws its strips")
+                .selected(deck)
+                .expect("a strip for the deck");
+            Point::new(at.center().x, at.center().y)
+        };
+
+        // 1 and 2: the press takes row 2 in hand, asks for nothing, and moves
+        // the mark to the row the hand is on.
+        let at = row(&mut readout, 2);
+        assert_eq!(readout.pointer(&ctx, Pointer::Moved(at)).0, Claim::Panel);
+        let (claim, did) = readout.pointer(&ctx, Pointer::Down);
+        assert_eq!(claim, Claim::Panel, "a press on a library row went to egui");
+        assert_eq!(did, Acted::Nothing, "the press asked for something");
+        assert_eq!(
+            readout.view.cursor_row(),
+            2,
+            "the mark did not follow the hand to the row it took"
+        );
+
+        // 3: nothing is emitted on the way, including over two strips it does
+        // not land on.
+        for over in [strip(&mut readout, 0), strip(&mut readout, 1)] {
+            let (claim, did) = readout.pointer(&ctx, Pointer::Moved(over));
+            assert_eq!(claim, Claim::Panel, "the carry lost its claim");
+            assert_eq!(
+                did,
+                Acted::Nothing,
+                "a move with a Set in hand asked for something"
+            );
+        }
+
+        // 4: and the release names the strip it is over.
+        let onto = strip(&mut readout, 2);
+        readout.pointer(&ctx, Pointer::Moved(onto));
+        assert_eq!(
+            readout.pointer(&ctx, Pointer::Up).1,
+            Acted::Emitted(Some(Operation::LoadSet {
+                deck: 2,
+                set: "glass_shell".to_owned(),
+            })),
+            "the drop did not name the strip it was let go over"
+        );
+        assert!(!readout.panel.dragging(), "the carry is still in hand");
+
+        // 5: and one let go over nothing asks for nothing at all.
+        let at = row(&mut readout, 0);
+        readout.pointer(&ctx, Pointer::Moved(at));
+        assert_eq!(readout.pointer(&ctx, Pointer::Down).1, Acted::Nothing);
+        let away = Point::new(-40.0, -40.0);
+        readout.pointer(&ctx, Pointer::Moved(away));
+        assert_eq!(
+            readout.pointer(&ctx, Pointer::Up).1,
+            Acted::Nothing,
+            "a drop over nothing asked for a load"
+        );
+    }
+
     /// **The filter row narrows what the bay lists, through the summary.**
     ///
     /// The other half of the same press: `a_press_on_a_filter_field_…` says the
@@ -16157,7 +16485,7 @@ mod press_handler {
     //! these hit tests **directly**, bypassing the press handler —
     //! `row.go(…)`, `bay.tally(…)`, `bay.mask(…)` and more. Read as though it
     //! were the handler, that region on its own satisfies six of [`TABLE`]'s
-    //! eighteen entries, `TransitionRow::go` among them, which is exactly the
+    //! twenty entries, `TransitionRow::go` among them, which is exactly the
     //! entry that was unwired: the check would have been green on the day the
     //! seam was open. **Two bounds keep it out, and either would do it alone
     //! today** — [`code`] stops at the first `#[cfg(test)]`, and [`body`] then
@@ -16316,6 +16644,13 @@ mod press_handler {
         // rather than emitting one — see there. What this table checks is that
         // the offer is *asked*, which is the seam and not the arm.
         ("LibraryBay", "read", "library_bay", "bay"),
+        // **And the list between the two**, derived from the same call a
+        // fourth time. It is the one offer in this table that answers no
+        // operation on *either* arm: what a press on a row hands back is the
+        // Set it took in hand (`view::Taken`), and the operation is built at
+        // the release, where the deck it names is. `Readout::took` is what
+        // performs the taking; the drop is `Mixer::dropped` below.
+        ("LibraryBay", "take", "library_bay", "bay"),
         // **The transition row's four, and the reason this module exists.**
         // These are the offers that were made, claimed and never asked
         // between `74719c3` and `094804c`. Deleting this row's branch from the
@@ -16326,14 +16661,23 @@ mod press_handler {
         ("TransitionRow", "quantum", "transition_row", "row"),
         ("TransitionRow", "length", "transition_row", "row"),
         ("TransitionRow", "go", "transition_row", "row"),
-        // **The Mixer bay's five**, derived once and asked five times. `select`
-        // is asked last and is the strip itself — what none of the other four
-        // claimed.
+        // **The Mixer bay's six**, and five of them are derived once and asked
+        // five times on a press. `select` is asked last and is the strip
+        // itself — what none of the other four claimed.
         ("Mixer", "grab", "mixer_bay", "bay"),
         ("Mixer", "blend", "mixer_bay", "bay"),
         ("Mixer", "tally", "mixer_bay", "bay"),
         ("Mixer", "mask", "mixer_bay", "bay"),
         ("Mixer", "select", "mixer_bay", "bay"),
+        // **The sixth, and the only entry in this table asked on a button
+        // *up*.** A carry names its deck by where it is let go, so the bay is
+        // laid out at the release and asked which strip the pointer is over.
+        // This module reads text rather than pressing anything, so what it
+        // checks is the same seam it checks for the other five — that the
+        // offer is asked at all — and which arm of the press handler asks it
+        // is not something it can see. `mod gpu`'s press-to-deck tests are
+        // what stand under that, as they do for every entry here.
+        ("Mixer", "dropped", "mixer_bay", "bay"),
         // **The Master bay's one**, and it is `Mixer::grab`'s method name on a
         // different type bound to a different local — which is the whole of
         // why an entry is four columns and not two.
@@ -17946,7 +18290,9 @@ mod gpu {
             x: edge.x,
             y: edge.y + 300.0,
         });
-        panel.released();
+        // A boundary, so there is no destination to hand in — see
+        // `Panel::released`, which takes one for the carry's sake alone.
+        panel.released(None);
         view::rearrange(&mut panel, CANVAS);
         let taller = physical(
             picture_rect(panel.layout(), CANVAS).expect("on screen"),

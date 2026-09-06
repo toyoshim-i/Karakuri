@@ -269,7 +269,7 @@ fn everything_that_changes_the_console_asks_for_a_frame() {
         "the pointer with a boundary in hand"
     );
     panel.moved(away);
-    panel.released();
+    panel.released(None);
     assert_eq!(
         Change::Pointer(Claim::Panel).repaint(),
         Repaint::Now,

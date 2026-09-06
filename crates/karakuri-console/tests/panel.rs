@@ -138,7 +138,7 @@ fn a_drag_out_and_back_leaves_the_arrangement_where_it_was() {
         let _ = p.moved(offset(axis, point, 9000.0));
         let _ = p.moved(offset(axis, point, -9000.0));
         let _ = p.moved(point);
-        p.released();
+        p.released(None);
 
         let after = rects(&mut p);
         assert!(
@@ -178,7 +178,7 @@ fn a_drag_past_the_left_edge_of_the_window() {
             };
             let _ = p.moved(at);
         }
-        p.released();
+        p.released(None);
     }
 }
 
@@ -295,9 +295,13 @@ fn a_sweep_of_hostile_input() {
                 let _ = p.moved(to);
                 p.set_viewport(vw, vh);
             }
-            p.released();
+            p.released(None);
             // A release with nothing in hand, and a press outside.
-            assert_eq!(p.released(), None, "a release let go of something twice");
+            assert_eq!(
+                p.released(None),
+                None,
+                "a release let go of something twice"
+            );
             p.press(Point::new(-10.0, -10.0));
             let _ = p.moved(Point::new(-10.0, -10.0));
             p.op(Op::Reset);
@@ -418,7 +422,7 @@ fn every_operation_leaves_the_layout_readable_and_undoes_exactly() {
     let axis = p.layout().axis(split).expect("a divider is on a split");
     p.press(point);
     let _ = p.moved(offset(axis, point, 60.0));
-    p.released();
+    p.released(None);
     assert_eq!(p.op(Op::Reset), Outcome::Reset);
     assert!(same(&before, &rects(&mut p)), "a reset did not restore");
 }
@@ -556,7 +560,7 @@ fn a_fold_during_a_drag_leaves_the_release_with_no_boundary() {
     );
 
     assert_eq!(
-        p.released(),
+        p.released(None),
         Some(karakuri_console::panel::Released::Gone { split, index }),
         "the boundary is gone and the release rested on something"
     );

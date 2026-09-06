@@ -83,7 +83,7 @@
 //!    describing itself to an operator has to say what a pointer reaches, and
 //!    a sentence saying it is where the count goes stale. What they are is
 //!    still written here, because a name is not a number and there is nowhere
-//!    else the thirty-four sit together: the Outputs row's sink
+//!    else the thirty-five sit together: the Outputs row's sink
 //!    ([`crate::view::outputs`]), a mixer strip's fader knob
 //!    ([`crate::view::Mixer::grab`]), its blend chip
 //!    ([`crate::view::Mixer::blend`]), its tally chip
@@ -101,12 +101,25 @@
 //!    ([`crate::view::program_head`]), the four deck preview cells under it
 //!    ([`crate::view::ProgramBay::preview`]), the Library bay's scope chips
 //!    ([`crate::view::LibraryBay::chip`]), the two filter fields under them
-//!    ([`crate::view::LibraryBay::filter`]) and the `read` chip in that bay's
-//!    foot ([`crate::view::LibraryBay::read`]). The rule did not change to hold
-//!    any of the thirty-three that came after the first, which is what it was
+//!    ([`crate::view::LibraryBay::filter`]), the `read` chip in that bay's
+//!    foot ([`crate::view::LibraryBay::read`]) and the **list** between them
+//!    ([`crate::view::LibraryBay::take`]). The rule did not change to hold
+//!    any of the thirty-four that came after the first, which is what it was
 //!    written for — and each is asked exactly the way the first is: the
 //!    derivation that draws it, asked whether the point is on it, with nothing
 //!    stored.
+//!
+//!    **The list is the first of them a press does not act on**, and rule 4 did
+//!    not change for that either. A press on a row takes a Set in hand and asks
+//!    for nothing; what it asks for is decided at the release, over whatever
+//!    strip the pointer is then on — `console.html`'s *"Dragging a row onto a
+//!    strip … names both operands in the one gesture"*. So the press is claimed
+//!    for the same reason every other one here is: the console painted the row,
+//!    `egui` owns no widget on it, and a press routed to `egui` there reaches
+//!    nothing at all. See [`crate::view::LibraryBay::take`],
+//!    [`crate::panel::Panel::carry`] and
+//!    [`crate::view::Mixer::dropped`], which is the destination and is asked at
+//!    the release rather than here.
 //!
 //!    **The last five are the first two that a boundary's grab reaches**, and
 //!    the rule holds them unchanged for the reason it holds everything else:
@@ -408,6 +421,19 @@
 //! [`crate::view::LibraryBay::filter`] emits none: what leaves is
 //! `Operation::ListSets` naming both filters as they will stand.
 //!
+//! **And so is the list under them, except that what it hands back is not an
+//! answer to *what does a press ask for* at all.**
+//! [`crate::view::LibraryBay::take`] answers *is this a control* here and
+//! *which Set is now in hand* to the caller — a `Taken`, off the same laid-out
+//! bay this rule hit-tests. It is the one offer on this console whose press
+//! names no operation, and that is the gesture rather than a gap: a load names
+//! a Set **and** a deck, the row is the first of the two, and the second is
+//! whatever strip the pointer is over when the button comes up
+//! ([`crate::view::Mixer::dropped`], asked at the release). The two halves are
+//! one derivation each and neither is stored, which is this section's rule
+//! arriving at a gesture that outlives its press — rule 1 is what keeps the
+//! middle of it off `egui`, unchanged, exactly as it did for the fader.
+//!
 //! **They are the one control here a boundary's grab does not reach and the
 //! chips beside them do.** `.lib-filters` is `padding: 6px 9px` inside the bay,
 //! so a field is 9 off each side edge against a [`GRAB`] of 6, where the chip
@@ -457,8 +483,8 @@ use crate::view::{
 /// arrangement pill, the look group's two, a strip's four, the transition
 /// row's four, the Master bay's one, a deck head's four, the Program bay
 /// head's `solo`, the four deck preview cells, the Library bay's scope chips,
-/// its two filter fields and the `read` chip in its foot, and the four class
-/// pills.
+/// its two filter fields, the `read` chip in its foot and the list above it,
+/// and the four class pills.
 ///
 /// **It is a table and not a sentence because [`claim`] asks its probes out of
 /// an array of exactly this length.** A derivation added to rule 4 without an
@@ -490,7 +516,21 @@ use crate::view::{
 /// and a third would be a change to the vocabulary rather than a longer slice
 /// the host handed in. [`Field::ALL`] is the same two, and it is what the probe
 /// walks.
-const CLAIMS: [usize; 14] = [
+///
+/// **The list's entry is one, and it is the one number here that could have
+/// been a count and must not be.** A press lands on one of however many rows
+/// the bay drew, exactly as it lands on one of however many chips it drew — and
+/// the chips are counted while these are not, because the difference is what
+/// each number is *about*. [`Scope::ALL`] is a closed list this crate owns, so
+/// the chip count is a fact about the console; how many rows are drawn is
+/// `LibraryBay::rows`, which is how many fit in a bay an operator can resize
+/// against a listing a store answered — a number that changes while nobody
+/// presses anything. [`CONTROLS`] is printed to an operator as *what the
+/// pointer reaches here*, and a figure that moved when a divider moved would be
+/// answering a different question. So the **list** is the control and which row
+/// is inside [`crate::view::LibraryBay::take`], which is the `read` chip's
+/// entry read the other way round.
+const CLAIMS: [usize; 15] = [
     1,
     1,
     1,
@@ -503,6 +543,7 @@ const CLAIMS: [usize; 14] = [
     4,
     Scope::ALL.len(),
     Field::ALL.len(),
+    1,
     1,
     4,
 ];
@@ -785,6 +826,25 @@ pub fn claim(panel: &mut Panel, ctx: &egui::Context, view: &View, p: Point) -> C
                     },
                 )
             };
+            // **The rows of the Library bay's list**, and they are the first
+            // thing on this console a press *takes hold of* rather than acts
+            // on: a press on a row picks that Set up, and what it asks for is
+            // decided where it is let go — `LibraryBay::take`, and
+            // `crate::panel::Panel::carry`. The bay is derived a fourth time
+            // for the third probe's reason, and this one is asked after the
+            // three above because the head and the foot are drawn over the
+            // ends of the same bay and a row is what is between them.
+            //
+            // **The listing goes in with the point**, exactly as it does for
+            // the `read` chip above and for the same reason: what a row means
+            // is a name this crate reads no store for (ADR-0156), and a row
+            // with no Set behind it is not a target. A press on the list's own
+            // ground below the last row is nobody's, which is rule 4's *a
+            // control claims what it acts on and no more*.
+            let on_row = || {
+                library(panel.layout(), &view.scopes, &view.library, view.opened())
+                    .is_some_and(|bay| bay.take(&view.library, p).is_some())
+            };
             // **The four class pills, one derivation asked four times**, which
             // is a deck head's arrangement rather than a strip's: they are in
             // four different regions and cannot be one laid-out box, but they
@@ -822,6 +882,7 @@ pub fn claim(panel: &mut Panel, ctx: &egui::Context, view: &View, p: Point) -> C
                 &on_scope,
                 &on_filter,
                 &on_read,
+                &on_row,
                 &on_mcp,
             ];
             match probes.iter().any(|probe| probe()) {

@@ -682,7 +682,7 @@ fn reached_by_the_pointer() -> BTreeSet<&'static str> {
             p.moved(dragged_to(axis, at)),
             Some(Dragged::Boundary { .. })
         );
-        p.released();
+        p.released(None);
         p.solve();
         let now = axis.extent(p.layout().rect(beside));
         if dragged && (now - was).abs() >= MOVED {
@@ -704,7 +704,7 @@ fn reached_by_the_pointer() -> BTreeSet<&'static str> {
             // on the press does not say which axis it is watching.
             p.moved(dragged_to(Axis::Row, at));
             p.moved(dragged_to(Axis::Column, at));
-            p.released();
+            p.released(None);
             let now = shape(&mut p);
             assert_eq!(
                 now, before,
