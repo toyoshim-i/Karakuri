@@ -373,6 +373,28 @@ param <name> : <type> [<min>, <max>] = <default>
   normalization basis for signal binding, and the basis for incremental revision: an
   instruction like "a little slower" can only be translated into a value by something that
   knows what the range is. Without one, every revision falls back to regenerating code.
+- **One range, and it applies to every component.** `param glow : vec3 [0.0, 4.0]` puts
+  `glow.x`, `glow.y` and `glow.z` each over `[0.0, 4.0]`. There is nowhere in the grammar to
+  write three ranges and nothing has wanted to; a declaration that needs them is three
+  declarations.
+- **A vector parameter is driven one component at a time.** The uniform is one
+  `vec3<f32>` field — nothing about the lowering changes — and everything that *drives* a
+  parameter addresses one component of it, under the key `<name>.<component>`: `glow.x`,
+  `glow.y`, `glow.z`, in that order. That is what a `param` record writes, what
+  `--param glow.y=0.7` writes, what a `bind` attaches to, and what the published interface
+  lists, one control per component. A bare `glow` addresses none of them and is refused
+  rather than guessed at.
+
+  Every consumer of a parameter value is one number — a binding resolves one `f32` per frame,
+  a fader is one, a published control is one, a MIDI control change is one — so the component
+  is part of the address wherever the value goes. `.` is the language's own spelling for a
+  component (see [Types](#types), *Swizzles allowed*) and no identifier can contain one, so a
+  component key collides with no declaration however it is spelled
+  ([ADR-0268](adr/0268-a-vector-parameter-is-driven-one-component-at-a-time.md)).
+
+  **A `vec3` is therefore three of the 3-to-8 controls recommended below.** That is the price
+  of the spelling and it is paid on purpose: hiding three numbers behind one row would put a
+  position in the published interface on something no control change can set.
 - **Every name the language already gives meaning to is reserved, and how widely depends on
   the name.** Reserved in every layer: `id`, every attribute (`position`, `size`,
   `tint`, …) and every ambient (`seed`, `copy`, `point`, `t`, `beats`, `dt`, `capacity`,
@@ -2205,6 +2227,18 @@ without either appearing in the file.
   both renderers. Setting two of them *apart* is `layer` plus an optional `index`, which
   both records now carry the way `procedure` does — `--param L4:1:exposure=2.0`,
   `--bind index=1`.
+- **A `param` value may be a vector, and it is expanded into components on load.** `{"t":"param",
+  "layer":"L4","key":"glow","value":[0.4,0.7,1.0]}` against a `param glow : vec3` becomes three
+  writes — `glow.x`, `glow.y`, `glow.z` — because a parameter is driven one component at a time
+  (see [param](#param)). The wide value earns its keep on the line: a file, or a model, says the
+  vector once and the reader expands it. What is written back out is components, one `param`
+  record each, which is what lets a Set file record a single component an operator moved.
+
+  Three shapes are reported rather than carried, and each names the component keys that would
+  work: a single number against a vector declaration, which names no component; a `vec2` written
+  against a `vec3`, which is not that parameter; and a `bind` on a bare vector key, since a
+  binding resolves to one number and a `vec3` has three places to put it. Binding one component
+  — `{"t":"bind","key":"glow.y",…}` — is ordinary.
 - Unknown `t` values are ignored, for forward compatibility.
 - **`gain`, `opacity`, `blend`, `mask`, `transition`, `select`, `residency`,
   `look`, `master_out`, `canvas`, `procedure`, `authority` and `transport` are not in this list and must never be.** They are the session's
@@ -2239,15 +2273,18 @@ orbit now, restated on every rebuild the way the salts and the bindings are, and
 worker applies it at the point the loader does. The record means what it has always meant;
 what changed is that the rebuild no longer discards it.
 
-**Two places this format is finer than the engine**, both reported on load rather than
-dropped: a `param` may be a vector while the engine's map holds `f32`, and `camera` carries
-two of the six fields the engine's orbit has. Each is a disagreement between the format and
-the engine rather than a gap in the loader, and settling them is the format's business and
-the engine's, not the reader's.
+**One place this format is still finer than the engine**, reported on load rather than
+dropped: `camera` carries two of the six fields the engine's orbit has. It is a disagreement
+between the format and the engine rather than a gap in the loader, and settling it is the
+format's business and the engine's, not the reader's.
 
-There used to be a third — `seed`, `capacity` and `param` keyed by layer against an engine
-that held one of each per Set. The engine caught up: params are per *node*, the salt is per
-*source*, and each source runs at its own capacity.
+There used to be three more. `seed`, `capacity` and `param` were keyed by layer against an
+engine that held one of each per Set, and **the engine caught up**: params are per *node*, the
+salt is per *source*, and each source runs at its own capacity. A vector `param` was the
+fourth, and it closed the other way round — not by widening the engine's value channel to hold
+three floats, but by **addressing the component**, so the wide value lives on the line and the
+engine holds `glow.x`, `glow.y` and `glow.z`
+([ADR-0268](adr/0268-a-vector-parameter-is-driven-one-component-at-a-time.md)).
 
 The *session* records are further along: `audio` and `tempo` per frame, and `gain`,
 `opacity`, `blend`, `residency`, `look`, `master_out` and `transport` per key press, are each
@@ -3182,7 +3219,11 @@ line, whose address is `--param`'s and whose range is `--bind`'s.
 
 **The address is optional and absent means every declaration**, exactly as it does on a
 `param` record, and that is what the default interface is made of: one control per *key*, not
-one per declaration. Per declaration would put two controls called `exposure` on a console,
+one per declaration. **A vector declaration is that many keys**, so `param glow : vec3` is
+three controls — `glow.x`, `glow.y`, `glow.z`, in that order, adjacent in the list because
+they are adjacent in the declaration. The order is an address: a MIDI control is learned
+against its position in the published interface, so the components have to come back in the
+same order every run. Per declaration would put two controls called `exposure` on a console,
 which is a shape `publish` itself refuses. A wildcard control's range is the **intersection**
 of what its nodes declare — one knob moving both must not offer a position only one of them
 said it still looks like itself at.
@@ -3454,6 +3495,14 @@ which is true. It also has to survive the unknown-key rule above. A decoder that
 it does not recognise cannot tell an absent `default` from one it skipped, and under both
 readings the answer is *"not known"*; under the other choice the two readings differ,
 because a record that is not there cannot be skipped into existence.
+
+**A vector `param` is one such omission today, and it is a gap rather than a rule.** `default`
+is one number and the engine now loads one per component — `glow.x`, `glow.y`, `glow.z`
+([ADR-0268](adr/0268-a-vector-parameter-is-driven-one-component-at-a-time.md)) — so a card for
+a `vec3` states no default while the run has three. The two cannot *disagree*, because both
+folds are in `karakuri-ir` and share one literal reader; the card is silent rather than wrong.
+Closing it is a question about this record's shape — whether `default` grows an array, or a
+`param_decl` becomes one record per component — and nobody has taken it.
 
 **`capacity_decl` and `emit` are absent where nothing was declared**, on the same rule: one
 record per declaration, and a declaration nobody wrote produces none. Only an L1 declares a

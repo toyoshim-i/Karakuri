@@ -42,23 +42,36 @@
 //! lives. One rule, one place, and a Set file and a command line cannot disagree
 //! about what a binding means.
 //!
-//! ## One place the format is still finer than the engine
+//! ## Where the format was finer than the engine, and how each was closed
 //!
-//! A `param` may be a vector, and the engine's map holds `f32`, so a vector
-//! write is reported rather than carried.
+//! A `param` may be a vector where the engine's map holds `f32`, and that used
+//! to be reported and dropped. It is **expanded** now: a parameter is driven
+//! one component at a time
+//! ([ADR-0268](../../../docs/adr/0268-a-vector-parameter-is-driven-one-component-at-a-time.md)),
+//! so a `{"t":"param","key":"glow","value":[0.4,0.7,1.0]}` against a `vec3
+//! glow` becomes three writes — `glow.x`, `glow.y`, `glow.z`. The wide `Value`
+//! earns its keep on the line rather than in the engine: a file, or a model,
+//! says the vector once and this expands it.
 //!
-//! Capacity was a second and `seed` a third, and both are closed the same way:
-//! each is keyed by node, the engine now holds one per geometry, and so each is
-//! carried rather than reported. What a recorded seed buys is more than the
-//! symmetry — a salt derived from a source's position in `--set` moves when the
-//! list is reordered, and one read back from a file does not.
+//! Capacity was a second and `seed` a third, and both were closed the other way
+//! round: each is keyed by node, the engine caught up and now holds one per
+//! geometry, and so each is carried rather than reported. That is the shape of
+//! objection the vector case had to answer — *the engine catches up and the
+//! value channel widens* — and it does not fit, because a capacity and a salt
+//! are one number per node where a vector is three the pipeline touches one at
+//! a time. What a recorded seed buys is more than the symmetry — a salt derived
+//! from a source's position in `--set` moves when the list is reordered, and one
+//! read back from a file does not.
 //!
-//! None of that is resolved here and none of it is silently dropped. Loading
-//! reports what it could not carry — see [`Loaded::notes`] — because a Set file
-//! that half-applies is the failure mode this repository keeps refusing:
-//! checking clean and coming up short later. The gaps themselves are the
-//! format's and the engine's to settle, and `Set::build` refusing a colliding
-//! param name is the same disagreement seen from the other side.
+//! **What is still reported rather than carried is the disagreement, not the
+//! width**: a scalar written against a vector declaration names no component, a
+//! `vec2` written against a `vec3` is not that parameter, and a binding on a
+//! bare vector key resolves to one number with three places to put it. Each is
+//! said with the component keys in the sentence. Loading reports what it could
+//! not carry — see [`Loaded::notes`] — because a Set file that half-applies is
+//! the failure mode this repository keeps refusing: checking clean and coming
+//! up short later. `camera` carrying two of the six fields the engine's orbit
+//! has is the one left that is a gap rather than a mismatch.
 
 use std::collections::BTreeMap;
 use std::path::{Component, Path, PathBuf};
@@ -315,6 +328,14 @@ impl Loaded {
 /// And one more that is the same shape: `noise` on a binding whose signal is
 /// not `noise` is refused, because accepting it leaves an operator re-reading
 /// the noise fields to find out why the parameter does not move.
+///
+/// **A fourth refusal is deliberately not here: a binding on a bare vector
+/// key.** A binding resolves to one number and a `vec3` has three places to
+/// put it, so `bind key=glow` names no component — but whether `glow` is a
+/// `vec3` is a fact about the *procedures*, which this function is not handed
+/// and a `--bind` string does not carry. It is refused in [`from_lines`],
+/// where the checked procedures are, with the component keys in the sentence
+/// (ADR-0268).
 pub fn binding_from_record(record: &Record) -> Result<Binding, String> {
     let Record::Bind {
         layer,
@@ -398,6 +419,14 @@ pub fn binding_from_record(record: &Record) -> Result<Binding, String> {
         stream: noise.stream,
     }))
 }
+
+/// **One `param` record as the file wrote it**: where it lands, the key it
+/// names, and the value.
+///
+/// Held rather than turned into a [`ParamWrite`] on sight, because what a
+/// vector value becomes depends on what the procedures declare and they are not
+/// checked until every `slot` record has been met — see [`from_lines`].
+type ParamRecord = (Option<(Kind, u32)>, String, Value);
 
 /// A written param's fold key: its address, then its name. `None` sorts first,
 /// which puts the Set-wide value above the narrower ones that override it.
@@ -927,6 +956,9 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
     let mut inlined: BTreeMap<Hash, BTreeMap<u32, String>> = BTreeMap::new();
     // What each geometry runs at, by index, growing as the file names them.
     let mut capacities: Vec<Option<u32>> = Vec::new();
+    // **The `param` records as written**, expanded into [`ParamWrite`]s once
+    // the procedures are checked — see the `Record::Param` arm.
+    let mut param_records: Vec<ParamRecord> = Vec::new();
     let mut params = Vec::new();
     let mut bindings = Vec::new();
     let mut camera = None;
@@ -1066,25 +1098,28 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
                     layer_name(other)
                 )),
             },
+            // **Held rather than turned into writes here.** What a `param`
+            // record becomes depends on what the procedures declare — a
+            // `vec3` value against a `vec3` param is three writes, one per
+            // component — and the procedures are not in hand until every
+            // `slot` record has been met and checked. So the records are
+            // collected in file order and expanded below, where the
+            // declarations are.
+            //
+            // The address is `(layer, index)` present or absent as a unit, so
+            // a record with no index is a wildcard whatever its `layer` says —
+            // which is what keeps every file written before the address
+            // existed meaning what it meant.
             Record::Param {
                 layer,
                 index,
                 key,
                 value,
-            } => match value {
-                // The address is `(layer, index)` present or absent as a unit,
-                // so a record with no index is a wildcard whatever its `layer`
-                // says — which is what keeps every file written before the
-                // address existed meaning what it meant.
-                Value::Scalar(v) => params.push(match index {
-                    Some(at) => ParamWrite::at(kind_of(*layer), *at, key.clone(), *v),
-                    None => ParamWrite::everywhere(key.clone(), *v),
-                }),
-                _ => notes.push(format!(
-                    "param `{key}` was skipped: it is a vector and the engine holds \
-                     scalar parameter values only"
-                )),
-            },
+            } => param_records.push((
+                index.map(|at| (kind_of(*layer), at)),
+                key.clone(),
+                *value,
+            )),
             // **Carried as written, both ends.** Whether the nodes it names
             // are in this Set is not a question this decoder can answer — a
             // name nobody wrote is derived where the Set is built — so it is
@@ -1341,6 +1376,144 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
     let l3s = check(&l3_srcs)?;
     let l4s = check(&l4_srcs)?;
     let fields = check(&field_srcs)?;
+
+    // -- What a `param` and a `bind` mean, now that the declarations are in hand -
+    //
+    // **A parameter is driven one component at a time**
+    // ([ADR-0268](../../../docs/adr/0268-a-vector-parameter-is-driven-one-component-at-a-time.md)),
+    // so the engine holds `glow.x`, `glow.y` and `glow.z` where a `.kir`
+    // declares one `vec3 glow`. That is the whole of what this section turns a
+    // record into — and the reason it is here rather than in the loop above is
+    // that the width comes from the *declaration*, which the loop does not have.
+    let layers: [(Kind, &[Checked]); 5] = [
+        (Kind::L1, &l1s),
+        (Kind::L2, &l2s),
+        (Kind::L3, &l3s),
+        (Kind::L4, &l4s),
+        (Kind::Field, &fields),
+    ];
+    // **Every declaration of `key` the address reaches, as its declared type.**
+    // Empty means nothing in this Set declares it — which is not an error here:
+    // a scalar write against a name a regenerated artifact no longer has is
+    // reported by the engine at build time and should not take the load down.
+    let declared_as = |at: Option<(Kind, u32)>, key: &str| -> Vec<karakuri_ir::Ty> {
+        let mut out = Vec::new();
+        for (kind, procs) in layers {
+            for (index, proc) in procs.iter().enumerate() {
+                if at.is_some_and(|(k, i)| k != kind || i as usize != index) {
+                    continue;
+                }
+                if let Some(p) = proc.params.iter().find(|p| p.name == key) {
+                    out.push(p.ty);
+                }
+            }
+        }
+        out
+    };
+    // The keys a declaration of `key` at `width` is addressed by, for a
+    // sentence that has to name them — `` `glow.x`, `glow.y`, `glow.z` ``.
+    let component_list = |key: &str, width: usize| -> String {
+        (0..width)
+            .map(|i| format!("`{}`", karakuri_ir::component_key(key, i)))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    let type_list = |tys: &[karakuri_ir::Ty]| -> String {
+        let mut names: Vec<&str> = tys.iter().map(|t| t.name()).collect();
+        names.sort_unstable();
+        names.dedup();
+        names
+            .iter()
+            .map(|n| format!("`{n}`"))
+            .collect::<Vec<_>>()
+            .join(" and ")
+    };
+    for (at, key, value) in param_records {
+        let tys = declared_as(at, &key);
+        let components: Vec<f32> = match value {
+            Value::Scalar(v) => vec![v],
+            Value::Vec2(v) => v.to_vec(),
+            Value::Vec3(v) => v.to_vec(),
+        };
+        // The first declaration this write reaches that is a vector, if any —
+        // which is only used to name the components in a refusal, so the first
+        // is as good as any. A wildcard reaches every node declaring the name,
+        // and two procedures may declare one name at two widths: a Set the
+        // format can describe and one expansion cannot serve.
+        let vector_width = tys
+            .iter()
+            .filter_map(|t| t.param_components())
+            .find(|w| *w > 1);
+        if let [value] = components[..] {
+            match vector_width {
+                // A single number against a declaration that is three: it
+                // names no component, and picking one would be inventing an
+                // address the file did not write.
+                Some(width) => notes.push(format!(
+                    "param `{key}` was skipped: it is declared {} and a vector parameter is \
+                     driven one component at a time — this Set addresses it as {}, and one \
+                     number names none of them",
+                    type_list(&tys),
+                    component_list(&key, width)
+                )),
+                // A scalar onto a scalar, or onto a name nothing here declares
+                // — which includes a component key a `save` wrote, since what a
+                // procedure declares is `glow` and never `glow.x`.
+                None => params.push(ParamWrite { at, key, value }),
+            }
+            continue;
+        }
+        let width = components.len();
+        // **Every declaration has to be that width**, and there has to be one.
+        // Expanding against nothing would file writes under keys no procedure
+        // has, which is the "checks clean and comes up short later" this reader
+        // exists not to do.
+        if !tys.is_empty() && tys.iter().all(|t| t.param_components() == Some(width)) {
+            for (i, value) in components.into_iter().enumerate() {
+                params.push(ParamWrite {
+                    at,
+                    key: karakuri_ir::component_key(&key, i),
+                    value,
+                });
+            }
+            continue;
+        }
+        notes.push(format!(
+            "param `{key}` was skipped: the file writes a `vec{width}` and {}",
+            match tys.is_empty() {
+                true => format!("no procedure in this Set declares `{key}`"),
+                false => format!("this Set declares it {}", type_list(&tys)),
+            }
+        ));
+    }
+    // **A binding drives one number, so a bare vector key has nothing to
+    // land on.** `Set::bind` refuses it — `declared_names` carries the
+    // components and not the declaration — and a refusal that arrives as
+    // `Bound::NoSuchParam` at build time says the parameter does not exist,
+    // which is not what is wrong. Said here instead, where the declaration is,
+    // and with the keys that would work in the sentence
+    // ([P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md)).
+    bindings.retain(|binding: &Binding| {
+        let at = binding.index.map(|i| (binding.layer, i));
+        let tys = declared_as(at, &binding.key);
+        let Some(width) = tys
+            .iter()
+            .filter_map(|t| t.param_components())
+            .find(|w| *w > 1)
+        else {
+            return true;
+        };
+        notes.push(format!(
+            "bind {}={} — `{}` is declared {} and a binding resolves to one number; this Set \
+             addresses it as {} — skipped",
+            layer_name(layer_of(binding.layer)),
+            binding.key,
+            binding.key,
+            type_list(&tys),
+            component_list(&binding.key, width)
+        ));
+        false
+    });
 
     // Node order, which is what [`Loaded::srcs`] promises: the same order the
     // procedures above are chained in, so the two walk in step.
@@ -2893,6 +3066,245 @@ proc dissolve {
         // The L1 values are still the ones applied: a note is not a refusal.
         assert_eq!(loaded.salts, vec![Some(1)]);
         assert_eq!(loaded.capacities, vec![Some(4096)]);
+    }
+
+    /// A renderer with a vector `param`, which the pair above has none of.
+    /// The declaration is `docs/ir-spec.md`'s own `param` example.
+    const GLOWING: &str = r#"
+proc glowing {
+  kind  L4
+  blend additive
+
+  param glow : vec3 [0.0, 4.0] = vec3(0.4, 0.7, 1.0)
+
+  consumes position
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    point_rate = 0.016;
+  }
+
+  fragment {
+    color = vec4(glow, 1.0);
+  }
+}
+"#;
+
+    /// A store holding the ordinary L1 and [`GLOWING`], and the nodes naming
+    /// them. Every vector-param test below starts here.
+    fn glowing_fixture() -> (tempfile::TempDir, Store, Vec<Node>) {
+        let (dir, store, l1, _l4) = fixture();
+        let glowing = beside(&dir, "glowing.kir", GLOWING);
+        let nodes = ordinary(&store, &l1, std::slice::from_ref(&glowing));
+        (dir, store, nodes)
+    }
+
+    /// The lines a `plain` save writes for [`glowing_fixture`], plus whatever
+    /// the test appends.
+    fn glowing_lines(store: &Store, nodes: &[Node], extra: Vec<Record>) -> Vec<Line> {
+        save(store, Asked::Operator, "g1", plain(nodes, &[])).expect("save");
+        let mut lines = store.read_set("g1").expect("read");
+        lines.extend(extra.into_iter().map(Line::new));
+        lines
+    }
+
+    /// **A vector `param` line becomes one write per component.**
+    ///
+    /// This is where the wide `Value` earns its keep: a file — or a model
+    /// through one MCP call — says the vector once, and the reader expands it
+    /// into the three writes the engine can carry, because a parameter is
+    /// driven one component at a time
+    /// (`docs/adr/0268-a-vector-parameter-is-driven-one-component-at-a-time.md`).
+    /// It used to be reported and dropped, with *"the engine holds scalar
+    /// parameter values only"*.
+    ///
+    /// **The order is the components' own**, not the file's and not a map's:
+    /// `glow.x` then `glow.y` then `glow.z`, carrying `0.4`, `0.7`, `1.0` in
+    /// the order the line wrote them. A reversal here would be a Set that
+    /// loads and is the wrong colour.
+    #[test]
+    fn a_vector_param_record_is_expanded_into_its_components() {
+        let (_dir, store, nodes) = glowing_fixture();
+        let lines = glowing_lines(
+            &store,
+            &nodes,
+            vec![Record::Param {
+                layer: Layer::L4,
+                index: Some(0),
+                key: "glow".to_string(),
+                value: Value::Vec3([0.4, 0.7, 1.0]),
+            }],
+        );
+
+        let loaded = from_lines(&store, "g1", &lines).expect("load");
+        assert_eq!(
+            loaded.params,
+            vec![
+                ParamWrite::at(Kind::L4, 0, "glow.x", 0.4),
+                ParamWrite::at(Kind::L4, 0, "glow.y", 0.7),
+                ParamWrite::at(Kind::L4, 0, "glow.z", 1.0),
+            ]
+        );
+        assert!(
+            !loaded.notes.iter().any(|n| n.contains("glow")),
+            "a vector param is carried now, not reported: {:?}",
+            loaded.notes
+        );
+    }
+
+    /// **One component, written and read back as itself — and the same three
+    /// numbers however the file spells them.**
+    ///
+    /// What a `save` puts on the line is components, one `param` record each,
+    /// which is what lets a Set file record the single component an operator
+    /// moved. What a *person or a model* writes is the vector, once. The last
+    /// assertion is that the two spellings load to the same list: the wide
+    /// value earns its keep on the line and nowhere past it.
+    #[test]
+    fn a_component_write_round_trips_through_the_file() {
+        let (_dir, store, nodes) = glowing_fixture();
+        let moved = [
+            ParamWrite::at(Kind::L4, 0, "glow.y", 0.7),
+            ParamWrite::everywhere("glow.z", 2.0),
+        ];
+        save(
+            &store,
+            Asked::Operator,
+            "g1",
+            Saving {
+                params: &moved,
+                ..plain(&nodes, &[])
+            },
+        )
+        .expect("save");
+        let text = written(&store, "g1");
+        assert!(
+            text.contains(r#""key":"glow.y","value":0.7"#),
+            "a component is written as a scalar under its own key: {text}"
+        );
+
+        let loaded = load(&store, "g1").expect("load");
+        assert_eq!(
+            loaded.params,
+            vec![
+                // `None` sorts first: the Set-wide write above the addressed
+                // one, which is the order `save` puts them in.
+                ParamWrite::everywhere("glow.z", 2.0),
+                ParamWrite::at(Kind::L4, 0, "glow.y", 0.7),
+            ]
+        );
+        assert!(
+            loaded.notes.is_empty(),
+            "a component key is an ordinary scalar write: {:?}",
+            loaded.notes
+        );
+
+        // **The same Set, spelled as one vector line.** Three `param` records
+        // under the component keys and one under the declared name are two
+        // spellings of one thing, and a file that meant different things by
+        // them would be a format with two answers.
+        let spelled_out = Saving {
+            params: &[
+                ParamWrite::at(Kind::L4, 0, "glow.x", 0.4),
+                ParamWrite::at(Kind::L4, 0, "glow.y", 0.7),
+                ParamWrite::at(Kind::L4, 0, "glow.z", 1.0),
+            ],
+            ..plain(&nodes, &[])
+        };
+        save(&store, Asked::Operator, "g2", spelled_out).expect("save");
+        let components = load(&store, "g2").expect("load").params;
+        let mut as_a_vector = store.read_set("g2").expect("read");
+        as_a_vector.retain(|line| !matches!(line.record(), Record::Param { .. }));
+        as_a_vector.push(Line::new(Record::Param {
+            layer: Layer::L4,
+            index: Some(0),
+            key: "glow".to_string(),
+            value: Value::Vec3([0.4, 0.7, 1.0]),
+        }));
+        assert_eq!(
+            from_lines(&store, "g2", &as_a_vector).expect("load").params,
+            components,
+            "one vector line and three component lines are the same Set"
+        );
+    }
+
+    /// **A single number against a `vec3` names no component**, and the note
+    /// says which keys would — the refusal carries what the next attempt needs
+    /// (`docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md`).
+    /// Reported and skipped rather than landed on a component this reader
+    /// picked, which would be inventing an address the file did not write.
+    #[test]
+    fn a_scalar_against_a_vector_declaration_is_reported_with_its_components() {
+        let (_dir, store, nodes) = glowing_fixture();
+        let lines = glowing_lines(
+            &store,
+            &nodes,
+            vec![Record::Param {
+                layer: Layer::L4,
+                index: Some(0),
+                key: "glow".to_string(),
+                value: Value::Scalar(0.5),
+            }],
+        );
+
+        let loaded = from_lines(&store, "g1", &lines).expect("load");
+        assert!(loaded.params.is_empty(), "{:?}", loaded.params);
+        let notes = loaded.notes.join("\n");
+        for want in ["`glow`", "`vec3`", "`glow.x`", "`glow.y`", "`glow.z`"] {
+            assert!(notes.contains(want), "{want} is not in the note: {notes}");
+        }
+    }
+
+    /// **A `bind` on a bare vector key is refused, and the sentence spells the
+    /// components.**
+    ///
+    /// A binding resolves to one number and a `vec3` has three places to put
+    /// it. `Set::bind` would answer `Bound::NoSuchParam`, which says the
+    /// parameter does not exist — not what is wrong, and not what the next
+    /// attempt needs.
+    ///
+    /// **Paired with the binding that must be accepted**, because a reader that
+    /// refused every binding would pass a test made only of refusals: one
+    /// component is an ordinary key and binds like any scalar.
+    #[test]
+    fn a_binding_on_a_bare_vector_key_is_refused_with_the_component_spelling() {
+        let (_dir, store, nodes) = glowing_fixture();
+        let lines = glowing_lines(
+            &store,
+            &nodes,
+            vec![
+                Record::Bind {
+                    layer: Layer::L4,
+                    index: None,
+                    key: "glow".to_string(),
+                    signal: "energy".to_string(),
+                    curve: "lin".to_string(),
+                    range: [0.0, 1.0],
+                    noise: None,
+                },
+                Record::Bind {
+                    layer: Layer::L4,
+                    index: None,
+                    key: "glow.y".to_string(),
+                    signal: "energy".to_string(),
+                    curve: "lin".to_string(),
+                    range: [0.0, 1.0],
+                    noise: None,
+                },
+            ],
+        );
+
+        let loaded = from_lines(&store, "g1", &lines).expect("load");
+        assert_eq!(
+            loaded.bindings.len(),
+            1,
+            "one component binds; the bare name does not"
+        );
+        assert_eq!(loaded.bindings[0].key, "glow.y");
+        let notes = loaded.notes.join("\n");
+        for want in ["`glow.x`", "`glow.y`", "`glow.z`", "skipped"] {
+            assert!(notes.contains(want), "{want} is not in the note: {notes}");
+        }
     }
 
     /// **A binding the engine cannot honour is reported and skipped**, and the

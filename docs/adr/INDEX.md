@@ -295,6 +295,7 @@ number; new records continue from the end.
 | [ADR-0265](0265-a-carried-set-names-its-deck-at-the-release-and-the-panel-refuses-no-drop.md) | A carried Set names its deck at the release, and the panel refuses no drop | 2026-09-06 | accepted |
 | [ADR-0266](0266-two-rungs-and-a-fit-because-a-frame-is-an-invariant-part-plus-a-fragment-part.md) | Two rungs and a fit, because a frame is an invariant part plus a fragment part | 2026-09-06 | accepted |
 | [ADR-0267](0267-the-panel-sends-into-the-folder-the-library-bay-is-pointed-at-and-the-destination-is-drawn-before-the-press.md) | The panel sends into the folder the Library bay is pointed at, and the destination is drawn before the press | 2026-09-06 | accepted |
+| [ADR-0268](0268-a-vector-parameter-is-driven-one-component-at-a-time.md) | A vector parameter is driven one component at a time | 2026-09-06 | accepted |
 
 ## Retired numbers
 

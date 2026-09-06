@@ -923,10 +923,15 @@ pub struct Set {
     /// layout has, which is how one list serves five kinds of uniform struct
     /// without any of them knowing about the others.
     field_params: Vec<String>,
-    /// The same params under the names they were **declared** with, one list
-    /// per field, which is what an address names: `--param Field:1:ball`,
-    /// `--bind layer=Field`, and a published control all use these, and only
-    /// the uniform uses the others.
+    /// The same params under the keys an **address** names, one list per
+    /// field: `--param Field:1:ball`, `--bind layer=Field`, and a published
+    /// control all use these, and only the uniform uses the others.
+    ///
+    /// **Component keys, where the others are declaration names.** A field
+    /// declaring `param glow : vec3` contributes `glow.x`, `glow.y`, `glow.z`
+    /// here and one `field\u{1}<slot>\u{1}glow` to `field_params` above —
+    /// [`declared_keys`] against the uniform's own list, which is the same
+    /// split every node keeps.
     field_declared: Vec<Vec<String>>,
     /// **Which field fills each Field slot, by node.** `(node, slot, field
     /// ordinal)`, where the node and the ordinal are both indices into
@@ -2766,19 +2771,18 @@ impl Set {
             .collect();
         // The same walk, so a node's values and its ranges cannot end up at
         // different indices — the defect this file has already paid for twice.
-        let declared = |node: &Checked| -> HashMap<String, [f32; 2]> {
-            node.params
-                .iter()
-                .map(|p| (p.name.clone(), [p.min, p.max]))
-                .collect()
-        };
+        // Both sides are keyed by component, which is [`declared_ranges`].
         let ranges = l1s
             .iter()
-            .map(|(l1, _)| declared(l1))
-            .chain(l2s.iter().map(|n| declared(n)))
-            .chain(cameras.iter().map(|n| n.map(declared).unwrap_or_default()))
-            .chain(l4s.iter().map(|n| declared(n)))
-            .chain(fields.iter().map(|n| declared(n)))
+            .map(|(l1, _)| declared_ranges(l1))
+            .chain(l2s.iter().map(|n| declared_ranges(n)))
+            .chain(
+                cameras
+                    .iter()
+                    .map(|n| n.map(declared_ranges).unwrap_or_default()),
+            )
+            .chain(l4s.iter().map(|n| declared_ranges(n)))
+            .chain(fields.iter().map(|n| declared_ranges(n)))
             .collect();
         // **Every node the operator's, on a Set nobody has spoken for yet.**
         // Derived from the same `names` walk the params and the ranges are, so
@@ -2835,10 +2839,11 @@ impl Set {
             interface: Vec::new(),
             l1_count: l1s.len(),
             field_count: fields.len(),
-            field_declared: fields
-                .iter()
-                .map(|f| f.params.iter().map(|p| p.name.clone()).collect())
-                .collect(),
+            // **The keys an address names, which for a vector param are its
+            // components.** `--param Field:0:glow.y` and a published control
+            // are both this list; the uniform's own names are `field_params`
+            // below and are the *declaration's*, one per `vec3`.
+            field_declared: fields.iter().map(|f| declared_keys(f)).collect(),
             // **One key per binding**, not per slot spelling: two nodes may
             // each declare a `shape` and have them bound to different fields,
             // so the union is taken over what was *bound* and the value behind
@@ -3074,8 +3079,18 @@ impl Set {
     /// them reports a misspelt *control* as a missing *parameter*, and sends
     /// whoever reads it to look at the wrong half of their command line.
     pub fn bind(&mut self, binding: Binding) -> Bound {
-        // Both checks: a node's map holds only its scalar params — a vector one
-        // is declared but has no value here — and a binding produces one float.
+        // Both checks: a name has to be one this layer declares *and* one the
+        // node holds a value under. The second is not implied by the first — a
+        // param whose default the IR fold cannot state is declared and absent
+        // from the map, and a binding produces one float with nothing to blend
+        // it against.
+        //
+        // **A vector param is not addressable here under its bare name**, and
+        // that falls out rather than being tested for: `declared_names` carries
+        // `glow.x`, `glow.y`, `glow.z` and the map is keyed the same way, so
+        // `bind(L4, "glow")` is `NoSuchParam` and `bind(L4, "glow.y")` lands on
+        // one number — which is all a binding has ever been able to drive
+        // (ADR-0268).
         //
         // **Any node of that layer will do.** A binding names a layer, so it
         // means the same as a bare `--param` does: every node of that layer
@@ -3327,7 +3342,8 @@ impl Set {
     }
 
     /// **What each node of `layer` declares, in node order and in the order
-    /// its procedure declared them.**
+    /// its procedure declared them** — as the keys a param is *addressed* by,
+    /// so a `vec3 glow` is three entries and not one.
     ///
     /// One entry per node of that layer, aligned with [`Set::nodes_of`]: entry
     /// `i` belongs to the slot at `nodes_of(layer).start + i` in
@@ -3343,6 +3359,14 @@ impl Set {
     /// [`Set::bind`] checks a binding's key against. Two readers of one walk,
     /// which is why this is a method rather than the block it used to be
     /// inside `bind`.
+    ///
+    /// **Each node's `param_keys` and never its `param_names`.** The two lists
+    /// differ by exactly a vector declaration: the layout has one `glow` field
+    /// and the interface has `glow.x`, `glow.y`, `glow.z`. `node::write_params`
+    /// walks the first because the packer finds a uniform field by name;
+    /// everything reached from here walks the second, because a fader, a
+    /// binding and a CC each move one number
+    /// ([ADR-0268](../../../docs/adr/0268-a-vector-parameter-is-driven-one-component-at-a-time.md)).
     fn declared_names(&self, layer: Kind) -> Vec<&[String]> {
         match layer {
             // **One entry per L1 *procedure***, which includes a far
@@ -3360,7 +3384,7 @@ impl Set {
                         .chain(source.paired.iter())
                         .enumerate()
                     {
-                        out[source.procedures[k]] = sim.param_names();
+                        out[source.procedures[k]] = sim.param_keys();
                     }
                 }
                 out
@@ -3372,12 +3396,12 @@ impl Set {
             Kind::L2 => self.sources[0]
                 .deforms
                 .iter()
-                .map(|d| d.param_names())
+                .map(|d| d.param_keys())
                 .collect(),
             // **One entry per camera node**, so that `L3:1:dist` is checked
             // against the second camera's declarations. The built-in's is
             // empty — it is a node and not a procedure.
-            Kind::L3 => self.cameras.iter().map(|c| c.param_names()).collect(),
+            Kind::L3 => self.cameras.iter().map(|c| c.param_keys()).collect(),
             // **One "node" that is no node at all.** A field has no pass and no
             // buffers, and its params are still declared, addressable, and an
             // operator's to ride — so what is returned here is the list the
@@ -3389,7 +3413,7 @@ impl Set {
             Kind::L4 => self.sources[0]
                 .renderers
                 .iter()
-                .map(|r| r.param_names())
+                .map(|r| r.param_keys())
                 .collect(),
         }
     }
@@ -3622,7 +3646,20 @@ impl Set {
     /// address.** A MIDI control is learned against *the deck and the position
     /// in its published interface* — `docs/manual/console.html`, "A knob is
     /// bound to a deck, not to a Set" — so this order is what the Inspector
-    /// numbers its rows with. An authored interface is the author's own, in the
+    /// numbers its rows with. `crates/karakuri/src/main.rs` is where that
+    /// becomes a number: `for (at, control) in published.iter().enumerate()`,
+    /// `ord: at + 1`.
+    ///
+    /// **A vector declaration is that many controls, in `x`, `y`, `z`
+    /// order**, and the order is load-bearing for the same reason the rest of
+    /// this walk is: `glow.x`, `glow.y` and `glow.z` are three positions, and
+    /// three knobs learned against them stop meaning what they meant if the
+    /// components come back in another order. The expansion is
+    /// `karakuri_ir::Param::keys`, carried here by each node's `param_keys`
+    /// through [`Set::declared_names`], so nothing in this function chooses it
+    /// ([ADR-0268](../../../docs/adr/0268-a-vector-parameter-is-driven-one-component-at-a-time.md)).
+    ///
+    /// An authored interface is the author's own, in the
     /// order they published it: [`Set::publish`] appends and this hands the list
     /// back as it stands. The default interface is the Set's own: node by node
     /// in the order the nodes run, and inside a node the order its procedure
@@ -4438,7 +4475,12 @@ impl Set {
 }
 
 /// What a param is actually written with: its binding's value if it has one,
-/// its manual value otherwise, or `None` for a name with no scalar value at all.
+/// its manual value otherwise, or `None` for a key the node holds no value
+/// under.
+///
+/// **`name` is an addressable key**, so for a vector param it is a component —
+/// `glow.y` — and this is asked once per component. That is why the answer can
+/// stay one `f32`: every consumer of one is (ADR-0268).
 ///
 /// A linear scan, deliberately. This is the render thread: a `HashMap` keyed
 /// by `String` would hash a name per param per frame to search a list that is
@@ -4456,10 +4498,11 @@ fn effective(
         .find(|b| b.layer == layer && b.key == name && b.covers(index))
     {
         Some(binding) => Some(binding.value()),
-        // `params` holds only the scalar params, so a declared vector one
-        // misses. `None` rather than an index: a node writing 0.0 into a
-        // uniform field beats a panic on the render thread — the same
-        // reasoning `resolve_bindings` gives about the same map.
+        // A miss is a param whose default the IR fold cannot state — at any
+        // width, since a vector is in here one component at a time. `None`
+        // rather than an index: a node writing 0.0 into a uniform field beats a
+        // panic on the render thread — the same reasoning `resolve_bindings`
+        // gives about the same map.
         None => params.get(name).copied(),
     }
 }
@@ -4772,14 +4815,74 @@ fn field_value(
 /// `tests::the_engines_param_map_reads_a_negative_default_through_the_ir_fold`
 /// can ask this function the same question
 /// `a_negative_param_default_is_read_as_its_declared_value` asks
-/// `Param::default_scalar`, on a machine with no adapter. A param this cannot state a number for is left out of the
-/// map entirely — the node then has no value for it and its uniform never packs
-/// one, which is how a `vec3` param stays undriven rather than being packed as
-/// a scalar.
+/// `Param::default_scalar`, on a machine with no adapter.
+///
+/// **One entry per component, which is what makes a vector param reach a
+/// shader at all.** A `param glow : vec3 [0.0, 4.0] = vec3(0.4, 0.7, 1.0)`
+/// enters as `glow.x`, `glow.y` and `glow.z`, each an `f32` — the keys
+/// `karakuri_ir::Param::keys` spells — because every consumer of a parameter
+/// value is one number: a binding resolves one `f32` per frame, a fader is
+/// one, a published control is one, a MIDI CC is one
+/// ([ADR-0268](../../../docs/adr/0268-a-vector-parameter-is-driven-one-component-at-a-time.md)).
+/// This used to call `Param::default_scalar`, which folds only a scalar, so a
+/// vector never entered the map and `node::write_params` packed zeroes.
+///
+/// A param this cannot state a number for is left out of the map entirely —
+/// **every one of its keys, together**, since the fold answers for the whole
+/// declaration. The node then has no value under those keys and
+/// `node::write_params` writes what a miss writes, which is `0.0` per
+/// component.
 fn declared_defaults(node: &Checked) -> HashMap<String, f32> {
     node.params
         .iter()
-        .filter_map(|p| p.default_scalar().map(|v| (p.name.clone(), v)))
+        .filter_map(|p| Some((p.keys(), p.default_components()?)))
+        .flat_map(|(keys, values)| keys.into_iter().zip(values))
+        .collect()
+}
+
+/// **Every key a node's params are addressed by**, in declaration order and in
+/// `x`, `y`, `z` order within a declaration.
+///
+/// **Not the same list as the node's uniform field names**, and telling the two
+/// apart is the whole of what a component key costs. A `vec3 glow` is *one*
+/// uniform field called `glow`, which is what `node::write_params` walks and
+/// what the packer finds by name; it is *three* addressable keys — `glow.x`,
+/// `glow.y`, `glow.z` — which is what a `--param`, a `bind`, a published
+/// control and this list mean. Each node keeps both: `param_names` is the
+/// layout's and `param_keys` is this one.
+///
+/// The order is load-bearing: [`Set::published`] walks it through
+/// [`Set::declared_names`], and a control's position in the published interface
+/// is what a MIDI control is learned against
+/// ([ADR-0268](../../../docs/adr/0268-a-vector-parameter-is-driven-one-component-at-a-time.md)).
+pub(crate) fn declared_keys(node: &Checked) -> Vec<String> {
+    node.params.iter().flat_map(|p| p.keys()).collect()
+}
+
+/// **The declared range one node enters a Set with**, under the same keys
+/// [`declared_defaults`] uses.
+///
+/// **The same pair under each component key**, which is the language's own
+/// rule and not a simplification here: `docs/ir-spec.md`'s *param* section says
+/// the range applies per component, so `glow.x`, `glow.y` and `glow.z` are each
+/// over `[0.0, 4.0]`. A per-component range would be a second thing for a
+/// declaration to say and the grammar has nowhere to say it.
+///
+/// **A function beside [`declared_defaults`] rather than the closure inside
+/// [`Set::build`] it used to be**, and for that function's reason exactly:
+/// `Set::build` needs a device, so the engine's use of the one expansion could
+/// only be reached through a GPU. The two are walked together so a node's
+/// values and its ranges cannot end up at different indices — the defect this
+/// file has already paid for twice.
+fn declared_ranges(node: &Checked) -> HashMap<String, [f32; 2]> {
+    node.params
+        .iter()
+        .flat_map(|p| {
+            p.keys()
+                .into_iter()
+                .map(move |key| (key, [p.min, p.max]))
+                .collect::<Vec<_>>()
+        })
         .collect()
 }
 
@@ -4945,6 +5048,128 @@ proc signed_defaults {
             Some(0.25),
             "the map a uniform is packed from has stopped agreeing with \
              `karakuri_ir::Param::default_scalar` about an ordinary positive default"
+        );
+    }
+
+    /// **A vector param enters the value map as one entry per component**,
+    /// which is the whole of what made a `vec3` reach a shader as zeroes.
+    ///
+    /// The map is what a node's uniform is packed from, and it was built from
+    /// `Param::default_scalar` — a fold that answers `None` for every vector —
+    /// so a `.kir` declaring `param glow : vec3 [0.0, 4.0] = vec3(0.4, 0.7,
+    /// 1.0)` put nothing in it and `node::write_params` wrote `[0.0; 3]`. The
+    /// three numbers were in the file the whole time.
+    ///
+    /// **And the range map is keyed the same way**, which is the pairing this
+    /// file has been wrong about twice: a value at one key and its range at
+    /// another is a control that cannot be published, bound or clamped. One
+    /// declared range per component, because `docs/ir-spec.md` says the range
+    /// applies per component.
+    ///
+    /// No GPU: [`declared_defaults`] and [`declared_ranges`] are functions for
+    /// exactly this reason — `Set::build` needs a device, so the engine's use
+    /// of the expansion could otherwise only be reached through one.
+    #[test]
+    fn a_vector_param_enters_the_value_map_one_component_at_a_time() {
+        let src = r#"
+proc glowing {
+  kind  L4
+  blend additive
+
+  param glow   : vec3  [0.0, 4.0] = vec3(0.4, 0.7, 1.0)
+  param plain  : float [ 0.0, 1.0] =  0.25
+
+  consumes position
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    point_rate = 0.004;
+  }
+
+  fragment {
+    color = vec4(glow * plain, 1.0);
+  }
+}
+"#;
+        let proc = karakuri_ir::parse(src).unwrap_or_else(|e| panic!("parse: {e:?}"));
+        let checked = karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("check: {e:?}"));
+
+        let values = declared_defaults(&checked);
+        assert_eq!(
+            values.get("glow.x").copied(),
+            Some(0.4),
+            "a `vec3` param is still not entering the map the uniform is packed from, so it \
+             reaches the shader as zeroes"
+        );
+        assert_eq!(values.get("glow.y").copied(), Some(0.7));
+        assert_eq!(values.get("glow.z").copied(), Some(1.0));
+        assert_eq!(
+            values.get("glow"),
+            None,
+            "the bare name addresses no number and must hold none"
+        );
+        assert_eq!(
+            values.get("plain").copied(),
+            Some(0.25),
+            "a scalar param keeps its own name"
+        );
+
+        let ranges = declared_ranges(&checked);
+        for key in ["glow.x", "glow.y", "glow.z"] {
+            assert_eq!(
+                ranges.get(key).copied(),
+                Some([0.0, 4.0]),
+                "{key} has no declared range, so nothing can publish, bind or clamp it"
+            );
+        }
+        assert_eq!(ranges.get("glow"), None);
+        assert_eq!(ranges.get("plain").copied(), Some([0.0, 1.0]));
+        assert_eq!(
+            values.keys().collect::<std::collections::BTreeSet<_>>(),
+            ranges.keys().collect::<std::collections::BTreeSet<_>>(),
+            "the value map and the range map are keyed by one walk and have stopped agreeing"
+        );
+    }
+
+    /// **A default this cannot state leaves every one of its keys out**, and
+    /// not some of them. The fold answers for the whole declaration, so a
+    /// half-entered vector — two components present and one missing — is a
+    /// state the map must not be able to reach: `write_params` would pack two
+    /// numbers and a zero, which looks like a value somebody chose.
+    ///
+    /// The range is still declared, because a range is two numbers in the
+    /// header and never an expression.
+    #[test]
+    fn a_vector_default_that_cannot_be_stated_leaves_no_component_behind() {
+        let src = r#"
+proc partial {
+  kind  L4
+  blend additive
+
+  param glow : vec3 [0.0, 4.0] = vec3(0.4, 0.7, 0.5 + 0.5)
+
+  consumes position
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    point_rate = 0.004;
+  }
+
+  fragment {
+    color = vec4(glow, 1.0);
+  }
+}
+"#;
+        let proc = karakuri_ir::parse(src).unwrap_or_else(|e| panic!("parse: {e:?}"));
+        let checked = karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("check: {e:?}"));
+        assert!(
+            declared_defaults(&checked).is_empty(),
+            "a default the fold cannot state must leave the whole declaration out"
+        );
+        assert_eq!(
+            declared_ranges(&checked).len(),
+            3,
+            "the range is declared whatever the default says"
         );
     }
 

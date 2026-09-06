@@ -110,20 +110,26 @@ pub(crate) struct View<'a> {
     pub beats: f32,
     pub seed_salt: u32,
     pub viewport: [f32; 2],
-    /// One value per declared param, by name. The Set resolves bindings against
-    /// its own state and hands the answer down; a node does not know what a
-    /// binding is.
+    /// One value per **addressable key**, which is the declared name for a
+    /// `float` and one component key per component for a `vec2` or a `vec3` —
+    /// `glow.x`, `glow.y`, `glow.z`. The Set resolves bindings against its own
+    /// state and hands the answer down; a node does not know what a binding is.
     ///
-    /// **`None` rather than a panic** for a declared name the Set has no scalar
-    /// value under. This is called on the render thread, and a panic there is
-    /// not the way to find out that a `.kir` declared something the uniform path
-    /// cannot write; see `Set::resolve_bindings`, which already says so about the
-    /// same map.
+    /// **One `f32`, and no wider**, which is
+    /// [ADR-0268](../../../../docs/adr/0268-a-vector-parameter-is-driven-one-component-at-a-time.md):
+    /// everything downstream of this — a binding, a fader, a published control,
+    /// a control change — is one number, so the component is part of the key
+    /// rather than the value being three floats wide.
     ///
-    /// It is not only vector params that land here. `Param::default_scalar`
-    /// reads a *literal* float out of the declaration, so any `float` param
-    /// whose default is an expression it does not fold misses too. That is a
-    /// defect of the fold rather than of this signature, and `0.0` is the wrong
+    /// **`None` rather than a panic** for a key the Set has no value under.
+    /// This is called on the render thread, and a panic there is not the way to
+    /// find out that a `.kir` declared something the fold cannot state; see
+    /// `Set::resolve_bindings`, which already says so about the same map.
+    ///
+    /// What lands there is a **default the fold cannot state**, at any width: a
+    /// literal with an optional sign is what `Param::default_components` reads,
+    /// so a `float` whose default is an expression misses, and so does every
+    /// component of a `vec3` whose constructor holds one. `0.0` is the wrong
     /// answer for it either way; it is merely a quieter wrong answer than the
     /// panic it replaced.
     pub param: &'a dyn Fn(&str) -> Option<f32>,
@@ -241,20 +247,33 @@ pub(crate) fn write_source_slots(
 ///
 /// A `float` gets the value the Set resolved for it — a binding's, an override's
 /// or the declaration's default — and `0.0` when it has none, on the terms
-/// [`View::param`] states. **A vector param gets zeroes**, because nothing in
-/// this engine drives one: `Param::default_scalar` reads a scalar out of a
-/// declaration and skips anything else, so a `vec3` param never enters a node's
-/// value map at all.
+/// [`View::param`] states.
 ///
-/// The zeroes are not a choice so much as the honest form of what was already
-/// true, and writing them is the part that was missing. Every node used to pack
-/// *every* declared name as an `f32`, and the packer panics on a field its
-/// layout says is a `vec3<f32>` — so a `.kir` declaring one parsed, checked,
-/// costed, and then took the render thread down on the first `prepare`. That is
-/// not the swap worker, so it was not caught as a `SetError::Panicked` either.
-/// Skipping the field instead trips the packer's other assertion, which is the
-/// one that keeps a half-written uniform from reaching a shader: the layout
-/// declares the field, so something has to fill it.
+/// **A vector param is asked for one component at a time**, under the keys
+/// `karakuri_ir::Param::keys` spells: a `vec3 glow` is packed from `glow.x`,
+/// `glow.y` and `glow.z`. That is the whole of
+/// [ADR-0268](../../../../docs/adr/0268-a-vector-parameter-is-driven-one-component-at-a-time.md)
+/// arriving here — the value channel is still an `Option<f32>` and it does not
+/// have to carry three floats, because the address does the carrying. It used
+/// to write zeroes, because `Param::default_scalar` folded only a scalar so a
+/// vector never entered a node's value map at all.
+///
+/// **`names` is the *layout's* list and not the interface's**, and the two are
+/// different lists on purpose. This walks one `glow`, because the packer finds a
+/// uniform field by name and no layout has a field called `glow.x`; the
+/// interface walks `Set::declared_names`, which is each node's `param_keys`. A
+/// component key reaching this loop would miss every field and be packed as an
+/// `f32`, which trips the packer's type assertion on the render thread.
+///
+/// **A component with nothing driving it is `0.0`, on the same terms as a
+/// scalar with nothing driving it.** Every node used to pack *every* declared
+/// name as an `f32`, and the packer panics on a field its layout says is a
+/// `vec3<f32>` — so a `.kir` declaring one parsed, checked, costed, and then
+/// took the render thread down on the first `prepare`. That is not the swap
+/// worker, so it was not caught as a `SetError::Panicked` either. Skipping the
+/// field instead trips the packer's other assertion, which is the one that
+/// keeps a half-written uniform from reaching a shader: the layout declares the
+/// field, so something has to fill it.
 ///
 /// One copy, called by all four nodes, so that a layer added later cannot
 /// reintroduce the panic by writing its own loop.
@@ -264,6 +283,24 @@ pub(crate) fn write_params(
     names: &[String],
     value: &dyn Fn(&str) -> Option<f32>,
 ) {
+    // The component of `name` the Set holds a value under, or `0.0`.
+    //
+    // **One buffer, reused, because this is the frame path.** A `String::new`
+    // allocates nothing until it is written to, so a node with no vector param
+    // — which is every node in `examples/` — pays exactly what it paid before;
+    // one with a vector param allocates once on the first component and reuses
+    // the capacity for the rest of the call. `format!` here would be an
+    // allocation per component per node per frame.
+    //
+    // The key is composed by `karakuri_ir::push_component_key` and is not
+    // spelled a second time here: a separator agreed by two crates is a
+    // separator two crates can stop agreeing about.
+    let mut key = String::new();
+    let mut component = |name: &str, i: usize| {
+        key.clear();
+        karakuri_ir::push_component_key(&mut key, name, i);
+        value(&key).unwrap_or(0.0)
+    };
     for name in names {
         let ty = layout
             .fields
@@ -273,10 +310,13 @@ pub(crate) fn write_params(
             .unwrap_or("f32");
         match ty {
             "vec2<f32>" => {
-                p.vec2(name, [0.0; 2]);
+                p.vec2(name, [component(name, 0), component(name, 1)]);
             }
             "vec3<f32>" => {
-                p.vec3(name, [0.0; 3]);
+                p.vec3(
+                    name,
+                    [component(name, 0), component(name, 1), component(name, 2)],
+                );
             }
             _ => {
                 p.f32(name, value(name).unwrap_or(0.0));
