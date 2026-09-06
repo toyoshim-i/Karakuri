@@ -393,7 +393,11 @@
      but material, because the material is what it is for: a letter laid over
      a live deck is unreadable against whatever the deck happens to be making
      that second, and it is unreadable in the one direction that matters, on
-     the deck that is on air. */
+     the deck that is on air.
+
+     It is a drop target as well as a monitor, and it names the deck its
+     letter names. That mark is with the mixer's, under `.strip.drop`, because
+     it is one mark in two places. */
   .cell { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
   .preview {
     aspect-ratio: 16/9; border-radius: 7px; background: var(--c-well);
@@ -505,6 +509,55 @@
      wherever tab has landed. */
   .strip.focus { box-shadow: inset 0 0 0 2px var(--c-lav); }
   .wfocus { outline: 2px dashed var(--c-sun); outline-offset: 2px; border-radius: 4px; }
+
+  /* ── The drop mark: where a carried Set lands if it is let go here ────────
+     A Set taken out of the Library bay is in hand until it is released, and
+     the release names a deck by the rectangle it was let go over — a mixer
+     strip, or one of the four deck preview cells, which name the decks their
+     letters name and sit in the centre column beside the list the Set came
+     out of. The pointer is in one place, so at most one rectangle carries
+     this mark, and over anything that is not one of them — the alleys between
+     the strips, a bay head, the transition row, another bay — nothing is
+     marked at all. A ring that snapped to the nearest strip would name a deck
+     nobody pointed at, and `.mixer-strips`'s `gap: 4px` and `padding: 6px`
+     are real places to let go.
+
+     `--c-text`, and none of the four inks. Every state on this panel is
+     spelled in one of them — lavender is the deck the keys are addressed to,
+     pink is live, sun is priming and the star and keyboard focus, mint is
+     armed, on, or held by a signal — and the text ink is what a word is drawn
+     in when nothing is being said about it. That is exactly what this mark
+     has to say: every strip drawn is a valid target and nothing about the
+     deck under the pointer is read, so the ring says *where* the release
+     lands and never *whether* it is allowed (ADR-0265). Where the text ink
+     appears beside a state — `.fx.sel`, `.sink.on` — it is the label coming
+     out of its dim and the mint beside it is carrying the state, so no
+     reading of this panel has it meaning anything on its own. Lavender is
+     ruled out twice over: `.strip.focus` above is already a lavender ring
+     meaning *this is the deck the keys are addressed to*, and the deck being
+     carried to is usually the deck already selected, so the two would be one
+     mark.
+
+     Round the outside rather than inside, which is how a strip wears this and
+     the selection at once: the selection is inset and this sits on the
+     target's own edge. An `outline` rather than a `box-shadow` for the same
+     reason — a second property, so a marked strip keeps whichever ring it
+     already had. `outline-offset: 0` because the ring belongs to the target
+     and not to the alley beside it.
+
+     The image inside a cell is left alone: it carries nothing but material,
+     for the reason `.cell` above gives, so the cell is ringed round the
+     outside and the letter that names the deck comes up out of the caption's
+     dim with it.
+
+     The pointer is a grab for as long as the Set is in hand, wherever it is
+     over. A static page can only hold that where it holds the state, so it is
+     set on the mark — `.divider-v`'s `cursor: col-resize` is the same trick
+     one control along. */
+  .strip.drop, .cell.drop { outline: 2px solid var(--c-text); outline-offset: 0; }
+  .cell.drop { border-radius: 8px; }
+  .cell.drop .caption b { color: var(--c-text); }
+  .strip.drop, .strip.drop [data-tip], .cell.drop, .cell.drop [data-tip] { cursor: grabbing; }
   .strip-name { font-size: 10px; color: var(--c-dim); width: 100%; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .tally { font-family: var(--f-round); font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; padding: 0 7px; border-radius: 999px; }
   .tally.live { background: color-mix(in srgb, var(--c-pink) 18%, transparent); color: var(--c-pink); box-shadow: 0 0 10px var(--c-glowp); }
