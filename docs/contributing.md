@@ -422,6 +422,13 @@ answered. The rule in §2 does not change, but who applies it does.
   valid procedure rejected by a rule the brief itself got wrong, a seam that made two unaddable
   costs addable, and a requirement that had to be walked back, each reported by the agent that was
   told to do it.
+- **A worker's finding is not a decision input until you can say what happens, when, and why.**
+  Relaying a summary costs whoever is deciding a round trip and usually hides the mechanism, which
+  is where the answer is: *a vector param reaches the shader as zero* was true and useless, and half
+  an hour of reading turned it into *the packer refuses to emit an unwritten field, the value
+  channel is an `Option<f32>` that cannot carry three floats, and the assertion built to stop a
+  silently-zero parameter is satisfied by writing one*. Ask the obvious next question yourself
+  before passing the answer on.
 - **Divide the work by file, not by phase.** Three commits that all touch one crate can only be
   done in order; the same work split by file runs in parallel and lands as it finishes. Decided in
   [ADR-0115](adr/0115-split-work-by-file-not-by-phase.md).
