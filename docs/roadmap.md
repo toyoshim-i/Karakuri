@@ -407,12 +407,41 @@ designed page and this bay's rather than a tidy-up; `.tally.off` went with it, t
 
 #### M5.3 — Library
 
-**Rows.** Three carry a `plan` panel badge: *Read what one Set holds and declares*, *Load material
-into a deck*, *Send a Set to somebody, and take one in*.
+**Rows.** *Load material into a deck* and *Send a Set to somebody, and take one in* carry a `plan`
+panel badge. **The count is gone rather than corrected.** It read four while it was three, was
+corrected to three on 2026-09-05, and read three while it was two by the next commit. Both times it
+went stale in silence, inside the paragraph that explained the previous change. *The
+instrumentation* below reached that answer for the meter and the vocabulary count; this is the same
+shape one sub-milestone down, so it gets the same answer — the rows are named, and the number is
+counted in the panel column of [every operation](manual/operations.html), where the badges are.
 
-***List what the store holds* was the fourth and is `has` now**, dropped from the count on
-2026-09-05. The two fields the mock has always drawn under the scope row are controls: they emit
-`Operation::ListSets` and the row reads `panel has library filters`. The badge had been honest
+***Read what one Set holds and declares* is `has`**, on 2026-09-06. The bay opens a reading under
+the cursor's row and it follows the cursor: every published key with its range and default, the
+capacity and what the geometry emits, read off the metadata cards the store keeps beside the
+artifacts rather than off a built Set — so the row's own promise, *"without fetching a source or
+compiling it"*, holds. **A reading is one question and only the opening asks it**: closing emits
+nothing and a cursor move re-reads without emitting, which would otherwise reach from the keyboard
+a row whose key column is a `gap`
+([ADR-0264](adr/0264-a-reading-is-one-question-and-only-the-opening-asks-it.md)).
+
+**What that row still owes is a home and a sentence, and neither is a decision.** The merge of
+several nodes' declarations into one row per key — the range intersected, the default the first
+declarer's, the emitted attributes unioned in file order — is done in
+`crates/karakuri/src/main.rs`'s `declared`, which is a second copy of what
+`karakuri_engine::set::Set::published` and `Set::declared_range` already decide, and it is a second
+copy of what `karakuri_environment::mcp::read_set` walks. **The right home is a structured reading
+in `karakuri-environment`** that both the tool and the panel render; it is in the host because that
+crate was not writable in the pass that drew the panel. `declared()`'s own head says so, and it is
+said here as well because nothing under `karakuri-environment` says it is owed anything. The
+sentence is the other half: the row's tip promises a reading that fetches and compiles nothing while
+`read_set` offers an element-storage figure that costs both, and the same clause sits on
+`Operation::ReadSet` — *"the row's tip tells the truth about the element-storage figure, or
+`read_set` stops offering it"* (`docs/manual/console.html`), and which of them gives way is
+undecided.
+
+***List what the store holds* is `has` too**, from 2026-09-05. The two fields the mock has always
+drawn under the scope row are controls: they emit `Operation::ListSets` and the row reads
+`panel has library filters`. The badge had been honest
 rather than stale — the drawing existed and the route did not, because the bay took its listing as
 names off a directory read and constructed the operation nowhere. Why the fields **step** rather
 than take letters, and what that costs, is

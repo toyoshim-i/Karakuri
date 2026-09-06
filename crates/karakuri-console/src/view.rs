@@ -8442,7 +8442,18 @@ const LOAD_ARROW: f32 = size::BASE * 0.5;
 /// **The note says nine lines and the mock draws ten**, and neither number is
 /// transcribed here for that reason: how many rows a reading is, is
 /// [`Reading::rows`]'s answer over the Set it is of — a head, one per key, the
-/// capacity and the emitted attributes where there are any, and a foot.
+/// capacity and the emitted attributes where there are any, and a foot. Over
+/// the mock's own Set that answer is ten, so the derivation agrees with the
+/// markup rather than with the note.
+///
+/// **Both numbers are in `docs/manual/console.html` and the disagreement is
+/// only here.** The page says nine twice — this chip's tip, *"nine lines that
+/// were not there a moment ago"*, and the comment over the block, *"one box
+/// rather than nine loose rows"* — and draws ten `.lib-row`s between them,
+/// without anywhere saying the two are different numbers. So somebody editing
+/// the mock meets one of them and not the pair, and the page is where that
+/// would be repaired; it is written down here because this is the file that
+/// had to choose.
 const READ_PILL: &str = "read";
 
 /// **The two words at the head of a reading**: what the row under the cursor

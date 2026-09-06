@@ -291,6 +291,7 @@ number; new records continue from the end.
 | [ADR-0261](0261-a-model-asked-save-lands-in-a-sandbox-because-the-operators-library-is-the-operators-own-act.md) | A model-asked save lands in a sandbox, because the operator's library is the operator's own act | 2026-09-05 | accepted |
 | [ADR-0262](0262-a-library-filter-field-steps-through-what-the-store-already-holds-rather-than-taking-letters.md) | A library filter field steps through what the store already holds, rather than taking letters | 2026-09-05 | accepted |
 | [ADR-0263](0263-the-library-bay-lists-most-recent-first-because-the-listing-is-the-operations-and-not-the-surfaces.md) | The library bay lists most recent first, because the listing is the operation's and not the surface's | 2026-09-05 | accepted |
+| [ADR-0264](0264-a-reading-is-one-question-and-only-the-opening-asks-it.md) | A reading is one question, and only the opening asks it | 2026-09-06 | accepted |
 
 ## Retired numbers
 
