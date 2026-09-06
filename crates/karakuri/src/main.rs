@@ -5716,7 +5716,7 @@ fn narrowing(holds: Option<&str>, layer: Option<&str>) -> Option<String> {
 struct Preset {
     /// What the row reads, which is the file's own name without its
     /// extension. **Not read out of the file**: a listing that opened
-    /// twenty-one files to draw twenty-one rows would be a directory read
+    /// twenty-two files to draw twenty-two rows would be a directory read
     /// doing a file read's work, and the id a take-in files the Set under is
     /// the one *inside* the file anyway — read there, on the press, by
     /// [`taking_in`].
@@ -12140,9 +12140,9 @@ mod tests {
     /// directory of parts, and a library lists what you can put on a deck"*.
     ///
     /// It is asserted against `examples/`, which is the directory this program
-    /// actually opens on: thirty-one parts and twenty-one Set files in one
+    /// actually opens on: thirty-three parts and twenty-two Set files in one
     /// place is exactly the mixture the rule is about, and a listing that took
-    /// the parts would draw fifty-two rows of which thirty-one name nothing
+    /// the parts would draw fifty-five rows of which thirty-three name nothing
     /// this vocabulary can load.
     ///
     /// A CPU test: a preset library is a directory.
@@ -12152,7 +12152,7 @@ mod tests {
         let listed = presets_listing(Some(&presets));
         assert!(
             listed.len() >= 20,
-            "`examples/` holds twenty-one `.kset` files and the listing found {}",
+            "`examples/` holds twenty-two `.kset` files and the listing found {}",
             listed.len()
         );
         for preset in &listed {
