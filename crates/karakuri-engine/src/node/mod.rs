@@ -187,27 +187,6 @@ pub(crate) struct Tick<'a> {
     pub source_value: &'a dyn Fn(&str) -> Option<u32>,
 }
 
-/// **Every declared param, packed as the layout declares it.**
-///
-/// A `float` gets the value the Set resolved for it — a binding's, an override's
-/// or the declaration's default — and `0.0` when it has none, on the terms
-/// [`View::param`] states. **A vector param gets zeroes**, because nothing in
-/// this engine drives one: `Param::default_scalar` reads a scalar out of a
-/// declaration and skips anything else, so a `vec3` param never enters a node's
-/// value map at all.
-///
-/// The zeroes are not a choice so much as the honest form of what was already
-/// true, and writing them is the part that was missing. Every node used to pack
-/// *every* declared name as an `f32`, and the packer panics on a field its
-/// layout says is a `vec3<f32>` — so a `.kir` declaring one parsed, checked,
-/// costed, and then took the render thread down on the first `prepare`. That is
-/// not the swap worker, so it was not caught as a `SetError::Panicked` either.
-/// Skipping the field instead trips the packer's other assertion, which is the
-/// one that keeps a half-written uniform from reaching a shader: the layout
-/// declares the field, so something has to fill it.
-///
-/// One copy, called by all four nodes, so that a layer added later cannot
-/// reintroduce the panic by writing its own loop.
 /// The spliced field's params, for a node that has them.
 ///
 /// **Filtered by the layout rather than by the caller.** A Set hands every node
@@ -258,6 +237,27 @@ pub(crate) fn write_source_slots(
     }
 }
 
+/// **Every declared param, packed as the layout declares it.**
+///
+/// A `float` gets the value the Set resolved for it — a binding's, an override's
+/// or the declaration's default — and `0.0` when it has none, on the terms
+/// [`View::param`] states. **A vector param gets zeroes**, because nothing in
+/// this engine drives one: `Param::default_scalar` reads a scalar out of a
+/// declaration and skips anything else, so a `vec3` param never enters a node's
+/// value map at all.
+///
+/// The zeroes are not a choice so much as the honest form of what was already
+/// true, and writing them is the part that was missing. Every node used to pack
+/// *every* declared name as an `f32`, and the packer panics on a field its
+/// layout says is a `vec3<f32>` — so a `.kir` declaring one parsed, checked,
+/// costed, and then took the render thread down on the first `prepare`. That is
+/// not the swap worker, so it was not caught as a `SetError::Panicked` either.
+/// Skipping the field instead trips the packer's other assertion, which is the
+/// one that keeps a half-written uniform from reaching a shader: the layout
+/// declares the field, so something has to fill it.
+///
+/// One copy, called by all four nodes, so that a layer added later cannot
+/// reintroduce the panic by writing its own loop.
 pub(crate) fn write_params(
     p: &mut crate::uniforms::UniformPacker<'_>,
     layout: &karakuri_codegen::layout::UniformLayout,
