@@ -8427,6 +8427,258 @@ const LOAD_PILL: &str = "load";
 /// right-pointing small triangle is about as wide as it is tall.
 const LOAD_ARROW: f32 = size::BASE * 0.5;
 
+// -- what one Set holds and declares, opened under its row ------------------
+
+/// **The word the foot's second capsule reads**, which is the mock's own
+/// `read` — the chip between the count and `load &rarr; A`.
+///
+/// **It carries no lit state**, which the note *Reading a Set before you spend
+/// a load on it* argues rather than leaves out: a run of lines appears under
+/// the cursor, *"which is not a thing anybody misses"*, and a second lav
+/// capsule beside [`LOAD_PILL`] would make this bay's one accent mean two
+/// things at a width of eight characters. So it is [`pill_at`]'s hairline
+/// round `--c-dim`, open or shut.
+///
+/// **The note says nine lines and the mock draws ten**, and neither number is
+/// transcribed here for that reason: how many rows a reading is, is
+/// [`Reading::rows`]'s answer over the Set it is of — a head, one per key, the
+/// capacity and the emitted attributes where there are any, and a foot.
+const READ_PILL: &str = "read";
+
+/// **The two words at the head of a reading**: what the row under the cursor
+/// declares, and how many controls that comes to.
+///
+/// `.addr` in the mock, which is the one place in this bay the lav is spent on
+/// something that is not the load — it is the same mark the Inspector writes a
+/// node's address in, and it says *this box is a reading of the row above it*
+/// rather than a sixth Set.
+const READING_HEAD: &str = "declares";
+
+/// The word the capacity row is drawn under, which the mock draws in the same
+/// range-and-default shape as a knob *"because that is how a procedure
+/// declares it"*.
+const READING_CAPACITY: &str = "capacity";
+
+/// The word the emitted attributes are drawn under — *"what a renderer drawn
+/// over it can consume"*.
+const READING_EMITS: &str = "emits";
+
+/// **One published control of a Set, as a reading of it.**
+///
+/// **Named for what `karakuri_engine::set::Set::published` calls the same
+/// thing**, and read off the cards instead of off a built Set: this crate
+/// takes no engine (ADR-0156), and a reading that had to build one would be
+/// the load this chip exists to be pressed before.
+///
+/// **One row per key and never one per node**, which is that function's own
+/// rule: a name two nodes declare is a single control over the part of the
+/// range both of them accept. The mock's note says why that is the
+/// list the Inspector will draw — *"`exposure` is one row here for the same
+/// reason it is one knob there"*.
+///
+/// **Both halves are the host's**, which is [`Node::addr`]'s seam one bay
+/// along: this crate reads no store (ADR-0156), so what crosses is the key and
+/// the words drawn beside it. **The position is deliberately not here** — the
+/// note: *"That number is the deck's published interface in order, and
+/// printing it here would be a promise about a map made before the load that
+/// put the interface there."*
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Published {
+    /// The key the control is published under — `radius`, `exposure`.
+    pub key: String,
+    /// The declared range and the default, as the host spelled them: the
+    /// mock's `0 – 8 · 2`. **A range and never a value**: a Set on disk has
+    /// nothing turned to anything, and the number under a hand is the
+    /// Inspector's to show after the load.
+    pub range: String,
+}
+
+/// **What the Set under the cursor holds and declares**, opened under its row.
+///
+/// # It is not a second Inspector, and the difference is not one of degree
+///
+/// `console.html`'s note is the whole of the argument: the Inspector groups by
+/// node because the two things it draws beside a value — who is holding it and
+/// what authority it is under — are one node's, and **a node is a thing a deck
+/// is running**. Nothing here is running, so there is no address to group
+/// under, no value to show, nobody holding anything and no `man / sug / auto`
+/// to set. What is left is what a procedure declares.
+///
+/// # Every line is a card's, and one figure is deliberately absent
+///
+/// The knobs, the capacity and the emitted attributes are each a record on the
+/// metadata card the store keeps beside an artifact, so the row's promise —
+/// *"without fetching a source or compiling it"* — holds for all three.
+/// **What a node's element storage comes to is not here**, and it is the one
+/// thing the MCP `read_set` tool answers that this does not: sizing it needs
+/// every source in the Set fetched and checked
+/// (`karakuri_environment::setfile::load`), which is the cost that sentence
+/// says this does not pay. The note says which way that gap is closed —
+/// *"the row's tip tells the truth about the element-storage figure, or
+/// `read_set` stops offering it"* — and it is a decision nobody has taken.
+///
+/// # A node with no card is counted rather than drawn
+///
+/// [`Reading::described`] is how many of [`Reading::nodes`] had one, and the
+/// foot says so. A card is derived rather than kept, so an artifact stored as
+/// bytes has none — *"an ordinary state of a working store rather than a
+/// damaged one"* — and the one thing that would make this reading lie is a
+/// knob missing from the list without a word.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Reading {
+    /// **Which Set it is a reading of**, which is what keeps a reading and the
+    /// row it is drawn under from coming apart: [`View::opened`] draws it only
+    /// under the row of that name, so a listing rewritten under a reading
+    /// closes it rather than filing it under whatever is now in that position.
+    pub id: String,
+    /// One per published key, in the order the Set publishes them.
+    pub knobs: Vec<Published>,
+    /// How many elements the geometry declares it can carry and how many it
+    /// takes by default, in [`Published::range`]'s own shape — or `None` where
+    /// nothing in the Set declares a capacity, which is a Set with no geometry
+    /// in it. **`None` draws no row**: a row with nothing after it is the
+    /// blank the mock's tip refuses.
+    pub capacity: Option<String>,
+    /// What the geometry emits, as the host joined them — or `None` where
+    /// nothing in the Set declares any, on [`Reading::capacity`]'s rule.
+    pub emits: Option<String>,
+    /// How many nodes the Set file names.
+    pub nodes: usize,
+    /// How many of those the store holds a card for, which is how many of them
+    /// this reading could read at all.
+    pub described: usize,
+}
+
+impl Reading {
+    /// **How many rows it is drawn in**: the head, one per knob, the capacity
+    /// and the emitted attributes where there are any, and the foot.
+    ///
+    /// The head and the foot are always drawn, which is what makes a reading
+    /// with nothing in it an *answer* rather than an empty box: `0 knobs`
+    /// under a Set that declares none is the same sentence
+    /// `karakuri-environment`'s card renderer says in words.
+    pub fn rows(&self) -> usize {
+        2 + self.knobs.len()
+            + usize::from(self.capacity.is_some())
+            + usize::from(self.emits.is_some())
+    }
+
+    /// The head's right-hand word: `6 knobs`.
+    pub fn knobs_word(&self) -> String {
+        format!(
+            "{} knob{}",
+            self.knobs.len(),
+            match self.knobs.len() {
+                1 => "",
+                _ => "s",
+            }
+        )
+    }
+
+    /// The foot's left-hand word: `5 nodes`.
+    pub fn nodes_word(&self) -> String {
+        format!(
+            "{} node{}",
+            self.nodes,
+            match self.nodes {
+                1 => "",
+                _ => "s",
+            }
+        )
+    }
+
+    /// **The foot's right-hand word**: the mock's `all described`, or how many
+    /// nodes declared nothing this could read.
+    ///
+    /// **The mock draws the first of the two and this has to be able to say
+    /// the second**, which is the tip's own instruction: a node with no card
+    /// *"is counted here rather than drawn as a blank row"*. How that count is
+    /// spelled is not on the page, so it is spelled here — in the words the
+    /// card reader already uses for the same absence.
+    pub fn cards_word(&self) -> String {
+        match self.nodes.saturating_sub(self.described) {
+            0 => "all described".to_owned(),
+            missing => format!("{missing} without a card"),
+        }
+    }
+}
+
+/// **A reading and the row it is open under**, handed to [`library`] together.
+///
+/// Two halves rather than one because neither is the other's: what the reading
+/// says is the host's answer, and which row it opens under is the console's
+/// own cursor. They are handed in as a pair so that the bay cannot lay a block
+/// out under one row and paint it under another — [`View::opened`] is the one
+/// place they are put together.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Opened<'a> {
+    /// Which row of the listing the reading belongs to — [`View::cursor_row`].
+    pub at: usize,
+    /// What that Set declares.
+    pub reading: &'a Reading,
+}
+
+/// **The box a reading is drawn in**, inside [`LibraryBay::list`] and under
+/// the row the cursor is on.
+///
+/// **One box rather than a run of loose rows**, which is the mock's own
+/// reading of it: the block belongs to the row above it, and a reading drawn
+/// flat into this list would read as Sets nested under a Set. So it stands on
+/// the well the staging lane's candidates stand on, inside
+/// [`size::READING_MARGIN_X`] of the list either side and at
+/// [`size::READING_RADIUS`].
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Block {
+    /// The well itself: the rows' own box, without the margin around it.
+    pub well: Rect,
+    /// **How many rows are in it** — [`Reading::rows`], whether or not the
+    /// list had room for them. The list clips, exactly as it clips a name too
+    /// long for the track.
+    pub rows: usize,
+    /// **The first row of the *listing* drawn under the block**, which is the
+    /// cursor's own row plus one. [`LibraryBay::row`] pushes every row from
+    /// here down by what the block takes.
+    pub under: usize,
+}
+
+impl Block {
+    /// The `index`th row of the reading, counting from the top of the well.
+    ///
+    /// [`LibraryBay::row`]'s derivation one box in: the rows are a stride and
+    /// a count, at [`size::LIB_ROW_H`] because a reading's row is a `.lib-row`
+    /// with its left padding overridden and nothing else changed.
+    pub fn row(&self, index: usize) -> Rect {
+        Rect::from_min_size(
+            Pos2::new(
+                self.well.min.x,
+                self.well.min.y + size::LIB_ROW_H * index as f32,
+            ),
+            egui::vec2(self.well.width(), size::LIB_ROW_H),
+        )
+    }
+}
+
+/// **What a press on the `read` chip asks for.**
+///
+/// Two answers because the press means two different things and only one of
+/// them is an operation. **Opening asks the host to read a Set** — the
+/// operation carries the id, the host answers it off the cards, and the record
+/// it writes is `Silent(Question)`, *it asks rather than changes*. **Closing
+/// asks nothing at all**: what it changes is which rows this bay is drawing,
+/// which is the console's own state and is no more an operation than a fold
+/// is. A press that emitted `ReadSet` to put a reading away would say a
+/// question was asked at the moment one stopped being.
+///
+/// [`TransitionRow::go`]'s shape three bays along, where one control's press
+/// also leaves by two doors.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Read {
+    /// Nothing is open under the cursor: read the Set that is there.
+    Open(Operation),
+    /// The reading under the cursor is open, and the press puts it away.
+    Shut,
+}
+
 // -- the library's two filter fields ------------------------------------
 
 /// **What the `holds` field reads with no filter set**, which is the mock's
@@ -8934,6 +9186,18 @@ pub struct LibraryBay {
     pub total: usize,
     /// `.lib-foot`, along the bottom edge of the bay, with its rule on top.
     pub foot: Rect,
+    /// **The reading open under the cursor**, or `None` where nothing is
+    /// open — which is every console until a press on the `read` chip, and
+    /// every one of this crate's tests that does not say otherwise.
+    ///
+    /// **`None` also where the row it would open under is not drawn**, which
+    /// is the one state the two halves can be in and disagree about: a cursor
+    /// clamps against the listing ([`View::cursor_row`]) and the rows clamp
+    /// against the room there is, so a bay with room for two rows and a
+    /// reading of the fifth has nowhere to put it. It is answered here rather
+    /// than at the paint, so what is laid out and what is painted are one
+    /// statement.
+    pub reading: Option<Block>,
 }
 
 /// **The foot's `load → A` pill, laid out**: the capsule, the word in it, the
@@ -8971,10 +9235,28 @@ impl LibraryBay {
         Rect::from_min_size(
             Pos2::new(
                 self.list.min.x,
-                self.list.min.y + size::LIB_ROW_H * index as f32,
+                self.list.min.y + size::LIB_ROW_H * index as f32 + self.pushed(index),
             ),
             egui::vec2(self.list.width(), size::LIB_ROW_H),
         )
+    }
+
+    /// **How far a reading pushes the `index`th row down**, which is nothing
+    /// at all for every row above it and the whole block for every row below.
+    ///
+    /// **The block is between two rows and not over them**, which is what
+    /// makes this a mode of the list rather than a card drawn on top of one:
+    /// the rows under the cursor keep their order and their stride and start
+    /// lower down, and the ones that no longer fit are not drawn — which the
+    /// foot's `n of m` already says, in the words it says it in for a library
+    /// taller than its list.
+    fn pushed(&self, index: usize) -> f32 {
+        match self.reading {
+            Some(block) if index >= block.under => {
+                size::READING_MARGIN_TOP + block.well.height() + size::READING_MARGIN_BOTTOM
+            }
+            _ => 0.0,
+        }
     }
 
     /// What the foot reads: `n of m`, the mock's own `5 of 27`.
@@ -9057,6 +9339,73 @@ impl LibraryBay {
                 Pos2::new(pill.max.x - size::PILL_PAD_X - mark.x, mid - mark.y * 0.5),
                 mark,
             ),
+        }
+    }
+
+    /// **The foot's `read` chip, laid out**: the capsule between the count
+    /// and the load pill.
+    ///
+    /// `.lib-foot` is a flex row of the count, a `.sep { flex: 1 }` and the
+    /// two capsules one [`size::LIB_FOOT_GAP`] apart, so this is measured back
+    /// from where [`LibraryBay::load`] put the pill rather than forward from
+    /// the count: the load pill is as wide as the deck letter in it, and a
+    /// chip placed from the left would move whenever that letter did.
+    ///
+    /// **One derivation for the paint and the press**, which is
+    /// [`LibraryBay::load`]'s own rule one capsule along — [`library_into`]
+    /// paints this and [`LibraryBay::read`] hit-tests it, so the capsule a
+    /// press lands on is the capsule the word is in.
+    pub fn read_chip(&self, ctx: &egui::Context, letter: &str) -> Rect {
+        let load = self.load(ctx, letter).pill;
+        let width = pill_width(ctx, READ_PILL);
+        Rect::from_min_size(
+            Pos2::new(load.min.x - size::LIB_FOOT_GAP - width, load.min.y),
+            egui::vec2(width, size::PILL_H),
+        )
+    }
+
+    /// **What a press at `p` on the `read` chip asks for**, or `None` where
+    /// there is no chip under it.
+    ///
+    /// # The operand is the cursor, which is the load pill's operand
+    ///
+    /// `console.html`'s note: *"Its operand is the cursor, which is the same
+    /// operand the pill beside it already uses — so the route costs one chip
+    /// in the foot and nothing else"*. So `set` is the Set under the cursor,
+    /// handed in the way every other reading of the listing is (ADR-0156), and
+    /// what comes back names it.
+    ///
+    /// # The two answers, and why closing is not an operation
+    ///
+    /// See [`Read`]. Whether the press opens or closes is read off
+    /// [`LibraryBay::reading`] — the block this bay is *drawing* — and not off
+    /// anything this method is told, so the chip cannot answer *shut* for a
+    /// reading nobody can see.
+    ///
+    /// **A press with no row under the cursor asks nothing**, which is a
+    /// library that lists nothing: there is no Set to read and the chip is
+    /// still drawn, because the foot is what the count is in. It is
+    /// [`Mixer::grab`]'s answer for a press on a fader's track — a control
+    /// claims what it acts on, and claiming a press to throw it away would put
+    /// the rule and the act out of step.
+    pub fn read(
+        &self,
+        ctx: &egui::Context,
+        letter: &str,
+        set: Option<&str>,
+        p: karakuri_layout::Point,
+    ) -> Option<Read> {
+        if ctx.cumulative_pass_nr() == 0 {
+            return None;
+        }
+        if !self.read_chip(ctx, letter).contains(Pos2::new(p.x, p.y)) {
+            return None;
+        }
+        match self.reading {
+            Some(_) => Some(Read::Shut),
+            None => Some(Read::Open(Operation::ReadSet {
+                id: set?.to_owned(),
+            })),
         }
     }
 
@@ -9272,10 +9621,17 @@ impl LibraryBay {
 /// here**, because no rectangle in this bay depends on it: it is a pointer,
 /// and a pointer goes to the paint beside the library cursor — see
 /// `library_into` and [`View::scope`].
+///
+/// **`open` is the exception, and it is the one pointer a rectangle in this
+/// bay does depend on.** A reading is drawn *under a row*, so where every row
+/// below it goes and how many of them there is room for both follow the
+/// cursor — see [`Opened`] and [`Block`]. `None` is a bay with nothing open,
+/// which is every console until a press on the `read` chip.
 pub fn library(
     layout: &karakuri_layout::Layout,
     scopes: &[Scope],
     sets: &[String],
+    open: Option<Opened<'_>>,
 ) -> Option<LibraryBay> {
     // **Nothing said about any library, so there is nothing to draw.** Not the
     // same as a scope that holds nothing — see this function's own doc, and
@@ -9287,6 +9643,7 @@ pub fn library(
         to_egui(layout.rect(layout.find("library")?)),
         !scopes.is_empty(),
         sets.len(),
+        open.map(|open| (open.at, open.reading.rows())),
     )
 }
 
@@ -9323,7 +9680,12 @@ pub fn library(
 /// a scope that lists nothing still wants room for a row, because the bay it is
 /// drawn in is the bay the next scope's rows land in and a question drawn over
 /// somewhere there is no room to answer it is worse than no question.
-fn library_box(region: Rect, chips: bool, total: usize) -> Option<LibraryBay> {
+fn library_box(
+    region: Rect,
+    chips: bool,
+    total: usize,
+    open: Option<(usize, usize)>,
+) -> Option<LibraryBay> {
     let foot = Rect::from_min_max(
         Pos2::new(region.min.x, region.max.y - size::LIB_FOOT_H),
         region.max,
@@ -9374,7 +9736,42 @@ fn library_box(region: Rect, chips: bool, total: usize) -> Option<LibraryBay> {
         return None;
     }
     let fits = (list.height() / size::LIB_ROW_H).floor().max(0.0) as usize;
-    let rows = fits.min(total);
+    let listed = fits.min(total);
+    // **A reading opens under a row that is drawn, and under no other.** The
+    // cursor is held inside the listed rows ([`View::walk`]) and the listing
+    // can be rewritten under it, so this is the one place the two are put
+    // together: a reading of a row this bay is not drawing is not drawn, and
+    // the list goes back to being the list.
+    let (rows, reading) = match open.filter(|(at, _)| *at < listed) {
+        None => (listed, None),
+        Some((at, block)) => {
+            // **The block is between the cursor's row and the next**, so what
+            // is above it is the cursor's row and everything before it.
+            let under = at + 1;
+            let top = list.min.y + size::LIB_ROW_H * under as f32 + size::READING_MARGIN_TOP;
+            let well = Rect::from_min_max(
+                Pos2::new(list.min.x + size::READING_MARGIN_X, top),
+                Pos2::new(
+                    list.max.x - size::READING_MARGIN_X,
+                    top + size::LIB_ROW_H * block as f32,
+                ),
+            );
+            // **What is left under the block is what the rest of the listing
+            // gets**, which is `fits`' own arithmetic on a shorter list —
+            // negative where the block itself runs past the bottom, which is a
+            // reading taller than the bay and is clipped rather than refused.
+            let left = list.max.y - well.max.y - size::READING_MARGIN_BOTTOM;
+            let after = (left / size::LIB_ROW_H).floor().max(0.0) as usize;
+            (
+                (under + after).min(total),
+                Some(Block {
+                    well,
+                    rows: block,
+                    under,
+                }),
+            )
+        }
+    };
     (fits > 0).then_some(LibraryBay {
         scopes,
         filters,
@@ -9382,6 +9779,7 @@ fn library_box(region: Rect, chips: bool, total: usize) -> Option<LibraryBay> {
         rows,
         total,
         foot,
+        reading,
     })
 }
 
@@ -9410,6 +9808,7 @@ fn library_into(
     sets: &[String],
     cursor: usize,
     letter: &str,
+    open: Option<Opened<'_>>,
 ) {
     let painter = ui.painter().with_clip_rect(bay.list);
     for (index, name) in sets.iter().take(bay.rows).enumerate() {
@@ -9442,6 +9841,14 @@ fn library_into(
         );
     }
 
+    // **The reading, under the row it is a reading of.** Drawn inside the same
+    // clip as the rows, which is what makes a reading taller than the bay a
+    // clipped box rather than a box drawn over the foot — `.lib-list`'s own
+    // answer to a name too long for the track, one axis round.
+    if let (Some(block), Some(open)) = (bay.reading, open) {
+        reading_into(&painter, pal, &block, open.reading);
+    }
+
     let painter = ui.painter().with_clip_rect(bay.foot);
     let rule = bay.foot.min.y + size::HAIRLINE * 0.5;
     painter.line_segment(
@@ -9460,6 +9867,13 @@ fn library_into(
         galley,
         pal.faint,
     );
+
+    // **The `read` chip**, between the count and the load pill and drawn as
+    // every other capsule on this panel is — [`pill_at`]'s hairline round
+    // `--c-dim`. **It does not light**, open or shut, and [`READ_PILL`] is
+    // where that is argued: the block above it is the state, and this bay's
+    // one accent is spent on the load beside it.
+    pill_at(ui, pal, bay.read_chip(ui.ctx(), letter), READ_PILL);
 
     // **`.pill.lav`, and it is the one pill on this panel with no border**:
     // `border-color: transparent; color: var(--c-lav); background:
@@ -9493,6 +9907,81 @@ fn library_into(
     word(at.text, LOAD_PILL);
     arrow_mark(&painter, at.arrow.center(), LOAD_ARROW, pal.lav, false);
     word(at.letter, letter);
+}
+
+/// **A reading, painted**: the well, and a row of it per line.
+///
+/// Where the box goes is [`library`]'s and where each row in it goes is
+/// [`Block::row`]'s, so this paints and derives nothing — [`library_into`]'s
+/// own rule one box out.
+///
+/// Term for term from `style.css` and from the markup the mock sets inline:
+///
+/// - the box — `background: var(--c-well)` at [`size::READING_RADIUS`], which
+///   is the well a candidate row stands on in the staging lane.
+/// - `.lib-row` with its left padding overridden — a name at [`size::BASE`],
+///   one [`size::READING_PAD_X`] in from the left of the well, centred across
+///   the row's own height.
+/// - `.lib-row .dim` — `color: var(--c-faint)` at [`size::LIB_FOOT_SIZE`],
+///   `margin-left: auto`, so the value ends one [`size::LIB_ROW_PAD_X`] in
+///   from the right of the well. **The same 10px the foot's count is drawn
+///   at**, which is the mock's own reading: a declaration is what the row is
+///   *about* and the range beside it is the small type this bay uses for
+///   everything a row is not named by.
+/// - `.addr` — `color: var(--c-lav)`, on the head's word alone. The weight is
+///   not honoured and cannot be, which is [`room`](crate::room)'s own sentence:
+///   `egui`'s default proportional face has no bold, so a `font-weight: 700`
+///   is a colour and a size here.
+fn reading_into(painter: &egui::Painter, pal: &Palette, block: &Block, reading: &Reading) {
+    painter.rect_filled(
+        block.well,
+        CornerRadius::same(size::READING_RADIUS as u8),
+        pal.well,
+    );
+    let mut at = 0usize;
+    let mut line = |left: &str, right: &str, ink: Color32| {
+        let row = block.row(at);
+        at += 1;
+        let galley = painter.layout_job(span_at(left, size::BASE, ink));
+        painter.galley(
+            Pos2::new(
+                row.min.x + size::READING_PAD_X,
+                row.center().y - galley.size().y * 0.5,
+            ),
+            galley,
+            ink,
+        );
+        let value = painter.layout_job(span_at(right, size::LIB_FOOT_SIZE, pal.faint));
+        painter.galley(
+            Pos2::new(
+                row.max.x - size::LIB_ROW_PAD_X - value.size().x,
+                row.center().y - value.size().y * 0.5,
+            ),
+            value,
+            pal.faint,
+        );
+    };
+    // **The head is the one lav in the box**, which is `.addr`'s own colour
+    // and the mark that says this is a reading of the row above rather than
+    // a sixth Set.
+    line(READING_HEAD, &reading.knobs_word(), pal.lav);
+    for knob in &reading.knobs {
+        line(&knob.key, &knob.range, pal.dim);
+    }
+    // **The capacity is drawn in a knob's shape**, because that is how a
+    // procedure declares it — and it is the declaration rather than this
+    // Set's own number, which nothing on this panel says before a load. The
+    // mock's note carries that as owed rather than answered here.
+    if let Some(capacity) = &reading.capacity {
+        line(READING_CAPACITY, capacity, pal.dim);
+    }
+    if let Some(emits) = &reading.emits {
+        line(READING_EMITS, emits, pal.dim);
+    }
+    // **The foot counts the nodes and says how many of them could be read**,
+    // which is the one thing that keeps a knob missing for want of a card
+    // from being a knob missing in silence.
+    line(&reading.nodes_word(), &reading.cards_word(), pal.dim);
 }
 
 /// **The scope row, painted**: the chips left to right, the marked one washed,
@@ -11715,6 +12204,27 @@ pub struct View {
     /// the move rather than at the draw: a cursor clamped while painting would
     /// move on a frame nobody pressed anything on.
     cursor_row: usize,
+    /// **What the Set under the cursor declares, opened** — or `None` for a
+    /// bay with nothing open, which is where every run starts.
+    ///
+    /// **The reading is the host's and the opening is this console's**, which
+    /// is the seam every other value in this bay crosses: what a Set declares
+    /// is read off the cards the store keeps (ADR-0156, and P-0091 — it is a
+    /// file read, done on the press and never on a frame), and *whether the
+    /// block is down* is the console's own state, exactly as which row the
+    /// cursor is on is. So a host answers [`Operation::ReadSet`] by writing
+    /// this, and puts the reading away by clearing it.
+    ///
+    /// **One row is open at a time**, which is the mock's own rule and is what
+    /// keeps this a mode of the list rather than a second list — so this is
+    /// one reading and not a set of them. It carries the id it is of, and
+    /// [`View::opened`] draws it only under the row of that name: a listing
+    /// rewritten under an open reading closes it rather than filing it under
+    /// whatever has taken that position.
+    ///
+    /// **Private, with [`View::read`] and [`View::shut_reading`] the only ways
+    /// in**, which is [`View::selection`]'s rule one pointer up.
+    reading: Option<Reading>,
     /// **Which scope the bay is listing**, as a position in [`View::scopes`],
     /// and the third of this console's pointers.
     ///
@@ -11853,6 +12363,10 @@ impl View {
             // no ring, and one with no store draws no rows and so no cursor.
             selection: 0,
             cursor_row: 0,
+            // **Nothing open**, which is not a fourth mark: a reading is a
+            // block of rows or it is not there, and the chip that opens one
+            // draws the same either way — `READ_PILL`.
+            reading: None,
             // The first chip of a row that has none in it yet. Not a reading
             // of anything either, for the two above's reason.
             scope: 0,
@@ -11946,6 +12460,58 @@ impl View {
         let moved = to != self.cursor_row;
         self.cursor_row = to;
         moved
+    }
+
+    /// **What the Library bay's cursor row has open**, or `None` where
+    /// nothing is.
+    ///
+    /// **Answered against the listing rather than read back bare**, which is
+    /// [`View::cursor_row`]'s rule with a name in it: a reading is of one Set,
+    /// the listing under it can be rewritten by any press on a scope chip or a
+    /// filter field, and a reading left drawn under whatever has taken that
+    /// position would be this bay describing one Set under the name of
+    /// another. So it is drawn where the row under the cursor is still the Set
+    /// it was read of, and nowhere else.
+    ///
+    /// **It is not put away when that happens.** Nothing here is `&mut`, and
+    /// the reading a press asked for is still what the host answered — what
+    /// has changed is that there is nowhere to draw it. A narrowing that takes
+    /// the row away and a second that brings it back are one gesture to the
+    /// hand that made them.
+    pub fn opened(&self) -> Option<Opened<'_>> {
+        let reading = self.reading.as_ref()?;
+        let at = self.cursor_row();
+        (self.library.get(at).map(String::as_str) == Some(reading.id.as_str()))
+            .then_some(Opened { at, reading })
+    }
+
+    /// **Open a reading under the cursor**, which is what a host answers
+    /// [`Operation::ReadSet`] with.
+    ///
+    /// The value is the host's whole answer — see [`Reading`], and
+    /// [`View::reading`] the field for why the reading is read out there and
+    /// the opening is kept in here.
+    pub fn read(&mut self, reading: Reading) {
+        self.reading = Some(reading);
+    }
+
+    /// **Whether a reading is open at all**, whatever row it was read of.
+    ///
+    /// [`View::opened`] is what the bay is drawn from and answers `None` where
+    /// the row it belongs to is gone; this is the flatter question a host asks
+    /// after moving the cursor, because **the reading follows the cursor**: a
+    /// move with one open is a read of the row it arrived at, and a move with
+    /// nothing open is a pointer moving.
+    pub fn reading_open(&self) -> bool {
+        self.reading.is_some()
+    }
+
+    /// **Put the reading away**, and answer whether there was one.
+    ///
+    /// The `bool` is [`View::select`]'s: a caller repaints on a change and not
+    /// on a press.
+    pub fn shut_reading(&mut self) -> bool {
+        self.reading.take().is_some()
     }
 
     /// **Which library the bay is listing**, or `None` for a console nobody
@@ -12363,6 +12929,10 @@ impl View {
         // it borrows from — `draw` takes `&mut self`, and a filter read inside
         // the arm below would be a second borrow of `holds`.
         let narrowed = self.filters();
+        // **The sixth, read here for the two above's reason**: it borrows the
+        // listing this frame is drawing, and `draw` takes `&mut self`. It is
+        // the cursor and the reading put together — see [`View::opened`].
+        let opened = self.opened();
         // **The two pointers, read once for the frame** beside the readings
         // they are drawn against — `draw` takes `&mut self` and the arms below
         // borrow these slices, so a pointer read inside an arm would be a
@@ -12504,7 +13074,7 @@ impl View {
                     Kind::Library => {
                         card(ui, &pal, rect);
                         head_into(ui, &pal, rect, placed.region, opening);
-                        if let Some(bay) = library(panel.layout(), scopes, sets) {
+                        if let Some(bay) = library(panel.layout(), scopes, sets, opened) {
                             // **The chips before the rows**, and painted from
                             // the draw rather than from inside the listing's
                             // own paint: the scope row belongs to the bay's
@@ -12518,7 +13088,7 @@ impl View {
                             // being read answers, where everything under it is
                             // what came back.
                             filters_into(ui, &pal, &bay, narrowed);
-                            library_into(ui, &pal, &bay, sets, cursor_row, load);
+                            library_into(ui, &pal, &bay, sets, cursor_row, load, opened);
                         }
                     }
                     // **The fourth bay with something in its body**, and it is

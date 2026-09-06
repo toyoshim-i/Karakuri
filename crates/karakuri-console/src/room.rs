@@ -761,6 +761,47 @@ pub mod size {
     /// neither while this row and that one were undrawn.
     pub const LIB_FOOT_H: f32 = LIB_FOOT_PAD_Y * 2.0 + LIB_FOOT_SIZE * LINE + HAIRLINE;
 
+    /// `.lib-foot`'s `gap: 8px`, between the count, the `read` chip and the
+    /// `load` pill. It is the row's only spacing that is not padding: `.sep`
+    /// takes whatever is left over, so this is what separates the two capsules
+    /// at the right-hand end of the row and nothing else.
+    pub const LIB_FOOT_GAP: f32 = 8.0;
+
+    // -- the library's reading ----------------------------------------------
+
+    /// **The box a reading stands in**, opened under the row the cursor is on:
+    /// `docs/manual/console.html`'s `margin: 2px 2px 3px`, inline on the one
+    /// element in that bay the stylesheet carries no rule for.
+    ///
+    /// Three numbers and not two, which is [`STAGE_LIST_PAD_BOTTOM`]'s shape
+    /// one bay along: the box stands a pixel further off the row under it than
+    /// off the row above it, because what is under it is the next Set and what
+    /// is above it is the Set this reading is of.
+    ///
+    /// **Cited to the markup rather than to a selector**, which is
+    /// [`PILL_GAP`]'s case and the second of two: the mock sets this box's
+    /// whole appearance inline, and `style.css` genuinely carries no `.reading`
+    /// rule to point at. The note *Reading a Set before you spend a load on it*
+    /// says why there is none — *"No new CSS: every class it uses is already in
+    /// the stylesheet"*.
+    pub const READING_MARGIN_X: f32 = 2.0;
+    pub const READING_MARGIN_TOP: f32 = 2.0;
+    pub const READING_MARGIN_BOTTOM: f32 = 3.0;
+
+    /// The same box's `docs/manual/console.html`'s `border-radius: 8px`, which
+    /// is [`CAND_RADIUS`]' number one bay along and not [`LIB_ROW_RADIUS`]'s
+    /// row radius: this is a well with rows in it, drawn at the radius the
+    /// mock gives every well it draws — `.cand` and `.fx` are both 8.
+    pub const READING_RADIUS: f32 = 8.0;
+
+    /// A reading's row is a `.lib-row` with its left padding overridden —
+    /// `docs/manual/console.html`'s `padding-left: 18px`, inline on each of
+    /// them. **The indent is the whole of what says these rows are not Sets**:
+    /// they are drawn in the same box at the same height inside the same list,
+    /// so a reading drawn flush with the names above it would read as Sets
+    /// nested under a Set.
+    pub const READING_PAD_X: f32 = 18.0;
+
     // -- the staging lane's candidates --------------------------------------
 
     /// `.stage-list`'s `padding: 6px 9px 8px`: the ring of card the candidate
