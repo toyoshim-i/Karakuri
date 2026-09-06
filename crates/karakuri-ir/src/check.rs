@@ -658,7 +658,10 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                         )
                         .with_hint(
                             "every element reaching this node becomes that many, and the derived \
-                            buffer is sized at the Set's whole `capacity` times the factor",
+                            buffer is sized at the Set's whole `capacity` times the factor. This \
+                            ceiling only keeps that product inside a `u32`: the cost pass \
+                            multiplies this node's per-element cost by the factor, so a body that \
+                            does real work is refused well below it and by that message instead",
                         ),
                     );
                 }

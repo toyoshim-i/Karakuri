@@ -418,8 +418,7 @@ counted in the panel column of [every operation](manual/operations.html), where 
 ***Read what one Set holds and declares* is `has`**, on 2026-09-06. The bay opens a reading under
 the cursor's row and it follows the cursor: every published key with its range and default, the
 capacity and what the geometry emits, read off the metadata cards the store keeps beside the
-artifacts rather than off a built Set — so the row's own promise, *"without fetching a source or
-compiling it"*, holds. **A reading is one question and only the opening asks it**: closing emits
+artifacts rather than off a built Set — so what it draws costs a directory read and nothing else. **A reading is one question and only the opening asks it**: closing emits
 nothing and a cursor move re-reads without emitting, which would otherwise reach from the keyboard
 a row whose key column is a `gap`
 ([ADR-0264](adr/0264-a-reading-is-one-question-and-only-the-opening-asks-it.md)).
@@ -432,12 +431,13 @@ declarer's, the emitted attributes unioned in file order — is done in
 copy of what `karakuri_environment::mcp::read_set` walks. **The right home is a structured reading
 in `karakuri-environment`** that both the tool and the panel render; it is in the host because that
 crate was not writable in the pass that drew the panel. `declared()`'s own head says so, and it is
-said here as well because nothing under `karakuri-environment` says it is owed anything. The
-sentence is the other half: the row's tip promises a reading that fetches and compiles nothing while
-`read_set` offers an element-storage figure that costs both, and the same clause sits on
-`Operation::ReadSet` — *"the row's tip tells the truth about the element-storage figure, or
-`read_set` stops offering it"* (`docs/manual/console.html`), and which of them gives way is
-undecided.
+said here as well because nothing under `karakuri-environment` says it is owed anything. **The sentence is no longer owed**: the tip gave way on 2026-09-06. It had promised a reading
+*"without fetching a source or compiling it"*, which is exact for the three blocks read off each
+artifact's own card and untrue of the fourth `read_set` volunteers — `element_storage_block` runs
+`compile::check` over every source before `Set::validate` can size anything. Both the row and
+`Operation::ReadSet` now say which figure costs what. The two options not taken were stopping the
+tool offering it, which removes a capability to fix a sentence, and making it a question of its own,
+which adds an operation; neither is foreclosed by this.
 
 ***List what the store holds* is `has` too**, from 2026-09-05. The two fields the mock has always
 drawn under the scope row are controls: they emit `Operation::ListSets` and the row reads
