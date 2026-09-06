@@ -361,8 +361,8 @@ pub enum Kind {
         title: &'static str,
         /// The controls the mock draws in this head, and **only the ones that
         /// are controls**. Every other pill in the mock's bay heads states a
-        /// value the console does not have yet — `1920x1080`, `previews 2 of
-        /// 4`, `4 of 4 - page 1`, `2 waiting` — and a pill reading `previews 2
+        /// value the console does not have yet — `1920x1080`, `previews 3 of
+        /// 4`, `3 of 3 - page 1`, `2 waiting` — and a pill reading `previews 3
         /// of 4` over an empty bay is exactly the scaffolding that looks
         /// finished. They arrive with the bay that knows the number.
         pills: &'static [&'static str],
@@ -7084,13 +7084,14 @@ const GO: &str = "go";
 ///
 /// # What is in the mock's bay and is deliberately not here
 ///
-/// - **The head's `4 of 4 · page 1`.** *"The strip is a paged list whose
-///   length is a number, and the header says which page you are on"* — so both
-///   halves of that pill are about paging, and there is none. Every strip the
-///   deck has is drawn, on the one page, so the pill could only ever read
-///   `n of n · page 1`: two numbers that are always equal and a third that is
-///   always 1. That is [`Kind::Bay`]'s own rule about a pill stating a value
-///   the console does not have, and the number that *is* known — how many
+/// - **The head's `3 of 3 · page 1`.** *"The strip is a paged list whose
+///   length is a number, the header says how long the list is, and it says
+///   which page you are on"* — so both halves of that pill are about paging,
+///   and there is none. Every strip the deck has is drawn, on the one page, so
+///   the pill could only ever read `n of n · page 1`: two numbers that are
+///   always equal and a third that is always 1. That is [`Kind::Bay`]'s own
+///   rule about a pill stating a value the console does not have, and the
+///   number that *is* known — how many
 ///   strips there are — is on the face of the bay already. It arrives with
 ///   paging.
 /// - **`.xfade`, the transition row under the strips.** It is drawn now, and
@@ -7108,8 +7109,8 @@ const GO: &str = "go";
 /// - **`.wfocus`, which is the second of the mock's two focuses**: keyboard
 ///   focus, transient, wherever tab lands. The mock draws it as a dashed sun
 ///   outline and the deck selection as a solid lavender ring, on purpose,
-///   because *"drawing them the same erases which of the two a reader is
-///   looking at"*. **The selection exists here now** and is drawn —
+///   because *"Drawing them the same way would erase which of the two a reader
+///   is looking at"*. **The selection exists here now** and is drawn —
 ///   [`View::selection`], and [`mixer_into`] for the ring — which is the
 ///   sentence ADR-0219 recorded as owed. Keyboard focus does not: nothing in
 ///   this console takes it, so a dashed outline would be drawn around a state
@@ -8565,15 +8566,17 @@ pub struct Published {
 /// # Every line is a card's, and one figure is deliberately absent
 ///
 /// The knobs, the capacity and the emitted attributes are each a record on the
-/// metadata card the store keeps beside an artifact, so the row's promise —
-/// *"without fetching a source or compiling it"* — holds for all three.
+/// metadata card the store keeps beside an artifact, so the row's promise on
+/// `docs/manual/operations.html` — *"each read off the artifact's own card, so
+/// those three fetch no source and compile nothing"* — holds for all three.
 /// **What a node's element storage comes to is not here**, and it is the one
 /// thing the MCP `read_set` tool answers that this does not: sizing it needs
 /// every source in the Set fetched and checked
 /// (`karakuri_environment::setfile::load`), which is the cost that sentence
-/// says this does not pay. The note says which way that gap is closed —
-/// *"the row's tip tells the truth about the element-storage figure, or
-/// `read_set` stops offering it"* — and it is a decision nobody has taken.
+/// says these three do not pay. The tip is the half that gave way, and
+/// `console.html`'s note says where the figure goes instead — *"A model asking
+/// over MCP gets it and pays for it; a press in a library list is not the
+/// place to spend that"*.
 ///
 /// # A node with no card is counted rather than drawn
 ///
@@ -8900,18 +8903,19 @@ fn stepped_layer(at: Option<Layer>) -> Option<Layer> {
 /// being read* rather than a place a Set can be.
 ///
 /// `docs/manual/operations.html`'s *Choose which scope the library shows* is
-/// the whole of the argument, and its sharpest sentence is what makes this one
-/// type rather than four: **the four chips are four questions rather than four
-/// acts** — *favourites* is *"this library filtered rather than a fifth place a
-/// Set can be"*, so choosing it and choosing *my sets* differ in the question
-/// asked and not in what is asked.
+/// the whole of the argument, and `console.html` argues the sharpest part of
+/// it, which is what makes this one type rather than four: **the four chips
+/// are four questions rather than four acts** — *favourites* is *"this library
+/// filtered rather than a fifth place a Set can be"*, so choosing it and
+/// choosing *my sets* differ in the question asked and not in what is asked.
 ///
 /// # Four here, and [`Operation::SelectScope`] still carries `Undecided`
 ///
-/// The two are not in disagreement. That payload is open because the scopes are
-/// *"the one thing about the library that is not closed: it grows when a
-/// directory is added"*, and a **vocabulary** that named a member of a growable
-/// list would go short the moment an operator points the bay at a directory.
+/// The two are not in disagreement. That payload is open because
+/// `docs/manual/operations.html`'s row calls the scopes *"the one thing about
+/// the library that is not closed"*, and a **vocabulary** that named a member
+/// of a growable list would go short the moment an operator points the bay at
+/// a directory.
 /// This type is not that: it is the row of chips **this panel draws**, which is
 /// the mock's four and no more, and it is handed to [`library`] as a slice for
 /// exactly that reason — the bay draws the scopes it is given, so a fifth is a
@@ -9164,14 +9168,14 @@ fn chip_width(ctx: &egui::Context, name: &str) -> f32 {
 /// # Nothing here writes a Set out, and what is missing is a destination
 ///
 /// `docs/manual/operations.html`'s *Send a Set to somebody, and take one in*
-/// names two directions and this bay is the home of both — *"the badge …
-/// names the bay rather than a control"*. **One of them is reached from here
-/// today and the other is not a drawing.** The taking-in half is *"a row under
-/// presets or folder, loaded"*, which is the load route above: a press on a
-/// `presets` row packages the `.kset` into the store and then loads it, which
-/// is *"this row performed at the second of them"*. The sending half —
-/// writing one out to hand somebody — is drawn nowhere, and this is the note
-/// that says why rather than leaving a gap indistinguishable from a decision.
+/// names two directions and this bay is the home of both — its panel badge
+/// names `library` and not a control. **One of them is reached from here today
+/// and the other is not a drawing.** The taking-in half is *"Taking one in is
+/// not a second row — opening a preset is this row"*, which is the load route
+/// above: a press on a `presets` row packages the `.kset` into the store and
+/// then loads it. The sending half — writing one out to hand somebody — is
+/// *"what nothing draws"*, and this is the note that says why rather than
+/// leaving a gap indistinguishable from a decision.
 ///
 /// **It is not that a panel has no file dialog.** The taking-in half needs one
 /// and does not have one either: what names the file there is **this listing**,
@@ -10289,8 +10293,8 @@ fn filters_into(ui: &Ui, pal: &Palette, bay: &LibraryBay, at: Filters<'_>) {
 const STAGING_TITLE: &str = "Staging";
 
 /// **Where a candidate stands, in the three words `console.html` uses for
-/// it** — *"whether it is on screen: landed, rolled back for costing too much,
-/// or refused by the checker"*.
+/// it** — *"Whether it is on screen: landed, rolled back for costing too much,
+/// or refused"*.
 ///
 /// # One variant per `swap::Event` a verdict is outstanding on, and no fourth
 ///
@@ -10302,8 +10306,8 @@ const STAGING_TITLE: &str = "Staging";
 /// will be built again, and no candidate changed state when it happened.
 ///
 /// **`Refused` is a build that failed and not a source the checker turned
-/// down**, and the difference is worth stating because the page's own sentence
-/// reads the other way. A `.kir` that does not check never reaches the engine
+/// down**, which is the page's own sentence — *"Refused on a row is a build
+/// that failed"*. A `.kir` that does not check never reaches the engine
 /// at all: `karakuri_environment::watch::Watch::poll` prints the diagnostics
 /// on the worker thread and returns `None`, so no `Request` is made, no
 /// `Event` is emitted, and **this lane cannot draw it** — which is a real gap,
@@ -12759,8 +12763,8 @@ impl View {
     /// inconsistency: a listing is a walk and wrapping it would jump the
     /// length of a list on one press, where the scopes are a *cycle* of four
     /// chips a step apart — `docs/manual/operations.html` says so at the row
-    /// (*"it steps to the next scope and wraps"*), and a step that stopped at
-    /// the last chip would need a second key to come back.
+    /// (*"The key steps to the next scope and wraps"*), and a step that
+    /// stopped at the last chip would need a second key to come back.
     ///
     /// Nothing to step where there are no chips or one, and that is `false`
     /// rather than a wrap onto itself: a press that changed nothing costs no
