@@ -1305,6 +1305,45 @@ smaller past that point stops getting cheaper and stops saying anything new. `te
 measures the pair: a 112x63 render of the panel's own material went from 0.6x the whole 720p frame
 to 1.1x of it.
 
+**Built on 2026-09-06, and its extrapolation is wrong — this is where to resume.**
+`crates/karakuri-engine/src/estimate.rs` draws a Set at `PREPARATION_RESOLUTION` (640x360), rewinds
+it, restores the viewport and returns milliseconds. What it does with the number is scale it by the
+area ratio, one rule for every topology, and **that is the part to replace**.
+
+**The rule that follows from the language rather than from a machine.** A frame is three parts: the
+simulation over `capacity`, the vertex stage per primitive, and the fragment stage over covered
+pixels. The first two do not depend on the target's size. The third does, and it does so for *every*
+topology, because `point_rate` is a **fraction of the target** rather than pixels — a fullscreen pass
+covers the target's area, a sprite covers `capacity × (rate × height)²`, a stroke covers its length
+times its width and both are fractions. So the cost is `a + b·area`, and **`Topology` is not the
+discriminator**: what decides whether a procedure looks invariant or looks area-proportional is
+coverage, `capacity × rate²`, which a param can move. The same procedure sits on either side of any
+rule keyed on the enum.
+
+**Two terms need two rungs.** One draw at one size gives `a + b·A` and no way to separate them, and
+scaling that sum by the area ratio scales `a` with it — which for per-element material is most of the
+frame. Measured on one machine, the shipped corpus overshot by very nearly the whole area ratio and
+every `Points` and `Lines` slot landed in the badge's last band, which is why `estimate` is not wired
+to `Deck::govern`. Take the second rung, fit, and extrapolate the fragment term alone.
+
+**Numbers taken here are not a basis for a decision.** Development is one unified-memory Metal
+machine; a tile-based renderer's binning behaviour and its thermal drift are that machine's and not
+the instrument's. Measurement is for confirming a rule that logic already argued, and for finding a
+floor. The floors themselves are the language's: ADR-0245 stops a sprite's coverage falling below one
+pixel, so both rungs must sit above `1/rate` rows — and `speed_lines` ships a stroke one pixel wide
+at 720 rows, so the reference size is already at its floor and no smaller draw says anything new
+about it.
+
+**What the ceilings turned out to be.** `MAX_OPS_PER_ELEMENT`, `MAX_OPS_PER_SPAWN`,
+`MAX_OPS_PER_FRAGMENT` and the fullscreen one all arrived in one commit whose message does not
+mention them, and **none has ever been measured against a frame time**. 4096 was chosen as an order
+of magnitude above two spec examples; 16384 is that times four with nothing arguing the factor; 512
+stands in for a quantity — `capacity × sprite area × overdraw` — that is nowhere counted. The doc on
+`MAX_OPS_PER_ELEMENT` says it *"will need retuning once real probe data (stage 7) exists"*; that data
+exists and nothing was retuned. **They are a backstop, not a budget**, and the governor is what
+enforces: a refusal before the show costs nothing, which is why a bound stays, but it belongs where
+it catches absurdity rather than where it negotiates a surface's normal.
+
 **Round the estimate toward refusing.** A show is cheaper to protect before it starts than to rescue
 during it.
 
