@@ -327,7 +327,7 @@ impl Presets {
     ///   id would invent a row that [`crate::setfile::resolve`] refuses when
     ///   pressed.
     /// - **The name is all that is read.** Nothing here opens a file: a
-    ///   listing that parsed twenty-one Sets to draw twenty-one rows would pay
+    ///   listing that parsed twenty-two Sets to draw twenty-two rows would pay
     ///   for a load nobody asked for, and a malformed one is a refusal at the
     ///   moment it is taken in, where the operator can see which row they
     ///   pressed.

@@ -1,0 +1,95 @@
+// **The cheap end of the sprite renderers, and the control for the expensive
+// one.** Pairs with `light_shell.kir`; see that file's header for what the pair
+// is for and why it is not a look.
+//
+//     cargo run -p karakuri -- examples/light_shell.kir examples/plain_points.kir
+//
+// `soft_points` is the renderer every measurement in this project has been taken
+// through. This is the same topology and the same blend with everything
+// removable removed, so that the difference between the two runs is the material
+// and not the panel around it.
+//
+// **2. The vertex stage, per primitive.** One primitive per element, so the
+// count is `light_shell`'s `capacity` — 4096 rather than 262144 quads, the same
+// sixty-fourth. The block itself is a `mat4` multiply and a *constant*:
+// `soft_points` computes `length(velocity)` and a `clamp` and a `mix` to size
+// each sprite by its speed, and this reads a param and stops. That also means
+// the renderer consumes one attribute fewer — `position` and `tint`, where
+// `soft_points` takes `position`, `velocity` and `age` — which is a narrower
+// vertex fetch per primitive as well as less arithmetic.
+//
+// **3. The fragment stage, over covered pixels.** This is the one that matters,
+// because it is the only one of the three that scales with the target and the
+// panel draws every slot into its own target and then presents it again.
+//
+// Coverage is `capacity × (point_rate × height)²`, `point_rate` being a fraction
+// of the target's height rather than a pixel count. At the reference size of
+// 1280x720:
+//
+//   this pair    4096 × (0.00417 × 720)²  =  4096 × 3.00px²  ≈  37k px  = 0.04x the frame
+//   the default  262144 × (0.00556 × 720)² = 262144 × 4.00px² ≈ 4.19M px = 4.55x the frame
+//
+// The default's rate is modulated by speed — `0.35 + 0.65 * clamp(...)` — so its
+// sprites run between 1.40px and 4.00px and its coverage between 0.56x and 4.55x
+// of the frame. **So the honest figure is a factor of fourteen to a hundred and
+// fourteen fewer covered pixels**, not a single number, and every one of those
+// pixels is an additive blend that serialises against whatever else landed in
+// the same texel.
+//
+// **The fragment block is four operations.** A `length`, a subtract, one
+// multiply for the falloff and one for the colour. `soft_points` spends a `pow`,
+// a `hash1` and an `hsv_to_rgb` per fragment; the hue here was computed once per
+// element in `light_shell` and arrives as `tint`, flat-interpolated. Squaring
+// `1 - d` rather than raising it to a `falloff` param is the whole of the visual
+// difference and most of the fragment cost.
+//
+// **It stays above the sub-pixel floor on purpose, and the declared minimum is
+// where that is enforced.** ADR-0245 draws a sprite of side below one pixel at
+// one pixel and pays the lost coverage in the colour, so material can go on
+// getting smaller without getting dimmer — and stops getting *cheaper*, at one
+// fragment per element whatever the target is. A pair that fell through that
+// floor would be a different picture measured against a fixed cost, which is
+// exactly the comparison this file was written to make possible. So the range
+// below starts at 0.0014, which is 1.008 pixels at 720 rows: **no setting of
+// this fader is sub-pixel at the reference size**, and the coverage arithmetic
+// above is real coverage rather than a rounded-up floor.
+
+proc plain_points {
+  kind  L4
+  blend additive
+
+  consumes position, tint
+
+  // Sprite side as a fraction of the frame's height. 0.00417 is 3.00 pixels at
+  // 720 rows — big enough to read as a lit point rather than as noise, small
+  // enough that 4096 of them cover a twenty-fifth of the frame. The floor of
+  // 0.0014 is one pixel at 720 rows; see the note above for why it is there.
+  param point_scale : float [0.0014, 0.0208] = 0.00417
+
+  // Higher than `soft_points`' 1.0 because there are sixty-four times fewer
+  // sprites and they are smaller: the same exposure over this much less material
+  // would be a dim frame, and a dim control is hard to tell from a broken one.
+  param exposure    : float [0.0, 8.0] = 1.6
+
+  vertex {
+    clip = camera * vec4(position, 1.0);
+
+    // A constant, deliberately. No perspective term and no speed term: sizing a
+    // sprite by anything is arithmetic per primitive, and this file's job is to
+    // not spend it.
+    point_rate = point_scale;
+  }
+
+  fragment {
+    let d = length(point_coord * 2.0 - 1.0);
+
+    // `max(0, 1 - d)` squared: a round falloff to nothing at the quad's edge,
+    // for one multiply. This is a `pow(..., falloff)` in every other sprite
+    // renderer here.
+    let e = max(0.0, 1.0 - d);
+
+    // `tint` is already linear RGB and already per-element. Values above 1.0 are
+    // expected — they are what will feed bloom.
+    color = vec4(tint * exposure, e * e);
+  }
+}
