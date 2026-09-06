@@ -293,6 +293,7 @@ number; new records continue from the end.
 | [ADR-0263](0263-the-library-bay-lists-most-recent-first-because-the-listing-is-the-operations-and-not-the-surfaces.md) | The library bay lists most recent first, because the listing is the operation's and not the surface's | 2026-09-05 | accepted |
 | [ADR-0264](0264-a-reading-is-one-question-and-only-the-opening-asks-it.md) | A reading is one question, and only the opening asks it | 2026-09-06 | accepted |
 | [ADR-0265](0265-a-carried-set-names-its-deck-at-the-release-and-the-panel-refuses-no-drop.md) | A carried Set names its deck at the release, and the panel refuses no drop | 2026-09-06 | accepted |
+| [ADR-0266](0266-two-rungs-and-a-fit-because-a-frame-is-an-invariant-part-plus-a-fragment-part.md) | Two rungs and a fit, because a frame is an invariant part plus a fragment part | 2026-09-06 | accepted |
 
 ## Retired numbers
 
