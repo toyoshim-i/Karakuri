@@ -457,8 +457,8 @@ finished.
 **Exit.** No `plan` badge in the panel column of this bay's rows on
 [every operation](manual/operations.html).
 
-**Blocked on. Nothing, as of 2026-09-05.** *Send a Set to somebody, and take one in* waited on a
-destination the vocabulary could carry, and
+**Blocked on. One thing, as of 2026-09-06, and it has no home.** *Send a Set to somebody, and take
+one in* waited on a destination the vocabulary could carry, and
 [ADR-0260](adr/0260-sending-a-set-is-a-read-and-a-reads-answer-goes-where-the-surface-that-asked-puts-answers.md)
 answers it by refusing the premise: sending is a **read**, and a read's answer goes where the surface
 that asked puts answers, so the operation names no destination and none is owed. `SetTransfer` does
@@ -466,10 +466,28 @@ not change. The vocabulary already holds three reads — `ReadSet`, `ListSets` a
 and names a place for none of them; the command line prints a package to stdout for the same reason
 it prints a listing there.
 
-**What is left of that row is a control rather than a decision**, and its *form* is open: a save
-sheet costs a dependency this workspace has none of and puts a modal operating-system window over a
-live instrument, and the clipboard costs no file name at all — ADR-0260 states both and chooses
-neither. The taking-in half is built and reached, a `presets` row taken in and loaded on the one
+**What was left of that row was a control rather than a decision, and the form is now taken.**
+ADR-0260 set out two candidates and chose neither — a save sheet, and the clipboard.
+[ADR-0267](adr/0267-the-panel-sends-into-the-folder-the-library-bay-is-pointed-at-and-the-destination-is-drawn-before-the-press.md)
+takes neither of them either: **the bay is already a file browser, so the directory it is pointed at
+is the destination**, and sending writes `<id>.kbset` there. The mock has been drawing that
+destination the whole time — `docs/manual/console.html:108` is a `.path` row reading
+`~/sets/tour-2026/night-b › opening` — and `view::LibraryBay` lists it as one of the mock's elements
+this crate has not built. It closes the loop the other two could not: the file lands where the
+listing can point at it, so `SetTransfer::Take`, which names a **file**, can consume what a send
+produced.
+
+**And it is what puts this milestone back on a blocker.** ADR-0267 needs `Scope::Folder` to have a
+directory, and no operation can carry one — `ListSets { holds, layer }` has nowhere to put it, so
+the chip *"waits on a row of the page and not on a decision"* (`crates/karakuri-console/src/view.rs`).
+The bay owes that directory whatever is decided about sending, because a folder scope that cannot be
+asked for a listing is a chip with no answer; what is new is that **this row is now the only `plan`
+panel badge left in this bay**, so the exit above runs through work that appears nowhere in this file
+as a task. Give it one, or it is an unfinished item under a milestone that will close without it.
+
+**One sentence on the page has to turn around**, and until it does this record is ahead of the page
+(`docs/contributing.md` §5 step 3): `docs/manual/console.html:1715` reads *"a folder is a way **in**,
+and **my sets** is where things are"*, and `:1690` *"So a folder row is a take"*. The taking-in half is built and reached, a `presets` row taken in and loaded on the one
 press. **The claim this paragraph used to make about a letter-taking control in this bay was
 wrong**: the Library bay draws none, and the naming flow it was pointing at is the arrangement
 pill's, in the transport row. *Load material into a deck* is not
