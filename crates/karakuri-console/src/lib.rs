@@ -290,6 +290,8 @@ fn left_pane() -> Spec {
     .named("left-pane")
     // `.body-grid`'s first track: `340px` (ADR-0239).
     .fixed(340.0)
+    // Minimum: a library row at its narrowest useful — `.lib-list` padding
+    // 3 + 3, `.lib-row` padding 7 + 7 and two 7px gaps, a star, a Set name of
     // a dozen characters and a duration, at the code face's ~6.6px per
     // character. The mock states no minimum for this track; 160 is chosen, and
     // it is the width at which a row still reads as a name and a time rather
@@ -548,6 +550,8 @@ fn right_pane() -> Spec {
     .fixed(400.0)
     // Minimum: four mixer strips still side by side, which is the narrowest
     // thing in the pane and the one the manual pins. A `.strip` is 4 + 4 of
+    // padding around a `.fader-col` of `.vfader` 17, a 6px gap and `.vmeter`
+    // 6 — 37 — and four of them with three 4px gaps inside `.mixer-strips`'
     // 6 + 6 padding is 172. The mock states no minimum for this track; this
     // one is read off the strip it has to hold.
     .min(172.0)
