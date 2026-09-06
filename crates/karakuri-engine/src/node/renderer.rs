@@ -28,12 +28,18 @@ pub(crate) struct Renderer {
     camera_bg: Option<(u32, wgpu::BindGroup)>,
     /// Present only under `blend weighted` — see [`crate::oit`].
     oit: Option<Oit>,
-    /// Whether this node draws the whole frame rather than one primitive per
-    /// element. **Read by the Set as well as by the draw**: a fullscreen L4
-    /// consumes nothing, which the check pass enforces, so a Set whose only
-    /// renderer is one has nothing reading its element buffers and skips the L1
-    /// passes entirely.
-    fullscreen: bool,
+    /// **What this node draws**, carried from the checked procedure rather
+    /// than reduced to a flag.
+    ///
+    /// Two readers, and they ask different questions of it. The draw asks
+    /// whether there is a primitive to size at all — a fullscreen L4 consumes
+    /// nothing, which the check pass enforces, so a Set whose only renderer is
+    /// one has nothing reading its element buffers and skips the L1 passes
+    /// entirely. [`crate::estimate`] asks the three-way question instead:
+    /// `Fullscreen` and `Lines` cost the target's area and `Points` does not,
+    /// so a small draw extrapolates one way or the other by this field. A
+    /// `bool` answered the first and could not answer the second.
+    topology: karakuri_ir::Topology,
     param_names: Vec<String>,
 }
 
@@ -53,7 +59,13 @@ impl Renderer {
         camera: &Camera,
         fields: karakuri_codegen::Bound<'_>,
     ) -> Renderer {
-        let fullscreen = l4.topology == Some(karakuri_ir::Topology::Fullscreen);
+        // **`Points` where a procedure somehow declared nothing.** `check`
+        // infers a topology for every L4 (`drawn_topology`), so the `None` arm
+        // is unreachable; it is spelled out rather than unwrapped because the
+        // conservative answer for a cost extrapolation and the conservative
+        // answer for the draw are the same one — a per-element renderer.
+        let topology = l4.topology.unwrap_or(karakuri_ir::Topology::Points);
+        let fullscreen = topology == karakuri_ir::Topology::Fullscreen;
         let weighted = l4.blend == Some(karakuri_ir::Blend::Weighted);
 
         let shader = generate_l4(l4, geometry.layout, fields);
@@ -258,13 +270,18 @@ impl Renderer {
                 .camera_group
                 .map(|g| (g, camera.bind_group().clone())),
             oit: weighted.then(|| Oit::new(device)),
-            fullscreen,
+            topology,
             param_names: l4.params.iter().map(|p| p.name.clone()).collect(),
         }
     }
 
     pub(crate) fn is_fullscreen(&self) -> bool {
-        self.fullscreen
+        self.topology == karakuri_ir::Topology::Fullscreen
+    }
+
+    /// What this node draws — see [`Renderer::topology`].
+    pub(crate) fn topology(&self) -> karakuri_ir::Topology {
+        self.topology
     }
 
     pub(crate) fn param_names(&self) -> &[String] {
@@ -287,7 +304,7 @@ impl Renderer {
     /// now derived on the GPU into a buffer this node binds. What is left is the
     /// clock, the salt, the canvas, and this node's own params.
     pub(crate) fn write_uniforms(&mut self, queue: &wgpu::Queue, view: &View<'_>) {
-        let fullscreen = self.fullscreen;
+        let fullscreen = self.is_fullscreen();
         let mut p = self.scratch.pack(&self.uniform_layout);
         p.f32("t", view.t)
             .f32("beats", view.beats)
@@ -395,7 +412,7 @@ impl Renderer {
         if let Some((at, bg)) = &self.camera_bg {
             pass.set_bind_group(*at, bg, &[]);
         }
-        if self.fullscreen {
+        if self.is_fullscreen() {
             // Three vertices, one instance, and no indirect read: the count
             // is a property of the shape rather than of how many elements
             // survived. See `FULLSCREEN_VS` for why it is a triangle and

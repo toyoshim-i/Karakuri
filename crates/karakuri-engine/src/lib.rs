@@ -32,6 +32,10 @@ pub mod binding;
 pub mod camera;
 pub mod compaction;
 pub mod deck;
+/// The small draw, and the one rule that turns it into a number for the
+/// console's risk badge. See the module's own documentation for what that rule
+/// costs, measured — it is not a caveat, it is the finding.
+pub mod estimate;
 pub mod frame;
 pub mod governor;
 pub mod gpu;
@@ -61,6 +65,7 @@ pub use binding::{Binding, Curve, ParamWrite, Signals};
 pub use camera::Orbit;
 pub use compaction::Compaction;
 pub use deck::{Blend, Deck, Frame, Mask, MaskKind, Residency};
+pub use estimate::{Estimate, PREPARATION_RESOLUTION};
 pub use frame::{compose, Committed, Look, Outcome, Sink, Skip, WindowSink};
 pub use governor::{Decision, Governor, Reason, Report, SlotState};
 pub use gpu::{Gpu, GpuError};

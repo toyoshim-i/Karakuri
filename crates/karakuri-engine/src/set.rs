@@ -3856,6 +3856,28 @@ impl Set {
     }
 
     /// Whether this Set composites its renderers or overdraws them.
+    /// **What this Set draws**, one entry per renderer, in draw order across
+    /// every source.
+    ///
+    /// The topology is the renderer's — `karakuri_ir::check` infers it from
+    /// whether the L4 has a `vertex` block and whether that block writes
+    /// `clip_b` — so it is a fact about what reaches the rasteriser rather than
+    /// about the geometry that feeds it. A Set with two renderers over one
+    /// geometry can have two different ones, which is why this is a list and
+    /// not a single answer.
+    ///
+    /// **Nothing here decides anything with it.** [`crate::estimate`] records
+    /// it on an estimate so an overshoot can be read against what was drawn,
+    /// and that is its only caller; the draw asks the narrower question through
+    /// `is_fullscreen`.
+    pub fn drawn_topologies(&self) -> Vec<karakuri_ir::Topology> {
+        self.sources
+            .iter()
+            .flat_map(|s| &s.renderers)
+            .map(|r| r.topology())
+            .collect()
+    }
+
     pub fn layering(&self) -> Layering {
         if self.merge.is_some() {
             Layering::Composite
