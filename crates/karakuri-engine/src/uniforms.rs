@@ -151,6 +151,17 @@ impl<'a> UniformPacker<'a> {
     /// reads as zero in the shader, and a parameter that is silently zero is
     /// far harder to find than a panic naming it.
     ///
+    /// **It cannot tell a zero somebody meant from a zero that means nothing
+    /// drives this.** `node::write_params` writes `vec2` and `vec3` zeroes for a
+    /// vector param, because nothing in this engine drives one and the value
+    /// channel is an `Option<f32>` that cannot carry three floats;
+    /// `node::write_field_params` reaches the same writes for a spliced field's
+    /// params. Both go through `write`, which sets the flag this scans — so "the
+    /// assertion built to stop a silently-zero parameter is satisfied by writing
+    /// one" (`docs/contributing.md` §3). The zeroes stay regardless: skipping the
+    /// field trips this panic, and packing the field as an `f32` trips `write`'s
+    /// type assertion on the render thread.
+    ///
     /// The check is a scan for *any* unwritten flag before the list of names
     /// is built, so the successful path — every frame — collects nothing and
     /// allocates nothing. The returned slice borrows the scratch, so the
