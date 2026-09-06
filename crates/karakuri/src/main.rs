@@ -2308,10 +2308,11 @@ impl Readout {
     /// keeps rather than only at the operation.
     ///
     /// **It emits nothing, and there is nothing for it to emit.** Moving this
-    /// cursor has no row on `docs/manual/operations.html` and is not owed one:
-    /// *"The cursor moves on the arrow keys and gets no row on the operations
-    /// page, which is a decision and not an omission"* — a pointer that names
-    /// a row instead of stepping to it is the same pointer, which is what
+    /// cursor has no row on `docs/manual/operations.html` and is not owed one,
+    /// and `docs/manual/console.html` is where that is said: *"The cursor
+    /// moves on the arrow keys and gets no row on the operations page, which
+    /// is a decision and not an omission"* — a pointer that names a row
+    /// instead of stepping to it is the same pointer, which is what
     /// `view::View::point_at` is.
     fn took(&mut self, p: Point, taken: Taken) -> Acted {
         let Taken { row, set } = taken;
@@ -5375,14 +5376,16 @@ fn library(root: &std::path::Path) -> Vec<setfile::SetSummary> {
 /// # The three blocks the row promises, and the fourth that is not here
 ///
 /// *"Every knob with its range and default, the element count, the attributes
-/// emitted — without fetching a source or compiling it."* The three are each a
-/// record on a card. **The element storage is deliberately absent**: the MCP
+/// emitted — each read off the artifact's own card, so those three fetch no
+/// source and compile nothing."* The three are each a record on a card.
+/// **The element storage is deliberately absent**: the MCP
 /// tool's `element_storage_block` calls `setfile::load`, which fetches every
 /// source in the Set and runs `compile::check` over it, so a panel that drew
-/// it would be paying exactly the cost that sentence says it does not.
-/// `docs/manual/console.html`'s note says the same and says what is unsettled
-/// — *"the row's tip tells the truth about the element-storage figure, or
-/// `read_set` stops offering it"* — which is a decision nobody has taken.
+/// it would be paying exactly the cost that sentence says these three do not.
+/// `docs/manual/console.html`'s note says the same and says where the figure
+/// goes instead — *"A model asking over MCP gets it and pays for it; a press
+/// in a library list is not the place to spend that"* — which the row settles
+/// the same way.
 ///
 /// # One control per key, and the range is the one every node agrees to
 ///
@@ -5914,9 +5917,8 @@ struct TakenIn {
 /// # Taking it in is not a second operation, and it is what gives it a name
 ///
 /// `docs/manual/operations.html`'s *Send a Set to somebody, and take one in*:
-/// packaging is *"one operation at two moments — ahead of time when you are
-/// sending, and at the press when you are not"*, so opening a preset **is**
-/// that row performed at the second of them. `console.html` reaches it from
+/// *"Taking one in is not a second row — opening a preset is this row"*, so
+/// opening a preset **is** that row performed. `console.html` reaches it from
 /// the other side: *"loading a preset is a packaging step, and a packaging step
 /// writes into the store: `my sets` gains a row you did not make."* That is
 /// what this does, and it is why a preset row is one press rather than two —
@@ -6002,13 +6004,12 @@ fn taking_in(
 /// # Two operations because they are two rows of the page, and one press
 ///
 /// `docs/manual/operations.html`'s *Send a Set to somebody, and take one in*:
-/// packaging is *"one operation at two moments — ahead of time when you are
-/// sending, and at the press when you are not"*, so *"loading a Set out of
-/// presets or out of a folder is this row performed at the second of them"*.
+/// *"Taking one in is not a second row — opening a preset is this row"*, so
+/// loading a Set out of presets or out of a folder **is** that row performed.
 /// The load after it is *Load material into a deck*, which is a different row
 /// with a different operation. **One press, two rows** — `console.html` says
-/// why it is one press: *"A row here is taken into the store and then loaded,
-/// which is one press because taking it in is what gives it a name."*
+/// why it is one press: *"That is one press rather than two because taking it
+/// in is what gives it the name the load needs."*
 ///
 /// So the press emits both. Emitting only the load would be a press that
 /// performs two of the page's rows and names one, and the row it dropped would
@@ -9889,10 +9890,10 @@ impl ApplicationHandler for App {
                                         // of the vocabulary —
                                         // `docs/manual/operations.html`'s
                                         // *Send a Set to somebody, and take
-                                        // one in*, *"this row performed at the
-                                        // second of them"*. Emitting only the
-                                        // load would be a press that does two
-                                        // of the page's rows and names one.
+                                        // one in*, *"opening a preset is this
+                                        // row"*. Emitting only the load would
+                                        // be a press that does two of the
+                                        // page's rows and names one.
                                         //
                                         // **Two emissions rather than one**,
                                         // because they are two rows: taking in
@@ -12208,10 +12209,10 @@ mod tests {
     /// in* performed at the second of its two moments, and then the load** —
     /// so it emits both, in that order.
     ///
-    /// `docs/manual/operations.html`: *"loading a Set out of presets or out of
-    /// a folder is this row performed at the second of them"*, and
-    /// `console.html`: *"A row here is taken into the store and then loaded,
-    /// which is one press because taking it in is what gives it a name."*
+    /// `docs/manual/operations.html`: *"Taking one in is not a second row —
+    /// opening a preset is this row"*, and `console.html`: *"That is one press
+    /// rather than two because taking it in is what gives it the name the load
+    /// needs."*
     /// **Two rows of the page and one press**, and what this defends is that
     /// the press names both of them: emitting only the load would be a press
     /// that performs two rows and names one, and the row it dropped is the one
@@ -13630,10 +13631,10 @@ mod tests {
     /// **A reading is read off the cards, one row per key, and never off a
     /// compile.**
     ///
-    /// The claim `docs/manual/operations.html` makes for this row — *"without
-    /// fetching a source or compiling it"* — and the four things
-    /// [`declared`] has to get right, each of which a plainer reading would
-    /// get wrong:
+    /// The claim `docs/manual/operations.html` makes for this row — *"each
+    /// read off the artifact's own card, so those three fetch no source and
+    /// compile nothing"* — and the four things [`declared`] has to get right,
+    /// each of which a plainer reading would get wrong:
     ///
     /// 1. **One control per key.** `exposure` is declared by two nodes here,
     ///    exactly as it is in the mock's own reading, and it is one row.
@@ -16485,12 +16486,12 @@ mod press_handler {
     //! these hit tests **directly**, bypassing the press handler —
     //! `row.go(…)`, `bay.tally(…)`, `bay.mask(…)` and more. Read as though it
     //! were the handler, that region on its own satisfies six of [`TABLE`]'s
-    //! twenty entries, `TransitionRow::go` among them, which is exactly the
-    //! entry that was unwired: the check would have been green on the day the
-    //! seam was open. **Two bounds keep it out, and either would do it alone
-    //! today** — [`code`] stops at the first `#[cfg(test)]`, and [`body`] then
-    //! cuts one function out of what is left — and each was measured against
-    //! the defect with the other taken away.
+    //! twenty-two entries, `TransitionRow::go` among them, which is exactly
+    //! the entry that was unwired: the check would have been green on the day
+    //! the seam was open. **Two bounds keep it out, and either would do it
+    //! alone today** — [`code`] stops at the first `#[cfg(test)]`, and
+    //! [`body`] then cuts one function out of what is left — and each was
+    //! measured against the defect with the other taken away.
     //!
     //! The same trap has been sprung once already from the other side, where a
     //! test-only item placed *above* the window loop moved [`key_column`]'s
