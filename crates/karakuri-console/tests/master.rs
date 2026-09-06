@@ -385,7 +385,7 @@ fn a_drag_asks_for_a_master_out_at_both_ends() {
             "the master out dragged to {end} asked for something other than {want}"
         );
         assert_eq!(
-            panel.released(),
+            panel.released(None),
             Some(Released::Let { knob: Knob::Out }),
             "the release names a deck's fader rather than the master out"
         );
@@ -444,5 +444,8 @@ fn the_route_a_window_takes_is_claim_then_derivation_then_operation() {
         panel.moved(to),
         Some(Dragged::Fader(Operation::SetMasterOut { out: 0.0 }))
     );
-    assert_eq!(panel.released(), Some(Released::Let { knob: Knob::Out }));
+    assert_eq!(
+        panel.released(None),
+        Some(Released::Let { knob: Knob::Out })
+    );
 }

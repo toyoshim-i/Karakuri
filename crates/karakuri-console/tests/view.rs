@@ -1059,7 +1059,7 @@ fn a_drag_in_hand_keeps_its_claim_wherever_the_pointer_goes() {
     // The release is still the panel's, and it has to be asked before
     // `released` takes the drag out of hand.
     assert_eq!(claim(&mut panel, &ctx, &showing(&[]), middle), Claim::Panel);
-    panel.released();
+    panel.released(None);
     assert!(!panel.dragging());
 
     // And afterwards the claim is back where it was.

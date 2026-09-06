@@ -36,26 +36,38 @@
 //! hand and where along it the pointer took hold. Both are the pointer's state
 //! and not the layout's.
 //!
-//! # Two kinds of drag, and one thing in hand
+//! # Three kinds of drag, and one thing in hand
 //!
-//! A boundary is one of them; a mixer strip's fader is the other, and they are
-//! **one `Option`** ([`Drag`], private) rather than two. That is not tidiness:
+//! A boundary is one of them; a mixer strip's fader is the second; a Set
+//! carried out of the Library bay is the third, and they are **one `Option`**
+//! ([`Drag`], private) rather than three. That is not tidiness:
 //! [`crate::input`]'s rule 1 — *a drag in hand keeps its claim, wherever the
 //! pointer has wandered to* — asks [`dragging`](Panel::dragging), and a second
 //! `Option` beside the first would be four states with two of them impossible
 //! and one rule that had to remember to ask about both. One thing in hand
-//! means rule 1 covers a fader by construction on the day it is written.
+//! means rule 1 covers a fader by construction on the day it is written, and
+//! it covered the carry the same way.
 //!
-//! **What the two disagree about is what a drag moves.** A boundary drag moves
-//! the arrangement, which is this crate's, so [`moved`](Panel::moved) writes it
-//! and reports where it landed. A fader drag moves the **engine's** value,
-//! which this crate does not have and cannot reach (ADR-0156) — so it writes
-//! nothing at all and reports a [`karakuri_operation::Operation`], which is the
-//! whole of what a GUI component is for: pointer motion into a number, sent to
-//! a target, and the value read back and drawn (ADR-0180). Nothing here
-//! remembers what the value became. The strip is drawn from what the deck says
-//! on the next frame, and a number kept here would be a second copy of the
-//! deck's state.
+//! **What the three disagree about is what a drag moves.** A boundary drag
+//! moves the arrangement, which is this crate's, so [`moved`](Panel::moved)
+//! writes it and reports where it landed. A fader drag moves the **engine's**
+//! value, which this crate does not have and cannot reach (ADR-0156) — so it
+//! writes nothing at all and reports a [`karakuri_operation::Operation`],
+//! which is the whole of what a GUI component is for: pointer motion into a
+//! number, sent to a target, and the value read back and drawn (ADR-0180).
+//! Nothing here remembers what the value became. The strip is drawn from what
+//! the deck says on the next frame, and a number kept here would be a second
+//! copy of the deck's state.
+//!
+//! **A carry moves nothing at all until it is let go**, and it is the one of
+//! the three whose *destination* is part of what it asks for. A fader knows
+//! which deck at the press — the knob is on a strip — so
+//! [`Released::Let`] carries no value and no target. A carry knows only what
+//! it picked up; which deck it lands on is whatever strip the pointer is over
+//! when the button comes up, so [`released`](Panel::released) is handed that
+//! answer the way [`grab`](Panel::grab) is handed a [`Grab`]: derived by
+//! [`crate::view`], which is where a strip's geometry is, and never
+//! re-derived here. See [`Released::Dropped`] and [`Released::Nowhere`].
 //!
 //! # Solve once, then read
 //!
@@ -121,6 +133,7 @@ pub struct Node {
 enum Drag {
     Boundary(Boundary),
     Fader(Fading),
+    Carry(Carrying),
 }
 
 /// A boundary in hand: which one, and where along it the pointer took hold.
@@ -167,6 +180,34 @@ struct Fading {
     /// of the value that would be sent. Every value that differs is a real
     /// change to the mix, however small.
     said: Option<f32>,
+}
+
+/// **A Set in hand**, on its way from a Library row to a mixer strip.
+///
+/// # It is a payload, where the other two are a control
+///
+/// [`Boundary`] and [`Fading`] each name **which control** the hand took hold
+/// of, resolved at the press, and every later event asks that control what the
+/// pointer now means. This names neither a control nor a place: what a carry
+/// holds is *the thing being carried*, and the control it is going to is not
+/// known until the button comes up.
+///
+/// **So the payload is a `String` and this is the one drag that is not
+/// `Copy`.** A Set is named by whatever the store called it — the row the host
+/// handed [`crate::view::View::library`] — and `karakuri-operation` names one
+/// the same way, because it is a leaf crate that cannot say anything narrower
+/// (`Operation::LoadSet`). That is what takes [`Released`] out of `Copy` with
+/// it, and it stops there: nothing else in this module gains a payload, and
+/// [`Pressed`] never sees a carry at all — [`Panel::carry`] is
+/// [`Panel::grab`]'s door and reports nothing back.
+///
+/// **Nothing is remembered about where it came from.** The row it was taken
+/// off is [`crate::view::View`]'s cursor, which the press moves and which
+/// outlives the gesture; a copy of it here would be a second answer to *which
+/// row is the cursor on* for as long as the button is down.
+struct Carrying {
+    /// Which Set, by the name the listing carried.
+    set: String,
 }
 
 /// **Which fader a hand has hold of**, named after the operation each of them
@@ -571,7 +612,14 @@ pub enum Dragged {
 ///
 /// [`Panel::released`] returns `None` when nothing was in hand, because a
 /// release that lets go of nothing did nothing.
-#[derive(Debug, Clone, Copy, PartialEq)]
+///
+/// **Not `Copy`, since [`Released::Dropped`] landed**, and that is the
+/// `String` in a Set's name arriving here rather than a decision taken about
+/// this enum: an operation naming a Set carries the name, `karakuri-operation`
+/// is a leaf crate that spells one as a `String`, and a release that answered
+/// with anything less would be this module inventing an id type for a store it
+/// cannot see (ADR-0156). Nothing else here changed shape — see [`Carrying`].
+#[derive(Debug, Clone, PartialEq)]
 pub enum Released {
     Rests {
         split: NodeId,
@@ -593,6 +641,44 @@ pub enum Released {
     /// somebody else's state, which is the second copy the whole module is
     /// written to refuse.
     Let { knob: Knob },
+    /// **A carried Set was let go over a strip**, and the load it asks for.
+    ///
+    /// **The one release on this panel that carries a value, and
+    /// [`Let`](Released::Let) above is why it is not a contradiction.** A
+    /// fader emitted every value it asked for while it was moving, so a value
+    /// here would be a second copy of the last of them; a carry emits nothing
+    /// while it moves, because a Set half-way to a strip has not been loaded
+    /// anywhere. The drop is the whole of what the gesture asks for, so it is
+    /// asked for here or nowhere.
+    ///
+    /// **Which deck is the caller's answer and not this module's**, handed to
+    /// [`Panel::released`] — see there, and [`Grab`] for the same seam at the
+    /// other end of a gesture.
+    ///
+    /// **Nothing is refused.** A drop on a deck that is live replaces what the
+    /// room is watching and this still asks for it: *"what may be asked for is
+    /// the instrument's to decide"* (`docs/manual/console.html`, *How a Set
+    /// reaches a deck*), and the gate is where that answer is
+    /// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
+    /// **This drag has no reading of residency at all** — a strip's `tally` is
+    /// not asked, here or in [`crate::view::Mixer::dropped`] — so there is
+    /// nowhere for a second rule to hide.
+    Dropped(Operation),
+    /// **A carried Set was let go over nothing**, and nothing is asked for.
+    ///
+    /// The third outcome a release can have, and it exists because a carry is
+    /// the one gesture on this panel that can be **cancelled**: a boundary
+    /// dragged off its track still lands somewhere legal and a fader dragged
+    /// past its end is still at its end, so both of them come to rest whatever
+    /// the pointer did. A row let go over the transport row, over another bay,
+    /// or off the viewport has nowhere to land, and a load aimed at the
+    /// nearest strip would be a deck nobody pointed at.
+    ///
+    /// **The Set is named because the caller has a sentence to say**, and
+    /// saying nothing at all is the failure this arm is against: a gesture
+    /// that is picked up, carried and then silently forgotten reads as a
+    /// panel that missed the press.
+    Nowhere { set: String },
 }
 
 /// Whether a node is drawing, and if not, why not.
@@ -671,6 +757,18 @@ pub enum InHand {
     /// A fader. **No axis**, because there is no resize cursor for a value:
     /// see [`Panel::in_hand`].
     Fader,
+    /// **A Set**, carried out of the Library bay. No axis for the fader's
+    /// reason and no payload for [`Panel::cursor`]'s: which Set is in hand is
+    /// the drag's, and a caller holding a copy of it would be shadowing the
+    /// drag it is about to ask to end.
+    ///
+    /// **It is a third answer rather than a second `Fader`**, and what needs
+    /// it is a caller deciding what a *move* meant: a move with a fader in
+    /// hand can emit an operation and a move with a carry in hand never can,
+    /// so a window loop that could not tell them apart would answer the
+    /// repaint question for one of them wrongly. `crates/karakuri/src/main.rs`
+    /// is where that is asked.
+    Carrying,
 }
 
 /// The console panel: the arrangement, the pointer, and the drag in hand.
@@ -756,6 +854,7 @@ impl Panel {
         Some(match self.drag.as_ref()? {
             Drag::Boundary(b) => InHand::Boundary(b.axis),
             Drag::Fader(_) => InHand::Fader,
+            Drag::Carry(_) => InHand::Carrying,
         })
     }
 
@@ -887,6 +986,31 @@ impl Panel {
         self.drag = Some(Drag::Fader(Fading { grab, said }));
     }
 
+    /// **Take a Set out of the Library bay.** [`grab`](Panel::grab)'s door with
+    /// a payload instead of a control — see [`Carrying`].
+    ///
+    /// **The view resolves which Set and this holds it**, which is [`Grab`]'s
+    /// seam over a listing instead of over a track: where the rows are is
+    /// [`crate::view::LibraryBay`]'s answer and depends on what the store said
+    /// this frame, and this module has no listing and takes none.
+    /// [`crate::view::LibraryBay::take`] is what a press resolves to.
+    ///
+    /// **The press itself asks for nothing at all**, which is
+    /// [`grab`](Panel::grab)'s rule read one bay along and is a stronger
+    /// statement here: a fader's press emits nothing because the value has not
+    /// moved, and a carry's emits nothing because *there is no operation yet*
+    /// — a Set names a load only once a deck is named too, and no deck is
+    /// named until the button comes up. So a press and a release with no
+    /// motion between them is a row picked up and put down, and the deck under
+    /// it at the release is the whole of what decides otherwise.
+    ///
+    /// It reports nothing back, for [`grab`](Panel::grab)'s reason: what the
+    /// press found is what the caller just resolved for itself.
+    pub fn carry(&mut self, p: Point, set: String) {
+        self.cursor = p;
+        self.drag = Some(Drag::Carry(Carrying { set }));
+    }
+
     /// A move with something in hand, and what it did — see [`Dragged`].
     /// `None` where nothing is in hand, and `None` where this move changed
     /// nothing.
@@ -897,11 +1021,20 @@ impl Panel {
     /// [`Grab::value`]. Nothing accumulates in either, which is what makes a
     /// drag past a stop — or past the end of a track — and back come home
     /// exactly.
+    ///
+    /// **A carry answers `None` to every move**, and that is the third kind of
+    /// drag rather than a case this forgot: nothing has happened, because
+    /// nothing happens until the Set is let go somewhere. [`Dragged`] has no
+    /// arm for it and is not owed one — an arm meaning *a hand is carrying
+    /// something and nothing happened* is `None` with a name on it, and a
+    /// caller that wants to draw the carry asks [`in_hand`](Panel::in_hand),
+    /// which is the question *is a gesture in progress* and already exists.
     pub fn moved(&mut self, p: Point) -> Option<Dragged> {
         self.cursor = p;
         match self.drag.as_ref()? {
             Drag::Boundary(_) => self.moved_boundary(p),
             Drag::Fader(_) => self.moved_fader(p),
+            Drag::Carry(_) => None,
         }
     }
 
@@ -960,7 +1093,30 @@ impl Panel {
     }
 
     /// The pointer went up. `None` where nothing was in hand.
-    pub fn released(&mut self) -> Option<Released> {
+    ///
+    /// # `onto` is the destination, resolved by whoever can resolve it
+    ///
+    /// **Which deck's strip the pointer is over**, or `None` for none — and
+    /// `None` for every release that is not a carry, because the other two
+    /// drags have no destination to name. A boundary comes to rest where the
+    /// layout put it and the layout is asked; a fader's rest is the deck's and
+    /// nobody is asked at all ([`Released::Let`]).
+    ///
+    /// **It is an argument for the reason [`Grab`] is one.** A strip's
+    /// geometry is [`crate::view::mixer`]'s answer — it depends on the values
+    /// the harness handed in and on a text shaper for the words in the same
+    /// strip — and this module has neither and takes neither. The alternative
+    /// is the toolkit inside the model. So the view is asked, as
+    /// [`crate::view::Outputs::op`] is asked, at a release instead of at a
+    /// press: [`crate::view::Mixer::dropped`] is the derivation, and it is the
+    /// same laid-out bay the frame drew.
+    ///
+    /// **One door and not two.** A carry could have had a `dropped(onto)` of
+    /// its own beside a `released()` that never takes a destination, and then
+    /// a caller that reached for the wrong one would cancel every drop in
+    /// silence. Here a caller that cannot answer passes `None`, which is the
+    /// honest outcome for a release that landed on nothing anyway.
+    pub fn released(&mut self, onto: Option<u8>) -> Option<Released> {
         match self.drag.take()? {
             Drag::Boundary(drag) => {
                 self.solve();
@@ -982,6 +1138,20 @@ impl Panel {
             // nothing owed and nothing to read back out of it.
             Drag::Fader(fading) => Some(Released::Let {
                 knob: fading.grab.knob,
+            }),
+            // No solve either, and for the same reason: a carry moved nothing
+            // here. `onto` was resolved against the layout the *caller* had
+            // already solved to hit-test it, which is the one solve there is.
+            Drag::Carry(carrying) => Some(match onto {
+                // **The whole of what the gesture asks for**, built here for
+                // `Knob::operation`'s reason: the translation from what a hand
+                // did into one operation of the vocabulary is the model's, and
+                // the two operands are the payload and the destination.
+                Some(deck) => Released::Dropped(Operation::LoadSet {
+                    deck,
+                    set: carrying.set,
+                }),
+                None => Released::Nowhere { set: carrying.set },
             }),
         }
     }

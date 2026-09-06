@@ -6319,11 +6319,58 @@ impl<'a> Mixer<'a> {
     /// for it to move. What it moves is [`View::selection`], which the ring
     /// above and the Library bay's pill both read.
     pub fn select(&self, p: karakuri_layout::Point) -> Option<Operation> {
+        self.deck_at(p).map(|deck| Operation::SelectDeck { deck })
+    }
+
+    /// **Which deck a carry let go at `p` lands on**, or `None` where no strip
+    /// is under it — which is a drop that asks for nothing at all
+    /// ([`crate::panel::Released::Nowhere`]).
+    ///
+    /// # It is a release where every other question in this bay is a press
+    ///
+    /// [`Mixer::grab`] and the four beside it answer *what does a press here
+    /// ask for*, and they are asked twice — once by [`crate::input::claim`] to
+    /// decide whose event it is, and once by whoever acts on it. Nothing asks
+    /// this one first: a carry already holds the pointer under `claim`'s rule
+    /// 1, so there is no claim to decide, and what is left is the second ask
+    /// on its own. What that buys is the destination resolved against the
+    /// geometry the frame *last drew* rather than against the geometry the
+    /// press was made on — the strips can have moved under a carry that took a
+    /// boundary with it on the way, and where the row lands is where the strip
+    /// is now.
+    ///
+    /// **The whole strip, where [`Mixer::select`] is what is left over.** The
+    /// two answer off one derivation ([`Mixer::deck_at`]) and differ in
+    /// nothing else, and that is the point: a press is offered the strip only
+    /// after the knobs and chips inside it have declined, because a press on a
+    /// knob is a press on that knob — but a Set let go over a knob is a Set
+    /// let go over **that deck**, since none of the five controls is a place a
+    /// Set could go instead. So this is asked of no other question first.
+    ///
+    /// **It reads no residency and no reading of any kind.** A drop on a live
+    /// deck asks for the load and the instrument decides
+    /// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md),
+    /// and `console.html`'s *"Nothing refuses it"*), so
+    /// [`Strip::tally`] is not consulted here and a strip's values reach this
+    /// only as the rectangle they were laid out into.
+    pub fn dropped(&self, p: karakuri_layout::Point) -> Option<u8> {
+        self.deck_at(p)
+    }
+
+    /// **Which strip's rectangle `p` is inside**, as a deck.
+    ///
+    /// Private, and the one derivation [`Mixer::select`] and
+    /// [`Mixer::dropped`] both read: *which column is the pointer in* is one
+    /// question, and two spellings of it would be a press that selects one
+    /// deck and a drop that loads another from the same point. The manual's
+    /// *deck* is the code's *slot* and a deck holds `MAX_SLOTS` of them, so
+    /// the index is a `u8` with room to spare — [`Mixer::grab`]'s note.
+    fn deck_at(&self, p: karakuri_layout::Point) -> Option<u8> {
         let p = Pos2::new(p.x, p.y);
-        self.boxes.iter().enumerate().find_map(|(index, at)| {
-            at.filter(|at| at.rect.contains(p))
-                .map(|_| Operation::SelectDeck { deck: index as u8 })
-        })
+        self.boxes
+            .iter()
+            .enumerate()
+            .find_map(|(index, at)| at.filter(|at| at.rect.contains(p)).map(|_| index as u8))
     }
 
     /// **Where the deck selection's ring goes**, and `None` for a selection
@@ -8690,6 +8737,27 @@ pub enum Read {
     Shut,
 }
 
+/// **A library row taken in hand**: which row, and the Set on it.
+///
+/// [`Chosen`]'s shape two rows up — a value travelling beside what the press
+/// meant, because the press means more than one operation can say. There the
+/// extra value is the chip `SelectScope` cannot name; here there is no
+/// operation at all yet, and both halves are wanted by different callers:
+/// [`crate::panel::Panel::carry`] takes the Set, and the row is what marks the
+/// list while a hand is on it.
+///
+/// **The row is a position and not a second copy of the name**, which is
+/// [`View::cursor_row`]'s own rule: what the mark can be drawn on is a place
+/// in the listing this console was handed, and a name kept beside it would go
+/// on naming a Set after the listing had been rewritten under it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Taken {
+    /// Which row of the listing, counting from the top of the drawn list.
+    pub row: usize,
+    /// The Set on it, by the name the listing carried.
+    pub set: String,
+}
+
 // -- the library's two filter fields ------------------------------------
 
 /// **What the `holds` field reads with no filter set**, which is the mock's
@@ -9052,13 +9120,19 @@ fn chip_width(ctx: &egui::Context, name: &str) -> f32 {
 /// # What is in the mock's bay and is here, which is the load route
 ///
 /// **`.lib-row.cursor` and the `load → A` pill in the foot.** These two are
-/// the whole of the route, and `console.html`'s *How a Set reaches a deck* is
-/// what settles their shape: *"what was missing was never the operation but
-/// the route"*, and the route is the arrangement — the cursor says which Set,
-/// the deck selection says which deck, so **a load is *"a cursor and a key
-/// with no pointer anywhere in it"***. So the cursor is drawn and moved by
-/// keys, the pill is a **readout** that says where a press lands *before* the
-/// press, and neither answers a pointer: `tests/library.rs` holds that.
+/// the whole of the *key's* route, and `console.html`'s *How a Set reaches a
+/// deck* is what settles their shape: *"what was missing was never the
+/// operation but the route"*, and that route is the arrangement — the cursor
+/// says which Set, the deck selection says which deck, so **a load is *"a
+/// cursor and a key with no pointer anywhere in it"***. So the cursor is
+/// drawn, the pill is a **readout** that says where a press lands *before* the
+/// press, and the pill answers no pointer: `tests/library.rs` holds that.
+///
+/// **The cursor is moved by a pointer as well as by the keys**, and that is
+/// the drag below arriving rather than a second control: a press on a row
+/// takes that Set in hand ([`LibraryBay::take`]) and the mark follows the
+/// hand, because the mark on a row is what this bay already draws for *which
+/// row* and the mock draws nothing else a carry could use.
 ///
 /// # The pill does not answer a press, and that is not the same as being inert
 ///
@@ -9069,9 +9143,10 @@ fn chip_width(ctx: &egui::Context, name: &str) -> f32 {
 /// onto a strip is a second route to the same command, and never the first …
 /// it names both operands in the one gesture, which makes it the only way to
 /// load a deck without selecting it first"*, and the operations page carries
-/// that gesture as this row's panel badge: `plan`, reading `library → deck`,
-/// which its legend defines as *"designed — this surface is meant to reach it
-/// and does not yet"*.
+/// that gesture as this row's panel badge, reading `library → deck`. **It is
+/// the drag that badge names and never this capsule**: [`LibraryBay::take`]
+/// picks a row up, [`crate::panel::Panel::carry`] holds it, and
+/// [`Mixer::dropped`] is where it lands.
 ///
 /// **So a press on the pill would be a third route nobody specified**, and it
 /// would be the wrong one twice over: it would name the deck from the
@@ -9080,10 +9155,11 @@ fn chip_width(ctx: &egui::Context, name: &str) -> f32 {
 /// the gesture that is specified still undrawn. What this bay owes is the
 /// drag; what it must not grow is a button.
 ///
-/// **This is why the scope chips moved a badge and this row did not.** A chip
-/// is the control the page names for its row and it is now pressable; the
-/// drag is the control this page names for this row and it is not drawn, so
-/// the badge stays *designed* and says so.
+/// **This row's badge moved when the drag landed, and the pill had nothing to
+/// do with it.** A chip is the control the page names for its row and a press
+/// on it is what made *that* badge true; the drag is the control this page
+/// names for this row, a press on a row and a release over a strip are what
+/// made this one true, and the capsule in the foot is a readout either way.
 ///
 /// # Nothing here writes a Set out, and what is missing is a destination
 ///
@@ -9217,9 +9293,11 @@ pub struct LibraryBay {
 /// [`AudioInPill`]'s shape two bays along and for the same reason — one
 /// derivation, so that what [`library_into`] paints and what a test asks about
 /// are the same rectangles. **It is not a control**: nothing in
-/// [`crate::input::claim`] hit-tests any of these, because a load is a cursor
-/// and a key with no pointer in it, and `tests/library.rs` is what fails the
-/// day one of them takes a press.
+/// [`crate::input::claim`] hit-tests any of these, because the route this
+/// capsule reads for is *"a cursor and a key with no pointer anywhere in
+/// it"* — and the route that does take a pointer starts in the list above it,
+/// on a row ([`LibraryBay::take`]). `tests/library.rs` is what fails the day
+/// the capsule takes a press.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LoadPill {
     /// **The capsule**, [`size::PILL_H`] tall at the far end of the foot.
@@ -9418,6 +9496,52 @@ impl LibraryBay {
                 id: set?.to_owned(),
             })),
         }
+    }
+
+    /// **What a press at `p` on the list takes in hand**, or `None` where
+    /// there is no drawn row under it.
+    ///
+    /// # It answers a payload where every other control here answers an
+    /// operation
+    ///
+    /// A press on a row asks for **nothing yet**. `console.html`'s *How a Set
+    /// reaches a deck* has the gesture as a drag — *"Dragging a row onto a
+    /// strip is a second route to the same command, and never the first … it
+    /// names both operands in the one gesture"* — and half a gesture names one
+    /// operand. So what comes back is the Set, on its way to
+    /// [`crate::panel::Panel::carry`], and the operation is built at the drop
+    /// where the second operand is ([`crate::panel::Released::Dropped`]).
+    ///
+    /// **A press that is never dragged anywhere asks for nothing either**, and
+    /// that is the same sentence rather than a second rule: the row is picked
+    /// up, carried nowhere, and let go over nothing.
+    ///
+    /// # The listing goes in with the point
+    ///
+    /// [`LibraryBay::read`]'s arrangement one row up, and for the reason that
+    /// method states: the operand is a name this crate reads no store for
+    /// (ADR-0156), so the rows the host handed in are what a row index means.
+    /// Handing them in is also what makes this refuse rather than clamp — a
+    /// listing shorter than the rows drawn takes nothing in hand, where an
+    /// index answered bare would name a Set nobody can see.
+    ///
+    /// **The rows are walked rather than divided.** A row's stride is
+    /// [`size::LIB_ROW_H`] and a reading pushes the rows under it down by a
+    /// whole block, so *which row is at `y`* is not one division —
+    /// [`LibraryBay::row`] already holds that arithmetic, and asking it per row
+    /// is what keeps the row a press lands on the row the paint drew. Never
+    /// more than [`LibraryBay::rows`] of them, so a press below the last row is
+    /// on the list's own ground and belongs to nobody.
+    pub fn take(&self, sets: &[String], p: karakuri_layout::Point) -> Option<Taken> {
+        let p = Pos2::new(p.x, p.y);
+        (0..self.rows)
+            .find(|index| self.row(*index).contains(p))
+            .and_then(|row| {
+                Some(Taken {
+                    row,
+                    set: sets.get(row)?.clone(),
+                })
+            })
     }
 
     /// **Every scope chip and its box**, left to right in the order the row
@@ -12211,8 +12335,10 @@ pub struct View {
     /// **An index into [`View::library`] and not a name**, because a name this
     /// console kept would be a second copy of a listing it is handed per
     /// frame — and a copy that goes on naming a Set the store no longer holds.
-    /// [`View::walk`] is what keeps it inside the listing, and it is asked at
-    /// the move rather than at the draw: a cursor clamped while painting would
+    /// [`View::walk`] and [`View::point_at`] are what keep it inside the
+    /// listing — a key steps and a press names, which is this console's
+    /// division everywhere a pointer meets a key — and both are asked at the
+    /// move rather than at the draw: a cursor clamped while painting would
     /// move on a frame nobody pressed anything on.
     cursor_row: usize,
     /// **What the Set under the cursor declares, opened** — or `None` for a
@@ -12470,6 +12596,39 @@ impl View {
         let to = (self.cursor_row as i64 + step as i64).clamp(0, last) as usize;
         let moved = to != self.cursor_row;
         self.cursor_row = to;
+        moved
+    }
+
+    /// **Put the library cursor on `row`**, and answer whether it moved.
+    ///
+    /// [`View::walk`]'s absolute door, and the pointer is what needs it: a key
+    /// can only say *one further on*, and a press lands on exactly one row —
+    /// the same division `e` and a scope chip make one bay up, and the same
+    /// one [`LibraryBay::filter`] makes against them.
+    ///
+    /// **What it is for is the carry.** A press on a row takes that Set in
+    /// hand ([`LibraryBay::take`]), and the mark on the row is the whole of
+    /// what this console can show for it: the mock draws `.lib-row.cursor` and
+    /// draws no ghost under a pointer and no lit strip, so the honest
+    /// affordance is the one the page already has, moved to the row the hand
+    /// is on. It outlives the gesture on purpose — a carry that was let go
+    /// over nothing leaves the cursor where the hand went, which is where `l`
+    /// would load from next.
+    ///
+    /// **A row past the listing is refused rather than clamped**, which is
+    /// [`View::select`]'s rule rather than [`View::walk`]'s, and for
+    /// `select`'s reason: a walk is *from where the cursor is*, so the nearest
+    /// row is what a key meant, and a press names a row outright — a press
+    /// answered with a different row than the one under it would move the load
+    /// somewhere nobody pointed.
+    ///
+    /// The `bool` is [`View::walk`]'s, for the same reason.
+    pub fn point_at(&mut self, row: usize) -> bool {
+        if row >= self.library.len() {
+            return false;
+        }
+        let moved = row != self.cursor_row;
+        self.cursor_row = row;
         moved
     }
 
@@ -13230,9 +13389,16 @@ impl View {
         // cursor vocabulary is *arrow, or resize over a boundary*, and
         // inventing a third mark here would be one control saying something no
         // other one on the panel says.
+        // **And a carry is the fader's answer again**, for the third kind of
+        // drag: a Set on its way to a strip crosses every boundary between the
+        // Library bay and the mixer, and a resize cursor flicking on over each
+        // of them would be a cursor for a gesture that is not happening. There
+        // is no cursor of its own for it either, and the reason is the one
+        // above rather than a gap — `CursorIcon::Grabbing` would be a third
+        // mark in a vocabulary of two, said by one control on the panel.
         let axis = match panel.in_hand() {
             Some(InHand::Boundary(axis)) => Some(axis),
-            Some(InHand::Fader) => None,
+            Some(InHand::Fader | InHand::Carrying) => None,
             None => match panel.layout().hit(panel.cursor(), GRAB) {
                 Hit::Divider { split, .. } => panel.layout().axis(split),
                 _ => None,

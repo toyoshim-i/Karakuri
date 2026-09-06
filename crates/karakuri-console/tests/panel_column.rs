@@ -362,6 +362,21 @@ fn sample(variant: &str) -> Operation {
         "ReadSet" => Operation::ReadSet {
             id: "night01".to_owned(),
         },
+        // **The drag from a row of that bay onto a mixer strip**, and the one
+        // emission in this list that no *press* produces: a press on a row
+        // takes the Set in hand and asks for nothing, and this is built at the
+        // release, out of the row that was carried and the strip it was let go
+        // over (`panel::Released::Dropped`). What the badge claims is that an
+        // operator reaches the row, so the value is any load.
+        //
+        // **It is the second route to a row the key already had**, which is
+        // what `console.html` calls it — *"a second route to the same command,
+        // and never the first"* — and the badge is about the *panel* column,
+        // so the key's `has` beside it was never evidence for this one.
+        "LoadSet" => Operation::LoadSet {
+            deck: 0,
+            set: "night01".to_owned(),
+        },
         other => panic!(
             "`{SRC}` constructs `Operation::{other}` and this file has no value for it — a \
              control started emitting an operation nobody accounted for. Add an arm here, and \
