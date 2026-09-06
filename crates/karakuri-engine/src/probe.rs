@@ -369,6 +369,55 @@ impl Probe {
         }
     }
 
+    /// **Re-point this probe at a different offscreen size, keeping its
+    /// verdict.**
+    ///
+    /// The one thing this must not do is construct a second [`Probe`]:
+    /// [`Probe::run`] demotes itself to [`MeasurementMethod::HostWallClock`]
+    /// for life on the first implausible sample, and two probes can land on
+    /// different methods and produce figures a budget would then be summing.
+    /// So `method` and the query resources are untouched here and only the
+    /// render attachment is replaced — a resize is a change of *what is
+    /// measured*, never of *which clock measured it*.
+    ///
+    /// This is what makes a small draw affordable at all: the offscreen target
+    /// is allocated once per size, not once per measurement, and
+    /// [`Measurement::resolution`] on every figure says which size answered.
+    ///
+    /// Allocates and is therefore not a frame-path call, exactly as
+    /// [`Probe::new`] is not. A no-op when the size already matches, so a
+    /// caller alternating between two sizes pays for the two allocations and
+    /// nothing more.
+    pub fn resize(&mut self, device: &wgpu::Device, resolution: (u32, u32)) {
+        if self.resolution == resolution {
+            return;
+        }
+        let (width, height) = resolution;
+        let target = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("probe target"),
+            size: wgpu::Extent3d {
+                width: width.max(1),
+                height: height.max(1),
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: Self::FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        });
+        self.target_view = target.create_view(&Default::default());
+        self.target = target;
+        self.resolution = resolution;
+    }
+
+    /// The offscreen size this probe is currently measuring at, which is what
+    /// [`Measurement::resolution`] will say.
+    pub fn resolution(&self) -> (u32, u32) {
+        self.resolution
+    }
+
     fn make_gpu_query(device: &wgpu::Device, queue: &wgpu::Queue) -> GpuQuery {
         let query_set = device.create_query_set(&wgpu::QuerySetDescriptor {
             label: Some("probe timestamps"),
