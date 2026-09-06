@@ -83,7 +83,7 @@
 //!    describing itself to an operator has to say what a pointer reaches, and
 //!    a sentence saying it is where the count goes stale. What they are is
 //!    still written here, because a name is not a number and there is nowhere
-//!    else the thirty-three sit together: the Outputs row's sink
+//!    else the thirty-four sit together: the Outputs row's sink
 //!    ([`crate::view::outputs`]), a mixer strip's fader knob
 //!    ([`crate::view::Mixer::grab`]), its blend chip
 //!    ([`crate::view::Mixer::blend`]), its tally chip
@@ -100,9 +100,10 @@
 //!    ([`crate::view::MasterRow::grab`]), the Program bay head's `solo`
 //!    ([`crate::view::program_head`]), the four deck preview cells under it
 //!    ([`crate::view::ProgramBay::preview`]), the Library bay's scope chips
-//!    ([`crate::view::LibraryBay::chip`]) and the two filter fields under them
-//!    ([`crate::view::LibraryBay::filter`]). The rule did not change to hold
-//!    any of the thirty-two that came after the first, which is what it was
+//!    ([`crate::view::LibraryBay::chip`]), the two filter fields under them
+//!    ([`crate::view::LibraryBay::filter`]) and the `read` chip in that bay's
+//!    foot ([`crate::view::LibraryBay::read`]). The rule did not change to hold
+//!    any of the thirty-three that came after the first, which is what it was
 //!    written for — and each is asked exactly the way the first is: the
 //!    derivation that draws it, asked whether the point is on it, with nothing
 //!    stored.
@@ -227,6 +228,22 @@
 //!    preview cell. **What brings the whole chip in is widening the pane**,
 //!    which that boundary allows and no maximum stops.
 //!    `tests/library.rs` measures both halves.
+//!
+//!    **The `read` chip in the Library bay's foot is the newest of them**, and
+//!    its clearance is a centring rather than a sum: `.lib-foot` is
+//!    [`crate::room::size::LIB_FOOT_H`]'s 26 tall and a `.pill` is
+//!    [`crate::room::size::PILL_H`]'s 16.5, centred, so there is **4.75** of
+//!    row above the capsule and 4.75 below it — and the foot's bottom edge is
+//!    the bay's, which is a boundary. **4.75 against a [`GRAB`] of 6 is the
+//!    third control on this console whose rim a boundary takes**, after the
+//!    `solo` capsule and a preview cell, and it is rule 3's ordinary price
+//!    rather than anything about this chip: everything from the capsule's
+//!    middle upwards is the panel's. Along the row it clears everything —
+//!    [`crate::room::size::LIB_FOOT_GAP`]'s 8 to the load pill on its right,
+//!    and the whole of the foot's leftover to the count on its left.
+//!    `tests/library.rs` measures it, and it is measured rather than inherited
+//!    from the load pill it sits beside, which happens to stand at the same
+//!    4.75 and is not a control at all.
 //!
 //!    **A control claims what it acts on and no more.** A fader's *track* is
 //!    drawn by the console and is not claimed, because a press on it does
@@ -432,15 +449,16 @@ use karakuri_operation::gate::Class;
 use crate::panel::{Panel, GRAB};
 use crate::view::{
     arrangement, audio_in, deck_head, inspector, library, look, master, mcp_pill, mixer, outputs,
-    program_bay, program_head, transition, Field, Scope, View,
+    program_bay, program_head, transition, Field, Scope, View, DECK_LETTERS,
 };
 
 /// **What each of rule 4's derivations answers for**, one entry per probe in
 /// [`claim`] and in that order: the Outputs sink, the audio-in pill, the
 /// arrangement pill, the look group's two, a strip's four, the transition
 /// row's four, the Master bay's one, a deck head's four, the Program bay
-/// head's `solo`, the four deck preview cells, the Library bay's scope chips
-/// and its two filter fields, and the four class pills.
+/// head's `solo`, the four deck preview cells, the Library bay's scope chips,
+/// its two filter fields and the `read` chip in its foot, and the four class
+/// pills.
 ///
 /// **It is a table and not a sentence because [`claim`] asks its probes out of
 /// an array of exactly this length.** A derivation added to rule 4 without an
@@ -460,13 +478,19 @@ use crate::view::{
 /// number of scopes that exist, and the day a fifth is added this rises with
 /// it rather than being a four somebody has to remember.
 ///
+/// **The `read` chip's entry is one**, and it is one for a reason worth
+/// separating from the two above: the chip is a *toggle over the cursor*
+/// rather than one of a row, so however long the listing is there is one
+/// capsule to press. What a press on it means depends on whether a reading is
+/// open, and that is inside `LibraryBay::read` where the block is.
+///
 /// **The filter row's entry is two and is a constant**, unlike the scope row
 /// above it: the row is `holds` and `layer` because
 /// [`karakuri_operation::Operation::ListSets`] carries two things to narrow by,
 /// and a third would be a change to the vocabulary rather than a longer slice
 /// the host handed in. [`Field::ALL`] is the same two, and it is what the probe
 /// walks.
-const CLAIMS: [usize; 13] = [
+const CLAIMS: [usize; 14] = [
     1,
     1,
     1,
@@ -479,6 +503,7 @@ const CLAIMS: [usize; 13] = [
     4,
     Scope::ALL.len(),
     Field::ALL.len(),
+    1,
     4,
 ];
 
@@ -713,7 +738,7 @@ pub fn claim(panel: &mut Panel, ctx: &egui::Context, view: &View, p: Point) -> C
             // is this rule's ordinary price and is measured in
             // `tests/library.rs`.
             let on_scope = || {
-                library(panel.layout(), &view.scopes, &view.library)
+                library(panel.layout(), &view.scopes, &view.library, view.opened())
                     .is_some_and(|bay| bay.chip(ctx, &view.scopes, p).is_some())
             };
             // **The Library bay's two filter fields**, one row under the
@@ -731,8 +756,34 @@ pub fn claim(panel: &mut Panel, ctx: &egui::Context, view: &View, p: Point) -> C
             // earlier because the row it is in is drawn only where the chips
             // above it are.
             let on_filter = || {
-                library(panel.layout(), &view.scopes, &view.library)
+                library(panel.layout(), &view.scopes, &view.library, view.opened())
                     .is_some_and(|bay| bay.filter(&view.holds, view.filters(), p).is_some())
+            };
+            // **The `read` chip in the Library bay's foot**, and it is the
+            // one control in this bay that is not in its head: the chips say
+            // which library and the fields narrow it, where this reads the row
+            // the cursor is on. The bay is derived a third time for the second
+            // probe's reason — `any` short-circuits, so a press that got this
+            // far has already been turned down by the two rows above.
+            //
+            // **The Set under the cursor goes in with the point**, because
+            // what a press asks for names it: `Operation::ReadSet` carries an
+            // id, and this crate reads no store (ADR-0156), so the operand is
+            // the row the host handed in. A listing with nothing in it has no
+            // Set there, and the chip then claims nothing —
+            // `LibraryBay::read`.
+            let on_read = || {
+                library(panel.layout(), &view.scopes, &view.library, view.opened()).is_some_and(
+                    |bay| {
+                        bay.read(
+                            ctx,
+                            DECK_LETTERS[usize::from(view.selection())],
+                            view.library.get(view.cursor_row()).map(String::as_str),
+                            p,
+                        )
+                        .is_some()
+                    },
+                )
             };
             // **The four class pills, one derivation asked four times**, which
             // is a deck head's arrangement rather than a strip's: they are in
@@ -770,6 +821,7 @@ pub fn claim(panel: &mut Panel, ctx: &egui::Context, view: &View, p: Point) -> C
                 &on_cells,
                 &on_scope,
                 &on_filter,
+                &on_read,
                 &on_mcp,
             ];
             match probes.iter().any(|probe| probe()) {

@@ -348,6 +348,20 @@ fn sample(variant: &str) -> Operation {
             holds: None,
             layer: None,
         },
+        // **The `read` chip in the Library bay's foot**, and the one emission
+        // in this list whose operand is a *pointer of this console's own*: the
+        // id is the Set under the cursor, which is where the load pill beside
+        // it reads its operand too. The value is any id, because what the
+        // badge claims is that an operator reaches the row.
+        //
+        // **One of its two presses emits nothing**, and that is not a gap in
+        // this inventory: opening asks for a reading and closing puts one
+        // away, which changes what this bay is drawing and nothing else —
+        // `view::Read`. What this file sees is the asking, which is the half
+        // the page's badge is about.
+        "ReadSet" => Operation::ReadSet {
+            id: "night01".to_owned(),
+        },
         other => panic!(
             "`{SRC}` constructs `Operation::{other}` and this file has no value for it — a \
              control started emitting an operation nobody accounted for. Add an arm here, and \

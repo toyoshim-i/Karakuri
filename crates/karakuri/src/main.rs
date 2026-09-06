@@ -284,7 +284,7 @@ use karakuri_console::view::{
     deck_head as deck_head_row, inspector as inspector_pane, library as library_bay,
     look as look_row, master as master_row, mcp_pill, mixer as mixer_bay, outputs, picture_rect,
     preview_rects, program_head, transition as transition_row, Ask, AudioAsk, AudioIn, Chosen, Go,
-    Kind, McpPill, Picture, Scope, TransitionSettings, View, DECKS, DECK_LETTERS,
+    Kind, McpPill, Picture, Read, Reading, Scope, TransitionSettings, View, DECKS, DECK_LETTERS,
 };
 // **How many slots a deck can hold**, which is how many this one has — see
 // [`SLOTS`]. Not re-exported at the crate root, and asked of the module that
@@ -1662,9 +1662,13 @@ impl Readout {
                 // inconsistency between them. What comes back is `Chosen`: the
                 // chip, and `Operation::SelectScope` beside it, because that
                 // operation's payload is `Undecided` and cannot carry a chip.
-                if let Some(chosen) =
-                    library_bay(self.panel.layout(), &self.view.scopes, &self.view.library)
-                        .and_then(|bay| bay.chip(ctx, &self.view.scopes, at))
+                if let Some(chosen) = library_bay(
+                    self.panel.layout(),
+                    &self.view.scopes,
+                    &self.view.library,
+                    self.view.opened(),
+                )
+                .and_then(|bay| bay.chip(ctx, &self.view.scopes, at))
                 {
                     return (claim, self.chose(chosen));
                 }
@@ -1683,11 +1687,45 @@ impl Readout {
                 // `Operation::ListSets`: unlike `SelectScope` this payload can
                 // carry everything the press decided, so there is no `Chosen`
                 // here and nothing beside the operation.
-                if let Some(operation) =
-                    library_bay(self.panel.layout(), &self.view.scopes, &self.view.library)
-                        .and_then(|bay| bay.filter(&self.view.holds, self.view.filters(), at))
+                if let Some(operation) = library_bay(
+                    self.panel.layout(),
+                    &self.view.scopes,
+                    &self.view.library,
+                    self.view.opened(),
+                )
+                .and_then(|bay| bay.filter(&self.view.holds, self.view.filters(), at))
                 {
                     return (claim, self.narrowed(operation));
+                }
+                // **The `read` chip in the Library bay's foot**, and the bay
+                // is derived a third time for the reason `claim` derives it a
+                // third time: each of these is a question about one laid-out
+                // bay and a value held across all three would outlive the
+                // question it answers.
+                //
+                // **The Set under the cursor goes in with the point**, because
+                // the operand of a reading is the cursor — the same operand
+                // the pill beside it reads, which is what
+                // `console.html`'s note means by *"the route costs one chip in
+                // the foot and nothing else"*.
+                if let Some(ask) = library_bay(
+                    self.panel.layout(),
+                    &self.view.scopes,
+                    &self.view.library,
+                    self.view.opened(),
+                )
+                .and_then(|bay| {
+                    bay.read(
+                        ctx,
+                        DECK_LETTERS[usize::from(self.view.selection())],
+                        self.view
+                            .library
+                            .get(self.view.cursor_row())
+                            .map(String::as_str),
+                        at,
+                    )
+                }) {
+                    return (claim, self.asked_to_read(ask));
                 }
                 // **The transition row's four capsules, derived once for all
                 // of them**, exactly as `claim` does it: the three settings
@@ -2126,6 +2164,42 @@ impl Readout {
             }
         );
         Acted::Emitted(Some(operation))
+    }
+
+    /// **A press on the Library bay's `read` chip**, and it is
+    /// [`Readout::narrowed`]'s shape one row down with one difference: only
+    /// one of the two things a press on this chip can mean is an operation.
+    ///
+    /// **Opening asks for a reading and this file does not answer it**, which
+    /// is [`Readout::narrowed`]'s division exactly: what a Set declares is on
+    /// a disk, the store is the window's rather than the readout's, and a
+    /// press is where this program already reads one. So the operation leaves
+    /// here and the caller answers it with [`read_reading`], on the same
+    /// branch it re-reads a listing on.
+    ///
+    /// **Closing is performed here and emits nothing.** It changes which rows
+    /// this bay is drawing, which is the console's own state — no more an
+    /// operation than a fold is — and a `ReadSet` emitted to put a reading
+    /// away would say a question was asked at the moment one stopped being.
+    /// See `view::Read`, where the argument is.
+    fn asked_to_read(&mut self, ask: Read) -> Acted {
+        match ask {
+            Read::Open(operation) => Acted::Emitted(Some(operation)),
+            Read::Shut => {
+                println!(
+                    "read: closed — {}",
+                    match self.view.shut_reading() {
+                        true => "the list is a list again, and the chip asks for it back",
+                        // The chip answers `Shut` off the block the bay is
+                        // drawing, so this is a reading that went away between
+                        // the layout and the press. Said rather than
+                        // unreachable.
+                        false => "there was nothing open",
+                    }
+                );
+                Acted::Nothing
+            }
+        }
     }
 
     /// A press on the Outputs row's one control. **The dot says what it did**
@@ -2567,6 +2641,7 @@ impl Readout {
                             layout,
                             &self.view.scopes,
                             &self.view.library,
+                            self.view.opened(),
                         ) {
                             Some(bay) => format!(
                                 "bay, {}, {} listed",
@@ -5138,6 +5213,213 @@ fn library(root: &std::path::Path) -> Vec<setfile::SetSummary> {
             // because the store is.
             println!("library: {} could not be listed: {e}", root.display());
             Vec::new()
+        }
+    }
+}
+
+/// **What one Set declares, read off the cards the store keeps beside its
+/// artifacts** — the answer to
+/// [`Operation::ReadSet`](karakuri_operation::Operation::ReadSet), in the shape
+/// the Library bay draws it in.
+///
+/// # It is the same reading the MCP tool gives a model, through the same path
+///
+/// `karakuri_environment::mcp::read_set` renders this for a model, and what it
+/// reads is the Set file's `slot` records and each artifact's metadata card —
+/// `Store::read_set`, then `Store::read_meta` per node, then the `param_decl`,
+/// `capacity_decl` and `emit` records on it. **This walks the same records**
+/// rather than a second source: a panel and a model that disagreed about what
+/// a Set declares would be two answers to one question. What differs is the
+/// rendering, and it differs because the destinations do: a model is handed
+/// prose it reads in a context window and a bay is handed one line per control
+/// in a column eight characters wide.
+///
+/// **The prose renderer is not called, and could not be**: it returns one
+/// `String` per Set with its blocks already laid out in sentences, and a
+/// listing row wants the key and the range apart. Lifting a structured reading
+/// into `karakuri-environment` so that both surfaces render one value is the
+/// right shape and is a change to a crate this pass may not touch; what is
+/// here is written against the same records in the same order so that the day
+/// somebody does, this is what moves.
+///
+/// # The three blocks the row promises, and the fourth that is not here
+///
+/// *"Every knob with its range and default, the element count, the attributes
+/// emitted — without fetching a source or compiling it."* The three are each a
+/// record on a card. **The element storage is deliberately absent**: the MCP
+/// tool's `element_storage_block` calls `setfile::load`, which fetches every
+/// source in the Set and runs `compile::check` over it, so a panel that drew
+/// it would be paying exactly the cost that sentence says it does not.
+/// `docs/manual/console.html`'s note says the same and says what is unsettled
+/// — *"the row's tip tells the truth about the element-storage figure, or
+/// `read_set` stops offering it"* — which is a decision nobody has taken.
+///
+/// # One control per key, and the range is the one every node agrees to
+///
+/// A Set publishes one control per *key* and not one per declaration
+/// (`docs/ir-spec.md`, and `karakuri_engine::set::Set::published`), so a name
+/// two nodes declare is one row over the part of the range both of them
+/// accept. That intersection is `Set::declared_range`'s own arithmetic —
+/// `lo.max(min)`, `hi.min(max)` — done here because **a built Set is what this
+/// chip exists to be pressed before**: `published()` needs an engine and a
+/// device, and a reading that took one would be the load it is meant to save.
+///
+/// The **default** is the first declarer's, and the order is the file's own —
+/// the same order `read_set` prints its nodes in and the order
+/// `Set::published` walks. A default is one number and two nodes may declare
+/// two; the alternative is drawing neither, which is a blank row and is the
+/// one thing the mock's own tip refuses.
+fn declared(root: &std::path::Path, id: &str) -> Result<Reading, String> {
+    let store = Store::open(root).map_err(|e| format!("the store at {}: {e}", root.display()))?;
+    let lines = store
+        .read_set(id)
+        .map_err(|e| format!("reading set `{id}`: {e}"))?;
+    let mut reading = Reading {
+        id: id.to_owned(),
+        ..Reading::default()
+    };
+    // The key's range so far and the first declarer's default, in the order
+    // the keys first appeared — a `Vec` and not a map for `Set::published`'s
+    // own reason: the order is what the author wrote, and a hasher's order
+    // would move between runs.
+    let mut knobs: Vec<(String, [f32; 2], Option<f32>)> = Vec::new();
+    let mut capacity: Option<[u32; 3]> = None;
+    let mut emits: Vec<String> = Vec::new();
+    for line in &lines {
+        let Record::Slot { proc_hash, .. } = line.record() else {
+            continue;
+        };
+        reading.nodes += 1;
+        // **A node with no card is counted rather than skipped in silence.**
+        // A card is derived rather than kept, so an artifact stored as bytes
+        // has none — an ordinary state of a working store, which
+        // `mcp::node_block` says at length — and what it costs this reading is
+        // whatever that node declared. The foot is where that is said.
+        let Ok(card) = store.read_meta(proc_hash) else {
+            continue;
+        };
+        reading.described += 1;
+        for entry in &card {
+            match entry.record() {
+                Record::ParamDecl {
+                    key,
+                    min,
+                    max,
+                    default,
+                    ..
+                } => match knobs.iter_mut().find(|(seen, ..)| seen == key) {
+                    Some((_, range, _)) => {
+                        range[0] = range[0].max(*min);
+                        range[1] = range[1].min(*max);
+                    }
+                    None => knobs.push((key.clone(), [*min, *max], *default)),
+                },
+                Record::CapacityDecl { min, max, default } => {
+                    capacity = Some(match capacity {
+                        None => [*min, *max, *default],
+                        Some([lo, hi, was]) => [lo.max(*min), hi.min(*max), was],
+                    })
+                }
+                // **The union, in the order the nodes declare them.** A Set
+                // over two geometries emits what both of them do, and the row
+                // is *what a renderer drawn over it can consume* rather than
+                // any one node's list.
+                Record::Emit { attrs } => {
+                    for attr in attrs {
+                        if !emits.contains(attr) {
+                            emits.push(attr.clone());
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    reading.knobs = knobs
+        .into_iter()
+        // **Spelled `view::Published` in full**, because
+        // `karakuri_engine::set::Published` is in scope here under the same
+        // name and they are the same idea two levels apart: one is what a
+        // built Set publishes and this is what a file's cards say it will.
+        .map(|(key, [min, max], default)| view::Published {
+            key,
+            range: spelled(
+                &format!("{min}"),
+                &format!("{max}"),
+                default.map(|d| format!("{d}")),
+            ),
+        })
+        .collect();
+    reading.capacity = capacity.map(|[min, max, default]| {
+        spelled(
+            &format!("{min}"),
+            &format!("{max}"),
+            Some(format!("{default}")),
+        )
+    });
+    reading.emits = (!emits.is_empty()).then(|| emits.join(", "));
+    Ok(reading)
+}
+
+/// **A declared range and the default that applies until something turns it**,
+/// in the shape the mock draws every line of a reading in: `0 – 8 · 2`.
+///
+/// **The three marks are the mock's own** — an en dash between the ends of the
+/// range and a middle dot before the default — and both are in the face the
+/// panel draws with, which is asserted rather than assumed
+/// ([`the_marks_a_reading_is_spelled_with_are_in_the_face`]): the `load → A`
+/// pill was typed with a U+2192 the default face does not carry and drew
+/// `load □ A` for a release.
+///
+/// **A default that is not a literal is a word and not a blank.** The card's
+/// `default` is absent where the declaration's expression is not a number this
+/// build can state — never where there is none, since the `.kir` grammar makes
+/// the expression mandatory — so what a blank would say here is false. `expr`
+/// is what is drawn instead, in a column that has room for four characters.
+fn spelled(min: &str, max: &str, default: Option<String>) -> String {
+    format!(
+        "{min} – {max} · {}",
+        default.unwrap_or_else(|| "expr".to_owned())
+    )
+}
+
+/// **The reading under the cursor, read and written into the view**, and the
+/// sentence to print about it.
+///
+/// [`listing`]'s shape one control along, and it is here for that function's
+/// reason: reading a Set file and the cards behind it is a disk read, this is
+/// the side of the seam that owns the store, and `karakuri-console` takes none
+/// of the three (ADR-0156). **On the press and never on a frame** (P-0091) —
+/// which is the press on the `read` chip, and the key that moves the cursor
+/// while a reading is open, because the reading follows the cursor.
+fn read_reading(view: &mut View, store: &std::path::Path) -> String {
+    let Some(id) = view.library.get(view.cursor_row()).cloned() else {
+        // A press with no row under the cursor asks nothing —
+        // `LibraryBay::read` answers `None` for it — so this is reachable only
+        // from a cursor that moved in a listing that went empty in between.
+        view.shut_reading();
+        return String::from("  read: this bay lists nothing, so there is no Set to read");
+    };
+    match declared(store, &id) {
+        Ok(reading) => {
+            let line = format!(
+                "  read: `{id}` declares {} over {}{}",
+                reading.knobs_word(),
+                reading.nodes_word(),
+                match reading.nodes == reading.described {
+                    true => String::new(),
+                    false => format!(", {}", reading.cards_word()),
+                }
+            );
+            view.read(reading);
+            line
+        }
+        // **Said out loud and the block put away**, which is [`library`]'s
+        // rule one bay up: a reading that failed to read and a Set that
+        // declares nothing must not draw the same.
+        Err(e) => {
+            view.shut_reading();
+            format!("  read: `{id}` could not be read — {e}")
         }
     }
 }
@@ -9069,6 +9351,15 @@ impl ApplicationHandler for App {
                         listing(&mut self.readout.view, &self.store, self.presets.as_ref())
                     );
                 }
+                // **And a press that asked to read a Set is a Set file and its
+                // cards to read**, on the same branch and for the same
+                // reason: the store is here, a file read is not a thing to do
+                // on a frame (P-0091), and `karakuri-console` reaches no disk
+                // at all (ADR-0156). What the console holds is the answer and
+                // whether the block is down — `view::View::reading`.
+                if matches!(acted, Acted::Emitted(Some(Operation::ReadSet { .. }))) {
+                    println!("{}", read_reading(&mut self.readout.view, &self.store));
+                }
                 // **A press on a control earns its frame from what it did**,
                 // and not from the claim: `Change::Pointer(Claim::Panel)` is
                 // already a frame, but the operation the dot asked for is the
@@ -9251,9 +9542,33 @@ impl ApplicationHandler for App {
                             self.readout.panel.layout(),
                             &self.readout.view.scopes,
                             &self.readout.view.library,
+                            self.readout.view.opened(),
                         )
                         .map_or(0, |bay| bay.rows);
                         let moved = self.readout.view.walk(step, listed);
+                        // **The reading follows the cursor**, which is
+                        // `console.html`'s own rule: *"the arrow keys move the
+                        // cursor and the reading moves with it"*, and *"one
+                        // row is open at a time"*. So the block under the
+                        // cursor is re-read off the disk here, on the move —
+                        // a file read on a press, which is where this program
+                        // already does them
+                        // ([P-0091](../../../docs/principles/0091-cost-is-known-before-it-is-paid.md)),
+                        // and only where the cursor actually moved.
+                        //
+                        // **And this key still names no operation**, which is
+                        // `key_column`'s `("up", &[])` and is the page's to
+                        // change rather than this file's (ADR-0198, ADR-0220):
+                        // the asking was the press on the `read` chip and what
+                        // this moves is that question's *operand*. The
+                        // operations page names no key for that row —
+                        // `console.html` calls it *"a gap and not a
+                        // decision"* — and a key that emitted `ReadSet` would
+                        // be an operator reaching the row from the keyboard
+                        // while the page says nobody can.
+                        if moved && self.readout.view.reading_open() {
+                            println!("{}", read_reading(&mut self.readout.view, &self.store));
+                        }
                         App::wants(
                             gfx,
                             &mut self.egui_due,
@@ -13128,6 +13443,327 @@ mod tests {
         }
     }
 
+    /// **A reading is read off the cards, one row per key, and never off a
+    /// compile.**
+    ///
+    /// The claim `docs/manual/operations.html` makes for this row — *"without
+    /// fetching a source or compiling it"* — and the four things
+    /// [`declared`] has to get right, each of which a plainer reading would
+    /// get wrong:
+    ///
+    /// 1. **One control per key.** `exposure` is declared by two nodes here,
+    ///    exactly as it is in the mock's own reading, and it is one row.
+    /// 2. **Over the part of the range both of them accept**, which is
+    ///    `Set::published`'s intersection done off the cards: `[0, 1]` and
+    ///    `[0.2, 0.8]` is one control over `[0.2, 0.8]`.
+    /// 3. **A node with no card is counted and not skipped in silence**, which
+    ///    is the foot's `n without a card` and the one thing that keeps a knob
+    ///    missing for want of a card from being a knob missing.
+    /// 4. **Nothing was compiled.** The artifacts here are not `.kir` at all —
+    ///    they are three bytes each — so a reading that fetched and checked a
+    ///    source could not have answered at all, which is the strongest form
+    ///    this claim can be put in.
+    ///
+    /// A CPU test: a store is a directory and no adapter is opened.
+    #[test]
+    fn a_reading_is_read_off_the_cards_and_never_off_a_compile() {
+        use karakuri_store::ndjson::Line;
+        let root = scratch_dir("read-set-declares");
+        let store = Store::open(&root).expect("a store to read");
+
+        // Three nodes: a geometry, a renderer that declares `exposure` over
+        // the whole range, and a second renderer that declares it narrower.
+        let card =
+            |records: Vec<Record>| -> Vec<Line> { records.into_iter().map(Line::new).collect() };
+        let param = |key: &str, min: f32, max: f32, default: Option<f32>| Record::ParamDecl {
+            key: key.to_owned(),
+            ty: "float".to_owned(),
+            min,
+            max,
+            default,
+        };
+        let geometry = store.put_artifact(b"g\n").expect("an artifact");
+        store
+            .write_meta(
+                &geometry,
+                &card(vec![
+                    param("radius", 0.0, 8.0, Some(2.0)),
+                    Record::CapacityDecl {
+                        min: 16384,
+                        max: 1048576,
+                        default: 262144,
+                    },
+                    Record::Emit {
+                        attrs: vec!["position".to_owned(), "size".to_owned()],
+                    },
+                ]),
+            )
+            .expect("a card");
+        let wide = store.put_artifact(b"r1\n").expect("an artifact");
+        store
+            .write_meta(&wide, &card(vec![param("exposure", 0.0, 1.0, Some(0.4))]))
+            .expect("a card");
+        let narrow = store.put_artifact(b"r2\n").expect("an artifact");
+        store
+            .write_meta(&narrow, &card(vec![param("exposure", 0.2, 0.8, Some(0.9))]))
+            .expect("a card");
+        // And a fourth node whose artifact this store has no card for, which
+        // is an ordinary state and not a damaged store.
+        let bare = store.put_artifact(b"r3\n").expect("an artifact");
+
+        let slot = |layer, index, hash| {
+            Line::new(Record::Slot {
+                layer,
+                index,
+                name: None,
+                proc_hash: hash,
+            })
+        };
+        use karakuri_store::record::Layer as Written;
+        store
+            .write_set(
+                "drift_night",
+                &[
+                    slot(Written::L1, 0, geometry),
+                    slot(Written::L4, 0, wide),
+                    slot(Written::L4, 1, narrow),
+                    slot(Written::L4, 2, bare),
+                ],
+            )
+            .expect("a Set to read");
+
+        let reading = declared(&root, "drift_night").expect("the Set reads");
+        assert_eq!(reading.id, "drift_night");
+        assert_eq!(
+            reading
+                .knobs
+                .iter()
+                .map(|knob| (knob.key.as_str(), knob.range.as_str()))
+                .collect::<Vec<_>>(),
+            vec![
+                ("radius", "0 – 8 · 2"),
+                // **One row and two nodes declare it**, over the part of the
+                // range both of them accept, and the default is the first
+                // declarer's — a control is one number and two nodes may
+                // declare two.
+                ("exposure", "0.2 – 0.8 · 0.4"),
+            ],
+            "the reading publishes {:?}",
+            reading.knobs
+        );
+        assert_eq!(
+            reading.capacity.as_deref(),
+            Some("16384 – 1048576 · 262144"),
+            "the capacity is drawn in a knob's shape"
+        );
+        assert_eq!(reading.emits.as_deref(), Some("position, size"));
+        assert_eq!((reading.nodes, reading.described), (4, 3));
+        assert_eq!(reading.cards_word(), "1 without a card");
+        assert_eq!(reading.knobs_word(), "2 knobs");
+        assert_eq!(reading.nodes_word(), "4 nodes");
+        // The head, two knobs, the capacity, what it emits, and the foot.
+        assert_eq!(reading.rows(), 6);
+
+        // **A default the card cannot state as a number is a word and not a
+        // blank**, because the `.kir` grammar makes the expression mandatory:
+        // what a blank would say here is that there is no default, which is
+        // false.
+        let expr = store.put_artifact(b"g2\n").expect("an artifact");
+        store
+            .write_meta(&expr, &card(vec![param("hue", 0.0, 1.0, None)]))
+            .expect("a card");
+        store
+            .write_set("expr01", &[slot(Written::L1, 0, expr)])
+            .expect("a Set to read");
+        assert_eq!(
+            declared(&root, "expr01")
+                .expect("the Set reads")
+                .knobs
+                .first()
+                .map(|knob| knob.range.clone()),
+            Some("0 – 1 · expr".to_owned())
+        );
+
+        // **A Set that declares nothing is an answer**: no capacity row, no
+        // emits row, and a head that says `0 knobs`.
+        let empty = store.put_artifact(b"e\n").expect("an artifact");
+        store.write_meta(&empty, &card(vec![])).expect("a card");
+        store
+            .write_set("empty01", &[slot(Written::L4, 0, empty)])
+            .expect("a Set to read");
+        let reading = declared(&root, "empty01").expect("the Set reads");
+        assert_eq!(
+            (reading.capacity.clone(), reading.emits.clone()),
+            (None, None)
+        );
+        assert_eq!(reading.rows(), 2, "a head and a foot are the whole of it");
+
+        std::fs::remove_dir_all(&root).expect("clean up");
+    }
+
+    /// **The answer is written into the view, under the row the cursor is
+    /// on**, and a Set that cannot be read says so and draws nothing.
+    ///
+    /// [`read_reading`] is the glue the window loop runs on a press that asked
+    /// for a reading — [`listing`]'s shape one control along — and the two
+    /// halves worth a test are the ones a caller cannot see: that what is
+    /// opened is the row under the cursor rather than the first row, and that
+    /// a failure **closes** the block. A reading that failed to read and a Set
+    /// that declares nothing must not draw the same, which is `library`'s own
+    /// rule one bay up.
+    ///
+    /// A CPU test: a store is a directory and a `View` takes no device.
+    #[test]
+    fn a_reading_is_written_into_the_view_under_the_row_the_cursor_is_on() {
+        let root = scratch_dir("read-set-view");
+        let store = Store::open(&root).expect("a store to read");
+        store.write_set("night01", &[]).expect("a Set to read");
+        store.write_set("morph01", &[]).expect("a Set to read");
+
+        let mut view = View::new(Room::Day);
+        view.scopes = Scope::ALL.to_vec();
+        view.library = vec!["night01".to_owned(), "morph01".to_owned()];
+        assert!(view.walk(1, 2), "the cursor did not move off the first row");
+
+        let said = read_reading(&mut view, &root);
+        assert!(
+            said.contains("morph01"),
+            "the reading names the first row rather than the one under the cursor: `{said}`"
+        );
+        let open = view.opened().expect("the reading is open under the cursor");
+        assert_eq!(open.at, 1);
+        assert_eq!(open.reading.id, "morph01");
+        // A Set file with no `slot` record in it names no material, which is a
+        // reading with nothing in it rather than a failure.
+        assert_eq!(open.reading.nodes, 0);
+        assert_eq!(open.reading.knobs_word(), "0 knobs");
+
+        // **And a row naming a Set this store does not hold puts the block
+        // away and says why**, where leaving the last reading drawn would
+        // describe one Set under another's name.
+        view.library = vec!["night01".to_owned(), "gone01".to_owned()];
+        let said = read_reading(&mut view, &root);
+        assert!(
+            said.contains("gone01") && said.contains("could not be read"),
+            "a Set that is not there was read as `{said}`"
+        );
+        assert!(
+            !view.reading_open(),
+            "a reading that failed to read left a block open"
+        );
+
+        std::fs::remove_dir_all(&root).expect("clean up");
+    }
+
+    /// **A press on the `read` chip asks for the Set under the cursor, and a
+    /// second press puts the reading away.**
+    ///
+    /// The seam, driven the way an operator drives it: the pointer arrives,
+    /// the panel claims it, and what comes back is
+    /// [`Operation::ReadSet`](karakuri_operation::Operation::ReadSet) naming
+    /// the row the cursor is on. **`press_handler` cannot see this** — it
+    /// reads text and asks whether the offer is asked — and
+    /// `karakuri-console`'s own tests cannot see it either, because the press
+    /// handler is here.
+    ///
+    /// **The close emits nothing**, which is the half worth a test: a second
+    /// press changes which rows the bay draws and asks no question, so a
+    /// `ReadSet` here would be this program saying a Set was read at the
+    /// moment one stopped being.
+    ///
+    /// A CPU test: a `Readout` takes no device.
+    #[test]
+    fn a_press_on_the_read_chip_asks_for_the_set_under_the_cursor() {
+        let ctx = drawn_once();
+        let mut readout = Readout::new(1440.0, 900.0);
+        readout.panel.solve();
+        readout.view.scopes = Scope::ALL.to_vec();
+        readout.view.library = vec!["drift_night".to_owned(), "lattice_veil".to_owned()];
+        assert!(readout.view.select_scope(Scope::MySets));
+
+        // The capsule, asked of the derivation that draws it rather than
+        // remembered — the rule the whole of `input` is written to.
+        let chip = |readout: &mut Readout| {
+            readout.panel.solve();
+            let at = library_bay(
+                readout.panel.layout(),
+                &readout.view.scopes,
+                &readout.view.library,
+                readout.view.opened(),
+            )
+            .expect("the bay lists its rows")
+            .read_chip(&ctx, DECK_LETTERS[usize::from(readout.view.selection())]);
+            Point::new(at.min.x + 2.0, at.center().y)
+        };
+
+        let at = chip(&mut readout);
+        assert_eq!(readout.pointer(&ctx, Pointer::Moved(at)).0, Claim::Panel);
+        let (claim, did) = readout.pointer(&ctx, Pointer::Down);
+        assert_eq!(claim, Claim::Panel);
+        assert_eq!(
+            did,
+            Acted::Emitted(Some(Operation::ReadSet {
+                id: "drift_night".to_owned()
+            })),
+            "the chip did not ask for the Set under the cursor"
+        );
+
+        // **The reading is the caller's to answer**, and this file's press
+        // handler holds no store — so the block is opened here the way the
+        // window loop opens it, and the second press is what is under test.
+        readout.view.read(Reading {
+            id: "drift_night".to_owned(),
+            ..Reading::default()
+        });
+        let at = chip(&mut readout);
+        assert_eq!(readout.pointer(&ctx, Pointer::Moved(at)).0, Claim::Panel);
+        let (claim, did) = readout.pointer(&ctx, Pointer::Down);
+        assert_eq!(claim, Claim::Panel);
+        assert_eq!(
+            did,
+            Acted::Nothing,
+            "closing a reading emitted an operation, which says a Set was read"
+        );
+        assert!(
+            !readout.view.reading_open(),
+            "the second press did not put the reading away"
+        );
+    }
+
+    /// **The marks a reading is spelled with are in the face the panel draws
+    /// with.**
+    ///
+    /// [`spelled`] writes `0 – 8 · 2` with an en dash and a middle dot, and
+    /// the `load → A` pill is what this test exists because of: it was typed
+    /// with a U+2192 `egui`'s default face does not carry, and the panel drew
+    /// `load □ A` for a release — *a readout of where a press lands, with a
+    /// tofu where the lands was*. A range with a tofu in it would be the same
+    /// failure on every row of every reading.
+    ///
+    /// **The minus is here too**, because a declared range can start below
+    /// zero — the mock's own `twist` is `−2 – 2 · 0` — and it is the sign
+    /// `format!` writes rather than the typographic one, which is asserted so
+    /// that the two are not quietly swapped.
+    ///
+    /// A CPU test: fonts are `egui`'s and take no device.
+    #[test]
+    fn the_marks_a_reading_is_spelled_with_are_in_the_face() {
+        let ctx = drawn_once();
+        let spelling = spelled("-2", "2", Some("0".to_owned()));
+        assert_eq!(spelling, "-2 – 2 · 0");
+        let font = egui::FontId::new(
+            karakuri_console::room::size::BASE,
+            egui::FontFamily::Proportional,
+        );
+        for mark in spelling.chars() {
+            assert!(
+                ctx.fonts_mut(|fonts| fonts.has_glyphs(&font, &mark.to_string())),
+                "`{mark}` is not in the default face, and the panel would draw a tofu where a \
+                 reading's range is"
+            );
+        }
+    }
+
     /// **A press on the outputs dot, through the window loop's own routing.**
     ///
     /// The other half of the test above: that one is a boundary the panel
@@ -13241,6 +13877,7 @@ mod tests {
                 readout.panel.layout(),
                 &readout.view.scopes,
                 &readout.view.library,
+                readout.view.opened(),
             )
             .expect("the bay lists its rows");
             let (_, at) = bay
@@ -13351,6 +13988,7 @@ mod tests {
                 readout.panel.layout(),
                 &readout.view.scopes,
                 &readout.view.library,
+                readout.view.opened(),
             )
             .expect("the bay lists its rows")
             .field(which)
@@ -15671,6 +16309,13 @@ mod press_handler {
         // call for the same reason — one offer, because which of the two the
         // point is on is inside `filter` where the boxes are.
         ("LibraryBay", "filter", "library_bay", "bay"),
+        // **And the `read` chip in its foot**, derived from the same call a
+        // third time. It is the one offer in this table whose answer is not an
+        // operation on both of its arms: `view::Read` carries the asking and
+        // the closing, and `Readout::asked_to_read` performs the second here
+        // rather than emitting one — see there. What this table checks is that
+        // the offer is *asked*, which is the seam and not the arm.
+        ("LibraryBay", "read", "library_bay", "bay"),
         // **The transition row's four, and the reason this module exists.**
         // These are the offers that were made, claimed and never asked
         // between `74719c3` and `094804c`. Deleting this row's branch from the

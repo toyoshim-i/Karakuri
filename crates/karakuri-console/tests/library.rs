@@ -32,11 +32,12 @@ use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::{Panel, GRAB};
 use karakuri_console::room::{size, Room};
 use karakuri_console::view::{
-    library, mcp_pill, Field, Filters, LibraryBay, Scope, View, DECK_LETTERS, HOLDS_UNSET, LAYERS,
-    LAYER_UNSET,
+    library, mcp_pill, Field, Filters, LibraryBay, Published, Read, Reading, Scope, View,
+    DECK_LETTERS, HOLDS_UNSET, LAYERS, LAYER_UNSET,
 };
 use karakuri_layout::{Point, Rect};
 use karakuri_operation::gate::{Class, Open};
+use karakuri_operation::Operation;
 
 /// **The mock's own library, as names**: five Sets, in the order it draws
 /// them.
@@ -75,7 +76,7 @@ fn console(viewport: Rect) -> Panel {
 
 /// The bay, laid out with the mock's names.
 fn bay(panel: &Panel) -> LibraryBay {
-    library(panel.layout(), SCOPES, &mock()).expect("the library bay lists its rows")
+    library(panel.layout(), SCOPES, &mock(), None).expect("the library bay lists its rows")
 }
 
 /// `egui`'s rectangle, from `karakuri_layout`'s.
@@ -299,7 +300,7 @@ fn the_rows_tile_the_list_and_stay_inside_it() {
     // chose. Asked of a store with more in it than the bay can hold, because
     // with five names the bay stops at five for the other reason.
     let many: Vec<String> = (0..200).map(|n| format!("set_{n:03}")).collect();
-    let full = library(panel.layout(), SCOPES, &many).expect("the bay lists its rows");
+    let full = library(panel.layout(), SCOPES, &many, None).expect("the bay lists its rows");
     assert!(full.rows < full.total, "200 names all fitted");
     let over = full.row(full.rows);
     assert!(
@@ -323,7 +324,7 @@ fn the_foot_says_how_many_are_listed_of_how_many_there_are() {
 
     // A window with room for all five.
     let tall = console(PLAUSIBLE);
-    let bay = library(tall.layout(), SCOPES, &names).expect("the bay lists its rows");
+    let bay = library(tall.layout(), SCOPES, &names, None).expect("the bay lists its rows");
     assert_eq!(bay.total, names.len(), "the total is not the store's");
     assert_eq!(
         bay.rows,
@@ -337,7 +338,7 @@ fn the_foot_says_how_many_are_listed_of_how_many_there_are() {
     // And a store with more in it than the bay can show: the total follows the
     // store and the count stops at what fits.
     let many: Vec<String> = (0..200).map(|n| format!("set_{n:03}")).collect();
-    let bay = library(tall.layout(), SCOPES, &many).expect("the bay lists its rows");
+    let bay = library(tall.layout(), SCOPES, &many, None).expect("the bay lists its rows");
     assert_eq!(bay.total, 200, "the total is not the store's");
     assert!(
         bay.rows < 200,
@@ -349,7 +350,7 @@ fn the_foot_says_how_many_are_listed_of_how_many_there_are() {
     // The narrowest window the arrangement is claimed to work at fits fewer,
     // and the number is the library region's own height read the same way.
     let small = console(SMALLEST);
-    let bay = library(small.layout(), SCOPES, &many).expect("the bay lists its rows");
+    let bay = library(small.layout(), SCOPES, &many, None).expect("the bay lists its rows");
     let region = to_egui(rect_of(small.layout(), "library"));
     let room = region.height()
         - size::HEAD_H
@@ -488,11 +489,11 @@ fn a_console_with_no_store_lists_nothing() {
 #[test]
 fn nothing_said_about_any_library_is_no_listing() {
     let panel = console(PLAUSIBLE);
-    assert_eq!(library(panel.layout(), &[], &[]), None);
-    assert!(library(panel.layout(), &[], &mock()).is_some());
-    assert!(library(panel.layout(), SCOPES, &mock()).is_some());
+    assert_eq!(library(panel.layout(), &[], &[], None), None);
+    assert!(library(panel.layout(), &[], &mock(), None).is_some());
+    assert!(library(panel.layout(), SCOPES, &mock(), None).is_some());
 
-    let empty = library(panel.layout(), SCOPES, &[]).expect(
+    let empty = library(panel.layout(), SCOPES, &[], None).expect(
         "a scope with nothing in it is a question that has been answered, and the chips \
          saying which question it was are still drawn",
     );
@@ -506,7 +507,7 @@ fn nothing_said_about_any_library_is_no_listing() {
     // And a console handed no scopes draws no scope row, whatever it lists:
     // the row is the chips it was given and never a band of empty card.
     assert_eq!(
-        library(panel.layout(), &[], &mock()).and_then(|bay| bay.scopes),
+        library(panel.layout(), &[], &mock(), None).and_then(|bay| bay.scopes),
         None,
         "a console nobody told what libraries there are drew a scope row"
     );
@@ -518,27 +519,27 @@ fn nothing_said_about_any_library_is_no_listing() {
 fn a_folded_or_soloed_or_short_bay_lists_nothing() {
     let names = mock();
     let mut layout = solved(PLAUSIBLE);
-    assert!(library(&layout, SCOPES, &names).is_some());
+    assert!(library(&layout, SCOPES, &names, None).is_some());
 
     layout.collapse(id_of(&layout, "library"));
     layout.solve();
     assert_eq!(
-        library(&layout, SCOPES, &names),
+        library(&layout, SCOPES, &names, None),
         None,
         "the library is folded away and its rows are still being drawn"
     );
 
     layout.expand(id_of(&layout, "library"));
     layout.solve();
-    assert!(library(&layout, SCOPES, &names).is_some());
+    assert!(library(&layout, SCOPES, &names, None).is_some());
 
     // A solo somewhere else takes the bay off the panel with it.
     layout.solo(id_of(&layout, "mixer"));
     layout.solve();
-    assert_eq!(library(&layout, SCOPES, &names), None);
+    assert_eq!(library(&layout, SCOPES, &names, None), None);
     layout.unsolo();
     layout.solve();
-    assert!(library(&layout, SCOPES, &names).is_some());
+    assert!(library(&layout, SCOPES, &names, None).is_some());
 
     // **And a bay with no room for the foot and one row lists nothing**, which
     // is the same answer and not a special case.
@@ -564,7 +565,7 @@ fn a_folded_or_soloed_or_short_bay_lists_nothing() {
         to_egui(rect_of(&short, "library")).height()
     );
     assert_eq!(
-        library(&short, SCOPES, &names),
+        library(&short, SCOPES, &names, None),
         None,
         "a bay with no room for one row listed some"
     );
@@ -583,7 +584,7 @@ fn a_folded_or_soloed_or_short_bay_lists_nothing() {
         region.height()
     );
     assert_eq!(
-        library(&barely, SCOPES, &names).map(|bay| bay.rows),
+        library(&barely, SCOPES, &names, None).map(|bay| bay.rows),
         Some(1),
         "a bay with room for exactly one row listed something else"
     );
@@ -602,7 +603,7 @@ fn a_folded_or_soloed_or_short_bay_lists_nothing() {
         to_egui(rect_of(&sliver, "library")).width()
     );
     assert_eq!(
-        library(&sliver, SCOPES, &names),
+        library(&sliver, SCOPES, &names, None),
         None,
         "a bay with no room for the list's own padding listed some"
     );
@@ -612,11 +613,12 @@ fn a_folded_or_soloed_or_short_bay_lists_nothing() {
 // The scope chips are the only controls here, and nothing is stored
 // ---------------------------------------------------------------------------
 
-/// **The scope chips answer a press and nothing else in this bay does.**
+/// **The scope chips answer a press, and so do the two filter fields and the
+/// `read` chip — and nothing else in this bay does.**
 ///
-/// The mock draws four scope chips, two filter fields, a `+`, a row cursor and
-/// the `load → A` pill. **The chips are the one of them that is a control
-/// here**, and the reason is the page rather than the code: `console.html`
+/// The mock draws four scope chips, two filter fields, a `+`, a row cursor,
+/// the `read` chip and the `load → A` pill. **The chips are the first of them
+/// that is a control here**, and the reason is the page rather than the code: `console.html`
 /// puts the affordance on each chip — *"Click to show it; click another scope
 /// to leave it"* — and `docs/manual/operations.html` names the row as *Choose
 /// which scope the library shows*'s home.
@@ -627,6 +629,16 @@ fn a_folded_or_soloed_or_short_bay_lists_nothing() {
 /// this test adds about them is the same thing it adds about the chips: the
 /// ground **around** them is nobody's, so the row's padding and the gap between
 /// the two are swept here with everything else that is not a control.
+///
+/// **The `read` chip in the foot is the third**, and it is the one control in
+/// this bay that is not in its head: the chips say which library and the
+/// fields narrow it, where this reads the row the cursor is on.
+/// `console.html`'s note *Reading a Set before you spend a load on it* is what
+/// puts it there — *"a `read` chip sits in the foot between the count and
+/// `load → A`"* — and what a press on it asks is
+/// [`the_read_chip_asks_for_the_set_under_the_cursor`]'s. What this test adds
+/// is that the foot's *ground* is still nobody's: the count, the space either
+/// side of it and the gap between the two capsules take no press.
 ///
 /// **The pill is the one that is deliberately not**, and that is a
 /// specification and not a thing left unbuilt: *How a Set reaches a deck*
@@ -655,7 +667,7 @@ fn a_folded_or_soloed_or_short_bay_lists_nothing() {
 /// with no scopes has no chip row at all, and asking it whether a chip takes a
 /// press is asking about a control nobody drew.
 #[test]
-fn the_scope_chips_and_the_filter_fields_are_the_bays_controls_and_nothing_else_is() {
+fn the_scope_chips_the_filter_fields_and_the_read_chip_are_the_bays_controls_and_nothing_else_is() {
     let (view, mut panel) = showing_mock();
     let ctx = drawn_once();
     let bay = bay(&panel);
@@ -750,10 +762,28 @@ fn the_scope_chips_and_the_filter_fields_are_the_bays_controls_and_nothing_else_
         right - left > 0.0,
         "the foot's content box is {left} to {right}, which is no box to sweep"
     );
+    // **The two capsules at the far end of the row are stepped over**, and
+    // they are stepped over for two different reasons: the `read` chip is a
+    // control and is asked about below, and the `load → A` pill is a readout
+    // that [`a_load_is_a_cursor_and_a_key_with_no_pointer_anywhere_in_it`]
+    // sweeps on its own. What is left is the foot's ground — the count, and
+    // the gap between it and them.
+    let chip = bay.read_chip(&ctx, DECK_LETTERS[0]);
+    let pill = bay.load(&ctx, DECK_LETTERS[0]).pill;
+    let mut swept = 0;
     for step in 0..=10 {
         let t = step as f32 / 10.0;
-        points.push(egui::pos2(left + (right - left) * t, bay.foot.center().y));
+        let p = egui::pos2(left + (right - left) * t, bay.foot.center().y);
+        if chip.contains(p) || pill.contains(p) {
+            continue;
+        }
+        points.push(p);
+        swept += 1;
     }
+    assert!(
+        swept >= 5,
+        "only {swept} points of the foot's ground were swept, and the two capsules cannot be          most of a row this wide"
+    );
     for index in 0..bay.rows {
         let at = bay.row(index);
         points.push(egui::pos2(at.min.x + size::LIB_ROW_PAD_X, at.center().y));
@@ -771,15 +801,27 @@ fn the_scope_chips_and_the_filter_fields_are_the_bays_controls_and_nothing_else_
         );
         asked += 1;
     }
+    // **And the `read` chip is the panel's**, asked at the same two pixels in
+    // from its own left edge the chips above are — its right-hand end is the
+    // gap before the load pill and its bottom rim is under the boundary's
+    // grab, which is [`the_read_chip_clears_every_boundary_but_the_one_under
+    // _the_bay`]'s subject and not this test's.
+    let probe = egui::pos2(chip.min.x + 2.0, chip.center().y);
+    assert_eq!(
+        claim(&mut panel, &ctx, &view, Point::new(probe.x, probe.y)),
+        Claim::Panel,
+        "the console gave `egui` a press on the `read` chip at {probe:?}"
+    );
+
     // A guard, so this cannot pass by testing nothing — and a floor under the
     // reach, so the foot's sweep, the scope row's ground and the rows cannot
     // quietly go away.
     assert_eq!(asked, points.len(), "not every point was asked");
     assert!(
-        points.len() >= 5 + 3 + 2 + 11 + 3,
+        points.len() >= 5 + 3 + 2 + 5 + 3,
         "only {} points asked: the bay's corners, the scope row's ground, the filter row's, the \
-         foot's box and at least one row are the floor, and fewer is a sweep that has stopped \
-         covering the pill",
+         foot's ground and at least one row are the floor, and fewer is a sweep that has stopped \
+         covering the foot",
         points.len()
     );
 }
@@ -951,7 +993,7 @@ fn a_chip_is_pressed_only_where_it_is_drawn() {
     layout.set_divider(split, 0, 218.0);
     layout.solve();
     let ctx = drawn_once();
-    let bay = library(&layout, SCOPES, &mock()).expect("the library bay lists its rows");
+    let bay = library(&layout, SCOPES, &mock(), None).expect("the library bay lists its rows");
     let row = bay.scopes.expect("the bay was handed scopes");
 
     let (scope, last) = bay
@@ -1144,15 +1186,15 @@ fn the_names_are_the_harnesss_and_are_stored_nowhere() {
     let one = vec!["morph01".to_owned()];
     let two = vec!["morph01".to_owned(), "night01".to_owned()];
     assert_eq!(
-        library(panel.layout(), SCOPES, &one).map(|b| b.total),
+        library(panel.layout(), SCOPES, &one, None).map(|b| b.total),
         Some(1)
     );
     assert_eq!(
-        library(panel.layout(), SCOPES, &two).map(|b| b.total),
+        library(panel.layout(), SCOPES, &two, None).map(|b| b.total),
         Some(2)
     );
     assert_eq!(
-        library(panel.layout(), SCOPES, &one).map(|b| b.total),
+        library(panel.layout(), SCOPES, &one, None).map(|b| b.total),
         Some(1)
     );
 
@@ -1889,7 +1931,7 @@ fn the_fields_read_what_is_set_and_a_stale_candidate_reads_as_unset() {
 #[test]
 fn a_console_with_no_scopes_draws_no_filter_row() {
     let panel = console(PLAUSIBLE);
-    let bay = library(panel.layout(), &[], &mock()).expect("the bay lists its rows");
+    let bay = library(panel.layout(), &[], &mock(), None).expect("the bay lists its rows");
     assert_eq!(bay.scopes, None);
     assert_eq!(
         bay.filters, None,
@@ -1906,3 +1948,566 @@ fn a_console_with_no_scopes_draws_no_filter_row() {
         "a bay with no filter row answered a press on one"
     );
 }
+
+// ---------------------------------------------------------------------------
+// The reading, and the chip that opens it
+// ---------------------------------------------------------------------------
+
+/// **The mock's own reading of `drift_night`**: six knobs, a capacity, what it
+/// emits, and five nodes all of which had a card.
+///
+/// The ranges are the mock's own strings, because that is what crosses the
+/// seam — `view::Published::range` is what the host spelled and this crate
+/// draws (ADR-0156). What they are spelled *from* is a card's `param` record,
+/// and `karakuri/src/main.rs` is where that spelling lives.
+fn reading() -> Reading {
+    Reading {
+        id: "drift_night".to_owned(),
+        knobs: [
+            ("radius", "0 – 8 · 2"),
+            ("turbulence", "0 – 3 · 0.4"),
+            ("amount", "0 – 1 · 0.5"),
+            ("twist", "−2 – 2 · 0"),
+            ("hue", "0 – 1 · 0.5"),
+            ("exposure", "0 – 1 · 0.4"),
+        ]
+        .iter()
+        .map(|(key, range)| Published {
+            key: (*key).to_owned(),
+            range: (*range).to_owned(),
+        })
+        .collect(),
+        capacity: Some("16384 – 1048576 · 262144".to_owned()),
+        emits: Some("position, size, life".to_owned()),
+        nodes: 5,
+        described: 5,
+    }
+}
+
+/// A view over the mock's library with that reading open under the first row.
+fn showing_reading() -> (View, Panel) {
+    let (mut view, panel) = showing_mock();
+    view.read(reading());
+    (view, panel)
+}
+
+/// **What a press on the `read` chip asks for is the Set under the cursor**,
+/// which is the operand the pill beside it already uses.
+///
+/// `console.html`'s note: *"Its operand is the cursor, which is the same
+/// operand the pill beside it already uses — so the route costs one chip in
+/// the foot and nothing else."* So the id in the operation follows the cursor,
+/// and this walks it rather than asserting one row: a chip that named the
+/// first row whatever was under the cursor would pass half of this.
+///
+/// **And a second press closes rather than asking again.** That is
+/// `view::Read`'s own division — closing changes which rows this bay draws,
+/// which is the console's own state and is no more an operation than a fold
+/// is — and it is asserted here because it is the half a chip that emitted
+/// `ReadSet` twice would get wrong in silence.
+#[test]
+fn the_read_chip_asks_for_the_set_under_the_cursor() {
+    let (mut view, panel) = showing_mock();
+    let ctx = drawn_once();
+    let bay = bay(&panel);
+    let chip = bay.read_chip(&ctx, DECK_LETTERS[0]);
+    let probe = Point::new(chip.min.x + 2.0, chip.center().y);
+    let ask = |view: &View, bay: &LibraryBay| {
+        bay.read(
+            &ctx,
+            DECK_LETTERS[0],
+            view.library.get(view.cursor_row()).map(String::as_str),
+            probe,
+        )
+    };
+
+    assert_eq!(
+        ask(&view, &bay),
+        Some(Read::Open(Operation::ReadSet {
+            id: "drift_night".to_owned()
+        })),
+        "the chip did not ask for the Set under the cursor"
+    );
+
+    assert!(view.walk(2, bay.rows), "the cursor did not move two rows");
+    assert_eq!(
+        ask(&view, &bay),
+        Some(Read::Open(Operation::ReadSet {
+            id: "glass_shell".to_owned()
+        })),
+        "the cursor moved and the chip went on naming the row it started on"
+    );
+
+    // **The gap before the chip is nobody's**, which is `.lib-foot`'s `gap`
+    // rather than a target: the count, the space beside it and the ground
+    // between the two capsules take no press.
+    let gap = Point::new(chip.min.x - size::LIB_FOOT_GAP * 0.5, chip.center().y);
+    assert!(
+        ask(&view, &bay).is_some(),
+        "the chip itself stopped answering, so the gap beside it measures nothing"
+    );
+    assert_eq!(
+        bay.read(&ctx, DECK_LETTERS[0], Some("drift_night"), gap),
+        None,
+        "the gap between the `read` chip and the load pill answered a press"
+    );
+
+    // **A library that lists nothing has no Set to read**, and the chip is
+    // still drawn because the foot is what the count is in. A press on it asks
+    // nothing rather than asking for a Set with no name.
+    let empty = library(panel.layout(), SCOPES, &[], None).expect("the bay draws its foot");
+    let chip = empty.read_chip(&ctx, DECK_LETTERS[0]);
+    assert_eq!(
+        empty.read(
+            &ctx,
+            DECK_LETTERS[0],
+            None,
+            Point::new(chip.center().x, chip.center().y)
+        ),
+        None,
+        "a bay listing nothing asked for a Set"
+    );
+
+    // **And with a reading open the same press closes it**, which is the
+    // block's own state read off the bay rather than off anything the chip is
+    // told.
+    let (view, panel) = showing_reading();
+    let open = library(panel.layout(), SCOPES, &view.library, view.opened())
+        .expect("the bay lists its rows");
+    assert!(open.reading.is_some(), "nothing was open to close");
+    let chip = open.read_chip(&ctx, DECK_LETTERS[0]);
+    assert_eq!(
+        open.read(
+            &ctx,
+            DECK_LETTERS[0],
+            Some("drift_night"),
+            Point::new(chip.min.x + 2.0, chip.center().y)
+        ),
+        Some(Read::Shut),
+        "a press with a reading open asked for it again instead of closing it"
+    );
+}
+
+/// **The reading opens under the cursor's row, and the rest of the listing
+/// moves down by exactly what it takes.**
+///
+/// `console.html`: *"a reading opens under the cursor row inside `.lib-list`,
+/// one row at a time, following the cursor"*, and *"the height it costs lands
+/// on the bay in this column that absorbs"*. So the rows above it do not move,
+/// the rows below it start under the block's own margin, and the count in the
+/// foot falls by however many no longer fit — which is the same `n of m` a
+/// library taller than its list already says.
+#[test]
+fn a_reading_opens_under_the_cursor_row_and_pushes_the_rest_down() {
+    let (view, panel) = showing_reading();
+    let shut = bay(&panel);
+    let open = library(panel.layout(), SCOPES, &view.library, view.opened())
+        .expect("the bay lists its rows");
+    let block = open.reading.expect("the reading is open under the cursor");
+
+    // Ten rows: the head, six knobs, the capacity, what it emits, and the
+    // foot.
+    assert_eq!(reading().rows(), 10, "the reading is not ten lines");
+    assert_eq!(block.rows, reading().rows(), "the block is not the reading");
+
+    // The well: under the cursor's row by the block's top margin, inside the
+    // list by its side margin, and as tall as its rows.
+    assert!(
+        near(
+            block.well.min.y,
+            open.row(0).max.y + size::READING_MARGIN_TOP
+        ),
+        "the well starts at {} and the cursor's row ends at {}",
+        block.well.min.y,
+        open.row(0).max.y
+    );
+    assert!(
+        near(block.well.min.x, open.list.min.x + size::READING_MARGIN_X)
+            && near(block.well.max.x, open.list.max.x - size::READING_MARGIN_X),
+        "the well is {:?} in a list spanning {} to {}",
+        block.well,
+        open.list.min.x,
+        open.list.max.x
+    );
+    assert!(
+        near(block.well.height(), size::LIB_ROW_H * block.rows as f32),
+        "the well is {} tall and ten rows are {}",
+        block.well.height(),
+        size::LIB_ROW_H * block.rows as f32
+    );
+
+    // Its rows tile it, at a `.lib-row`'s own height.
+    for index in 1..block.rows {
+        assert!(
+            near(block.row(index).min.y, block.row(index - 1).max.y),
+            "the reading's row {index} does not meet the one above it"
+        );
+    }
+    assert!(
+        near(block.row(block.rows - 1).max.y, block.well.max.y),
+        "the reading's last row ends at {} and the well at {}",
+        block.row(block.rows - 1).max.y,
+        block.well.max.y
+    );
+
+    // The row above it has not moved, and the row below it starts under the
+    // block's bottom margin.
+    assert!(
+        near(open.row(0).min.y, shut.row(0).min.y),
+        "the row the reading is under moved when it opened"
+    );
+    assert!(
+        near(
+            open.row(1).min.y,
+            block.well.max.y + size::READING_MARGIN_BOTTOM
+        ),
+        "the row under the reading is at {} and the block ends at {}",
+        open.row(1).min.y,
+        block.well.max.y
+    );
+
+    // **The five the mock lists all still fit**, which is what makes the
+    // paragraph above about a block between two rows rather than about a
+    // shorter list. The bay this column gives the Library is taller than five
+    // rows and a reading of ten, and nothing was pushed out.
+    assert_eq!(
+        open.rows, shut.rows,
+        "the mock's five rows and a ten-line reading fit the bay, and {} were listed",
+        open.rows
+    );
+
+    // **A library taller than its list is where the block costs rows**, and
+    // what it costs is the block's own height read in rows — the foot says so
+    // in the words it already says a truncated listing in.
+    let many: Vec<String> = (0..200).map(|n| format!("set_{n:03}")).collect();
+    let mut deep = View::new(Room::Day);
+    deep.library = many.clone();
+    deep.scopes = Scope::ALL.to_vec();
+    let mut of_first = reading();
+    of_first.id = many[0].clone();
+    deep.read(of_first);
+    let full = library(panel.layout(), SCOPES, &many, None).expect("the bay lists its rows");
+    let cut =
+        library(panel.layout(), SCOPES, &many, deep.opened()).expect("the bay lists its rows");
+    let block = cut.reading.expect("the reading is open");
+    assert!(
+        full.rows < full.total,
+        "200 names all fitted, so nothing here is measuring what a block costs"
+    );
+    let took = size::READING_MARGIN_TOP + block.well.height() + size::READING_MARGIN_BOTTOM;
+    assert!(
+        cut.rows < full.rows,
+        "the bay listed {} rows with a {took}-tall block open and {} with none",
+        cut.rows,
+        full.rows
+    );
+    // **And it is a count of what fits and not a number chosen**: the last row
+    // listed is inside the list and the next one would not have been, which is
+    // `the_rows_tile_the_list_and_stay_inside_it`'s claim asked of a list with
+    // a block in the middle of it.
+    assert!(
+        !cut.list.contains_rect(cut.row(cut.rows)),
+        "row {} at {:?} would have fitted under the block in {:?} and was not drawn",
+        cut.rows,
+        cut.row(cut.rows),
+        cut.list
+    );
+    assert_eq!(
+        cut.count(),
+        format!("{} of 200", cut.rows),
+        "the foot stopped saying how many of how many"
+    );
+    assert!(
+        cut.list.contains_rect(cut.row(cut.rows - 1)),
+        "the last row the bay listed is outside the list"
+    );
+}
+
+/// **A reading is drawn under the row it is a reading of, and under no
+/// other.**
+///
+/// The listing under an open reading can be rewritten by any press on a scope
+/// chip or a filter field, and the cursor is a position in it. So the two are
+/// put together in one place — `View::opened` — and what it answers where they
+/// have come apart is *nothing open*, which is the list going back to being a
+/// list rather than one Set described under another's name.
+#[test]
+fn a_reading_is_drawn_only_under_the_row_it_is_a_reading_of() {
+    let (mut view, panel) = showing_reading();
+    let listed = bay(&panel).rows;
+    assert_eq!(
+        view.opened().map(|open| open.at),
+        Some(0),
+        "the reading did not open under the row it was read of"
+    );
+
+    // The cursor moves and the reading does not follow it by itself: what is
+    // under the cursor is a different Set, and a block left drawn there would
+    // be `lattice_veil` described as `drift_night`.
+    assert!(view.walk(1, listed), "the cursor did not move");
+    assert!(
+        view.opened().is_none(),
+        "the reading of `drift_night` is drawn under `lattice_veil`"
+    );
+    assert!(view.walk(-1, listed), "the cursor did not move back");
+    assert!(
+        view.opened().is_some(),
+        "the reading did not come back with the cursor"
+    );
+
+    // And a listing rewritten under it closes it for the same reason, even
+    // where the cursor has not moved at all.
+    view.library = vec!["night01".to_owned(), "drift_night".to_owned()];
+    assert!(
+        view.opened().is_none(),
+        "the reading is drawn under whatever took the row it was read of"
+    );
+
+    // Putting it away is the console's own state and says whether there was
+    // one to put away.
+    assert!(view.shut_reading(), "there was nothing open to shut");
+    assert!(
+        !view.shut_reading(),
+        "shutting nothing said it shut something"
+    );
+    assert!(view.opened().is_none());
+}
+
+/// **The `read` chip clears every boundary but the one under the bay**, and
+/// the number is the same 4.75 the load pill beside it stands at.
+///
+/// `input.rs`'s rule 3 gives a boundary first refusal, so what this measures is
+/// what that costs here: a `.lib-foot` is 26 tall and a `.pill` is 16.5,
+/// centred, so the capsule's own rim is 4.75 off the foot's — and the foot's
+/// bottom edge is the bay's, which is a boundary with a `GRAB` of 6. **The rim
+/// is the price and the chip is not**: everything from its middle upwards is
+/// the panel's, which is the same arrangement the `solo` capsule and the deck
+/// preview cells are already in.
+#[test]
+fn the_read_chip_clears_every_boundary_but_the_one_under_the_bay() {
+    let (view, mut panel) = showing_mock();
+    let ctx = drawn_once();
+    let bay = bay(&panel);
+    let chip = bay.read_chip(&ctx, DECK_LETTERS[0]);
+    let region = to_egui(rect_of(panel.layout(), "library"));
+
+    // The three edges that clear it: the two ends of the capsule and its top.
+    for probe in [
+        Point::new(chip.min.x + 1.0, chip.center().y),
+        Point::new(chip.max.x - 1.0, chip.center().y),
+        Point::new(chip.center().x, chip.min.y + 1.0),
+    ] {
+        assert!(
+            !matches!(
+                panel.layout().hit(probe, GRAB),
+                karakuri_layout::Hit::Divider { .. }
+            ),
+            "a boundary grabs {probe:?}, which is on the `read` chip"
+        );
+        assert_eq!(
+            claim(&mut panel, &ctx, &view, probe),
+            Claim::Panel,
+            "the console gave `egui` a press at {probe:?} on the `read` chip"
+        );
+    }
+
+    // And the rim that does not, with the arithmetic said out loud so that a
+    // change to either number is a change to this sentence.
+    let rim = region.max.y - chip.max.y;
+    assert!(
+        near(rim, (size::LIB_FOOT_H - size::PILL_H) * 0.5),
+        "the chip's bottom rim is {rim} off the bay's edge and the foot leaves {}",
+        (size::LIB_FOOT_H - size::PILL_H) * 0.5
+    );
+    assert!(
+        rim < GRAB,
+        "the chip clears the boundary by {rim} against a grab of {GRAB}, so this test is \
+         measuring nothing"
+    );
+    assert!(
+        matches!(
+            panel
+                .layout()
+                .hit(Point::new(chip.center().x, chip.max.y - 0.5), GRAB),
+            karakuri_layout::Hit::Divider { .. }
+        ),
+        "the pixel at the bottom of the chip is not the boundary's, so nothing here measured a \
+         grab"
+    );
+}
+
+/// **What a reading draws: a line per declaration, and a word for what it
+/// could not read.**
+///
+/// Asserted by drawing a frame and reading the galleys inside the block,
+/// because *what is in the box* is a claim about the paint pass. The three
+/// blocks the mock draws are the three here — the knobs, the capacity and the
+/// emitted attributes — and the element-storage figure the MCP tool volunteers
+/// is deliberately not among them: sizing it fetches every source in the Set
+/// and compiles it, which is exactly the cost the row's tip says a reading
+/// does not pay.
+///
+/// **The foot counts the nodes and says how many declared nothing**, which is
+/// the one thing that keeps a knob missing for want of a card from being a
+/// knob missing in silence.
+#[test]
+fn a_reading_draws_a_line_per_declaration_and_counts_what_it_could_not_read() {
+    let (mut view, mut panel) = showing_reading();
+    let open = library(panel.layout(), SCOPES, &view.library, view.opened())
+        .expect("the bay lists its rows");
+    let block = open.reading.expect("the reading is open");
+    let drawn = shapes_inside(&mut view, &mut panel, block.well);
+    let words: Vec<String> = drawn
+        .iter()
+        .filter_map(|shape| match shape {
+            egui::Shape::Text(at) => Some(at.galley.text().to_owned()),
+            _ => None,
+        })
+        .collect();
+
+    for want in [
+        "declares",
+        "6 knobs",
+        "radius",
+        "0 – 8 · 2",
+        "exposure",
+        "capacity",
+        "16384 – 1048576 · 262144",
+        "emits",
+        "position, size, life",
+        "5 nodes",
+        "all described",
+    ] {
+        assert!(
+            words.iter().any(|word| word == want),
+            "the reading does not say `{want}`: {words:?}"
+        );
+    }
+    // **The well itself**, so a box of type standing on the card cannot pass
+    // this: the mock draws these rows on the recess the staging lane's
+    // candidates stand on.
+    assert!(
+        drawn.iter().any(|shape| matches!(
+            shape,
+            egui::Shape::Rect(at) if near(at.rect.min.y, block.well.min.y)
+                && near(at.rect.height(), block.well.height())
+        )),
+        "nothing filled the reading's well at {:?}: {drawn:#?}",
+        block.well
+    );
+    // **And nothing in it is a figure this reading did not pay for.** The
+    // element storage is bytes, and no line here says so.
+    assert!(
+        !words.iter().any(|word| word.contains("bytes")),
+        "the reading draws an element-storage figure, which needs every source in the Set \
+         fetched and compiled: {words:?}"
+    );
+
+    // A Set with a node the store holds no card for: the knob list is short by
+    // whatever that node declared, and the foot is what says so.
+    let mut short = reading();
+    short.described = 3;
+    view.read(short);
+    let open = library(panel.layout(), SCOPES, &view.library, view.opened())
+        .expect("the bay lists its rows");
+    let block = open.reading.expect("the reading is open");
+    let drawn = shapes_inside(&mut view, &mut panel, block.well);
+    assert!(
+        drawn.iter().any(|shape| matches!(
+            shape,
+            egui::Shape::Text(at) if at.galley.text() == "2 without a card"
+        )),
+        "two nodes declared nothing this could read and the foot did not say so: {drawn:#?}"
+    );
+}
+
+/// **A reading with nothing in it is an answer**, and it is drawn as one: the
+/// head says `0 knobs` and the rows that would have nothing after them are not
+/// drawn at all.
+///
+/// A blank row is the one thing the mock's own tip refuses — *"a knob missing
+/// from the list without a word is the one thing that would make this lie"* —
+/// so a Set with no geometry in it draws no capacity line rather than a line
+/// with nothing beside it.
+#[test]
+fn a_reading_with_nothing_to_declare_says_so_rather_than_drawing_blanks() {
+    let (mut view, mut panel) = showing_mock();
+    view.read(Reading {
+        id: "drift_night".to_owned(),
+        knobs: Vec::new(),
+        capacity: None,
+        emits: None,
+        nodes: 1,
+        described: 1,
+    });
+    let open = library(panel.layout(), SCOPES, &view.library, view.opened())
+        .expect("the bay lists its rows");
+    let block = open.reading.expect("the reading is open");
+    assert_eq!(block.rows, 2, "a head and a foot are the whole of it");
+
+    let drawn = shapes_inside(&mut view, &mut panel, block.well);
+    let words: Vec<String> = drawn
+        .iter()
+        .filter_map(|shape| match shape {
+            egui::Shape::Text(at) => Some(at.galley.text().to_owned()),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        words.iter().any(|word| word == "0 knobs") && words.iter().any(|word| word == "1 node"),
+        "the head and the foot do not say what there is: {words:?}"
+    );
+    assert!(
+        !words
+            .iter()
+            .any(|word| word == "capacity" || word == "emits"),
+        "a row was drawn with nothing after it: {words:?}"
+    );
+}
+
+/// **The chip reads `read` and does not light**, open or shut.
+///
+/// `console.html`'s note: *"It carries no lit state of its own, because the
+/// block above it is the state … the one colour this bay spends on an act is
+/// spent on the load beside it."* So this asserts the word is painted in the
+/// foot and that the capsule's own fill is not there in either state — a
+/// second lav capsule beside `load → A` would make the colour mean two things
+/// at a width of eight characters.
+#[test]
+fn the_read_chip_says_read_and_never_lights() {
+    let (mut view, mut panel) = showing_mock();
+    for open in [false, true] {
+        if open {
+            view.read(reading());
+        }
+        let foot = bay(&panel).foot;
+        let drawn = shapes_inside(&mut view, &mut panel, foot);
+        assert!(
+            drawn.iter().any(|shape| matches!(
+                shape,
+                egui::Shape::Text(at) if at.galley.text() == READ_WORD
+            )),
+            "the foot does not say `{READ_WORD}` with the reading {}: {drawn:#?}",
+            match open {
+                true => "open",
+                false => "shut",
+            }
+        );
+        let ctx = drawn_once();
+        let chip = bay(&panel).read_chip(&ctx, DECK_LETTERS[0]);
+        assert!(
+            !drawn.iter().any(|shape| matches!(
+                shape,
+                egui::Shape::Rect(at) if near(at.rect.min.x, chip.min.x)
+                    && near(at.rect.width(), chip.width())
+                    && at.fill != egui::Color32::TRANSPARENT
+            )),
+            "the `read` chip is filled, which is the one colour this bay spends on the load"
+        );
+    }
+}
+
+/// The word the chip is drawn with, which is the mock's own and is not a
+/// constant this crate exports: it is asserted here because a chip reading
+/// something else is a control the note does not describe.
+const READ_WORD: &str = "read";
