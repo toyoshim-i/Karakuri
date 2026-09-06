@@ -961,6 +961,14 @@ have.
 - **Dual embeddings.** The text side needs `origin` and `tag`, which have no producer until
   something generates procedures; the visual side needs the thumbnail M5.3 judges. From M4.
 - **Search over more than a node's name, and grouping.** The same absent card fields. From M4.
+- **MCP offers the effective limit beside the declared one.** A model writing a procedure is told
+  what the *language* permits — the ceiling `cost::estimate` refuses at — and never what this
+  machine has actually been able to afford. The second number is inferable from what has run: the
+  preparation slot's measurements and the governor's history. The two do not compare directly, a
+  ceiling being in ops and a measurement in milliseconds, so what a model would be handed is closer
+  to a rate than to a limit and the shape of it is not settled here. **Polishing rather than a
+  feature**, and it wants two things first: the estimate *The preparation slot is the measurement*
+  builds, and a run long enough to have a history worth quoting. From M5.
 
 ---
 
