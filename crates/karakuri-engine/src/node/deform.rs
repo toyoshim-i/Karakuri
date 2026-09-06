@@ -58,7 +58,20 @@ pub(crate) struct Deform {
     /// its input's counts straight on, which is what every L2 did before
     /// amplification existed.
     amplified: Option<Amplified>,
+    /// **The declaration names, which are the uniform's own field names** —
+    /// one `glow` for a `vec3`. [`super::write_params`] walks this, so it must
+    /// not carry components: the packer finds a field by name and a `glow.x`
+    /// is in no layout.
     param_names: Vec<String>,
+    /// **The keys this node's params are *addressed* by** — `glow.x`,
+    /// `glow.y`, `glow.z` for that same `vec3`.
+    ///
+    /// `Set::declared_names` walks this, which is what `Set::published` and
+    /// `Set::bind` are built from, and it is the list the value map is keyed
+    /// by. Two lists rather than one because the uniform and the address
+    /// disagree about what a vector is
+    /// ([ADR-0268](../../../../docs/adr/0268-a-vector-parameter-is-driven-one-component-at-a-time.md)).
+    param_keys: Vec<String>,
 }
 
 /// The three things a node that changes the element count has to own.
@@ -396,6 +409,7 @@ impl Deform {
             synthetic: shader.synthetic,
             amplified,
             param_names: l2.params.iter().map(|p| p.name.clone()).collect(),
+            param_keys: crate::set::declared_keys(l2),
         })
     }
 
@@ -493,8 +507,12 @@ impl Deform {
         &self.emits
     }
 
-    pub(crate) fn param_names(&self) -> &[String] {
-        &self.param_names
+    /// **The addressable keys, and there is deliberately no accessor for the
+    /// other list.** `param_names` is read at the one place it means anything
+    /// — this node's own uniform write — and handing it out would be handing
+    /// out a list of names a `--param` cannot use.
+    pub(crate) fn param_keys(&self) -> &[String] {
+        &self.param_keys
     }
 
     /// This node's uniform block, from the grouping's view of the frame.

@@ -546,20 +546,30 @@ proc gain_dot {
         assert_eq!(set.param("gain"), Some(0.25));
     }
 
-    /// **A vector param is declared and not driven, and used to panic the render
-    /// thread for it.**
+    /// **A vector param is driven by component, and used to panic the render
+    /// thread for being declared at all.**
     ///
-    /// The language allows `param centre : vec3 …`; the engine has never driven one
-    /// — `Param::default_scalar` reads a scalar out of a declaration and skips
-    /// anything else, so a vector param never enters a node's value map. Every
-    /// node's uniform path nonetheless wrote *every* declared name as an `f32`, and
-    /// the packer panics on a field its layout says is a `vec3<f32>`. So a `.kir`
-    /// that parses, checks and costs took the render thread down on the first
-    /// `prepare` — not the swap worker, so not caught as `SetError::Panicked`.
+    /// Two defects, one after the other, and this is the test that has watched
+    /// both. First: every node's uniform path wrote *every* declared name as an
+    /// `f32`, and the packer panics on a field its layout says is a
+    /// `vec3<f32>` — so a `.kir` that parses, checks and costs took the render
+    /// thread down on the first `prepare`, and not in the swap worker, so not
+    /// caught as `SetError::Panicked`. That was closed by writing the field as
+    /// a vector, with zeroes, because nothing could state the value.
     ///
-    /// Building and preparing is the whole test: the panic was unconditional.
+    /// Second: the zeroes. `Param::default_scalar` folds a scalar, so a vector
+    /// never entered a node's value map and a declared `vec3(0.5, 0.5, 0.5)`
+    /// reached the shader as `vec3(0.0)`. The map holds one `f32` per component
+    /// now — `centre.x`, `centre.y`, `centre.z`
+    /// (`docs/adr/0268-a-vector-parameter-is-driven-one-component-at-a-time.md`).
+    ///
+    /// The bare name still holds nothing, and that is the part that did not
+    /// change: it names three numbers and `Set::param` answers with one.
+    ///
+    /// Building and preparing is still most of the test: the panic was
+    /// unconditional.
     #[test]
-    fn a_vector_param_is_left_undriven_rather_than_packed_as_a_scalar() {
+    fn a_vector_param_is_driven_by_component_rather_than_packed_as_a_scalar() {
         let gpu = Gpu::headless().expect("no GPU available");
         let mixed = r#"
 proc mixed {
@@ -597,8 +607,15 @@ proc mixed {
         assert_eq!(
             set.param("centre"),
             None,
-            "a vector param has no scalar value to hold"
+            "the bare name of a vector param names three numbers and holds none"
         );
+        for key in ["centre.x", "centre.y", "centre.z"] {
+            assert_eq!(
+                set.param(key),
+                Some(0.5),
+                "{key} is what the uniform is packed from, and the declaration states it"
+            );
+        }
     }
 
     // ---------------------------------------------------------------------------

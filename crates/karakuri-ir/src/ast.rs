@@ -202,6 +202,24 @@ impl Ty {
             Ty::Mat3 | Ty::Mat4 => return None,
         })
     }
+
+    /// **How many `f32` values a `param` of this type is driven as**, or
+    /// `None` for a type no `param` may declare.
+    ///
+    /// Deliberately narrower than [`Ty::components`], and the narrowness is
+    /// the point: that one answers for every type in the language, where this
+    /// answers the checker's own list — *"params may only be `float`, `vec2`,
+    /// or `vec3`"* (`check.rs`). A `vec4` param does not exist, so a caller
+    /// spelling out its components would be spelling out a declaration nothing
+    /// can make; `None` says that rather than inventing a fourth key.
+    pub fn param_components(self) -> Option<usize> {
+        Some(match self {
+            Ty::Float => 1,
+            Ty::Vec2 => 2,
+            Ty::Vec3 => 3,
+            _ => return None,
+        })
+    }
 }
 
 /// Attributes an L1 procedure emits and an L4 procedure consumes.
@@ -711,8 +729,10 @@ impl Lit {
 /// `param <name> : <type> [<min>, <max>] = <default>`
 ///
 /// The range is mandatory: it is the fader range, the agent's search range, and
-/// the normalisation basis for signal binding all at once. For vector params it
-/// applies per component.
+/// the normalisation basis for signal binding all at once. **For vector params
+/// it applies per component** — one `[min, max]` covers `glow.x`, `glow.y` and
+/// `glow.z` alike, which is `docs/ir-spec.md`'s "param" section and is what
+/// `Set::build` writes into the range map under each of [`Param::keys`].
 #[derive(Debug, Clone)]
 pub struct Param {
     pub name: String,
@@ -753,28 +773,179 @@ impl Param {
     /// `None` is *"this default is not a number I can state"*, and never
     /// *"there is no default"*: the grammar makes `= <expr>` mandatory. What a
     /// caller does with that is the caller's — the engine leaves the param out
-    /// of its uniform, the metadata writer writes the declaration with no
-    /// `default` key.
+    /// of its value map, so its uniform field is packed with the `0.0` a miss
+    /// produces; the metadata writer writes the declaration with no `default`
+    /// key.
+    ///
+    /// **A vector declaration answers `None` here and is not undeclarable.**
+    /// `= vec3(0.4, 0.7, 1.0)` is three numbers and this returns one, so it is
+    /// [`Param::default_components`] that states them — the widening this
+    /// paragraph reserved, taken for the one case where the numbers are
+    /// statable and the width was the whole obstacle. A caller that wants
+    /// *one* number still wants this one.
     pub fn default_scalar(&self) -> Option<f32> {
-        match &self.default {
-            Expr::Lit {
-                value: Lit::Float(v),
-                ..
-            } => Some(*v),
-            Expr::Unary {
-                op: UnOp::Neg,
-                value,
-                ..
-            } => match value.as_ref() {
-                Expr::Lit {
-                    value: Lit::Float(v),
-                    ..
-                } => Some(-v),
-                _ => None,
-            },
+        fold_literal(&self.default)
+    }
+
+    /// **The declared default as one number per component**, or `None` where
+    /// the declaration is an expression this does not fold.
+    ///
+    /// [`Param::default_scalar`] widened by exactly one step, and it is the
+    /// step that widening was always reserved for: that function's own
+    /// documentation says `None` means *"this default is not a number I can
+    /// state"* and never *"there is no default"*, and for a `vec3` the numbers
+    /// are statable — the language just needs more than one of them to state
+    /// them in. A parameter is **driven one component at a time**
+    /// ([ADR-0268](../../../docs/adr/0268-a-vector-parameter-is-driven-one-component-at-a-time.md)),
+    /// so this is the shape every consumer of a default wants.
+    ///
+    /// What folds:
+    ///
+    /// - a float literal, or a negated one — one value, which is
+    ///   [`Param::default_scalar`]'s answer in a one-element vector;
+    /// - `vecN(a, b, …)` with `N` arguments, each a literal or a negated
+    ///   literal — `N` values, in the order they are written;
+    /// - `vecN(a)` with one such argument — the **broadcast**, `N` copies of
+    ///   it. `docs/ir-spec.md`, "Types": *"Vector constructors follow GLSL:
+    ///   any mix of scalars and shorter vectors whose component counts sum to
+    ///   the target width, or a single scalar to broadcast. `vec3(1.0, 0.0,
+    ///   0.0)`, `vec3(0.0)`, and `vec4(position, 1.0)` are all well formed"*.
+    ///
+    /// **A nested constructor answers `None`, and it is said here rather than
+    /// left to be discovered.** `vec3(vec2(0.1, 0.2), 0.3)` is legal by that
+    /// same passage and its component count reaches the target width through
+    /// an inner constructor rather than through this argument list, so the
+    /// arity test above rejects it. That is [`Param::default_scalar`]'s
+    /// deliberate narrowness held to: the useful set is literals with an
+    /// optional sign, and widening it further is a language question — what a
+    /// default may say — rather than a convenience for one caller.
+    ///
+    /// **The arity is the declared type's and not the constructor's**, so a
+    /// list that does not fill the declaration folds to nothing rather than to
+    /// a short vector. The checker already refuses such a default
+    /// (`check.rs`, *"param `{}` default has type `{}`, expected `{}`"*); this
+    /// answers for a `Param` that has not been through it.
+    pub fn default_components(&self) -> Option<Vec<f32>> {
+        let width = self.ty.param_components()?;
+        if width == 1 {
+            return fold_literal(&self.default).map(|v| vec![v]);
+        }
+        let Expr::Call { name, args, .. } = &self.default else {
+            return None;
+        };
+        if name != self.ty.name() {
+            return None;
+        }
+        match args.len() {
+            1 => fold_literal(&args[0]).map(|v| vec![v; width]),
+            n if n == width => args.iter().map(fold_literal).collect(),
             _ => None,
         }
     }
+
+    /// **Every key this declaration is driven by**, in `x`, `y`, `z` order.
+    ///
+    /// One key for a `float` — the declared name itself, so nothing about a
+    /// scalar parameter changes — and one per component for a `vec2` or a
+    /// `vec3`, spelled by [`component_key`].
+    ///
+    /// **The order is load-bearing**: `Set::published` walks this to build the
+    /// default interface, and a control's *position* in that interface is what
+    /// a MIDI control is learned against.
+    pub fn keys(&self) -> Vec<String> {
+        match self.ty.param_components() {
+            Some(width) if width > 1 => (0..width).map(|i| component_key(&self.name, i)).collect(),
+            _ => vec![self.name.clone()],
+        }
+    }
+}
+
+/// A literal, or a negated literal, as a number.
+///
+/// **One fold, because two would disagree.** [`Param::default_scalar`] and
+/// [`Param::default_components`] are the same reading of the same declaration
+/// at two widths, and the engine's uniform and `karakuri-environment`'s
+/// `param_decl` are both packed from it — a second evaluator would agree with
+/// the shader only by coincidence.
+///
+/// **A negation is folded, because the parser does not fold it.** `= -0.35` is
+/// `Unary { Neg, Lit }` and not a literal, so matching [`Expr::Lit`] alone
+/// silently dropped every negative default.
+fn fold_literal(expr: &Expr) -> Option<f32> {
+    match expr {
+        Expr::Lit {
+            value: Lit::Float(v),
+            ..
+        } => Some(*v),
+        Expr::Unary {
+            op: UnOp::Neg,
+            value,
+            ..
+        } => match value.as_ref() {
+            Expr::Lit {
+                value: Lit::Float(v),
+                ..
+            } => Some(-v),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// **The component letters, in the order a vector parameter is addressed in.**
+///
+/// Three, because [`Ty::param_components`] answers for the three types a
+/// `param` may declare and the widest is a `vec3` — `check.rs` refuses the
+/// rest: *"params may only be `float`, `vec2`, or `vec3`"*.
+///
+/// They are the language's own swizzle components — `check_swizzle` maps
+/// exactly `x`, `y`, `z`, `w` — so a component key reads as the `.kir` text
+/// that would name the same number.
+pub const COMPONENTS: [&str; 3] = ["x", "y", "z"];
+
+/// **The key one component of a vector parameter is addressed by**:
+/// `glow` component 1 is `glow.y`.
+///
+/// **`.` is the separator for three reasons, and each is checkable.** No `.kir`
+/// identifier can contain one — `lexer.rs`'s `lex_ident` takes
+/// `is_alphanumeric() || c == '_'` and nothing else — so a component key
+/// collides with no declared name however it is spelled. It is the language's
+/// own spelling for *this component of that vector*, which is the swizzle
+/// (`docs/ir-spec.md`, "Types": *"Swizzles allowed (`v.xy`, `v.zyx`)"*). And
+/// the command line already spells *member of* this way: `--edge
+/// <node>.<slot>=<node>`, whose parser splits on the last `.` for the same
+/// reason this needs no escaping — *"the slot is a `.kir` identifier, which
+/// cannot"* hold one.
+///
+/// **Nothing in `karakuri-codegen` produces or consumes a `.`**: the four
+/// manglings are `param_{name}`, `field_{slot}_{name}`, `source_{slot}` and
+/// `usr_{name}`, and the two *semantic* keys separate with `\u{1}`. So a
+/// component key never reaches a uniform layout field name, which is what
+/// keeps `node::write_params` walking the declaration names while the
+/// interface walks these.
+///
+/// Panics on a component past `COMPONENTS`, which is unreachable through
+/// [`Param::keys`]: the widest `param` a procedure may declare is a `vec3`.
+pub fn component_key(name: &str, component: usize) -> String {
+    let mut out = String::with_capacity(name.len() + 2);
+    push_component_key(&mut out, name, component);
+    out
+}
+
+/// [`component_key`] into a buffer the caller owns.
+///
+/// **This exists for the render thread.** `karakuri-engine`'s
+/// `node::write_params` composes a key per component of every vector param of
+/// every node, every frame, and `format!` there would be an allocation per
+/// component per frame. One reused buffer costs none after the first.
+///
+/// It is the same function so that the separator is written down once: two
+/// spellings of `.` in two crates is exactly the drift `docs/contributing.md`
+/// §4 is about.
+pub fn push_component_key(out: &mut String, name: &str, component: usize) {
+    out.push_str(name);
+    out.push('.');
+    out.push_str(COMPONENTS[component]);
 }
 
 /// `capacity [<min>, <max>] = <default>`
@@ -1275,5 +1446,122 @@ mod tests {
     fn multiplication_binds_tighter_than_comparison() {
         assert!(BinOp::Mul.precedence() > BinOp::Lt.precedence());
         assert!(BinOp::Add.precedence() > BinOp::Eq.precedence());
+    }
+
+    /// One L4 declaring whatever `params` says, checked, so every test below
+    /// asks the fold about a declaration the checker has already accepted.
+    fn declared(params: &str) -> Vec<Param> {
+        let src = format!(
+            r#"
+proc folds {{
+  kind  L4
+  blend additive
+
+{params}
+
+  consumes position
+
+  vertex {{
+    clip       = camera * vec4(position, 1.0);
+    point_rate = 0.004;
+  }}
+
+  fragment {{
+    color = vec4(1.0, 1.0, 1.0, 1.0);
+  }}
+}}
+"#
+        );
+        let proc = crate::parse(&src).unwrap_or_else(|e| panic!("parse: {e:?}"));
+        crate::check::check(&proc)
+            .unwrap_or_else(|e| panic!("check: {e:?}"))
+            .params
+    }
+
+    fn only(params: &str) -> Param {
+        declared(params).into_iter().next().expect("one param")
+    }
+
+    /// **The whole of what a vector default was missing.** Before
+    /// [`Param::default_components`] the only fold was
+    /// [`Param::default_scalar`], which answers `None` for every `vec3`, so
+    /// the three numbers a `.kir` writes down were unreachable and the engine
+    /// packed zeroes. `docs/ir-spec.md`'s own `param` example is this
+    /// declaration.
+    #[test]
+    fn a_vector_default_folds_to_one_number_per_component() {
+        let glow = only("  param glow : vec3 [0.0, 4.0] = vec3(0.4, 0.7, 1.0)");
+        assert_eq!(
+            glow.default_components(),
+            Some(vec![0.4, 0.7, 1.0]),
+            "the three numbers the declaration states"
+        );
+        assert_eq!(
+            glow.default_scalar(),
+            None,
+            "one number is still not what a `vec3` declares"
+        );
+        assert_eq!(
+            glow.keys(),
+            vec!["glow.x", "glow.y", "glow.z"],
+            "the component order is a MIDI address and is `x`, `y`, `z`"
+        );
+    }
+
+    /// The broadcast `docs/ir-spec.md` makes legal in "Types" — *"or a single
+    /// scalar to broadcast … `vec3(0.0)`"* — which is one argument for three
+    /// components, so an arity test alone would read it as a mismatch.
+    #[test]
+    fn a_broadcast_default_folds_to_that_number_in_every_component() {
+        assert_eq!(
+            only("  param wash : vec3 [0.0, 1.0] = vec3(0.25)").default_components(),
+            Some(vec![0.25, 0.25, 0.25])
+        );
+        assert_eq!(
+            only("  param pan : vec2 [-1.0, 1.0] = vec2(-0.5)").default_components(),
+            Some(vec![-0.5, -0.5])
+        );
+    }
+
+    /// A negative component is a value and not an absence, which is the defect
+    /// `default_scalar` was widened for once already — and it has to survive
+    /// inside a constructor, where the argument is `Unary { Neg, Lit }` for the
+    /// same reason the whole default was.
+    #[test]
+    fn a_negated_component_is_folded_inside_the_constructor() {
+        assert_eq!(
+            only("  param drift : vec2 [-1.0, 1.0] = vec2(-0.35, 0.25)").default_components(),
+            Some(vec![-0.35, 0.25])
+        );
+    }
+
+    /// A scalar keeps its one key and its one number, so nothing about a
+    /// `float` param moves.
+    #[test]
+    fn a_scalar_default_is_one_component_under_the_declared_name() {
+        let radius = only("  param radius : float [0.1, 8.0] = 2.0");
+        assert_eq!(radius.default_components(), Some(vec![2.0]));
+        assert_eq!(radius.default_scalar(), Some(2.0));
+        assert_eq!(radius.keys(), vec!["radius"]);
+    }
+
+    /// **`None` is *this default is not a number I can state*.** Both cases
+    /// are legal `.kir` that the checker accepts: an argument that is an
+    /// expression rather than a literal, and a nested constructor whose
+    /// component count reaches the width through an inner `vec2`. The fold
+    /// says so rather than inventing a number, and the engine leaves those
+    /// keys out of its value map.
+    #[test]
+    fn a_default_this_cannot_state_folds_to_nothing() {
+        assert_eq!(
+            only("  param glow : vec3 [0.0, 4.0] = vec3(0.4, 0.7, 0.5 + 0.5)").default_components(),
+            None,
+            "an argument that is not a literal is not a number this states"
+        );
+        assert_eq!(
+            only("  param glow : vec3 [0.0, 4.0] = vec3(vec2(0.1, 0.2), 0.3)").default_components(),
+            None,
+            "a nested constructor answers `None`, which is said in the doc"
+        );
     }
 }

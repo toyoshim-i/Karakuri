@@ -337,12 +337,16 @@ sequenceDiagram
 ### 4.5 karakuri-store
 
 - **Purpose**: Content-addressed artifact storage keyed by SHA-256 of `.kir` source text, `.kbset` Set files, and `.ndjson` session recordings. **A Set has two forms and the store holds one of them**: `.kset` is the authoring form, naming its parts by relative path beside them, and `.kbset` is the resolved form the store holds and the form that travels, so nothing is left to work out at the frame boundary a load lands on (ADR-0229, ADR-0231).
-- **What a Set file cannot carry is named rather than dropped, and printed on load.** A `param`
-  may be a vector where the engine's map holds `f32`, and a `camera` record carries two of
-  `Orbit`'s six fields, so the other four come back as defaults. Both are real disagreements
-  between the format and the engine rather than omissions in the loader, and each is reported
+- **What a Set file cannot carry is named rather than dropped, and printed on load.** A `camera`
+  record carries two of `Orbit`'s six fields, so the other four come back as defaults — a real
+  disagreement between the format and the engine rather than an omission in the loader, reported
   at the site in `karakuri-environment/src/setfile.rs`. A Set file that half-applied in silence
   is the failure this repository refuses.
+- **A vector `param` was the other one and is carried now.** A parameter is driven one component
+  at a time (ADR-0268), so `{"t":"param","key":"glow","value":[0.4,0.7,1.0]}` becomes three
+  writes — `glow.x`, `glow.y`, `glow.z` — and the engine holds one `f32` under each. What is
+  reported is the disagreement rather than the width: a single number against a vector
+  declaration, a `vec2` against a `vec3`, or a `bind` on a bare vector key.
 
 ### 4.6 karakuri-cli
 

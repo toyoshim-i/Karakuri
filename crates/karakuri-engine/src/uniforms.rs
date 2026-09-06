@@ -152,15 +152,24 @@ impl<'a> UniformPacker<'a> {
     /// far harder to find than a panic naming it.
     ///
     /// **It cannot tell a zero somebody meant from a zero that means nothing
-    /// drives this.** `node::write_params` writes `vec2` and `vec3` zeroes for a
-    /// vector param, because nothing in this engine drives one and the value
-    /// channel is an `Option<f32>` that cannot carry three floats;
-    /// `node::write_field_params` reaches the same writes for a spliced field's
-    /// params. Both go through `write`, which sets the flag this scans — so "the
-    /// assertion built to stop a silently-zero parameter is satisfied by writing
-    /// one" (`docs/contributing.md` §3). The zeroes stay regardless: skipping the
-    /// field trips this panic, and packing the field as an `f32` trips `write`'s
-    /// type assertion on the render thread.
+    /// drives this**, and that is still true — but it is now the ordinary
+    /// scalar case rather than a vector-shaped hole. `node::write_params` packs
+    /// a `vec2` or a `vec3` from the Set's value under one component key per
+    /// component (`glow.x`, `glow.y`, `glow.z`), so a declared default, an
+    /// override and a binding all reach the field; a component with **nothing**
+    /// driving it resolves through the same `unwrap_or(0.0)` a `float` with
+    /// nothing driving it does
+    /// ([ADR-0268](../../../docs/adr/0268-a-vector-parameter-is-driven-one-component-at-a-time.md)).
+    ///
+    /// **What has not changed is that a write satisfies this scan.** Every one
+    /// of those goes through `write`, which sets the flag — so where a value is
+    /// genuinely missing, "the assertion built to stop a silently-zero parameter
+    /// is satisfied by writing one" (`docs/contributing.md` §3) still describes
+    /// what happens. This paragraph said the whole vector case was that, and
+    /// after ADR-0268 that is too strong: the case is now a param whose default
+    /// the IR fold cannot state, which is a scalar's case too. The field is
+    /// written either way, because skipping it trips this panic and packing it
+    /// as an `f32` trips `write`'s type assertion on the render thread.
     ///
     /// The check is a scan for *any* unwritten flag before the list of names
     /// is built, so the successful path — every frame — collects nothing and

@@ -591,7 +591,13 @@ editor**, whose source half is
 `ReadProcedure`, `WriteProcedure` and `WireInput` and is the two *node's source* rows above; adding
 or removing a node is the part with no home, listed in the preamble. The **parameter surfaces**,
 which are *Write a parameter*, *Attach a signal to a parameter* and *Take a parameter back* — the
-MIDI learn half of that item is M5.12 and the tooltip it lives in is M5.11. And the **`man / sug /
+MIDI learn half of that item is M5.12 and the tooltip it lives in is M5.11. **What each of them
+addresses is a component**, since
+[ADR-0268](adr/0268-a-vector-parameter-is-driven-one-component-at-a-time.md): a `param glow : vec3`
+is three rows — `glow.x`, `glow.y`, `glow.z` — and the engine holds one `f32` under each. That
+record closes nothing here; it is written down beside the item because the three surfaces are where
+the spelling is first felt, and because **no surface can write a parameter live today**, which is
+what makes these three the item they are. And the **`man / sug /
 auto` control**, which is *Set a node's authority*: the node head draws it since 2026-08-29 and the
 writer is what is left.
 
@@ -804,7 +810,9 @@ column is `has` or `gap`.
 and what is missing is **reaching a map while running** — a map is a file saved and recalled per
 controller. The next is **learn**: a control is bound to a deck and a position in the Set's
 published interface, never to a parameter by name, and the assignment lives in the control's own
-tooltip. The last two are M2's, and they are the surface itself rather than a route into it:
+tooltip. That position is why a vector parameter publishes as `x`, `y`, `z` in that order and never
+as one row — one row would be a position no control change can set
+([ADR-0268](adr/0268-a-vector-parameter-is-driven-one-component-at-a-time.md)). The last two are M2's, and they are the surface itself rather than a route into it:
 **MIDI *out***, so a surface's LEDs and motorised faders follow the deck, which matters the moment
 two things can move a fader; and **14-bit control changes**, so a fader is more than 128 positions.
 

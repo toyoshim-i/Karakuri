@@ -72,7 +72,20 @@ struct Producer {
     scratch: UniformScratch,
     uniform_bg: wgpu::BindGroup,
     state_bg: wgpu::BindGroup,
+    /// **The declaration names, which are the uniform's own field names** —
+    /// one `glow` for a `vec3`. [`super::write_params`] walks this, so it must
+    /// not carry components: the packer finds a field by name and a `glow.x`
+    /// is in no layout.
     param_names: Vec<String>,
+    /// **The keys this node's params are *addressed* by** — `glow.x`,
+    /// `glow.y`, `glow.z` for that same `vec3`.
+    ///
+    /// `Set::declared_names` walks this, which is what `Set::published` and
+    /// `Set::bind` are built from, and it is the list the value map is keyed
+    /// by. Two lists rather than one because the uniform and the address
+    /// disagree about what a vector is
+    /// ([ADR-0268](../../../../docs/adr/0268-a-vector-parameter-is-driven-one-component-at-a-time.md)).
+    param_keys: Vec<String>,
 }
 
 impl Camera {
@@ -219,11 +232,25 @@ impl Camera {
         }
     }
 
-    /// The params this node declares, or nothing when the camera is the
-    /// built-in — which declares none, because it is not a procedure.
-    pub(crate) fn param_names(&self) -> &[String] {
+    /// **The addressable keys this node's params answer to**, or nothing when
+    /// the camera is the built-in — which declares none, because it is not a
+    /// procedure.
+    ///
+    /// There is deliberately no accessor for the other list: `param_names` is
+    /// read at the one place it means anything — this node's own uniform write
+    /// — and handing it out would be handing out a list of names a `--param`
+    /// cannot use.
+    /// **The addressable keys this node's params answer to**, or nothing when
+    /// the camera is the built-in — which declares none, because it is not a
+    /// procedure.
+    ///
+    /// There is deliberately no accessor for the other list: `param_names` is
+    /// read at the one place it means anything — this node's own uniform write
+    /// — and handing it out would be handing out a list of names a `--param`
+    /// cannot use.
+    pub(crate) fn param_keys(&self) -> &[String] {
         match &self.proc {
-            Some(p) => &p.param_names,
+            Some(p) => &p.param_keys,
             None => &[],
         }
     }
@@ -427,6 +454,7 @@ impl Producer {
             uniform_bg,
             state_bg,
             param_names: l3.params.iter().map(|p| p.name.clone()).collect(),
+            param_keys: crate::set::declared_keys(l3),
         }
     }
 
