@@ -2314,19 +2314,44 @@ impl Readout {
     /// is a decision and not an omission"* — a pointer that names a row
     /// instead of stepping to it is the same pointer, which is what
     /// `view::View::point_at` is.
+    ///
+    /// **And a pointer that is the same pointer owes what the keys owe.**
+    /// `view::View::opened` draws the reading only where the row under the
+    /// cursor is still the Set it was read of, and the rule that keeps that
+    /// honest is the cursor's rather than the keyboard's: *"**the reading
+    /// follows the cursor**: a move with one open is a read of the row it
+    /// arrived at"* (`karakuri-console/src/view.rs`,
+    /// `view::View::reading_open`). So this answers [`Acted::Pointed`] where
+    /// the mark actually moved, exactly as the arrow keys answer
+    /// `Change::Pointed(moved)`, and the window loop re-reads on it the way it
+    /// re-reads on theirs. A carry that discarded the `bool` made the block
+    /// under an open reading vanish for the length of the run, because nothing
+    /// else on this route ever moves the cursor back.
+    ///
+    /// **That is still no operation.** `read_reading` reads the store and
+    /// writes the answer into the view; it emits nothing, so the press this
+    /// file's own doc calls *"the one offer on this console whose press names
+    /// no operation"* goes on naming none (ADR-0265).
     fn took(&mut self, p: Point, taken: Taken) -> Acted {
         let Taken { row, set } = taken;
         // **The mark first, and the hand after it.** Both are this console's
         // own pointers and neither is an operation, so the order is only about
         // the borrow — but the mark is what says the press was seen.
-        self.view.point_at(row);
+        let moved = self.view.point_at(row);
         println!(
             "press ({:.0}, {:.0}): `{set}` is in hand — let it go over a strip to load it there, \
              or anywhere else to load nothing",
             p.x, p.y
         );
         self.panel.carry(p, set);
-        Acted::Nothing
+        // **The `bool` is answered rather than dropped**, which is the whole
+        // of the re-read above: a row the hand arrived at is a row the reading
+        // moves to, and a press that landed on the row the cursor was already
+        // on moved nothing and asks for nothing.
+        match moved {
+            true => Acted::Pointed,
+            false => Acted::Nothing,
+        }
     }
 
     /// A press on the Outputs row's one control. **The dot says what it did**
@@ -3029,13 +3054,13 @@ enum Pointer {
 
 /// **What routing a pointer event did**, beyond deciding whose it was.
 ///
-/// Three answers rather than an `Option<Outcome>`, because there are now two
-/// kinds of control on the panel and they end in two different places: the
-/// Outputs dot asks for an operation on the *arrangement*, which this crate
-/// performs and reports as an [`Outcome`], and a fader asks for an operation
-/// on the *mix*, which nothing in `karakuri-console` can perform at all. The
-/// repaint decision is taken from which of the three it is — see
-/// `Change::Operated` and `Change::Emitted`.
+/// A list rather than an `Option<Outcome>`, because the controls on this panel
+/// end in more than one place: the Outputs dot asks for an operation on the
+/// *arrangement*, which this crate performs and reports as an [`Outcome`], a
+/// fader asks for an operation on the *mix*, which nothing in
+/// `karakuri-console` can perform at all, and two of them ask for no operation
+/// and are still not nothing. The repaint decision is taken from which of them
+/// it is — see `Change::Operated` and `Change::Emitted`.
 #[derive(Debug, Clone, PartialEq)]
 enum Acted {
     /// Nothing acted: a press on a boundary, a move, a wheel, a release.
@@ -3057,6 +3082,32 @@ enum Acted {
     /// held in the `Opening`, which is a handle another surface reads, and a
     /// copy of it in this enum would be the second answer to *what is open*.
     Opened,
+    /// **A press moved the library cursor**, and asked for nothing
+    /// ([`Readout::took`]).
+    ///
+    /// It is the console's one pointer a press moves *without* naming an
+    /// operation: the deck selection moves on a press too, and reaches
+    /// [`Acted::Emitted`] through `Operation::SelectDeck` and [`pointed`],
+    /// which is `Change::Pointed`'s note on the same pair.
+    ///
+    /// **A fifth answer rather than a reuse of [`Acted::Nothing`]**, which is
+    /// [`Acted::Opened`]'s argument one control along: this press names no
+    /// operation and must not be made into one (ADR-0265), so it cannot be an
+    /// [`Acted::Emitted`]; and it is not nothing either, because **the reading
+    /// follows the cursor** — a move with one open is a read of the row it
+    /// arrived at (`karakuri_console::view::View::reading_open`), and a caller
+    /// that could not tell this press from a boundary's would leave the block
+    /// drawn nowhere.
+    ///
+    /// **The caller is what owes that read**, and not [`Readout::took`]: a
+    /// reading is a file, and the store is the window's rather than the
+    /// readout's — the division [`Readout::asked_to_read`] is written to.
+    ///
+    /// It carries no payload because there is none to carry: it is answered
+    /// only where the cursor **moved**, which is `View::point_at`'s `bool`,
+    /// and a copy of the row here would be a second answer to
+    /// `View::cursor_row`.
+    Pointed,
 }
 
 fn folding(folded: bool) -> &'static str {
@@ -8913,6 +8964,16 @@ impl App {
             // `Change` of its own would be a second answer to a question that
             // is already answered.
             Acted::Opened => otherwise,
+            // **A carry that moved the library cursor earns the frame the
+            // claimed press already earns, and no more**, which is the arm
+            // above word for word. `Change::Pointer(Claim::Panel)` — what
+            // `otherwise` is on every path that can reach this — is already
+            // `Repaint::Now`, and `Change::Pointed(true)` is what the arrow
+            // keys raise for the same move and is the same answer. The re-read
+            // this press owes is not here because the store is not: see the
+            // button-up arm of `App::window_event`, which is where every other
+            // press that reaches a disk reaches it.
+            Acted::Pointed => otherwise,
             Acted::Operated(outcome) => Change::Operated(outcome).repaint(),
             Acted::Emitted(operation) => {
                 if let Some(operation) = operation.as_ref() {
@@ -9489,6 +9550,25 @@ impl ApplicationHandler for App {
                 // at all (ADR-0156). What the console holds is the answer and
                 // whether the block is down — `view::View::reading`.
                 if matches!(acted, Acted::Emitted(Some(Operation::ReadSet { .. }))) {
+                    println!("{}", read_reading(&mut self.readout.view, &self.store));
+                }
+                // **And a press that moved the library cursor owes that same
+                // read**, because the rule is the cursor's and not the
+                // keyboard's: *"the reading follows the cursor: a move with
+                // one open is a read of the row it arrived at"*
+                // (`karakuri-console/src/view.rs`, `View::reading_open`).
+                // This is the arrow keys' own line one event along — the same
+                // two conditions and the same call — and it is here for the
+                // reason the two above it are: the store is the window's, a
+                // file read is not a thing to do on a frame (P-0091), and
+                // `karakuri-console` reaches no disk at all (ADR-0156).
+                //
+                // **The press still names no operation** (ADR-0265):
+                // `read_reading` emits none, and `Acted::Pointed` is not an
+                // `Acted::Emitted`. Without this line a carry taken while a
+                // reading was open on another row made that block disappear
+                // and nothing brought it back.
+                if matches!(acted, Acted::Pointed) && self.readout.view.reading_open() {
                     println!("{}", read_reading(&mut self.readout.view, &self.store));
                 }
                 // **A Set dropped out of `presets` is taken in before it is
@@ -14253,7 +14333,11 @@ mod tests {
     ///    half a gesture names one operand.
     /// 2. **The cursor mark follows the hand**, which is the whole of what
     ///    this console can draw for a carry — the mock draws no ghost and no
-    ///    drop target.
+    ///    drop target — and `Acted::Pointed` is the press saying so. What is
+    ///    owed on that answer when a reading is open is
+    ///    [`a_carry_that_moves_the_cursor_re_reads_the_row_it_arrived_at`];
+    ///    here it is the mark alone, and `Acted::Nothing` in its place would
+    ///    be a press that moved the cursor and told nobody.
     /// 3. Every move on the way is `Acted::Nothing`, over two strips that are
     ///    not the one it lands on.
     /// 4. The release over strip C asks for `LoadSet` naming **deck C** and
@@ -14325,7 +14409,11 @@ mod tests {
         assert_eq!(readout.pointer(&ctx, Pointer::Moved(at)).0, Claim::Panel);
         let (claim, did) = readout.pointer(&ctx, Pointer::Down);
         assert_eq!(claim, Claim::Panel, "a press on a library row went to egui");
-        assert_eq!(did, Acted::Nothing, "the press asked for something");
+        assert_eq!(
+            did,
+            Acted::Pointed,
+            "the press asked for an operation, or moved the mark without answering that it did"
+        );
         assert_eq!(
             readout.view.cursor_row(),
             2,
@@ -14360,7 +14448,7 @@ mod tests {
         // 5: and one let go over nothing asks for nothing at all.
         let at = row(&mut readout, 0);
         readout.pointer(&ctx, Pointer::Moved(at));
-        assert_eq!(readout.pointer(&ctx, Pointer::Down).1, Acted::Nothing);
+        assert_eq!(readout.pointer(&ctx, Pointer::Down).1, Acted::Pointed);
         let away = Point::new(-40.0, -40.0);
         readout.pointer(&ctx, Pointer::Moved(away));
         assert_eq!(
@@ -14368,6 +14456,137 @@ mod tests {
             Acted::Nothing,
             "a drop over nothing asked for a load"
         );
+    }
+
+    /// **A carry that moves the library cursor re-reads the row it arrived
+    /// at**, which is the rule the cursor states rather than the keyboard:
+    /// *"the reading follows the cursor: a move with one open is a read of the
+    /// row it arrived at"* (`karakuri-console/src/view.rs`,
+    /// `View::reading_open`).
+    ///
+    /// # The defect it was written for
+    ///
+    /// `Readout::took` discarded `View::point_at`'s `moved`. So taking a row
+    /// in hand while a reading was open on a **different** row moved the
+    /// cursor off that row, `View::opened` answered `None` because the row
+    /// under the cursor was no longer the Set the reading was of, and the
+    /// block disappeared — for the rest of the run, because nothing on this
+    /// route ever walks the cursor back. The arrow keys never had it: they
+    /// re-read on `moved && reading_open()`.
+    ///
+    /// # Why it is here and can be nowhere else
+    ///
+    /// It needs all three of a press handler, a store on a disk, and the
+    /// glue between them, and this file is the only place that has any two.
+    /// `carry.rs` in `karakuri-console` presses the bay and the view directly
+    /// and that crate reaches no disk at all (ADR-0156), so the half it can
+    /// hold is `the_row_a_hand_takes_is_the_row_the_cursor_marks` — that
+    /// `point_at` answers the move — and not that anything acts on the answer.
+    ///
+    /// # What it asserts, and what each one fails against
+    ///
+    /// 1. The press answers `Acted::Pointed`, which is the whole of what
+    ///    `Readout::took` can do about it: the readout holds no store, so the
+    ///    press says *the cursor moved* and the caller reads the file. A
+    ///    `took` that drops the `bool` again answers `Acted::Nothing` here.
+    /// 2. **The block is gone until it is re-read**, which is the defect
+    ///    itself, asserted so that step 3 cannot pass by the reading never
+    ///    having moved.
+    /// 3. `read_reading` — the call the window loop makes on that answer —
+    ///    puts the reading under the row the hand took, naming that row's Set.
+    /// 4. **A press on the row the cursor is already on answers
+    ///    `Acted::Nothing`**, so a carry that moved nothing costs no file
+    ///    read.
+    ///
+    /// **What it cannot see is that the window loop makes the call**, because
+    /// `winit` cannot be asked for an `ActiveEventLoop` outside its own loop
+    /// and an event handler is not something a test can drive —
+    /// `Readout::pointer`'s own doc. That wire is
+    /// [`super::reading_follows_the_cursor`], which reads it as text.
+    ///
+    /// A CPU test: a store is a directory and a `Readout` takes no device.
+    #[test]
+    fn a_carry_that_moves_the_cursor_re_reads_the_row_it_arrived_at() {
+        let ctx = drawn_once();
+        let root = scratch_dir("carry-reading");
+        let store = Store::open(&root).expect("a store to read");
+        store.write_set("drift_night", &[]).expect("a Set to read");
+        store.write_set("lattice_veil", &[]).expect("a Set to read");
+
+        let mut readout = Readout::new(1440.0, 900.0);
+        readout.panel.solve();
+        readout.view.scopes = Scope::ALL.to_vec();
+        readout.view.library = vec!["drift_night".to_owned(), "lattice_veil".to_owned()];
+        assert!(readout.view.select_scope(Scope::MySets));
+
+        // The rectangles, off the derivation that draws them — and the open
+        // reading goes in with them, because the block is drawn among the rows
+        // and the row below it is somewhere else while it is down.
+        let row = |readout: &mut Readout, index: usize| {
+            readout.panel.solve();
+            let at = library_bay(
+                readout.panel.layout(),
+                &readout.view.scopes,
+                &readout.view.library,
+                readout.view.opened(),
+            )
+            .expect("the bay lists its rows")
+            .row(index);
+            Point::new(at.center().x, at.center().y)
+        };
+
+        // The reading is opened the way the window loop opens it, on the row
+        // the cursor starts on.
+        read_reading(&mut readout.view, &root);
+        let open = readout.view.opened().expect("a reading on the first row");
+        assert_eq!((open.at, open.reading.id.as_str()), (0, "drift_night"));
+
+        // 1: the press on the other row takes it in hand and says the mark
+        // moved.
+        let at = row(&mut readout, 1);
+        assert_eq!(readout.pointer(&ctx, Pointer::Moved(at)).0, Claim::Panel);
+        let (claim, did) = readout.pointer(&ctx, Pointer::Down);
+        assert_eq!(claim, Claim::Panel, "a press on a library row went to egui");
+        assert_eq!(
+            did,
+            Acted::Pointed,
+            "the carry moved the library cursor and answered nothing, so the reading open on \
+             the row it left has nowhere to be drawn and nothing to bring it back"
+        );
+        assert_eq!(readout.view.cursor_row(), 1);
+
+        // 2: and until the answer is acted on, the block is drawn nowhere.
+        assert!(
+            readout.view.opened().is_none(),
+            "the reading is still drawn on a row the cursor has left"
+        );
+        assert!(readout.view.reading_open(), "the reading was put away");
+
+        // 3: what the window loop does with that answer.
+        let said = read_reading(&mut readout.view, &root);
+        assert!(
+            said.contains("lattice_veil"),
+            "the re-read named a row the hand is not on: `{said}`"
+        );
+        let open = readout
+            .view
+            .opened()
+            .expect("the reading followed the cursor to the row the hand took");
+        assert_eq!((open.at, open.reading.id.as_str()), (1, "lattice_veil"));
+        readout.pointer(&ctx, Pointer::Up);
+
+        // 4: and a press on the row the cursor is already on moves nothing,
+        // so it owes no read at all.
+        let at = row(&mut readout, 1);
+        readout.pointer(&ctx, Pointer::Moved(at));
+        assert_eq!(
+            readout.pointer(&ctx, Pointer::Down).1,
+            Acted::Nothing,
+            "a press on the row the cursor was already on asked for a re-read of it"
+        );
+        readout.pointer(&ctx, Pointer::Up);
+
+        std::fs::remove_dir_all(&root).expect("clean up");
     }
 
     /// **The filter row narrows what the bay lists, through the summary.**
@@ -17354,6 +17573,108 @@ mod event_response {
              destructure or off a receiver by another name. `egui-winit` 0.36.1 hard-codes it \
              true for every `Tab`, so honouring it stops `Tab` reaching the `match` that moves \
              focus between bays (ADR-0259), on the first press and in silence"
+        );
+    }
+}
+
+#[cfg(test)]
+mod reading_follows_the_cursor {
+    //! **The rule is the cursor's and not the keyboard's, and this file pays
+    //! it on both surfaces.**
+    //!
+    //! `karakuri-console/src/view.rs` states it on `View::reading_open`:
+    //! *"**the reading follows the cursor**: a move with one open is a read of
+    //! the row it arrived at, and a move with nothing open is a pointer
+    //! moving"*. `View::opened` is what makes it load-bearing — the block is
+    //! drawn only where the row under the cursor is still the Set it was read
+    //! of — and neither is a rule the console can keep by itself, because the
+    //! re-read is a file read and that crate reaches no disk at all
+    //! (ADR-0156). **Two surfaces move that cursor**: the arrow keys, through
+    //! `View::walk`, and a carry's press, through `View::point_at`.
+    //!
+    //! # Why it is worth a check
+    //!
+    //! For a while only one of them paid. `Readout::took` called `point_at`
+    //! and discarded the `bool` it answers, so a row taken in hand while a
+    //! reading was open on another row moved the cursor off it and the block
+    //! vanished with nothing to bring it back — no panic, no diagnostic, a
+    //! reading that stops being drawn. ADR-0265 left it undecided and now
+    //! decides it the cursor's way, which makes *both branches present* the
+    //! invariant that record names.
+    //!
+    //! # How it is read
+    //!
+    //! [`super::event_response`]'s machinery, one question along: this file
+    //! read as text, cut at the first [`TESTS`], comments dropped and the
+    //! lines joined — [`code`], the same answer [`super::press_handler`] asks
+    //! it for. There is nothing to enumerate instead: a branch in a `match`
+    //! arm is not something the program lists.
+    //!
+    //! Both statements are matched **whole** rather than by a name, which is
+    //! [`super::event_response`]'s `CALL` reason: `read_reading` is called on
+    //! three branches above the tests and two of them are somebody else's, so
+    //! a scan keyed on the callee alone would pass on a file where either of
+    //! these two had been deleted.
+    //!
+    //! # What it cannot see, and which way each one fails
+    //!
+    //! - **That either branch is reached.** It reads text; whether the arm it
+    //!   sits in runs is `mod gpu`'s question. A *false negative*.
+    //! - **That the read is the right one.** That `read_reading` opens the row
+    //!   under the cursor is
+    //!   `super::tests::a_reading_is_written_into_the_view_under_the_row_the_cursor_is_on`,
+    //!   and that the press answers `Acted::Pointed` at all is
+    //!   `super::tests::a_carry_that_moves_the_cursor_re_reads_the_row_it_arrived_at`.
+    //!   This module asks one question: does the window loop act on that
+    //!   answer.
+    //! - **`/* … */`, and a `//` inside a string literal.** Neither cut in
+    //!   [`code`] handles either, unchanged from the modules above;
+    //!   `super::press_handler::the_two_cuts_are_the_whole_of_the_comment_syntax_they_meet`
+    //!   is what fails the day one is written.
+
+    use super::key_column::{code, SRC, TESTS};
+
+    /// **The arrow keys' half**, in [`code`]'s flattened spelling: `moved` is
+    /// `View::walk`'s answer, and the arm it is in is the one that binds it.
+    const WALKED: &str = concat!(
+        "if moved && self.readout.view.reading_open() { ",
+        "println!(\"{}\", read_reading(&mut self.readout.view, &self.store)); }"
+    );
+
+    /// **The carry's half**, and the same two conditions: `Acted::Pointed` is
+    /// `View::point_at`'s answer carried out of `Readout::took`, which is
+    /// where the press handler can put it and the store is not.
+    const POINTED: &str = concat!(
+        "if matches!(acted, Acted::Pointed) && self.readout.view.reading_open() { ",
+        "println!(\"{}\", read_reading(&mut self.readout.view, &self.store)); }"
+    );
+
+    /// **A move with a reading open is a read of the row it arrived at, on
+    /// whichever surface moved the cursor** — ADR-0265's decision, as a check.
+    ///
+    /// A CPU test, deliberately, and for [`super::key_column`]'s reason: it
+    /// reads a file, so a machine with no adapter still has an answer about
+    /// whether this program keeps the rule.
+    #[test]
+    fn both_surfaces_re_read_the_row_the_cursor_arrived_at() {
+        let code = code();
+
+        assert!(
+            code.contains(WALKED),
+            "{SRC} no longer re-reads the row an arrow key walked the cursor to. The statement \
+             this looks for is `{WALKED}`, above the first `{TESTS}`; without it a reading open \
+             on one row is drawn nowhere as soon as the cursor steps off it, because \
+             `View::opened` answers `None` for a row that is no longer the Set it was read of"
+        );
+
+        assert!(
+            code.contains(POINTED),
+            "{SRC} no longer re-reads the row a carry's press moved the cursor to. The statement \
+             this looks for is `{POINTED}`, above the first `{TESTS}`. The rule at \
+             `karakuri-console/src/view.rs` is the cursor's and not the keyboard's (ADR-0265), \
+             and the press is the surface that has to be reminded: `Readout::took` discarded \
+             `View::point_at`'s answer once already, and what that cost was a reading that \
+             disappeared when a row was picked up beside it and never came back"
         );
     }
 }

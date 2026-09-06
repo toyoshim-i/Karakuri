@@ -51,10 +51,10 @@ watching may be dropped on at all.
 first three ask for nothing.
 
 1. **The press takes the Set in hand.** `LibraryBay::take`
-   (`crates/karakuri-console/src/view.rs:9535`) answers a `Taken` — a row index and the Set's name —
+   (`crates/karakuri-console/src/view.rs:9539`) answers a `Taken` — a row index and the Set's name —
    and not an operation, because half a gesture names one operand. `Readout::took`
-   (`crates/karakuri/src/main.rs:2316`) moves the library cursor to that row (`View::point_at`,
-   `view.rs:12626`) and hands the name to `Panel::carry` (`panel.rs:1009`).
+   (`crates/karakuri/src/main.rs:2335`) moves the library cursor to that row (`View::point_at`,
+   `view.rs:12630`) and hands the name to `Panel::carry` (`panel.rs:1009`).
 2. **A move asks for nothing.** `Panel::moved` answers `None` with a carry in hand. Nothing has
    happened, because nothing happens until the Set is let go.
 3. **The release names the deck.** `Mixer::dropped` (`view.rs:6356`) answers which strip's rectangle
@@ -66,7 +66,7 @@ first three ask for nothing.
 **The load asked for is the load the key asks for.** `LoadSet` leaves by the door every other
 control's operation leaves by, so the drop re-points the slot's source and installs nothing
 (ADR-0228), and a drop on a `presets` row runs the key's own two helpers — `taking_in` and
-`preset_press` (`crates/karakuri/src/main.rs:5959`, `:6040`) — so one gesture emits
+`preset_press` (`crates/karakuri/src/main.rs:6012`, `:6040`) — so one gesture emits
 `TransferSet { Take }` and then `LoadSet`. That is the page's *"Two ways in, one name"* met at the
 operation rather than only at the badge, and taking a preset in is an operator's own act, which is
 where it is allowed to write the operator's library
@@ -98,7 +98,7 @@ selection would be a pointer spelling of `l` with the one capability the page cl
 and the drop would land on a deck the hand was not over. It is also the failure the host-side test
 was written to catch: *"Deleting the `Mixer::dropped` ask from the release arm is the injection this
 was watched to fail against, and moving it into the press arm is the second"*
-(`crates/karakuri/src/main.rs`, `a_drop_on_a_strip_loads_the_strip_it_was_let_go_over`, `:14266`).
+(`crates/karakuri/src/main.rs`, `a_drop_on_a_strip_loads_the_strip_it_was_let_go_over`, `:14351`).
 
 **Build no drag at all, and leave `l` as the only route.** Free, and defensible on the day: the
 operation is reachable, ADR-0228 had already made it work, and [roadmap.md](../roadmap.md) said in
@@ -209,18 +209,54 @@ Set instead, so the panel says what it did with the gesture rather than going qu
 - **A press on an open reading takes nothing in hand.** `LibraryBay::take` walks the rows through
   `LibraryBay::row` rather than dividing by the row stride, so the block a reading opens is not a
   row and the rows below it still answer their own names.
-- **A carry moves the cursor and does not re-read, and the keyboard does.** `View::opened`
-  (`crates/karakuri-console/src/view.rs:12651`) answers the reading only where the row under the
+- **The reading follows the cursor on both surfaces, and the carry pays it.** `View::opened`
+  (`crates/karakuri-console/src/view.rs:12655`) answers the reading only where the row under the
   cursor is still the Set it was read of, and the rule that keeps that honest is stated at
-  `view.rs:12672` — *"**the reading follows the cursor**: a move with one open is a read of the row
-  it arrived at"*. The keyboard pays it: `crates/karakuri/src/main.rs:9753` is `if moved &&
-  self.readout.view.reading_open()` and re-reads. `Readout::took` discards `View::point_at`'s
-  `moved` and asks nothing, so **taking a row in hand while a reading is open on another row makes
-  that reading's block disappear, and no release brings it back.** The reading is not put away —
-  there is nowhere to draw it — so the state is recoverable by walking back to its row. Whether the
-  pointer owes the same re-read the arrow keys do, or whether the rule is the keyboard's alone, is
-  not decided here: it is a page question about what a reading is *of*, and `console.html`
-  specifies the mark's movement for the keys only.
+  `view.rs:12676` — *"**the reading follows the cursor**: a move with one open is a read of the row
+  it arrived at"*. **That rule names no surface, and it is the cursor's rather than the
+  keyboard's.** `Readout::took` discarded `View::point_at`'s `moved` and asked nothing, so taking a
+  row in hand while a reading was open on another row made that block disappear and nothing brought
+  it back: the only thing that moves this cursor is a hand, and the hand had already gone where it
+  meant to. So the pointer now owes what the keys pay at `crates/karakuri/src/main.rs:9834` — `took`
+  answers the `bool` (`main.rs:2352`) and the window loop re-reads on it (`main.rs:9571`), the same
+  two conditions and the same `read_reading` one event along.
+- **The page is behind that rather than against it, and half of it was already surface-neutral.**
+  The prose names the keys — *"the arrow keys move the cursor and the reading moves with it"*
+  (`docs/manual/console.html:2099-2100`) — and was written when they were the only thing that moved
+  this cursor. The `read` pill's own tip names none, on the line this record already quotes for the
+  drag (`console.html:137`): *"move the cursor and the reading moves with it, so one row is open at
+  a time and never a second list."* A reading that followed one surface's cursor and not the other's
+  would be two answers to *what is this a reading of* on a bay that has one cursor
+  (`View::cursor_row`) — which is the sentence further down this list held to: the pointer is the
+  same pointer, so the mark it moves is the same mark. A clause naming the press belongs in that
+  paragraph of `console.html` and is an edit to the page rather than a second branch here.
+- **The press still names no operation, and keeping that true cost a fifth `Acted`.** `read_reading`
+  (`crates/karakuri/src/main.rs:5579`) reads the store and writes the answer into the view; it emits
+  nothing. So Decision step 1 stands and so does everything filed under it — `input::CLAIMS` still
+  counts this list as one offer whose press names no operation
+  (`crates/karakuri-console/src/input.rs:428-429`), `press_handler::TABLE` gains no entry, and
+  `operations.html` gains no row. What could not stand was `Acted::Nothing`: the readout holds no
+  store — the division `Readout::asked_to_read` is written to, and the reason every file read in
+  this program is in the window loop — so the press has to say *the cursor moved* and let the caller
+  read the file. That answer is `Acted::Pointed` (`main.rs:3110`), which is `Acted::Opened`'s
+  argument one control along (ADR-0236): not an operation, and not nothing either. It earns no frame
+  of its own — `App::performed` answers it with `otherwise` (`main.rs:8976`), because a claimed
+  press is already `Repaint::Now` and `Change::Pointed(true)` is what the arrow keys raise for the
+  same move. **One standing assertion moved with it**:
+  `a_drop_on_a_strip_loads_the_strip_it_was_let_go_over` read `Acted::Nothing` for the press on a
+  row and now reads `Acted::Pointed`, which is that test's own point 2 — the mark follows the hand —
+  said by the press rather than only by the view.
+- **The two halves are held by two tests, because no one test can reach both.**
+  `a_carry_that_moves_the_cursor_re_reads_the_row_it_arrived_at` (`main.rs:14509`) presses through
+  `Readout::pointer` against a store on disk: the press answers `Pointed`, the block is drawn
+  nowhere until the answer is acted on, `read_reading` puts it under the row the hand took, and a
+  press on the row the cursor is already on answers `Nothing` and owes no read. **The window loop's
+  own branch is reachable from no test** — `winit` hands out no `ActiveEventLoop` outside its loop,
+  which is why `Readout::pointer` exists as a method at all — so `mod reading_follows_the_cursor`
+  (`main.rs:17581`) reads *both* statements out of this file as text, in `press_handler`'s and
+  `event_response`'s shape, and fails naming the one that went missing. Each was checked against its
+  own injection: dropping the `bool` in `took` fails the first and not the second, and deleting the
+  loop's branch fails the second and not the first.
 
 - **The page names only the keys for that mark, and this record is what says the pointer is the
   same pointer.** `docs/manual/console.html:2044-2045` reads *"The cursor moves on the arrow keys
@@ -231,5 +267,5 @@ Set instead, so the panel says what it did with the gesture rather than going qu
   *only* the arrow keys is reading a sentence about which surfaces have a row, and the fix for that
   is a clause on the page rather than a branch in `main.rs`.
 - **Nine tests in `crates/karakuri-console/tests/carry.rs` hold the console's half**, and the moment
-  the deck is resolved at is held in the host: `crates/karakuri/src/main.rs:14266`, which is the only
+  the deck is resolved at is held in the host: `crates/karakuri/src/main.rs:14351`, which is the only
   place both halves of the gesture meet a press handler.
