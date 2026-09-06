@@ -473,8 +473,11 @@ wrong**: the Library bay draws none, and the naming flow it was pointing at is t
 pill's, in the transport row. *Load material into a deck* is not
 blocked: `l` performs the operation
 ([ADR-0228](adr/0228-a-library-load-re-points-the-slots-source-and-never-installs-a-set.md)), and
-the control the page names is the drag from a row onto a strip, which the page carries as that
-row's panel badge and marks *designed* — *"this surface is meant to reach it and does not yet"*.
+the control the page names is the drag from a row onto a strip, which is built and reached: a row
+is picked up, carried and dropped on a strip, and the page's panel badge for this operation reads
+`has` (`docs/manual/operations.html:201`). **What the drag does not draw is the carry itself** —
+there is no drop-target state and no indicator on the row in hand. That is a panel affordance
+rather than a route, so it does not hold the operation's badge, and it is open.
 The pill beside it is a readout on purpose, so a press on it would be a third route
 nobody specified (`view::LibraryBay`).
 
