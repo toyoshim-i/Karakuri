@@ -365,7 +365,7 @@
           <!-- RIGHT: mixer, master, sequencer -->
           <div class="col">
             <div class="bay">
-              <div class="bay-head"><span>Mixer</span><span style="display:flex;gap:5px;align-items:center"><span data-tip="Four strips, all four of them on screen, and the page you are on. Four today because the compositing shader declares four inputs &mdash; the strip list is a paged list whose length is a number rather than a row of four the console fixed, and this is where that number and the page are said. Nothing scrolls out of reach mid&#8209;transition: every strip the page holds is visible at once, which is why the list is paged rather than scrolled. A readout, and there is nothing here to press. &#8853; MIDI: unassigned &mdash; a readout is not an operation, so there is no target for a map line to name.">4 of 4 &middot; page 1</span><span class="pill" data-tip="Whether a model may reach the mix, and it is shut, which is where every class starts. While it reads shut, the operations this bay draws are refused when a model asks for them: a strip's trim and its fader, blend, the mask, a fade, a crossfade and a wipe &mdash; and the master out one bay down, which is classed here because it is a level rather than an effect. Refused rather than hidden: the call arrives and fails, and the sentence it fails with names this bay, so a model can tell the person sitting beside it which pill to press. Nothing here is ever refused to a hand. Click to open the class; click again to shut it. Two things about that press are not settled yet and are not being smoothed over: whether it covers the whole class or one operation of it, and whether an opening is still here after a restart. &#8853; MIDI: unassigned &mdash; this is a setting of the map every surface reaches the vocabulary through rather than an operation, so there is no target for a map line to name; the &#8853; in every other tooltip on this page is that same layer reached one control at a time.">mcp &middot; shut</span></span></div>
+              <div class="bay-head"><span>Mixer</span><span style="display:flex;gap:5px;align-items:center"><span data-tip="Three strips, all three of them on screen, and the page you are on. Three because three of the four tracks are filled &mdash; the compositing shader declares four inputs and a track nothing fills draws nothing at all, so the strip list is a paged list whose length is a number rather than a row of four the console fixed, and this is where that number and the page are said. Nothing scrolls out of reach mid&#8209;transition: every strip the page holds is visible at once, which is why the list is paged rather than scrolled. A readout, and there is nothing here to press. &#8853; MIDI: unassigned &mdash; a readout is not an operation, so there is no target for a map line to name.">3 of 3 &middot; page 1</span><span class="pill" data-tip="Whether a model may reach the mix, and it is shut, which is where every class starts. While it reads shut, the operations this bay draws are refused when a model asks for them: a strip's trim and its fader, blend, the mask, a fade, a crossfade and a wipe &mdash; and the master out one bay down, which is classed here because it is a level rather than an effect. Refused rather than hidden: the call arrives and fails, and the sentence it fails with names this bay, so a model can tell the person sitting beside it which pill to press. Nothing here is ever refused to a hand. Click to open the class; click again to shut it. Two things about that press are not settled yet and are not being smoothed over: whether it covers the whole class or one operation of it, and whether an opening is still here after a restart. &#8853; MIDI: unassigned &mdash; this is a setting of the map every surface reaches the vocabulary through rather than an operation, so there is no target for a map line to name; the &#8853; in every other tooltip on this page is that same layer reached one control at a time.">mcp &middot; shut</span></span></div>
               <div class="mixer-strips">
                 <div class="strip live focus" data-tip="Deck A&#39;s strip, and the deck the keys are addressed to &mdash; the solid ring round the column. Two ways into that selection and neither of them is a control: 0 to 3, or a press anywhere on this strip that no knob under the pointer claimed. That is why the strip is the one thing in this bay with no capsule and no track of its own to press &mdash; it is the whole column, and what a press on it means is address the keys here. The selection persists: it stays put when you tab away into the library, and it is not keyboard focus, which is transient, goes wherever tab lands, and is the dashed ring on deck B. It writes no record; it is a console pointer, and the library&#39;s load pill reads it for its letter. A deck the mixer is drawing no strip for cannot be selected, which is that letter kept honest at the source. &#8853; MIDI: unassigned.">
                   <span class="strip-name">drift_night</span>
@@ -556,10 +556,13 @@
       <div class="note">
         <h3>Mixer</h3>
         <p>
-          Four channel strips, all visible, nothing that scrolls out of reach mid
-          transition. Four today because the compositing shader declares four
-          inputs &mdash; the strip is a <strong>paged list whose length is a
-          number</strong>, and the header says which page you are on.
+          A channel strip per filled track, all visible, nothing that scrolls
+          out of reach mid transition. Four tracks because the compositing
+          shader declares four inputs, and a track nothing fills draws nothing
+          at all &mdash; so the strip is a <strong>paged list whose length is a
+          number</strong>, the header says how long the list is, and it says
+          which page you are on. Three strips above, because the deck the mock
+          is drawing has three slots filled.
         </p>
         <p>
           <strong>The residency chip is the one control that can be showing two
@@ -978,7 +981,7 @@
           empty.</strong> <code>man &times;2 &middot; sug</code> is what the
           three under that head are set to. It is not a fourth value &mdash;
           there are three and they are the vocabulary's &mdash; and it is not a
-          control; it is a count, the way <code>4 of 4</code> in the mixer head
+          control; it is a count, the way <code>3 of 3</code> in the mixer head
           is a count. A head that simply dropped its chip would be a control
           going away without saying why, which is the one thing this panel does
           not do. <strong>A Set with one renderer has one node under that head

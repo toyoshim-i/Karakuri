@@ -1337,7 +1337,14 @@ operations! {
     SelectScope { scope: Undecided } => "Choose which scope the library shows",
 
     /// Every knob with its range and default, the element count, the
-    /// attributes emitted — without fetching a source or compiling it.
+    /// attributes emitted — each read off the artifact's own card, so those
+    /// three fetch no source and compile nothing.
+    ///
+    /// **What a node's element storage comes to is the figure that is not a
+    /// card's.** It needs every source in the Set fetched and checked before
+    /// anything can be sized, and it pays for that. The panel draws the three
+    /// that cost nothing; a model asking over MCP is offered the fourth as
+    /// well.
     ReadSet { id: String } => "Read what one Set holds and declares",
 
     /// Send a Set to somebody, and take one in.

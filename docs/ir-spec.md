@@ -349,7 +349,9 @@ reaching the node becomes `factor` of them. See
   settled entirely by the compaction that runs once after L1. One is the endomorphism an L2
   already is, and would buy a second buffer holding a copy of the first. The ceiling is on
   the single declaration and keeps the *product* inside a `u32`; it is not what keeps a
-  buffer inside the device.
+  buffer inside the device, and it is rarely the limit an author meets first — the cost
+  pass multiplies the node's whole per-element cost by the factor, so a body doing any real
+  work is refused well below 1024 and by a different message.
 
 **What is too large is decided where the Set is built, not here.** The buffer a node needs is
 the Set's `capacity`, times every factor above the node, times the element stride — and a
