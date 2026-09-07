@@ -536,8 +536,26 @@ nobody specified (`view::LibraryBay`).
    `egui`'s `dropped_files` on this platform — and a dialog with a dependency is the fallback if it
    does not. **Sending is the only `plan` panel badge this blocks**, and the page turning `a folder
    is a way in` around is ADR-0267's other half.
-2. **A lister for the edit history, and the bay walking it.** `karakuri_environment::history` has
-   `Snapshots::record`, `seed` and `stamped_id` and **no lister**: nothing opens `<store>/history/`
+2. **The bay walking the edit history. The lister is built** —
+   `karakuri_environment::history::list`, most recent first, foreign entries skipped and counted,
+   capped on days opened before a day is read and saying when it stopped short. What is left is the
+   manual naming the control and the bay drawing it.
+
+   **And building it turned up the thing the reframing has to answer.** `Snapshots::record`
+   addresses a version by `(slot, layer, index)` and **the layout carries no Set id anywhere**, so
+   the files either side of a library load on one slot are indistinguishable. *A Set's history is a
+   list of the versions it has had* is not answerable from these files: what they support is a
+   node's chain, which is the key `record`'s own dedup is on. So either the page names a row as a
+   **node's** version, or something decides `record` starts writing a Set id — and that second one
+   is a change to the writer and a decision, not a listing. The page owes the rest with it: the row
+   moves into *The library*, the control is a fifth scope chip beside `my sets`, `favourites`,
+   `presets` and `folder`, the order is stated in the row's own sentence as *List what the store
+   holds* states its, landing on a row is a **load**, and `WalkHistory`'s payload is *a revision to
+   land on*. `Operation::WalkHistory`'s doc gives *"the store has no reader"* as half its reason for
+   `Undecided`; that half is now false.
+
+   The paragraph this replaces read: `karakuri_environment::history` has `Snapshots::record`, `seed`
+   and `stamped_id` and **no lister**: nothing opens `<store>/history/`
    to answer *what versions has this had*. Once it can, *Walk the edit history* is a scope in this
    bay — the rows are versions, the reading is the one already built, and landing on one is the load
    already built. That also settles `WalkHistory { step: Undecided }`, whose own doc offers three
