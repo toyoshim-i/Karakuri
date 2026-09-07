@@ -83,12 +83,13 @@
 //!    describing itself to an operator has to say what a pointer reaches, and
 //!    a sentence saying it is where the count goes stale. What they are is
 //!    still written here, because a name is not a number and there is nowhere
-//!    else the thirty-five sit together: the Outputs row's sink
+//!    else the thirty-six sit together: the Outputs row's sink
 //!    ([`crate::view::outputs`]), a mixer strip's fader knob
 //!    ([`crate::view::Mixer::grab`]), its blend chip
 //!    ([`crate::view::Mixer::blend`]), its tally chip
 //!    ([`crate::view::Mixer::tally`]), its mask mini
-//!    ([`crate::view::Mixer::mask`]), under the strips the transition row's
+//!    ([`crate::view::Mixer::mask`]), the **strip itself**
+//!    ([`crate::view::Mixer::select`]), under the strips the transition row's
 //!    shape, quantum and length pills and the `go` capsule that runs one
 //!    ([`crate::view::TransitionRow`]), the
 //!    transport row's audio-in pill
@@ -104,7 +105,7 @@
 //!    ([`crate::view::LibraryBay::filter`]), the `read` chip in that bay's
 //!    foot ([`crate::view::LibraryBay::read`]) and the **list** between them
 //!    ([`crate::view::LibraryBay::take`]). The rule did not change to hold
-//!    any of the thirty-four that came after the first, which is what it was
+//!    any of the thirty-five that came after the first, which is what it was
 //!    written for — and each is asked exactly the way the first is: the
 //!    derivation that draws it, asked whether the point is on it, with nothing
 //!    stored.
@@ -258,12 +259,34 @@
 //!    from the load pill it sits beside, which happens to stand at the same
 //!    4.75 and is not a control at all.
 //!
+//!    **The thirty-sixth is a whole strip, and it is the first control here
+//!    that is not drawn as one.** [`crate::view::Mixer::select`] is the
+//!    strip's own rectangle, so what a press on it means — *address the keys
+//!    to this deck* — is offered by the column rather than by a capsule, and
+//!    `console.html`'s strip tip says so in those terms: *"Two ways into that
+//!    selection and neither of them is a control: 0 to 3, or a press anywhere
+//!    on this strip that no knob under the pointer claimed."* It is the last
+//!    of the strip's five questions for that reason and not by preference: the
+//!    four inside the column are asked first, and this is what is left over.
+//!    **It landed in the rule late**, and the four things that already
+//!    described it — the operations page's `has` badge, the tip above,
+//!    [`crate::view::Mixer::select`] and the press arm in `karakuri/src/main.rs`
+//!    that asks it — were all true while this probe was missing, so a press on
+//!    a strip's ground fell through to `egui` and reached nothing at all.
+//!
 //!    **A control claims what it acts on and no more.** A fader's *track* is
-//!    drawn by the console and is not claimed, because a press on it does
-//!    nothing — see [`crate::view::Mixer::grab`] for why a press off the knob
-//!    must not move the value. Claiming a press in order to throw it away
-//!    would put the rule and the act out of step, and `egui` owns nothing
-//!    there either, so the two answers are the same nothing.
+//!    drawn by the console and moves no value, because a press off the knob
+//!    must not jump it — see [`crate::view::Mixer::grab`]. That is a statement
+//!    about the *fader* and not about the claim, and the strip above is what
+//!    keeps the two apart: a press on the track is the panel's, it selects the
+//!    deck the track is on, and the level does not move. `console.html` states
+//!    both halves and in that order — *"a press on the track off the knob does
+//!    nothing"* on the fader, *"a press anywhere on this strip that no knob
+//!    under the pointer claimed"* on the column around it. Where nothing at
+//!    all is offered the rule still declines: the Master bay's out is one
+//!    fader in a bay with no selection in it, so its track is claimed by
+//!    nobody, and `egui` owns nothing there either — the two answers are the
+//!    same nothing.
 //! 5. Otherwise it goes to
 //!    [`egui_winit::State::on_window_event`](https://docs.rs/egui-winit) and
 //!    `egui` decides.
@@ -312,6 +335,14 @@
 //! shape after the one the deck reports, **and the angle the deck reports
 //! beside it**, which is the whole of ADR-0203 and is why choosing a shape
 //! does not straighten a diagonal front.
+//!
+//! **So is the strip the four of them sit in**, and it is the one here where
+//! *is this a control* is the whole column:
+//! [`crate::view::Mixer::select`] answers both questions off the same
+//! `deck_at` the drop reads — `SelectDeck` naming the deck whose rectangle the
+//! point is in. It is asked **after** the four above on both sides, in this
+//! rule and again in the caller, because a press on a knob is a press on that
+//! knob and this is what is left over.
 //!
 //! **So is the Master bay's out**, and it is [`crate::view::Mixer::grab`]'s
 //! arrangement rather than the look's: [`crate::view::MasterRow::grab`]
@@ -441,11 +472,11 @@
 //! list below are both the bay's own, so there is no boundary up or down
 //! either.
 //!
-//! **Four questions, one derivation.** The mixer bay is laid out once per
+//! **Five questions, one derivation.** The mixer bay is laid out once per
 //! event and asked for every control it has — a knob, a blend chip, a tally
-//! chip and a mask mini are four questions about one laid-out strip, and a
-//! second derivation would be a second answer that could disagree with the one
-//! the frame drew.
+//! chip, a mask mini and the strip they sit in are five questions about one
+//! laid-out strip, and a second derivation would be a second answer that could
+//! disagree with the one the frame drew.
 //!
 //! # One exception, and it is not a hole in the rule
 //!
@@ -480,7 +511,7 @@ use crate::view::{
 
 /// **What each of rule 4's derivations answers for**, one entry per probe in
 /// [`claim`] and in that order: the Outputs sink, the audio-in pill, the
-/// arrangement pill, the look group's two, a strip's four, the transition
+/// arrangement pill, the look group's two, a strip's five, the transition
 /// row's four, the Master bay's one, a deck head's four, the Program bay
 /// head's `solo`, the four deck preview cells, the Library bay's scope chips,
 /// its two filter fields, the `read` chip in its foot and the list above it,
@@ -492,11 +523,22 @@ use crate::view::{
 /// are actually asked rather than a count somebody has to remember to raise.
 ///
 /// **What it cannot see is a control added inside a derivation already here**:
-/// a fifth chip on a strip is one more thing a press reaches, and `on_strip`
-/// would go on answering for four. That one is caught where every other fact
+/// a sixth chip on a strip is one more thing a press reaches, and `on_strip`
+/// would go on answering for five. That one is caught where every other fact
 /// about a control is — the clearance test the rule above says each one owes,
 /// `tests/mask.rs` being the most recent of them — and this entry is what has
 /// to be raised beside it.
+///
+/// **That is not a hypothetical, and the strip's entry is the case it
+/// happened to.** [`crate::view::Mixer::select`] landed with the deck
+/// selection, `karakuri/src/main.rs`'s press arm asked it, both manual pages
+/// described it, and `on_strip` went on asking four questions — so no press on
+/// a strip's ground ever reached [`Claim::Panel`] and the arm that would have
+/// acted on it never ran. Nothing here could have caught it: the array's
+/// length was right the whole time. What catches it now is
+/// `tests/mixer.rs`, which asks [`claim`] at the points a strip has no chip
+/// on.
+///
 /// **The scope row's entry is [`Scope::ALL`]'s length and not a typed four**,
 /// which is the one entry here that is written as an expression. The row is
 /// as long as the slice the host handed the bay, and what a host can hand it
@@ -535,7 +577,7 @@ const CLAIMS: [usize; 15] = [
     1,
     1,
     2,
-    4,
+    5,
     4,
     1,
     4,
@@ -598,15 +640,18 @@ pub enum Claim {
 /// are laid out around. It is paid on a pointer event and not on a frame, and
 /// a console with no deck behind it pays nothing at all — [`mixer`] answers
 /// `None` to an empty slice before it asks for any type. **The chips cost
-/// none of that again**: the bay is derived once and all four of the mixer's
-/// controls are asked of it — and the mask mini adds no lookup of its own,
-/// because it holds a mark rather than a word.
+/// none of that again**: the bay is derived once and all five of the mixer's
+/// controls are asked of it — and neither the mask mini nor the strip adds a
+/// lookup of its own, because one holds a mark rather than a word and the
+/// other is the box the words were laid out into.
 ///
 /// **A control in a bay that is not laid out is never reached**, and it is
 /// [`mixer`] that answers so rather than a check here: a folded mixer — or one
 /// inside a folded pane — has no room for its row of strips, `strips_row`
 /// answers `None`, and the bay is `None` before any chip is hit-tested.
-/// `tests/tally.rs` asserts it both ways round. [`inspector`] is the same
+/// `tests/tally.rs` asserts it both ways round, and the strip itself goes
+/// with them: a bay that is not laid out has no rectangle to select a deck
+/// by either. [`inspector`] is the same
 /// answer one bay along, and [`deck_head`] adds a second: a pane too narrow to
 /// hold its own chips draws none, so there is nothing there to press.
 ///
@@ -684,14 +729,25 @@ pub fn claim(panel: &mut Panel, ctx: &egui::Context, view: &View, p: Point) -> C
                 .is_some_and(|pill| pill.hit(p))
             };
             // **The bay is derived once for all of its controls**, since a
-            // knob, a blend chip, a tally chip and a mask mini are four
-            // questions about one laid-out strip.
+            // knob, a blend chip, a tally chip, a mask mini and the strip they
+            // sit in are five questions about one laid-out strip.
+            //
+            // **The strip is asked last, and it is the only one of the five
+            // that could answer for the other four.** `Mixer::select` is the
+            // column's whole rectangle, so this chain would come out the same
+            // with it first — and the order is the caller's rather than an
+            // optimisation: `karakuri/src/main.rs` tries the four that name
+            // something inside the column and takes the strip as what is left
+            // over, so a press on a knob is that knob's and a press on the
+            // name, the number, the meter or a fader's track is the deck's.
+            // Written in one order in both places, the two cannot come apart.
             let on_strip = || {
                 mixer(ctx, panel.layout(), &view.mixer).is_some_and(|bay| {
                     bay.grab(p).is_some()
                         || bay.blend(p).is_some()
                         || bay.tally(p).is_some()
                         || bay.mask(p).is_some()
+                        || bay.select(p).is_some()
                 })
             };
             // **The transition row's four capsules, derived once for all of
@@ -735,7 +791,7 @@ pub fn claim(panel: &mut Panel, ctx: &egui::Context, view: &View, p: Point) -> C
             // console with no deck behind it has no panes and pays nothing —
             // [`View::inspector`] is empty, and this iterates over nothing.
             // **The Master bay's one control**, and the bay is derived for it
-            // exactly as the mixer's is for its four — one question about one
+            // exactly as the mixer's is for its five — one question about one
             // laid-out row here, because there is one thing in this bay a hand
             // can move. A console with no level behind it has no row at all
             // and pays nothing.

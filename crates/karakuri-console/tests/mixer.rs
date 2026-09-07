@@ -23,10 +23,11 @@
 //!    **What the tally does when the residency it was given and the one that
 //!    was asked for disagree is `parked.rs`**, not here: the strips in this
 //!    file are all settled, so nothing in it moves.
-//! 6. **Which of these are controls and which are readouts** — the two fader
-//!    knobs and nothing else, both directions stated rather than inferred from
-//!    the presence or absence of a hit test. What a drag on one *does* is
-//!    `tests/fader.rs`.
+//! 6. **Which of these are controls and which are readouts** — five controls
+//!    inside the column and the column itself, both directions stated rather
+//!    than inferred from the presence or absence of a hit test: a press
+//!    anywhere in a strip is the panel's, and the alley between two strips is
+//!    `egui`'s. What a drag on a knob *does* is `tests/fader.rs`.
 //!
 //! None of it needs a window or a device. It does need `egui`'s fonts, because
 //! the tally's capsule and the blend's mini are as wide as the words in them.
@@ -39,7 +40,7 @@ use karakuri_console::panel::Panel;
 use karakuri_console::room::{size, Room};
 use karakuri_console::view::{mixer, Level, Mask, Mixer, Strip, StripBox, Tally, View, DECKS};
 use karakuri_layout::{Point, Rect};
-use karakuri_operation::BlendMode;
+use karakuri_operation::{BlendMode, Operation};
 
 /// **The mock's own first strip, as values**: `drift_night` live, a trim at
 /// 0.72, the fader at 1.00, `add` over no mask, and a meter reading.
@@ -1089,25 +1090,42 @@ fn a_name_too_long_for_a_strip_is_elided_on_one_line() {
 }
 
 // ---------------------------------------------------------------------------
-// Five controls, and the rest are readouts
+// The whole strip is claimed, and which control it is the derivation's
 // ---------------------------------------------------------------------------
 
-/// **The two knobs and the three chips are the panel's, and everything else in
-/// the bay is `egui`'s.**
+/// **Every point inside a strip is the panel's, and the alley between two of
+/// them is `egui`'s.**
 ///
 /// The console's rule has three claims before `egui`'s: a drag in hand, a
 /// boundary within `GRAB`, and a control the console draws (ADR-0176). This
-/// bay now has five of the third kind — the trim's knob, the fader's knob, the
-/// blend chip (ADR-0187), the tally chip (ADR-0195) and the mask mini
-/// (ADR-0203) — and nothing else in it: the meter and the number are readouts,
-/// and so is a fader's **track** off the knob, because a press there would be
-/// a jump nobody asked for.
+/// bay asks five questions of the third kind: four name something inside the
+/// column — `Mixer::grab` for either knob, the blend chip (ADR-0187), the
+/// tally chip (ADR-0195) and the mask mini (ADR-0203) — and the fifth is the
+/// **strip they sit in**, which is the whole column and is what a press on the
+/// name, the number, the meter or a fader's track means: address the keys to
+/// this deck (`Mixer::select`, and `console.html`'s *"a press anywhere on this
+/// strip that no knob under the pointer claimed"*).
 ///
-/// **Stated rather than inferred in both directions.** A knob that stopped
-/// being claimed would be a control drawn where it cannot be grabbed, and a
-/// bay that claimed everything would take presses it does nothing with.
+/// **This test asserted the opposite until 2026-09-07, and it was written
+/// before the selection existed.** `at.rect.center()` and `at.name.center()`
+/// were required to be `Claim::Egui`, which was true on 2026-08-25 when a
+/// strip's ground was nobody's; `Mixer::select` landed five days later,
+/// `karakuri/src/main.rs` asked it from the press arm, and `input::on_strip`
+/// went on asking four questions — so the arm never ran and the test held the
+/// hole open. Nothing decided a strip's ground should not be claimed; the four
+/// probes were simply never made five.
+///
+/// **What the claim can no longer tell apart, the derivation still can.** A
+/// knob is inside the strip's rectangle, so `Claim::Panel` at a knob is now
+/// satisfied by the strip and would go on being satisfied by it if the knob
+/// stopped being hit-tested. So the second half asks the bay directly: at each
+/// control's own point exactly that control answers, and at the ground the
+/// four answer `None` and `select` names the deck. What a drag on a knob
+/// *does* is `tests/fader.rs`, and how far each control sits from a boundary
+/// is `tests/fader.rs`, `tests/blend.rs`, `tests/tally.rs` and
+/// `tests/mask.rs`.
 #[test]
-fn the_five_controls_are_claimed_and_the_rest_of_the_bay_is_not() {
+fn the_whole_strip_is_claimed_and_the_alley_between_two_is_not() {
     let (mut panel, ctx) = console(PLAUSIBLE);
     let strips = mock_strips();
     let bay = bay(&panel, &ctx, &strips);
@@ -1115,27 +1133,14 @@ fn the_five_controls_are_claimed_and_the_rest_of_the_bay_is_not() {
     let trim = at.trim_at(mock().gain);
     let fader = at.fader_at(mock().opacity);
 
-    // The five that are.
-    for (probe, what) in [
-        (trim.knob.center(), "the trim's knob"),
-        (fader.knob.center(), "the fader's knob"),
-        (at.blend.center(), "the blend chip"),
-        (at.tally.center(), "the tally chip"),
-        (at.mask.center(), "the mask mini"),
-    ] {
-        assert_eq!(
-            claim(&mut panel, &ctx, &showing(&strips), point(probe)),
-            Claim::Panel,
-            "{what} is not being claimed, so it is drawn where it cannot be grabbed"
-        );
-    }
-
-    // And everything else, including both tracks away from their knobs. The
-    // mock's trim is at 0.72 and its fader at 1.00, so the far end of the trim
-    // and the floor of the fader are both track and neither is knob.
+    // The mock's trim is at 0.72 and its fader at 1.00, so the far end of the
+    // trim and the floor of the fader are both track and neither is knob.
     let track_end = egui::pos2(at.trim.max.x - 1.0, at.trim.center().y);
     let track_floor = egui::pos2(at.fader.center().x, at.fader.max.y - 1.0);
-    let probes = [
+
+    // The five controls and the ground between them, and the answer is the
+    // same for all of them: a press anywhere in the column is the panel's.
+    let ground = [
         (at.rect.center(), "the strip"),
         (at.name.center(), "the name"),
         (track_end, "the trim's track, past the knob"),
@@ -1143,13 +1148,84 @@ fn the_five_controls_are_claimed_and_the_rest_of_the_bay_is_not() {
         (at.meter.center(), "the meter"),
         (at.num.center(), "the number"),
     ];
-    for (probe, what) in probes {
+    let controls = [
+        (trim.knob.center(), "the trim's knob"),
+        (fader.knob.center(), "the fader's knob"),
+        (at.blend.center(), "the blend chip"),
+        (at.tally.center(), "the tally chip"),
+        (at.mask.center(), "the mask mini"),
+    ];
+    for (probe, what) in controls.iter().chain(ground.iter()) {
         assert_eq!(
-            claim(&mut panel, &ctx, &showing(&strips), point(probe)),
-            Claim::Egui,
-            "{what} is being claimed as a control the panel acts on"
+            claim(&mut panel, &ctx, &showing(&strips), point(*probe)),
+            Claim::Panel,
+            "{what} is not being claimed, so a press there reaches nothing at all — \
+             `egui` owns no widget anywhere on this console"
         );
     }
+
+    // **Which control it is is still the derivation's**, and it has to be
+    // asked here rather than left to the claim: the strip's rectangle contains
+    // every one of the five, so `Claim::Panel` at a knob no longer says the
+    // knob was hit-tested.
+    assert!(
+        bay.grab(point(trim.knob.center())).is_some(),
+        "the trim's knob is claimed by the strip around it and by nothing of its own"
+    );
+    assert!(
+        bay.grab(point(fader.knob.center())).is_some(),
+        "the fader's knob is claimed by the strip around it and by nothing of its own"
+    );
+    assert!(
+        bay.blend(point(at.blend.center())).is_some(),
+        "the blend chip is claimed by the strip around it and by nothing of its own"
+    );
+    assert!(
+        bay.tally(point(at.tally.center())).is_some(),
+        "the tally chip is claimed by the strip around it and by nothing of its own"
+    );
+    assert!(
+        bay.mask(point(at.mask.center())).is_some(),
+        "the mask mini is claimed by the strip around it and by nothing of its own"
+    );
+
+    // And on the ground none of the four answers, so what is left over is the
+    // strip — the deck this column is, named as an operation.
+    for (probe, what) in ground {
+        let p = point(probe);
+        assert!(
+            bay.grab(p).is_none()
+                && bay.blend(p).is_none()
+                && bay.tally(p).is_none()
+                && bay.mask(p).is_none(),
+            "{what} is one of the four controls inside the column, so it is not the \
+             leftover the selection is made of"
+        );
+        assert_eq!(
+            bay.select(p),
+            Some(Operation::SelectDeck { deck: 0 }),
+            "{what} is in deck A's strip and selects no deck"
+        );
+    }
+
+    // **The alley between two strips is nobody's**: `.mixer-strips` has a
+    // `gap`, it is a real place to press, and a claim there would be the panel
+    // taking an event for a deck the pointer is not on.
+    let alley = {
+        let a = bay.selected(0).expect("a strip for deck A");
+        let b = bay.selected(1).expect("a strip for deck B");
+        egui::pos2((a.max.x + b.min.x) * 0.5, a.center().y)
+    };
+    assert!(
+        bay.select(point(alley)).is_none(),
+        "the alley is inside a strip, so the assertion under it is asking nothing"
+    );
+    assert_eq!(
+        claim(&mut panel, &ctx, &showing(&strips), point(alley)),
+        Claim::Egui,
+        "the alley between two strips is being claimed, and there is no deck there to \
+         address the keys to"
+    );
 
     // The two points that are track rather than knob have to actually be off
     // the knob, or the paragraph above is asserting nothing.

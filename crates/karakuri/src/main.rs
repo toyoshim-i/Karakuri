@@ -1568,10 +1568,10 @@ impl Readout {
             // `karakuri_console::input::CONTROLS`, which is why this sentence
             // no longer says a number: it went stale four times.
             //
-            // **The bay is derived once and asked four times**, exactly as
-            // `claim` does it: a knob, a blend chip, a tally chip and a mask
-            // mini are four questions about one laid-out strip, and four
-            // derivations would be four answers.
+            // **The bay is derived once and asked five times**, exactly as
+            // `claim` does it: a knob, a blend chip, a tally chip, a mask mini
+            // and the strip they sit in are five questions about one laid-out
+            // strip, and five derivations would be five answers.
             (Pointer::Down, Claim::Panel) => {
                 self.panel.solve();
                 // **The audio-in pill first**, and it and the arrangement pill
@@ -1853,7 +1853,7 @@ impl Readout {
                 // this file does with either is take it in hand, and which
                 // fader it was is inside the `Knob`. The two bays cannot
                 // overlap, so the order is arbitrary — the mixer is asked
-                // first because it has four questions to this one's one.
+                // first because it has five questions to this one's one.
                 let knob = bay.as_ref().and_then(|bay| bay.grab(at)).or_else(|| {
                     master_row(ctx, self.panel.layout(), self.view.master_out)
                         .and_then(|row| row.grab(at))
@@ -14426,6 +14426,100 @@ mod tests {
         readout.pointer(&ctx, Pointer::Up);
         assert_eq!(readout.view.filters().layer, Some(Layer::L1));
         assert_eq!(readout.view.filters().holds, Some("drift_shell"));
+    }
+
+    /// **A press on a strip's ground addresses the keys to that deck** — the
+    /// whole route, through the same `Readout::pointer` a hand goes through.
+    ///
+    /// # Why it is here and can be nowhere else
+    ///
+    /// `karakuri-console` owns both halves and cannot put them together:
+    /// `input::claim` there says a press on a strip is the panel's, and
+    /// `Mixer::select` says which deck it names, and **nothing in that crate
+    /// joins the two**. This file's press arm is the join, and the defect this
+    /// was written against lived exactly in the gap: `on_strip` asked four
+    /// questions where the bay has five, so every press on a strip's ground
+    /// was routed to `egui`, the `(Pointer::Down, Claim::Panel)` arm never ran,
+    /// and the `bay.select(at)` call at the end of it was unreachable —
+    /// while `operations.html`'s *"click a strip"*, `console.html`'s strip tip,
+    /// `Mixer::select` and that call all said it worked.
+    ///
+    /// **Deleting `|| bay.select(p).is_some()` from `input::on_strip` is the
+    /// injection this was watched to fail against**: the claim comes back
+    /// `Egui` and the press asks for nothing.
+    ///
+    /// **The point is the strip's name box**, which is the affordance's own
+    /// words — *"a press anywhere on this strip that no knob under the pointer
+    /// claimed"* — and the four that could have claimed it are asked here so
+    /// that the press under test is the leftover rather than a chip.
+    ///
+    /// A CPU test: a `Readout` takes no device.
+    #[test]
+    fn a_press_on_a_strips_ground_selects_that_deck() {
+        let ctx = drawn_once();
+        let mut readout = Readout::new(1440.0, 900.0);
+        readout.panel.solve();
+        readout.view.mixer = (0..4)
+            .map(|slot| view::Strip {
+                name: format!("slot{slot}"),
+                tally: view::Tally::Live,
+                requested: view::Tally::Live,
+                gain: 0.5,
+                gain_to: None,
+                opacity: 0.5,
+                opacity_to: None,
+                blend: BlendMode::Over,
+                mask: view::Mask::None,
+                mask_angle: 0.0,
+                level: None,
+            })
+            .collect();
+        assert_eq!(
+            readout.view.selection(),
+            0,
+            "the selection is not deck A, so a press naming deck C could be naming the \
+             selection it started on"
+        );
+
+        // The rectangle, off the derivation that draws it — the rule the whole
+        // of `input` is written to, and the reason a test presses where the
+        // paint painted.
+        let bay = mixer_bay(&ctx, readout.panel.layout(), &readout.view.mixer)
+            .expect("the mixer bay draws its strips");
+        let name = bay.strip(2).name;
+        let at = Point::new(name.center().x, name.center().y);
+        assert!(
+            bay.grab(at).is_none()
+                && bay.blend(at).is_none()
+                && bay.tally(at).is_none()
+                && bay.mask(at).is_none(),
+            "the name box is one of the four controls inside the column, so this press is \
+             not the leftover the selection is made of"
+        );
+
+        assert_eq!(
+            readout.pointer(&ctx, Pointer::Moved(at)).0,
+            Claim::Panel,
+            "a press on a strip went to egui, so the panel's own press arm never runs"
+        );
+        let (claim, did) = readout.pointer(&ctx, Pointer::Down);
+        assert_eq!(claim, Claim::Panel, "a press on a strip went to egui");
+        assert_eq!(
+            did,
+            Acted::Emitted(Some(Operation::SelectDeck { deck: 2 })),
+            "the press did not address the keys to the deck the strip is"
+        );
+
+        // **The selection moves where the operation is performed**, which is
+        // `pointed` and not the press arm: `SelectDeck` writes no record, so
+        // the surface that emits it is what performs it (ADR-0198).
+        assert_eq!(
+            readout.view.selection(),
+            0,
+            "the press moved the pointer itself"
+        );
+        assert!(pointed(&mut readout.view, &Operation::SelectDeck { deck: 2 }).is_some());
+        assert_eq!(readout.view.selection(), 2);
     }
 
     /// **A Set dragged from a library row onto a mixer strip loads the strip

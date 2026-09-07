@@ -299,21 +299,28 @@ fn the_operation_names_the_strips_own_deck() {
 // A control claims what it acts on and no more
 // ---------------------------------------------------------------------------
 
-/// **A press off the chip asks for nothing and is not claimed.**
+/// **A press off the chip asks for nothing, and what it does instead is select
+/// the deck.**
 ///
-/// `input`'s rule 3: *"a control claims what it acts on and no more."* The
-/// name above it, the trim below it, the strip's own well and the ground
-/// between two strips are all painted by the console and none of them is a
-/// control, so `egui` gets the event — which owns no widget there either, so
-/// the two answers are the same nothing, arrived at without the panel claiming
-/// a press it would throw away.
+/// `input`'s rule 4: *"a control claims what it acts on and no more."* The
+/// name above it, the trim below it, the number and the meter are painted by
+/// the console and none of them is the tally chip, so this chip answers
+/// nothing for any of them. They are all inside the strip, though, and the
+/// strip is itself a control (`Mixer::select`) — so the press is the panel's
+/// and it means *address the keys to this deck*.
 ///
 /// **Both halves, because either alone is satisfiable by the wrong code.** A
-/// chip that asked for nothing but was claimed would take presses it does
-/// nothing with; a chip that asked from anywhere would move a deck's residency
-/// from a press on the name above it.
+/// chip that asked from anywhere would move a deck's residency from a press on
+/// the name above it; a chip whose neighbours answered nothing at all would be
+/// a column an operator cannot select by pressing.
+///
+/// **This test required `Claim::Egui` at those points until 2026-09-07.** That
+/// was true when it was written and stopped being true on 2026-08-30, when
+/// `Mixer::select` made the whole column a control and `input::on_strip` went
+/// on asking four questions instead of five. The rule has not changed; what is
+/// *left over* after the four inside the column is no longer nothing.
 #[test]
-fn a_press_off_the_chip_asks_for_nothing_and_is_not_claimed() {
+fn a_press_off_the_chip_asks_for_nothing_and_selects_the_deck_instead() {
     let (mut panel, ctx) = console();
     let strips = strips();
     let bay = bay(&panel, &ctx, &strips);
@@ -355,9 +362,15 @@ fn a_press_off_the_chip_asks_for_nothing_and_is_not_claimed() {
             "{what} asked the residency to change"
         );
         assert_eq!(
+            bay.select(point(probe)),
+            Some(Operation::SelectDeck { deck: 1 }),
+            "{what} is inside strip B and selects no deck, so the press reaches nothing"
+        );
+        assert_eq!(
             claim(&mut panel, &ctx, &showing(&strips), point(probe)),
-            Claim::Egui,
-            "{what} is being claimed as a control the panel acts on"
+            Claim::Panel,
+            "{what} is not the panel's, so a press there goes to `egui`, which owns no \
+             widget anywhere on this console"
         );
     }
 

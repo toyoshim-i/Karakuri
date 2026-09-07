@@ -6370,6 +6370,14 @@ impl<'a> Mixer<'a> {
     /// claimed"* — and it is why the bay needs no sixth control drawn to carry
     /// it.
     ///
+    /// **It is one of rule 4's probes like every other control here**, and it
+    /// is asked twice for the same reason they are: once by
+    /// [`crate::input::claim`] to decide the press is the panel's, and once by
+    /// whoever acts on it. It went eight days claimed by nobody —
+    /// `input::on_strip` asked the four inside the column and not this one, so
+    /// the press reached `egui`, which owns no widget on the console and did
+    /// nothing with it. `tests/mixer.rs` is what says otherwise now.
+    ///
     /// [`Operation::SelectDeck`] writes no record and is the console's own
     /// pointer, so whoever emits it performs it: there is nothing on the deck
     /// for it to move. What it moves is [`View::selection`], which the ring
@@ -6950,8 +6958,8 @@ impl TransitionRow {
     }
 
     /// One pill's hit test, written once because the three differ only in
-    /// which rectangle and which cycle — the shape [`Mixer`]'s four share by
-    /// being four questions about one laid-out strip.
+    /// which rectangle and which cycle — the shape [`Mixer`]'s five share by
+    /// being five questions about one laid-out strip.
     fn pressed(
         &self,
         pill: Rect,
