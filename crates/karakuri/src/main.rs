@@ -1132,19 +1132,21 @@ impl Costs {
                  Sequencer, which are a head and nothing else. \
                  That is NOT the workspace's \
                  reference workload. The \
-                 engine half is one Set of `{}` — {} elements at {}x{}, one step a frame — the \
-                 deck's other three slots are allocated, one of them parked, and an \
-                 allocated slot neither steps nor draws, so none of them is in these \
-                 numbers — and \
-                 that one canvas presented twice — into the picture's rectangle, \
-                 and again into deck A's preview cell, both of which are the \
-                 canvas's own shape. It is the workspace's reference workload \
-                 (docs/contributing.md §1) only while nobody passed a pair on the command \
-                 line: 262144 elements at 1280x720 is what `drift_shell.kir` declares and \
-                 what a bare `cargo run -p karakuri` therefore runs, and the figures above \
-                 are comparable with the rest of this repository's exactly that far. Host \
-                 clock, debug profile with dependencies at opt-level 3.",
-                WINDOW.0, WINDOW.1, material, capacity, CANVAS.0, CANVAS.1
+                 engine half is four slots of `{}` — {} elements each at {}x{}, one step a \
+                 frame apiece. The other three are allocated, one of them parked, and \
+                 every one of them steps and draws into its own cell on every frame \
+                 (ADR-0269), so all four simulations and all four draws are in these \
+                 numbers — and five presents at the canvas's own shape: each slot's \
+                 canvas into its own preview cell, and the mix into the picture's \
+                 rectangle. The workspace's reference workload is \
+                 `examples/drift_cloud.kset` at 1280x720 (docs/contributing.md §1, \
+                 ADR-0270) — a named Set rather than whatever this program opens on — \
+                 and this reading is comparable with the rest of this repository's \
+                 figures exactly as far as it is that material at that canvas, and \
+                 never with a headless one: this is a deck of four stepped and drawn \
+                 slots with a panel over it, and a headless figure is one Set. Host \
+                 clock, {}.",
+                WINDOW.0, WINDOW.1, material, capacity, CANVAS.0, CANVAS.1, PROFILE
             );
             println!(
                 "  and every figure above is taken on a core that spends the vsync wait \
@@ -3188,6 +3190,17 @@ fn knob_where(knob: Knob) -> String {
 /// engine renders cannot come from two places — see [`aims`].
 const CANVAS: (u32, u32) = (1280, 720);
 
+/// **Which profile this binary was built with**, for the legend's own reading.
+///
+/// It said *debug, with dependencies at opt-level 3* in a string, so a
+/// `--release` run printed the wrong one at the foot of its own numbers — and
+/// a host-clock figure whose build is misreported is worse than one with no
+/// build beside it, because the reader has no reason to doubt it.
+const PROFILE: &str = match cfg!(debug_assertions) {
+    true => "debug profile with dependencies at opt-level 3",
+    false => "release profile",
+};
+
 /// **Deck A's seed salt**, which decides where its elements start. Any value
 /// is a picture; 7 is the one `karakuri-cli`'s own tests use, so this looks
 /// like what they look like.
@@ -3344,11 +3357,14 @@ impl Sources {
     /// program's choice of what to open on rather than a property of a preset
     /// library: a library is a directory with at least one `.kset` in it
     /// (`karakuri_environment::places`'s `is_a_library`, which asked for a
-    /// `.kir` until the authoring form landed), and these two are
-    /// what the reference workload is measured on — see
+    /// `.kir` until the authoring form landed), and these two are the pair
+    /// `examples/drift_cloud.kset` names, which is what `docs/contributing.md`
+    /// §1 calls the reference workload. **That is a coincidence this program is
+    /// free to end**: the workload is the named Set and not whatever a bare run
+    /// opens on (ADR-0270), so changing these two names is a demo decision and
+    /// takes no figure with it. See
     /// `the_capacity_is_the_l1s_own_declaration_and_the_l4_declares_none`,
-    /// which pins the L1's capacity because `docs/contributing.md` §1 quotes
-    /// figures taken against it.
+    /// which pins the Set's capacity and checks these two for a per-file read.
     ///
     /// **Under the root rather than under the working directory**, and the
     /// asymmetry with a typed path is the one the old `Default` had for the
@@ -15756,23 +15772,43 @@ mod tests {
     /// **It is not `karakuri_ir::DEFAULT_CAPACITY` either**, which is the
     /// language default for a file that declared nothing and is what
     /// `check_header` makes unreachable for an L1 that passed checking. The
-    /// number below is asserted rather than derived on purpose: it is what a
-    /// bare `cargo run -p karakuri` runs, which is what makes the reading
-    /// [`Costs::say`] prints comparable with the rest of this repository's
-    /// figures (`docs/contributing.md` §1's reference workload).
+    /// number below is asserted rather than derived on purpose, and **it is the
+    /// reference workload's rather than this program's**: `docs/contributing.md`
+    /// §1 names `examples/drift_cloud.kset` at 1280x720, and 262144 is what that
+    /// Set's L1 declares. It used to be asserted of whatever a bare `cargo run
+    /// -p karakuri` opened on, which coupled the workload to the demo and is
+    /// ADR-0270. What is still asserted of the shipped pair is that its capacity
+    /// is read from its own file, which is a different property and the one this
+    /// test is named for.
     #[test]
     fn the_capacity_is_the_l1s_own_declaration_and_the_l4_declares_none() {
         let sources = shipped();
+
+        // **The reference workload, pinned by name.** `drift_cloud.kset` is the
+        // Set `docs/contributing.md` §1 names, and this is its L1. That the
+        // `.kset` names these two parts is checked where every shipped Set is
+        // composed, in `karakuri-cli`'s `examples` suite, so it is not
+        // transcribed twice here.
+        let reference = checked(&sources.l1.with_file_name("drift_shell.kir"));
+        let pinned = reference
+            .capacity
+            .expect("an L1 that passed contract checking always carries a capacity");
+        assert_eq!(
+            pinned.default, 262_144,
+            "`examples/drift_cloud.kset`'s L1 no longer declares the capacity every \
+             host-clock figure in this repository was taken at, and \
+             `docs/contributing.md` §1 names it as the one reference workload \
+             (ADR-0270)"
+        );
+
+        // **And the pair this program opens on, checked for a per-file read and
+        // not for a number.** ADR-0270 split these: which pair is the default is
+        // a demo decision, and what it may not do is run at something other than
+        // what its own file declares.
         let l1 = checked(&sources.l1);
         let declared = l1
             .capacity
             .expect("an L1 that passed contract checking always carries a capacity");
-        assert_eq!(
-            declared.default, 262_144,
-            "the pair this program plays by default is no longer the workspace's \
-             reference workload, and the reading printed after three quiet seconds \
-             says it is"
-        );
         assert!(
             declared.contains(declared.default),
             "the file's own default is outside the range the same file declares"
