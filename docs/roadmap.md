@@ -939,6 +939,23 @@ the host's**: `crates/karakuri` answers `WindowEvent::Resized` and `WindowEvent:
 itself, and `esc` reaches the second. What is owed there is the `a` binding, which is bound to
 nothing, and the `close` control on the panel.
 
+**Sizing has a third owed item, and it is one line.** The window has no minimum inner size, so it
+can be dragged under the arrangement's own minima — where the solve scales everything down together
+(ADR-0250) and the Mixer stops drawing strips while the deck previews carry on, so the pointer loses
+the deck selection and the keys keep it.
+[ADR-0272](adr/0272-the-window-has-a-minimum-and-only-one-of-adr-0250s-three-cases-is-real.md) takes
+the decision and `karakuri-console` publishes the number as `MINIMUM_VIEWPORT` — 692 x 658.5, the
+declared minima summed along each axis, with a test recomputing both from the tree. What is left is
+`.with_min_inner_size(...)` on `crates/karakuri/src/main.rs`'s window attributes; until that lands
+the constant is a claim nothing enforces.
+
+**And it leaves one thing undone that a window minimum cannot reach**: `centre`'s declared minimum
+of 340 is `.body-grid`'s CSS track rather than a reading of its content, and the inspector's
+`.param` grid wants 207 in a pane before its fader has any width — so at a 340 centre the parameter
+faders are not drawn, and a divider drag reaches that centre at *any* window width. Closing it moves
+`centre`'s minimum to 2 x 207 + 9 = 423 and the arrangement's declared width minimum to 775, which
+is a change to the arrangement and wants its own record.
+
 Nothing in this section is blocked.
 
 ---

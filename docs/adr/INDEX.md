@@ -298,6 +298,8 @@ number; new records continue from the end.
 | [ADR-0268](0268-a-vector-parameter-is-driven-one-component-at-a-time.md) | A vector parameter is driven one component at a time | 2026-09-06 | accepted |
 | [ADR-0269](0269-a-slot-that-is-drawn-is-stepped-and-a-preview-runs-at-the-rooms-tempo.md) | A slot that is drawn is stepped, and a preview runs at the room's tempo | 2026-09-07 | accepted |
 | [ADR-0270](0270-the-reference-workload-is-a-named-set-rather-than-whatever-the-default-pair-is.md) | The reference workload is a named Set rather than whatever the default pair is | 2026-09-07 | accepted |
+| [ADR-0271](0271-the-panel-opens-on-the-demo-rather-than-on-the-reference-workloads-pair.md) | The panel opens on the demo rather than on the reference workload's pair | 2026-09-07 | accepted |
+| [ADR-0272](0272-the-window-has-a-minimum-and-only-one-of-adr-0250s-three-cases-is-real.md) | The window has a minimum, and only one of ADR-0250's three cases is real | 2026-09-07 | accepted |
 
 ## Retired numbers
 

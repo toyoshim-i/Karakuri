@@ -32,11 +32,18 @@ pub const PLAUSIBLE: Rect = Rect {
 /// The smallest window this arrangement is claimed to work at, and every digit
 /// of it is derived rather than picked.
 ///
-/// **990 wide** is `.console`'s `min-width: 1010px` less its own 10px of
-/// padding either side — the narrowest panel the mock will draw, and the
-/// narrowest at which the inspector's `.param` grid (`15px 88px 1fr 58px`,
-/// 8px gaps, 22 of padding — 207 before the fader) fits in an inspector pane.
-/// At 990 the centre track is 484 and each inspector pane is 237.
+/// **1244 wide** is the width that gives the centre the **484** the mock's own
+/// narrowest console gives it, at the tracks this panel has: `.console`'s
+/// `min-width: 1010px` less its 10px of padding either side is 990, and the
+/// mock's `.body-grid` spends that on `218px minmax(340px, 1fr) 268px` with
+/// two 10px gaps — so 484 in the middle. The panel's outer tracks are 340 and
+/// 400 (ADR-0239) and the mock's stylesheet still carries 218 and 268, so the
+/// same 484 costs 340 + 400 + 20 more: **1244**. The 484 is what is being
+/// held, and what it buys is the inspector: each pane is 237.5, and the
+/// `.param` grid (`15px 88px 1fr 58px`, 8px gaps, 22 of padding — 207 before
+/// the fader has any width) fits in one. **`min-width: 1010px` is the stale
+/// number of the two** — read against this panel's tracks it gives a centre
+/// of 230 — and it is the mock's own, so it is not this file's to move.
 ///
 /// **658.5 high** is the sum of the column-axis minima: the transport's 48,
 /// the body row's 556.5 — the row of three columns — the outputs row's 34 and
@@ -49,9 +56,15 @@ pub const PLAUSIBLE: Rect = Rect {
 /// `arrangement.rs` recomputes both numbers from the tree, so this is a claim
 /// rather than a copy.
 ///
-/// Not smaller, because below either figure the solve stops honouring minima
-/// and scales everything down together — which is the right behaviour and is
-/// not a panel anyone can work on.
+/// Not smaller, because below either figure the panel is no longer the panel
+/// this console describes. The two figures fail differently and it is worth
+/// keeping them apart: **658.5 is where the solve stops honouring minima** and
+/// scales everything down together — which is the right behaviour and is not a
+/// panel anyone can work on — while 1244 is a claim about the *content*, and
+/// the solve goes on honouring every minimum down to
+/// [`karakuri_console::MINIMUM_VIEWPORT`]'s 692. That constant is the window's
+/// floor and this is the console's claim; ADR-0272 is why they are two
+/// numbers.
 pub const SMALLEST: Rect = Rect {
     x: 0.0,
     y: 0.0,

@@ -1357,3 +1357,62 @@ fn a_press_on_a_strip_selects_that_deck() {
     );
     assert_eq!(at.select(point(outside)), None);
 }
+
+/// **The bay's last strip and `MINIMUM_VIEWPORT`'s width are one number**, and
+/// under it the pointer loses the deck selection while the keys keep it.
+///
+/// This is the concrete thing a window minimum buys, so it is asserted as the
+/// pair rather than as the threshold alone. At
+/// `karakuri_console::MINIMUM_VIEWPORT.0` the right pane is exactly 172, a
+/// track is exactly 37, and the fader column is exactly 29 inside 4 + 4 of
+/// padding — `strip_box`'s own condition, met with nothing to spare. A tenth
+/// of a pixel narrower and every strip is `None`, so `Mixer::select` answers
+/// for nowhere on the bay; and the four preview cells beside it are still
+/// drawn, because they ask only for positive area. `0`..`3` on the keyboard
+/// go on selecting a deck in that state, which is the asymmetry
+/// [ADR-0272](../../../docs/adr/0272-the-window-has-a-minimum-and-only-one-of-adr-0250s-three-cases-is-real.md)
+/// closes by refusing the window.
+#[test]
+fn under_the_minimum_viewport_the_bay_draws_no_strips_and_the_previews_remain() {
+    let (w, h) = karakuri_console::MINIMUM_VIEWPORT;
+    let canvas = (1280, 720);
+    let strips = std::iter::repeat_with(mock).take(DECKS).collect::<Vec<_>>();
+    let ctx = drawn_once();
+
+    let placed = |w: f32| {
+        let mut panel = Panel::new(w, h);
+        karakuri_console::view::rearrange(&mut panel, canvas);
+        let count = mixer(&ctx, panel.layout(), &strips)
+            .map(|bay| bay.placed().count())
+            .unwrap_or(0);
+        let cells = karakuri_console::view::preview_rects(panel.layout(), canvas).is_some();
+        (count, cells)
+    };
+
+    assert_eq!(
+        placed(w),
+        (DECKS, true),
+        "at the minimum viewport the bay does not draw four strips"
+    );
+    assert_eq!(
+        placed(w - 0.1),
+        (0, true),
+        "a tenth of a pixel under it, the strips and the cells did not part company"
+    );
+
+    // And the strip is what a press reaches a deck through, so with no strips
+    // there is nothing on the bay that selects one.
+    let mut panel = Panel::new(w - 0.1, h);
+    karakuri_console::view::rearrange(&mut panel, canvas);
+    let bay = mixer(&ctx, panel.layout(), &strips).expect("the bay is still laid out");
+    let region = rect_of(panel.layout(), "mixer");
+    for x in 0..20 {
+        for y in 0..20 {
+            let p = Point::new(
+                region.x + region.w * x as f32 / 19.0,
+                region.y + region.h * y as f32 / 19.0,
+            );
+            assert_eq!(bay.select(p), None, "a press at {p:?} selected a deck");
+        }
+    }
+}
