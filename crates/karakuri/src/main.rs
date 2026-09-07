@@ -5900,11 +5900,12 @@ fn presets_listing(presets: Option<&karakuri_environment::places::Presets>) -> V
 ///   decides where the value would live and leaves nothing to read. Nothing
 ///   here writes one: a store invented for it would be the specification
 ///   written backwards, which that page says in as many words.
-/// - **A folder waits on an operation.** *"No operation in the vocabulary can
-///   ask a folder for its listing"* — `Operation::ListSets` carries what a Set
-///   holds and which layer it uses, and has nowhere at all to put a directory.
-///   So the chip is drawn and the asking is owed by that row of
-///   `docs/manual/operations.html` rather than by this file.
+/// - **A folder has no directory yet.** `Operation::ListSets` has nowhere to
+///   put one and should not: both its fields narrow what a store already
+///   holds, and which store is asked at all is [`listing`]'s own answer.
+///   ADR-0275 says how one is chosen — a folder dropped anywhere on this
+///   window — so what is owed is this file reading `dropped_files`, and not a
+///   row of `docs/manual/operations.html`.
 ///
 /// It is said out loud on the step and again on a press, because a scope that
 /// went quiet and a scope that is empty are the same experience — which is the
@@ -5926,10 +5927,9 @@ fn why_nothing(scope: Scope) -> &'static str {
              library"
         }
         Scope::Folder => {
-            "no operation in the vocabulary can ask a directory for its listing — \
-             `ListSets` carries what a Set holds and has nowhere to put a folder — so this \
-             chip is drawn and the asking is owed by the operations page rather than by \
-             this program"
+            "nothing here reads a folder dropped on this window yet, which is how a \
+             directory is chosen — so this scope is empty because the way in is not built \
+             rather than because a directory holds nothing"
         }
     }
 }
@@ -12607,9 +12607,14 @@ mod tests {
             "the `favourites` sentence does not say what is missing: {}",
             why_nothing(Scope::Favourites)
         );
+        // **It says how a directory is chosen, and it used to say `operation`.**
+        // This asserted that word until ADR-0275, on the reading that the chip
+        // waited on one — which `ListSets`' own shape refutes: both its fields
+        // narrow what a store already holds, and which store is asked at all
+        // never was the operation's. What the sentence owes now is the way in.
         assert!(
-            why_nothing(Scope::Folder).contains("operation"),
-            "the `folder` sentence does not say what it is waiting on: {}",
+            why_nothing(Scope::Folder).contains("dropped"),
+            "the `folder` sentence does not say how a directory is chosen: {}",
             why_nothing(Scope::Folder)
         );
 
@@ -14049,7 +14054,7 @@ mod tests {
     /// the panel claims it, and what comes back is
     /// [`Operation::ReadSet`](karakuri_operation::Operation::ReadSet) naming
     /// the row the cursor is on. **`press_handler` cannot see this** — it
-    /// reads text and asks whether the offer is asked — and
+    /// reads text and asks whether the control is asked — and
     /// `karakuri-console`'s own tests cannot see it either, because the press
     /// handler is here.
     ///
@@ -16405,9 +16410,11 @@ mod key_column {
     /// and in [`super::KEYS`] above, which would otherwise make the scan agree
     /// with itself.
     ///
-    /// **`pub(super)` for [`super::press_handler`]**, which cuts
-    /// `karakuri-console`'s own source at the same marker and for the same
-    /// reason: that crate's `view.rs` has a test module too.
+    /// **`pub(super)` for [`super::press_handler`]**, which stops at the same
+    /// marker for the same reason, one question along. It cut
+    /// `karakuri-console`'s own source at it too until 2026-09-07, while that
+    /// crate's controls were read out of its text rather than out of
+    /// `input::PROBES`.
     pub(super) const TESTS: &str = "#[cfg(test)]";
 
     /// The two arm shapes the window loop's `match` is written in.
@@ -16600,8 +16607,8 @@ mod key_column {
     const NO_ROW: &[&str] = &["n", "up", "down", "return", "backspace", "space"];
 
     /// `pub(super)` for [`super::press_handler`]. Byte for byte what
-    /// `karakuri-console/tests/panel_column.rs` does, which is where the second
-    /// caller's other path resolves from.
+    /// `karakuri-console/tests/panel_column.rs` does, and both resolve [`SRC`]
+    /// from it.
     pub(super) fn workspace() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../..")
@@ -17049,8 +17056,8 @@ mod key_column {
 
 #[cfg(test)]
 mod press_handler {
-    //! **Every offer `karakuri-console` makes, against the presses this window
-    //! answers.**
+    //! **Every control `karakuri-console` claims, against the presses this
+    //! window answers.**
     //!
     //! The console draws a control and turns a press on it into an operation
     //! or into an intent; [`Readout::pointer`] has to ask each control and act
@@ -17072,6 +17079,37 @@ mod press_handler {
     //! wire between the crate that draws a control and the binary that
     //! performs it.
     //!
+    //! # What a control is, and where the list of them lives
+    //!
+    //! **In `karakuri-console`, as a value.** `input::PROBES` is that crate's
+    //! own register of what rule 4 hit-tests: one row per derivation, naming
+    //! it, counting the controls a pointer reaches through it, and carrying
+    //! the probe. So [`ASKED`] is one entry per row of it, in that order, and
+    //! the array is `PROBES.len()` long — **a control added to that crate
+    //! arrives here as a compile error**, which is the direction this module
+    //! was written for and the direction it used to answer by scanning.
+    //!
+    //! **It did scan, until 2026-09-07.** There was no list in
+    //! `karakuri-console` of what its controls offer, and a list written here
+    //! would have been the second copy of one
+    //! ([`docs/contributing.md` §4](../../../docs/contributing.md)) — so this
+    //! module read that crate's source instead, took every indented `pub fn`
+    //! inside an `impl` whose parameters named a `Point` and whose return type
+    //! was not `bool`, and required a four-column table entry for each. A table
+    //! in that crate is the first copy, so the scan and the four columns went
+    //! with it ([ADR-0274](../../../docs/adr/0274-a-control-is-a-row-in-the-consoles-own-table.md)).
+    //!
+    //! **What an entry needs is now three columns and not four.** The old ones
+    //! were forced by the scan: method names are not unique — `owns` was on
+    //! seven types, `hit` on five, `grab` on three — and every receiver in the
+    //! press handler is a local called `bay`, `row`, `pill` or `head`, so an
+    //! entry had to name the type, the method, the derivation *and* the local
+    //! to be identifiable at all. A row of `PROBES` is a value with a name, so
+    //! what is left to write down is only how this file reaches it: the
+    //! derivation it calls, and the calls that ask it. **The derivation is
+    //! still a column** because two rows can be asked through one local —
+    //! `pill.ask(` is both cards' — and it is what tells those two apart.
+    //!
     //! # Why the check is here and can be nowhere else
     //!
     //! [`key_column`]'s reason, unchanged: the press handler is in this file,
@@ -17087,71 +17125,31 @@ mod press_handler {
     //! `bay.mask(…)`, the transition row's `go` and more.
     //!
     //! **Read as though it were the handler, that region satisfies two of
-    //! [`TABLE`]'s twenty-two entries: `Mixer::tally` and `Mixer::mask`.**
-    //! Counted by taking this file from its first `#[cfg(test)]` line to the
-    //! end, flattening it the way [`code`] flattens what is above that line,
-    //! and putting
+    //! [`ASKED`]'s entries: the mixer strip's and the transition row's** —
+    //! wrongly, and only in part. Counted by taking this file from its first
+    //! `#[cfg(test)]` line to the end, flattening it the way [`code`] flattens
+    //! what is above that line, and putting
     //! [`every_control_in_the_table_is_asked_by_the_press_handler`]'s rule
-    //! over each entry — the region holds the entry's `derivation(`, and its
-    //! `receiver.method(` somewhere after it. Counting a bare `.method(`
-    //! instead, with no derivation and no ordering, gives twelve.
-    //! `TransitionRow::go` is in the twelve and not in the two: the test that
-    //! calls it is wrapped over two lines by `rustfmt`, so the flattened text
-    //! reads `row .go(` where the rule's spelling is `row.go(`.
+    //! over each entry, no entry is satisfied whole: the region derives
+    //! `mixer_bay(` and asks `bay.tally(` and `bay.mask(` after it, and it
+    //! derives `transition_row(` and asks nothing of it the rule can see —
+    //! `rustfmt` wraps that call over two lines, so the flattened text reads
+    //! `row .go(` where the rule's spelling is `row.go(`.
     //!
-    //! **Two entries is not a check that would pass** — the other twenty fail
-    //! on that region — and passing is not what the bounds are for. Two of
-    //! the console's controls could stop being asked by this window and this
-    //! check would still call them wired, because a test would be answering
-    //! for the handler. One control that stopped being asked is the defect
-    //! this module was written for. **Two bounds keep the region out, and
-    //! either would do it alone today** — [`code`] stops at the first
-    //! `#[cfg(test)]`, and [`body`] then cuts one function out of what is left
-    //! — and each was measured against the defect with the other taken away.
+    //! **Passing is not what the bounds are for.** Two of the console's
+    //! controls could stop being asked by this window and this check would
+    //! still call them wired, because a test would be answering for the
+    //! handler. One control that stopped being asked is the defect this module
+    //! was written for. **Two bounds keep the region out, and either would do
+    //! it alone today** — [`code`] stops at the first `#[cfg(test)]`, and
+    //! [`body`] then cuts one function out of what is left — and each was
+    //! measured against the defect with the other taken away.
     //!
     //! The same trap has been sprung once already from the other side, where a
     //! test-only item placed *above* the window loop moved [`key_column`]'s
     //! stop line past every key arm and left both of its checks passing over an
     //! empty set. [`shipped`] and [`checked`] carry that account, and they sit
     //! below `mod tests` for it.
-    //!
-    //! # What an offer is
-    //!
-    //! There is no list in `karakuri-console` of what its controls offer, and a
-    //! list written here would be the second copy of one
-    //! ([`docs/contributing.md` §4](../../../docs/contributing.md)). So the set
-    //! is read out of that crate's own source, by a criterion stated here
-    //! rather than left for a reader to infer from a regex.
-    //!
-    //! **The criterion.** Over every `.rs` file in [`CONSOLE`], cut at the
-    //! first `#[cfg(test)]` and read with `panel_column.rs`'s two line cuts, an
-    //! **offer** is an indented `pub fn` inside an `impl` whose parameters name
-    //! a `Point` and whose return type is not `bool`. A `-> bool` is a
-    //! **claim** — `input::claim`'s business, which decides whether the press
-    //! belongs to the console at all, and not this file's. Anything else that
-    //! takes a `Point` answers *what does a press here ask for*, and this file
-    //! has to ask it.
-    //!
-    //! *Indented, and inside an `impl`*: an offer is a control's, and a control
-    //! is a type. That rules out `input::claim` itself, which is a free
-    //! function and is the router this handler asks first rather than a control
-    //! it routes to. *`pub`*: an offer this binary cannot name is not an offer,
-    //! and `pub(crate)` is exactly that — structural rather than a convention,
-    //! so it is not a hole.
-    //!
-    //! # Why an entry is four columns and not two
-    //!
-    //! **Method names are not unique.** Counted over the `pub fn`s this
-    //! criterion reads, `owns` is on seven types, `hit` on five, `grab` on
-    //! three, `op` on three, and `ask`, `item` and `select` on two apiece; and
-    //! every receiver in the press handler is a local called `bay`, `row`,
-    //! `pill` or `head` — two different types are both called `bay` in the
-    //! same function, and both cards are asked through a `pill`. So an entry
-    //! in [`TABLE`] names the type, the method, **the derivation this file
-    //! calls to get the receiver**, and the local it binds it to. The
-    //! derivation is what separates `Mixer::grab` from `MasterRow::grab`: they
-    //! are one word apart in the source and two different controls on the
-    //! panel.
     //!
     //! # What it cannot see, and which way each one fails
     //!
@@ -17169,6 +17167,15 @@ mod press_handler {
     //!   apart: `SetSync` was emitted, claimed, printed, and the deck did not
     //!   move, for a release. A *false negative* again, and `mod gpu`'s
     //!   press-to-deck tests are what stand under it.
+    //! - **A second control inside a derivation already rowed.** A sixth chip
+    //!   on a strip is one more thing a press reaches and one more call this
+    //!   handler owes, and neither the row's count nor this entry's list rises
+    //!   on its own. That is the same blind spot `input::PROBES` documents on
+    //!   its own side, and it is why a control's clearance test is still what
+    //!   every new one owes. The scan this module used to run saw a *new
+    //!   method* where this sees a new row, so it would have caught that one
+    //!   and could not catch a control added to a method already tabled;
+    //!   neither reading is the whole, and this one costs no directory listing.
     //! - **Neither cut handles `/* … */`, and neither handles a `//` inside a
     //!   string.** That one **is** closed, by refusal rather than by parsing:
     //!   [`the_two_cuts_are_the_whole_of_the_comment_syntax_they_meet`] fails
@@ -17178,9 +17185,9 @@ mod press_handler {
     //!   `blank_comments_and_strings` is the workspace's answer where the
     //!   syntax genuinely has to be read; it is a hundred lines in another
     //!   package's integration test, which no target here can `use`, and
-    //!   copying it would buy nothing this refusal does not — neither region
-    //!   contains one today, and both are files this repository owns.
-    //! - **Only the seam.** Whether the operation an offer hands back is the
+    //!   copying it would buy nothing this refusal does not — this file
+    //!   contains neither today, and it is one this repository owns.
+    //! - **Only the seam.** Whether the operation a control hands back is the
     //!   right one is `panel_column.rs`'s and `vocabulary.rs`'s; whether a key
     //!   reaches it is [`key_column`]'s; whether the page's badge is honest is
     //!   both of those. This file asks one question: is every control the
@@ -17188,19 +17195,10 @@ mod press_handler {
 
     use std::collections::BTreeMap;
     use std::fs;
-    use std::path::PathBuf;
+
+    use karakuri_console::input::PROBES;
 
     use super::key_column::{code, workspace, SRC, TESTS};
-
-    /// The console's own source, relative to the workspace root — read as
-    /// text, because there is no list in it of what its controls offer and a
-    /// list written here would be a second copy of one.
-    ///
-    /// `panel_column.rs` reads the same directory and resolves it the same
-    /// way: [`workspace`] is byte-identical to that file's, and the path is
-    /// workspace-relative, so it resolves from this package with no new
-    /// machinery.
-    const CONSOLE: &str = "crates/karakuri-console/src";
 
     /// The press handler's head, in [`code`]'s flattened spelling.
     ///
@@ -17211,155 +17209,151 @@ mod press_handler {
     const HANDLER: &str =
         "fn pointer(&mut self, ctx: &egui::Context, event: Pointer) -> (Claim, Acted) {";
 
-    /// **Every offer the console makes, and how this file gets to it.**
+    /// **Every row of `karakuri_console::input::PROBES`, and how this file
+    /// reaches what it claims.**
     ///
-    /// Type, method, the derivation this file calls for the receiver, and the
-    /// local that receiver is bound to. The first two are the offer
-    /// [`offers`] finds in `karakuri-console`; the second two are how the
-    /// press handler reaches it, and they are what makes the entry
-    /// identifiable — see the module header on why the method alone is not.
+    /// The row's name, **the derivation this file calls to get the receiver**,
+    /// and every call the press handler makes on that receiver for the
+    /// controls the row covers. One entry per row and in the console's own
+    /// order, which is what
+    /// [`the_table_is_the_consoles_own_rows_in_the_consoles_own_order`] holds
+    /// it to — so an entry cannot quietly answer for its neighbour.
     ///
-    /// **Written down rather than derived**, and it has to be: nothing in
-    /// `Mixer::grab`'s name says `mixer_bay`, and the derivations are a
+    /// **The array is `PROBES.len()` long, and that is the whole of the
+    /// backward direction.** A control the console starts claiming and this
+    /// window never asks used to be found by reading that crate's source for
+    /// `pub fn`s taking a `Point`; it is now a row in a value, and a row with
+    /// no entry here does not compile.
+    ///
+    /// **The asks are written down rather than derived**, and they have to be:
+    /// nothing in a row's name says `mixer_bay`, and the derivations are a
     /// deliberate arrangement rather than a convention — a bay is derived
-    /// *once* and asked five times, because five derivations of one laid-out
-    /// strip would be five answers. Both directions read this one list, so an
-    /// entry naming an offer the console no longer makes fails
-    /// [`the_table_names_offers_this_console_still_makes`] and an offer with
-    /// no entry fails [`every_offer_a_console_control_makes_is_in_the_table`].
-    const TABLE: &[(&str, &str, &str, &str)] = &[
+    /// *once* and asked six times, because six derivations of one laid-out
+    /// strip would be six answers.
+    ///
+    /// **Three entries name calls made on a button *up* rather than a press.**
+    /// A carry names its deck by where it is let go, so the mixer bay and the
+    /// Program bay are laid out at the release and asked which rectangle the
+    /// pointer is over — `bay.dropped(` and `cells.dropped(`. This module
+    /// reads text rather than pressing anything, so what it checks is the same
+    /// seam it checks for every other call, and which arm of the press handler
+    /// makes it is not something it can see. `mod gpu`'s press-to-deck tests
+    /// are what stand under that.
+    ///
+    /// **The preview cells' entry is that release and nothing else**, because
+    /// a press on a cell asks for nothing: ADR-0240 retired `SetPreview`, and
+    /// `ProgramBay::cell`'s own documentation still says *"A press on a cell
+    /// asks for nothing, and that is the decision rather than a gap."* The
+    /// cells are claimed all the same, because they are drawn over a boundary
+    /// and `input::claim` has to keep a press on them off `egui`
+    /// ([ADR-0273](../../../docs/adr/0273-the-carry-lands-on-two-sets-of-rectangles-and-wears-a-face.md)).
+    const ASKED: [(&str, &str, &[&str]); PROBES.len()] = [
+        // **The Outputs row's sink**, and the two calls are one control: the
+        // row answers whether the point is on the dot, and then which of the
+        // two operations that press is.
+        (
+            "the Outputs row's sink",
+            "outputs(",
+            &["row.hit(", "row.op("],
+        ),
         // **The two cards, and they are the only two whose order matters**:
         // each draws over the bays, so while one is down a press inside it
         // belongs to the card. `ask` is the whole of each pill's offer — the
         // press on the capsule, the press on a row, and the dismissal — which
-        // is why neither entry names `item`; see [`EXEMPT`].
-        ("AudioInPill", "ask", "audio_in_pill", "pill"),
-        ("ArrangementPill", "ask", "arrangement_pill", "pill"),
+        // is why neither names `item`, the sub-question each `ask` composes.
+        // They are asked through one local, so it is the derivation above each
+        // that tells the two entries apart.
+        ("the audio-in pill", "audio_in_pill(", &["pill.ask("]),
+        ("the arrangement pill", "arrangement_pill(", &["pill.ask("]),
         // **The two look controls, derived once for both** — the exposure
         // track's place is measured from the tone map capsule's, so they are
         // two questions about one laid-out group.
-        ("LookRow", "tonemap", "look_row", "row"),
-        ("LookRow", "exposure", "look_row", "row"),
-        // **The deck head's three, one Inspector pane at a time.** The pane is
-        // derived per index and the head from the pane, so the derivation
-        // named here is the inner one: `inspector_pane` answers a rectangle
-        // and `deck_head_row` answers the control.
-        ("DeckHead", "sync", "deck_head_row", "head"),
-        ("DeckHead", "reanchor", "deck_head_row", "head"),
-        ("DeckHead", "scrub", "deck_head_row", "head"),
-        // The Library bay's scope chips, walked once for the same reason: a
-        // chip is as wide as the word in it.
-        ("LibraryBay", "chip", "library_bay", "bay"),
-        // And its two filter fields, one row under them, derived from the same
-        // call for the same reason — one offer, because which of the two the
-        // point is on is inside `filter` where the boxes are.
-        ("LibraryBay", "filter", "library_bay", "bay"),
-        // **And the `read` chip in its foot**, derived from the same call a
-        // third time. It is the one offer in this table whose answer is not an
-        // operation on both of its arms: `view::Read` carries the asking and
-        // the closing, and `Readout::asked_to_read` performs the second here
-        // rather than emitting one — see there. What this table checks is that
-        // the offer is *asked*, which is the seam and not the arm.
-        ("LibraryBay", "read", "library_bay", "bay"),
-        // **And the list between the two**, derived from the same call a
-        // fourth time. It is the one offer in this table that answers no
-        // operation on *either* arm: what a press on a row hands back is the
-        // Set it took in hand (`view::Taken`), and the operation is built at
-        // the release, where the deck it names is. `Readout::took` is what
-        // performs the taking; the drop is `Mixer::dropped` below.
-        ("LibraryBay", "take", "library_bay", "bay"),
+        (
+            "the look group's two",
+            "look_row(",
+            &["row.tonemap(", "row.exposure("],
+        ),
+        // **The Mixer bay's five, derived once and asked five times on a
+        // press**, plus the drop at the release. `select` is asked last and is
+        // the strip itself — what none of the other four claimed.
+        (
+            "a mixer strip's five",
+            "mixer_bay(",
+            &[
+                "bay.grab(",
+                "bay.blend(",
+                "bay.tally(",
+                "bay.mask(",
+                "bay.select(",
+                "bay.dropped(",
+            ],
+        ),
         // **The transition row's four, and the reason this module exists.**
-        // These are the offers that were made, claimed and never asked
+        // These are the controls that were drawn, claimed and never asked
         // between `74719c3` and `094804c`. Deleting this row's branch from the
         // press handler is the injection this module was watched to fail
         // against; deleting `go`'s `match` alone, and leaving the other three
         // wired, is the second.
-        ("TransitionRow", "shape", "transition_row", "row"),
-        ("TransitionRow", "quantum", "transition_row", "row"),
-        ("TransitionRow", "length", "transition_row", "row"),
-        ("TransitionRow", "go", "transition_row", "row"),
-        // **The Mixer bay's six**, and five of them are derived once and asked
-        // five times on a press. `select` is asked last and is the strip
-        // itself — what none of the other four claimed.
-        ("Mixer", "grab", "mixer_bay", "bay"),
-        ("Mixer", "blend", "mixer_bay", "bay"),
-        ("Mixer", "tally", "mixer_bay", "bay"),
-        ("Mixer", "mask", "mixer_bay", "bay"),
-        ("Mixer", "select", "mixer_bay", "bay"),
-        // **The sixth, and the only entry in this table asked on a button
-        // *up*.** A carry names its deck by where it is let go, so the bay is
-        // laid out at the release and asked which strip the pointer is over.
-        // This module reads text rather than pressing anything, so what it
-        // checks is the same seam it checks for the other five — that the
-        // offer is asked at all — and which arm of the press handler asks it
-        // is not something it can see. `mod gpu`'s press-to-deck tests are
-        // what stand under that, as they do for every entry here.
-        ("Mixer", "dropped", "mixer_bay", "bay"),
-        // **And the seventh entry is not the Mixer bay's at all**, which is
-        // the same release asked of the other set of rectangles it can land
-        // on: the four deck preview cells, each naming the deck its letter
-        // names. It is asked with the deck's slot count beside the point,
-        // because the row is four cells whatever the deck holds — see
-        // `ProgramBay::dropped`, and `EXEMPT`'s `cell` entry for the press
-        // that still asks for nothing.
-        ("ProgramBay", "dropped", "program_bay", "cells"),
-        // **The Master bay's one**, and it is `Mixer::grab`'s method name on a
-        // different type bound to a different local — which is the whole of
-        // why an entry is four columns and not two.
-        ("MasterRow", "grab", "master_row", "row"),
-    ];
-
-    /// **The types whose offers this file does not route**, because they are
-    /// not controls on the console.
-    ///
-    /// One entry. `karakuri_console::panel::Panel` is the arrangement rather
-    /// than anything drawn on it, and its four are the arrangement's own
-    /// answers rather than a control's offer: `press` is the boundary under
-    /// the pointer, asked by `Readout::press` once every control has declined;
-    /// `grab` is what this handler hands it when a knob comes into hand;
-    /// `moved` and `set_cursor` belong to the pointer's other two arms. A
-    /// table entry for any of them would name a bay that is not one.
-    ///
-    /// It is written as a type rather than as four offers so that a fifth
-    /// method on `Panel` does not arrive here as a fifth line to wave through;
-    /// and it is held against the source by
-    /// [`the_exemptions_are_still_the_state_of_the_source`], which fails if
-    /// `Panel` stops offering anything at all — an exemption granted to
-    /// nobody.
-    const NOT_A_CONTROL: &[&str] = &["Panel"];
-
-    /// **The offers a control makes that this file deliberately never asks.**
-    ///
-    /// Each entry is the type, the method, and the offer on the same type that
-    /// composes it where there is one. `panel_column.rs`'s `UNREACHABLE`
-    /// discipline, which is that **an exemption whose reason has expired must
-    /// itself fail**: [`the_exemptions_are_still_the_state_of_the_source`]
-    /// demands that the scan still finds the offer, that the press handler
-    /// still does not ask it, and that a named composer is still both
-    /// composing it and in [`TABLE`]. Any of those going stale names the line
-    /// to delete.
-    const EXEMPT: &[(&str, &str, Option<&str>)] = &[
-        // **A press on a cell asks for nothing and a release on one does**,
-        // so this is an exemption with a composer rather than a bare one.
-        // ADR-0240 retired `SetPreview`, and `ProgramBay::cell`'s own
-        // documentation still says: *"A press on a cell asks for nothing, and
-        // that is the decision rather than a gap."* Nothing is in hand at a
-        // press, so there is no second operand for it to name; a carry puts
-        // one there, and `ProgramBay::dropped` is what this file asks at the
-        // release — off `cell`, which is why it is that offer's composer
-        // (ADR-0273). The cells were claimed before either existed, because
-        // they are drawn over a boundary and `input::claim` has to keep them
-        // off `egui`.
-        ("ProgramBay", "cell", Some("dropped")),
-        // **The two sub-questions of an `ask`.** Each answers *which row of
-        // the card is under the point*, and each pill's `ask` calls it and
-        // then decides — a row is an operation, and anywhere else inside the
-        // card is the dismissal. Asking `item` from here would take the row
-        // and skip the dismissal, so what this file must ask is `ask`, which
-        // it does. They are `pub` because the console's own tests press rows
-        // by index.
-        ("AudioInPill", "item", Some("ask")),
-        ("ArrangementPill", "item", Some("ask")),
+        (
+            "the transition row's four",
+            "transition_row(",
+            &["row.shape(", "row.quantum(", "row.length(", "row.go("],
+        ),
+        // **The Master bay's one**, and it is the Mixer bay's `grab` on a
+        // different type bound to a different local — which is why the local
+        // is part of what is written down and the method alone is not.
+        ("the Master bay's out", "master_row(", &["row.grab("]),
+        // **The deck head's three, one Inspector pane at a time.** The pane is
+        // derived per index and the head from the pane, so the derivation
+        // named here is the inner one: `inspector_pane` answers a rectangle
+        // and `deck_head_row` answers the control. The fourth control the row
+        // counts is the scrub's second arrow, which `scrub` answers for both
+        // of.
+        (
+            "a deck head's four",
+            "deck_head_row(",
+            &["head.sync(", "head.reanchor(", "head.scrub("],
+        ),
+        // **The Program bay head's `solo`**, and the two calls are the Outputs
+        // sink's arrangement one bay over: the head answers whether the point
+        // is on the capsule, and then which of the two operations it is.
+        (
+            "the Program bay head's solo",
+            "program_head(",
+            &["head.hit(", "head.op("],
+        ),
+        // **The four deck preview cells**, asked at the release alone — see
+        // the head of this table.
+        (
+            "the deck preview cells",
+            "program_bay(",
+            &["cells.dropped("],
+        ),
+        // **The Library bay's four**, and the bay is derived once per question
+        // rather than held across them, exactly as `input::claim` derives it
+        // four times: a value held across all four would outlive the question
+        // it answers. So one derivation is named by four entries, and each is
+        // told apart by the call rather than by it.
+        (
+            "the Library bay's scope chips",
+            "library_bay(",
+            &["bay.chip("],
+        ),
+        (
+            "the Library bay's filter fields",
+            "library_bay(",
+            &["bay.filter("],
+        ),
+        (
+            "the read chip in the Library bay's foot",
+            "library_bay(",
+            &["bay.read("],
+        ),
+        ("the Library bay's list", "library_bay(", &["bay.take("]),
+        // **The four class pills**, one derivation asked four times: they are
+        // in four different regions and cannot be one laid-out box, but they
+        // are one type and one question.
+        ("the class pills", "mcp_pill(", &["pill.hit("]),
     ];
 
     /// A line's code, `panel_column.rs`'s second cut: whatever trails a `//`
@@ -17395,190 +17389,10 @@ mod press_handler {
         rest[..end].to_owned()
     }
 
-    /// The type an `impl` line opens, or `None` for a line that is not one.
-    ///
-    /// Column zero only, which is where every `impl` in that crate is, and it
-    /// is what keeps an `impl` inside a function body or a doc comment from
-    /// renaming the type the offers below it are attributed to.
-    fn impl_type(line: &str) -> Option<String> {
-        let rest = line.strip_prefix("impl")?;
-        if !rest.starts_with(' ') && !rest.starts_with('<') {
-            return None;
-        }
-        // An optional generic list: `impl<'a> Mixer<'a>`.
-        let rest = match rest.strip_prefix('<') {
-            Some(after) => {
-                let mut depth = 1usize;
-                let mut shut = after.len();
-                for (at, c) in after.char_indices() {
-                    match c {
-                        '<' => depth += 1,
-                        '>' => {
-                            depth -= 1;
-                            if depth == 0 {
-                                shut = at + 1;
-                                break;
-                            }
-                        }
-                        _ => {}
-                    }
-                }
-                &after[shut..]
-            }
-            None => rest,
-        };
-        // `impl Default for Arrangement` is an `Arrangement` method.
-        let rest = rest.trim_start();
-        let rest = match rest.rfind(" for ") {
-            Some(at) => rest[at + " for ".len()..].trim_start(),
-            None => rest,
-        };
-        let end = rest
-            .find(|c: char| !c.is_alphanumeric() && c != '_')
-            .unwrap_or(rest.len());
-        (end > 0).then(|| rest[..end].to_owned())
-    }
-
-    /// The `.rs` files of [`CONSOLE`], sorted, with a floor under the count: a
-    /// scan that read nothing would find no offers and satisfy every loop
-    /// below by iterating over nothing at all.
-    fn console_files() -> Vec<PathBuf> {
-        let dir = workspace().join(CONSOLE);
-        let mut files: Vec<PathBuf> = fs::read_dir(&dir)
-            .unwrap_or_else(|e| {
-                panic!(
-                    "{} is the console's source and is unreadable: {e}",
-                    dir.display()
-                )
-            })
-            .map(|entry| entry.expect("a directory entry").path())
-            .filter(|path| path.extension().is_some_and(|e| e == "rs"))
-            .collect();
-        files.sort();
-        assert!(
-            files.len() >= 7,
-            "only {} `.rs` files found under {CONSOLE} — a scan that reads nothing would find \
-             no offers and pass every assertion below",
-            files.len()
-        );
-        files
-    }
-
-    /// **Every offer the console makes**, by the criterion in this module's
-    /// header, as `(type, method)`.
-    ///
-    /// The read stops at each file's first [`TESTS`] line for the reason it
-    /// stops in this one: `karakuri-console/src/view.rs` has a test module of
-    /// its own, and a `pub fn` in a test module is not a control's offer.
-    fn offers() -> Vec<(String, String)> {
-        let mut found = Vec::new();
-        for path in console_files() {
-            let text = fs::read_to_string(&path)
-                .unwrap_or_else(|e| panic!("{} could not be read: {e}", path.display()));
-            let lines: Vec<&str> = text.lines().collect();
-            let mut owner = String::new();
-            for (at, raw) in lines.iter().enumerate() {
-                let line = raw.trim();
-                if line == TESTS {
-                    break;
-                }
-                if line.starts_with("//") {
-                    continue;
-                }
-                let code = cut(line);
-                // An offer is a control's, and a control is a type. Column
-                // zero is where every `impl` in that crate opens and where a
-                // free function is declared — `input::claim` is one, and it is
-                // the router this handler asks first rather than a control it
-                // routes to.
-                if !raw.starts_with(' ') {
-                    if let Some(ty) = impl_type(code) {
-                        owner = ty;
-                    }
-                    continue;
-                }
-                if !code.starts_with("pub fn ") {
-                    continue;
-                }
-                // The signature, which `rustfmt` wraps once it has four
-                // parameters — `LibraryBay::chip` has.
-                let mut sig = code.to_owned();
-                let mut next = at + 1;
-                while !sig.contains('{') && next < lines.len() {
-                    let line = lines[next].trim();
-                    next += 1;
-                    if line.starts_with("//") {
-                        continue;
-                    }
-                    sig.push(' ');
-                    sig.push_str(cut(line));
-                }
-                let (params, returns) = match sig.find("->") {
-                    Some(arrow) => (&sig[..arrow], sig[arrow + 2..].trim_start()),
-                    None => (sig.as_str(), ""),
-                };
-                if !params.contains("Point") {
-                    continue;
-                }
-                // A claim, and `input::claim`'s business rather than this
-                // file's.
-                if returns.starts_with("bool") {
-                    continue;
-                }
-                let name = &code["pub fn ".len()..];
-                let end = name
-                    .find(|c: char| !c.is_alphanumeric() && c != '_')
-                    .unwrap_or(name.len());
-                assert!(
-                    !owner.is_empty(),
-                    "{}:{} declares `{}` outside any `impl` — the scan has lost track of which \
-                     control an offer belongs to",
-                    path.display(),
-                    at + 1,
-                    &name[..end]
-                );
-                found.push((owner.clone(), name[..end].to_owned()));
-            }
-        }
-        found
-    }
-
-    /// The offers this file is answerable for: everything [`offers`] found,
-    /// less the types [`NOT_A_CONTROL`] names.
-    fn controls() -> Vec<(String, String)> {
-        offers()
-            .into_iter()
-            .filter(|(ty, _)| !NOT_A_CONTROL.contains(&ty.as_str()))
-            .collect()
-    }
-
-    fn exempt(ty: &str, method: &str) -> bool {
-        EXEMPT.iter().any(|(t, m, _)| *t == ty && *m == method)
-    }
-
-    fn tabled(ty: &str, method: &str) -> bool {
-        TABLE.iter().any(|(t, m, _, _)| *t == ty && *m == method)
-    }
-
-    /// **How the press handler asks an entry**, as the text it would be asked
-    /// by: the local the receiver is bound to and the method on it.
-    fn ask(receiver: &str, method: &str) -> String {
-        format!("{receiver}.{method}(")
-    }
-
-    /// The floor under everything: a scan that matched nothing would satisfy
-    /// every loop below by iterating over nothing at all, and a body that came
-    /// back empty would report every control unwired or none, depending which
-    /// way the loop ran.
+    /// The floor under everything: a body that came back empty would report
+    /// every control unwired or none, depending which way the loop ran.
     #[test]
-    fn the_scan_finds_the_console_and_the_press_handler() {
-        let offers = offers();
-        assert!(
-            offers.len() >= 25,
-            "only {} offers found under {CONSOLE} — the console makes more than this, and a \
-             scan below it is a scan that has stopped matching code",
-            offers.len()
-        );
+    fn the_scan_finds_the_press_handler() {
         let body = body();
         assert!(
             body.len() >= 3000,
@@ -17596,68 +17410,37 @@ mod press_handler {
         );
     }
 
-    /// **A control the console draws and this window never asks.**
+    /// **[`ASKED`] is the console's own rows, in the console's own order.**
     ///
-    /// The direction that was open between `74719c3` and `094804c`, and the
-    /// reason the whole module is here. An offer with no entry in [`TABLE`] is
-    /// a control that either has no branch in the press handler or has one
-    /// nobody wrote down, and neither is a state this file can tell the
-    /// difference between from the outside — so both arrive here, naming the
-    /// offer.
+    /// The array's length is `PROBES.len()`, so a row added or removed there
+    /// is a compile error here; this is the other half of that, and it is what
+    /// makes an entry identifiable at all. Written in the same order, an entry
+    /// and a row are the same control by position — written in any other, the
+    /// two would agree on a count and disagree about which control each line
+    /// is about, and every message this module prints would name the wrong
+    /// one.
     #[test]
-    fn every_offer_a_console_control_makes_is_in_the_table() {
-        for (ty, method) in controls() {
-            if exempt(&ty, &method) {
-                continue;
-            }
-            assert!(
-                tabled(&ty, &method),
-                "`{ty}::{method}` takes a `Point` and answers something other than `bool`, so \
-                 it is an offer a press makes to this window, and `TABLE` has no entry for it — \
-                 a control `karakuri-console` draws and `{SRC}` may never ask. Wire it into the \
-                 press handler and add the entry, or say in `EXEMPT` why a press on it asks for \
-                 nothing"
+    fn the_table_is_the_consoles_own_rows_in_the_consoles_own_order() {
+        for (at, (name, derivation, _)) in ASKED.iter().enumerate() {
+            assert_eq!(
+                *name, PROBES[at].name,
+                "entry {at} of `ASKED` says the press handler reaches `{name}` through \
+                 `{derivation}`, and row {at} of `karakuri_console::input::PROBES` is \
+                 `{}` — the two lists have gone out of order, and every entry from here \
+                 down is being checked against another control's row",
+                PROBES[at].name
             );
         }
     }
 
-    /// **The table naming an offer that has gone.**
+    /// **Every control the console claims is asked inside the press handler.**
     ///
-    /// It fails apart from the test above because it is the other failure:
-    /// that one says the console reached past this file, this one says the
-    /// table describes a console that no longer exists. Without it an entry
-    /// left behind by a deleted control would go on being satisfied by a stale
-    /// line in the press handler, and the pair would agree with each other
-    /// about a control nobody draws.
-    #[test]
-    fn the_table_names_offers_this_console_still_makes() {
-        let made: Vec<(String, String)> = controls();
-        for (ty, method, derivation, _) in TABLE {
-            assert!(
-                made.iter()
-                    .any(|(t, m)| t.as_str() == *ty && m.as_str() == *method),
-                "`TABLE` says the press handler asks `{ty}::{method}` through `{derivation}`, \
-                 and no such offer is made anywhere under {CONSOLE} — either the control went \
-                 and this line goes with it, or the offer stopped taking a `Point` and this \
-                 file can no longer see it"
-            );
-            assert!(
-                !exempt(ty, method),
-                "`{ty}::{method}` is in `TABLE` and in `EXEMPT` — one says the press handler \
-                 asks it and the other says it deliberately does not"
-            );
-        }
-    }
-
-    /// **Every control in the table is asked inside the press handler.**
-    ///
-    /// Two halves, and the entry's four columns are what make them one claim:
-    /// the derivation appears, and the receiver it binds is asked for the
-    /// method **after** it. A receiver cannot be asked before it is derived,
-    /// so the ordering is what pairs an ask with its own control rather than
-    /// with another entry's — the two cards' asks are the same eight
-    /// characters, and it is the derivation each of them follows that tells
-    /// them apart.
+    /// Two halves, and the entry's derivation is what makes them one claim:
+    /// the derivation appears, and the receiver it binds is asked **after**
+    /// it. A receiver cannot be asked before it is derived, so the ordering is
+    /// what pairs a call with its own control rather than with another
+    /// entry's — the two cards' asks are the same eight characters, and it is
+    /// the derivation each of them follows that tells them apart.
     ///
     /// **And a shared ask is counted.** Where two entries would be satisfied
     /// by one line of source — `pill.ask(` is both cards' — the body must
@@ -17667,162 +17450,91 @@ mod press_handler {
     #[test]
     fn every_control_in_the_table_is_asked_by_the_press_handler() {
         let body = body();
-        let mut shared: BTreeMap<String, usize> = BTreeMap::new();
-        for (_, method, _, receiver) in TABLE {
-            *shared.entry(ask(receiver, method)).or_default() += 1;
-        }
-        for (ty, method, derivation, receiver) in TABLE {
-            let derived = format!("{derivation}(");
-            let at = body.find(&derived).unwrap_or_else(|| {
-                panic!(
-                    "the press handler in {SRC} never calls `{derivation}`, so it has nothing to \
-                     ask `{ty}::{method}` of — the control is drawn, `input::claim` claims a \
-                     press on it, and this window does nothing with the press"
-                )
-            });
-            let ask = ask(receiver, method);
-            let asks: Vec<usize> = body.match_indices(&ask).map(|(at, _)| at).collect();
-            assert!(
-                asks.iter().any(|found| *found > at),
-                "the press handler derives `{derivation}` and never asks it `{ask}at)` — \
-                 `{ty}::{method}` is an offer the console makes on a control this window draws, \
-                 claims the press on, and then declines to act on. That is the seam this module \
-                 exists for"
-            );
-            let wanted = shared[&ask];
-            assert!(
-                asks.len() >= wanted,
-                "`{ask}` appears {} time(s) in the press handler and {wanted} entries of \
-                 `TABLE` are asked by exactly those characters — one control's ask is standing \
-                 in for another's, and `{ty}::{method}` is one of them",
-                asks.len()
-            );
-        }
-    }
-
-    /// **The exemptions, held against the source they exempt.**
-    ///
-    /// [`EXEMPT`] is a list written by hand, so it is written to fail rather
-    /// than to go stale — `panel_column.rs`'s rule for `UNREACHABLE`, which
-    /// deleted its own last entry the day the reason for it expired. Three
-    /// ways an entry can stop being true, and each names the line to remove.
-    #[test]
-    fn the_exemptions_are_still_the_state_of_the_source() {
-        let made = controls();
-        let body = body();
-        let text = console_text();
-        for (ty, method, composer) in EXEMPT {
-            assert!(
-                made.iter()
-                    .any(|(t, m)| t.as_str() == *ty && m.as_str() == *method),
-                "`{ty}::{method}` is exempted in `EXEMPT` and no control under {CONSOLE} offers \
-                 it — an exemption granted to nobody. Delete the line"
-            );
-            assert!(
-                !body.contains(&format!(".{method}(")),
-                "`{ty}::{method}` is exempted in `EXEMPT` as an offer this window never asks, \
-                 and the press handler in {SRC} asks something spelled `.{method}(` — the \
-                 exemption has stopped being true. Delete the line and add the entry to `TABLE`"
-            );
-            let Some(composer) = composer else {
-                continue;
-            };
-            assert!(
-                text.matches(&format!("self.{method}(")).count()
-                    >= EXEMPT
-                        .iter()
-                        .filter(|(_, m, c)| m == method && c.is_some())
-                        .count(),
-                "`{ty}::{method}` is exempted as a question `{ty}::{composer}` asks on this \
-                 window's behalf, and nothing under {CONSOLE} calls `self.{method}(` any more — \
-                 it is a plain offer now, and this window has to ask it itself"
-            );
-            assert!(
-                tabled(ty, composer),
-                "`{ty}::{method}` is exempted because `{ty}::{composer}` composes it, and \
-                 `{composer}` is not in `TABLE` — the exemption points at a route this window \
-                 does not take either, so the control is unreachable by both"
-            );
-        }
-        for ty in NOT_A_CONTROL {
-            assert!(
-                offers().iter().any(|(t, _)| t.as_str() == *ty),
-                "`{ty}` is exempted in `NOT_A_CONTROL` and offers nothing under {CONSOLE} — an \
-                 exemption granted to nobody. Delete the line"
-            );
-        }
-    }
-
-    /// Every line both scans read, joined — for the one question that is about
-    /// the text rather than about a control.
-    fn console_text() -> String {
-        let mut kept = String::new();
-        for path in console_files() {
-            let text = fs::read_to_string(&path)
-                .unwrap_or_else(|e| panic!("{} could not be read: {e}", path.display()));
-            for line in text.lines() {
-                let line = line.trim();
-                if line == TESTS {
-                    break;
-                }
-                if line.starts_with("//") {
-                    continue;
-                }
-                kept.push_str(cut(line).trim());
-                kept.push(' ');
+        let mut shared: BTreeMap<&str, usize> = BTreeMap::new();
+        for (_, _, asks) in &ASKED {
+            for ask in *asks {
+                *shared.entry(ask).or_default() += 1;
             }
         }
-        kept
+        for (name, derivation, asks) in &ASKED {
+            let at = body.find(derivation).unwrap_or_else(|| {
+                panic!(
+                    "the press handler in {SRC} never calls `{derivation}`, so it has nothing to \
+                     ask {name} of — the controls are drawn, `input::claim` claims a press on \
+                     them, and this window does nothing with the press"
+                )
+            });
+            for ask in *asks {
+                let found: Vec<usize> = body.match_indices(ask).map(|(at, _)| at).collect();
+                assert!(
+                    found.iter().any(|found| *found > at),
+                    "the press handler derives `{derivation}` and never asks it `{ask}at)` — \
+                     {name} is claimed by `input::claim`, drawn by this window, and then \
+                     declined. That is the seam this module exists for"
+                );
+                let wanted = shared[ask];
+                assert!(
+                    found.len() >= wanted,
+                    "`{ask}` appears {} time(s) in the press handler and {wanted} entries of \
+                     `ASKED` are asked by exactly those characters — one control's ask is \
+                     standing in for another's, and {name} is one of them",
+                    found.len()
+                );
+            }
+        }
     }
 
     /// **The two cuts are the whole of the comment syntax in what they read**,
     /// or this says so and names the line.
     ///
     /// A line comment is all either cut understands. `/* … */` reads as code,
-    /// so an offer spelled inside one would be scanned and an ask inside one
-    /// would read as wired; a `//` inside a string literal is cut as a comment,
-    /// so the ask on that line would vanish. Both are one-line changes away at
-    /// any time, and neither would announce itself.
+    /// so an ask inside one would read as wired; a `//` inside a string
+    /// literal is cut as a comment, so the ask on that line would vanish. Both
+    /// are one-line changes away at any time, and neither would announce
+    /// itself.
     ///
-    /// **So this closes them by refusing rather than by parsing.** Neither
-    /// region contains either today — both are files this repository owns, and
-    /// `rustfmt` has never written one — and the day one arrives the scan says
-    /// it has stopped being able to read the file instead of reading it
-    /// wrongly. `karakuri-engine/tests/gpu_tests_are_under_mod_gpu.rs`'s
+    /// **So this closes them by refusing rather than by parsing.** This file
+    /// contains neither today — it is one this repository owns, and `rustfmt`
+    /// has never written one — and the day one arrives the scan says it has
+    /// stopped being able to read the file instead of reading it wrongly.
+    /// `karakuri-engine/tests/gpu_tests_are_under_mod_gpu.rs`'s
     /// `blank_comments_and_strings` is what to reach for if that day ever
     /// makes a block comment worth keeping.
+    ///
+    /// **It reads this file and no other, since 2026-09-07.** It read
+    /// `karakuri-console/src` as well while this module scanned that crate for
+    /// offers; the rows are a value now, so the only text either cut meets is
+    /// the one [`code`] flattens — which is also what [`super::key_column`] and
+    /// [`super::event_response`] read, so the refusal still stands under all
+    /// three.
     #[test]
     fn the_two_cuts_are_the_whole_of_the_comment_syntax_they_meet() {
-        let mut regions: Vec<PathBuf> = console_files();
-        regions.push(workspace().join(SRC));
-        for path in regions {
-            let text = fs::read_to_string(&path)
-                .unwrap_or_else(|e| panic!("{} could not be read: {e}", path.display()));
-            for (at, raw) in text.lines().enumerate() {
-                let line = raw.trim();
-                if line == TESTS {
-                    break;
-                }
-                if line.starts_with("//") {
-                    continue;
-                }
-                assert!(
-                    !cut(line).contains("/*"),
-                    "{}:{} opens a block comment, and neither cut this module makes understands \
-                     one — an offer inside it would be scanned and an ask inside it would read \
-                     as wired: {line}",
-                    path.display(),
-                    at + 1
-                );
-                assert!(
-                    !slashes_in_a_string(line),
-                    "{}:{} has a `//` inside a string literal, and the second cut would take \
-                     the rest of the line with it — an ask on this line would vanish and the \
-                     control would report as unwired: {line}",
-                    path.display(),
-                    at + 1
-                );
+        let path = workspace().join(SRC);
+        let text = fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("{} could not be read: {e}", path.display()));
+        for (at, raw) in text.lines().enumerate() {
+            let line = raw.trim();
+            if line == TESTS {
+                break;
             }
+            if line.starts_with("//") {
+                continue;
+            }
+            assert!(
+                !cut(line).contains("/*"),
+                "{}:{} opens a block comment, and neither cut this module makes understands \
+                 one — an ask inside it would read as wired: {line}",
+                path.display(),
+                at + 1
+            );
+            assert!(
+                !slashes_in_a_string(line),
+                "{}:{} has a `//` inside a string literal, and the second cut would take \
+                 the rest of the line with it — an ask on this line would vanish and the \
+                 control would report as unwired: {line}",
+                path.display(),
+                at + 1
+            );
         }
     }
 
