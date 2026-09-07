@@ -18,9 +18,9 @@ list of limits — including a few that are invisible until they bite.
 cargo run -p karakuri-cli
 ```
 
-A window opens with the example pair — `examples/drift_shell.kir` describing a field of
-elements and `examples/soft_points.kir` describing how they are drawn. Press `h` for the
-keys, `s` for the status line, `esc` to quit.
+A window opens with the example pair — `examples/coil_vortex.kir` describing a funnel of
+braided coils and `examples/star_flares.kir` describing how they are drawn. Press `h` for
+the keys, `s` for the status line, `esc` to quit.
 
 The window is a **preview**. What is rendered is the *canvas*, and it is 1920×1080 whatever
 size the window is:
@@ -33,10 +33,13 @@ The canvas is fitted into the window, so you will normally see black bars. Press
 the window to the canvas exactly — that is what you want if something downstream is
 capturing the window.
 
-Defaults are `drift_shell` + `soft_points` at 262144 elements. [examples/](../examples/) also
-holds `spark_fountain`, an L1 that spawns and kills, and `beat_shell`, which reads the
-`beats` ambient so the figure turns with the bar and swells on the beat rather than at
-wall time. Pair either with the same L4:
+Defaults are `coil_vortex` + `star_flares` at 10240 elements — the two parts
+[examples/star_vortex.kset](../examples/star_vortex.kset) names, at a count where every
+element is an object rather than a grain of fog. [examples/](../examples/) also holds
+`drift_shell` + `soft_points` at 262144, which was the default until 2026-09-07 and is what
+`docs/contributing.md` §1 names as the reference workload; `spark_fountain`, an L1 that
+spawns and kills; and `beat_shell`, which reads the `beats` ambient so the figure turns with
+the bar and swells on the beat rather than at wall time. Pair any of them with an L4:
 
 ```sh
 cargo run -p karakuri-cli -- examples/spark_fountain.kir examples/soft_points.kir

@@ -2649,11 +2649,39 @@ impl Readout {
         // the numbers under it are `Report`'s own `Display` and the same three
         // fields `karakuri-cli`'s `report_governing` prints, so an operator
         // reading a park here and a park there is reading one thing.
+        // **And why, read off the report rather than asserted here.** This
+        // said *the budget has no room* in a fixed string, which was the only
+        // park a bare run could reach while the default pair was 262144
+        // elements. ADR-0271 moved it to `examples/star_vortex.kset`'s pair,
+        // which is closed form — and `Governor::admit` asks *is there anything
+        // to warm* before it asks the budget, so the same park comes back as
+        // `NoPrimingNeeded` and a sentence naming the budget is this file
+        // describing a decision it did not read. The line under this one has
+        // printed the governor's own word all along; the two disagreeing is
+        // worse than either being wrong alone.
+        let why = match governed
+            .decisions
+            .iter()
+            .find(|decision| decision.slot == ASKED_TO_PRIME)
+            .map(|decision| decision.reason)
+        {
+            Some(Reason::NoHeadroom) => "the budget has no room",
+            Some(Reason::NoPrimingNeeded) => {
+                "the Set is closed form and has nothing to warm, which is the one park no \
+                 amount of budget resolves"
+            }
+            Some(Reason::Unmeasured) => "nothing measured what that slot costs",
+            Some(Reason::CommittedUnknown) => {
+                "what this deck is already spending is unknown, so there is no headroom \
+                 figure to admit against"
+            }
+            _ => "the governor did not grant it",
+        };
         println!(
             "deck {parked}'s strip is the one that MOVES: its chip reads ALLOC and rolls \
              part of the way toward PRIM once a second and falls back, never landing, \
              because what the slot was asked for and what it is doing disagree. this \
-             program asks for {parked} to be primed at startup and the budget has no room, \
+             program asks for {parked} to be primed at startup and {why}, \
              so `Deck::govern` holds it at allocated with the request intact — that is a \
              PARK, which is `not now` and not `no`: nothing has to be asked twice, and the \
              next pass over a deck with room admits it. nothing in this file writes an \
@@ -3171,11 +3199,19 @@ fn knob_where(knob: Knob) -> String {
 
 /// The canvas: what the Set renders at, and what the deck is sized to.
 ///
-/// **The workspace's reference workload**, 262144 elements at 1280x720
-/// (`docs/contributing.md` §1), and it is that on purpose rather than by
-/// default: this is the one place in the console where a number is about the
-/// engine rather than about the panel, and a number taken at the reference
-/// workload can be put beside every other one in this repository. **Not the
+/// **The reference workload's canvas**, 1280x720 (`docs/contributing.md` §1),
+/// and it is that on purpose rather than by default: this is the one place in
+/// the console where a number is about the engine rather than about the panel,
+/// and a figure taken at the reference workload can be put beside every other
+/// one in this repository.
+///
+/// **The canvas is half of that workload and the material is the other half**,
+/// which is the distinction ADR-0270 drew and ADR-0271 made visible: the
+/// workload is `examples/drift_cloud.kset` — 262144 elements — at this canvas,
+/// and what this program opens on is `examples/star_vortex.kset`'s pair at
+/// 10240. So this constant keeps a reading comparable *as far as the canvas
+/// goes*, and a bare run is not a reference-workload figure. The startup
+/// legend prints the material and the capacity it actually ran, and says so. **Not the
 /// size of the picture, and not the size of a preview cell either** — see
 /// [`Present::draw`], which letterboxes this into whatever it is drawn into
 /// and is handed two rectangles of different sizes a frame, and which is what
@@ -3357,14 +3393,32 @@ impl Sources {
     /// program's choice of what to open on rather than a property of a preset
     /// library: a library is a directory with at least one `.kset` in it
     /// (`karakuri_environment::places`'s `is_a_library`, which asked for a
-    /// `.kir` until the authoring form landed), and these two are the pair
-    /// `examples/drift_cloud.kset` names, which is what `docs/contributing.md`
-    /// §1 calls the reference workload. **That is a coincidence this program is
-    /// free to end**: the workload is the named Set and not whatever a bare run
-    /// opens on (ADR-0270), so changing these two names is a demo decision and
-    /// takes no figure with it. See
+    /// `.kir` until the authoring form landed), and these two are the parts
+    /// `examples/star_vortex.kset` names — a funnel of ten thousand flares,
+    /// each one an object with a size and an orientation you can follow with
+    /// your eye.
+    ///
+    /// **They were `drift_shell.kir` + `soft_points.kir` until 2026-09-07**,
+    /// which is the pair `examples/drift_cloud.kset` names and what
+    /// `docs/contributing.md` §1 calls the reference workload — 262144
+    /// alpha-blended sprites, a count tuned when this panel drew one canvas,
+    /// where no single element is visible and the picture reads as fog. That
+    /// coincidence has ended rather than been broken: the workload is the
+    /// named Set and not whatever a bare run opens on (ADR-0270), so changing
+    /// these two names is a demo decision and takes no figure with it, and
+    /// [ADR-0271](../../../docs/adr/0271-the-panel-opens-on-the-demo-rather-than-on-the-reference-workloads-pair.md)
+    /// is that decision. See
     /// `the_capacity_is_the_l1s_own_declaration_and_the_l4_declares_none`,
-    /// which pins the Set's capacity and checks these two for a per-file read.
+    /// which pins the Set's capacity by name and checks these two for a
+    /// per-file read — two claims that were one assertion until ADR-0270.
+    ///
+    /// **Two paths and not the `.kset`**, which is the shape of this type and
+    /// costs the Set's two `bind` records: `star_vortex.kset` binds `energy` to
+    /// the funnel's `scale` and `band0` to its `ripple`, and a bare run gets
+    /// neither. The funnel turns and the pulse still climbs it, because both
+    /// are the L1's own motion; what a bare run does not show is the material
+    /// answering to sound. Loading `star_vortex` off the Library bay is where
+    /// that is, and the same is true of every shipped Set.
     ///
     /// **Under the root rather than under the working directory**, and the
     /// asymmetry with a typed path is the one the old `Default` had for the
@@ -3373,8 +3427,8 @@ impl Sources {
     /// where they typed it.
     fn under(presets: &std::path::Path) -> Sources {
         Sources {
-            l1: presets.join("drift_shell.kir"),
-            l4: presets.join("soft_points.kir"),
+            l1: presets.join("coil_vortex.kir"),
+            l4: presets.join("star_flares.kir"),
         }
     }
 
@@ -5748,7 +5802,7 @@ fn narrowing(holds: Option<&str>, layer: Option<&str>) -> Option<String> {
 struct Preset {
     /// What the row reads, which is the file's own name without its
     /// extension. **Not read out of the file**: a listing that opened
-    /// twenty-two files to draw twenty-two rows would be a directory read
+    /// twenty-three files to draw twenty-three rows would be a directory read
     /// doing a file read's work, and the id a take-in files the Set under is
     /// the one *inside* the file anyway — read there, on the press, by
     /// [`taking_in`].
@@ -12172,9 +12226,9 @@ mod tests {
     /// directory of parts, and a library lists what you can put on a deck"*.
     ///
     /// It is asserted against `examples/`, which is the directory this program
-    /// actually opens on: thirty-three parts and twenty-two Set files in one
+    /// actually opens on: thirty-five parts and twenty-three Set files in one
     /// place is exactly the mixture the rule is about, and a listing that took
-    /// the parts would draw fifty-five rows of which thirty-three name nothing
+    /// the parts would draw fifty-eight rows of which thirty-five name nothing
     /// this vocabulary can load.
     ///
     /// A CPU test: a preset library is a directory.
@@ -12184,7 +12238,7 @@ mod tests {
         let listed = presets_listing(Some(&presets));
         assert!(
             listed.len() >= 20,
-            "`examples/` holds twenty-two `.kset` files and the listing found {}",
+            "`examples/` holds twenty-three `.kset` files and the listing found {}",
             listed.len()
         );
         for preset in &listed {
@@ -15689,11 +15743,11 @@ mod tests {
         let told = of(&["--presets", library]).expect("a library that is there");
         assert_eq!(
             told.sources.l1,
-            std::path::Path::new(library).join("drift_shell.kir")
+            std::path::Path::new(library).join("coil_vortex.kir")
         );
         assert_eq!(
             told.sources.l4,
-            std::path::Path::new(library).join("soft_points.kir")
+            std::path::Path::new(library).join("star_flares.kir")
         );
         assert_eq!(
             told.presets.as_ref().map(|presets| presets.found),
@@ -15823,12 +15877,17 @@ mod tests {
         );
 
         // **A second L1, and it is the one that tells the two mistakes apart.**
-        // `drift_shell.kir` declares 262144, which is also
-        // `karakuri_ir::DEFAULT_CAPACITY` — so every assertion above passes
-        // just as well against a [`capacity_of`] that ignored the file and
-        // returned the language default. `strand_shell.kir` declares 131072
-        // and says why in the file (512 strands x 256 samples), and it is what
-        // that defect fails on.
+        // The pin above is `drift_shell.kir` at 262144, which is also
+        // `karakuri_ir::DEFAULT_CAPACITY` — so that assertion passes just as
+        // well against a [`capacity_of`] that ignored the file and returned the
+        // language default. `strand_shell.kir` declares 131072 and says why in
+        // the file (512 strands x 256 samples), and it is what that defect
+        // fails on. It is kept although the shipped pair no longer declares the
+        // language default either (ADR-0271 moved it to `coil_vortex.kir` at
+        // 10240): which pair is the default is a demo decision, and a test that
+        // can only tell a per-file read from a constant while the demo happens
+        // to be off the constant is a test that goes quiet the next time the
+        // demo moves.
         let other = checked(&sources.l1.with_file_name("strand_shell.kir"));
         assert_eq!(
             capacity_of(&other),
@@ -15919,6 +15978,33 @@ fn shipped() -> Sources {
 #[cfg(test)]
 fn shipped_slots() -> Vec<Sources> {
     std::iter::repeat_n(shipped(), SLOTS).collect()
+}
+
+/// **The reference workload's pair**, for the tests whose claim is about a cost
+/// rather than about what this program opens on.
+///
+/// `docs/contributing.md` §1 names `examples/drift_cloud.kset` —
+/// `drift_shell.kir` at the 262144 elements it declares, with
+/// `soft_points.kir` — and this resolves those two out of the same preset
+/// library [`shipped`] answers from. It is deliberately **not**
+/// [`shipped_slots`], and the two were one value until 2026-09-07.
+///
+/// **What separated them is a test going quiet rather than red.**
+/// [`ADR-0271`](../../../docs/adr/0271-the-panel-opens-on-the-demo-rather-than-on-the-reference-workloads-pair.md)
+/// moved the default pair to `examples/star_vortex.kset`'s two parts, which are
+/// closed-form and 10240 elements. `gpu::the_budget_parks_a_deck_and_the_strip_carries_both_residencies`
+/// then measured 1.8 ms a slot against a 2.7 ms headroom and the governor
+/// answered `NoPrimingNeeded` — a closed-form Set with nothing to warm — so the
+/// park the test is named for was still a park and no longer the budget's. Which
+/// pair a bare run opens on is a demo decision (ADR-0270); whether the budget
+/// refuses a second Live slot is not, and it needs material chosen for its cost.
+#[cfg(test)]
+fn reference() -> Sources {
+    let shipped = shipped();
+    Sources {
+        l1: shipped.l1.with_file_name("drift_shell.kir"),
+        l4: shipped.l4.with_file_name("soft_points.kir"),
+    }
 }
 
 #[cfg(test)]
@@ -16752,17 +16838,33 @@ mod press_handler {
     //! It cannot even be an integration test under `crates/karakuri/tests/`,
     //! because a package with no library target has nothing for one to `use`.
     //!
-    //! **Below `mod tests`, and that is not a matter of taste.** The eight
-    //! thousand lines of tests under this file's first `#[cfg(test)]` call
-    //! these hit tests **directly**, bypassing the press handler —
-    //! `row.go(…)`, `bay.tally(…)`, `bay.mask(…)` and more. Read as though it
-    //! were the handler, that region on its own satisfies six of [`TABLE`]'s
-    //! twenty-two entries, `TransitionRow::go` among them, which is exactly
-    //! the entry that was unwired: the check would have been green on the day
-    //! the seam was open. **Two bounds keep it out, and either would do it
-    //! alone today** — [`code`] stops at the first `#[cfg(test)]`, and
-    //! [`body`] then cuts one function out of what is left — and each was
-    //! measured against the defect with the other taken away.
+    //! **Below `mod tests`, and that is not a matter of taste.** The tests
+    //! under this file's first `#[cfg(test)]` call these hit tests
+    //! **directly**, bypassing the press handler — `bay.tally(…)`,
+    //! `bay.mask(…)`, the transition row's `go` and more.
+    //!
+    //! **Read as though it were the handler, that region satisfies two of
+    //! [`TABLE`]'s twenty-two entries: `Mixer::tally` and `Mixer::mask`.**
+    //! Counted by taking this file from its first `#[cfg(test)]` line to the
+    //! end, flattening it the way [`code`] flattens what is above that line,
+    //! and putting
+    //! [`every_control_in_the_table_is_asked_by_the_press_handler`]'s rule
+    //! over each entry — the region holds the entry's `derivation(`, and its
+    //! `receiver.method(` somewhere after it. Counting a bare `.method(`
+    //! instead, with no derivation and no ordering, gives twelve.
+    //! `TransitionRow::go` is in the twelve and not in the two: the test that
+    //! calls it is wrapped over two lines by `rustfmt`, so the flattened text
+    //! reads `row .go(` where the rule's spelling is `row.go(`.
+    //!
+    //! **Two entries is not a check that would pass** — the other twenty fail
+    //! on that region — and passing is not what the bounds are for. Two of
+    //! the console's controls could stop being asked by this window and this
+    //! check would still call them wired, because a test would be answering
+    //! for the handler. One control that stopped being asked is the defect
+    //! this module was written for. **Two bounds keep the region out, and
+    //! either would do it alone today** — [`code`] stops at the first
+    //! `#[cfg(test)]`, and [`body`] then cuts one function out of what is left
+    //! — and each was measured against the defect with the other taken away.
     //!
     //! The same trap has been sprung once already from the other side, where a
     //! test-only item placed *above* the window loop moved [`key_column`]'s
@@ -19644,15 +19746,15 @@ mod gpu {
             egui_wgpu::Renderer::new(&gpu.device, FORMAT, egui_wgpu::RendererOptions::default());
         let mut panel = Panel::new(W as f32, H as f32);
         panel.solve();
-        let mut engine = Engine::new(
-            &gpu,
-            &mut renderer,
-            &shipped_slots(),
-            panel.layout(),
-            1.0,
-            None,
-        );
-        let material = vec![shipped().material(); engine.deck.slot_count()];
+        // **The reference workload's pair rather than the shipped one**, and
+        // that is the whole of what keeps this test about the budget: see
+        // [`reference`]. `examples/star_vortex.kset`'s pair is closed-form, so
+        // this deck built from it parks deck B for `NoPrimingNeeded` and the
+        // assertion below would be reading a different refusal.
+        let reference = reference();
+        let slots: Vec<Sources> = std::iter::repeat_n(reference.clone(), SLOTS).collect();
+        let mut engine = Engine::new(&gpu, &mut renderer, &slots, panel.layout(), 1.0, None);
+        let material = vec![reference.material(); engine.deck.slot_count()];
 
         // **Before the pass, and this is the deck this program opens with.**
         // `Deck::new` brings every slot up Live and [`Engine::new`] rests all
