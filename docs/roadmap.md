@@ -545,13 +545,18 @@ nobody specified (`view::LibraryBay`).
    capped on days opened before a day is read and saying when it stopped short. What is left is the
    manual naming the control and the bay drawing it.
 
-   **And building it turned up the thing the reframing has to answer.** `Snapshots::record`
-   addresses a version by `(slot, layer, index)` and **the layout carries no Set id anywhere**, so
-   the files either side of a library load on one slot are indistinguishable. *A Set's history is a
-   list of the versions it has had* is not answerable from these files: what they support is a
-   node's chain, which is the key `record`'s own dedup is on. So either the page names a row as a
-   **node's** version, or something decides `record` starts writing a Set id — and that second one
-   is a change to the writer and a decision, not a listing. The page owes the rest with it: the row
+   **Building it turned up a gap, and the gap is closed.** `Snapshots::record` addresses a version
+   by `(slot, layer, index)` and **the layout carries no Set id anywhere**, so as the files stand
+   the two sides of a library load on one slot are indistinguishable and *a Set's history* is not
+   answerable from them. **The id is written from now on, and it costs an argument rather than a
+   design.** Every route that edits is addressed by slot — `mcp::write_procedure` resolves
+   `Slots::path(slot, layer, index)` and refuses a node the slot does not hold, and an operator's
+   own editor is pointed at that slot's scratch copy — so at the moment of a write the program knows
+   which Set the slot is running. **It is already kept**: `Gfx::material` is one name per slot,
+   rewritten in `played` on the load, and its doc says why a name per deck was not enough. What is
+   left open is only what to write where there is no Set: a run launched with a pair on the command
+   line has no id, and `k` writes a new one mid-chain. Rows are a Set's versions. The page owes the
+   rest: the row
    moves into *The library*, the control is a fifth scope chip beside `my sets`, `favourites`,
    `presets` and `folder`, the order is stated in the row's own sentence as *List what the store
    holds* states its, landing on a row is a **load**, and `WalkHistory`'s payload is *a revision to
@@ -898,7 +903,9 @@ is refused, and where a class opens*).
 — which is where MCP is served from — accumulates none. **It belongs here rather than in the bay that
 would read them**: what makes a version worth keeping is that something other than the operator's
 own hands wrote it, and this is where that something is. M5.3's *Walk the edit history* reads what
-this keeps, and has a lister to build either way.
+this keeps, and has a lister to build either way. **The Set id goes in with the record** — the
+slot names it and `Gfx::material` already holds it, so recording without it would file a version
+under a node and lose which Set it belonged to, which is the one thing the bay reading it needs.
 
 **Blocked on.** The bays above, for the rest. A row whose operation the engine cannot yet perform has
 nothing for MCP to route to. MCP is a mouth rather than the control stick, so it follows the bays
