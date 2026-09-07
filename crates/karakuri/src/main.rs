@@ -9232,7 +9232,22 @@ impl ApplicationHandler for App {
         }
         let attrs = Window::default_attributes()
             .with_title("The Karakuri console")
-            .with_inner_size(winit::dpi::LogicalSize::new(WINDOW.0, WINDOW.1));
+            .with_inner_size(winit::dpi::LogicalSize::new(WINDOW.0, WINDOW.1))
+            // **The panel is not dragged under its own arrangement.**
+            // `karakuri_console::MINIMUM_VIEWPORT` is the declared minima
+            // summed along each axis — 692 x 658.5 — and below it the solve
+            // stops honouring them and scales everything down together
+            // (ADR-0250), which takes the Mixer's strips off the panel while
+            // the deck previews stay: the pointer can no longer select a deck
+            // and `0`..`3` still can. The units are the same on both sides —
+            // the viewport handed to `Panel::set_viewport` below is this
+            // window's inner size divided by the scale factor. A screen
+            // narrower than this leaves the window larger than the screen,
+            // which is an ordinary state and not a failure (ADR-0272).
+            .with_min_inner_size(winit::dpi::LogicalSize::new(
+                karakuri_console::MINIMUM_VIEWPORT.0,
+                karakuri_console::MINIMUM_VIEWPORT.1,
+            ));
         let window = Arc::new(event_loop.create_window(attrs).expect("window"));
         let size = window.inner_size();
         self.scale = window.scale_factor();

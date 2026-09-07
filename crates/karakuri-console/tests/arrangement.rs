@@ -85,11 +85,93 @@ fn the_panel_is_usable_at_the_smallest_window_it_claims() {
         SMALLEST.h
     );
 
-    // The width is not the tree's sum — that is 846, and the panel is unusable
-    // there because the inspector's parameter rows stop fitting. 990 is
-    // `.console`'s own `min-width: 1010px` less its padding, and it is the
-    // narrower claim of the two. See the report on 340 against 1010.
+    // The width is not the tree's sum. That sum is
+    // `karakuri_console::MINIMUM_VIEWPORT.0` — the width below which the solve
+    // stops honouring what the three tracks declare — and the panel is already
+    // unusable there, because at a centre of 340 an inspector pane is 165.5
+    // and the `.param` grid wants 207 before its fader has any width. So this
+    // window is the wider of the two claims and that one is the floor under
+    // the solve; the assertion is that they are in that order.
     assert!(implied_min(&layout, root, Axis::Row) <= SMALLEST.w);
+}
+
+/// **`MINIMUM_VIEWPORT` is the tree's own sum on both axes**, recomputed here
+/// rather than trusted — the same guard the body row's 556.5 is under, for the
+/// same reason: the constant is written by hand because the model does not
+/// derive a split's minimum from its children's, so nothing but this stops the
+/// two drifting apart the next time a minimum moves.
+///
+/// It was watched to fail: with the width term written as the 846 this file's
+/// comment used to claim, the recomputation answers 692 and the assertion
+/// names both numbers.
+#[test]
+fn the_minimum_viewport_is_the_sum_of_the_declared_minima() {
+    let layout = solved(PLAUSIBLE);
+    let root = layout.root();
+
+    // 160 + 340 + 172, and the two 10px dividers between the three tracks.
+    let width = implied_min(&layout, root, Axis::Row);
+    assert!(
+        near(width, karakuri_console::MINIMUM_VIEWPORT.0),
+        "the tree's implied minimum width is {width}, not the {} the constant claims",
+        karakuri_console::MINIMUM_VIEWPORT.0
+    );
+
+    // 48 + 556.5 + 34, and the two 10px dividers between the three rows —
+    // which is `SMALLEST.h` as well, and that is not a coincidence: the
+    // console's claimed smallest window is held up by the column axis and cut
+    // short by the row one.
+    let height = implied_min(&layout, root, Axis::Column);
+    assert!(
+        near(height, karakuri_console::MINIMUM_VIEWPORT.1),
+        "the tree's implied minimum height is {height}, not the {} the constant claims",
+        karakuri_console::MINIMUM_VIEWPORT.1
+    );
+    assert!(near(karakuri_console::MINIMUM_VIEWPORT.1, SMALLEST.h));
+
+    // And the width is the one that is *not* the smallest window claimed —
+    // see the test above for why the two differ.
+    assert!(karakuri_console::MINIMUM_VIEWPORT.0 < SMALLEST.w);
+}
+
+/// **At the minimum viewport every region is at or above what it declares, and
+/// one logical pixel under it none of them is.**
+///
+/// The first half is what the constant means. The second is what it buys: at
+/// 691.9 the body row's three tracks are all short — 171.74 for a right pane
+/// that declared 172 — because the last step of `solve_split` scales every
+/// child together once the frozen minima come to more than the extent
+/// (ADR-0250). Nothing is out of place and nothing is negative; the panel is
+/// simply no longer the panel its own numbers describe.
+#[test]
+fn one_pixel_under_the_minimum_no_region_holds_its_minimum() {
+    let at = |w: f32, h: f32| {
+        solved(karakuri_layout::Rect {
+            x: 0.0,
+            y: 0.0,
+            w,
+            h,
+        })
+    };
+
+    let (w, h) = karakuri_console::MINIMUM_VIEWPORT;
+    let layout = at(w, h);
+    assert_sane(&layout);
+    assert_within_bounds(&layout);
+    assert!(near(rect_of(&layout, "left-pane").w, 160.0));
+    assert!(near(rect_of(&layout, "centre").w, 340.0));
+    assert!(near(rect_of(&layout, "right-pane").w, 172.0));
+
+    let layout = at(w - 0.1, h);
+    assert_sane(&layout);
+    assert!(rect_of(&layout, "left-pane").w < 160.0);
+    assert!(rect_of(&layout, "centre").w < 340.0);
+    assert!(rect_of(&layout, "right-pane").w < 172.0);
+
+    let layout = at(w, h - 0.1);
+    assert_sane(&layout);
+    assert!(rect_of(&layout, "transport").h < 48.0);
+    assert!(rect_of(&layout, "outputs").h < 34.0);
 }
 
 /// **The Program bay is two regions, and the split is the bay's own 395 read

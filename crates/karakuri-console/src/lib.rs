@@ -247,6 +247,64 @@ pub fn layout() -> Layout {
     Layout::new(arrangement())
 }
 
+/// **The smallest viewport at which every region still holds the minimum it
+/// declares**, in the logical pixels [`arrangement`] is written in — and what
+/// a host passes to its window as a minimum inner size.
+///
+/// # What it is the minimum *of*
+///
+/// Below this the solve stops honouring the minima and scales the whole
+/// arrangement down together
+/// ([ADR-0250](../../../docs/adr/0250-below-the-minima-the-arrangement-scales-rather-than-being-rewritten.md)),
+/// which keeps every rectangle sane and takes the panel's controls with it: a
+/// mixer strip narrower than its fader column draws nothing, and the four
+/// preview cells beside it need only positive area, so the pointer loses the
+/// deck selection while the keys keep it. **A window that cannot be dragged
+/// below this cannot reach that state**
+/// ([ADR-0272](../../../docs/adr/0272-the-window-has-a-minimum-and-only-one-of-adr-0250s-three-cases-is-real.md)).
+///
+/// # Both figures, term for term
+///
+/// **Both are the console's own**, and neither is in the mock: the stylesheet
+/// states no minimum for the two outer tracks and no minimum in the column
+/// axis at all, so what is summed here is the minima this file chooses, each
+/// argued where it is declared.
+///
+/// **692 wide** is the body row's three tracks at the minima each declares,
+/// plus the two [`COLUMN_DIVIDER`]s between them: `left-pane` 160, `centre`
+/// 340, `right-pane` 172, `+ 10 + 10`. It is exactly where the Mixer bay's
+/// last strip fits — at a right pane of 172 a track is 37 and the fader
+/// column is 29 inside 4 + 4 of padding, which is `strip_box`'s own threshold
+/// in [`view`] met to the pixel — so one logical pixel narrower and the bay
+/// draws no strips at all.
+///
+/// **658.5 high** is the root column's three rows at theirs, plus the two
+/// [`ROOT_DIVIDER`]s: `transport` 48, the body row 556.5, `outputs` 34,
+/// `+ 10 + 10`. The body row's 556.5 is the centre's, and where it comes from
+/// is written at the row itself.
+///
+/// **The declared minima and not the capped ones.** ADR-0174 caps a claim by
+/// what a node's visible content can use, so an arrangement with its bays
+/// folded away needs less than this; a window minimum that followed that
+/// would move as an operator folds, and would leave a window that cannot be
+/// grown back to what unfolding needs. These numbers are a property of the
+/// tree, fixed when the [`Spec`] is built, and no drag, fold, session or
+/// screen changes them.
+///
+/// **It is a floor under the solve rather than a promise about every
+/// control.** One of the three width terms is not derived from its own
+/// content: `centre`'s 340 is `.body-grid`'s CSS track, and the inspector says
+/// in as many words that its `.param` grid wants 207 in a pane before the
+/// fader has any width. At 692 a pane is 165.5 and the parameter faders are
+/// not drawn — and no window minimum can fix that, because a divider drag
+/// reaches a 340 centre at any window width. What would fix it is the centre's
+/// declared minimum, which is a decision about the arrangement and not about
+/// the window.
+///
+/// `tests/arrangement.rs` recomputes both figures from the tree, so this is a
+/// claim about the arrangement rather than a copy of one.
+pub const MINIMUM_VIEWPORT: (f32, f32) = (692.0, 658.5);
+
 /// The library over the staging lane.
 ///
 /// **Which of the two absorbs the change is stated by the mock**: the library
