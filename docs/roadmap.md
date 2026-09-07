@@ -409,13 +409,22 @@ designed page and this bay's rather than a tidy-up; `.tally.off` went with it, t
 
 #### M5.3 — Library
 
-**Rows.** *Load material into a deck* and *Send a Set to somebody, and take one in* carry a `plan`
-panel badge. **The count is gone rather than corrected.** It read four while it was three, was
-corrected to three on 2026-09-05, and read three while it was two by the next commit. Both times it
-went stale in silence, inside the paragraph that explained the previous change. *The
-instrumentation* below reached that answer for the meter and the vocabulary count; this is the same
-shape one sub-milestone down, so it gets the same answer — the rows are named, and the number is
-counted in the panel column of [every operation](manual/operations.html), where the badges are.
+**Rows.** Counted in the panel column of [every operation](manual/operations.html)'s *The library*,
+where the badges are. **Neither the count nor the list belongs here, and both have been tried.** The
+count read four while it was three, was corrected on 2026-09-05, and read three while it was two by
+the next commit; the list that replaced it named *Load material into a deck*, which went `has` on
+2026-09-06, and missed two rows that had not. Each went stale in silence inside the paragraph
+explaining the previous correction, which is *The instrumentation*'s lesson one sub-milestone down
+and now has two witnesses instead of one.
+
+**What is owed, on 2026-09-07, and one of the three is not what its badge said it was.** *Keep what
+a deck is playing* is a control to draw and nothing behind it: the operation is `has` from the key
+and over MCP, and what this bay does not have is a press for it. *Send a Set to somebody* is what
+this milestone is blocked on, below. ***Walk the edit history* is the third, and it left *Rows the
+manual has not given a home* to get here** — that list holds it on the reading that it is undo, a
+surface over the store's history files and a later milestone. It is not undo. It is a listing of the
+versions a Set has had and a load of the one you pick, which is this bay's shape and nothing else:
+the Library already lists, already reads, and already loads. What that costs is below.
 
 ***Read what one Set holds and declares* is `has`**, on 2026-09-06. The bay opens a reading under
 the cursor's row and it follows the cursor: every published key with its range and default, the
@@ -457,7 +466,7 @@ finished.
 **Exit.** No `plan` badge in the panel column of this bay's rows on
 [every operation](manual/operations.html).
 
-**Blocked on. One thing, as of 2026-09-06, and it has no home.** *Send a Set to somebody, and take
+**Blocked on. One thing, as of 2026-09-07, and it is the task below.** *Send a Set to somebody, and take
 one in* waited on a destination the vocabulary could carry, and
 [ADR-0260](adr/0260-sending-a-set-is-a-read-and-a-reads-answer-goes-where-the-surface-that-asked-puts-answers.md)
 answers it by refusing the premise: sending is a **read**, and a read's answer goes where the surface
@@ -503,6 +512,28 @@ there is no drop-target state and no indicator on the row in hand. That is a pan
 rather than a route, so it does not hold the operation's badge, and it is open.
 The pill beside it is a readout on purpose, so a press on it would be a third route
 nobody specified (`view::LibraryBay`).
+
+**The two pieces of work this milestone is waiting on, as tasks rather than as prose.**
+
+1. **A folder scope with a directory in it.** ADR-0267 puts the send there, and `Scope::Folder`
+   *"waits on an operation"* — `ListSets { holds, layer }` has nowhere to put a directory, so the
+   chip is drawn and cannot be asked for a listing. The bay owes this whatever is decided about
+   sending: a scope that cannot be asked is a chip with no answer. The mock has been drawing the
+   answer the whole time — `console.html`'s `.path` row, which `view::LibraryBay` lists as an
+   element this crate has not built. **Sending is the only `plan` panel badge this blocks**, and the
+   page turning `a folder is a way in` around is ADR-0267's other half.
+2. **A lister for the edit history, and the bay walking it.** `karakuri_environment::history` has
+   `Snapshots::record`, `seed` and `stamped_id` and **no lister**: nothing opens `<store>/history/`
+   to answer *what versions has this had*. Once it can, *Walk the edit history* is a scope in this
+   bay — the rows are versions, the reading is the one already built, and landing on one is the load
+   already built. That also settles `WalkHistory { step: Undecided }`, whose own doc offers three
+   shapes and whose answer is the second: **a revision to land on**, because a row is what an
+   operator picked. The manual names the control first (`docs/contributing.md` §5 step 3), and until
+   it does this row's panel cell reads `—`.
+
+**What is *not* here, and it moved rather than being dropped.** Nothing records a history in this
+program at all — only `karakuri-cli` builds a `Snapshots`, so a panel run keeps none and an MCP
+write keeps none. That is M5.10's, under *Every write that compiles is a version*.
 
 **Also here.** The Set browser's live previews and the thumbnail beside them.
 The bay lists what the store holds already; the previews are what waits, and what a thumbnail is
@@ -778,6 +809,15 @@ whether a press covers a class or one operation of it, whether an opening outliv
 whether an open class shuts itself are open ([the console page](manual/console.html), *What a model
 is refused, and where a class opens*).
 
+**Every write that compiles is a version, and none of them is kept.** `mcp::write_procedure` runs
+`compile::check` and writes the file, and touches nothing else;
+`crates/karakuri/src/main.rs` never constructs `history::Snapshots` and never calls `record`. Only
+`karakuri-cli` does, so a `--watch` run accumulates versions under `<store>/history/` and a panel run
+— which is where MCP is served from — accumulates none. **It belongs here rather than in the bay that
+would read them**: what makes a version worth keeping is that something other than the operator's
+own hands wrote it, and this is where that something is. M5.3's *Walk the edit history* reads what
+this keeps, and has a lister to build either way.
+
 **Blocked on.** The bays above, for the rest. A row whose operation the engine cannot yet perform has
 nothing for MCP to route to. MCP is a mouth rather than the control stick, so it follows the bays
 rather than being spread through them.
@@ -868,16 +908,22 @@ can name a folded bay. The key may still earn its place as a bulk act; its recor
 
 #### Rows the manual has not given a home
 
-Three rows carry a `plan` panel badge over a panel cell reading `—`: *Wire a procedure's input to a
-node*, *Narrow the published interface*, and *Walk the edit history*. Nothing on the console is
-specified to reach any of them, so no bay holds them and none of M5.1 to M5.9 can close them.
-**The manual has to name a home before they can be scheduled.** There is no drawing to owe until it
-does.
+Two rows carry a `plan` panel badge over a panel cell reading `—`: *Wire a procedure's input to a
+node* and *Narrow the published interface*. Nothing on the console is specified to reach either, so
+no bay holds them and none of M5.1 to M5.9 can close them. **The manual has to name a home before
+they can be scheduled.** There is no drawing to owe until it does.
 
-Two of them have a second blocker behind the missing control. *Narrow the published interface* is
-upstream of the Inspector: until something publishes, every control that bay will ever draw is a
-wildcard. *Walk the edit history* carries `WalkHistory { step: Undecided }` and needs the same
-history reader M5.7's item 5 names.
+*Narrow the published interface* has a second blocker behind the missing control: it is upstream of
+the Inspector, and until something publishes, every control that bay will ever draw is a wildcard.
+
+**This list held three, and the third left it by being read again rather than by being decided.**
+*Walk the edit history* was here because the operations page calls the surface over those files
+*undo* and *a later milestone*, and undo is nobody's bay. It is not undo. A Set's history is a list
+of the versions it has had, walking it is a listing, and landing on one is a load — all three of
+which the Library bay already does — so the row is M5.3's, and what it needs is a lister rather than
+a home. **A blocker that names a milestone rather than a mechanism is a blocker nobody can check**,
+and this one survived two readings of this file before the question *what actually stops it* was
+asked of it.
 
 #### The console's own shape
 
