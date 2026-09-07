@@ -77,8 +77,10 @@ anything on the frame path; the colour rule in particular is
   that looks like a finding. **A panel figure and a headless figure are two of those**, at the
   same nominal workload: the panel is a deck of four slots, every one of them stepped and drawn
   on every frame ([ADR-0269](adr/0269-a-slot-that-is-drawn-is-stepped-and-a-preview-runs-at-the-rooms-tempo.md)),
-  with a present pass per cell and an `egui` pass over the lot, where `karakuri-engine`'s own
-  measurements are one Set and nothing else — so each of them says which it is. It is also why
+  with a present pass per cell and an `egui` pass over the lot, where a headless figure has no panel
+  over it at all — and **headless is not one thing either**: `karakuri-engine`'s benchmarks include
+  a deck of four, so a figure says what it was taken on rather than which side of that line it fell.
+  So each of them says which it is. It is also why
   [`swap.rs`](../crates/karakuri-engine/src/swap.rs)'s `PROBE_RESOLUTION` is fixed rather than
   the deck's — a governor adds per-Set measurements together, so **comparable matters more than
   absolute**. What a number carries about *how* it was taken is the instrument's own rule and is

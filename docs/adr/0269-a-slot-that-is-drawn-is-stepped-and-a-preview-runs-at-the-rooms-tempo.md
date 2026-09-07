@@ -117,10 +117,9 @@ rewind.
 
 ## What it costs, and this is a consequence rather than the reason
 
-The reference workload — `examples/drift_shell.kir` + `soft_points.kir` at capacity 262144, 1280x720,
-four slots with one Live — through
-`karakuri-engine/tests/deck.rs`'s `the_cost_of_a_slot_and_of_the_composite_are_measured_and_reported`,
-which prints these rather than asserting them. Host clock around submit-and-wait, so biased high
+`karakuri-engine/tests/deck.rs`'s `the_cost_of_a_slot_and_of_the_composite_are_measured_and_reported`
+— four slots with one Live, capacity 262144, 1280x720 — which prints these rather than asserting
+them. Host clock around submit-and-wait, so biased high
 ([P-0095](../principles/0095-an-instrument-that-cannot-measure-says-so-rather-than-reporting-a-number.md)).
 Medians of 120 frames. **The machine was busy while these were taken and the figures below are the
 quiet runs of two before and ten after**, which is stated rather than hidden: the four-slot lines
@@ -128,6 +127,23 @@ swung between 21 ms and 63 ms across the loaded runs while the one-slot lines he
 so the contention shows up on four simulations and not on one. The one figure that did not move with
 the load is the one this record turns on — the cold line read 207.5 and 209.7 on both before-runs,
 loaded and quiet — because two hundred milliseconds is not noise.
+
+**Corrected 2026-09-07: the material named here was the neighbouring test's.** This paragraph opened
+*"The reference workload — `examples/drift_shell.kir` + `soft_points.kir` at capacity 262144"*, and
+that pair is what
+`the_cost_of_filling_a_preview_cell_is_measured_and_reported` `include_str!`s, one screen further
+down the same file, saying why in as many words. The test the figures below come from builds
+`deck.rs`'s **own** fixtures — the `static_shell` L1 and the `soft_points` L4 written at the top of
+it, a fixed-radius shell of points drawn additively — at the same capacity and the same canvas.
+**The figures are real either way**: both are a shell of points at 262144 elements and 1280x720, so
+what was wrong is the name on them and not the measurement. What it costs a reader is comparability
+in one direction: a figure here belongs beside the four figures next to it in the same table, and
+not beside a figure taken on the reference workload. **Two different Sets at 262144 reading as one
+measurement is the failure
+[ADR-0270](0270-the-reference-workload-is-a-named-set-rather-than-whatever-the-default-pair-is.md)
+moved the convention to prevent** — the workload is `examples/drift_cloud.kset` by name rather than
+a capacity number — and that record's consequences name this sentence as the correction owed. This
+is it.
 
 | | before | after |
 |---|---|---|
@@ -148,10 +164,61 @@ paying.
 **The step itself is nearly free next to the draw**, which is the fourth row: three off-air slots
 that were already warm cost 20.7 ms drawn and 21.1 ms drawn and stepped.
 
+**Annotated 2026-09-07: every figure in that table was taken with a sprite 2.8 times too wide, and
+the re-taking is below rather than in place of it.** `96c9cc7` (2026-09-02) made a sprite a fraction
+of the target's height and migrated `deck.rs`'s fixtures by dividing by 256, which is right for the
+assertions in that file — they render 256 high — and wrong for the two measurements in it, which
+render at 1280x720. The L4 above therefore drew an 11.25-texel sprite where it had drawn four, 7.9
+times the area, on an additive blend that is paid by area. The fixture now scales the rate to the
+height it is rendered at and says why. **The argument this record turns on is untouched**: two
+hundred milliseconds a frame was an unstepped Set drawing its whole capacity at one clip address,
+which is a count of destination texels and not a sprite size, and no re-taking brings it back.
+**The absolute milliseconds are the fixture as much as the deck**, and that is what is corrected.
+
+**Which of the two treatments each half gets is `docs/contributing.md` §4's rule and not a
+judgement made here.** An ADR is a description of history: a description that was wrong is
+corrected, so the sentence naming the material is edited in place above; the past is not revised
+and a record is annotated with what it later became, so the figures stay where they are and the
+re-taking sits beside them. Reading them together is the point — the first table is what was
+measured on 2026-09-07 and acted on, the second is the same test with one fixture corrected, and
+neither is the other.
+
+Re-taken on one machine on 2026-09-07, same test, same host clock, medians of 120 frames, the
+sprite pinned to four texels against 720 and — for the left column — put back to 11.25 in the same
+sitting rather than quoted from the table above, so the two columns are a pair rather than two
+dates. Twenty-nine runs were taken, thirteen at the old sprite and sixteen at the new. **The
+machine was worse than it was in the first table**: another session ran the workspace suite through
+the same GPU for much of the day, and even with nothing else up the four-slot lines swung between
+16 and 82 ms while the bare line held to a millisecond. **Each column below is the quietest single
+run at that sprite** — not a mean of anything, and not the two halves of one sitting — with the
+bare line's spread across every run beside it, because it is the only line that held still enough
+for a spread to mean something.
+
+| | 11.25-texel sprite | 4-texel sprite |
+|---|---|---|
+| bare Set, no deck | 10.3 (9.7 – 12.0 across 12 runs) | 7.6 (7.3 – 7.8 across 15) |
+| deck of one | 10.5 | 5.9 |
+| deck of four, all Live | 21.4 | 16.2 |
+| four, one Live, three warmed and then taken off air | 21.3 | 16.1 |
+| **four, one Live, three off air since the first frame** | **22.0** | **16.2** |
+
+The bare line drops one run on each side — 2.7 ms at the old sprite and 12.6 at the new, both from
+runs whose other four lines were as far out.
+
+**The left column is this record's own *after* column, reproduced five days later.** 10.3, 10.5,
+21.4, 21.3 and 22.0 against 9.9–10.6, 10.1–10.6, 21.0, 21.1 and 22.4. That is what identifies the
+sprite in the original figures rather than the machine or the day, and it is what lets the right
+column be read as the same measurement with one fixture changed. **A quarter to two fifths came off
+every line.** The three four-slot lines land within 0.2 ms of each other in the right column, which
+is the sentence above about the cold line — *it now reads what the warm line reads* — measured more
+cleanly than it was when it was written.
+
 **This is this material's number and not the instrument's, and the record must not be read as
 either.** Capacity 262144 with additive blending is deliberately aggressive — it is the `.kir`
-default and the reference workload for the reason `docs/contributing.md` gives, that comparable
-matters more than absolute — and the same shape at capacity 4096 costs about 2.4 ms unstepped. The
+default, and it is the capacity the reference workload declares, for the reason
+`docs/contributing.md` §1 gives: that comparable matters more than absolute. (**That sentence said
+*and the reference workload*, and the capacity is not the workload**; the correction above is the
+whole of the difference.) The same shape at capacity 4096 costs about 2.4 ms unstepped. The
 concentrated-overdraw cliff is real, and an operator can reach it with a legitimate picture: a
 procedure that puts every element at one point is not a mistake. **It is not being fixed here and no
 limit is being added.** Somebody with the hardware who wants that picture is allowed it.
