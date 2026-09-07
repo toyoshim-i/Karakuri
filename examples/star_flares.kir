@@ -1,0 +1,158 @@
+// A four-point flare with a hot core, one per element, each one turned to its
+// own axis. The one sprite renderer here that draws a *shape* rather than a
+// falloff.
+//
+//     cargo run -p karakuri -- examples/coil_vortex.kir examples/star_flares.kir
+//
+// Pairs with `coil_vortex.kir`; that file's header is where the pair's argument
+// is. **Every other sprite renderer in this library is radially symmetric** —
+// `soft_points` is `pow(1 - d, falloff)`, `plain_points` is that squared,
+// `hard_dots` is a `smoothstep` on a mixed metric — so a sprite has no
+// orientation and a field of them has no texture beyond its density. This one
+// rotates `point_coord` into the element's own frame and lays a bright bar
+// along each axis, which is what a lens sees looking at a point of light. At
+// ten thousand elements you can see one; at a quarter of a million you could
+// not, which is the whole reason the pair is written at the count it is.
+//
+// **The rotation is read, not computed.** `uv` carries `vec2(cos(a), sin(a))`
+// for this element's axis, written once per element by `coil_vortex`, so the
+// fragment block spends four multiplies and two adds where an angle would have
+// cost a `hash1`, a `sin` and a `cos` **per covered pixel**. That is
+// `plain_points.kir`'s argument about `tint` applied to geometry instead of to
+// colour, and it is worth a fifth of this block: the same file computing its own
+// angle estimates at 147 ops per fragment against this one's 122.
+//
+// **It consumes `size` and `uv`, and both are real constraints.** Only `age` and
+// `velocity` have derivation rules, so a Set pairing this with a geometry that
+// emits neither is refused where the Set is built. `hard_dots.kir` says the same
+// thing about `size` and it is the honest failure: a renderer whose shape comes
+// out of an attribute nobody supplies has no shape.
+//
+// # `blend weighted`, which was tested rather than assumed
+//
+// This was written additive, and both were rendered at the default capacity and
+// at four times it. At 10240 the two are close — additive is slightly more
+// luminous, weighted slightly more saturated. **At 40960 they are not close**:
+// additive washes the dense middle of the funnel to white and the individual
+// flares stop existing, which is the failure the whole pair is a reaction to,
+// while weighted keeps every hue and every ribbon boundary. Since the point of a
+// wide `capacity` range is that an operator turns it up, the blend that survives
+// being turned up is the one to ship.
+//
+// What it costs is the sort. Weighted blended OIT resolves toward the nearer
+// fragment by depth weight rather than by order, so the occlusion is right and
+// the ordering is approximate — `glass_shell.kir` is where that is argued at
+// length. Here the approximation is doing something useful rather than being
+// tolerated: a ribbon in front of another ribbon *hides* it, and hiding is how a
+// coil reads as a coil.
+//
+// **`exposure` and `opacity` are two controls and not one**, which is the other
+// thing weighted buys. Under additive, doubling either does the same thing.
+// Here `exposure` is how bright the flare is and `opacity` is how much of what
+// is behind it survives, so a dim solid funnel and a bright transparent one are
+// different pictures.
+//
+// # The sub-pixel floor is this file's own
+//
+// ADR-0245 draws a sprite whose side is below one pixel at one pixel and pays
+// the lost coverage in the colour, so material can go on getting smaller without
+// getting dimmer — and stops getting cheaper, at one fragment per element
+// whatever the target is. A pair that fell through that floor would be a
+// different picture measured against a fixed cost.
+//
+// `point_scale`'s range therefore starts at 0.0014, which is 1.008 pixels at 720
+// rows: **no setting of this fader is sub-pixel at the reference size.** And the
+// multiplier is `max(size, 1.0)` rather than `size`, so that claim is a property
+// of this file rather than a claim about whichever geometry filled the slot.
+// `coil_vortex` emits `size` at 1 or above by construction and the `max` never
+// fires for the shipped pair; it is there for the one that has not been written
+// yet. `plain_points.kir` states the same floor and cannot make it unconditional,
+// because its `point_rate` is the param and nothing else.
+//
+// # Coverage, against the pair everything here is measured against
+//
+// Coverage is `capacity × (point_rate × height)²` and `point_rate` is a fraction
+// of the target's height. `size` is not a constant, so the figure carries the
+// mean of its square — `1 + grain·hash^5` over a uniform hash is 3.79 at the
+// default `grain` of 4. At 1280x720:
+//
+//   this pair    10240 × (0.0076 × 720)² × 3.79  ≈ 1.16M px = 1.26x the frame
+//   the default  262144 × (0.00556 × 720)²       ≈ 4.19M px = 4.55x the frame
+//
+// **A factor of 3.6 fewer covered pixels, and a factor of 25 fewer primitives.**
+// The fragment block is dearer per pixel than `soft_points`' — 122 ops against
+// 57 — so the honest figure for the fragment stage is a factor of 1.7 rather
+// than of 3.6, and it is the vertex and simulation stages that fall by an order
+// of magnitude. A sprite at `size` 1 is 5.5 pixels across and the largest are
+// about 27; the beat pulse takes those to 34 as it passes.
+
+proc star_flares {
+  kind  L4
+  blend weighted
+
+  consumes position, tint, size, uv
+
+  // Sprite side as a fraction of the frame's height, per unit of `size`. 0.0076
+  // is 5.47 pixels at 720 rows. The floor of 0.0014 is one pixel there; see the
+  // note above for why it is where it is.
+  param point_scale : float [0.0014, 0.0417] = 0.0076
+
+  // How bright the flare is, and how much of what is behind it it hides. Two
+  // controls because the blend is weighted; see above.
+  param exposure    : float [0.0, 8.0]  = 1.4
+  param opacity     : float [0.0, 1.0]  = 0.85
+
+  // The halo's exponent. The bars below are what make this a star; the halo is
+  // what makes it a light.
+  param falloff     : float [0.5, 8.0]  = 2.6
+
+  // How much of the shape is the bars, and how thin they are. At `spike` 0 this
+  // is an ordinary soft sprite, which is the far end of the same fader.
+  param spike       : float [0.0, 1.0]  = 0.55
+  param needle      : float [2.0, 40.0] = 16.0
+
+  // The white core, added to the colour rather than to the coverage: a flare is
+  // hotter than it is wider at the middle.
+  param glint       : float [0.0, 4.0]  = 1.6
+
+  vertex {
+    clip = camera * vec4(position, 1.0);
+
+    // `max(size, 1.0)` is the sub-pixel floor made unconditional; see above.
+    point_rate = point_scale * max(size, 1.0);
+  }
+
+  fragment {
+    // Into the element's own frame. `uv` is a unit vector, so this is a
+    // rotation and not a scale, and it arrives flat-interpolated — a sprite is
+    // one element's worth of values and there is nothing to interpolate
+    // between.
+    let q = point_coord * 2.0 - 1.0;
+    let p = vec2(q.x * uv.x - q.y * uv.y, q.x * uv.y + q.y * uv.x);
+
+    let d  = length(p);
+    let ax = abs(p.x);
+    let ay = abs(p.y);
+
+    let halo = pow(max(0.0, 1.0 - d), falloff);
+
+    // Two bars crossing at the middle: thin across, and fading to nothing at
+    // the quad's edge so a bar never ends in a hard line.
+    let bar1 = max(0.0, 1.0 - ay * needle) * max(0.0, 1.0 - ax);
+    let bar2 = max(0.0, 1.0 - ax * needle) * max(0.0, 1.0 - ay);
+
+    // `halo` to the sixth, by multiplication. It is exactly
+    // `pow(max(0, 1 - d), falloff * 6)` and costs three multiplies instead of a
+    // second `pow`, which is the most expensive builtin in a block that runs per
+    // covered pixel.
+    let h2  = halo * halo;
+    let h3  = h2 * halo;
+    let hot = h3 * h3;
+
+    // Alpha is opacity here, not emission — the blend is weighted — and the
+    // shader clamps it to [0, 1], so the bars' overlap at the middle resolves to
+    // solid rather than to more than solid.
+    color = vec4(tint * exposure + vec3(hot * glint),
+                 (halo + spike * (bar1 + bar2)) * opacity);
+  }
+}
