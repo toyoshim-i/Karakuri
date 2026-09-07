@@ -34,7 +34,10 @@ use common::{drawn_once, rect_of, showing, PLAUSIBLE};
 use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::{Panel, Released};
 use karakuri_console::room::size;
-use karakuri_console::view::{library, mixer, LibraryBay, Mixer, Scope, Strip, Tally, View};
+use karakuri_console::view::{
+    library, mixer, program_bay, rearrange, LibraryBay, Mixer, ProgramBay, Scope, Strip, Tally,
+    View,
+};
 use karakuri_layout::Point;
 use karakuri_operation::{BlendMode, Operation};
 
@@ -583,5 +586,360 @@ fn the_row_a_hand_takes_is_the_row_the_cursor_marks() {
         view.cursor_row(),
         0,
         "a refused press moved the mark anyway"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// The other set of rectangles a drop can land on
+// ---------------------------------------------------------------------------
+
+/// A console with a store, a deck of `strips.len()` slots, and the Program
+/// bay arranged so its four cells have places.
+///
+/// [`console`] does not rearrange, because nothing it tests reads the Program
+/// bay; every rectangle in that bay is read from the bit `view::rearrange`
+/// writes, so a cell asked for without it is a cell read out of one of the two
+/// arrangements only.
+fn with_cells(strips: &[Strip]) -> (View, Panel, egui::Context) {
+    let mut view = showing(strips);
+    view.library = sets();
+    view.scopes = Scope::ALL.to_vec();
+    let mut panel = Panel::new(PLAUSIBLE.w, PLAUSIBLE.h);
+    rearrange(&mut panel, view.canvas);
+    panel.solve();
+    (view, panel, drawn_once())
+}
+
+fn program(panel: &Panel, view: &View) -> ProgramBay {
+    program_bay(panel.layout(), view.canvas).expect("the Program bay is on screen")
+}
+
+/// The middle of the `deck`th preview cell's image.
+fn cell_at(bay: &ProgramBay, deck: u8) -> Point {
+    point(bay.cells.expect("the preview row is on screen")[usize::from(deck)].center())
+}
+
+/// **A drop on a deck preview cell asks to load that cell's deck**, which is
+/// the same command a release on that deck's strip asks for.
+///
+/// Four cells and five rows, so a drop that named the selection, the row's
+/// index or the first deck has three wrong answers to give. **The strips are
+/// asked at every cell too**, and answer `None` at all four: that is what
+/// makes this a second set of rectangles rather than a second reading of the
+/// first, and it is what *at most one rectangle is marked* rests on — a point
+/// inside one set is outside the other, so nothing has to arbitrate.
+#[test]
+fn a_drop_on_a_preview_cell_asks_to_load_that_cells_deck() {
+    let (view, mut panel, ctx) = with_cells(&strips());
+    let bay = bay(&panel, &view);
+    let cells = program(&panel, &view);
+    let strips = strips_bay(&panel, &ctx, &view);
+
+    for deck in 0..4u8 {
+        let onto = cell_at(&cells, deck);
+        assert_eq!(
+            strips.dropped(onto),
+            None,
+            "cell {deck} is inside a mixer strip, so a release there has two answers"
+        );
+        for index in 0..bay.rows {
+            let at = row(&bay, index);
+            let taken = bay.take(&view.library, at).expect("a drawn row");
+            panel.carry(at, taken.set);
+            assert_eq!(panel.moved(onto), None);
+            assert_eq!(
+                panel.released(cells.dropped(onto, view.mixer.len())),
+                Some(Released::Dropped(Operation::LoadSet {
+                    deck,
+                    set: view.library[index].clone(),
+                })),
+                "row {index} let go over cell {deck} asked for something else"
+            );
+        }
+    }
+}
+
+/// **A cell whose letter names no slot takes no drop**, and it is the only
+/// rectangle in either set that is drawn and is not a target.
+///
+/// The mixer draws one strip per slot, so a three-slot deck has three strips
+/// and a fourth cell with nothing behind the letter on it — the mock's own
+/// deck D. A release there has no deck to load into and asks for nothing,
+/// which is the refusal `3` already gets from the keyboard and the same
+/// reading behind it: `View::select` off `View::mixer`'s length.
+///
+/// **The three cells beside it still answer**, which is what makes this a
+/// reading of the slot count rather than a bay that stopped taking drops; and
+/// the mixer is asked at the fourth cell too, so a `None` there cannot be the
+/// strips answering for it.
+#[test]
+fn a_cell_whose_letter_names_no_slot_takes_no_drop() {
+    let three: Vec<Strip> = strips().into_iter().take(3).collect();
+    let (view, mut panel, ctx) = with_cells(&three);
+    let bay = bay(&panel, &view);
+    let cells = program(&panel, &view);
+    let strips = strips_bay(&panel, &ctx, &view);
+    assert_eq!(view.mixer.len(), 3, "this deck is not three slots");
+    assert_eq!(
+        cells.cells.expect("the preview row is on screen").len(),
+        4,
+        "the row is not four cells, so there is no cell without a slot to test"
+    );
+
+    // The fourth cell is drawn, and `cell` still answers for it — what has
+    // changed is what a *release* there means.
+    let onto = cell_at(&cells, 3);
+    assert_eq!(cells.cell(onto), Some(3), "the fourth cell is not drawn");
+    assert!(cells.owns(onto), "the fourth cell is not claimed any more");
+    assert_eq!(strips.dropped(onto), None);
+    assert_eq!(
+        cells.dropped(onto, view.mixer.len()),
+        None,
+        "a drop on deck D's cell named a deck this console has no slot for"
+    );
+
+    let at = row(&bay, 0);
+    let taken = bay.take(&view.library, at).expect("row 0 is drawn");
+    panel.carry(at, taken.set);
+    assert_eq!(
+        panel.released(cells.dropped(onto, view.mixer.len())),
+        Some(Released::Nowhere {
+            set: view.library[0].clone(),
+        }),
+        "a drop on a cell with no slot behind its letter asked for a load"
+    );
+
+    // And the three that do name a slot are unaffected.
+    for deck in 0..3u8 {
+        let onto = cell_at(&cells, deck);
+        assert_eq!(
+            cells.dropped(onto, view.mixer.len()),
+            Some(deck),
+            "cell {deck} stopped naming its deck"
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// What the carry is drawn as
+// ---------------------------------------------------------------------------
+
+/// Every drop mark the console paints on one frame, as the rectangle it is
+/// round.
+///
+/// **Recognised by the ink and the side of the edge it is on**, which is what
+/// `style.css` gives it and nothing else on this panel has: `--c-text` is the
+/// one colour the four states do not use, and `.strip.focus`'s lavender ring
+/// is inset where this is an `outline`. So a mark counted here cannot be the
+/// selection, a hairline, or a pill's border.
+fn drop_marks(view: &mut View, panel: &mut Panel) -> Vec<egui::Rect> {
+    let ink = view.room.palette().text;
+    let ctx = drawn_once();
+    let mut out = ctx.run_ui(egui::RawInput::default(), |ui| view.draw(ui, panel));
+    out.textures_delta.clear();
+    out.shapes
+        .into_iter()
+        .filter_map(|clipped| match clipped.shape {
+            egui::Shape::Rect(rect)
+                if rect.stroke.color == ink
+                    && rect.stroke.width == size::DROP_RING
+                    && rect.stroke_kind == egui::StrokeKind::Outside =>
+            {
+                Some(rect.rect)
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+/// The cursor the console asked for on one frame.
+fn cursor(view: &mut View, panel: &mut Panel) -> egui::CursorIcon {
+    let ctx = drawn_once();
+    let mut out = ctx.run_ui(egui::RawInput::default(), |ui| view.draw(ui, panel));
+    out.textures_delta.clear();
+    out.platform_output.cursor_icon
+}
+
+/// **At most one rectangle is marked, and it is the one the release would
+/// name.**
+///
+/// The pointer is in one place, so this is a fact about where the hand is
+/// rather than a rule either bay keeps — and it is asserted over both sets of
+/// rectangles and over the ground between them. Four strips and four cells,
+/// so a mark drawn round the wrong one of the eight has seven wrong answers
+/// to give.
+///
+/// **Nothing is marked with nothing in hand**, which is what separates this
+/// from a hover: the same points are drawn with no carry and carry no ring.
+#[test]
+fn one_rectangle_is_marked_and_it_is_the_one_the_release_names() {
+    let (mut view, mut panel, ctx) = with_cells(&strips());
+    let bay = bay(&panel, &view);
+    let cells = program(&panel, &view);
+    // **The eight rectangles, taken off the two bays before anything is
+    // drawn**: `Mixer` borrows the strips the view holds, and `View::draw`
+    // takes it by `&mut`.
+    let targets: Vec<Point> = {
+        let strips = strips_bay(&panel, &ctx, &view);
+        (0..4u8)
+            .flat_map(|deck| [strip_at(&strips, deck), cell_at(&cells, deck)])
+            .collect()
+    };
+
+    // Nothing in hand: the pointer is over strip A and nothing is ringed.
+    panel.moved(targets[0]);
+    assert_eq!(
+        drop_marks(&mut view, &mut panel).len(),
+        0,
+        "a rectangle is ringed with nothing in hand — the mark is a hover"
+    );
+
+    let mut asked = 0;
+    for onto in targets {
+        let at = row(&bay, 0);
+        let taken = bay.take(&view.library, at).expect("row 0 is drawn");
+        panel.carry(at, taken.set);
+        panel.moved(onto);
+        let marks = drop_marks(&mut view, &mut panel);
+        assert_eq!(
+            marks.len(),
+            1,
+            "{} rectangles are ringed with the pointer at {onto:?}",
+            marks.len()
+        );
+        assert!(
+            marks[0].contains(egui::Pos2::new(onto.x, onto.y)),
+            "the ring at {:?} is not round the rectangle under the pointer at {onto:?}",
+            marks[0]
+        );
+        panel.released(None);
+        asked += 1;
+    }
+    assert_eq!(asked, 8, "not every rectangle was asked");
+}
+
+/// **Over anything that is not a target, nothing is marked.**
+///
+/// The alley between two strips is the case the rule was written for:
+/// `.mixer-strips` has a `gap: 4px` and it is a real place to let go, so a
+/// mark that snapped to the nearest strip would name a deck nobody pointed at
+/// and the release after it would load one. The bay head above the strips,
+/// the transition row under them, the Library bay the Set came out of and a
+/// point off the viewport are the other four.
+///
+/// **The fourth cell of a three-slot deck is the fifth**, and it is the one
+/// that is a rectangle rather than ground: a release there loads nothing
+/// (`a_cell_whose_letter_names_no_slot_takes_no_drop`), so a ring on it would
+/// be the mark promising a landing the release does not make.
+#[test]
+fn nothing_is_marked_where_a_release_would_load_nothing() {
+    let three: Vec<Strip> = strips().into_iter().take(3).collect();
+    let (mut view, mut panel, ctx) = with_cells(&three);
+    let bay = bay(&panel, &view);
+    let cells = program(&panel, &view);
+
+    // The alley: half way between strip A's right edge and strip B's left.
+    // Taken before anything is drawn, for the reason above.
+    let alley = {
+        let strips = strips_bay(&panel, &ctx, &view);
+        let a = strips.selected(0).expect("a strip for deck A");
+        let b = strips.selected(1).expect("a strip for deck B");
+        let alley = Point::new((a.max.x + b.min.x) * 0.5, a.center().y);
+        assert_eq!(strips.dropped(alley), None, "the alley is inside a strip");
+        alley
+    };
+    let mixer_region = rect_of(panel.layout(), "mixer");
+    let transport = rect_of(panel.layout(), "transport");
+
+    let mut asked = 0;
+    for over in [
+        alley,
+        // The bay's head, above the strips.
+        Point::new(mixer_region.x + mixer_region.w * 0.5, mixer_region.y + 4.0),
+        Point::new(transport.x + transport.w * 0.5, transport.y + 4.0),
+        row(&bay, 0),
+        Point::new(-40.0, -40.0),
+        cell_at(&cells, 3),
+    ] {
+        let at = row(&bay, 0);
+        let taken = bay.take(&view.library, at).expect("row 0 is drawn");
+        panel.carry(at, taken.set);
+        panel.moved(over);
+        let marks = drop_marks(&mut view, &mut panel);
+        assert_eq!(
+            marks.len(),
+            0,
+            "{:?} is ringed with the pointer at {over:?}, where a release loads nothing",
+            marks
+        );
+        panel.released(None);
+        asked += 1;
+    }
+    assert_eq!(asked, 6, "not every point was asked");
+}
+
+/// **The pointer is a grab for as long as the Set is in hand, wherever it
+/// is** — the one thing that says a gesture is still running while the hand is
+/// over nothing at all.
+///
+/// **Asserted over a boundary above all.** A carry crosses every divider
+/// between the Library bay and the mixer, and the arm this replaces answered
+/// `None` there and fell through to the hit test — so a resize cursor flicked
+/// on over each of them, for a gesture that was not happening. The boundary is
+/// asked here with nothing in hand as well, where it is still a resize: that
+/// is what makes this the *carry* suppressing it rather than the hit test
+/// having stopped working.
+#[test]
+fn the_pointer_is_a_grab_while_a_set_is_in_hand() {
+    let (mut view, mut panel, ctx) = with_cells(&strips());
+    let bay = bay(&panel, &view);
+    let on_strip = {
+        let strips = strips_bay(&panel, &ctx, &view);
+        strip_at(&strips, 1)
+    };
+
+    // A vertical boundary, found the way the panel finds one: the left edge of
+    // the mixer's own region is a divider between two panes.
+    let mixer_region = rect_of(panel.layout(), "mixer");
+    let on_boundary = Point::new(mixer_region.x, mixer_region.y + mixer_region.h * 0.5);
+    panel.moved(on_boundary);
+    let resize = cursor(&mut view, &mut panel);
+    assert!(
+        matches!(
+            resize,
+            egui::CursorIcon::ResizeHorizontal | egui::CursorIcon::ResizeVertical
+        ),
+        "the point picked is not on a boundary at all ({resize:?}), so the assertion below \
+         would pass against nothing"
+    );
+
+    let at = row(&bay, 2);
+    let taken = bay.take(&view.library, at).expect("row 2 is drawn");
+    panel.carry(at, taken.set);
+
+    let mut asked = 0;
+    for over in [
+        on_boundary,
+        on_strip,
+        row(&bay, 0),
+        Point::new(-40.0, -40.0),
+    ] {
+        panel.moved(over);
+        assert_eq!(
+            cursor(&mut view, &mut panel),
+            egui::CursorIcon::Grabbing,
+            "the pointer is not a grab at {over:?} with a Set in hand"
+        );
+        asked += 1;
+    }
+    assert_eq!(asked, 4, "not every point was asked");
+
+    // And it is gone with the gesture: the boundary is a resize again.
+    panel.moved(on_boundary);
+    panel.released(None);
+    assert_eq!(
+        cursor(&mut view, &mut panel),
+        resize,
+        "the grab outlived the carry"
     );
 }

@@ -449,6 +449,24 @@ pub mod size {
     /// have to be told apart by their line and not by their weight.
     pub const STRIP_FOCUS_RING: f32 = 2.0;
 
+    /// `.strip.drop`'s `outline: 2px solid var(--c-text)`: the ring round the
+    /// rectangle a carried Set lands on if it is let go there. **Outside**,
+    /// where [`STRIP_FOCUS_RING`] above is inset, and that is what lets one
+    /// strip wear both at once — the selection sits inside the strip's edge
+    /// and this sits on it, which is the case the mark had to survive. Its
+    /// `outline-offset: 0` is why it is on the edge rather than proud of it:
+    /// the ring belongs to the target and not to the alley beside it.
+    ///
+    /// **One number for two rectangles.** `.cell.drop` carries the same
+    /// declaration, because it is one mark in two places; what differs is the
+    /// corner it is drawn round, and that is the target's own —
+    /// [`STRIP_RADIUS`] on a strip and [`PREVIEW_RADIUS`] on a cell. The
+    /// mock's `.cell.drop` sets a `border-radius: 8px` of its own, which is
+    /// the `.cell` box's corner — a box with no background that the console
+    /// does not draw, because a cell there is its image and the caption under
+    /// it — the view's `caption_of` is where the second half of it is.
+    pub const DROP_RING: f32 = 2.0;
+
     /// `.strip`'s `padding: 7px 4px`.
     pub const STRIP_PAD_X: f32 = 4.0;
     pub const STRIP_PAD_Y: f32 = 7.0;

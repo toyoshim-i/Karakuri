@@ -187,7 +187,11 @@ Set instead, so the panel says what it did with the gesture rather than going qu
 - **`InHand` gained a third answer and the cursor gained no third shape.** `InHand::Carrying` exists
   so a window loop can tell a move that may emit from one that never can; `view::cursor` keeps the
   vocabulary *arrow, or resize over a boundary*, and a carry suppresses the resize cursor the way a
-  fader does.
+  fader does. **The second half of that stopped being true on 2026-09-07**: the page asked for the
+  third shape and a carry is now `CursorIcon::Grabbing`, wherever the pointer is
+  ([ADR-0273](0273-the-carry-lands-on-two-sets-of-rectangles-and-wears-a-face.md), which carries
+  what was wrong with the argument this clause records). The first half is unchanged, and the
+  suppression is still there — a carry no longer reaches the boundary hit test at all.
 - **The Library bay's list is a control, and *"the one offer on this console whose press names no
   operation"*** (`crates/karakuri-console/src/input.rs:428-429`).
   `input::CLAIMS` is `[usize; 15]` and the list contributes `1` rather than a row count, because
@@ -205,7 +209,12 @@ Set instead, so the panel says what it did with the gesture rather than going qu
   the pointer and no mark on the row in hand beyond `.lib-row.cursor`, because the mock draws none
   of those. That is a panel affordance rather than a route, so it does not hold the operation's
   badge; it is named as open in [roadmap.md](../roadmap.md)'s M5.3, and anything richer is an edit
-  to `console.html` first (`docs/contributing.md` §5 step 3).
+  to `console.html` first (`docs/contributing.md` §5 step 3). **The edit was made on 2026-09-07 and
+  the condition in that last clause is what met it**: `4ec14db` put the drop mark, the four cells as
+  a second destination and the grab cursor in the mock, and
+  [ADR-0273](0273-the-carry-lands-on-two-sets-of-rectangles-and-wears-a-face.md) is the panel owing
+  all three. The ghost and the mark on the row in hand are still not drawn, and are declined there
+  rather than open.
 - **A press on an open reading takes nothing in hand.** `LibraryBay::take` walks the rows through
   `LibraryBay::row` rather than dividing by the row stride, so the block a reading opens is not a
   row and the rows below it still answer their own names.

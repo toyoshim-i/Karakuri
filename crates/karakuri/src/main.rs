@@ -287,9 +287,9 @@ use karakuri_console::view::{
     self, arrangement as arrangement_pill, audio_in as audio_in_pill, class_at,
     deck_head as deck_head_row, inspector as inspector_pane, library as library_bay,
     look as look_row, master as master_row, mcp_pill, mixer as mixer_bay, outputs, picture_rect,
-    preview_rects, program_head, transition as transition_row, Ask, AudioAsk, AudioIn, Chosen, Go,
-    Kind, McpPill, Picture, Read, Reading, Scope, Taken, TransitionSettings, View, DECKS,
-    DECK_LETTERS,
+    preview_rects, program_bay, program_head, transition as transition_row, Ask, AudioAsk, AudioIn,
+    Chosen, Go, Kind, McpPill, Picture, Read, Reading, Scope, Taken, TransitionSettings, View,
+    DECKS, DECK_LETTERS,
 };
 // **How many slots a deck can hold**, which is how many this one has — see
 // [`SLOTS`]. Not re-exported at the crate root, and asked of the module that
@@ -1405,7 +1405,8 @@ impl Readout {
             Some(Released::Nowhere { set }) => {
                 println!(
                     "release: `{set}` was let go over nothing, so nothing was loaded — a drop \
-                     names its deck by landing on that deck's strip"
+                     names its deck by landing on that deck's strip, or on its preview cell in \
+                     the Program bay"
                 );
                 Acted::Nothing
             }
@@ -1913,20 +1914,40 @@ impl Readout {
                     }
                 }
             }
-            // **Where a drop names its deck.** A carry is the one gesture here
+            // **Where a drop names its deck**, and there are two sets of
+            // rectangles it can name it by. A carry is the one gesture here
             // whose destination is not known until the button comes up, so the
-            // bay is laid out *now* and asked which strip the pointer is over
-            // — `Mixer::dropped`, the same derivation the frame drew and the
-            // same one `claim` hit-tests the knobs and chips of. It is asked
-            // only with a carry in hand: a boundary and a fader each come to
-            // rest without a destination, and laying out the mixer on every
-            // release would be two galley lookups per strip to answer a
-            // question nobody asked.
+            // bays are laid out *now* and asked which of their rectangles the
+            // pointer is over — `Mixer::dropped` and `ProgramBay::dropped`,
+            // the same derivations the frame drew and the same ones `claim`
+            // hit-tests the knobs, chips and cells of. They are asked only
+            // with a carry in hand: a boundary and a fader each come to rest
+            // without a destination, and laying the mixer out on every release
+            // would be two galley lookups per strip to answer a question
+            // nobody asked.
+            //
+            // **The order is arbitrary and cannot matter**: the strips are in
+            // the right pane and the cells in the centre column, so a point
+            // inside one set is outside the other, and `or_else` is two
+            // questions about one point rather than a precedence.
+            //
+            // **The cell half is asked with the deck's slot count**, which is
+            // the strips this console was handed: the row is always `DECKS`
+            // cells and a deck holds one to four slots, so a release on the
+            // fourth cell of a three-slot deck has nothing to load into and is
+            // refused exactly as `3` is refused from the keyboard
+            // (`pointed`, and `View::select` under it) —
+            // [ADR-0273](../../../docs/adr/0273-the-carry-lands-on-two-sets-of-rectangles-and-wears-a-face.md).
             (Pointer::Up, Claim::Panel) => {
                 let onto = match self.panel.in_hand() {
                     Some(InHand::Carrying) => mixer_bay(ctx, self.panel.layout(), &self.view.mixer)
                         .as_ref()
-                        .and_then(|bay| bay.dropped(at)),
+                        .and_then(|bay| bay.dropped(at))
+                        .or_else(|| {
+                            program_bay(self.panel.layout(), self.view.canvas)
+                                .as_ref()
+                                .and_then(|cells| cells.dropped(at, self.view.mixer.len()))
+                        }),
                     _ => None,
                 };
                 did = self.released(onto);
@@ -14432,9 +14453,12 @@ mod tests {
     ///
     /// 1. A press on the third row is the panel's, and it emits nothing:
     ///    half a gesture names one operand.
-    /// 2. **The cursor mark follows the hand**, which is the whole of what
-    ///    this console can draw for a carry — the mock draws no ghost and no
-    ///    drop target — and `Acted::Pointed` is the press saying so. What is
+    /// 2. **The cursor mark follows the hand**, and `Acted::Pointed` is the
+    ///    press saying so. It is no longer the whole of what this console
+    ///    draws for a carry — the rectangle under the pointer is ringed and
+    ///    the pointer is a grab, which is `View::draw`'s and is held by
+    ///    `karakuri-console/tests/carry.rs`; the mock still draws no ghost.
+    ///    What is
     ///    owed on that answer when a reading is open is
     ///    [`a_carry_that_moves_the_cursor_re_reads_the_row_it_arrived_at`];
     ///    here it is the mark alone, and `Acted::Nothing` in its place would
@@ -14556,6 +14580,116 @@ mod tests {
             readout.pointer(&ctx, Pointer::Up).1,
             Acted::Nothing,
             "a drop over nothing asked for a load"
+        );
+    }
+
+    /// **A Set let go on a deck preview cell loads that cell's deck**, through
+    /// the same `Readout::pointer` a hand goes through — and a cell whose
+    /// letter names no slot loads nothing.
+    ///
+    /// # Why it is here and not in `karakuri-console`
+    ///
+    /// `carry.rs` there asks the two bays itself and hands the destination to
+    /// `Panel::released`. **What this file owns is that the release asks the
+    /// second bay at all**: the press handler resolved the drop against
+    /// `Mixer::dropped` alone until ADR-0273, so a carry that crossed to the
+    /// centre column and let go on a cell was answered `Nowhere` — the panel
+    /// drawing a ring round a rectangle the release then declined to use.
+    /// **Deleting the `ProgramBay::dropped` ask from the release arm is the
+    /// injection this was watched to fail against.**
+    ///
+    /// # And the slot count is asked with it
+    ///
+    /// The deck here has **three** slots and the row is four cells, so cell D
+    /// is drawn with nothing behind the letter on it. A release there names no
+    /// deck, which is the refusal `3` already gets from the keyboard —
+    /// `pointed`, off the same `View::mixer` length. Passing `DECKS` instead
+    /// of that length is the second injection, and it asks for
+    /// `LoadSet { deck: 3 }` on a deck that has no slot 3.
+    ///
+    /// A CPU test: a `Readout` takes no device.
+    #[test]
+    fn a_drop_on_a_preview_cell_loads_the_deck_its_letter_names() {
+        let ctx = drawn_once();
+        let mut readout = Readout::new(1440.0, 900.0);
+        // The Program bay's cells are read from the bit `rearrange` writes, so
+        // a frame's own first act is what puts them anywhere at all.
+        view::rearrange(&mut readout.panel, readout.view.canvas);
+        readout.panel.solve();
+        readout.view.scopes = Scope::ALL.to_vec();
+        readout.view.library = vec![
+            "drift_night".to_owned(),
+            "lattice_veil".to_owned(),
+            "glass_shell".to_owned(),
+        ];
+        readout.view.mixer = (0..3)
+            .map(|slot| view::Strip {
+                name: format!("slot{slot}"),
+                tally: view::Tally::Live,
+                requested: view::Tally::Live,
+                gain: 0.5,
+                gain_to: None,
+                opacity: 0.5,
+                opacity_to: None,
+                blend: BlendMode::Over,
+                mask: view::Mask::None,
+                mask_angle: 0.0,
+                level: None,
+            })
+            .collect();
+        assert_eq!(
+            readout.view.selection(),
+            0,
+            "the selection is not deck A, so a drop naming deck B could be naming the selection"
+        );
+
+        let row = |readout: &mut Readout, index: usize| {
+            readout.panel.solve();
+            let at = library_bay(
+                readout.panel.layout(),
+                &readout.view.scopes,
+                &readout.view.library,
+                readout.view.opened(),
+            )
+            .expect("the bay lists its rows")
+            .row(index);
+            Point::new(at.center().x, at.center().y)
+        };
+        let cell = |readout: &mut Readout, deck: usize| {
+            readout.panel.solve();
+            let cells = preview_rects(readout.panel.layout(), readout.view.canvas)
+                .expect("the preview row is on screen");
+            assert_eq!(cells.len(), DECKS, "the row is not four cells");
+            let at = cells[deck];
+            Point::new(at.center().x, at.center().y)
+        };
+
+        // Row 1 onto cell B: not the selection, not the row's index as a deck.
+        let at = row(&mut readout, 1);
+        readout.pointer(&ctx, Pointer::Moved(at));
+        assert_eq!(readout.pointer(&ctx, Pointer::Down).1, Acted::Pointed);
+        let onto = cell(&mut readout, 1);
+        readout.pointer(&ctx, Pointer::Moved(onto));
+        assert_eq!(
+            readout.pointer(&ctx, Pointer::Up).1,
+            Acted::Emitted(Some(Operation::LoadSet {
+                deck: 1,
+                set: "lattice_veil".to_owned(),
+            })),
+            "the drop did not name the cell it was let go over"
+        );
+        assert!(!readout.panel.dragging(), "the carry is still in hand");
+
+        // And cell D, which this deck has no slot for, loads nothing.
+        let at = row(&mut readout, 2);
+        readout.pointer(&ctx, Pointer::Moved(at));
+        assert_eq!(readout.pointer(&ctx, Pointer::Down).1, Acted::Pointed);
+        let onto = cell(&mut readout, 3);
+        readout.pointer(&ctx, Pointer::Moved(onto));
+        assert_eq!(
+            readout.pointer(&ctx, Pointer::Up).1,
+            Acted::Nothing,
+            "a drop on the fourth cell of a three-slot deck asked for a load"
         );
     }
 
@@ -17067,6 +17201,14 @@ mod press_handler {
         // is not something it can see. `mod gpu`'s press-to-deck tests are
         // what stand under that, as they do for every entry here.
         ("Mixer", "dropped", "mixer_bay", "bay"),
+        // **And the seventh entry is not the Mixer bay's at all**, which is
+        // the same release asked of the other set of rectangles it can land
+        // on: the four deck preview cells, each naming the deck its letter
+        // names. It is asked with the deck's slot count beside the point,
+        // because the row is four cells whatever the deck holds — see
+        // `ProgramBay::dropped`, and `EXEMPT`'s `cell` entry for the press
+        // that still asks for nothing.
+        ("ProgramBay", "dropped", "program_bay", "cells"),
         // **The Master bay's one**, and it is `Mixer::grab`'s method name on a
         // different type bound to a different local — which is the whole of
         // why an entry is four columns and not two.
@@ -17103,14 +17245,18 @@ mod press_handler {
     /// composing it and in [`TABLE`]. Any of those going stale names the line
     /// to delete.
     const EXEMPT: &[(&str, &str, Option<&str>)] = &[
-        // **A real offer with no composer, and the decision rather than a
-        // gap.** ADR-0240 retired `SetPreview`, and `ProgramBay::cell`'s own
-        // documentation says: *"A press on a cell asks for nothing, and that
-        // is the decision rather than a gap."* The cells stay claimed only
-        // because they are drawn over a boundary, so `input::claim` has to
-        // keep them off `egui` — a claim with nothing behind it, which is
-        // exactly the shape this module was written to refuse everywhere else.
-        ("ProgramBay", "cell", None),
+        // **A press on a cell asks for nothing and a release on one does**,
+        // so this is an exemption with a composer rather than a bare one.
+        // ADR-0240 retired `SetPreview`, and `ProgramBay::cell`'s own
+        // documentation still says: *"A press on a cell asks for nothing, and
+        // that is the decision rather than a gap."* Nothing is in hand at a
+        // press, so there is no second operand for it to name; a carry puts
+        // one there, and `ProgramBay::dropped` is what this file asks at the
+        // release — off `cell`, which is why it is that offer's composer
+        // (ADR-0273). The cells were claimed before either existed, because
+        // they are drawn over a boundary and `input::claim` has to keep them
+        // off `egui`.
+        ("ProgramBay", "cell", Some("dropped")),
         // **The two sub-questions of an `ask`.** Each answers *which row of
         // the card is under the point*, and each pill's `ask` calls it and
         // then decides — a row is an operation, and anywhere else inside the

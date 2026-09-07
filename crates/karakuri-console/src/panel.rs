@@ -641,7 +641,18 @@ pub enum Released {
     /// somebody else's state, which is the second copy the whole module is
     /// written to refuse.
     Let { knob: Knob },
-    /// **A carried Set was let go over a strip**, and the load it asks for.
+    /// **A carried Set was let go over a rectangle that names a deck**, and
+    /// the load it asks for.
+    ///
+    /// **Two sets of rectangles name one**: a mixer strip
+    /// ([`crate::view::Mixer::dropped`]) and a deck preview cell
+    /// ([`crate::view::ProgramBay::dropped`]), which is `console.html`'s
+    /// *"the same command rather than a second command"* and arrives here as
+    /// the one `deck` the caller resolved. Which of the two it was is not in
+    /// this value and is not owed one: the operation names a deck and a Set,
+    /// and a copy of the route beside it would be a third operand nothing
+    /// downstream can use
+    /// ([ADR-0273](../../../docs/adr/0273-the-carry-lands-on-two-sets-of-rectangles-and-wears-a-face.md)).
     ///
     /// **The one release on this panel that carries a value, and
     /// [`Let`](Released::Let) above is why it is not a contradiction.** A
@@ -672,7 +683,11 @@ pub enum Released {
     /// past its end is still at its end, so both of them come to rest whatever
     /// the pointer did. A row let go over the transport row, over another bay,
     /// or off the viewport has nowhere to land, and a load aimed at the
-    /// nearest strip would be a deck nobody pointed at.
+    /// nearest strip would be a deck nobody pointed at. **A cell whose letter
+    /// names no slot is one of those places**: the row is four cells whatever
+    /// the deck holds, so the fourth cell of a three-slot deck is a rectangle
+    /// with nothing behind the letter on it
+    /// ([`crate::view::ProgramBay::dropped`]).
     ///
     /// **The Set is named because the caller has a sentence to say**, and
     /// saying nothing at all is the failure this arm is against: a gesture
@@ -1096,7 +1111,8 @@ impl Panel {
     ///
     /// # `onto` is the destination, resolved by whoever can resolve it
     ///
-    /// **Which deck's strip the pointer is over**, or `None` for none — and
+    /// **Which deck the rectangle under the pointer names** — a mixer strip
+    /// or one of the four deck preview cells — or `None` for neither, and
     /// `None` for every release that is not a carry, because the other two
     /// drags have no destination to name. A boundary comes to rest where the
     /// layout put it and the layout is asked; a fader's rest is the deck's and
