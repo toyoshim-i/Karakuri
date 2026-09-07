@@ -350,7 +350,35 @@
   .scopes { display: flex; gap: 4px; padding: 7px 9px; border-bottom: 1px solid var(--c-hair); flex-wrap: wrap; }
   .scope { padding: 0 8px; border-radius: 999px; color: var(--c-faint); }
   .scope.sel { color: var(--c-lav); background: color-mix(in srgb, var(--c-lav) 15%, transparent); font-weight: 500; }
+  /* ── Where this library is pointed ───────────────────────────────────────
+     The `folder` scope's row, drawn whichever chip is marked because it is
+     also where a send lands and a destination has to be on screen before the
+     press. It is faint because it is a readout: nothing in it takes a press,
+     and what re-points it is another folder dropped on the window.
+
+     It is drawn only once a folder has been chosen, so this rule has no empty
+     state and there is no placeholder here to write — a run that has had no
+     folder dropped on it draws the scopes straight onto `.lib-filters`, which
+     is `.stage-list`'s answer to an empty lane one bay down: a line saying
+     there is nothing would be a sentence about an absence.
+
+     `.path.incoming` is the row while a folder is over the window, and it is
+     the whole of the mark that gesture gets. A folder dragged in from outside
+     tells this window a path and never a position — no pointer arrives with
+     the hover and none with the release — so nothing can be ringed the way
+     `.strip.drop` rings the rectangle a carried Set would land on, and what is
+     drawn is the path itself. `--c-text` for `.strip.drop`'s reason: the text
+     ink is what a word is drawn in when nothing is being said about it, and
+     nothing is being said here about whether the release will be allowed. It
+     is the row coming up out of its own faint rather than a second colour, so
+     the line that changes is the line that will hold the answer.
+
+     The panel above does not wear it, and that is not an omission: it is
+     already drawing a Set in hand over the mixer, and a carry and a folder
+     coming in from the desktop are not two drags that can be running at
+     once. */
   .path { padding: 4px 10px; color: var(--c-faint); border-bottom: 1px solid var(--c-hair); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .path.incoming { color: var(--c-text); }
   .lib-filters { display: flex; gap: 5px; padding: 6px 9px; border-bottom: 1px solid var(--c-hair); }
   .field { border: 1px solid var(--c-line); border-radius: 999px; padding: 0 9px; color: var(--c-faint); flex: 1; min-width: 0; }
   .lib-list { display: flex; flex-direction: column; padding: 3px; }
