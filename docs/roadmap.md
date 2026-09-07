@@ -1065,9 +1065,21 @@ slot is running and the Staging lane draws that verdict; what cannot happen is t
 describes, because a refused build installs nothing — a failed compile makes no `Request` and a
 rolled-back trial leaves the previous Set running — so the honest picture after a rejection is the
 material that is still there. `crates/karakuri-engine/tests/deck.rs`'s
-`a_rejected_build_shows_what_is_still_running_and_a_cold_slot_shows_black` asserts both ends of it.
+`a_rejected_build_shows_what_is_still_running` asserts it.
 **What is owed is the page's sentence**, and the open question under it is whether a cell ever
 carries a diagnostic or whether saying what went wrong stays the Staging lane's.
+
+**A cell now shows material *running*, which is the other half of the same requirement and was
+missing until 2026-09-07.** Every slot was drawn and only some were stepped, so a cell for an
+off-air slot showed the still it stopped at — or, for a slot that had been off air since the window
+opened, near-black. **A still is not what the operator is deciding from**, and a cell off the room's
+tempo is not a preview of what putting that slot on air would look like, so every drawn slot is now
+stepped on every frame at the session's tempo:
+[ADR-0269](adr/0269-a-slot-that-is-drawn-is-stepped-and-a-preview-runs-at-the-rooms-tempo.md). That
+retires the governor's priming rate, makes `Residency::Allocated` mean *off air and asked of
+nothing* rather than *at rest*, and takes the *cold slot shows black* half of the test above with it
+— no deck can show a never-stepped Set any more. **What it leaves owed is one number**, and it is
+under *Performance discipline* below rather than here.
 
 **The panel serves MCP.** `karakuri --mcp PORT` binds `127.0.0.1:PORT` and runs
 `karakuri_environment::mcp::serve` with the same `Opening` the four bay-head pills write, so a pill
@@ -1314,6 +1326,17 @@ preview cell shows, and when*).
 measures a Set, and a frame is passes this project has never timed together. The instrument question
 [P-0095](principles/0095-an-instrument-that-cannot-measure-says-so-rather-than-reporting-a-number.md) asks of any number applies to
 this one and has no answer yet.
+
+**The gap widened on 2026-09-07 and the record says so rather than closing it.**
+[ADR-0269](adr/0269-a-slot-that-is-drawn-is-stepped-and-a-preview-runs-at-the-rooms-tempo.md) steps
+every drawn slot on every frame, so an off-air slot now costs its L1 as well as its L4 and neither is
+in `Report::committed_ms`, which sums the **Live** slots. That field says what it means and an
+admission decision needs exactly it; what nothing computes is the deck's total, which is the
+per-slot `Decision::cost_ms` summed. Making `committed_ms` that total would leave `over_budget` — the
+governor's one warning — permanently on for any four-slot deck of heavy material, which is why it was
+not done in passing. **The same change also measured the thing this item is about**: the four-slot
+frame that *"measured about 10 ms and registered as no violation at all"* is 21 ms with every slot
+warm and was 209 ms with three of them cold, and it still registers as no violation at all.
 
 #### The preparation slot is the measurement
 

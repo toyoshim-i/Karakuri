@@ -2406,20 +2406,29 @@ proc wash {
         );
     }
 
-    /// **`Allocated` keeps its state.** A slot taken off air does not advance while
-    /// it is off, and resumes where it stopped when it comes back — it does not
-    /// restart, and it does not quietly catch up.
+    /// **`Allocated` leaves the mix and keeps running.** A slot taken off air
+    /// goes on advancing at the room's tempo, and comes back on the beat the
+    /// rest of the deck is on rather than at the `t` it left on.
     ///
     /// `t` is the sharpest witness available: simulation time only moves through
-    /// `Set::prepare`, and a slot that is not `Live` is never handed one. That is
-    /// the same property `swap.rs` already leans on to park an outgoing Set across
-    /// a watchdog window, which is why it costs nothing to have here.
+    /// `Set::prepare`, and every slot is handed one on every frame
+    /// (ADR-0269) — so what going off air changes is the mix and nothing else.
     ///
-    /// This is two of the three residency levels. `Priming` — stepping
-    /// hidden at a reduced rate — is the next slice and needs the budget governor
-    /// to be worth having.
+    /// **It used to assert the opposite**, and the sentence it asserted —
+    /// *`Allocated` keeps its state; a slot taken off air does not advance while
+    /// it is off, and resumes where it stopped* — is the behaviour ADR-0269
+    /// removed. What made it wrong is the cell: a slot that stands still while
+    /// it is off air is a slot whose preview is a still, and the operator is
+    /// deciding from that preview. The property it leaned on is still true
+    /// somewhere, and that somewhere is `swap.rs`, which parks an *outgoing
+    /// Set* across a watchdog window — a Set held outside the deck, which no
+    /// residency reaches.
+    ///
+    /// Substepped while it is off air, so that "kept up" is a claim about steps
+    /// rather than about frames: three steps a frame for ten frames is thirty,
+    /// and a slot stepping once a frame regardless would read ten.
     #[test]
-    fn a_slot_taken_off_air_keeps_its_t_and_resumes_where_it_stopped() {
+    fn a_slot_taken_off_air_keeps_running_and_comes_back_on_the_beat() {
         let gpu = Gpu::headless().expect("no GPU available");
         let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
         let mut deck = deck_of(&gpu, &[SEED_A, SEED_B]);
@@ -2434,20 +2443,19 @@ proc wash {
         assert_eq!(deck.live_slots(), 1);
         assert_eq!(deck.slot_count(), 2, "going off air does not free the slot");
 
-        // Substepped while it is away, so that "did not advance" is a claim about
-        // steps rather than about frames.
         for _ in 0..10 {
             frame(&gpu, &mut deck, &present, 3);
         }
         assert_eq!(
             steps_taken(deck.slot(0).set()),
             40,
-            "the on-air slot did not step normally while the other was parked"
+            "the on-air slot did not step normally while the other was off air"
         );
         assert_eq!(
             steps_taken(deck.slot(1).set()),
-            10,
-            "an Allocated slot advanced: something is calling `prepare` on it"
+            40,
+            "an off-air slot did not keep the room's tempo: nothing is calling \
+             `prepare` on it, so its cell is a still rather than a preview"
         );
 
         // What the mix shows while it is away is what the remaining slot shows.
@@ -2472,8 +2480,8 @@ proc wash {
         }
         assert_eq!(
             steps_taken(deck.slot(1).set()),
-            15,
-            "the returning slot did not resume from where it was parked"
+            45,
+            "the returning slot did not come back where the room is"
         );
         assert_eq!(steps_taken(deck.slot(0).set()), 45);
         assert_eq!(deck.live_slots(), 2);
@@ -2556,13 +2564,22 @@ proc wash {
         }
     }
 
-    /// **An off-air slot is drawn into its own target every frame, and never
-    /// stepped.**
+    /// **An off-air slot is drawn into its own target every frame, and stepped
+    /// every frame.**
     ///
-    /// ADR-0258's *residency does not gate a cell* and *looking adds a draw and
-    /// never a step*, together. The slot an operator most needs to look at is the
-    /// one that is not on air yet, and the look may not move it
-    /// ([P-0082](../../../docs/principles/0082-looking-never-writes-back.md)).
+    /// ADR-0258's *residency does not gate a cell*, and ADR-0269's *a slot that
+    /// is drawn is stepped*. The slot an operator most needs to look at is the
+    /// one that is not on air yet, and what they need to see is the material
+    /// running rather than the still it stopped at.
+    ///
+    /// **`t` still moves for the deck's reason and not the monitor's**, which is
+    /// what keeps
+    /// [P-0082](../../../docs/principles/0082-looking-never-writes-back.md)
+    /// intact: the step is the residency's, and taking every cell off this
+    /// console would not stop one of them. What the test can see of that is that
+    /// the two off-air levels advance by the frame's steps and by nothing else —
+    /// a draw that stepped the slot as well would show up as a slot that took
+    /// two.
     ///
     /// **The resize is what makes this a test of *this* frame's draw.** A slot
     /// target persists, so a parked slot that was Live a moment ago keeps the last
@@ -2572,11 +2589,10 @@ proc wash {
     /// one is the only frame on which the target's contents can only have come
     /// from a draw recorded on it.
     ///
-    /// Both off-air levels are covered, because they are two branches:
-    /// `Allocated` draws and never steps, `Priming` steps on the governor's rate
-    /// and draws on every frame regardless.
+    /// Both off-air levels are covered even though they are now one branch,
+    /// because they are two *residencies* and a surface reads them apart.
     #[test]
-    fn an_off_air_slot_is_drawn_every_frame_and_never_stepped() {
+    fn an_off_air_slot_is_drawn_every_frame_and_steps_every_frame() {
         let gpu = Gpu::headless().expect("no GPU available");
 
         for residency in [Residency::Allocated, Residency::Priming] {
@@ -2590,14 +2606,10 @@ proc wash {
                 frame(&gpu, &mut deck, &present, 1);
             }
             deck.set_residency(1, residency);
-            // One in a thousand, so that across the frames below the Priming
-            // slot steps on the first and on none of the rest — the draw has to
-            // be there on the frames it does not step.
-            deck.set_prime_one_in(1, 1000);
             for _ in 0..4 {
                 frame(&gpu, &mut deck, &present, 1);
             }
-            let parked_at = steps_taken(deck.slot(1).set());
+            let off_air_at = steps_taken(deck.slot(1).set());
 
             // **The target is thrown away and remade**, so nothing in it can be
             // left over from when the slot was Live.
@@ -2618,23 +2630,15 @@ proc wash {
                  operator is deciding whether to bring the slot up (ADR-0258)"
             );
 
-            // And the look did not move it. `Allocated` may not have stepped at
-            // all; `Priming` may have stepped only on the frames the governor's
-            // rate allows, which at one in a thousand is the frame it entered
-            // Priming and no other.
-            let after = steps_taken(deck.slot(1).set());
-            match residency {
-                Residency::Allocated => assert_eq!(
-                    after, parked_at,
-                    "drawing an Allocated slot advanced it — looking never writes back \
-                     (P-0082)"
-                ),
-                _ => assert_eq!(
-                    after, parked_at,
-                    "a Priming slot stepped on a frame its rate did not allow, so the \
-                     draw is stepping it"
-                ),
-            }
+            // And it advanced by the frame's steps and by no more: the draw is
+            // not a second step on top of the residency's (P-0082).
+            assert_eq!(
+                steps_taken(deck.slot(1).set()),
+                off_air_at + 1,
+                "a slot at {residency:?} did not take exactly the one step the frame \
+                 gave it — either it is standing still, which makes its cell a still \
+                 (ADR-0269), or the draw is stepping it as well (P-0082)"
+            );
 
             // The mix is still only the Live slot's, which is the other half:
             // drawn is not mixed.
@@ -2653,35 +2657,34 @@ proc wash {
         }
     }
 
-    /// **A slot whose build was rejected shows what is still running, and a slot
-    /// with nothing behind the draw shows black.**
+    /// **A slot whose build was rejected shows what is still running.**
     ///
-    /// The two failure cases ADR-0258 has to answer honestly, and the answer is not
-    /// the same for both because the states are not the same.
+    /// One of the failure cases ADR-0258 has to answer honestly. A rejected build
+    /// changes nothing — `swap.rs` is explicit that the running Set keeps
+    /// running, with its `t` and its live count untouched — so the honest picture
+    /// is the material that is still there, drawn on the frame after the
+    /// rejection exactly as on the frame before. Anything else would be the cell
+    /// inventing a state the deck is not in. What says a build was refused is
+    /// `Event::Rejected`, which the Staging lane draws; the cell's job is the
+    /// picture.
     ///
-    /// **A rejected build changes nothing** — `swap.rs` is explicit that the
-    /// running Set keeps running, with its `t` and its live count untouched — so
-    /// the honest picture is the material that is still there, and it is drawn on
-    /// the frame after the rejection exactly as on the frame before. Anything else
-    /// would be the cell inventing a state the deck is not in. What says a build
-    /// was refused is `Event::Rejected`, which the Staging lane draws; the cell's
-    /// job is the picture.
+    /// **The other half of this test is gone, and it is gone because the state
+    /// it asserted is unreachable.** It read: *a Set that has never stepped has
+    /// no element state, so its draw is a pass over zeroed buffers — every
+    /// element at the origin, a handful of texels in the middle of an otherwise
+    /// black frame*, which is the cold end of a slot and was what priming
+    /// existed to fix. ADR-0269 steps every slot on every frame, so the first
+    /// frame a slot is drawn on is a frame it has already stepped: no deck can
+    /// show a never-stepped Set, and a test asserting one would be asserting
+    /// against a fixture rather than against the engine.
     ///
-    /// **A Set that has never stepped has no element state**, so its draw is a
-    /// pass over zeroed buffers: every element at the origin, which comes out as
-    /// a handful of texels in the middle of an otherwise black frame. Near-black
-    /// rather than exactly black, and the number is asserted against the Live
-    /// neighbour on the same frame rather than against a constant, because what
-    /// matters is that it carries no material. That is the cold end of a slot and
-    /// it is why priming exists — take a candidate down, warm it, look at it.
-    ///
-    /// **Black-because-drawn and black-because-nothing-drew are told apart by the
-    /// resize.** `Deck::resize` reallocates the target and wgpu hands it back
-    /// zeroed, so the count is checked at zero *before* the frame and above zero
-    /// after it: the pass ran, and what it put there is the cold Set's own answer
-    /// rather than a leftover.
+    /// **Nothing-drew and drew-nothing are still told apart by the resize.**
+    /// `Deck::resize` reallocates the target and wgpu hands it back zeroed, so
+    /// the count is checked at zero *before* the frame and above zero after it:
+    /// the pass ran, and what it put there is this Set's own answer rather than
+    /// a leftover.
     #[test]
-    fn a_rejected_build_shows_what_is_still_running_and_a_cold_slot_shows_black() {
+    fn a_rejected_build_shows_what_is_still_running() {
         let gpu = Gpu::headless().expect("no GPU available");
         let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
 
@@ -2705,46 +2708,12 @@ proc wash {
             HEIGHT,
         );
 
-        // --- the cold slot -------------------------------------------------
-        // Off air from the first frame, so it has never stepped.
+        // --- the rejected build --------------------------------------------
+        // Warm the slot first, so there is a picture for a rejection to leave
+        // alone. Off air is enough: an off-air slot steps (ADR-0269).
         deck.set_residency(1, Residency::Allocated);
         deck.resize(&gpu.device, WIDTH / 2, HEIGHT / 2);
         let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH / 2, HEIGHT / 2);
-        assert_eq!(
-            lit(&readback(&gpu, deck.slot_target(1))),
-            0,
-            "the reallocated target came back with something in it, so nothing below \
-             can tell a fresh draw from a stale one"
-        );
-        frame(&gpu, &mut deck, &present, 1);
-        assert_eq!(
-            steps_taken(deck.slot(1).set()),
-            0,
-            "the cold slot stepped, so it is not cold and this half asserts nothing"
-        );
-        let cold = lit(&readback(&gpu, deck.slot_target(1)));
-        let neighbour = lit(&readback(&gpu, deck.slot_target(0)));
-        assert!(
-            neighbour > 100,
-            "the Live neighbour is dark too, so the frame recorded nothing at all and \
-             nothing below is the cold slot's own answer"
-        );
-        assert!(
-            cold > 0,
-            "no pass was recorded for the cold slot: its target is exactly what the \
-             resize left, so its cell would be showing a reallocation rather than a Set"
-        );
-        assert!(
-            cold * 50 < neighbour,
-            "a Set that has never stepped drew {cold} lit texels against the neighbour's \
-             {neighbour}: it has no element state, so anything approaching material here \
-             did not come from the material"
-        );
-
-        // --- the rejected build --------------------------------------------
-        // Warm the slot first, so there is a picture for a rejection to leave
-        // alone: `Priming` steps it out of the room.
-        deck.set_residency(1, Residency::Priming);
         for _ in 0..8 {
             frame(&gpu, &mut deck, &present, 1);
         }
@@ -2753,10 +2722,10 @@ proc wash {
             warmed > 0,
             "the slot did not warm, so there is nothing to keep"
         );
-        deck.set_residency(1, Residency::Allocated);
         frame(&gpu, &mut deck, &present, 1);
         let before = readback(&gpu, deck.slot_target(1));
         assert!(lit(&before) > 100, "the warmed slot drew nothing");
+        let at_rejection_start = steps_taken(deck.slot(1).set());
 
         // A capacity outside the L1's declared range: the worker builds it and
         // `Set::build` refuses, which is `Event::Rejected` and not a swap.
@@ -2785,8 +2754,13 @@ proc wash {
 
         let started = Instant::now();
         let mut rejected = false;
+        // Counted, because the slot goes on running while the worker refuses the
+        // build: what a rejection must not do is move the clock by anything
+        // other than the frames the room took.
+        let mut waited = 0u64;
         while !rejected {
             frame(&gpu, &mut deck, &present, 1);
+            waited += 1;
             for event in deck.events(1) {
                 match event {
                     Event::Rejected { .. } => rejected = true,
@@ -2798,11 +2772,13 @@ proc wash {
                 "waited {PATIENCE:?} for the rejection and it never arrived"
             );
         }
+        assert!(warmed > 0, "the slot never warmed");
 
         assert_eq!(
             steps_taken(deck.slot(1).set()),
-            warmed,
-            "the rejected build moved the running Set's clock"
+            at_rejection_start + waited,
+            "the rejected build moved the running Set's clock by something other than \
+             the frames that went past while it was being refused"
         );
         // The target is thrown away, so what comes back can only be this
         // frame's draw of the Set that survived the rejection.
@@ -2971,11 +2947,16 @@ proc wash {
     /// `Deck::begin_frame` gives every slot its frame boundary, off-air ones
     /// included — a build has to be able to land on a slot that is not showing,
     /// and retired Sets have to keep reaching the worker. What an off-air slot
-    /// must *not* get is a watchdog sample: it renders nothing, so the frame
-    /// interval the deck is producing is entirely the other slots' cost. Judging
-    /// against it accepts a candidate on a budget it never spent, and — with a
-    /// tight budget and busy neighbours, which is what this asserts because it is
-    /// the deterministic direction — rolls one back for cost it never caused.
+    /// must *not* get is a watchdog sample: the frame interval is one number for
+    /// the whole deck, so judging against it accepts a candidate on a budget it
+    /// never spent, and — with a tight budget and busy neighbours, which is what
+    /// this asserts because it is the deterministic direction — rolls one back
+    /// for cost it never caused.
+    ///
+    /// **The reason used to be that an off-air slot renders nothing**, which
+    /// stopped being true when every slot started being drawn (ADR-0258) and
+    /// stepped (ADR-0269). The conclusion did not change with it: the ambiguity
+    /// is attribution, and one interval over four slots cannot be attributed.
     ///
     /// The budget here is zero, so nothing can pass it. While the slot is parked
     /// no verdict may arrive at all; the moment it goes Live, one must.
@@ -3064,10 +3045,10 @@ proc wash {
                 );
             }
         }
-        assert_eq!(
-            steps_taken(deck.slot(1).set()),
-            0,
-            "the parked slot was stepped"
+        assert!(
+            steps_taken(deck.slot(1).set()) > 0,
+            "the off-air slot did not step, so this test is no longer about a slot \
+             that is paying into the interval it is not being judged by"
         );
 
         // On air, it is judged — against a budget of zero, so it goes.
@@ -3110,17 +3091,24 @@ proc wash {
     /// of it is identical. Deck-of-one against deck-of-four is what a slot costs,
     /// which is dominated by the Set and not by the mix.
     ///
-    /// **The last pair is what ADR-0258 costs**, and it is why it is measured here
-    /// rather than argued in a comment. Every slot is drawn on every frame so
-    /// that its console cell has something in it, which on the panel's own deck
-    /// is one Live slot and three off-air draws. `Residency::Allocated` is the
-    /// after; `Residency::Priming` at one step in a very large number is the
-    /// before, since the governor's rate makes it step on no frame in the window
-    /// and the branch is otherwise the same — no, it is not: it draws too. So the
-    /// before is **a deck of one**, which is exactly what a four-slot deck with
-    /// three dark slots used to cost on the frame path: three slots that neither
-    /// stepped, drew, nor reached the composite. The difference between that line
-    /// and the four-slots-one-Live line is the whole of the bill.
+    /// **The last two lines are what ADR-0258 and ADR-0269 cost**, and it is why
+    /// they are measured here rather than argued in a comment. Every slot is
+    /// drawn and stepped on every frame so that its console cell shows the
+    /// material running, which on the panel's own deck is one Live slot and
+    /// three off-air ones. `deck of one` is what a four-slot deck used to cost
+    /// on the frame path when three of its slots neither stepped, drew, nor
+    /// reached the composite; the gap between it and `four, one Live` is the
+    /// whole of the bill.
+    ///
+    /// **`four, one Live, cold` is the same deck never warmed**, which is the
+    /// panel's own state rather than this test's convenience: three slots off
+    /// air since the window opened. Before ADR-0269 it read about 209 ms against
+    /// the warm line's 20.7 — an unstepped Set draws its whole capacity at the
+    /// origin — and it now reads what the warm line reads, because the slots are
+    /// warm after one frame. **The 209 was this material's number and not the
+    /// instrument's**: capacity 262144 with additive blending is deliberately
+    /// aggressive, and the same shape at capacity 4096 costs a couple of
+    /// milliseconds.
     ///
     /// `#[ignore]`d because four simulations at capacity 262144 is a real
     /// workload, and `cargo test` should not be one.
@@ -3234,6 +3222,47 @@ proc wash {
             }
             out
         };
+        // **The same deck, never warmed**, which is the panel's own state
+        // rather than this test's: three slots that have been off air since
+        // the window opened, holding element state `Simulation::initialize`
+        // filled with zeros. Every element is at the origin, so the whole
+        // capacity is drawn at one clip position and the raster back end
+        // serialises order-dependent blending at that one address. The gap
+        // between this line and `four, one Live` is what an unstepped draw
+        // costs, and it is the reason ADR-0269 steps every drawn slot.
+        let one_live_cold = {
+            let seeds = [SEED_A, SEED_B, SEED_A + 1, SEED_B + 1];
+            let swaps = seeds
+                .iter()
+                .map(|&seed| {
+                    let mut set = Set::build(
+                        &gpu.device,
+                        &gpu.queue,
+                        &compile(L1),
+                        &compile(L4),
+                        CAP,
+                        seed,
+                    )
+                    .expect("the pair is compatible");
+                    set.resize(&gpu.device, W, H);
+                    HotSwap::fixed(set)
+                })
+                .collect();
+            let mut deck = Deck::new(&gpu.device, swaps, W, H);
+            // Off air before a frame has ever run, so nothing warmed them.
+            for slot in 1..4 {
+                deck.set_residency(slot, Residency::Allocated);
+            }
+            let mut out = Vec::new();
+            for i in 0..WARMUP + MEASURED {
+                let at = Instant::now();
+                frame(&gpu, &mut deck, &present, 1);
+                if i >= WARMUP {
+                    out.push(at.elapsed().as_secs_f32() * 1_000.0);
+                }
+            }
+            out
+        };
 
         let deck_mb = 4.0 * f64::from(W) * f64::from(H) * 8.0 / 1_048_576.0;
         eprintln!(
@@ -3244,6 +3273,7 @@ proc wash {
         summarize("deck of one", one);
         summarize("deck of four", four);
         summarize("four, one Live", one_live);
+        summarize("four, one Live, cold", one_live_cold);
         eprintln!(
             "  `deck of one` is what `four, one Live` cost before every slot was drawn: \n               the three off-air slots did nothing at all on the frame path. The gap between \n               those two lines is what ADR-0258 costs on this machine."
         );

@@ -188,16 +188,20 @@
 //! holds this program's one pair at its own salt, since a `HotSwap` cannot
 //! hold nothing and this program has no second pair to give one. Deck A is
 //! Live; the other three rest at `Residency::Allocated`, which is what a
-//! channel nobody has asked anything of is: not stepping and contributing
-//! nothing to the mix. An operator brings one up by cycling its tally or by
-//! loading a Set into it.
+//! channel nobody has asked anything of is: contributing nothing to the mix,
+//! and running all the same. An operator brings one up by cycling its tally or
+//! by loading a Set into it.
 //!
-//! **Every cell draws, whatever its slot's residency.** An off-air slot is
-//! drawn into its own target and never stepped, because the slot nobody is
-//! watching is the candidate and the cell is what it is judged from
-//! ([ADR-0258](../../../docs/adr/0258-the-look-comes-before-the-fader-so-a-cell-draws-every-slot-and-says-which-nothing-it-is.md)).
-//! It costs a draw per slot and that draw is outside the governor's
-//! arithmetic; the roadmap's *Performance discipline* carries what is owed.
+//! **Every cell draws, and every slot steps, whatever its residency.** An
+//! off-air slot is stepped and drawn into its own target on every frame, at the
+//! room's tempo, because the slot nobody is watching is the candidate and the
+//! cell is what it is judged from
+//! ([ADR-0258](../../../docs/adr/0258-the-look-comes-before-the-fader-so-a-cell-draws-every-slot-and-says-which-nothing-it-is.md)),
+//! and a cell drawn from a slot nothing is stepping is a still rather than a
+//! look at the material
+//! ([ADR-0269](../../../docs/adr/0269-a-slot-that-is-drawn-is-stepped-and-a-preview-runs-at-the-rooms-tempo.md)).
+//! It costs a step and a draw per slot, both outside the governor's arithmetic;
+//! the roadmap's *Performance discipline* carries what is owed.
 //!
 //! **Each cell is its own deck's monitor and cannot be another's.** A cell is
 //! presented from `Deck::slot_view` for the slot it is lettered for — that
@@ -291,7 +295,7 @@ use karakuri_console::view::{
 // [`SLOTS`]. Not re-exported at the crate root, and asked of the module that
 // declares it rather than transcribed here.
 use karakuri_engine::deck::MAX_SLOTS;
-use karakuri_engine::governor::{Reason, Report, SLOWEST_PRIME_ONE_IN};
+use karakuri_engine::governor::{Reason, Report};
 // The engine's own `Published`, and its node kinds under the word the address
 // uses for them: `Kind` is already the console's *region* kind on this side,
 // and one word cannot be two things in one file.
@@ -2538,11 +2542,14 @@ impl Readout {
              the mix, always — there is no control that swaps it for one deck, and the \
              cells are why there does not need to be (ADR-0240). {} — that is about the \
              MIX and not about the cells: a slot that is not LIVE is drawn into its own \
-             target and skipped by the composite, so it is watchable and inaudible. a \
-             slot that is not stepping shows the still it stopped at and one that has \
-             never stepped shows black, which is priming's whole use. every cell costs a \
-             present pass of its own and three of the four are not in the compute budget \
-             — the bill ADR-0258 says is paid rather than argued.",
+             target and skipped by the composite, so it is watchable and inaudible. \
+             every slot steps every frame at the room's tempo, whatever its residency, so \
+             a cell shows material running rather than a still — a preview that is not on \
+             the beat is not a preview of what putting that slot on air would look like \
+             (ADR-0269). every cell costs a present pass of its own, and the step and the \
+             draw of the three that are not LIVE are outside the compute budget — the \
+             bill ADR-0258 says is paid rather than argued, with ADR-0269's three steps \
+             added to it.",
             match live.as_slice() {
                 [] => "nothing on this deck is LIVE, so the mix is empty".to_owned(),
                 [one] => format!(
@@ -2669,14 +2676,14 @@ impl Readout {
                 "the other {} — {} — {} allocated and {} asked for nothing: the governor \
                  reports `OffAir`, which is a slot at REST rather than a slot refused. each \
                  holds this program's one pair at its own seed salt, because a slot cannot \
-                 hold nothing and this program has no second pair to give one. it steps \
-                 nothing and reaches the mix not at all — but it IS drawn, into its own \
-                 target, every frame, which is what puts it in its cell and what ADR-0258 \
-                 asks for; the frame numbers below include those draws. a slot that has \
-                 never stepped has no element state, so a cell for a slot that has been \
-                 at rest since this window opened is black until something warms it — \
-                 which is what priming is for. an operator brings one up by cycling its \
-                 tally or loading a Set onto it.",
+                 hold nothing and this program has no second pair to give one. it \
+                 reaches the mix not at all — but it IS stepped and drawn, into its own \
+                 target, every frame, which is what puts running material in its cell and \
+                 what ADR-0258 and ADR-0269 ask for; the frame numbers below include both. \
+                 REST is about the mix and about what was asked for, and not about whether \
+                 the simulation runs: an operator brings one up by cycling its tally or \
+                 loading a Set onto it, and what they see in the cell before they do is \
+                 what they will get.",
                 match resting.len() {
                     1 => "slot",
                     _ => "slots",
@@ -2696,9 +2703,9 @@ impl Readout {
         println!("  {governed}");
         for decision in governed.parked() {
             println!(
-                "  slot {} (deck {}) parked, request held: {:?} — {}, against {}, and one \
-                 step in {SLOWEST_PRIME_ONE_IN} is the slowest rate the governor will call \
-                 priming",
+                "  slot {} (deck {}) parked, request held: {:?} — {}, against {}. the \
+                 request stands and the slot goes on stepping either way: a park withholds \
+                 the grant and not the simulation (ADR-0269)",
                 decision.slot,
                 deck_letter(decision.slot as u8),
                 decision.reason,
@@ -4064,21 +4071,26 @@ impl Sink for Presented {
 /// its channels; what is *in* them is this program's one pair at four salts,
 /// which is what a slot nobody has loaded anything into holds ([`Engine::new`]).
 /// [`ON_AIR`] is Live and is the whole of the picture. Every other slot rests
-/// at `Residency::Allocated` — not stepping and contributing nothing, though
-/// each is still drawn into its own cell —
+/// at `Residency::Allocated` — contributing nothing to the mix, and stepped
+/// and drawn into its own cell all the same —
 /// and [`ASKED_TO_PRIME`] is additionally asked to warm up and parked by the
 /// budget in [`Engine::ask_to_prime`], which is what puts a pending request on
-/// this panel for the mixer's tally to draw. **The three cost a draw each and
-/// no step**: measured on 2026-09-02, four slots at 262144 elements were about
-/// 10 ms a frame against one slot's 5.9, and none of it reaches the governor,
-/// which reads a per-Set cost. This sentence used to say the three cost
-/// nothing, which was true only while an off-air slot was not drawn.
+/// this panel for the mixer's tally to draw. **The three cost a step and a draw
+/// each**, and none of it reaches the governor, which reads a per-Set cost.
+/// This sentence has been wrong twice in the same direction — it said the three
+/// cost nothing while they were being drawn, and *a draw each and no step*
+/// while they were being stepped — so what it is now is the whole of a frame
+/// for every slot, which is what
+/// [ADR-0269](../../../docs/adr/0269-a-slot-that-is-drawn-is-stepped-and-a-preview-runs-at-the-rooms-tempo.md)
+/// makes it. The number that goes with it is not one this file can carry: it is
+/// `karakuri-engine`'s `tests/deck.rs`, which prints a deck of four against a
+/// deck of one on the machine reading it.
 ///
 /// **All four preview cells are on, whatever the decks are doing.** A cell is
 /// drawn because there is a slot behind it ([`Engine::aim`]), and this deck is
-/// full, so four cells show four slots' own material: deck A stepping and on
-/// air, deck B warming or parked, C and D standing at the still they stopped
-/// at. That is [ADR-0258](../../../docs/adr/0258-the-look-comes-before-the-fader-so-a-cell-draws-every-slot-and-says-which-nothing-it-is.md)
+/// full, so four cells show four slots' own material, all four of them
+/// running: deck A stepping on air, deck B warming or parked, C and D warming
+/// with nobody having asked. That is [ADR-0258](../../../docs/adr/0258-the-look-comes-before-the-fader-so-a-cell-draws-every-slot-and-says-which-nothing-it-is.md)
 /// met on this surface — the operator watches a candidate's cell to decide
 /// whether it is worth a fader, and then raises the fader. It used to be gated
 /// on `Residency::Live`, which left the three cells worth looking at dark; the
@@ -4960,12 +4972,13 @@ impl Engine {
         // which is a mixer set wrong rather than a mixer.
         //
         // `Residency::Allocated` is the state the engine already has for this,
-        // rather than one invented here — *compiled, buffers held, not
-        // stepping, keeps its `t`* — and `deck::Frame::render` reads the
-        // effective residency into the composite's `live` flag, so an
-        // allocated slot contributes nothing to the mix, draws nothing, and
-        // steps nothing. The strip reads ALLOC, the cell reads `off`, and the
-        // slot costs its buffers and no frame time. That is
+        // rather than one invented here — *off air, asked of nothing* — and
+        // `deck::Frame::render` reads the effective residency into the
+        // composite's `live` flag, so an allocated slot contributes nothing to
+        // the mix. It is drawn (ADR-0258) and it steps (ADR-0269), so what it
+        // costs is its buffers, its L1 and its L4, and what it does not cost is
+        // a term in the fold. The strip reads ALLOC and the cell reads material
+        // running. That is
         // [P-0085](../../../docs/principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md):
         // *a slot with nothing in it* is a residency this deck already has a
         // word for.
@@ -5080,13 +5093,17 @@ impl Engine {
     /// frame of measured per-Set cost — and what one of these Sets measures at
     /// is this machine's business rather than anything this file can know. So
     /// the budget is set **from the measurement that was just taken**: what
-    /// deck A is already committed to, plus half of the least the slowest
-    /// priming rate could ask for. [`SLOWEST_PRIME_ONE_IN`] is the slowest the
-    /// governor is willing to call priming and a slowed slot costs
-    /// `cost / n` amortised, so a headroom under `cost / SLOWEST_PRIME_ONE_IN`
-    /// cannot take this Set at **any** rate — the refusal is arithmetic on
-    /// every machine rather than on the ones where the numbers happen to come
-    /// out.
+    /// deck A is already committed to, plus **half** of what warming deck B was
+    /// measured at. Half of a cost is not that cost, so the request cannot fit
+    /// — the refusal is arithmetic on every machine rather than on the ones
+    /// where the numbers happen to come out.
+    ///
+    /// **It used to be an eighth of it, and the change is ADR-0269's.** The
+    /// governor could once admit a slot at one step in `SLOWEST_PRIME_ONE_IN`
+    /// frames and charge `cost / n` for it, so parking a request meant leaving
+    /// headroom under `cost / 8`. There is no rate left to undercut: a drawn
+    /// slot steps every frame, every slot is drawn, and a request either fits
+    /// at its whole measured cost or is parked.
     ///
     /// **A number computed from the measurement rather than a constant**,
     /// because a constant is the fixture the product cannot produce
@@ -5118,9 +5135,8 @@ impl Engine {
             self.deck.slot(ON_AIR).measured_cost(),
             self.deck.slot(ASKED_TO_PRIME).measured_cost(),
         ) {
-            self.deck.set_compute_budget_ms(
-                committed.ms + warming.ms / (2.0 * SLOWEST_PRIME_ONE_IN as f32),
-            );
+            self.deck
+                .set_compute_budget_ms(committed.ms + warming.ms / 2.0);
         }
         self.deck.govern()
     }

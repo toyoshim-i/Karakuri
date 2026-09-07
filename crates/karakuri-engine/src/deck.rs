@@ -91,9 +91,13 @@
 //!
 //! ## Residency: requested and effective
 //!
-//! All three levels are here now. [`Residency::Live`] is
-//! stepped and composited; [`Residency::Priming`] is stepped and **not drawn**;
-//! [`Residency::Allocated`] is compiled, buffers held, not stepping.
+//! All three levels are here now, and **two of them are the same thing seen
+//! from the operator's side.** [`Residency::Live`] is stepped, drawn and
+//! composited. [`Residency::Priming`] and [`Residency::Allocated`] are both
+//! stepped and drawn and reach the mix not at all; what tells them apart is
+//! that priming was asked for and granted, and nothing in this file behaves
+//! differently because of it —
+//! `docs/adr/0269-a-slot-that-is-drawn-is-stepped-and-a-preview-runs-at-the-rooms-tempo.md`.
 //!
 //! **A slot has two of them, and keeping them apart is the whole of this
 //! section.** They are different facts about different actors and the word
@@ -117,6 +121,13 @@
 //! is Priming and whose effective residency is Allocated is **parked** —
 //! waiting for room, not switched off.
 //!
+//! **A park no longer stops anything, and that is worth saying in the same
+//! breath.** Priming and Allocated run the same frame, so what the governor
+//! withholds when it parks a slot is the *grant* and not the simulation. The
+//! operator sees a park on the strip — the request standing against the
+//! residency — and does not see it in the cell, because the cell is showing
+//! material that is running either way.
+//!
 //! Parked is the state that has to survive, and it survives by *not being
 //! stored*: the effective residency is recomputed from the request on every
 //! [`Deck::govern`] pass, so a slot parked because the deck was full primes
@@ -129,86 +140,87 @@
 //!
 //! The property underneath all three, and the reason the set of levels is this
 //! set: **`t` advances through [`Set::prepare`](crate::set::Set::prepare) and
-//! nowhere else.** A slot that is not handed one does not move. So Allocated
-//! keeps its state and a slot taken off-air and put back resumes at the `t` it
-//! stopped at rather than restarting — `swap.rs` already leans on exactly this
-//! for rollback, parking the outgoing Set unstepped so it comes back where it
-//! was left.
+//! nowhere else.** A slot that is not handed one does not move.
 //!
-//! ## Priming steps; it does not draw
+//! **What used to follow from that no longer does, and the change is
+//! deliberate.** Allocated used to be handed no `prepare`, so a slot taken off
+//! air stood still and came back at the `t` it stopped at. It is handed one on
+//! every frame now, so it comes back at the `t` the room reached — which is
+//! what a cell showing it has been drawing the whole time. Nothing on the frame
+//! path relied on the old behaviour; what relies on a Set standing still is
+//! `swap.rs`, and that is a Set it holds **outside the deck** while a candidate
+//! is on trial, which no slot draws and no residency reaches.
 //!
-//! Priming was first specified as "rendering hidden at reduced rate and
-//! resolution". **That wording is superseded and this is the implementation, so
-//! the reasoning belongs here** — see
-//! `docs/adr/0053-priming-runs-the-simulation-and-skips-rendering.md`.
+//! ## Every off-air slot runs, and a preview is what it is for
 //!
-//! What needs warming is per-element state, and **L1 owns all of it**. An L1
-//! procedure's attributes live in the element buffers and are the only thing a
-//! simulation accumulates; L4 is stateless by construction — `Set`'s L4
-//! pipeline holds no per-element storage it
-//! writes, and every frame it reads whatever L1 last wrote and throws the
-//! result at a target. So a Set is warm exactly when its element buffers are
-//! warm, and reaching that state needs [`Set::prepare`] and the L1 passes and
-//! nothing else.
+//! **A slot that is drawn is stepped, on every frame, at the room's tempo.**
+//! Every slot is drawn (see the next section), so this is every slot —
+//! `docs/adr/0269-a-slot-that-is-drawn-is-stepped-and-a-preview-runs-at-the-rooms-tempo.md`.
 //!
-//! A Priming slot therefore runs `prepare` and [`Set::step`], and **skips the
-//! render entirely**. Not a smaller target: no target. There is no resolution
-//! to reduce, no draw to pay for, and no composite term — the mix skips
-//! anything that is not Live, which it already did for Allocated. That is
-//! strictly cheaper than a hidden render and it warms exactly the same
-//! state, because the state was never in the pixels.
+//! The argument is what a preview is for and not what it costs. ADR-0258 put
+//! every slot in a cell of its own because an operator has to see material
+//! before putting it on air, and the cell is what that decision is made on. A
+//! cell drawn from a slot nothing is stepping is not showing them the material:
+//! it is a still, or — for a slot that has never stepped, whose element buffers
+//! `Simulation::initialize` filled with zeros — it is black. The tempo half is
+//! the same argument at a finer grain. A cell running slower than the room is
+//! not a preview of what would happen if that slot went live, so there is no
+//! reduced rate to fall back to: it is every frame or it is not a preview.
 //!
-//! A Priming slot *is* drawn, and that is a different feature on a different
-//! surface — see "Every slot is drawn; only a Live slot is mixed" below. It
-//! puts the slot in its own monitor cell and changes nothing about what is
-//! warming: `Set::draw` is the raster half on its own and touches no state.
+//! **Priming is what is left over, and what is left over is the request.** It
+//! was first specified as "rendering hidden at reduced rate and resolution",
+//! and then as running the simulation and skipping the render
+//! (`docs/adr/0053-priming-runs-the-simulation-and-skips-rendering.md`). Both
+//! wordings are about a slot the room could not see, and neither survives a
+//! deck where every slot is drawn and every slot runs. What a Priming slot does
+//! that an Allocated one does not is *nothing*: the difference is that somebody
+//! asked for this one to be warmed and the governor granted it.
 //!
-//! It also removes a trap the reduced-resolution version carries: a Set primed at a
-//! reduced resolution is a Set whose L4 rasterised a different number of
-//! fragments per element — `point_rate` fixes a sprite's share of the frame,
-//! not its texel count — and if any of that ever fed back into state the primed result would
-//! not be the result of having been Live. Skipping the draw makes "primed for
-//! thirty frames, then Live" *identical* to "Live for thirty frames" rather
-//! than close to it, and `tests/priming.rs` asserts that bit for bit.
+//! Two things from that history are still load-bearing and stay:
 //!
-//! **"Reduced rate" survives and means something real.** A Priming slot may
-//! step on only some frames — one in `n`, decided by [`crate::governor`] from
-//! the budget. Its `t` then advances slower than wall time, which is correct
-//! and is the whole point: a priming slot is catching up, not keeping time.
-//! Nothing downstream can tell a slot that primed slowly from one that primed
-//! fast, because `t` is `steps_taken * dt` and both arrive at a given `t`
-//! having taken the same steps.
+//! **The state that needs warming is L1's, and only L1's.** An L1 procedure's
+//! attributes live in the element buffers and are the only thing a simulation
+//! accumulates; L4 is stateless by construction — `Set`'s L4 pipeline holds no
+//! per-element storage it writes, and every frame it reads whatever L1 last
+//! wrote and throws the result at a target. So a Set is warm exactly when its
+//! element buffers are warm. That is what makes drawing a slot free of
+//! consequence for what it is warming into, and it is why a preview at the
+//! deck's own resolution is not a different simulation from an on-air one: a
+//! Set primed at a reduced *resolution* would have rasterised a different
+//! number of fragments per element, and if any of that ever fed back into state
+//! the primed result would not be the result of having been Live.
 //!
-//! **That took one repair, and a Set with a signal binding is where it showed.**
-//! A Priming slot used to be handed the *session's* [`Signals`] at this frame's
-//! phase, because that is what every slot in the frame was handed. A slot
-//! stepping one frame in `n` has taken a fraction of the session's steps, so
-//! its `t` and the phase driving it came apart, and a bound param was sampled
-//! at instants the slot's own clock never reached — "primed at one-in-two then
-//! Live" was *not* bit-identical to "always Live" for a Set with a binding, and
-//! `spawn_rate` is a bound param in the ir-spec's own answer to irregular
-//! spawning, so it reached the population and not only the look.
-//!
-//! What closes it is a slot-local view of the one oscillator — the session's
-//! grid read at the slot's own position along it, not a second oscillator.
+//! **An off-air slot reads the grid at its own position on it.** A Set that has
+//! taken fewer steps than the session — one built and installed mid-set — would
+//! otherwise have a bound param sampled at instants its own clock never
+//! reached, and `spawn_rate` is a bound param in the ir-spec's own answer to
+//! irregular spawning, so it reaches the population and not only the look. What
+//! closes it is a slot-local view of the one oscillator — the session's grid
+//! read at the slot's own position along it, not a second oscillator.
 //! [`Set::prepare_warming`](crate::set::Set::prepare_warming) is that view and
 //! carries the argument; the position is expressed as a **lag in steps** rather
 //! than as a time, so a slot that is not behind reads the session's oscillator
-//! bit for bit and the identity is exact rather than nearly exact.
+//! bit for bit and the identity is exact rather than nearly exact. Every slot
+//! on a deck that came up together is such a slot, so on the ordinary deck this
+//! is `prepare` under another name.
 //!
-//! Two things that repair does not reach, both named where the code is: a
-//! tempo *correction* during a slow warm-up, since the grid is read as it
-//! stands rather than as it was, and measured audio, which has no past value to
-//! be read at. `tests/priming.rs` covers rate-invariance against a bound Set
-//! and the full-rate identity against a Live one — the second is the test that
-//! says which instant is the right one, and the first cannot see it.
+//! Two things that view does not reach, both named where the code is: a tempo
+//! *correction* while a slot is behind, since the grid is read as it stands
+//! rather than as it was, and measured audio, which has no past value to be
+//! read at.
 //!
-//! What Priming is *not* is a look at a slot. Seeing a slot before it goes on
-//! air wants a target and a draw; this is the warming, and the two are separate
-//! features that a single "render hidden" would have conflated. Both are built
-//! and they compose in exactly the way keeping them separate allowed: priming
-//! gives a parked candidate something to show, the per-slot draw shows it, and
-//! neither had to learn about the other.
+//! **What this buys, stated because it reads like a cost and is not.** An
+//! unstepped Set draws its whole capacity at the origin, so every primitive
+//! lands on one clip position and the raster back end serialises
+//! order-dependent blending at that one address. Measured on the reference
+//! workload — `drift_shell` + `soft_points` at capacity 262144, 1280x720, four
+//! slots with one Live — a deck whose three off-air slots had never stepped ran
+//! at a **209.7 ms** median frame, and the same deck with them stepping runs at
+//! **20.7 ms**. `tests/deck.rs`'s
+//! `the_cost_of_a_slot_and_of_the_composite_are_measured_and_reported` prints
+//! both. That is this material's number and not the instrument's — the same
+//! shape at capacity 4096 costs a couple of milliseconds — and it is a
+//! consequence rather than the reason: not stepping was wrong when it was free.
 //!
 //! ## Every slot is drawn; only a Live slot is mixed
 //!
@@ -219,15 +231,19 @@
 //! in [`Frame::render`] — the residency branches decide the first, the
 //! composite's `live` flag decides the second.
 //!
-//! The rule inside that is one line, and it is
-//! `docs/adr/0072-auditioning-adds-a-draw-and-never-a-step.md`: **looking adds
-//! a draw and never a step.** The Live branch steps and draws. The Priming
-//! branch steps on the frames the governor allows and draws on all of them. The
-//! Allocated branch draws and never steps, so what it shows is the still it
-//! stopped at. Nothing here advances a clock because something is being looked
-//! at — [`crate::set::Set::draw`] is the raster half on its own, and `t` moves
-//! only through `Set::prepare`
-//! (`docs/principles/0082-looking-never-writes-back.md`).
+//! **Looking still adds a draw and never a step**
+//! (`docs/adr/0072-auditioning-adds-a-draw-and-never-a-step.md`,
+//! `docs/principles/0082-looking-never-writes-back.md`), and ADR-0269 does not
+//! touch that: the step an off-air slot takes is not the monitor's. Take every
+//! cell off this console and every slot goes on stepping, because a resident
+//! slot runs — that is the deck's, decided by residency, and the cell is a read
+//! of it. What P-0082 rules out is a preview that moves the thing it was opened
+//! to judge, and the deck it rules out is the one where watching a slot is what
+//! makes it advance. Here nothing advances *because* it is looked at, and the
+//! failure P-0082 names — you watch a moving picture, decide you like it, put it
+//! on air, and it is not where you were looking — is what the old Allocated
+//! branch produced rather than prevented: it showed a still, and the material
+//! moved the moment the fader came up.
 //!
 //! **There is no chooser, and that is the change.** A `preview: Option<usize>`
 //! lived here with `Deck::set_preview` as its only writer: one slot at a time
@@ -255,28 +271,38 @@
 //! `docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md`
 //! loses, and it loses for the reason written there: a rule protecting a
 //! performance may not be used to remove what the performance is played with.
-//! What bounds it is that a draw is a raster pass over element state that is
-//! already packed — no `prepare`, no compute, no allocation — so an off-air
-//! slot costs its L4 and nothing else.
+//!
+//! **ADR-0269 adds three steps a frame to that bill and does not add a
+//! refusal.** The sentence that used to bound the bill — a draw is a raster
+//! pass over state that is already packed, so an off-air slot costs its L4 and
+//! nothing else — is retired: an off-air slot costs its L1 as well. The
+//! governor is not asked about it, and the reason is the same one written
+//! above. A governor that could refuse the step would be a governor that could
+//! take a cell back to a still, which is the state ADR-0258 and ADR-0269 exist
+//! to remove; and the existing refusal it would be spelled as, a park, is about
+//! a *request* to prime rather than about whether a slot runs. So the only
+//! thing the governor does with an off-air slot's cost is report it, and the
+//! measurement above is the answer to whether the bill is payable: it is
+//! smaller than the one it replaces.
 //!
 //! ## Determinism
 //!
-//! Every Live slot is advanced by the same `steps`, from the same tick, in the
+//! **Every slot** is advanced by the same `steps`, from the same tick, in the
 //! same frame. Two runs with the same tick sequence and the same seeds
 //! composite to the same pixels, and that depends on the *order* of the sum as
 //! much as on the values: floating-point addition is not associative, which is
 //! why this repository has order-preserving compaction at all.
 //!
-//! Priming is inside that invariant rather than beside it. Which frames a
-//! Priming slot steps on is `frames_primed % prime_one_in`, counted from the
-//! frame it entered Priming — engine state advanced by the same frame loop
-//! everything else is, with no clock anywhere in it. The rate itself comes from
-//! [`crate::governor`], whose inputs are measurements taken at build time and
-//! residencies, and which visits slots in index order. So a record stream that
+//! **ADR-0269 took a counter out of that rather than adding one.** Which frames
+//! an off-air slot stepped on used to be `prime_phase % prime_one_in`, a rate
+//! the governor chose out of a budget; every slot steps on every frame now, so
+//! there is no phase to reproduce and no rate for a measurement to reach. What
+//! is left is what a slot is *given*, which is this frame's `steps` off this
+//! frame's tick — the same input every other slot gets. A record stream that
 //! primes a slot for a while and then puts it on air reproduces exactly, which
-//! `tests/priming.rs` asserts — the priming half of it. The governor's index
-//! order is asserted separately, in `tests/governor.rs`, because `govern` is
-//! not on the frame path and a bit-for-bit render comparison cannot see it.
+//! `tests/priming.rs` asserts. The governor's index order is asserted
+//! separately, in `tests/governor.rs`, because `govern` is not on the frame
+//! path and a bit-for-bit render comparison cannot see it.
 //!
 //! So the compositing order is the slot index, and nothing else. Slots live in
 //! a `Vec` and are visited by index; there is no `HashMap` in the path, and
@@ -340,22 +366,26 @@
 //! record stream and the same seed produce the same bound parameter values,
 //! bit for bit, on every run.
 //!
-//! An `Allocated` slot is not prepared, so it reads no signals while it is off
-//! air and its `t` stands still — but the session clock does not stop, because
-//! it is the session's rather than the slot's. A slot brought back on air
-//! rejoins the beat the rest of the deck is on rather than resuming a phase of
-//! its own, which is the right answer for the same reason the tempo is shared.
+//! **Every slot reads signals now**, off air as much as on: an off-air slot is
+//! prepared on every frame and its `t` runs with the room's, which is what
+//! makes its cell a preview rather than a still.
 //!
-//! A `Priming` slot is the one case that reads the grid somewhere other than
-//! the session's position on it. It steps on some frames and not others, so its
-//! `t` falls behind at a rate the *governor* chose, and giving it the session's
-//! phase would make that rate decide what it warms into. It reads the same
-//! oscillator, held back by the steps it has not taken —
-//! [`Set::prepare_warming`](crate::set::Set::prepare_warming) — and rejoins the
-//! session's position the moment it goes on air, where nothing sees the jump
-//! because the frame before was not drawn. A slot that is not behind is held
-//! back by nothing and reads the session's oscillator itself, which is what
-//! keeps the identity above bit-exact for bound material.
+//! An off-air slot reads the grid at *its own* position on it —
+//! [`Set::prepare_warming`](crate::set::Set::prepare_warming) — and that
+//! matters in exactly one case: a Set that has taken fewer steps than the
+//! session, which is one built and installed after the session began. It is
+//! held back by the steps it has not taken, so what it warms into does not
+//! depend on when it arrived, and it rejoins the session's position the moment
+//! it goes on air. A slot that is not behind is held back by nothing and reads
+//! the session's oscillator itself, bit for bit — which is every slot on a deck
+//! that came up together, and is what keeps the identity above exact for bound
+//! material.
+//!
+//! **The discontinuity that leaves is on the cell of a slot that is behind**,
+//! and it is named rather than closed: material that reads `beats` or carries a
+//! binding moves the moment such a slot goes on air, by however far behind it
+//! is. Closing it means reading the session's grid instead, which is the defect
+//! `Set::prepare_warming` cost a repair to fix.
 //!
 //! ## Transport
 //!
@@ -366,11 +396,12 @@
 //! session's own step count and is what every slot did before the module
 //! existed.
 //!
-//! **Priming deliberately has no transport.** A warming slot is catching up on
-//! a rate the *governor* chose, which is a different mechanism answering a
-//! different question, and two things in charge of one clock is how a slot ends
-//! up somewhere neither of them meant. The transport applies when a slot is on
-//! air and at no other time.
+//! **An off-air slot deliberately has no transport.** Its cell has to be a
+//! preview of what putting this slot on air would look like, and a preview on a
+//! clock of its own is a preview of nothing — which is the same argument that
+//! makes it step every frame (ADR-0269). The transport applies when a slot is
+//! on air and at no other time, so arranging one is visible from the moment the
+//! fader comes up and not before.
 //!
 //! ## Level metering
 //!
@@ -709,29 +740,34 @@ impl Blend {
 
 /// Where a slot sits between compiled and composited.
 ///
-/// All three levels. The ordering of the variants is the
-/// ordering of how much a slot costs, which is the order
-/// [`crate::governor`] moves slots down.
+/// All three levels. The ordering of the variants is the ordering of how much
+/// a slot costs, which is the order [`crate::governor`] moves slots down —
+/// **and the bottom two now cost the same**, which is
+/// `docs/adr/0269-a-slot-that-is-drawn-is-stepped-and-a-preview-runs-at-the-rooms-tempo.md`
+/// and is stated on the variants rather than left to be discovered.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Residency {
-    /// Stepped and composited.
+    /// Stepped, drawn and composited. The only level that reaches the mix, that
+    /// reads a level, and that a [`Transport`] applies to.
     Live,
-    /// **Stepped on some frames, drawn on all of them, and mixed on none.**
-    /// Warming its element buffers out of the room — see "Priming steps; it
-    /// does not draw" in the module doc for why the warming itself needs no
-    /// draw, and "Every slot is drawn; only a Live slot is mixed" for why it
-    /// gets one anyway. Contributes nothing to the mix and reads no level.
+    /// **Stepped every frame, drawn every frame, mixed on none — and asked
+    /// for.** Warming its element buffers out of the room.
+    ///
+    /// What separates it from [`Residency::Allocated`] is the request behind
+    /// it and nothing the frame path does: somebody asked for this slot to be
+    /// warmed and [`Deck::govern`] granted it. That is a real distinction —
+    /// it is what a strip shows, and what a park is a park *of* — and it is not
+    /// a behavioural one.
     Priming,
-    /// Compiled, buffers held, not stepping. Keeps its `t`.
+    /// **Stepped every frame, drawn every frame, mixed on none — and asked of
+    /// nothing.** Either nobody asked for this slot, or a request to prime it
+    /// is parked.
+    ///
+    /// It used to mean *at rest*: compiled, buffers held, not stepping, keeping
+    /// the `t` it stopped at. It does not stand still any more, because its
+    /// cell is drawn and a cell drawn from a slot nothing is stepping is a
+    /// still rather than a look at the material (ADR-0258, ADR-0269).
     Allocated,
-}
-
-impl Residency {
-    /// Whether a slot at this level advances its `t` at all. Priming does, on
-    /// the frames it steps.
-    pub fn steps(self) -> bool {
-        !matches!(self, Residency::Allocated)
-    }
 }
 
 /// One deck member: a Set with its own hot-swap worker, its own HDR target,
@@ -765,23 +801,11 @@ struct Slot {
     blend: Blend,
     /// What shape of the frame this deck slot's layer reaches. See [`Mask`].
     mask: Mask,
-    /// While [`Residency::Priming`], step one frame in this many. `1` is every
-    /// frame. Set by [`crate::governor`] out of the budget, or by hand.
-    prime_one_in: u32,
-    /// Frames this slot has spent Priming, counted from the frame it entered.
-    /// The step decision is `prime_phase % prime_one_in == 0`, so it is a pure
-    /// function of engine state and the same record stream primes on the same
-    /// frames every run — see "Determinism" in the module doc.
-    ///
-    /// Reset whenever the rate or the residency changes, so that a rate change
-    /// takes effect from a defined frame rather than from wherever a running
-    /// counter happened to be.
-    prime_phase: u32,
     /// **What this slot's clock does with the session's** — free, tempo-synced
-    /// or beat-locked. Read only while [`Residency::Live`]: a Priming slot is
-    /// catching up on the governor's rate, which is a different mechanism for a
-    /// different reason, and giving it a transport as well would put two things
-    /// in charge of one clock.
+    /// or beat-locked. Read only while [`Residency::Live`]: an off-air slot
+    /// runs at the room's tempo so that its cell is a preview of what going on
+    /// air would look like, and a transport is what an operator arranges for a
+    /// slot they have put on air.
     transport: Transport,
     target: wgpu::Texture,
     view: wgpu::TextureView,
@@ -882,8 +906,6 @@ impl Deck {
                     opacity: 1.0,
                     blend: Blend::default(),
                     mask: Mask::default(),
-                    prime_one_in: 1,
-                    prime_phase: 0,
                     transport: Transport::default(),
                     target,
                     view,
@@ -978,11 +1000,11 @@ impl Deck {
     /// Every slot gets its frame boundary here — Allocated ones included, so
     /// that a build landing on an off-air slot still installs, and so that
     /// retired Sets keep being handed back to the worker to be freed. What an
-    /// off-air slot does *not* get is a watchdog sample: it renders nothing,
-    /// so this frame's interval is entirely other slots' cost, and judging a
-    /// candidate against it would accept or reject it on a number it had no
-    /// part in. `HotSwap::begin_frame_parked` freezes the trial instead, and
-    /// the verdict waits until the slot is Live. What is still not separated
+    /// off-air slot does *not* get is a watchdog sample: this frame's interval
+    /// is one number for the whole deck, so judging a candidate against it
+    /// would accept or reject it on its neighbours' cost.
+    /// `HotSwap::begin_frame_parked` freezes the trial instead, and the verdict
+    /// waits until the slot is Live. What is still not separated
     /// is one Live slot's cost from its neighbours' — that needs a per-Set
     /// measurement, which [`crate::probe`] takes at build time and
     /// [`crate::governor`] budgets from, and which this watchdog does not
@@ -1057,18 +1079,21 @@ impl Deck {
                 // Installs and retirement, but no watchdog sample: this frame
                 // is not this slot's to be judged by.
                 //
-                // Priming is on this side of the line and not the other, which
-                // is worth stating because it steps. The watchdog's question is
-                // "are frames still arriving with this Set on screen", and this
-                // Set is not on screen — it draws nothing, so the interval the
-                // deck is producing is entirely the Live slots' cost. Worse, a
-                // slot priming at one frame in four is not even paying its own
-                // cost on three frames out of four, so a window of intervals
-                // attributed to it would be three parts noise. The trial is
-                // frozen and the verdict waits until the slot is Live, exactly
-                // as it does for a parked one. What judges a priming slot is
-                // the per-Set measurement `crate::governor` budgets against,
-                // which is a different question and a different number.
+                // **The reason is attribution and no longer absence.** An
+                // off-air slot draws (ADR-0258) and steps (ADR-0269), so it is
+                // paying into the interval this frame produces — the argument
+                // that used to sit here, that it costs nothing and the interval
+                // is entirely the Live slots', is gone with the frames it
+                // described. What has not changed is that the interval is the
+                // *deck's*: it is one number for four slots, so a window of
+                // them says nothing about which slot moved it, and a candidate
+                // on an off-air slot would be accepted or rolled back on its
+                // neighbours' cost. The trial is frozen and the verdict waits
+                // until the slot is Live, where the same ambiguity is at least
+                // the one `swap.rs` already records. What judges an off-air
+                // slot is the per-Set measurement `crate::governor` budgets
+                // against, which is a different question and a different
+                // number.
                 Residency::Priming | Residency::Allocated => slot.swap.begin_frame_parked(device),
             }
             // A build landing, and a rollback putting the outgoing Set back,
@@ -1214,10 +1239,12 @@ impl Deck {
 
     /// Move a slot between residency levels.
     ///
-    /// Nothing is freed and nothing is reset at any level: a slot moved to
-    /// [`Residency::Allocated`] holds its `t` until it steps again, and one
-    /// moved to [`Residency::Priming`] resumes stepping from wherever it was
-    /// left rather than starting over.
+    /// Nothing is freed and nothing is reset at any level, and **nothing stops
+    /// running**: a slot moved to [`Residency::Allocated`] goes on stepping at
+    /// the room's tempo, off air and drawn into its own cell (ADR-0269), and
+    /// one moved to [`Residency::Priming`] carries on from wherever it was
+    /// rather than starting over. What moves is what reaches the mix, what
+    /// reads a level, and what a [`Transport`] applies to.
     ///
     /// **This is the request, and the only thing that writes it.** Putting a
     /// slot into Priming asks for it to be warmed; whether the budget allows
@@ -1242,11 +1269,6 @@ impl Deck {
         if self.slots[slot].effective == residency {
             return;
         }
-        // From a defined frame, so that "one step in four" counts from the
-        // moment priming started rather than from wherever a counter that had
-        // been running through an unrelated stretch happened to be. Two runs of
-        // the same record stream then prime on the same frames.
-        self.slots[slot].prime_phase = 0;
         self.slots[slot].effective = residency;
         // Off air is off the meter, immediately and including whatever is
         // still in flight: an Allocated slot's target holds whatever it last
@@ -1314,6 +1336,9 @@ impl Deck {
 
     /// How many slots are warming out of sight right now. Effective, so a
     /// parked slot is not one of them however much it was asked for.
+    ///
+    /// **A count of grants rather than of simulations.** Every off-air slot
+    /// warms (ADR-0269); this is how many of them were asked for and admitted.
     pub fn priming_slots(&self) -> usize {
         self.slots
             .iter()
@@ -1325,28 +1350,6 @@ impl Deck {
     /// [`Deck::is_parked`].
     pub fn parked_slots(&self) -> usize {
         (0..self.slots.len()).filter(|&i| self.is_parked(i)).count()
-    }
-
-    /// One step every this many frames while the slot is Priming. `1` is every
-    /// frame, which is what a slot comes up at.
-    pub fn prime_one_in(&self, slot: usize) -> u32 {
-        self.slots[slot].prime_one_in
-    }
-
-    /// Slow a Priming slot down, or speed it up. Clamped to at least 1 — a rate
-    /// of zero is not "never", it is a modulus of zero.
-    ///
-    /// Ordinarily [`Deck::govern`]'s to set. Exposed because a rate is a
-    /// legitimate manual choice ("warm this gently while I mix") and because a
-    /// caller that does not want a governor at all should still be able to
-    /// prime.
-    pub fn set_prime_one_in(&mut self, slot: usize, one_in: u32) {
-        let one_in = one_in.max(1);
-        if self.slots[slot].prime_one_in != one_in {
-            // From a defined frame, for the reason `set_residency` resets it.
-            self.slots[slot].prime_phase = 0;
-            self.slots[slot].prime_one_in = one_in;
-        }
     }
 
     /// The compute budget priming is decided against, in milliseconds of
@@ -1394,6 +1397,29 @@ impl Deck {
     /// ones are left alone: a deck measured late stays partly unbudgetable,
     /// which the governor reports, rather than losing an hour of simulation to
     /// a status line.
+    ///
+    /// # The rewind still belongs, and what it manufactures now lasts one frame
+    ///
+    /// It is fair to ask, since the state a rewind leaves — every element at
+    /// the origin — is the expensive one
+    /// (`docs/adr/0269-a-slot-that-is-drawn-is-stepped-and-a-preview-runs-at-the-rooms-tempo.md`
+    /// measures it), and this is the call that manufactures it. Two things say
+    /// keep it.
+    ///
+    /// **It is a restoration and not a reset, here.** The predicate above only
+    /// admits a Set at `t == 0`, so a rewind takes nothing away: what it undoes
+    /// is the measurement's own steps and nothing else. Skipping it would leave
+    /// every measured slot a few steps into a simulation nobody asked to
+    /// advance, which is the frame path's business rather than a probe's, and
+    /// would make the first frame of a session depend on how many samples the
+    /// probe happened to take.
+    ///
+    /// **What it manufactures is no longer permanent.** Before ADR-0269 an
+    /// off-air slot never stepped, so a slot rewound here stayed at the origin
+    /// for as long as it stayed off air — which on the panel is the whole
+    /// session — and drew its whole capacity at one address on every frame.
+    /// Every slot steps every frame now, so the state this leaves is gone on
+    /// the next one.
     ///
     /// One [`Probe`] for the whole deck, deliberately: constructing one runs a
     /// calibration workload ten times over, and two probes can land on
@@ -1471,7 +1497,6 @@ impl Deck {
             // it had just taken off air. Not `set_residency` — that writes the
             // request too, which is the one thing this pass may not do.
             self.set_effective(decision.slot, decision.effective);
-            self.set_prime_one_in(decision.slot, decision.prime_one_in);
         }
         report
     }
@@ -1736,10 +1761,10 @@ impl Deck {
             }
             // `live_mut` rather than a queue write of its own: the edges are the
             // Set's state, and the merge uniform is written from them wherever
-            // the Set next writes its uniforms — `prepare` on air, and
-            // `refresh_view` off it. A selection therefore reaches an off-air
-            // slot's own target on the next frame, which is where it is looked
-            // at.
+            // the Set next writes its uniforms, which is `prepare` — on air and
+            // off it alike, since every slot is prepared on every frame. A
+            // selection therefore reaches an off-air slot's own target on the
+            // next frame, which is where it is looked at.
             self.slots[s.slot()]
                 .swap
                 .live_mut()
@@ -1938,67 +1963,48 @@ impl Frame<'_> {
                         meters.record(i, encoder);
                     }
                 }
-                // Warming, out of sight. `prepare` and the L1 passes, and
-                // **no render pass at all** — no target, no draw, nothing
-                // reaching the composite. See "Priming steps; it does not
-                // draw" in the module doc for why that warms everything the
-                // a hidden render would have.
+                // **Off air, and running anyway.** Priming and Allocated are
+                // one branch because they are one behaviour: this slot's cell
+                // is drawn on every frame (ADR-0258), and a cell drawn from a
+                // slot nothing is stepping is a still rather than a look at
+                // the material. So it takes this frame's steps, at the room's
+                // tempo, and draws them — which is
+                // `docs/adr/0269-a-slot-that-is-drawn-is-stepped-and-a-preview-runs-at-the-rooms-tempo.md`.
                 //
-                // On a frame it does not step, nothing happens: `prepare` is
-                // what advances `t`, so the slot's clock simply runs slower
-                // than wall time. It is catching up, not keeping time.
-                Residency::Priming => {
-                    let step_now = slot.prime_phase % slot.prime_one_in == 0;
-                    slot.prime_phase = slot.prime_phase.wrapping_add(1);
-                    if step_now {
-                        let set = slot.swap.live_mut();
-                        // `prepare_warming`, not `prepare`: this slot's clock
-                        // is behind the session's by however much the governor
-                        // has slowed it, and handing it the session's phase
-                        // would let the priming *rate* decide what it warms
-                        // into. See `Set::prepare_warming`.
-                        set.prepare_warming(self.queue, steps, signals);
-                        set.step(encoder, steps);
-                    }
-                    // Drawn **every frame rather than only on the frames it
-                    // steps**.
-                    //
-                    // Not because it would otherwise flicker: a slot target
-                    // persists, so skipping the draw leaves the last one there
-                    // and the picture is identical between steps. The reason is
-                    // that "the last one" stops existing when the target does —
-                    // [`Deck::resize`] reallocates it — and a slot priming one
-                    // frame in sixty would then show black until its next step.
-                    // One pass a frame against a hole that long is the trade,
-                    // and it is small: the pass draws the same image again.
-                    //
-                    // `refresh_view` for the reason the Allocated branch gives:
-                    // on a frame this slot did not step, nothing wrote the L4
-                    // uniform, so a resize would leave it drawing at the old
-                    // aspect until its next step.
+                // **What separates the two levels here is nothing**, and the
+                // separation that is left is the request: Priming is a slot
+                // somebody asked to have warmed and the governor granted,
+                // Allocated is a slot nobody asked about or one whose request
+                // is parked. Both run. See "Residency: requested and
+                // effective" in the module doc.
+                //
+                // **No transport, at either level.** A transport is what an
+                // operator arranges for a slot on air; a cell has to be a
+                // preview of what putting this slot on air would look like,
+                // and a preview on a clock of its own is a preview of nothing.
+                //
+                // `prepare_warming` rather than `prepare`: a Set that has
+                // taken fewer steps than the session — one built and installed
+                // mid-set — reads the grid held back by exactly that lag, so
+                // what it warms into does not depend on when it arrived. A
+                // slot that is not behind reads the session's oscillator bit
+                // for bit, which every slot on a deck that came up together
+                // is. See `Set::prepare_warming`.
+                //
+                // `Set::render` rather than `step` then `draw`, for the reason
+                // the Live arm uses it: there is one copy of the pass sequence
+                // and the parity flip that goes with it.
+                //
+                // **The L4 uniform needs no `refresh_view` here.** `prepare`
+                // writes the viewport and the camera's aspect ratio, and this
+                // branch prepares on every frame — which is what made the
+                // resize repair ADR-0072 records necessary and is now what
+                // makes it unnecessary.
+                Residency::Priming | Residency::Allocated => {
                     let view = &slot.view;
                     let set = slot.swap.live_mut();
-                    set.refresh_view(self.queue);
-                    set.draw(encoder, view);
-                }
-                // Not stepped, and drawn anyway — which shows the still it
-                // stopped at, since `t` only advances through `prepare` and
-                // looking at something must not run it (P-0082). A Set that has
-                // never stepped at all has no element state to draw and comes
-                // out black; that is the honest face of a candidate nobody has
-                // warmed, and priming is what exists to give it one.
-                Residency::Allocated => {
-                    let view = &slot.view;
-                    let set = slot.swap.live_mut();
-                    // **The one thing this writes**, and it is not state: the
-                    // L4 uniform block carries the viewport and the camera's
-                    // aspect ratio, both written by `prepare` alone. A parked
-                    // slot never prepares, so without this a resize leaves it
-                    // drawing at the aspect it had before — for as long as it
-                    // stays off air, which is to say permanently.
-                    // `Set::refresh_view` moves nothing else.
-                    set.refresh_view(self.queue);
-                    set.draw(encoder, view);
+                    set.prepare_warming(self.queue, steps, signals);
+                    set.render(encoder, view, steps);
                 }
             }
         }

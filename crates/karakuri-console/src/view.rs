@@ -5309,10 +5309,12 @@ pub fn roll_at(phase: Phase) -> f32 {
 pub enum Tally {
     /// `.tally.live` — stepped and composited. On air.
     Live,
-    /// `.tally.priming` — stepped and warming its buffers, drawn only while
-    /// something auditions it.
+    /// `.tally.priming` — stepped and warming its buffers, drawn into its own
+    /// cell, and asked for.
     Priming,
-    /// `.tally.alloc` — compiled, buffers held, not stepping, keeping its `t`.
+    /// `.tally.alloc` — stepped and drawn like a priming slot, and asked of
+    /// nothing. Off air, not at rest: every slot runs at the room's tempo so
+    /// that its cell is a preview rather than a still (ADR-0269).
     Allocated,
 }
 

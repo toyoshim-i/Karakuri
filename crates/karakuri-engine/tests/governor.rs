@@ -1,5 +1,9 @@
-//! The budget governor: what may prime, how fast, and what it refuses to
-//! touch.
+//! The budget governor: what may prime, and what it refuses to touch.
+//!
+//! **It used to decide a rate as well**, one step every *n* frames, and about a
+//! third of this file asserted the arithmetic of it. ADR-0269 retired that: a
+//! drawn slot steps every frame, every slot is drawn, and a request now either
+//! fits at its whole measured cost or is parked.
 //!
 //! Two halves, deliberately.
 //!
@@ -109,35 +113,33 @@ fn a_priming_slot_is_demoted_when_the_committed_cost_leaves_no_room() {
 }
 
 /// The negative control for the test above: the identical deck with a budget
-/// that fits admits the same slot at full rate. Without this, "demoted when
-/// there is no room" would also pass on a governor that demoted everything.
+/// that fits admits the same slot. Without this, "demoted when there is no
+/// room" would also pass on a governor that demoted everything.
 #[test]
-fn the_same_slot_primes_at_full_rate_when_there_is_room() {
+fn the_same_slot_primes_when_there_is_room() {
     let report = Governor::new(60.0).decide(&[live(12.0), priming(40.0)]);
 
     assert_eq!(report.decisions[1].effective, Residency::Priming);
-    assert_eq!(report.decisions[1].prime_one_in, 1);
     assert_eq!(report.decisions[1].reason, Reason::Fits);
     assert_eq!(report.priming_ms, 40.0);
 }
 
-/// **Between the two, it slows down rather than refusing.** 16 ms committed
-/// against a 20 ms budget leaves 4; a 10 ms candidate does not fit at full rate
-/// but does at one frame in three, and the amortised cost charged against the
-/// budget is 10/3.
+/// **There is nothing between the two.** 16 ms committed against a 20 ms budget
+/// leaves 4, and a 10 ms candidate is parked — where it used to be admitted at
+/// one frame in three and charged 10/3 against the budget.
+///
+/// Kept as a test of its own, and kept at these numbers, because this is the
+/// case ADR-0269 changed the answer to: a rate could spread a cost that fits in
+/// a frame across several frames, and there is no such spreading left to do.
 #[test]
-fn a_candidate_that_does_not_fit_at_full_rate_is_slowed_rather_than_parked() {
+fn a_candidate_that_does_not_fit_is_parked_rather_than_slowed() {
     let report = Governor::new(20.0).decide(&[live(16.0), priming(10.0)]);
 
     let decision = report.decisions[1];
-    assert_eq!(decision.effective, Residency::Priming);
-    assert_eq!(
-        decision.prime_one_in, 3,
-        "10 ms into 4 ms of headroom is one frame in three, not one in {}",
-        decision.prime_one_in
-    );
-    assert_eq!(decision.reason, Reason::Slowed);
-    assert!((report.priming_ms - 10.0 / 3.0).abs() < 1e-4);
+    assert_eq!(decision.effective, Residency::Allocated);
+    assert_eq!(decision.reason, Reason::NoHeadroom);
+    assert!(decision.is_parked(), "the request was not held");
+    assert_eq!(report.priming_ms, 0.0);
 }
 
 /// **Two priming slots share what is left, in index order**, and the second one
@@ -147,27 +149,28 @@ fn a_candidate_that_does_not_fit_at_full_rate_is_slowed_rather_than_parked() {
 /// reproduce.
 #[test]
 fn priming_slots_are_admitted_in_index_order_against_a_shrinking_headroom() {
-    let report = Governor::new(20.0).decide(&[live(10.0), priming(8.0), priming(8.0)]);
+    let report = Governor::new(20.0).decide(&[live(10.0), priming(8.0), priming(3.0)]);
 
     assert_eq!(
-        report.decisions[1].prime_one_in, 1,
-        "the first one fits whole"
+        report.decisions[1].reason,
+        Reason::Fits,
+        "the first one fits"
     );
-    assert_eq!(report.decisions[1].reason, Reason::Fits);
-    // 2 ms left after the first; 8/4 is 2, which fits exactly.
-    assert_eq!(report.decisions[2].prime_one_in, 4);
-    assert_eq!(report.decisions[2].reason, Reason::Slowed);
+    // 2 ms left after the first, which will not take 3.
+    assert_eq!(report.decisions[2].reason, Reason::NoHeadroom);
 
-    // The same 8 ms candidate behind a cheaper neighbour gets a different rate,
-    // which is what makes "in index order, against a shrinking headroom" a
-    // claim rather than a description: the answer for a slot depends on what
-    // was decided before it, and "before" is by index.
-    let cheaper_first = Governor::new(20.0).decide(&[live(10.0), priming(4.0), priming(8.0)]);
-    assert_eq!(cheaper_first.decisions[1].prime_one_in, 1);
+    // The same 3 ms candidate behind a cheaper neighbour is admitted, which is
+    // what makes "in index order, against a shrinking headroom" a claim rather
+    // than a description: the answer for a slot depends on what was decided
+    // before it, and "before" is by index.
+    let cheaper_first = Governor::new(20.0).decide(&[live(10.0), priming(4.0), priming(3.0)]);
+    assert_eq!(cheaper_first.decisions[1].reason, Reason::Fits);
     assert_eq!(
-        cheaper_first.decisions[2].prime_one_in, 2,
-        "6 ms of headroom takes an 8 ms candidate at one frame in two"
+        cheaper_first.decisions[2].reason,
+        Reason::Fits,
+        "6 ms of headroom takes a 3 ms candidate"
     );
+    assert_eq!(cheaper_first.priming_ms, 7.0);
 }
 
 /// **Live slots over the budget are a warning and nothing else.**
@@ -493,24 +496,22 @@ fn steps_taken(set: &Set) -> u64 {
     (set.time() * 60.0).round() as u64
 }
 
-/// **A rate can spread a cost; it cannot shrink one.**
+/// **A Set larger than the whole budget is refused.**
 ///
-/// The amortisation is an average — a slot stepping one frame in `n` costs
-/// `cost / n` *on average* and the whole `cost` on the frames it steps. Without
-/// a cap on the unamortised figure, a Set measured at six times the entire
-/// budget divides by eight, reads as fitting, and buys a hundred-millisecond
-/// hidden step every eighth frame on a deck that has nothing else on it. The
-/// budget answers "is there room to step one more simulation", and for this Set
-/// there is no rate at which there is.
+/// It used to need saying twice. A rate could spread a cost across frames, so a
+/// Set measured at six times the budget divided by eight, read as fitting, and
+/// bought a hundred-millisecond hidden step every eighth frame — which is why a
+/// peak cap sat in front of the amortisation. With the rate gone (ADR-0269) the
+/// cap and the comparison are the same test, and this is it: the budget answers
+/// "is there room to step one more simulation", and for this Set there is not.
 #[test]
-fn a_slot_costing_more_than_the_whole_budget_is_refused_at_every_rate() {
+fn a_slot_costing_more_than_the_whole_budget_is_refused() {
     let report = Governor::new(16.7).decide(&[priming(100.0)]);
 
     assert_eq!(
         report.decisions[0].effective,
         Residency::Allocated,
-        "a Set costing six times the whole budget was admitted to prime; 100/8 is \
-         12.5 and the frames it steps still cost 100"
+        "a Set costing six times the whole budget was admitted to prime"
     );
     assert_eq!(report.decisions[0].reason, Reason::NoHeadroom);
     assert_eq!(report.priming_ms, 0.0);
@@ -519,7 +520,7 @@ fn a_slot_costing_more_than_the_whole_budget_is_refused_at_every_rate() {
     // deck admits a Set that does fit in one frame.
     let fits = Governor::new(16.7).decide(&[priming(16.0)]);
     assert_eq!(fits.decisions[0].effective, Residency::Priming);
-    assert_eq!(fits.decisions[0].prime_one_in, 1);
+    assert_eq!(fits.decisions[0].reason, Reason::Fits);
 }
 
 // The seven of twenty-two that take a device. The rest reason over a budget and
@@ -574,24 +575,32 @@ mod gpu {
             FRAMES as u64,
             "the Live slot stopped stepping"
         );
+        // **The demotion is not visible in the slot's `t`, and that is the
+        // point rather than a hole in the test.** A parked slot steps every
+        // frame like every other off-air slot (ADR-0269), so what `govern`
+        // applied is the *residency* — asserted above, off the deck — and what
+        // it deliberately did not touch is the simulation. This used to read
+        // `0` here, and the sentence it carried, *the demotion was a report and
+        // not an action*, is now the wrong test of the right claim.
         assert_eq!(
             steps_taken(deck.slot(1).set()),
-            0,
-            "the demoted slot is still stepping, so the demotion was a report and not \
-         an action"
+            FRAMES as u64,
+            "a parked slot stopped stepping, so the cell an operator is judging this \
+         candidate by went to a still the moment the budget refused it"
         );
 
         // The negative control on the same deck: raise the budget and the same slot
-        // is admitted and does step. Without this, the assertions above would pass
-        // on a `govern` that parked everything it was ever shown. Nothing re-asks
-        // for priming here — the request outlived the demotion, which is
+        // is admitted. Without this, the assertions above would pass on a `govern`
+        // that parked everything it was ever shown. Nothing re-asks for priming
+        // here — the request outlived the demotion, which is
         // `a_parked_slot_primes_again_by_itself_when_the_deck_empties`'s subject.
         deck.set_compute_budget_ms(100.0);
         assert_eq!(deck.govern().decisions[1].reason, Reason::Fits);
+        assert_eq!(deck.residency(1), Residency::Priming);
         for _ in 0..FRAMES {
             frame(&gpu, &mut deck, &present, 1);
         }
-        assert_eq!(steps_taken(deck.slot(1).set()), FRAMES as u64);
+        assert_eq!(steps_taken(deck.slot(1).set()), 2 * FRAMES as u64);
         assert_eq!(steps_taken(deck.slot(0).set()), 2 * FRAMES as u64);
     }
     /// The closed-form flag reaches the governor **off the Set**, through the check
@@ -625,15 +634,18 @@ mod gpu {
             "an accumulating Set was refused priming as though it were closed form"
         );
     }
-    /// **`govern` is idempotent, so calling it often does not stall priming.**
+    /// **`govern` is idempotent, and a parked slot goes on running.**
     ///
     /// A caller that runs it every frame — which is the shape a status line
-    /// invites — must not reset the priming counter every frame, because
-    /// `prime_phase = 0` on every call means "one frame in four" becomes "every
-    /// frame" and the budget the governor just computed is spent four times over.
-    /// The reset belongs to a *change*, and this is what says so.
+    /// invites — has to get the same answer every time, since the pass has no
+    /// memory and its inputs did not move. It used to have a second half: the
+    /// call must not reset the priming counter, because `prime_phase = 0` every
+    /// frame turned "one frame in four" into "every frame". There is no counter
+    /// now, and what replaces that half is the other side of the same coin —
+    /// the parked slot steps every frame, and repeated governing does not stop
+    /// it (ADR-0269).
     #[test]
-    fn calling_govern_every_frame_does_not_stall_a_slowed_priming_slot() {
+    fn calling_govern_every_frame_changes_nothing_and_the_parked_slot_runs() {
         let gpu = Gpu::headless().expect("no GPU available");
         let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
         const FRAMES: usize = 12;
@@ -647,26 +659,29 @@ mod gpu {
             WIDTH,
             HEIGHT,
         );
-        // 8 ms on air against 10 leaves 2, which takes the 8 ms candidate at one
-        // frame in four.
+        // 8 ms on air against 10 leaves 2, which will not take an 8 ms
+        // candidate.
         deck.set_compute_budget_ms(10.0);
         deck.set_residency(1, Residency::Priming);
-        assert_eq!(deck.govern().decisions[1].prime_one_in, 4);
+        assert_eq!(deck.govern().decisions[1].reason, Reason::NoHeadroom);
 
         for _ in 0..FRAMES {
             let report = deck.govern();
             assert_eq!(
-                report.decisions[1].prime_one_in, 4,
-                "the rate changed under a repeated call with nothing else changing"
+                report.decisions[1].reason,
+                Reason::NoHeadroom,
+                "the verdict changed under a repeated call with nothing else changing"
             );
+            assert!(deck.is_parked(1), "the request was not held across a pass");
             frame(&gpu, &mut deck, &present, 1);
         }
 
         assert_eq!(
             steps_taken(deck.slot(1).set()),
-            (FRAMES / 4) as u64,
-            "a slot priming one frame in four stepped more often than that; `govern` \
-         is resetting the counter it should only reset on a change"
+            FRAMES as u64,
+            "a parked slot did not step; a park withholds the grant and not the \
+         simulation, and the cell an operator is judging this candidate by is a \
+         still without it"
         );
     }
     /// **A slot parked for lack of headroom primes again by itself.**
@@ -695,9 +710,10 @@ mod gpu {
             WIDTH,
             HEIGHT,
         );
-        // 15 ms on air against 16 leaves 1 ms, and 16/8 is 2: no rate fits. The
-        // same 16 ms candidate on an empty deck fits whole, which is what makes
-        // this a park rather than a Set that is simply too expensive.
+        // 15 ms on air against 16 leaves 1 ms, which will not take a 16 ms
+        // candidate. The same candidate on an empty deck fits whole, which is
+        // what makes this a park rather than a Set that is simply too
+        // expensive.
         deck.set_compute_budget_ms(16.0);
         deck.set_residency(1, Residency::Priming);
 
@@ -717,7 +733,14 @@ mod gpu {
         for _ in 0..FRAMES {
             frame(&gpu, &mut deck, &present, 1);
         }
-        assert_eq!(steps_taken(deck.slot(1).set()), 0, "a parked slot stepped");
+        // It runs while it is parked — a park withholds the grant, not the
+        // simulation (ADR-0269) — so what changes when the deck empties below is
+        // the residency and the report, and not the `t`.
+        assert_eq!(
+            steps_taken(deck.slot(1).set()),
+            FRAMES as u64,
+            "a parked slot stopped stepping"
+        );
 
         // The deck empties. Slot 1 is not mentioned.
         deck.set_residency(0, Residency::Allocated);
@@ -736,7 +759,7 @@ mod gpu {
         }
         assert_eq!(
             steps_taken(deck.slot(1).set()),
-            FRAMES as u64,
+            2 * FRAMES as u64,
             "the report said Priming and the slot did not step"
         );
     }

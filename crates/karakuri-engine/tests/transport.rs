@@ -21,7 +21,8 @@
 // prefix `cargo test -- --skip gpu::` filters on. The convention, and the test
 // that enforces it, are in `tests/gpu_tests_are_under_mod_gpu.rs`.
 mod gpu {
-    use karakuri_engine::deck::{Deck, Residency};
+    use karakuri_engine::deck::Deck;
+    use karakuri_engine::set::DT;
     use karakuri_engine::swap::HotSwap;
     use karakuri_engine::transport::{Refusal, Sync};
     use karakuri_engine::{Gpu, Present, Set, Signals};
@@ -245,20 +246,26 @@ proc plain_points {
     /// and the very next frame is level with the session. A transport that stepped
     /// towards the target would take thirty frames to close that, and would pass
     /// every arithmetic test in `transport.rs` while doing so.
+    ///
+    /// **The lag is manufactured by handing the deck an oscillator that has
+    /// already run**, which is what a Set installed part-way through a set
+    /// looks like from the slot's side. It used to be manufactured by parking
+    /// the slot for thirty frames, and that stopped producing a lag when every
+    /// slot started stepping on every frame (ADR-0269): a slot off air keeps
+    /// the room's tempo, so it never falls behind by standing still.
     #[test]
     fn beat_sync_lands_in_one_frame_rather_than_catching_up() {
         let gpu = Gpu::headless().expect("no GPU available");
         let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
         let mut deck = deck_of(&gpu, RING);
 
-        // Thirty frames off air: the session clock runs, the slot's does not.
-        deck.set_residency(0, Residency::Allocated);
+        let mut ahead = Signals::new(BPM, u64::from(SEED));
         for _ in 0..30 {
-            frame(&gpu, &mut deck, &present);
+            ahead.advance(1, DT);
         }
-        assert_eq!(steps_taken(&deck), 0, "an allocated slot stepped");
+        deck.set_signals(ahead);
+        assert_eq!(steps_taken(&deck), 0, "the slot started somewhere else");
 
-        deck.set_residency(0, Residency::Live);
         deck.set_transport(0, Sync::Beat, BPM, 0.0)
             .expect("`ring` is closed form");
         frame(&gpu, &mut deck, &present);
