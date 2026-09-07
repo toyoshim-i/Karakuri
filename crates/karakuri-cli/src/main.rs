@@ -417,7 +417,7 @@ sets — one deck slot each, composited in the order given, at most 4:
                         its procedure
   L1.kir L4.kir         the same thing, positionally, for one pair. Given
                         alongside --set it becomes the last slot
-  (nothing)             examples/drift_shell.kir + examples/soft_points.kir
+  (nothing)             examples/coil_vortex.kir + examples/star_flares.kir
 
 options:
   --render FILE         render one frame offscreen and stop
@@ -1665,9 +1665,15 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
         // Only when nothing else named material: `--set` still wins.
         match args_out.demo.map(Demo::deck).filter(|d| !d.is_empty()) {
             Some(deck) => args_out.sets = deck,
+            // **`examples/star_vortex.kset`'s two parts**, and the choice is a
+            // demo one: what a run that named nothing is worth looking at.
+            // ADR-0270 freed it — the reference workload is a named Set rather
+            // than whatever this line says — and ADR-0271 spent it. The `.kset`
+            // itself is not loaded here because this is two paths; its two
+            // `bind` records are what a bare run does not get.
             None => args_out.sets.push((
-                Named::bare("examples/drift_shell.kir"),
-                vec![Named::bare("examples/soft_points.kir")],
+                Named::bare("examples/coil_vortex.kir"),
+                vec![Named::bare("examples/star_flares.kir")],
             )),
         }
     }
@@ -8371,9 +8377,11 @@ proc points {
         assert_eq!(
             args.sets,
             vec![(
-                Named::bare("examples/drift_shell.kir"),
-                vec![Named::bare("examples/soft_points.kir")],
-            )]
+                Named::bare("examples/coil_vortex.kir"),
+                vec![Named::bare("examples/star_flares.kir")],
+            )],
+            "the pair `examples/star_vortex.kset` names, which is what a run that said \
+             nothing opens on since ADR-0271"
         );
     }
 
@@ -8456,8 +8464,8 @@ proc points {
         assert_eq!(
             args.sets,
             vec![(
-                Named::bare("examples/drift_shell.kir"),
-                vec![Named::bare("examples/soft_points.kir")],
+                Named::bare("examples/coil_vortex.kir"),
+                vec![Named::bare("examples/star_flares.kir")],
             )]
         );
     }
