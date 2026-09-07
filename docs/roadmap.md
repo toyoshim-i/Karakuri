@@ -1169,7 +1169,12 @@ flag, and its own doc says why: it is the workspace's reference workload, so a n
 panel sits beside every other number in this repository. **Every cost figure in this file was
 measured at that constant.** That is a measuring harness's default standing in for an instrument's,
 and what replaces it is the largest enabled output's size, with whoever wants the reference workload
-typing it.
+typing it. **What the reference workload now is** — `examples/drift_cloud.kset` at 1280x720, named
+rather than taken from whatever the default pair happens to be — is
+[ADR-0270](adr/0270-the-reference-workload-is-a-named-set-rather-than-whatever-the-default-pair-is.md),
+which also says what it leaves undone here: a panel figure is a deck of four stepped and drawn
+slots and a headless figure is one Set, so the sentence above about a panel number sitting beside
+every other number in this repository holds only against other panel numbers.
 
 - **Which cut of the previous frame a feedback effect reads, and what holding it costs.** The
   previous frame is not one thing. It could be a Set's output, the raw frame the mix wrote before

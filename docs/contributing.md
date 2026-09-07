@@ -60,13 +60,25 @@ anything on the frame path; the colour rule in particular is
   while the numbers are good, and on Metal the values themselves come back as zero. **We do not
   switch backends to get a clock**: DX12 costs 3.5× the frame on the same hardware, so it would buy
   the measurement by changing what is measured
-- **One reference workload: 262144 elements at 1280x720.** Every host-clock figure quoted in
-  this repository is taken there, which is the only reason two of them written a month apart can
-  be put beside each other. It is neither a target nor a limit — it is the `.kir` default
-  capacity and the default canvas, and it earns its place by being what everything else was
-  measured at. A number taken anywhere else says so beside itself, because the failure this
-  prevents is silent: a reader subtracts two figures that were never about the same thing and
-  gets a result that looks like a finding. It is also why
+- **One reference workload, and it is a named Set rather than whatever the default is:
+  [`examples/drift_cloud.kset`](../examples/drift_cloud.kset) — `drift_shell.kir` at the 262144
+  elements it declares, with `soft_points.kir` — rendered at 1280x720.** Every host-clock figure
+  quoted in this repository is taken there, which is the only reason two of them written a month
+  apart can be put beside each other. It is neither a target nor a limit, and it earns its place
+  by being what everything else was measured at and by nothing else. **It was defined as the
+  default until 2026-09-07** — the `.kir` default capacity and the default canvas — and a
+  convention that moves whenever the demo moves is not a convention: the pair a bare `cargo run
+  -p karakuri` opens on is free to change, and no longer takes the workload with it when it does
+  ([ADR-0270](adr/0270-the-reference-workload-is-a-named-set-rather-than-whatever-the-default-pair-is.md)).
+  **Nothing already written is invalidated by that.** What was measured has not moved; only its
+  definition has, from *the default* to *this Set at this canvas*, so no figure needs re-taking.
+  A number taken anywhere else says so beside itself, because the failure this prevents is
+  silent: a reader subtracts two figures that were never about the same thing and gets a result
+  that looks like a finding. **A panel figure and a headless figure are two of those**, at the
+  same nominal workload: the panel is a deck of four slots, every one of them stepped and drawn
+  on every frame ([ADR-0269](adr/0269-a-slot-that-is-drawn-is-stepped-and-a-preview-runs-at-the-rooms-tempo.md)),
+  with a present pass per cell and an `egui` pass over the lot, where `karakuri-engine`'s own
+  measurements are one Set and nothing else — so each of them says which it is. It is also why
   [`swap.rs`](../crates/karakuri-engine/src/swap.rs)'s `PROBE_RESOLUTION` is fixed rather than
   the deck's — a governor adds per-Set measurements together, so **comparable matters more than
   absolute**. What a number carries about *how* it was taken is the instrument's own rule and is

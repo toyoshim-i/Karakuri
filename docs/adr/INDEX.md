@@ -297,6 +297,7 @@ number; new records continue from the end.
 | [ADR-0267](0267-the-panel-sends-into-the-folder-the-library-bay-is-pointed-at-and-the-destination-is-drawn-before-the-press.md) | The panel sends into the folder the Library bay is pointed at, and the destination is drawn before the press | 2026-09-06 | accepted |
 | [ADR-0268](0268-a-vector-parameter-is-driven-one-component-at-a-time.md) | A vector parameter is driven one component at a time | 2026-09-06 | accepted |
 | [ADR-0269](0269-a-slot-that-is-drawn-is-stepped-and-a-preview-runs-at-the-rooms-tempo.md) | A slot that is drawn is stepped, and a preview runs at the room's tempo | 2026-09-07 | accepted |
+| [ADR-0270](0270-the-reference-workload-is-a-named-set-rather-than-whatever-the-default-pair-is.md) | The reference workload is a named Set rather than whatever the default pair is | 2026-09-07 | accepted |
 
 ## Retired numbers
 
