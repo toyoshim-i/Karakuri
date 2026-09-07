@@ -773,7 +773,7 @@ pub struct Set {
     dt: f32,
     /// The `beats` the last [`Set::prepare`] wrote into the L4 uniform block.
     ///
-    /// Kept so that [`Set::refresh_view`] can rewrite that block for a slot
+    /// Kept so that [`Set::prepare`] can rewrite that block for a slot
     /// nothing is preparing without moving the grid position it was drawn at.
     /// Derived, never authoritative: the oscillator is the grid, and this is
     /// the answer it gave at this Set's `t`.
@@ -4004,20 +4004,27 @@ impl Set {
     /// every respect but one — oscillator signals are read on this Set's own
     /// clock instead of the session's.
     ///
-    /// The difference only exists because a warming slot's clock is behind the
-    /// room's. It steps on some frames and not others, so `steps_taken * dt`
-    /// falls further behind the session's `t` the slower it is warmed, and
-    /// handing it the session's phase would make a binding advance by a whole
-    /// frame's worth of beats for every step the slot actually takes. **The
-    /// governor picks that rate.** A Set warmed at one step in four would then
-    /// warm into different material than the same Set warmed at full rate — a
-    /// performance knob, invisible to the operator, silently changing the
-    /// picture. Reading the grid at the slot's own `t` removes the rate from
-    /// the arithmetic entirely.
+    /// The difference only exists because a warming slot's clock can be behind
+    /// the room's, and handing such a slot the session's phase would make a
+    /// binding advance by more beats than the slot has steps to spend them on —
+    /// so what it warms into would depend on how far behind it happened to be.
+    /// Reading the grid at the slot's own `t` removes that from the arithmetic
+    /// entirely.
+    ///
+    /// **What puts a slot behind is now one thing and it used to be two.** The
+    /// governor could slow a warming slot to one step every `n` frames, and a
+    /// Set warmed at one step in four then warmed into different material than
+    /// the same Set warmed at full rate — a performance knob, invisible to the
+    /// operator, silently changing the picture. There is no such rate any more
+    /// (`docs/adr/0269-a-slot-that-is-drawn-is-stepped-and-a-preview-runs-at-the-rooms-tempo.md`):
+    /// every slot steps every frame. What is left is a Set that **arrived
+    /// late** — built and installed part-way through a session, starting at
+    /// `t = 0` against a clock that has run — and this is what keeps it warming
+    /// into the same material as one that was there from the start.
     ///
     /// **The lag is a step count, so a slot that is not behind reads exactly
-    /// what it would have read on air.** A slot warming at full rate takes a
-    /// step whenever the session does, its lag is zero, and
+    /// what it would have read on air.** A slot that came up with the deck takes
+    /// a step whenever the session does, its lag is zero, and
     /// [`Signals::behind`] hands back the session's own oscillator bit for bit
     /// — which is what makes "primed then Live" *identical* to "always Live"
     /// rather than close to it, for bound material as well as unbound. Deriving
@@ -4028,10 +4035,10 @@ impl Set {
     ///
     /// Two residues, both real and neither fixable here:
     ///
-    /// - **Tempo corrections.** Warming slower spans more wall time and
-    ///   therefore more corrections, and [`Oscillator::behind`] gives the grid
-    ///   as it stands rather than as it was. Invariance holds against a steady
-    ///   tempo, not across a change of one.
+    /// - **Tempo corrections.** [`Oscillator::behind`] gives the grid as it
+    ///   stands rather than as it was, so a tempo correction between a slot's
+    ///   position and the room's is not accounted for. Invariance holds against
+    ///   a steady tempo, not across a change of one.
     /// - **Measured audio.** `energy` and the bands are this frame's
     ///   measurement at every rate, because there is no other measurement to
     ///   give. A Set bound to audio warms into whatever the room was doing while
@@ -4046,15 +4053,15 @@ impl Set {
     /// behind its own clock is.
     ///
     /// **A monitor cell is the case where the frame before *is* drawn**, and
-    /// it is the one place that discontinuity is visible: a warming slot is
-    /// shown at its own grid position, so material that reads `beats` or
+    /// it is the one place that discontinuity is visible: a slot that is behind
+    /// is shown at its own grid position, so material that reads `beats` or
     /// carries a binding moves the moment it goes on air, by however far behind
-    /// the governor's rate had it. Every slot is drawn on every frame now
-    /// (see "Every slot is drawn; only a Live slot is mixed" in
-    /// [`crate::deck`]), so this is visible on the console rather than
-    /// hypothetical. Named rather than closed, because the close is to read the
-    /// session's grid instead — which is the defect this split cost a repair to
-    /// fix.
+    /// it is. Every slot is drawn on every frame (see "Every slot is drawn;
+    /// only a Live slot is mixed" in [`crate::deck`]), so this is visible on the
+    /// console rather than hypothetical — for the one slot it can still happen
+    /// to, which is one a build installed mid-session. Named rather than closed,
+    /// because the close is to read the session's grid instead, which is the
+    /// defect this split cost a repair to fix.
     pub fn prepare_warming(&mut self, queue: &wgpu::Queue, steps: u8, signals: &Signals) {
         self.prepare_on(queue, steps, signals, Clock::Local);
     }
@@ -4171,7 +4178,7 @@ impl Set {
 
         // The grid at exactly this frame's `t`, on the same terms as the
         // per-substep `beats` above: one instant, named twice, derived once.
-        // Kept, because [`Set::refresh_view`] has to be able to rewrite this
+        // Kept, because [`Set::prepare`] has to be able to rewrite this
         // block without moving it.
         self.last_beats = view.oscillator().at_time(f64::from(self.time())).beats() as f32;
         self.write_l4_uniforms(queue);
@@ -4366,26 +4373,6 @@ impl Set {
         }
     }
 
-    /// **Rewrite the L4 uniforms against the current viewport**, without
-    /// advancing anything.
-    ///
-    /// For an off-air slot that nothing is preparing. `viewport` and
-    /// the camera's aspect ratio are written by [`Set::prepare`] and by nothing
-    /// else, while [`Set::resize`] moves only the host-side value — so an
-    /// `Allocated` slot drawn after a resize would draw at the aspect ratio it
-    /// had before it, for as long as it stayed off air. Which is to say
-    /// permanently, since going off air is what stops it being prepared.
-    ///
-    /// **Every other field comes out unchanged**, and that is the whole
-    /// contract: `t` is `steps_taken * dt` and nothing here steps, `beats` is
-    /// the value the last `prepare` derived, and a bound parameter is whatever
-    /// it last resolved to — bindings are not re-resolved, because resolving
-    /// them against a moving grid would make a parked slot's parameters drift
-    /// while its geometry stood still.
-    pub fn refresh_view(&mut self, queue: &wgpu::Queue) {
-        self.write_l4_uniforms(queue);
-    }
-
     /// Every binding, once, against the signals it was handed — the session's
     /// on air, the same ones read at this Set's `t` while warming. Which is
     /// [`Set::prepare_on`]'s to decide and not this function's: it resolves
@@ -4511,12 +4498,16 @@ impl Set {
     /// Run this frame's simulation and **nothing else** — no render pass, no
     /// target, no draw.
     ///
-    /// This is the whole of what a Priming slot runs. All of a Set's
-    /// per-element state is the L1 node's: L4 is stateless and reads whatever
-    /// L1 last wrote, so warming a Set means running this and skipping the draw.
-    /// See "Priming" in [`crate::deck`] for why that is the right shape, and
-    /// `docs/adr/0053-priming-runs-the-simulation-and-skips-rendering.md` for
-    /// the "reduced resolution" it supersedes.
+    /// All of a Set's per-element state is the L1 node's: L4 is stateless and
+    /// reads whatever L1 last wrote, so warming a Set is running this and
+    /// nothing else. **No slot on a deck runs it alone any more** — every slot
+    /// is drawn, so every slot goes through [`VideoSource::render`], which is
+    /// this followed by the draw
+    /// (`docs/adr/0269-a-slot-that-is-drawn-is-stepped-and-a-preview-runs-at-the-rooms-tempo.md`).
+    /// It stays separate because the pair has to stay separable: a caller
+    /// warming a Set with nothing to draw into is what
+    /// `docs/adr/0053-priming-runs-the-simulation-and-skips-rendering.md`
+    /// established, and `tests/priming.rs` still runs it.
     ///
     /// [`VideoSource::render`] is this followed by the draw, so the two cannot
     /// disagree about what a step is: there is one copy of the pass sequence

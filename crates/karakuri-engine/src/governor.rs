@@ -65,7 +65,15 @@
 //!
 //! - **Which slots are effectively [`Priming`](crate::deck::Residency::Priming)
 //!   at all**, out of those requesting it.
-//! - **How fast each of those steps**, as one step every *n* frames.
+//!
+//! It used to decide a second thing — **how fast each of those steps**, as one
+//! step every *n* frames — and that is gone.
+//! `docs/adr/0269-a-slot-that-is-drawn-is-stepped-and-a-preview-runs-at-the-rooms-tempo.md`
+//! steps every drawn slot on every frame, every slot is drawn, and a rate that
+//! applies to no slot is not a rate. What a park now changes is the word on the
+//! strip and not the work in the frame: an off-air slot steps either way, so
+//! this module decides whether a request was **granted** rather than whether a
+//! simulation runs.
 //!
 //! ## What it does not touch
 //!
@@ -160,16 +168,6 @@
 use crate::deck::Residency;
 use crate::probe::{Measurement, MeasurementMethod};
 
-/// The slowest a Priming slot is allowed to be driven: one step every this
-/// many frames.
-///
-/// A rate is only worth having while the slot still finishes warming in a
-/// usable time. At 1-in-8 a simulation reaches thirty seconds of `t` after four
-/// minutes of wall clock, which is already at the edge of "prepared ahead of a
-/// phrase" being a true description. Beyond it, parking the slot and telling
-/// the operator so is more honest than pretending it is being prepared.
-pub const SLOWEST_PRIME_ONE_IN: u32 = 8;
-
 /// A default compute budget, in milliseconds of measured per-Set cost.
 ///
 /// **Not [`crate::swap::DEFAULT_BUDGET_MS`]**, and the two must not be confused
@@ -193,21 +191,23 @@ pub const DEFAULT_COMPUTE_BUDGET_MS: f32 = 16.7;
 pub enum Reason {
     /// Live. Not the governor's to touch — see the module doc.
     OnAir,
-    /// Priming, at full rate, within the headroom.
+    /// Priming, within the headroom. **At the room's tempo**, which is the
+    /// only rate there is: every slot steps every frame, so a granted request
+    /// costs what the slot was already costing.
     Fits,
-    /// Priming, slowed down to fit the headroom that was left.
-    Slowed,
     /// Allocated, and that is what was asked for. The governor was not asked
     /// about this slot and did nothing to it.
     OffAir,
-    /// Parked: it does not fit, at any rate this module is willing to call
-    /// priming. Either the headroom left after the Live slots will not take it
-    /// even amortised, or its own single-frame cost is larger than the whole
-    /// budget — which no rate can fix, because the frames a slowed slot does
-    /// step still cost the whole measurement.
+    /// Parked: the headroom left after the Live slots will not take this
+    /// slot's measured cost.
     ///
     /// **The request is untouched**, so this is "not now" rather than "no": the
     /// next pass over a deck with room admits it with nothing else changing.
+    ///
+    /// **What it does not mean is that the slot stops.** It steps every frame
+    /// whatever this says, because it is drawn every frame (ADR-0269). A park
+    /// withholds the grant, not the simulation, and an operator sees it on the
+    /// strip rather than in the cell.
     NoHeadroom,
     /// Parked: nothing measured this Set, so it cannot be budgeted for. Not a
     /// claim that it is expensive — a claim that its cost is unknown, which is
@@ -241,11 +241,6 @@ pub struct Decision {
     pub requested: Residency,
     /// What the engine should be doing with this slot until the next pass.
     pub effective: Residency,
-    /// One step every this many frames. `1` for Live and for full-rate
-    /// priming; meaningless for an Allocated slot, which does not step at all,
-    /// and reported as `1` there rather than as a number that looks like a
-    /// rate.
-    pub prime_one_in: u32,
     pub reason: Reason,
     /// What this slot was measured at, if anything measured it. Carried so a
     /// status line can show what the arithmetic was done on.
@@ -286,8 +281,15 @@ pub struct Report {
     /// What the Live slots are already measured to cost, summed. **Understates
     /// by `unmeasured_live` Sets' worth** — see that field.
     pub committed_ms: f32,
-    /// What the slots left Priming add on top, at the rates decided: a step
-    /// every `n` frames costs `cost / n` per frame, amortised.
+    /// What the slots left Priming add on top, summed at their whole measured
+    /// cost — there is no rate to amortise over any more (ADR-0269).
+    ///
+    /// **It is not what the deck spends off air**, and the difference grew
+    /// when every slot started stepping: a parked slot and a slot nobody asked
+    /// about cost the same as a granted one and appear in neither this nor
+    /// [`Report::committed_ms`]. Both fields say what they say — what is on
+    /// air, and what priming was granted — and what the deck spends in total
+    /// is the per-slot [`Decision::cost_ms`] summed by whoever wants it.
     pub priming_ms: f32,
     /// Live slots with no measurement. `committed_ms` cannot include them, so
     /// a non-zero value here means the deck's committed cost is **unknown**
@@ -487,22 +489,21 @@ impl Governor {
                 let cost_ms = slot.cost.map(|c| c.ms);
                 // The request decides which question is asked; the answer is
                 // the effective residency and is never written back over it.
-                let (effective, prime_one_in, reason) = match slot.requested {
-                    Residency::Live => (Residency::Live, 1, Reason::OnAir),
-                    Residency::Allocated => (Residency::Allocated, 1, Reason::OffAir),
+                let (effective, reason) = match slot.requested {
+                    Residency::Live => (Residency::Live, Reason::OnAir),
+                    Residency::Allocated => (Residency::Allocated, Reason::OffAir),
                     Residency::Priming => {
-                        let (r, n, why) = self.admit(slot, &mut headroom, committed_known);
+                        let (r, why) = self.admit(slot, &mut headroom, committed_known);
                         if r == Residency::Priming {
-                            priming_ms += cost_ms.unwrap_or(0.0) / n as f32;
+                            priming_ms += cost_ms.unwrap_or(0.0);
                         }
-                        (r, n, why)
+                        (r, why)
                     }
                 };
                 Decision {
                     slot: i,
                     requested: slot.requested,
                     effective,
-                    prime_one_in,
                     reason,
                     cost_ms,
                 }
@@ -520,27 +521,32 @@ impl Governor {
         }
     }
 
-    /// Whether one slot asking to prime may, and at what rate. Spends from
-    /// `headroom` when it says yes.
+    /// Whether one slot asking to prime may. Spends from `headroom` when it
+    /// says yes.
     ///
     /// Every `Allocated` it returns is a **park**: the caller keeps the
     /// request, and the next pass asks again.
+    ///
+    /// **There is no rate to decide any more** (ADR-0269). A drawn slot steps
+    /// every frame and every slot is drawn, so the question is whether the
+    /// budget has room for what this slot already costs, and the answer is yes
+    /// or not yet.
     fn admit(
         &self,
         slot: &SlotState,
         headroom: &mut f32,
         committed_known: bool,
-    ) -> (Residency, u32, Reason) {
+    ) -> (Residency, Reason) {
         // Before the budget, because it is not a budget question: a closed-form
         // Set has nothing to warm, so priming it would buy nothing at any
         // price. Checked first so that the reason a status line shows is the
         // true one rather than "no headroom" on a deck that happened to be
         // full.
         if slot.closed_form {
-            return (Residency::Allocated, 1, Reason::NoPrimingNeeded);
+            return (Residency::Allocated, Reason::NoPrimingNeeded);
         }
         let Some(cost) = slot.cost else {
-            return (Residency::Allocated, 1, Reason::Unmeasured);
+            return (Residency::Allocated, Reason::Unmeasured);
         };
         // After this slot's own measurement and before the arithmetic, because
         // the two unknowns are different things to fix: a slot with no
@@ -549,39 +555,23 @@ impl Governor {
         // that is actually blocking *it*. The deck-wide condition is in
         // `Report::unmeasured_live` and on the `Display` line either way.
         if !committed_known {
-            return (Residency::Allocated, 1, Reason::CommittedUnknown);
+            return (Residency::Allocated, Reason::CommittedUnknown);
         }
-        // **A peak cap, before the amortisation.** `cost / n` is an average and
-        // the frames it does step cost the whole `cost`, so without this a Set
-        // measured at six times the entire budget is admitted at one frame in
-        // eight — 100 ms into a 16.7 ms budget reads as 12.5 ms and "fits",
-        // while every eighth frame runs a hundred milliseconds of hidden work
-        // that nothing on air asked for. A rate can spread a cost that fits in
-        // a frame across several frames; it cannot make one that does not fit
-        // into one that does. A Set this expensive is not a priming problem.
+        // **The whole cost, against the headroom, once.** A rate used to sit
+        // here: `cost / n` amortised over one step every `n` frames, with a
+        // peak cap in front of it because the frames a slowed slot did step
+        // still cost the whole measurement. Both are gone with the rate
+        // (ADR-0269) — a drawn slot steps every frame — and what is left is
+        // the comparison the cap was protecting.
         //
         // `is_nan` is checked rather than left to fall out of the comparison: a
-        // measurement that is not a number is not a small one, and every
-        // `<=` below would answer `false` for it and land it here anyway — but
+        // measurement that is not a number is not a small one, and the `<=`
+        // below would answer `false` for it and land it here anyway — but
         // silently, and by accident.
-        if cost.ms.is_nan() || cost.ms > self.budget_ms {
-            return (Residency::Allocated, 1, Reason::NoHeadroom);
+        if cost.ms.is_nan() || cost.ms > *headroom {
+            return (Residency::Allocated, Reason::NoHeadroom);
         }
-        // A slot stepping one frame in `n` costs `cost / n` per frame,
-        // amortised. That is the whole of the rate model, and it is worth being
-        // explicit that it is an average rather than a promise about any single
-        // frame: the frames it does step cost the full `cost`, and the deck
-        // will be lumpy at coarse rates. The alternative — spreading one step
-        // across several frames — is not available, because a step is one
-        // dispatch chain and cannot be cut in half.
-        for n in 1..=SLOWEST_PRIME_ONE_IN {
-            let amortised = cost.ms / n as f32;
-            if amortised <= *headroom {
-                *headroom -= amortised;
-                let reason = if n == 1 { Reason::Fits } else { Reason::Slowed };
-                return (Residency::Priming, n, reason);
-            }
-        }
-        (Residency::Allocated, 1, Reason::NoHeadroom)
+        *headroom -= cost.ms;
+        (Residency::Priming, Reason::Fits)
     }
 }

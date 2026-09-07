@@ -4552,14 +4552,6 @@ fn report_governing(report: &karakuri_engine::governor::Report, why: &str) {
             decision.slot, decision.reason
         );
     }
-    for decision in &report.decisions {
-        if decision.effective == Residency::Priming && decision.prime_one_in > 1 {
-            eprintln!(
-                "  slot {} priming at one step in {}",
-                decision.slot, decision.prime_one_in
-            );
-        }
-    }
 }
 
 /// The one measurement in the program: elapsed real time as a step count, which

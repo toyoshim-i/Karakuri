@@ -769,18 +769,31 @@ mod gpu {
             );
         }
 
-        // And an off-air slot does not advance a phase of its own while parked:
-        // the clock is the session's, so it rejoins the beat the deck is on rather
-        // than resuming one it kept to itself.
+        // And an off-air slot goes on reading the same phase, because it goes on
+        // stepping: every slot takes the frame's steps whatever its residency
+        // (ADR-0269), so a slot that came up with the deck is never behind and
+        // `Set::prepare_warming` hands it the session's oscillator itself. This
+        // used to assert the opposite — that a parked slot stopped resolving —
+        // and it was the parked slot's cell that made that wrong: a bound
+        // parameter frozen at the value it had when the fader came down is a
+        // cell showing a still.
         deck.set_residency(1, Residency::Allocated);
-        let parked = value_of(&deck, 1, "radius");
+        let off_air_at = value_of(&deck, 1, "radius");
+        let mut moved = false;
         for _ in 0..7 {
             frame(&gpu, &mut deck, &present, 1);
+            assert_eq!(
+                value_of(&deck, 0, "radius"),
+                value_of(&deck, 1, "radius"),
+                "an off-air slot read a different phase than the Live one beside it"
+            );
+            moved |= value_of(&deck, 1, "radius") != off_air_at;
         }
-        assert_eq!(
-            value_of(&deck, 1, "radius"),
-            parked,
-            "an Allocated slot kept resolving bindings"
+        assert!(
+            moved,
+            "the bound value never moved over seven frames, so the comparison above \
+             holds against a slot that stopped resolving as much as against one that \
+             did not"
         );
         deck.set_residency(1, Residency::Live);
         frame(&gpu, &mut deck, &present, 1);
