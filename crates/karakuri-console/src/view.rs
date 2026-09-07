@@ -1774,6 +1774,53 @@ impl ProgramBay {
             .map(|deck| deck as u8)
     }
 
+    /// **Which deck a carry let go at `p` lands on**, or `None` where no cell
+    /// of a deck that has a slot is under it.
+    ///
+    /// [`Mixer::dropped`]'s answer one bay over, and the same gesture:
+    /// `console.html`'s *How a Set reaches a deck* names **two** sets of
+    /// rectangles a release can land on, *"the four deck preview cells take a
+    /// drop as well, and each names the deck its letter names"*. The Library
+    /// bay is in the left pane and the mixer in the right, so a carry between
+    /// them crosses the whole window; the cells are in the centre column,
+    /// beside the list the Set came out of.
+    ///
+    /// **A cell is an operand and never a choice.** Nothing routes a cell —
+    /// `A` is deck A whatever is loaded, which is ADR-0240 — so there is no
+    /// second thing a release here could mean and no reading to take before
+    /// it means the first.
+    ///
+    /// # `slots` is how many the deck has, and it is why this takes an
+    /// argument where [`Mixer::dropped`] takes none
+    ///
+    /// The mixer walks the strips it drew and there is one per slot, so *a
+    /// deck with no slot* is already a strip that is not there. **The row is
+    /// [`DECKS`] cells whatever the deck holds** — a cell that vanished would
+    /// move the other three, and the letter is the only thing naming a deck
+    /// ([ADR-0170](../../../docs/adr/0170-a-deck-preview-cell-is-drawn-whether-or-not-a-deck-is-behind-it.md))
+    /// — so the fourth cell of a three-slot deck is a rectangle whose letter
+    /// names no deck, and a release on it has nothing to load into. It
+    /// answers `None`, which is the same refusal `3` gets from the keyboard
+    /// and the same reading behind it: [`View::select`] is *"a deck the mixer
+    /// has no strip for is refused"*, off [`View::mixer`]'s length, and
+    /// `karakuri/src/main.rs`'s `pointed` prints it.
+    ///
+    /// **That is not the refusal ADR-0265 forbids**, and the two are worth
+    /// keeping apart. What is not read is the deck's *residency* and the
+    /// cell's *material*: a drop on a live deck asks for the load, and a cell
+    /// drawing nothing because no engine has handed it a texture is a target
+    /// like any other ([`View::previews`], where `None` is two states). What
+    /// is read is whether the letter names a deck at all — the operand, not
+    /// the answer.
+    ///
+    /// The count is the caller's for [`Mixer::dropped`]'s reason, one step
+    /// further out: this type is the bay's *geometry*, derived from a solved
+    /// layout and nothing else, and a slot count is a reading the console is
+    /// handed per frame.
+    pub fn dropped(&self, p: karakuri_layout::Point, slots: usize) -> Option<u8> {
+        self.cell(p).filter(|deck| usize::from(*deck) < slots)
+    }
+
     /// **A press on a cell asks for nothing, and that is the decision rather
     /// than a gap.**
     ///
@@ -1789,6 +1836,13 @@ impl ProgramBay {
     /// what a control claims is what it is drawn over, and a cell an operator
     /// can drag the row's boundary off has to be claimed whether or not a
     /// press on the middle of it asks for anything.
+    ///
+    /// **A release on one asks for something, and that is not this sentence
+    /// weakening.** [`ProgramBay::dropped`] is where it is, and a press and a
+    /// release are two moments: nothing is in hand at the press, so there is
+    /// still nothing for it to ask for — the carry is what puts the second
+    /// operand there ([ADR-0273](../../../docs/adr/0273-the-carry-lands-on-two-sets-of-rectangles-and-wears-a-face.md)).
+    ///
     /// Whether `p` is on any of the cells -- the union of the four, for
     /// [`crate::input`]'s rule 4.
     pub fn owns(&self, p: karakuri_layout::Point) -> bool {
@@ -6355,6 +6409,14 @@ impl<'a> Mixer<'a> {
     /// and `console.html`'s *"Nothing refuses it"*), so
     /// [`Strip::tally`] is not consulted here and a strip's values reach this
     /// only as the rectangle they were laid out into.
+    ///
+    /// **It is one of two answers now, and never both.** The four deck
+    /// preview cells take the drop as well ([`ProgramBay::dropped`]), and the
+    /// two bays are in two regions of the panel — so a point is inside one
+    /// set of rectangles or the other or neither, and *at most one rectangle
+    /// is marked* is a fact about where the pointer is rather than a rule
+    /// either of them enforces
+    /// ([ADR-0273](../../../docs/adr/0273-the-carry-lands-on-two-sets-of-rectangles-and-wears-a-face.md)).
     pub fn dropped(&self, p: karakuri_layout::Point) -> Option<u8> {
         self.deck_at(p)
     }
@@ -7610,9 +7672,31 @@ fn name_job(name: &str, width: f32, colour: Color32) -> LayoutJob {
 /// **The Mixer bay's strips, painted.**
 ///
 /// Where everything goes is [`mixer`]'s, so this paints and derives nothing.
-fn mixer_into(ui: &Ui, pal: &Palette, mixer: &Mixer, phase: Phase, selection: u8) {
+///
+/// **`marked` is the strip a carried Set would land on**, and it is handed in
+/// rather than asked here for the reason `selection` is: it is a *pointer*,
+/// and one of the two the panel holds. [`View::draw`] resolves it off
+/// [`Mixer::dropped`] — the derivation the release asks — so the ring is
+/// painted round the strip that release would name and never round a
+/// neighbour.
+fn mixer_into(
+    ui: &Ui,
+    pal: &Palette,
+    mixer: &Mixer,
+    phase: Phase,
+    selection: u8,
+    marked: Option<u8>,
+) {
     for (strip, at) in mixer.placed() {
         strip_into(ui, pal, strip, at, phase);
+    }
+    // `.strip.drop` — `outline: 2px solid var(--c-text)` at `outline-offset:
+    // 0`, the rectangle a Set in hand lands on if it is let go here. Drawn
+    // **before** the selection below and outside the strip's own edge where
+    // that one is inset, which is how one strip wears both at once — the mock
+    // draws deck A wearing exactly that pair.
+    if let Some(rect) = marked.and_then(|deck| mixer.selected(deck)) {
+        drop_ring(ui, pal, rect, size::STRIP_RADIUS);
     }
     // `.strip.focus` — `box-shadow: inset 0 0 0 2px var(--c-lav)`, the deck
     // selection, drawn **after every strip** because an inset shadow is over a
@@ -7634,6 +7718,49 @@ fn mixer_into(ui: &Ui, pal: &Palette, mixer: &Mixer, phase: Phase, selection: u8
             StrokeKind::Inside,
         );
     }
+}
+
+/// **The drop mark**: `.strip.drop` and `.cell.drop`'s `outline: 2px solid
+/// var(--c-text)`, round the one rectangle a carried Set would land on.
+///
+/// # One function, because it is one mark in two places
+///
+/// A strip and a deck preview cell wear the same ring — `style.css` gives the
+/// two selectors one declaration and says why: the release names a deck, and
+/// which of the two rectangles it was let go over is not something the mark
+/// has to distinguish. What each caller brings is the target's own corner,
+/// [`size::STRIP_RADIUS`] or [`size::PREVIEW_RADIUS`], because the ring is on
+/// the rectangle's edge and an edge has the corner it has.
+///
+/// # `--c-text`, and it is free ink
+///
+/// Every state this console has is spelled in one of four colours — lavender
+/// is the deck the keys are addressed to, pink is live, sun is priming and the
+/// star, mint is armed — and the text ink is what a word is drawn in when
+/// nothing is being said about it. That is exactly what this mark has to say:
+/// it says **where** the release lands and never **whether** it is allowed
+/// ([ADR-0265](../../../docs/adr/0265-a-release-names-the-deck-and-nothing-is-refused.md)).
+/// Lavender is ruled out twice over — the selection is already a lavender ring
+/// round a strip, and the deck being carried to is usually the deck already
+/// selected, so the two would be one mark on one strip in the moment it is
+/// read fastest.
+///
+/// # [`StrokeKind::Outside`], and it is what makes the pair legible
+///
+/// `.strip.focus` is an inset `box-shadow` and this is an `outline` at
+/// `outline-offset: 0`, so a strip that is both selected and under the pointer
+/// wears the inner ring and the outer one at once instead of one clobbering
+/// the other. **Unclipped**, unlike the selection above: the ink is outside
+/// the target's rectangle, and a painter clipped to it would draw nothing at
+/// all. It fits — `.mixer-strips` has a `gap: 4px` between strips and the
+/// `.previews` grid a `gap: 6px`, against two of ink each side.
+fn drop_ring(ui: &Ui, pal: &Palette, at: Rect, radius: f32) {
+    ui.painter().rect_stroke(
+        at,
+        CornerRadius::same(radius as u8),
+        Stroke::new(size::DROP_RING, pal.text),
+        StrokeKind::Outside,
+    );
 }
 
 /// **The Mixer bay's transition row, painted**, term for term from
@@ -13087,7 +13214,38 @@ impl View {
         // the row is set aside, so `deck-previews` is not in the plan at all
         // and a cell drawn from its entry would be a cell drawn in one of the
         // two arrangements only.
-        let cells = program_bay(panel.layout(), self.canvas).and_then(|bay| bay.cells);
+        let program = program_bay(panel.layout(), self.canvas);
+        let cells = program.and_then(|bay| bay.cells);
+        // **Where a Set in hand would land, resolved once for the frame off
+        // the derivations the release asks.** `None` for every other drag and
+        // for no drag at all, which is what makes this the *carry's* mark
+        // rather than a hover: `Panel::in_hand` is the question *is a gesture
+        // in progress*, and `Panel::cursor` is where the pointer is whoever
+        // claimed the event.
+        //
+        // **At most one of the two answers**, and that is where the pointer is
+        // rather than a rule either bay keeps: the mixer's strips and the
+        // Program bay's cells are rectangles in two regions of the panel, so a
+        // point inside one set is outside the other. Over an alley between two
+        // strips, over a bay head, over the transition row or over another bay
+        // both answer `None` and nothing at all is marked — a mark that
+        // snapped to the nearest strip would name a deck nobody pointed at,
+        // and the release that followed it would load one.
+        //
+        // **The strip half is resolved inside the bay's own arm below**, off
+        // the one `mixer` call this frame makes: a second derivation would be
+        // a second answer, and the mark has to be round the strip the release
+        // will name. Only the cell half is answered here, where the bay it
+        // reads is already derived.
+        //
+        // **The slot count goes in with the point**, and it is the same
+        // reading [`View::select`] refuses a key on: the row is [`DECKS`]
+        // cells whatever the deck holds, so a cell whose letter names no slot
+        // is a rectangle with nothing to load into
+        // ([`ProgramBay::dropped`]).
+        let carried = matches!(panel.in_hand(), Some(InHand::Carrying)).then(|| panel.cursor());
+        let marked_cell =
+            carried.and_then(|at| program.and_then(|bay| bay.dropped(at, self.mixer.len())));
         let picture = self.picture;
         let previews = self.previews;
         let values = self.transport;
@@ -13198,7 +13356,12 @@ impl View {
                         card(ui, &pal, rect);
                         head_into(ui, &pal, rect, placed.region, opening);
                         if let Some(bay) = mixer(ui.ctx(), panel.layout(), strips) {
-                            mixer_into(ui, &pal, &bay, phase, selection);
+                            // **Which strip a Set in hand would land on, off
+                            // this bay and not a second one.** `Mixer::dropped`
+                            // is the derivation the release asks, so the ring
+                            // is painted round the strip that release names.
+                            let marked = carried.and_then(|at| bay.dropped(at));
+                            mixer_into(ui, &pal, &bay, phase, selection, marked);
                         }
                         // **The transition row, under the strips**, and it is
                         // painted from here rather than from inside
@@ -13326,8 +13489,19 @@ impl View {
             // argument is.
             if let Some(cells) = cells {
                 for (deck, cell) in cells.into_iter().enumerate() {
+                    // **The drop mark, and it is not a reading of the cell.**
+                    // What is behind the rectangle is not read — a cell
+                    // drawing material, a still, or nothing at all is a target
+                    // exactly the same — so this is `marked_cell`'s answer and
+                    // not `previews[deck]`'s. Painted before the image so the
+                    // hairline round the well goes on over it, exactly as the
+                    // ring round a strip goes under the selection's.
+                    let marked = marked_cell == Some(deck as u8);
+                    if marked {
+                        drop_ring(ui, &pal, cell, size::PREVIEW_RADIUS);
+                    }
                     preview(ui, &pal, cell, previews[deck]);
-                    caption_into(ui, &pal, cell, deck, previews[deck]);
+                    caption_into(ui, &pal, cell, deck, previews[deck], marked);
                 }
             }
 
@@ -13391,20 +13565,48 @@ impl View {
         // a fader held against its top let the pointer wander across a
         // boundary, which is a cursor for a gesture that is not happening.
         //
-        // There is no cursor of its own for a fader: the console's whole
-        // cursor vocabulary is *arrow, or resize over a boundary*, and
-        // inventing a third mark here would be one control saying something no
-        // other one on the panel says.
-        // **And a carry is the fader's answer again**, for the third kind of
-        // drag: a Set on its way to a strip crosses every boundary between the
-        // Library bay and the mixer, and a resize cursor flicking on over each
-        // of them would be a cursor for a gesture that is not happening. There
-        // is no cursor of its own for it either, and the reason is the one
-        // above rather than a gap — `CursorIcon::Grabbing` would be a third
-        // mark in a vocabulary of two, said by one control on the panel.
+        // There is no cursor of its own for a fader: a knob under the hand is
+        // already drawn where the hand is, and a value moving is the whole of
+        // what a fader drag says. So it suppresses the resize and asks for
+        // nothing in its place.
+        //
+        // **A carry suppresses it for the same reason and does not stop
+        // there.** A Set on its way to a deck crosses every boundary between
+        // the Library bay and the mixer, so falling through to the hit test
+        // would flick a resize cursor on over each of them — a cursor for a
+        // gesture that is not happening. What goes on instead is
+        // `CursorIcon::Grabbing`, and `console.html` is what asks for it:
+        // *"the pointer itself is a grab for as long as the Set is in hand …
+        // it is the one thing that says a gesture is still running while the
+        // hand is over nothing at all"*.
+        //
+        // **This comment argued against that shape and the argument was
+        // wrong**, so it is rewritten rather than deleted: it read that a
+        // grab *"would be a third mark in a vocabulary of two, said by one
+        // control on the panel"*. Two things are wrong with it. A carry is
+        // not said by a control — the Set leaves the Library bay's list and is
+        // over no control at all for most of the gesture, which is the one
+        // state on this panel that nothing drawn can report. And a carry is
+        // the only drag here that can be **cancelled**: a boundary and a fader
+        // come to rest wherever the pointer left them, so a cursor for either
+        // would be decoration, where this one is the difference between a
+        // gesture still running and a press that was missed. The page is
+        // where that was settled
+        // ([ADR-0273](../../../docs/adr/0273-the-carry-lands-on-two-sets-of-rectangles-and-wears-a-face.md));
+        // ADR-0265's consequence naming the old shape is annotated there.
+        //
+        // **Still one writer and still one icon per frame.** The grab is set
+        // here rather than beside the drop mark for the reason the whole
+        // function exists: `egui_winit` writes the window's cursor out of
+        // `PlatformOutput` once, and a second setter is a flicker that depends
+        // on event order.
         let axis = match panel.in_hand() {
             Some(InHand::Boundary(axis)) => Some(axis),
-            Some(InHand::Fader | InHand::Carrying) => None,
+            Some(InHand::Carrying) => {
+                ctx.set_cursor_icon(egui::CursorIcon::Grabbing);
+                return;
+            }
+            Some(InHand::Fader) => None,
             None => match panel.layout().hit(panel.cursor(), GRAB) {
                 Hit::Divider { split, .. } => panel.layout().axis(split),
                 _ => None,
@@ -13534,6 +13736,17 @@ pub const PREVIEW_NO_SLOT: &str = "no slot";
 ///   slot went away would be the cell's state said twice.
 /// - **The word** is `.caption`'s own `var(--c-faint)`, `pal.faint`.
 ///
+/// # The third colour, and it is the drop mark rather than a state
+///
+/// `marked` is `.cell.drop .caption b`'s `color: var(--c-text)`: while a
+/// carried Set would land on this cell, the letter comes up out of its dim
+/// with the ring round the image. **It is not a fourth state of the cell** —
+/// the two above are still the only two [`View::previews`] distinguishes, and
+/// nothing here reads the picture for it. What the ring says is *where the
+/// release lands* and what the letter says is *which deck that is*, which is
+/// the one thing on a cell that already names the operand
+/// ([`drop_ring`], and `console.html`'s *How a Set reaches a deck*).
+///
 /// # No badge
 ///
 /// The mock's `.risk` dot is the estimated cost of the slot in five bands, and
@@ -13546,17 +13759,28 @@ pub const PREVIEW_NO_SLOT: &str = "no slot";
 /// when*, and the one worth carrying here is the last: **purple stops the cell
 /// drawing.** A slot over budget is stopped rather than shown harder, so the
 /// day this badge is drawn it is the one band that is also a behaviour.
-fn caption_into(ui: &Ui, pal: &Palette, image: Rect, deck: usize, picture: Option<Picture>) {
+fn caption_into(
+    ui: &Ui,
+    pal: &Palette,
+    image: Rect,
+    deck: usize,
+    picture: Option<Picture>,
+    marked: bool,
+) {
     let at = caption_of(image);
     let painter = ui.painter().with_clip_rect(at);
     let font = FontId::new(size::PREVIEW_SIZE, FontFamily::Proportional);
 
-    let letter = painter.layout_no_wrap(DECK_LETTERS[deck].to_owned(), font.clone(), pal.dim);
+    let ink = match marked {
+        true => pal.text,
+        false => pal.dim,
+    };
+    let letter = painter.layout_no_wrap(DECK_LETTERS[deck].to_owned(), font.clone(), ink);
     let width = letter.size().x;
     painter.galley(
         Pos2::new(at.min.x, at.center().y - letter.size().y * 0.5),
         letter,
-        pal.dim,
+        ink,
     );
 
     let word = painter.layout_no_wrap(state_word(picture).to_owned(), font, pal.faint);

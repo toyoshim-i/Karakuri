@@ -507,9 +507,13 @@ is picked up, carried and dropped on a strip, and the page's panel badge for thi
 `has` (`docs/manual/operations.html:202`). **The deck is named at the release rather than by the
 selection, and nothing is refused** — that, and what a drop over nothing does, is
 [ADR-0265](adr/0265-a-carried-set-names-its-deck-at-the-release-and-the-panel-refuses-no-drop.md).
-**What the drag does not draw is the carry itself** —
-there is no drop-target state and no indicator on the row in hand. That is a panel affordance
-rather than a route, so it does not hold the operation's badge, and it is open.
+**The carry is drawn now, and that half is closed.** The rectangle under the pointer is ringed
+while a Set is in hand, the four deck preview cells take the drop as well as the strips, and the
+pointer is a grab for as long as the gesture runs
+([ADR-0273](adr/0273-the-carry-lands-on-two-sets-of-rectangles-and-wears-a-face.md)) — the mock
+specified all three in `4ec14db` and none of them is a route, so none holds the operation's badge.
+**What is still not drawn is the Set**: there is no ghost under the pointer and no second mark on
+the row in hand, and both were declined in the design pass rather than left open.
 The pill beside it is a readout on purpose, so a press on it would be a third route
 nobody specified (`view::LibraryBay`).
 
