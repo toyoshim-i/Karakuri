@@ -601,12 +601,21 @@ notes against what the tips already say.
 
 #### M5.5 — Inspector
 
-**Rows.** Ten carry a `plan` panel badge: *Write a parameter*, *Attach a signal to a parameter*,
-*Take a parameter back*, *Element capacity, seeds, the camera*, *Read one node's source*, *Check
-and write one node's source*, *Keep what a deck is playing*, *Set a node's authority*, *Composite a
-deck's renderers*, and ***Choose which renderer of a deck is live***, moved here from M5.2 on
-2026-09-05 because the mock draws its chips in this bay directly under *Composite*, which this bay
-already owned, and the console page describes the two as one control and the choice it turns into.
+**Rows.** The rows whose panel badge names a control this bay draws, which is **not** the page's
+*Inside a Set* section and is where the count has to be derived from: they are spread over five
+sections, and the section holds two rows that are not this bay's. Ten of them —
+*Composite a deck's renderers*, ***Choose which renderer of a deck is live*** (moved here from M5.2
+on 2026-09-05, because the mock draws its chips directly under *Composite* and the console page
+describes the two as one control and the choice it turns into), *Write a parameter*, *Attach a
+signal to a parameter*, *Take a parameter back*, *Element capacity, seeds, the camera*, *Set a
+node's authority*, *Keep what a deck is playing*, *Read one node's source* and *Check and write one
+node's source*. The two the section sweeps in and this bay does not own are *Wire a procedure's
+input to a node* and *Narrow the published interface*, which carry a `plan` badge over a panel cell
+reading `—` and are in *Rows the manual has not given a home*.
+
+***Keep what a deck is playing* is claimed twice**, here and inside M5.3's rule. The mock draws
+`keep` in this bay's pane head, one per pane, so the control is this bay's; M5.3's paragraph and
+`crates/karakuri/src/main.rs`'s *"the Library bay has no keep pill drawn"* are the other spelling.
 
 ***Set a deck's sync mode* and *Scrub a deck a quarter beat* were counted here and are M5.13's**,
 dropped on 2026-09-05. Both sit at the deck head and both carry a `has` panel badge — the chip and
@@ -619,21 +628,58 @@ no letter here to bind.
 **Exit.** No `plan` badge in the panel column of this bay's rows on
 [every operation](manual/operations.html).
 
-**Blocked on.** Two rows. *Set a node's authority* waits on a writer, and a live-session one:
-`Set::set_authority` is reached from `swap.rs`'s restatement and from its own test and from nowhere
-else, so every node of every Set is `Manual` and the chip can read while nothing can make it change
-([ADR-0216](adr/0216-a-node-nobody-has-spoken-for-is-manual-and-a-request-states-only-what-was-said.md)).
-*Composite a deck's renderers* waits on a setter: `Set::merge` is `Some` only where
-`layering == Layering::Composite` at `Set::build`, nothing writes it afterwards, and neither `Set`
-nor `Deck` offers one, so the operation names a state the engine cannot be moved into while running.
+**Blocked on. Five rows, and one mechanism covers three of them** — this paragraph said two, and
+the sentence under it said the other eight waited on nothing, which was the claim that hid it.
 
-The other eight of the ten wait on nothing. This is the largest bay of the unblocked ones and the
-most lopsided: every read it needs answers off a running Set, so what is missing is presses rather
-than faces.
+**There is no public route from a `&mut Deck` to a live `Set`.** Every control this panel has built
+lands operation → `Record` → `apply` → a `Deck` setter, and `Deck`'s public surface has no param,
+binding or authority writer. `Deck::slot` hands back a `&HotSwap` and says why — *"Deliberately not
+mutable"* — and `HotSwap::live_mut` is `pub(crate)` with the same argument written out. The engine's
+writers all exist and are all reachable only at a build: `Set::write_param`, `Set::set_published`,
+`Set::bind`, `Set::set_authority`. That one hole stops *Write a parameter*, *Attach a signal to a
+parameter* and *Set a node's authority*, and it is what makes this the bay where an operator turns a
+knob and the bay with no way to turn one.
 
-**Also here.** Three of the four items with no sub-milestone land in this bay. The **node
+- ***Take a parameter back* has nothing to call even once that route exists**: `Set::bind` has no
+  inverse anywhere in the workspace and `Binding` carries no suspended state. The row's own tip
+  already says it — *"Nothing does this today; it is the second rule's other half."*
+- ***Composite a deck's renderers* waits on a setter.** `Set::merge` is `Some` only where
+  `layering == Layering::Composite` at `Set::build`, nothing writes it afterwards, and neither `Set`
+  nor `Deck` offers one, so the operation names a state the engine cannot be moved into while
+  running.
+- ***Element capacity, seeds, the camera* is two-thirds blocked and one-third undecided.** A capacity
+  sizes buffers at build and a salt is assigned there; `Set::source_capacities` and
+  `Set::source_salts` are readers with no writers. The camera arm is `Property::Camera(Undecided)` —
+  the vocabulary has no numbers for a control to send.
+- **The two *node's source* rows have nothing drawn and nowhere to type.** The mock's Inspector is a
+  half-head, a deck head and node groups; no source area is drawn anywhere on it. And the console has
+  one letter-taking flow, bounded to naming an arrangement, which is why the Library's filter fields
+  step rather than take letters. A source editor is a second one, and that is a console-wide
+  decision nobody has taken.
+
+**Two of the ten wait on nothing, and both are short.** *Keep what a deck is playing* — the save
+path is built and `k` runs it, so the pill is a rectangle, a claim and the same call. *Choose which
+renderer of a deck is live* — `Deck::schedule_selection` is public and reaches the swap on the beat,
+`written(SelectRenderer)` already answers a `Record::Select` given the transition reading this file
+already takes, and what is missing is that arm in `apply` and a claim on the chips.
+
+**One thing to know before drawing the first control, and it is not a press.** A live parameter
+write is **discarded on the next rebuild**, and a rebuild is any save of any `.kir` in that slot,
+because every slot is watched. `Request::params` is restated rather than read off the outgoing Set,
+and what it is restated from is `Watch::overrides`, which only a re-point writes. That is the
+failure `Watch::camera` and `Watch::live` are documented against. So the first parameter control
+owes a writer into the watcher beside the writer into the Set, or it moves a knob that walks back on
+the next save.
+
+**And there may be no row on screen to press.** A pane draws a node group whole or not at all and
+there is no scroll position anywhere in the crate, so with the pair a bare run opens on the first
+group is the L1's at 26.5 + 19 x 22.5 = 454px against a bay minimum of 151.5. Below roughly 534px of
+Inspector bay, not one parameter row is drawn. Whether that is a blocker or the first thing this
+bay's own work has to fix is a decision about scrolling that no record here takes.
+
+**Also here.** Three of the seven *Adds* items land in this bay. The **node
 editor**, whose source half is
-`ReadProcedure`, `WriteProcedure` and `WireInput` and is the two *node's source* rows above; adding
+`ReadProcedure` and `WriteProcedure` and is the two *node's source* rows above; adding
 or removing a node is the part with no home, listed in the preamble. The **parameter surfaces**,
 which are *Write a parameter*, *Attach a signal to a parameter* and *Take a parameter back* — the
 MIDI learn half of that item is M5.12 and the tooltip it lives in is M5.11. **What each of them
