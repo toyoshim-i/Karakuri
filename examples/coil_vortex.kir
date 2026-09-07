@@ -1,0 +1,233 @@
+// A funnel of braided coils, gold at the tip and blue at the crown, with a
+// pulse that climbs it once every two beats.
+//
+//     cargo run -p karakuri -- examples/coil_vortex.kir examples/star_flares.kir
+//     cargo run -p karakuri-cli -- --set examples/coil_vortex.kir,examples/star_flares.kir
+//
+// **Ten thousand elements, and the number is the whole design.** The shipped
+// default pair runs `drift_shell` at 262144 additive sprites, where no single
+// element is visible and the picture is a volume of fog — which is a real look
+// and is not the only one. At 10240 every element is an object: it has a size
+// of its own, an orientation of its own, and a place on a curve you can follow
+// with your eye. Everything below spends the budget that buys — on structure
+// and on motion rather than on coverage.
+//
+// **Nothing is limited.** `capacity` declares `[1024, 1048576]`, which is four
+// times the reference workload at the top, and the structure is derived from it
+// rather than hardcoded: `u` is `seed / capacity`, so turning the dial up packs
+// the coils denser and never makes them longer. The default is where the look
+// is, not where the hardware is.
+//
+// # The shape, and why it is not a disc
+//
+// This started as a spiral galaxy — a phyllotaxis disc with the arms wound by
+// radius — and the pictures were the best thing here for about an hour. It does
+// not survive the camera. **A Set with no L3 is watched from the built-in orbit:
+// radius 8, height 2, target the origin**, which is an elevation of 14°, and it
+// revolves at 0.15 turns a second. A flat disc is then either lying nearly
+// edge-on for ever (untilted) or edge-on for half of every camera revolution
+// (tilted) — and the algebra says there is no tilt that avoids both, since the
+// disc's normal has to stay within 14° of the vertical to keep away from the
+// orbit's plane, which is the untilted case again. Rendered frames at four
+// azimuths are what settled it.
+//
+// So the material has **vertical extent instead**, and a body with an axis up
+// the y axis has no bad azimuth at all: every one of them is the same picture
+// turned. The funnel is `pow(u, flare)` in radius, narrow at the bottom and
+// open at the crown, which reads at this elevation as something rising and
+// spreading. `(u - 0.55)` rather than `(u - 0.5)` is framing and nothing else:
+// the orbit looks *down*, so the low end of an axis projects further from the
+// middle of the frame than the high end, and moving the balance point up by a
+// twentieth puts the tip and the crown the same distance from it.
+//
+// # The coils
+//
+// **The azimuth is a golden-ratio hash of `seed`, taken in integer space.** The
+// obvious spelling is the phyllotaxis one — `fract(float(seed) * 0.381966)` —
+// and it is wrong at the top of the declared range: `float(seed)` near a
+// million times a constant lands where a `f32`'s ulp is about a thirtieth, so
+// `fract` of it has a few dozen distinct values and a million elements sit on a
+// few dozen rays. `seed * 2654435769u` wraps in `u32` — exactly, at any
+// capacity — and dividing the result by 2^32 is the same sequence with none of
+// that. The engine's own `step_grid` multiplies by a Knuth constant for the
+// neighbouring reason.
+//
+// **`gather` is what turns an even spray into ribbons.** `f` is how far this
+// element sits from the middle of its arm's angular cell, and the element is
+// pulled toward that middle by `gather`: 0 is a solid cone of points, 1 puts
+// every element exactly on one of `arms` rays. The default of 0.85 leaves the
+// ribbon a body without letting it become a cloud. The same `f` decides
+// `armness` below, so a ribbon is brightest along its spine and dims at its
+// edges — one number, two jobs, which is what keeps the two agreeing.
+//
+// `wind` is how many turns a ribbon makes over the height of the funnel, and
+// `swing` breathes it on an eight-beat cycle: the coils wind up and unwind
+// rather than settling into a fixed helix. Winding *with time* was the first
+// thing tried and it is the classic mistake — a helix that only ever tightens
+// ends as a smooth cone and stays there.
+//
+// # What the music does
+//
+// **`beats` is an ambient**, so this needs no binding to be on the grid: `ph`
+// is a pulse position that sweeps 0 to 1 every `1 / sweep` beats, `ring` is a
+// gaussian around it, and an element within that band is pushed out, enlarged
+// and brightened. A pulse climbing a funnel from the tip to the crown is the
+// most legible musical event this library can draw, and it costs an `exp`.
+//
+// **`star_vortex.kset` binds two more**, which is the other half — see that
+// file. `scale` follows `energy` through `smooth`, so the funnel breathes with
+// how loud the room is, and `ripple` follows `band0` through `pow2`, so the low
+// end kicks the pulse. With no audio input open both signals are invented at a
+// confidence of 0.1 and the bindings move their params a tenth of the way,
+// which is the bus being honest rather than a fallback.
+//
+// # Three things are computed here that a renderer would otherwise compute per
+// # covered pixel
+//
+// `tint`, `size` and `uv`. That is `plain_points.kir`'s argument and it is the
+// reason `tint` exists as an attribute: a `hash1` and an `hsv_to_rgb` in an
+// `element` block run once per element, and the same two in a `fragment` block
+// run once per covered pixel. `uv` is the new one — it carries
+// `vec2(cos(a), sin(a))` for this element's flare axis, so `star_flares` rotates
+// its `point_coord` with two multiplies instead of a hash and a sine pair —
+// which is a fifth of that renderer's fragment block, 147 ops against 122.
+//
+// **`size` is never below 1**, and that is a contract rather than an accident:
+// it is what lets the renderer's declared `point_scale` floor be a real
+// sub-pixel floor. See `star_flares.kir`.
+//
+// Closed form — no `spawn`, no `kill()`, and nothing reads an attribute this
+// procedure emits — so there is nothing to prime and a scrub is exact.
+
+proc coil_vortex {
+  kind     L1
+  topology points
+
+  // Wide on purpose. 10240 is where every element reads as an element; an
+  // operator with the hardware for a quarter of a million is not stopped by
+  // this file, and the structure is derived from `capacity` so the top of the
+  // range is the same funnel packed denser.
+  capacity [1024, 1048576] = 10240
+
+  // Radius at the crown, in world units, and the height of the funnel. The
+  // built-in orbit sits 8 out and 2 up and wants material within about 4 of the
+  // origin: the crown is 3.8 from it at rest, and 4.5 as the pulse passes.
+  param scale  : float [0.3, 4.0]  = 2.8
+  param height : float [0.5, 4.0]  = 2.9
+
+  // The funnel's profile: `waist` is the radius at the tip as a fraction of the
+  // crown's, and `flare` is the exponent between them. 1 is a straight cone,
+  // and above it the throat stays narrow further up.
+  param waist  : float [0.05, 1.0] = 0.26
+  param flare  : float [0.5, 4.0]  = 1.9
+
+  // How many ribbons, and how hard elements are pulled onto them. At 0 this is
+  // a cone of loose points and there are no ribbons to count.
+  param arms   : float [1.0, 9.0]  = 4.0
+  param gather : float [0.0, 1.0]  = 0.85
+
+  // Turns a ribbon makes from tip to crown, and how far that wanders over an
+  // eight-beat cycle.
+  param wind   : float [0.0, 4.0]  = 2.20
+  param swing  : float [0.0, 1.0]  = 0.18
+
+  // Turns per second of the whole funnel, against the camera's own 0.15.
+  param spin   : float [0.0, 0.5]  = 0.045
+
+  // How far off its ribbon an element may sit, radially and vertically. It is
+  // what gives a ribbon a body rather than a line; at 0 the coils are curves
+  // one element thick.
+  param thick  : float [0.0, 1.0]  = 0.14
+
+  // A curl field over the whole body. Small: this file is legible because the
+  // coils are clean, and the turbulence that makes a shell look alive is what
+  // dissolves a ribbon. 0.45 was tried and the picture became a plume.
+  param turb   : float [0.0, 2.0]  = 0.12
+
+  // The pulse. `sweep` is how many climbs per beat — 0.5 is one every two
+  // beats — `sharp` is how tight the band is, and `ripple` is how far it pushes
+  // the material out as it passes.
+  param sweep  : float [0.0, 4.0]  = 0.5
+  param sharp  : float [2.0, 30.0] = 8.0
+  param ripple : float [0.0, 1.5]  = 0.30
+
+  // Hue at the tip, and how far around the wheel the crown is from it. The ramp
+  // runs *backwards* — gold, through red and magenta and violet, to blue —
+  // because forwards from 0.09 passes through green, which was the first thing
+  // rendered here and looked like a fault.
+  param hue    : float [0.0, 1.0]  = 0.09
+  param band   : float [0.0, 1.0]  = 0.50
+  param sat    : float [0.0, 1.0]  = 0.85
+
+  // How heavy the tail of the size distribution is. A few large flares among
+  // many small ones is what makes ten thousand elements read as individuals;
+  // one uniform size reads as a texture whatever the count.
+  param grain  : float [0.0, 6.0]  = 4.0
+
+  // Turns per second of each flare about its own axis. Slow — it is a shimmer,
+  // not a spin.
+  param roll   : float [0.0, 0.5]  = 0.02
+
+  emit position, tint, size, uv
+
+  element {
+    // No `spawn` block, so every element is live from frame zero and `seed` is
+    // the slot index. `u` is therefore this element's place along the funnel,
+    // and it is a function of `capacity`: the dial changes the density and not
+    // the shape.
+    let n = float(capacity);
+    let u = (float(seed) + 0.5) / n;
+
+    // The azimuth, as turns. Integer golden-ratio hashing — see the header for
+    // why this is not `fract(float(seed) * 0.381966)`.
+    let g = float(seed * 2654435769u) / 4294967296.0;
+
+    // Which ribbon, and how far off its middle. `f` is in [-0.5, 0.5) and is
+    // reused below as the brightness across the ribbon.
+    let k = max(floor(arms), 1.0);
+    let s = g * k;
+    let f = fract(s) - 0.5;
+    let turns = (s - f * gather) / k;
+
+    // `beats` is monotone and starts at 0; the guard costs one instruction
+    // against a negative reaching `fract` and the `uint` conversions elsewhere
+    // in this library.
+    let bt = max(beats, 0.0);
+
+    // The pulse: a gaussian band at height `ph`, climbing.
+    let ph = fract(bt * sweep);
+    let dd = (u - ph) * sharp;
+    let ring = exp(-dd * dd);
+
+    // The funnel. `(u - 0.55)` is framing under the built-in orbit; see header.
+    let c    = (u - 0.55) * 2.0;
+    let rad  = scale * (waist + (1.0 - waist) * pow(u, flare));
+    let jit  = 1.0 + thick * (hash1(seed + 5u) - 0.5) * 2.0;
+    let vjit = thick * (hash1(seed + 13u) - 0.5) * height * 0.5;
+    let rr   = rad * jit * (1.0 + ring * ripple);
+
+    let w  = wind + swing * sin(bt * 0.7853982);
+    let th = (turns + u * w + t * spin) * 6.2831853;
+
+    let base = vec3(cos(th) * rr, c * height + vjit, sin(th) * rr);
+    let flow = curl(base * 0.55 + vec3(0.0, t * 0.1, 0.0)) * turb;
+    position = base + flow;
+
+    // Linear RGB: `hsv_to_rgb` returns linear and sRGB is encoded once, at
+    // final output (P-0064). Values above 1.0 are expected — a ribbon's spine
+    // and the pulse are both above it.
+    let armness = 1.0 - smoothstep(0.05, 0.42, abs(f));
+    let h  = fract(hue + 1.0 - band * u * (0.55 + 0.45 * u));
+    let sv = sat * (0.55 + 0.45 * u);
+    tint = hsv_to_rgb(vec3(h, sv, 1.0)) * (0.45 + 0.95 * armness + ring * 1.2);
+
+    // 1 plus something non-negative, always. The renderer's sub-pixel floor is
+    // stated at `size` = 1 and this is what makes that the floor.
+    size = 1.0 + grain * pow(hash1(seed + 7u), 5.0) + ring * 1.2;
+
+    // The axis this element's flare is drawn along, as a unit vector rather
+    // than an angle, so the renderer needs no `sin`/`cos` of its own.
+    let a = (hash1(seed + 3u) + t * roll) * 6.2831853;
+    uv = vec2(cos(a), sin(a));
+  }
+}

@@ -1,0 +1,5 @@
+{"t":"set","id":"star_vortex","v":1}
+{"t":"part","layer":"L1","path":"coil_vortex.kir"}
+{"t":"part","layer":"L4","path":"star_flares.kir"}
+{"t":"bind","layer":"L1","key":"scale","signal":"energy","curve":"smooth","range":[2.35,3.25]}
+{"t":"bind","layer":"L1","key":"ripple","signal":"band0","curve":"pow2","range":[0.12,0.85]}
