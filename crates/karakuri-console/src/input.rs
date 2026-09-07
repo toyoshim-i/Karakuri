@@ -78,12 +78,15 @@
 //!    all. The panel's controls are painted shapes, and the only thing that
 //!    knows a press landed on one is this rule.
 //!
-//!    **How many of them there are is [`CONTROLS`]**, and that is a number
-//!    this crate exports rather than one this paragraph keeps: a surface
-//!    describing itself to an operator has to say what a pointer reaches, and
-//!    a sentence saying it is where the count goes stale. What they are is
-//!    still written here, because a name is not a number and there is nowhere
-//!    else the thirty-six sit together: the Outputs row's sink
+//!    **How many of them there are is [`CONTROLS`]**, summed over [`PROBES`],
+//!    and that is a number this crate exports rather than one this paragraph
+//!    keeps: a surface describing itself to an operator has to say what a
+//!    pointer reaches, and a sentence saying it is where the count goes stale.
+//!    **Which derivation reaches which of them is [`PROBES`] too**, one row
+//!    apiece. What is written out here is the *argument* for each — the
+//!    clearance a control was measured to and what a press on it means — which
+//!    is a paragraph rather than a row and is why this list stays: the Outputs
+//!    row's sink
 //!    ([`crate::view::outputs`]), a mixer strip's fader knob
 //!    ([`crate::view::Mixer::grab`]), its blend chip
 //!    ([`crate::view::Mixer::blend`]), its tally chip
@@ -220,8 +223,8 @@
 //!    **The twenty-fourth to the twenty-seventh are the Library bay's scope
 //!    chips**, and they are the first controls here whose *number* is a value
 //!    rather than a constant — one per scope the host handed the bay, which is
-//!    why [`CLAIMS`]' entry for them is [`Scope::ALL`]'s length written as an
-//!    expression. Their clearance is a sum and not a centring, which is the
+//!    why [`PROBES`]' row for them counts [`Scope::ALL`] rather than
+//!    naming a four. Their clearance is a sum and not a centring, which is the
 //!    Master bay's out's shape one column over: `.scopes` is drawn under the
 //!    bay head, so what holds the chips off the boundary **above** — the one
 //!    between the transport row and the body — is
@@ -506,60 +509,82 @@ use karakuri_operation::gate::Class;
 use crate::panel::{Panel, GRAB};
 use crate::view::{
     arrangement, audio_in, deck_head, inspector, library, look, master, mcp_pill, mixer, outputs,
-    program_bay, program_head, transition, Field, Scope, View, DECK_LETTERS,
+    program_bay, program_head, transition, Field, Scope, View, DECKS, DECK_LETTERS,
 };
 
-/// **What each of rule 4's derivations answers for**, one entry per probe in
-/// [`claim`] and in that order: the Outputs sink, the audio-in pill, the
+/// **What each of rule 4's derivations answers for**, one row per probe and in
+/// the order [`claim`] asks them: the Outputs sink, the audio-in pill, the
 /// arrangement pill, the look group's two, a strip's five, the transition
 /// row's four, the Master bay's one, a deck head's four, the Program bay
 /// head's `solo`, the four deck preview cells, the Library bay's scope chips,
 /// its two filter fields, the `read` chip in its foot and the list above it,
 /// and the four class pills.
 ///
-/// **It is a table and not a sentence because [`claim`] asks its probes out of
-/// an array of exactly this length.** A derivation added to rule 4 without an
-/// entry here does not compile, so [`CONTROLS`] is a sum over the probes that
-/// are actually asked rather than a count somebody has to remember to raise.
+/// **One probe per derivation, cheapest answer first**, and [`on_mcp`] is last
+/// because it is the dearest probe here — each class lays out its bay's whole
+/// head to find one capsule in it, and the Outputs one lays out the row's word
+/// and its sink's name as well.
 ///
-/// **What it cannot see is a control added inside a derivation already here**:
-/// a sixth chip on a strip is one more thing a press reaches, and `on_strip`
-/// would go on answering for five. That one is caught where every other fact
-/// about a control is — the clearance test the rule above says each one owes,
-/// `tests/mask.rs` being the most recent of them — and this entry is what has
-/// to be raised beside it.
+/// **That is a cost ordering and not a correctness one.** [`claim`] answers a
+/// `bool` and the walk short-circuits, so no order over these rows can change
+/// what it says: a press is on one of these controls or it is not, and which
+/// probe noticed first is nobody's business outside this array. **So the rows
+/// may be reordered freely**, and the only thing the order buys is that the
+/// common press — which is on nothing — pays every cheap answer before it pays
+/// the dear one. Which control a press then acts on is asked again by the
+/// caller, in the caller's own order (`karakuri/src/main.rs`).
 ///
-/// **That is not a hypothetical, and the strip's entry is the case it
-/// happened to.** [`crate::view::Mixer::select`] landed with the deck
-/// selection, `karakuri/src/main.rs`'s press arm asked it, both manual pages
-/// described it, and `on_strip` went on asking four questions — so no press on
-/// a strip's ground ever reached [`Claim::Panel`] and the arm that would have
+/// **It is a table and not a sentence because it is what [`claim`] walks.** A
+/// derivation that is not a row here is never asked, so it is not a control at
+/// all; and [`CONTROLS`] is summed over the same rows, so the number this
+/// crate exports and the questions it is a count of cannot come apart. It was
+/// two parallel arrays until 2026-09-07 — a hand-summed `[usize; 15]` beside a
+/// `[&dyn Fn; 15]` inside [`claim`] — and one value carrying both is
+/// [ADR-0274](../../../docs/adr/0274-a-control-is-a-row-in-the-consoles-own-table.md).
+///
+/// **A control added inside a derivation already here is still a number to
+/// raise**: a sixth chip on a strip is one more thing a press reaches, and
+/// [`on_strip`] would go on asking five questions while its row went on saying
+/// five. What has changed is that the probe and the count are now one line
+/// apart instead of two arrays apart, and that **three of the fifteen no
+/// longer carry a number at all** — the class pills, the preview cells and the
+/// scope chips each count the list their probe walks, so a fifth of any of the
+/// three raises [`CONTROLS`] on its own. The rest are caught where every other
+/// fact about a control is: the clearance test the rule above says each one
+/// owes, `tests/mask.rs` being the most recent of them, and this row is what
+/// has to be raised beside it.
+///
+/// **That is not a hypothetical, and the strip's row is the case it happened
+/// to.** [`crate::view::Mixer::select`] landed with the deck selection,
+/// `karakuri/src/main.rs`'s press arm asked it, both manual pages described
+/// it, and [`on_strip`] went on asking four questions — so no press on a
+/// strip's ground ever reached [`Claim::Panel`] and the arm that would have
 /// acted on it never ran. Nothing here could have caught it: the array's
-/// length was right the whole time. What catches it now is
-/// `tests/mixer.rs`, which asks [`claim`] at the points a strip has no chip
-/// on.
+/// length was right the whole time. What catches it now is `tests/mixer.rs`,
+/// which asks [`claim`] at the points a strip has no chip on.
 ///
-/// **The scope row's entry is [`Scope::ALL`]'s length and not a typed four**,
-/// which is the one entry here that is written as an expression. The row is
-/// as long as the slice the host handed the bay, and what a host can hand it
-/// is values of [`Scope`] — so the number of chips a pointer can reach is the
-/// number of scopes that exist, and the day a fifth is added this rises with
-/// it rather than being a four somebody has to remember.
+/// **The scope row's count is [`Scope::ALL`]'s length and not a typed four.**
+/// The row is as long as the slice the host handed the bay, and what a host
+/// can hand it is values of [`Scope`] — so the number of chips a pointer can
+/// reach is the number of scopes that exist, and the day a fifth is added this
+/// rises with it rather than being a four somebody has to remember. The class
+/// pills' count is [`Class::ALL`]'s for the same reason, one crate out, and
+/// the preview cells' is [`DECKS`].
 ///
-/// **The `read` chip's entry is one**, and it is one for a reason worth
-/// separating from the two above: the chip is a *toggle over the cursor*
-/// rather than one of a row, so however long the listing is there is one
-/// capsule to press. What a press on it means depends on whether a reading is
-/// open, and that is inside `LibraryBay::read` where the block is.
+/// **The `read` chip's count is one**, and it is one for a reason worth
+/// separating from those: the chip is a *toggle over the cursor* rather than
+/// one of a row, so however long the listing is there is one capsule to press.
+/// What a press on it means depends on whether a reading is open, and that is
+/// inside `LibraryBay::read` where the block is.
 ///
-/// **The filter row's entry is two and is a constant**, unlike the scope row
+/// **The filter row's count is two and is a constant**, unlike the scope row
 /// above it: the row is `holds` and `layer` because
-/// [`karakuri_operation::Operation::ListSets`] carries two things to narrow by,
-/// and a third would be a change to the vocabulary rather than a longer slice
-/// the host handed in. [`Field::ALL`] is the same two, and it is what the probe
-/// walks.
+/// [`karakuri_operation::Operation::ListSets`] carries two things to narrow
+/// by, and a third would be a change to the vocabulary rather than a longer
+/// slice the host handed in. [`Field::ALL`] is the same two, and it is what the
+/// probe walks.
 ///
-/// **The list's entry is one, and it is the one number here that could have
+/// **The list's count is one, and it is the one number here that could have
 /// been a count and must not be.** A press lands on one of however many rows
 /// the bay drew, exactly as it lands on one of however many chips it drew — and
 /// the chips are counted while these are not, because the difference is what
@@ -571,40 +596,131 @@ use crate::view::{
 /// pointer reaches here*, and a figure that moved when a divider moved would be
 /// answering a different question. So the **list** is the control and which row
 /// is inside [`crate::view::LibraryBay::take`], which is the `read` chip's
-/// entry read the other way round.
-const CLAIMS: [usize; 15] = [
-    1,
-    1,
-    1,
-    2,
-    5,
-    4,
-    1,
-    4,
-    1,
-    4,
-    Scope::ALL.len(),
-    Field::ALL.len(),
-    1,
-    1,
-    4,
+/// row read the other way round.
+pub const PROBES: [Probe; 15] = [
+    Probe {
+        name: "the Outputs row's sink",
+        claims: 1,
+        ask: on_sink,
+    },
+    Probe {
+        name: "the audio-in pill",
+        claims: 1,
+        ask: on_audio,
+    },
+    Probe {
+        name: "the arrangement pill",
+        claims: 1,
+        ask: on_pill,
+    },
+    Probe {
+        name: "the look group's two",
+        claims: 2,
+        ask: on_look,
+    },
+    Probe {
+        name: "a mixer strip's five",
+        claims: 5,
+        ask: on_strip,
+    },
+    Probe {
+        name: "the transition row's four",
+        claims: 4,
+        ask: on_transition,
+    },
+    Probe {
+        name: "the Master bay's out",
+        claims: 1,
+        ask: on_master,
+    },
+    Probe {
+        name: "a deck head's four",
+        claims: 4,
+        ask: on_deck_head,
+    },
+    Probe {
+        name: "the Program bay head's solo",
+        claims: 1,
+        ask: on_solo,
+    },
+    Probe {
+        name: "the deck preview cells",
+        claims: DECKS,
+        ask: on_cells,
+    },
+    Probe {
+        name: "the Library bay's scope chips",
+        claims: Scope::ALL.len(),
+        ask: on_scope,
+    },
+    Probe {
+        name: "the Library bay's filter fields",
+        claims: Field::ALL.len(),
+        ask: on_filter,
+    },
+    Probe {
+        name: "the read chip in the Library bay's foot",
+        claims: 1,
+        ask: on_read,
+    },
+    Probe {
+        name: "the Library bay's list",
+        claims: 1,
+        ask: on_row,
+    },
+    Probe {
+        name: "the class pills",
+        claims: Class::ALL.len(),
+        ask: on_mcp,
+    },
 ];
 
-/// **How many controls rule 4 hit-tests**, summed over [`CLAIMS`].
+/// **One of rule 4's derivations, as a value.**
+///
+/// A control's registration is this row and nothing else: naming it, saying
+/// how many controls a pointer reaches through it, and carrying the probe
+/// [`claim`] asks. There is nowhere else to add one and nowhere else to
+/// forget one.
+pub struct Probe {
+    /// What the derivation answers for, in the words the rule above uses for
+    /// it.
+    ///
+    /// **It is what `karakuri/src/main.rs` keys its own half of the seam on.**
+    /// That file has to *act* on every control this file claims, and until
+    /// 2026-09-07 it rebuilt the list by scanning this crate's source for
+    /// `pub fn`s taking a `Point`, because there was no list here to read. A
+    /// row is a value and has a name, so the scan is gone.
+    pub name: &'static str,
+    /// How many controls a pointer reaches through this one derivation, and
+    /// what [`CONTROLS`] is a sum of.
+    pub claims: usize,
+    /// The derivation that draws those controls, asked whether the point is on
+    /// one of them — and nothing is stored.
+    ///
+    /// **A `fn` and not a closure, because every one of the fifteen wants
+    /// exactly the four values [`claim`] itself takes**: the panel for its
+    /// solved layout, the `egui` context for a galley, the view for what the
+    /// deck and the store said this frame, and the point. The derivations have
+    /// nothing else in common — they answer nine different types to the caller
+    /// — but the question *is the point on one of these* is one signature.
+    pub ask: fn(&Panel, &egui::Context, &View, Point) -> bool,
+}
+
+/// **How many controls rule 4 hit-tests**, summed over [`PROBES`].
 ///
 /// Exported because the answer to *what can the pointer press here* is this
 /// crate's and nobody else's: `egui` owns no widget anywhere on the console,
 /// so a caller has no other way to ask. `karakuri/src/main.rs` prints it in
 /// its legend, where the sentence it replaced said the panel had three
 /// controls and went on saying it while ten more landed.
-pub const CONTROLS: usize = summed(&CLAIMS);
+pub const CONTROLS: usize = summed(&PROBES);
 
-/// [`CLAIMS`] added up in a `const`, which `Iterator::sum` is not.
-const fn summed(claims: &[usize]) -> usize {
+/// [`PROBES`]' claims added up in a `const`, which `Iterator::sum` is not.
+const fn summed(probes: &[Probe]) -> usize {
     let mut total = 0;
     let mut at = 0;
-    while at < claims.len() {
-        total += claims[at];
+    while at < probes.len() {
+        total += probes[at].claims;
         at += 1;
     }
     total
@@ -618,6 +734,243 @@ pub enum Claim {
     Panel,
     /// `egui`'s.
     Egui,
+}
+
+/// **The Outputs row's one sink**, and the first control this console drew —
+/// the rule above is measured against it and `tests/outputs.rs` is where the
+/// arithmetic is. Before the first frame there are no fonts and no drawn
+/// control at all, which [`outputs`] answers `None` to.
+fn on_sink(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    outputs(ctx, panel.layout(), view.opening).is_some_and(|row| row.hit(p))
+}
+
+/// **The two pills that are not in a bay**, and the only two asked
+/// with their cards already known to be shut: rule 2 has answered
+/// for the open case above, so these are the capsules alone.
+///
+/// The audio-in pill is asked first because it is drawn first —
+/// the arrangement pill is laid out from where it ends, so asking
+/// in the other order would derive the second from the first
+/// anyway.
+fn on_audio(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    audio_in(ctx, panel.layout(), view.transport, view.audio.as_ref())
+        .is_some_and(|pill| pill.hit(p))
+}
+
+/// **The arrangement pill**, laid out from where the audio-in pill ends —
+/// which is why it is asked second: asking in the other order would derive
+/// this one from that one anyway.
+fn on_pill(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    arrangement(
+        ctx,
+        panel.layout(),
+        view.transport,
+        view.audio.as_ref(),
+        &view.arrangement,
+    )
+    .is_some_and(|pill| pill.hit(p))
+}
+
+/// **The bay is derived once for all of its controls**, since a
+/// knob, a blend chip, a tally chip, a mask mini and the strip they
+/// sit in are five questions about one laid-out strip.
+///
+/// **The strip is asked last, and it is the only one of the five
+/// that could answer for the other four.** `Mixer::select` is the
+/// column's whole rectangle, so this chain would come out the same
+/// with it first — and the order is the caller's rather than an
+/// optimisation: `karakuri/src/main.rs` tries the four that name
+/// something inside the column and takes the strip as what is left
+/// over, so a press on a knob is that knob's and a press on the
+/// name, the number, the meter or a fader's track is the deck's.
+/// Written in one order in both places, the two cannot come apart.
+fn on_strip(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    mixer(ctx, panel.layout(), &view.mixer).is_some_and(|bay| {
+        bay.grab(p).is_some()
+            || bay.blend(p).is_some()
+            || bay.tally(p).is_some()
+            || bay.mask(p).is_some()
+            || bay.select(p).is_some()
+    })
+}
+
+/// **The transition row's four capsules, derived once for all of
+/// them**, which is a strip's arrangement one row down: the pills
+/// are laid end to end from the block's left padding, so where the
+/// third is depends on how wide the first two words are, and a
+/// second walk would put the capsule a press lands on somewhere
+/// the word is not.
+///
+/// **It is asked whatever the deck is doing.** `on_strip` above
+/// pays nothing on a console with no deck because there are no
+/// strips to lay out; this row is the console's own setting and is
+/// drawn either way, so it is a laid-out row and four word widths
+/// on every press that gets this far.
+///
+/// **The `go` capsule is claimed with no deck behind it too**, and
+/// that is `TransitionRow::owns`' own sentence rather than a
+/// decision here: a press on it is refused and the refusal is the
+/// act, so the panel is what has to answer for the press.
+fn on_transition(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    transition(ctx, panel.layout(), view.transition()).is_some_and(|row| row.owns(p))
+}
+
+/// The two at the end of the transport row, derived once for
+/// both: the exposure track's place is measured from the tone map's
+/// capsule, so they are two questions about one laid-out group.
+fn on_look(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    look(
+        ctx,
+        panel.layout(),
+        view.transport,
+        view.audio.as_ref(),
+        &view.arrangement,
+        view.look,
+    )
+    .is_some_and(|row| row.owns(p))
+}
+
+/// **The Master bay's one control**, and the bay is derived for it
+/// exactly as the mixer's is for its five — one question about one
+/// laid-out row here, because there is one thing in this bay a hand
+/// can move. A console with no level behind it has no row at all
+/// and pays nothing.
+fn on_master(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    master(ctx, panel.layout(), view.master_out).is_some_and(|row| row.owns(p))
+}
+
+/// **The deck head's three, one pane at a time**, and each pane is
+/// derived once for all of them exactly as a strip is: the anchor's
+/// place is measured from the mode chip's and the arrows' from the
+/// anchor's, so they are three questions about one laid-out pane. A
+/// console with no deck behind it has no panes and pays nothing —
+/// [`View::inspector`] is empty, and this iterates over nothing.
+fn on_deck_head(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    view.inspector.iter().enumerate().any(|(index, pane)| {
+        inspector(panel.layout(), index, pane)
+            .and_then(|at| deck_head(ctx, &at, pane))
+            .is_some_and(|head| head.owns(p))
+    })
+}
+
+/// **The one control this console has in a bay head**, and the only
+/// one of the twenty-three whose capsule a boundary's grab reaches —
+/// `view::program_head` is where that 0.75 of a pixel is measured
+/// and argued, and rule 3 above is what decides it.
+fn on_solo(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    program_head(ctx, panel.layout(), view.opening).is_some_and(|head| head.hit(p))
+}
+
+/// **The four deck preview cells, derived once for all of them**,
+/// which is a strip's arrangement one bay over: the cells are four
+/// questions about one arranged Program bay, and a second
+/// derivation would put the cells a press lands on in the other of
+/// the two arrangements. It asks for no type at all — a cell is a
+/// rectangle and a letter — so this is the cheapest probe here.
+fn on_cells(panel: &Panel, _ctx: &egui::Context, view: &View, p: Point) -> bool {
+    program_bay(panel.layout(), view.canvas).is_some_and(|bay| bay.owns(p))
+}
+
+/// **The Library bay's scope chips**, and it is the first control
+/// this console has whose *count* is a value rather than a
+/// constant: the row is as long as the slice the host handed the
+/// bay. One derivation for all of them, which is a strip's
+/// arrangement — the chips are laid end to end from the row's left
+/// padding, so where the fourth is depends on how wide the first
+/// three words are, and a second walk would put the capsule a press
+/// lands on somewhere the wash is not.
+///
+/// **The row is asked before any chip is**, inside
+/// `LibraryBay::chip`: `.scopes` clips, so at the mock's own width
+/// the fourth chip finishes outside the bay, and the part of it
+/// that is not drawn is not a target. The part that is inside the
+/// pane divider's grab is the boundary's under rule 3 above, which
+/// is this rule's ordinary price and is measured in
+/// `tests/library.rs`.
+fn on_scope(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    library(panel.layout(), &view.scopes, &view.library, view.opened())
+        .is_some_and(|bay| bay.chip(ctx, &view.scopes, p).is_some())
+}
+
+/// **The Library bay's two filter fields**, one row under the
+/// chips, and the bay is derived again rather than shared with the
+/// probe above it — `any` short-circuits, so the second derivation
+/// is only ever paid by a press that got past the chips, and a bay
+/// held across two probes would be a value living longer than the
+/// question it answers.
+///
+/// **It asks `egui` for nothing**, where the chips ask it for a word
+/// width apiece: `.field` is `flex: 1`, so where the two fields are
+/// is a division of the row rather than a measurement of what is in
+/// them — `LibraryBay::field`. So this is the cheapest probe in rule
+/// 4 after the preview cells, and it is asked here rather than
+/// earlier because the row it is in is drawn only where the chips
+/// above it are.
+fn on_filter(panel: &Panel, _ctx: &egui::Context, view: &View, p: Point) -> bool {
+    library(panel.layout(), &view.scopes, &view.library, view.opened())
+        .is_some_and(|bay| bay.filter(&view.holds, view.filters(), p).is_some())
+}
+
+/// **The `read` chip in the Library bay's foot**, and it is the
+/// one control in this bay that is not in its head: the chips say
+/// which library and the fields narrow it, where this reads the row
+/// the cursor is on. The bay is derived a third time for the second
+/// probe's reason — `any` short-circuits, so a press that got this
+/// far has already been turned down by the two rows above.
+///
+/// **The Set under the cursor goes in with the point**, because
+/// what a press asks for names it: `Operation::ReadSet` carries an
+/// id, and this crate reads no store (ADR-0156), so the operand is
+/// the row the host handed in. A listing with nothing in it has no
+/// Set there, and the chip then claims nothing —
+/// `LibraryBay::read`.
+fn on_read(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    library(panel.layout(), &view.scopes, &view.library, view.opened()).is_some_and(|bay| {
+        bay.read(
+            ctx,
+            DECK_LETTERS[usize::from(view.selection())],
+            view.library.get(view.cursor_row()).map(String::as_str),
+            p,
+        )
+        .is_some()
+    })
+}
+
+/// **The rows of the Library bay's list**, and they are the first
+/// thing on this console a press *takes hold of* rather than acts
+/// on: a press on a row picks that Set up, and what it asks for is
+/// decided where it is let go — `LibraryBay::take`, and
+/// `crate::panel::Panel::carry`. The bay is derived a fourth time
+/// for the third probe's reason, and this one is asked after the
+/// three above because the head and the foot are drawn over the
+/// ends of the same bay and a row is what is between them.
+///
+/// **The listing goes in with the point**, exactly as it does for
+/// the `read` chip above and for the same reason: what a row means
+/// is a name this crate reads no store for (ADR-0156), and a row
+/// with no Set behind it is not a target. A press on the list's own
+/// ground below the last row is nobody's, which is rule 4's *a
+/// control claims what it acts on and no more*.
+fn on_row(panel: &Panel, _ctx: &egui::Context, view: &View, p: Point) -> bool {
+    library(panel.layout(), &view.scopes, &view.library, view.opened())
+        .is_some_and(|bay| bay.take(&view.library, p).is_some())
+}
+
+/// **The four class pills, one derivation asked four times**, which
+/// is a deck head's arrangement rather than a strip's: they are in
+/// four different regions and cannot be one laid-out box, but they
+/// are one type and one question — `view::mcp_pill`, asked whether
+/// the point is on the capsule that region draws.
+///
+/// **Asked last because it is the dearest probe here.** Each class
+/// lays out its bay's whole head to find one capsule in it, and the
+/// Outputs one lays out the row's word and its sink's name as well;
+/// `any` short-circuits, so the common press — which is on nothing —
+/// still pays it only after every cheaper answer has said no.
+fn on_mcp(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    Class::ALL.iter().any(|class| {
+        mcp_pill(ctx, panel.layout(), *class, view.opening).is_some_and(|pill| pill.hit(p))
+    })
 }
 
 /// Who gets a pointer event at `p` — see the module documentation for the
@@ -700,248 +1053,14 @@ pub fn claim(panel: &mut Panel, ctx: &egui::Context, view: &View, p: Point) -> C
     // anything. See the module documentation and `tests/outputs.rs`.
     match panel.layout().hit(p, GRAB) {
         Hit::Divider { .. } => Claim::Panel,
-        // Rule 4, over all [`CONTROLS`] of the console's controls. Each is
-        // asked the same way — the derivation that draws it, asked whether the
-        // point is on it — and no answer is stored.
+        // Rule 4, over all [`CONTROLS`] of the console's controls, one row
+        // of [`PROBES`] at a time. Each is asked the same way — the
+        // derivation that draws it, asked whether the point is on it — and no
+        // answer is stored. The walk short-circuits exactly as the chain of
+        // `||` it replaced did, so a press on the sink still costs one galley
+        // lookup.
         Hit::View(_) | Hit::Nothing => {
-            let on_sink =
-                || outputs(ctx, panel.layout(), view.opening).is_some_and(|row| row.hit(p));
-            // **The two pills that are not in a bay**, and the only two asked
-            // with their cards already known to be shut: rule 2 has answered
-            // for the open case above, so these are the capsules alone.
-            //
-            // The audio-in pill is asked first because it is drawn first —
-            // the arrangement pill is laid out from where it ends, so asking
-            // in the other order would derive the second from the first
-            // anyway.
-            let on_audio = || {
-                audio_in(ctx, panel.layout(), view.transport, view.audio.as_ref())
-                    .is_some_and(|pill| pill.hit(p))
-            };
-            let on_pill = || {
-                arrangement(
-                    ctx,
-                    panel.layout(),
-                    view.transport,
-                    view.audio.as_ref(),
-                    &view.arrangement,
-                )
-                .is_some_and(|pill| pill.hit(p))
-            };
-            // **The bay is derived once for all of its controls**, since a
-            // knob, a blend chip, a tally chip, a mask mini and the strip they
-            // sit in are five questions about one laid-out strip.
-            //
-            // **The strip is asked last, and it is the only one of the five
-            // that could answer for the other four.** `Mixer::select` is the
-            // column's whole rectangle, so this chain would come out the same
-            // with it first — and the order is the caller's rather than an
-            // optimisation: `karakuri/src/main.rs` tries the four that name
-            // something inside the column and takes the strip as what is left
-            // over, so a press on a knob is that knob's and a press on the
-            // name, the number, the meter or a fader's track is the deck's.
-            // Written in one order in both places, the two cannot come apart.
-            let on_strip = || {
-                mixer(ctx, panel.layout(), &view.mixer).is_some_and(|bay| {
-                    bay.grab(p).is_some()
-                        || bay.blend(p).is_some()
-                        || bay.tally(p).is_some()
-                        || bay.mask(p).is_some()
-                        || bay.select(p).is_some()
-                })
-            };
-            // **The transition row's four capsules, derived once for all of
-            // them**, which is a strip's arrangement one row down: the pills
-            // are laid end to end from the block's left padding, so where the
-            // third is depends on how wide the first two words are, and a
-            // second walk would put the capsule a press lands on somewhere
-            // the word is not.
-            //
-            // **It is asked whatever the deck is doing.** `on_strip` above
-            // pays nothing on a console with no deck because there are no
-            // strips to lay out; this row is the console's own setting and is
-            // drawn either way, so it is a laid-out row and four word widths
-            // on every press that gets this far.
-            //
-            // **The `go` capsule is claimed with no deck behind it too**, and
-            // that is `TransitionRow::owns`' own sentence rather than a
-            // decision here: a press on it is refused and the refusal is the
-            // act, so the panel is what has to answer for the press.
-            let on_transition = || {
-                transition(ctx, panel.layout(), view.transition()).is_some_and(|row| row.owns(p))
-            };
-            // The two at the end of the transport row, derived once for
-            // both: the exposure track's place is measured from the tone map's
-            // capsule, so they are two questions about one laid-out group.
-            let on_look = || {
-                look(
-                    ctx,
-                    panel.layout(),
-                    view.transport,
-                    view.audio.as_ref(),
-                    &view.arrangement,
-                    view.look,
-                )
-                .is_some_and(|row| row.owns(p))
-            };
-            // **The deck head's three, one pane at a time**, and each pane is
-            // derived once for all of them exactly as a strip is: the anchor's
-            // place is measured from the mode chip's and the arrows' from the
-            // anchor's, so they are three questions about one laid-out pane. A
-            // console with no deck behind it has no panes and pays nothing —
-            // [`View::inspector`] is empty, and this iterates over nothing.
-            // **The Master bay's one control**, and the bay is derived for it
-            // exactly as the mixer's is for its five — one question about one
-            // laid-out row here, because there is one thing in this bay a hand
-            // can move. A console with no level behind it has no row at all
-            // and pays nothing.
-            let on_master =
-                || master(ctx, panel.layout(), view.master_out).is_some_and(|row| row.owns(p));
-            let on_deck_head = || {
-                view.inspector.iter().enumerate().any(|(index, pane)| {
-                    inspector(panel.layout(), index, pane)
-                        .and_then(|at| deck_head(ctx, &at, pane))
-                        .is_some_and(|head| head.owns(p))
-                })
-            };
-            // **The one control this console has in a bay head**, and the only
-            // one of the twenty-three whose capsule a boundary's grab reaches —
-            // `view::program_head` is where that 0.75 of a pixel is measured
-            // and argued, and rule 3 above is what decides it.
-            let on_solo =
-                || program_head(ctx, panel.layout(), view.opening).is_some_and(|head| head.hit(p));
-            // **The four deck preview cells, derived once for all of them**,
-            // which is a strip's arrangement one bay over: the cells are four
-            // questions about one arranged Program bay, and a second
-            // derivation would put the cells a press lands on in the other of
-            // the two arrangements. It asks for no type at all — a cell is a
-            // rectangle and a letter — so this is the cheapest probe here.
-            let on_cells =
-                || program_bay(panel.layout(), view.canvas).is_some_and(|bay| bay.owns(p));
-            // **The Library bay's scope chips**, and it is the first control
-            // this console has whose *count* is a value rather than a
-            // constant: the row is as long as the slice the host handed the
-            // bay. One derivation for all of them, which is a strip's
-            // arrangement — the chips are laid end to end from the row's left
-            // padding, so where the fourth is depends on how wide the first
-            // three words are, and a second walk would put the capsule a press
-            // lands on somewhere the wash is not.
-            //
-            // **The row is asked before any chip is**, inside
-            // `LibraryBay::chip`: `.scopes` clips, so at the mock's own width
-            // the fourth chip finishes outside the bay, and the part of it
-            // that is not drawn is not a target. The part that is inside the
-            // pane divider's grab is the boundary's under rule 3 above, which
-            // is this rule's ordinary price and is measured in
-            // `tests/library.rs`.
-            let on_scope = || {
-                library(panel.layout(), &view.scopes, &view.library, view.opened())
-                    .is_some_and(|bay| bay.chip(ctx, &view.scopes, p).is_some())
-            };
-            // **The Library bay's two filter fields**, one row under the
-            // chips, and the bay is derived again rather than shared with the
-            // probe above it — `any` short-circuits, so the second derivation
-            // is only ever paid by a press that got past the chips, and a bay
-            // held across two probes would be a value living longer than the
-            // question it answers.
-            //
-            // **It asks `egui` for nothing**, where the chips ask it for a word
-            // width apiece: `.field` is `flex: 1`, so where the two fields are
-            // is a division of the row rather than a measurement of what is in
-            // them — `LibraryBay::field`. So this is the cheapest probe in rule
-            // 4 after the preview cells, and it is asked here rather than
-            // earlier because the row it is in is drawn only where the chips
-            // above it are.
-            let on_filter = || {
-                library(panel.layout(), &view.scopes, &view.library, view.opened())
-                    .is_some_and(|bay| bay.filter(&view.holds, view.filters(), p).is_some())
-            };
-            // **The `read` chip in the Library bay's foot**, and it is the
-            // one control in this bay that is not in its head: the chips say
-            // which library and the fields narrow it, where this reads the row
-            // the cursor is on. The bay is derived a third time for the second
-            // probe's reason — `any` short-circuits, so a press that got this
-            // far has already been turned down by the two rows above.
-            //
-            // **The Set under the cursor goes in with the point**, because
-            // what a press asks for names it: `Operation::ReadSet` carries an
-            // id, and this crate reads no store (ADR-0156), so the operand is
-            // the row the host handed in. A listing with nothing in it has no
-            // Set there, and the chip then claims nothing —
-            // `LibraryBay::read`.
-            let on_read = || {
-                library(panel.layout(), &view.scopes, &view.library, view.opened()).is_some_and(
-                    |bay| {
-                        bay.read(
-                            ctx,
-                            DECK_LETTERS[usize::from(view.selection())],
-                            view.library.get(view.cursor_row()).map(String::as_str),
-                            p,
-                        )
-                        .is_some()
-                    },
-                )
-            };
-            // **The rows of the Library bay's list**, and they are the first
-            // thing on this console a press *takes hold of* rather than acts
-            // on: a press on a row picks that Set up, and what it asks for is
-            // decided where it is let go — `LibraryBay::take`, and
-            // `crate::panel::Panel::carry`. The bay is derived a fourth time
-            // for the third probe's reason, and this one is asked after the
-            // three above because the head and the foot are drawn over the
-            // ends of the same bay and a row is what is between them.
-            //
-            // **The listing goes in with the point**, exactly as it does for
-            // the `read` chip above and for the same reason: what a row means
-            // is a name this crate reads no store for (ADR-0156), and a row
-            // with no Set behind it is not a target. A press on the list's own
-            // ground below the last row is nobody's, which is rule 4's *a
-            // control claims what it acts on and no more*.
-            let on_row = || {
-                library(panel.layout(), &view.scopes, &view.library, view.opened())
-                    .is_some_and(|bay| bay.take(&view.library, p).is_some())
-            };
-            // **The four class pills, one derivation asked four times**, which
-            // is a deck head's arrangement rather than a strip's: they are in
-            // four different regions and cannot be one laid-out box, but they
-            // are one type and one question — `view::mcp_pill`, asked whether
-            // the point is on the capsule that region draws.
-            //
-            // **Asked last because it is the dearest probe here.** Each class
-            // lays out its bay's whole head to find one capsule in it, and the
-            // Outputs one lays out the row's word and its sink's name as well;
-            // `any` short-circuits, so the common press — which is on nothing —
-            // still pays it only after every cheaper answer has said no.
-            let on_mcp = || {
-                Class::ALL.iter().any(|class| {
-                    mcp_pill(ctx, panel.layout(), *class, view.opening)
-                        .is_some_and(|pill| pill.hit(p))
-                })
-            };
-            // **One probe per derivation, cheapest answer first**, and the
-            // array is [`CLAIMS`]' length: a control reached through a
-            // derivation that list does not have fails to compile here, which
-            // is the whole of why [`CONTROLS`] cannot fall behind the rule.
-            // `any` short-circuits exactly as the chain of `||` it replaced
-            // did, so a press on the sink still costs one galley lookup.
-            let probes: [&dyn Fn() -> bool; CLAIMS.len()] = [
-                &on_sink,
-                &on_audio,
-                &on_pill,
-                &on_look,
-                &on_strip,
-                &on_transition,
-                &on_master,
-                &on_deck_head,
-                &on_solo,
-                &on_cells,
-                &on_scope,
-                &on_filter,
-                &on_read,
-                &on_row,
-                &on_mcp,
-            ];
-            match probes.iter().any(|probe| probe()) {
+            match PROBES.iter().any(|probe| (probe.ask)(panel, ctx, view, p)) {
                 true => Claim::Panel,
                 false => Claim::Egui,
             }

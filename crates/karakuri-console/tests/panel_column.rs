@@ -385,6 +385,33 @@ fn sample(variant: &str) -> Operation {
     }
 }
 
+/// Every `.rs` file under `dir`, **including the ones in directories under
+/// it**.
+///
+/// The read was one level deep until 2026-09-07, with the count floor above as
+/// its only guard — and the floor could not have caught the case it was
+/// written for. There are seven `.rs` files directly under `SRC`; splitting
+/// `view.rs` into `view/` would leave seven of them there and take every
+/// emission in it out of this scan, silently, with `files.len() >= 7` still
+/// true. `crates/karakuri/src/main.rs`'s press handler ran the same listing
+/// with the same floor and is gone; this is the other half.
+fn walk(dir: &Path, into: &mut Vec<PathBuf>) {
+    let entries = fs::read_dir(dir).unwrap_or_else(|e| {
+        panic!(
+            "{} is under this crate's source and is unreadable: {e}",
+            dir.display()
+        )
+    });
+    for entry in entries {
+        let path = entry.expect("a directory entry").path();
+        if path.is_dir() {
+            walk(&path, into);
+        } else if path.extension().is_some_and(|e| e == "rs") {
+            into.push(path);
+        }
+    }
+}
+
 /// **Every operation a control in this crate constructs**, by the criterion in
 /// this file's header, as an `Operation` apiece.
 ///
@@ -392,16 +419,8 @@ fn sample(variant: &str) -> Operation {
 /// reached and one row may be reached from more than one file.
 fn emissions() -> Vec<Operation> {
     let dir = workspace().join(SRC);
-    let mut files: Vec<PathBuf> = fs::read_dir(&dir)
-        .unwrap_or_else(|e| {
-            panic!(
-                "{} is this crate's source and is unreadable: {e}",
-                dir.display()
-            )
-        })
-        .map(|entry| entry.expect("a directory entry").path())
-        .filter(|path| path.extension().is_some_and(|e| e == "rs"))
-        .collect();
+    let mut files = Vec::new();
+    walk(&dir, &mut files);
     files.sort();
     assert!(
         files.len() >= 7,

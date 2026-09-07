@@ -301,6 +301,8 @@ number; new records continue from the end.
 | [ADR-0271](0271-the-panel-opens-on-the-demo-rather-than-on-the-reference-workloads-pair.md) | The panel opens on the demo rather than on the reference workload's pair | 2026-09-07 | accepted |
 | [ADR-0272](0272-the-window-has-a-minimum-and-only-one-of-adr-0250s-three-cases-is-real.md) | The window has a minimum, and only one of ADR-0250's three cases is real | 2026-09-07 | accepted |
 | [ADR-0273](0273-the-carry-lands-on-two-sets-of-rectangles-and-wears-a-face.md) | The carry lands on two sets of rectangles and wears a face | 2026-09-07 | accepted |
+| [ADR-0274](0274-a-control-is-a-row-in-the-consoles-own-table.md) | A control is a row in the console's own table | 2026-09-07 | accepted |
+| [ADR-0275](0275-a-folder-is-chosen-by-dropping-one-on-the-window-and-the-drop-is-the-windows-rather-than-a-bays.md) | A folder is chosen by dropping one on the window, and the drop is the window's rather than a bay's | 2026-09-07 | accepted |
 
 ## Retired numbers
 
