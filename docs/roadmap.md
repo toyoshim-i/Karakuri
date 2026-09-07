@@ -515,13 +515,27 @@ nobody specified (`view::LibraryBay`).
 
 **The two pieces of work this milestone is waiting on, as tasks rather than as prose.**
 
-1. **A folder scope with a directory in it.** ADR-0267 puts the send there, and `Scope::Folder`
-   *"waits on an operation"* — `ListSets { holds, layer }` has nowhere to put a directory, so the
-   chip is drawn and cannot be asked for a listing. The bay owes this whatever is decided about
-   sending: a scope that cannot be asked is a chip with no answer. The mock has been drawing the
-   answer the whole time — `console.html`'s `.path` row, which `view::LibraryBay` lists as an
-   element this crate has not built. **Sending is the only `plan` panel badge this blocks**, and the
-   page turning `a folder is a way in` around is ADR-0267's other half.
+1. **A folder scope with a directory in it — and it does not wait on an operation.** Three places
+   say it does: `view::Scope`'s doc bullet, `why_nothing`'s `Folder` arm, and the tip on *List what
+   the store holds*. All three read a correctly shaped payload as a defect. **`ListSets { holds,
+   layer }` is not missing a field**: both its fields are filters over what the store already holds,
+   a directory is *which store is being asked at all*, and that is already the host's — `listing()`
+   picks the store or the presets root outside the operation. What decides it is the rule the one
+   path in the vocabulary already obeys: **a path may sit in a payload only where every route that
+   fills it derives it from something the program itself produced.** `SetTransfer::Take { file }`
+   obeys — the panel's route re-asks the presets listing and finds the row by the word that was
+   pressed, so no surface spells a path. A directory on `ListSets` would be spelled, and `mcp.rs`'s
+   *"paths never cross the protocol"* is the same wall on the other side. There is no per-surface
+   exemption to reach for either: `gate` is one classification and one sentence for every route.
+
+   So what the chip waits on is **a host mechanism for choosing a directory, and a sentence on the
+   page** — `console.html`'s `.path` row is drawn and carries no `data-tip`, alone among that bay's
+   elements. The decision is a folder dragged onto the bay: no dependency, no modal over a live
+   instrument, and the `.path` row is already drawn as a readout of where you are, which is what a
+   dropped folder sets. It rests on one unknown — whether a dropped *directory* reaches
+   `egui`'s `dropped_files` on this platform — and a dialog with a dependency is the fallback if it
+   does not. **Sending is the only `plan` panel badge this blocks**, and the page turning `a folder
+   is a way in` around is ADR-0267's other half.
 2. **A lister for the edit history, and the bay walking it.** `karakuri_environment::history` has
    `Snapshots::record`, `seed` and `stamped_id` and **no lister**: nothing opens `<store>/history/`
    to answer *what versions has this had*. Once it can, *Walk the edit history* is a scope in this
