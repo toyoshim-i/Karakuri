@@ -1047,6 +1047,56 @@ is a change to the arrangement and wants its own record.
 
 Nothing in this section is blocked.
 
+#### M5.14 — The frame's cost
+
+**Its subject is what a frame costs and who is told, and it is a sub-milestone because nothing else
+here can hold it.** Everything below was recorded, verified and hooked into *Performance
+discipline* — which `Continuous concerns` opens by saying are **not milestones**. So it was prose
+under a heading that closes nothing, which is how four items came to float free of every exit
+condition in this file.
+
+**What it is for is drawn in the mock and drawn nowhere else.** The risk badge's five bands are
+specified in [the console page](manual/console.html), under *What a deck preview cell shows, and
+when* and on deck A's caption tooltip. **M5.1 closed on 2026-09-03 with the badge undrawn**, on the
+reading that it is *"not a drawing that is owed"* because nothing could produce the estimate — and
+nothing was scheduled to. That is this repository's own named failure, realised: an unfinished task
+under a closed milestone is never picked up.
+
+**Items, in the order they unblock each other.**
+
+1. **A floor a caller does not have to supply.** `estimate` answers `Unfit::FloorUnknown` for every
+   `Points` and `Lines` Set, because ADR-0245's sub-pixel floor needs `1/rate` and `point_rate` is a
+   per-element vertex expression the CPU never reads. Closing it is a static analysis of that
+   expression against its params' declared ranges. **Until it closes the estimate answers for almost
+   nothing this instrument ships**, which is the precondition of item 4 being worth doing.
+2. **An instrument that measures a frame rather than a pass.** Nothing has ever timed the frame's
+   passes together — the panel's three medians are CPU time by construction and the wait beside them
+   is excluded on a reading that holds only while the GPU is not the bottleneck. P-0095 asks what a
+   number carries about how it was taken, and *the whole frame* has no answer yet.
+3. **A deck total beside `committed_ms`.** Both it and `headroom_ms` sum only Live slots, so since
+   ADR-0269 they understate the deck by three slots of step **and** draw. The measured case is in
+   this file: a four-slot frame is 21 ms warm and was 209 ms cold, and **it registers as no violation
+   at all**. Making `committed_ms` the deck's total would leave `over_budget` permanently on for any
+   four-slot deck of heavy material, so what `over_budget` should then say is part of the item.
+4. **`estimate` wired to `Deck::govern`.** Built on 2026-09-06 and exported from `lib.rs` to no
+   caller. It is also the other half of the ceilings' sentence — *they are a backstop, not a budget,
+   and the governor is what enforces* — so nothing is owed on the four ceilings themselves beyond
+   this.
+5. **The badge drawn**, which is what the four above are for.
+
+**Exit.** Not a badge grep, and that is the point: **the panel draws a dot whose band a test can
+predict from a measurement.** Every other sub-milestone's exit is a column of
+[every operation](manual/operations.html); this one's consumer is a readout rather than an
+operation, which is exactly why no column could hold it.
+
+**Blocked on.** Item 1 blocks item 4. Nothing else here waits on another bay.
+
+**What ADR-0226 says, and what it does not.** M5 closes when M5.1 to M5.9 close and the two sections
+at the end of this list close with them. **M5.14 is not in that list**, and neither are M5.10 to
+M5.13 — the four columns and this are cross-cutting where M5.1 to M5.9 are bays. So M5 can close
+with the badge undrawn exactly as M5.1 did, and whether it should is ADR-0226's question rather than
+this section's.
+
 ---
 
 ### M6 — Autonomy
