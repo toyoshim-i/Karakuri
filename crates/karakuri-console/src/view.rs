@@ -9066,11 +9066,14 @@ fn stepped_layer(at: Option<Layer>) -> Option<Layer> {
 ///   *"Nothing in the vocabulary names a favourite, so there is nothing yet for
 ///   a key, a map or a model to reach."* Nothing here writes one, and a store
 ///   invented for it would be the specification written backwards.
-/// - [`Scope::Folder`] — **it waits on an operation.** *A folder scope reads
-///   Sets, and a bundle is not a third thing*: *"no operation in the vocabulary
-///   can ask a folder for its listing"*, because `Operation::ListSets` carries
-///   what a Set holds and has nowhere to put a directory. So the chip waits on
-///   a row of the page and not on a decision.
+/// - [`Scope::Folder`] — **it waits on a directory, and not on an operation.**
+///   `Operation::ListSets { holds, layer }` is not missing a field: both are
+///   filters over what a store already holds, and a directory is *which store
+///   is asked at all*, which is the host's outside the operation entirely.
+///   What the chip waits on is a mechanism for choosing one, and ADR-0275 is
+///   it — a folder dragged off the desktop onto the window, window-global
+///   rather than aimed at this bay. `console.html`'s *How a folder is chosen,
+///   and why the drop is the window's* is the specification.
 ///
 /// Both are **drawn** all the same, which is not the placeholder ADR-0200
 /// refuses: a chip is the question, the question is real, and what is missing
