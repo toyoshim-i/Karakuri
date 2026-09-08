@@ -78,7 +78,7 @@
 //! operation leaves the layout clean behind it.
 
 use karakuri_layout::{Axis, Hit, Layout, NodeId, Point, Rect};
-use karakuri_operation::Operation;
+use karakuri_operation::{Operation, ParamAt, ParamValue};
 
 /// How far either side of a boundary still grabs it. Wider than any divider
 /// the console draws, which is [`Layout::hit`]'s whole argument for taking a
@@ -227,7 +227,7 @@ struct Carrying {
 /// **which deck** is part of what a knob *is* rather than something every
 /// knob has. A variant that carries it and one that does not is the compiler
 /// holding that, where an `Option<u8>` would leave `Trim` free to be `None`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Knob {
     /// The trim — the mock's `.trim .fader`, lying down —
     /// [`Operation::SetGain`].
@@ -250,19 +250,50 @@ pub enum Knob {
     /// `docs/adr/0224-out-and-exposure-are-two-levels-that-multiply-in-different-places.md`
     /// for why it is not the tone mapper's exposure).
     Out,
+    /// **A published parameter's fader**, in an Inspector pane —
+    /// [`Operation::WriteParam`]. It is the one knob that names something
+    /// inside a Set rather than a level on it, which is why it carries a name
+    /// and this enum is no longer `Copy`: a parameter is addressed by name,
+    /// which is ADR-0280's own reason for `mix::Change`, and the address is
+    /// `karakuri-operation`'s so there is one spelling of it.
+    Param {
+        /// Which deck's, on [`Knob::Trim`]'s terms.
+        deck: u8,
+        /// The control the interface published. A `None` node is a wildcard,
+        /// and `Set::write_param` is where ADR-0223's authority refusal meets
+        /// it.
+        param: ParamAt,
+        /// What it was published over. [`Knob::operation`]'s `value` is a
+        /// track position and this is what turns it into a number.
+        range: [f32; 2],
+    },
 }
 
 impl Knob {
     /// **The operation this knob asks for at `value`**, and the whole of the
     /// translation a fader performs.
-    pub fn operation(self, value: f32) -> Operation {
+    pub fn operation(&self, value: f32) -> Operation {
         match self {
-            Knob::Trim { deck } => Operation::SetGain { deck, gain: value },
+            Knob::Trim { deck } => Operation::SetGain {
+                deck: *deck,
+                gain: value,
+            },
             Knob::Fader { deck } => Operation::SetOpacity {
-                deck,
+                deck: *deck,
                 opacity: value,
             },
             Knob::Out => Operation::SetMasterOut { out: value },
+            // `crate::view::Param::at` inverted, which is the relation
+            // `Grab::value` has to `crate::view::filled` one field along.
+            Knob::Param {
+                deck,
+                param,
+                range: [low, high],
+            } => Operation::WriteParam {
+                deck: *deck,
+                param: param.clone(),
+                value: ParamValue::Scalar(low + (high - low) * value.clamp(0.0, 1.0)),
+            },
         }
     }
 
@@ -271,9 +302,9 @@ impl Knob {
     /// For a caller with a sentence to print. Nothing routes through it: the
     /// deck is inside the operation already, which is [`Dragged::Fader`]'s
     /// rule about one value and not two.
-    pub fn deck(self) -> Option<u8> {
+    pub fn deck(&self) -> Option<u8> {
         match self {
-            Knob::Trim { deck } | Knob::Fader { deck } => Some(deck),
+            Knob::Trim { deck } | Knob::Fader { deck } | Knob::Param { deck, .. } => Some(*deck),
             Knob::Out => None,
         }
     }
@@ -299,7 +330,7 @@ impl Knob {
 /// is being held goes on using the track the press was made on until the
 /// button comes up. A hand cannot do both at once, and the alternative — this
 /// module re-deriving a strip's geometry — is the toolkit inside the model.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Grab {
     knob: Knob,
     axis: Axis,
@@ -333,8 +364,8 @@ impl Grab {
     }
 
     /// Which control this is, and which deck's where it is a deck's.
-    pub fn knob(self) -> Knob {
-        self.knob
+    pub fn knob(&self) -> Knob {
+        self.knob.clone()
     }
 
     /// **What a pointer at `coord` puts this fader at**, on `[0, 1]`.
@@ -357,7 +388,7 @@ impl Grab {
     /// over `[0, 1]` and cannot show the difference between 1.0 and 3.0. The
     /// top of this drag is exactly unity, so what the gap costs is *reach*
     /// rather than *precision*.
-    pub fn value(self, coord: f32) -> f32 {
+    pub fn value(&self, coord: f32) -> f32 {
         let edge = coord - self.offset;
         unit(match self.axis {
             Axis::Row => (edge - self.zero) / self.travel,
@@ -1095,8 +1126,7 @@ impl Panel {
         let Some(Drag::Fader(fading)) = self.drag.as_mut() else {
             return None;
         };
-        let grab = fading.grab;
-        let value = grab.value(grab.axis.coord(p));
+        let value = fading.grab.value(fading.grab.axis.coord(p));
         // **Exactly, and not within a threshold.** See `Fading::said`: a
         // boundary's half a pixel is about what is worth *printing* at sixty
         // asks a second, and every value that differs here is a different mix.
@@ -1104,7 +1134,7 @@ impl Panel {
             return None;
         }
         fading.said = Some(value);
-        Some(Dragged::Fader(grab.knob.operation(value)))
+        Some(Dragged::Fader(fading.grab.knob.operation(value)))
     }
 
     /// The pointer went up. `None` where nothing was in hand.
@@ -1153,7 +1183,7 @@ impl Panel {
             // No solve: a fader drag never touched the layout, so there is
             // nothing owed and nothing to read back out of it.
             Drag::Fader(fading) => Some(Released::Let {
-                knob: fading.grab.knob,
+                knob: fading.grab.knob.clone(),
             }),
             // No solve either, and for the same reason: a carry moved nothing
             // here. `onto` was resolved against the layout the *caller* had

@@ -508,15 +508,18 @@ use karakuri_operation::gate::Class;
 
 use crate::panel::{Panel, GRAB};
 use crate::view::{
-    arrangement, audio_in, deck_head, inspector, library, look, master, mcp_pill, mixer, outputs,
-    program_bay, program_head, tracker_group, transition, Field, Scope, View, DECKS, DECK_LETTERS,
+    arrangement, audio_in, deck_head, inspector, keep_pill, library, look, master, mcp_pill, mixer,
+    outputs, program_bay, program_head, tracker_group, transition, Field, Scope, View, DECKS,
+    DECK_LETTERS,
 };
 
 /// **What each of rule 4's derivations answers for**, one row per probe and in
 /// the order [`claim`] asks them: the Outputs sink, the audio-in pill, the
 /// tracker group's three, the arrangement pill, the look group's two, a
-/// strip's five, the transition row's four, the Master bay's one, a deck
-/// head's four, the Program bay head's `solo`, the four deck preview cells,
+/// strip's five, the transition row's four, the Master bay's one, the
+/// Inspector pane heads' `keep`, a deck head's four, the renderer chips, a
+/// parameter row's fader, the
+/// Program bay head's `solo`, the four deck preview cells,
 /// the Library bay's scope chips, its two filter fields, the `read` chip in
 /// its foot and the list above it, and the four class pills.
 ///
@@ -602,7 +605,7 @@ use crate::view::{
 /// answering a different question. So the **list** is the control and which row
 /// is inside [`crate::view::LibraryBay::take`], which is the `read` chip's
 /// row read the other way round.
-pub const PROBES: [Probe; 16] = [
+pub const PROBES: [Probe; 19] = [
     Probe {
         name: "the Outputs row's sink",
         claims: 1,
@@ -644,9 +647,24 @@ pub const PROBES: [Probe; 16] = [
         ask: on_master,
     },
     Probe {
+        name: "the Inspector pane heads' keep",
+        claims: 1,
+        ask: on_keep,
+    },
+    Probe {
         name: "a deck head's four",
         claims: 4,
         ask: on_deck_head,
+    },
+    Probe {
+        name: "the renderer chips",
+        claims: 1,
+        ask: on_rend,
+    },
+    Probe {
+        name: "a parameter row's fader",
+        claims: 1,
+        ask: on_param,
     },
     Probe {
         name: "the Program bay head's solo",
@@ -874,6 +892,18 @@ fn on_master(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool 
     master(ctx, panel.layout(), view.master_out).is_some_and(|row| row.owns(p))
 }
 
+/// **The `keep` capsule in each Inspector pane's head**, one derivation
+/// per pane: the pane is [`inspector`]'s answer and the capsule is
+/// [`keep_pill`]'s, which is [`on_deck_head`]'s own arrangement one row
+/// up. One galley lookup per pane, for the word in the capsule.
+fn on_keep(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    view.inspector.iter().enumerate().any(|(index, pane)| {
+        inspector(panel.layout(), index, pane)
+            .and_then(|at| keep_pill(ctx, &at, pane))
+            .is_some_and(|pill| pill.hit(p))
+    })
+}
+
 /// **The deck head's three, one pane at a time**, and each pane is
 /// derived once for all of them exactly as a strip is: the anchor's
 /// place is measured from the mode chip's and the arrows' from the
@@ -885,6 +915,31 @@ fn on_deck_head(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bo
         inspector(panel.layout(), index, pane)
             .and_then(|at| deck_head(ctx, &at, pane))
             .is_some_and(|head| head.owns(p))
+    })
+}
+
+/// **The renderer chips in the Inspector's panes**, and the count is
+/// **one** for the Library list's reason: how many chips are drawn is a
+/// property of the Set in the slot, which changes while nobody presses
+/// anything, where `Scope::ALL`'s length is a fact about this console.
+/// The row is asked as a whole — [`crate::view::InspectorPane::select_renderer`]
+/// walks only the groups the pane drew, only the rows a press is a choice
+/// on, and only until the chip under the pointer.
+fn on_rend(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    view.inspector.iter().enumerate().any(|(index, pane)| {
+        inspector(panel.layout(), index, pane)
+            .is_some_and(|at| at.select_renderer(ctx, pane, p).is_some())
+    })
+}
+
+/// **A parameter row's fader, one pane at a time**, and the last control in an
+/// Inspector pane. It asks `egui` for nothing: every box in a pane is the full
+/// width of the pane or a track of the mock's own grid, so this is the cheapest
+/// probe in a pane. A console with no deck behind it has no panes and pays
+/// nothing.
+fn on_param(panel: &Panel, _ctx: &egui::Context, view: &View, p: Point) -> bool {
+    view.inspector.iter().enumerate().any(|(index, pane)| {
+        inspector(panel.layout(), index, pane).is_some_and(|at| at.owns(pane, p))
     })
 }
 

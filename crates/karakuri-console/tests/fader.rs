@@ -98,6 +98,9 @@ fn travel(at: StripBox, knob: Knob) -> f32 {
         // The Master bay's, which is no strip's and has a file of its own:
         // `tests/master.rs` measures that track off the bay it is in.
         Knob::Out => panic!("the master out is not one of a strip's two faders"),
+        // The Inspector's, which is no strip's either: `tests/param_fader.rs`
+        // measures that track off the pane it is in.
+        Knob::Param { .. } => panic!("a parameter fader is not one of a strip's two faders"),
     }
 }
 
@@ -107,7 +110,7 @@ fn take(panel: &mut Panel, bay: &Mixer, p: egui::Pos2) -> Grab {
     let grab = bay
         .grab(point(p))
         .unwrap_or_else(|| panic!("nothing to take hold of at {p:?}"));
-    panel.grab(point(p), grab);
+    panel.grab(point(p), grab.clone());
     grab
 }
 
