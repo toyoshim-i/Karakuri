@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>What the Words Mean</title>
-<meta name="description" content="The six ideas the rest of the Karakuri manual assumes: a procedure, a Set, a deck, the mix, the beat grid, and a record.">
+<meta name="description" content="The seven ideas the rest of the Karakuri manual assumes: a procedure, a Set, a deck, the mix, the beat grid, a record, and focus.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=M+PLUS+1+Code:wght@400;500;700&family=M+PLUS+Rounded+1c:wght@400;500;700;800&display=swap">
@@ -30,7 +30,7 @@
     <p class="eyebrow">Karakuri &middot; the manual</p>
     <h1>What the words mean</h1>
     <p class="lede">
-      Six ideas, and the rest of the manual assumes them. None is complicated
+      Seven ideas, and the rest of the manual assumes them. None is complicated
       on its own; what is worth reading is how they fit &mdash; because the
       shape they make is not the shape most visual software has, and reading
       the console with the wrong shape in mind is the one way to find it
@@ -176,6 +176,81 @@
     </p>
   </section>
 
+  <section>
+    <h2>Focus</h2>
+    <p>
+      The bay a key press is addressed to. The console is a stack of
+      <strong>bays</strong> &mdash; the transport, the library, the staging
+      lane, the program view, the inspector, the mixer, the master chain, the
+      sequencer and the outputs &mdash; and focus is the one of them the
+      keyboard is talking to. <strong>Focus is declared, and that is the whole
+      of what it buys</strong>: you put it somewhere and a ring says where it
+      is, where a pointer is only wherever your hand last let go &mdash; so what
+      a key acts on is never settled by where the mouse happens to be sitting.
+    </p>
+    <p>
+      <strong>It is not the deck selection.</strong> The two are drawn
+      differently because they are not the same fact: the deck selection
+      persists &mdash; it stays put when you tab away into the library &mdash;
+      and keyboard focus is transient and goes wherever tab lands. The selection
+      is a solid ring and focus is a dashed one, because drawing them the same
+      way would erase which of the two you are looking at. What the selection is
+      <em>for</em> is the deck a deck-addressed operation names, which is why it
+      has to survive your hands being somewhere else; every bay remembers its
+      own address the same way, and the deck selection is that rule seen once
+      rather than a habit of the mixer's.
+    </p>
+    <p>
+      <strong><code>Tab</code> moves it to the next bay and
+      <code>shift-Tab</code> to the one before</strong>, and the order is the
+      panel's own geometry rather than a list somebody maintains: down a column
+      first and only then across to the next one, so a pane stays whole and an
+      operator who has dragged a divider has moved the traversal with it. It
+      never descends &mdash; whatever depth the address had reached inside a
+      bay, <code>Tab</code> leaves for the next one. The pointer is the other
+      way in: a press anywhere on a mixer strip that no knob under it claimed
+      means <em>address the keys here</em>. And <strong>a folded bay keeps its
+      place in the ring so that it can be opened</strong>, not so that it can be
+      operated &mdash; while focus is on one, the key that unfolds it is the
+      only key that acts, and the rest decline and say why, because there is
+      nothing drawn for them to land on.
+    </p>
+    <p>
+      <strong>The keys that act inside a bay are the same six in every
+      bay</strong>, and they are the same six because they are rules about
+      kinds of thing rather than about bays. Everything the panel draws is an
+      item, a control, a state, a level, an act or a field, so: a digit names
+      the nth thing one level below the address and <code>0</code> names the
+      bay's own head; the arrows take the neighbour, or the next value;
+      <code>space</code> is the addressed thing's next state, which for a bay is
+      folded and unfolded and for a level is the value it was declared at;
+      <code>enter</code> is the act the addressed control is for; and
+      <code>esc</code> goes up one level and no further. <strong>Nothing is
+      given a letter for its initial</strong> &mdash; the alphabet runs out and
+      a grammar does not, and learning one bay is learning nine.
+    </p>
+    <p>
+      <strong>A global letter is what is left over.</strong> A key is global
+      when the operation it names has no operand at all, or when its only
+      operand is the choice the key itself spells &mdash; tapping the beat,
+      halving and doubling the grid, resetting the arrangement, bringing back
+      what is folded. Focus exists to supply an operand, so an operation with
+      none has nothing for focus to add and the press is already the whole
+      gesture. Those are also the keys that are yours to re-spell: a global key
+      is a complete instruction on its own, so it is remapped the way a MIDI
+      control is, while the six inside a bay are the grammar and are not.
+    </p>
+    <p>
+      <strong>Focus is decided and not yet built.</strong> The deck selection
+      and its solid ring are on the panel today; the console takes no keyboard
+      focus at all, nothing is bound to <code>Tab</code>, the keyboard is still
+      one letter per operation, and <code>esc</code> still quits rather than
+      going up a level &mdash; decided 2026&#8209;09&#8209;05, and
+      the two rings are specified on <a href="console.html">the console
+      page</a>, under <em>Two focuses, and they do not look alike</em>.
+    </p>
+  </section>
+
   <section class="cap">
     <h2>The shape, in one paragraph</h2>
     <p>
@@ -187,7 +262,9 @@
       changes is scheduled against the <strong>beat grid</strong> and written
       down as a <strong>record</strong>. The console is a surface over exactly
       that and nothing else &mdash; which is why
-      <a href="operations.html">every operation</a> can be listed and counted.
+      <a href="operations.html">every operation</a> can be listed and counted,
+      and <strong>focus</strong> is which bay of that surface a key press is
+      addressed to.
     </p>
   </section>
 
