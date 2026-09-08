@@ -23,6 +23,30 @@
 //! user preset is `--save-set`'s neighbourhood. The snapshots have to be taken
 //! while the editing is happening or there is nothing to list later.
 //!
+//! # A version is filed under the Set the slot was running
+//!
+//! ```text
+//! <store>/history/2026/08/16/143052-271_slot0_L4_beat_strokes@star_vortex.kir
+//! ```
+//!
+//! A chain is still `(slot, layer, index)` and that is no longer the whole
+//! address. The same slot holds a different Set after a library load, so
+//! without the id the two sides of that load are one chain, and *what versions
+//! has this Set had* is a question these files could not be asked at all.
+//!
+//! **It cost an argument rather than a design, because every route that edits
+//! is addressed by slot.** [`crate::mcp`]'s `write_procedure` resolves
+//! `Slots::path(slot, layer, index)` and refuses a node the slot does not
+//! hold, and an operator's own editor is pointed at that slot's scratch copy.
+//! So at the moment of a write the program knows which Set the slot is
+//! running, and [`Snapshots::record`] is handed it rather than deducing it
+//! from anything.
+//!
+//! **The id is the answer at the moment of the write, and a version that is
+//! filed is never re-filed.** Both of the cases where there is no Set fall out
+//! of that one sentence, and neither of them is a word — see
+//! [`Snapshots::record`].
+//!
 //! # Why a date directory, and why local time
 //!
 //! ```text
@@ -58,7 +82,10 @@
 //! A rebuild recompiles both procedures whichever one was saved, so writing
 //! both every time would fill the directory with duplicates of the file nobody
 //! touched — and make the chain for that layer a row of identical entries with
-//! nothing to choose between. Each layer remembers what it last wrote.
+//! nothing to choose between. Each chain remembers what it last wrote, and a
+//! chain is a node **of a Set**: a slot re-pointed at other material is a
+//! different chain with its own memory, which is what keeps a load's first
+//! version from being skipped as an edit that did not happen.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -146,9 +173,16 @@ fn unused(issued: &mut std::collections::HashSet<String>, stamp: String) -> Stri
 /// one snapshot per save, alternating between two procedures that had not
 /// changed, and the chain a surface walks became unusable exactly where there
 /// was most to walk back through.
+///
+/// **And per Set**, which is the fourth field of the key and the one that is
+/// not an address within the arrangement — see [`Snapshots::record`], which
+/// argues why the id is part of a chain rather than a label on a row.
 pub struct Snapshots {
     root: PathBuf,
-    last: HashMap<(usize, &'static str, usize), Vec<u8>>,
+    /// The chain — a node **of a Set** — against what it last wrote. The
+    /// `Option` is a version written where there was no Set, which is a state
+    /// and not a missing key; [`Snapshots::record`] says which runs are in it.
+    last: HashMap<(usize, &'static str, usize, Option<String>), Vec<u8>>,
 }
 
 /// One history for the run, shared between the launch-time seeding and every
@@ -168,25 +202,112 @@ impl Snapshots {
     }
 
     /// Write `source` as this slot and layer's newest snapshot, unless it is
-    /// what was written last.
+    /// what this chain wrote last.
     ///
     /// Returns the path written, or `None` when the source was unchanged.
     /// **Failures are the caller's to report and never to act on**: a snapshot
     /// that could not be written must not stop a build that compiled, because
     /// the operator asked for a picture and this is bookkeeping.
+    ///
+    /// # `set` is the Set the slot is running at the moment of the write
+    ///
+    /// Not the Set the source came from, and not one worked out afterwards.
+    /// **Every route that edits is addressed by slot** — [`crate::mcp`]'s
+    /// `write_procedure` resolves `Slots::path(slot, layer, index)` and refuses
+    /// a node the slot does not hold, and an operator's editor is pointed at
+    /// that slot's scratch copy — so the one thing every writer has in hand is
+    /// which Set the slot it is writing into is playing. That is what this
+    /// takes, and it takes it rather than keeping a table of its own, because a
+    /// second copy of *what is this slot running* is a second thing to be
+    /// wrong.
+    ///
+    /// `None` where there is no Set. That is a state rather than an argument
+    /// nobody filled in, and the last section says which runs are in it.
+    ///
+    /// # It goes in the name, because a row is a name and nothing else
+    ///
+    /// `143052-271_slot0_L4_beat_strokes@star_vortex.kir`. [`list`] walks
+    /// directory entries and opens no file — which is the shape of the thing
+    /// rather than a shortcut it took — so an id kept anywhere a reader would
+    /// have to open something for is an id [`Version`] cannot carry.
+    ///
+    /// Two placements lost to that, and they lost by different amounts.
+    ///
+    /// - **Beside the file**, a sidecar per snapshot, costs the lister one
+    ///   open per row and doubles the entries in a directory an operator is
+    ///   invited to work in by hand.
+    /// - **A directory per Set**, `history/<set>/YYYY/MM/DD/`, costs more than
+    ///   the open. `rm -rf history/2026/07` is this module's whole retention
+    ///   policy and stops being one when a month is spread under every Set
+    ///   separately; and the walk is lazy *because* the day directories are the
+    ///   top of the tree — newest first, stopping once it has enough — which a
+    ///   reader that had to enter every Set before it could order two days
+    ///   cannot be.
+    ///
+    /// **Behind `@`, and after the procedure name, because both of the fields
+    /// either side of that separator may hold `_`.** A Set id may:
+    /// [`crate::accepted_save`] spells a model's save `<stamp>_<name>`, so a
+    /// fixed `_`-delimited field is not merely awkward here, it is wrong for
+    /// ids this program itself writes. `@` is outside [`sanitize`]'s alphabet
+    /// and both fields go through it, so the last `@` in a name this wrote is
+    /// the separator and there is no other.
+    ///
+    /// **A name with no `@` is a version with no Set**, which is also every
+    /// name written before this argument existed — so the lister goes on
+    /// claiming those, and reads them back as what they are rather than as
+    /// versions of a Set called something.
+    ///
+    /// # The dedup key is the chain, and the chain is now per Set
+    ///
+    /// `(slot, layer, index, set)`. Keyed without the id, a load onto a node
+    /// whose source happened to match what the outgoing Set last had would be
+    /// skipped, and the incoming Set's chain would begin at its first *edit* —
+    /// which is the hole [`seed`] exists to close, one level up. Keyed with it,
+    /// a slot loaded back to a Set it has already played dedups against what
+    /// **that** Set last had instead of writing a duplicate, because the memory
+    /// is per chain and the chain came back.
+    ///
+    /// # Where there is no Set, and what a save does about it
+    ///
+    /// **A run launched with a pair on the command line is `None`.** There is
+    /// no id to write: nothing was loaded and nothing was saved, and the
+    /// material is two paths somebody typed. A name derived from those — which
+    /// is what `crates/karakuri`'s `Sources::material` builds for the mixer
+    /// strip — is a readout and not an id, and putting it here would file
+    /// versions under a Set no listing can ever match. `Option` is the type
+    /// that can say *there is none*; a sentinel that reads as a name cannot,
+    /// because an operator is free to name a Set that word.
+    ///
+    /// **A save mid-chain changes nothing here, because a save does not move
+    /// the slot.** It copies what is playing into the library under a new id.
+    /// A **load** is what changes which Set a slot is running, and the panel
+    /// already spells that difference: `played` rewrites the slot's name on a
+    /// `LoadSet` and nothing rewrites it on a `SaveSet`. So the versions either
+    /// side of a save carry whatever the slot was already carrying, and a Set a
+    /// save created has no versions filed under its own id until somebody loads
+    /// it. **That is the true answer and not a gap**: nothing has ever been a
+    /// version *of* it — it **is** a version, and it is in the library.
+    ///
+    /// The alternative was to re-file the chain from the save forward, and it
+    /// loses on its own terms. The version that was saved is the one written
+    /// *before* the press, so a Set re-filed from the press onwards is a Set
+    /// whose history does not contain itself; and making it contain itself
+    /// means renaming files that are already filed, which is the one thing this
+    /// module never does to a version it has written.
     pub fn record(
         &mut self,
         slot: usize,
         layer: &'static str,
         index: usize,
+        set: Option<&str>,
         proc_name: &str,
         source: &[u8],
     ) -> Result<Option<PathBuf>, String> {
-        if self
-            .last
-            .get(&(slot, layer, index))
-            .is_some_and(|s| s == source)
-        {
+        // Owned to look up, which is one allocation on a path that is about to
+        // create a directory and write a file. A borrowed key would be a
+        // lifetime on this whole map to save it.
+        let chain = (slot, layer, index, set.map(str::to_string));
+        if self.last.get(&chain).is_some_and(|s| s == source) {
             return Ok(None);
         }
         let now = chrono::Local::now();
@@ -203,10 +324,21 @@ impl Snapshots {
         } else {
             format!("{index}")
         };
-        let name = format!("{stamp}_slot{slot}_{layer}{at}_{}.kir", sanitize(proc_name));
+        // The Set is in the name only when there is one, so every name a run
+        // with no Set has ever written is the name it still writes — the same
+        // argument the index above is left off a `_0` by, and the same one that
+        // lets `list` go on claiming the names written before this field was.
+        let of = match set {
+            Some(set) => format!("@{}", sanitize(set)),
+            None => String::new(),
+        };
+        let name = format!(
+            "{stamp}_slot{slot}_{layer}{at}_{}{of}.kir",
+            sanitize(proc_name)
+        );
         let path = dir.join(name);
         std::fs::write(&path, source).map_err(|e| format!("{}: {e}", path.display()))?;
-        self.last.insert((slot, layer, index), source.to_vec());
+        self.last.insert(chain, source.to_vec());
         Ok(Some(path))
     }
 }
@@ -222,10 +354,12 @@ impl Snapshots {
 /// call site is this module's naming rule written a second time, in a crate
 /// where no test here can fail when the two spellings part company.
 ///
-/// **The address is a node of a running arrangement, not a Set.** `record`
-/// takes a slot, a layer and a renderer index and the layout carries no Set id,
-/// so `which Set was this a version of` is a question these files cannot
-/// answer and this type does not pretend to — see [`list`].
+/// **The address is a node of a running arrangement *and* the Set that
+/// arrangement was.** `record` takes a slot, a layer, a renderer index and the
+/// Set the slot was running, and writes all four into the name — so *which Set
+/// was this a version of* is read off a name like everything else here.
+/// [`Version::set`] is that answer, including where the answer is *none* — see
+/// [`list`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Version {
     /// **When**, spelled the way [`stamped_id`] spells it —
@@ -258,6 +392,17 @@ pub struct Version {
     /// What the procedure called itself, through [`sanitize`]. It is what the
     /// file was named after and not what the file says now; nothing is opened.
     pub proc_name: String,
+    /// **Which Set the slot was running** when this version was written, or
+    /// `None` for one written where there was no Set at all — which is a state
+    /// rather than an unknown, and [`Snapshots::record`] names the runs it is
+    /// the truth about.
+    ///
+    /// Read off the name behind `@`, and absent from a name that carries no
+    /// `@`. `record` argues both the placement and the `Option`.
+    ///
+    /// **It is here so the narrowing is possible, and the narrowing is not
+    /// here** — see [`list`].
+    pub set: Option<String>,
     /// The snapshot itself — what to read, and what a load would be pointed at.
     pub file: PathBuf,
 }
@@ -319,26 +464,29 @@ fn known_layer(word: &str) -> Option<&'static str> {
 /// [`Snapshots::new`] takes, and [`DIR`] joined on here for the same reason, so
 /// a reader and the writer cannot end up looking at two directories.
 ///
-/// # What a version is *of*, and why this is not keyed by a Set
+/// # What a version is *of*, and why this is still not `versions_of(set_id)`
 ///
 /// [`Snapshots::record`] addresses a snapshot by **slot, layer and renderer
 /// index** — a node of the arrangement that was running when it was written —
-/// and the layout carries no Set id anywhere. So this cannot be
-/// `versions_of(set_id)` and would be lying if it were: the same slot holds a
-/// different Set after a library load, and the files on either side of that
-/// load are indistinguishable.
+/// **and by the Set the slot was running**, which it writes into the name. So
+/// both questions are answerable off these rows and neither needs a second
+/// reader: *the versions this node has had* is `(slot, layer, index)`, the key
+/// `record`'s dedup is on, and *the versions this Set has had* is
+/// [`Version::set`].
 ///
-/// **What the layout does support is the chain**, which is `(slot, layer,
-/// index)` — the key `record`'s dedup is on, and the thing this module's head
-/// calls a chain. Every row carries it, so *the versions this node has had* is
-/// a filter over this listing and not a second reader.
-///
-/// **So the narrowing is not here.** One listing, ordered, with the address on
-/// every row; which rows an operator is looking at is a question the surface
-/// asks, the way `Operation::ListSets`' two filters are applied where they are
-/// answered ([ADR-0262](../../../docs/adr/0262-a-library-filter-field-steps-through-what-the-store-already-holds-rather-than-taking-letters.md))
+/// **Neither narrowing is here, and that is one rule applied twice.** One
+/// listing, ordered, with the whole address on every row; which rows an
+/// operator is looking at is a question the surface asks, the way
+/// `Operation::ListSets`' two filters are applied where they are answered
+/// ([ADR-0262](../../../docs/adr/0262-a-library-filter-field-steps-through-what-the-store-already-holds-rather-than-taking-letters.md))
 /// and not inside `Store::list_sets`. What this owes the surface is that the
 /// filter is *possible*, and the address on the row is that.
+///
+/// **A row whose `set` is `None` is a row no Set matches**, and a narrowing has
+/// to spell that rather than let it fall through as a wildcard: those versions
+/// were written where there was no Set — `record` says which runs those are —
+/// and a filter that folded them into whichever Set was asked for would be
+/// inventing a history for it.
 ///
 /// # Most recent first, and here that is the layout's order rather than a sort
 ///
@@ -381,7 +529,8 @@ fn known_layer(word: &str) -> Option<&'static str> {
 /// the right width in digits; anything in a day directory that is a directory,
 /// or whose name is not one [`Snapshots::record`] would have written — the
 /// `.kir` suffix, a `HHMMSS-mmm` stamp, `slot<digits>`, a [`LAYERS`] word with
-/// an optional index after it, and a procedure name in [`sanitize`]'s alphabet.
+/// an optional index after it, a procedure name in [`sanitize`]'s alphabet, and
+/// — where there is one — an `@` and a Set id in that same alphabet.
 /// A non-UTF-8 name fails `to_str` and falls out with the rest, no lossy
 /// repair and no unwrap for a hostile name to trip.
 ///
@@ -544,6 +693,24 @@ fn cannot_be_listed(dir: &Path, why: &std::io::Error) -> String {
 fn version(date: &str, entry: &std::fs::DirEntry) -> Option<Version> {
     let name = entry.file_name();
     let stem = name.to_str()?.strip_suffix(".kir")?;
+    // **The Set comes off the tail first, on `@`.** Both fields either side of
+    // it may hold `_`, so `_` cannot separate them — see [`Snapshots::record`],
+    // which also says why `@` can only be the separator: it is outside
+    // [`sanitize`]'s alphabet and both fields have been through it.
+    //
+    // A name with no `@` is a version with no Set, which is what `record`
+    // writes for a run that has none and is also every name written before
+    // there was a field. A name whose tail is not something `record` could have
+    // written is refused outright rather than read as a procedure name with an
+    // `@` in it, on this function's own rule: the inverse of the naming and
+    // nothing else.
+    let (stem, set) = match stem.rsplit_once('@') {
+        Some((head, set)) if !set.is_empty() && sanitize(set) == set => {
+            (head, Some(set.to_string()))
+        }
+        Some(_) => return None,
+        None => (stem, None),
+    };
     // `splitn(4)`, because a procedure name may hold `_` — `sanitize` keeps it
     // — and the three fields before it may not.
     let mut fields = stem.splitn(4, '_');
@@ -593,6 +760,7 @@ fn version(date: &str, entry: &std::fs::DirEntry) -> Option<Version> {
         layer,
         index,
         proc_name: proc_name.to_string(),
+        set,
         file: entry.path(),
     })
 }
@@ -626,11 +794,20 @@ fn sanitize(name: &str) -> String {
 ///
 /// Reported and never fatal, on the same terms as every other snapshot: a
 /// history that could not be written must not stop a run from starting.
-pub fn seed<'a>(shared: &Shared, sets: impl Iterator<Item = (usize, Vec<&'a Path>)>) {
+///
+/// **A slot arrives with the Set it is about to run**, or `None` where it is
+/// about to run material no Set names — a pair on the command line. It is the
+/// same argument [`Snapshots::record`] takes and for its reason: the caller is
+/// the one holding it, and the seed is the first version of the chain it
+/// belongs to.
+pub fn seed<'a>(
+    shared: &Shared,
+    sets: impl Iterator<Item = (usize, Option<&'a str>, Vec<&'a Path>)>,
+) {
     let Ok(mut snapshots) = shared.lock() else {
         return;
     };
-    for (slot, paths) in sets {
+    for (slot, set, paths) in sets {
         // Every file, each under its own layer and its own index within that
         // layer — the whole stack, because the history is a place an operator
         // walks back through and a node missing from it cannot be walked back
@@ -665,7 +842,7 @@ pub fn seed<'a>(shared: &Shared, sets: impl Iterator<Item = (usize, Vec<&'a Path
             // for the check pass would mean seeding after the first compile,
             // which is after the first edit could already have happened.
             let name = declared_name(&source).unwrap_or_else(|| "start".to_string());
-            if let Err(e) = snapshots.record(slot, layer, index, &name, &source) {
+            if let Err(e) = snapshots.record(slot, layer, index, set, &name, &source) {
                 eprintln!("slot {slot}: the starting {layer} is not in the edit history: {e}");
             }
         }
@@ -762,13 +939,13 @@ mod tests {
         let mut snaps = Snapshots::new(tmp.path());
 
         let written = snaps
-            .record(0, "L4", 0, "soft_points", b"the first version")
+            .record(0, "L4", 0, None, "soft_points", b"the first version")
             .expect("record")
             .expect("a first version is always new");
         assert_eq!(std::fs::read(&written).expect("read"), b"the first version");
 
         let second = snaps
-            .record(0, "L4", 0, "soft_points", b"the second version")
+            .record(0, "L4", 0, None, "soft_points", b"the second version")
             .expect("record")
             .expect("changed");
         assert_ne!(written, second, "the second snapshot overwrote the first");
@@ -785,12 +962,12 @@ mod tests {
         let mut snaps = Snapshots::new(tmp.path());
 
         assert!(snaps
-            .record(0, "L1", 0, "field", b"same")
+            .record(0, "L1", 0, None, "field", b"same")
             .expect("record")
             .is_some());
         assert!(
             snaps
-                .record(0, "L1", 0, "field", b"same")
+                .record(0, "L1", 0, None, "field", b"same")
                 .expect("record")
                 .is_none(),
             "an identical source was written a second time"
@@ -807,19 +984,19 @@ mod tests {
         let mut snaps = Snapshots::new(tmp.path());
 
         assert!(snaps
-            .record(0, "L1", 0, "field", b"same")
+            .record(0, "L1", 0, None, "field", b"same")
             .expect("record")
             .is_some());
         assert!(
             snaps
-                .record(1, "L1", 0, "field", b"same")
+                .record(1, "L1", 0, None, "field", b"same")
                 .expect("record")
                 .is_some(),
             "slot 1's first snapshot was skipped because slot 0 had the same source"
         );
         assert!(
             snaps
-                .record(0, "L4", 0, "field", b"same")
+                .record(0, "L4", 0, None, "field", b"same")
                 .expect("record")
                 .is_some(),
             "the L4 chain was skipped because the L1 chain had the same source"
@@ -845,26 +1022,26 @@ mod tests {
         let mut snaps = Snapshots::new(tmp.path());
 
         assert!(snaps
-            .record(0, "L4", 0, "sprites", b"first")
+            .record(0, "L4", 0, None, "sprites", b"first")
             .expect("record")
             .is_some());
         assert!(
             snaps
-                .record(0, "L4", 1, "strokes", b"second")
+                .record(0, "L4", 1, None, "strokes", b"second")
                 .expect("record")
                 .is_some(),
             "the second renderer's first snapshot was skipped as the first renderer's"
         );
         assert!(
             snaps
-                .record(0, "L4", 1, "strokes", b"second")
+                .record(0, "L4", 1, None, "strokes", b"second")
                 .expect("record")
                 .is_none(),
             "the second renderer's unchanged source was written again"
         );
         assert!(
             snaps
-                .record(0, "L4", 0, "sprites", b"first")
+                .record(0, "L4", 0, None, "sprites", b"first")
                 .expect("record")
                 .is_none(),
             "the first renderer looked changed because the second had written since"
@@ -882,11 +1059,11 @@ mod tests {
         let mut snaps = Snapshots::new(tmp.path());
 
         let first = snaps
-            .record(0, "L4", 0, "sprites", b"a")
+            .record(0, "L4", 0, None, "sprites", b"a")
             .expect("record")
             .expect("written");
         let second = snaps
-            .record(0, "L4", 1, "strokes", b"b")
+            .record(0, "L4", 1, None, "strokes", b"b")
             .expect("record")
             .expect("written");
         let name =
@@ -911,7 +1088,7 @@ mod tests {
         let tmp = tempfile::tempdir().expect("tempdir");
         let mut snaps = Snapshots::new(tmp.path());
         let path = snaps
-            .record(2, "L4", 0, "beat_strokes", b"x")
+            .record(2, "L4", 0, None, "beat_strokes", b"x")
             .expect("record")
             .expect("new");
 
@@ -959,7 +1136,7 @@ mod tests {
         let shared = Snapshots::shared(tmp.path());
         seed(
             &shared,
-            std::iter::once((0, vec![l1.as_path(), l4.as_path()])),
+            std::iter::once((0, None, vec![l1.as_path(), l4.as_path()])),
         );
 
         let names: Vec<String> = files(&tmp.path().join(DIR))
@@ -996,6 +1173,7 @@ mod tests {
             &shared,
             std::iter::once((
                 0,
+                None,
                 vec![
                     l1.as_path(),
                     l2.as_path(),
@@ -1035,20 +1213,20 @@ mod tests {
         let shared = Snapshots::shared(tmp.path());
         seed(
             &shared,
-            std::iter::once((0, vec![l1.as_path(), l4.as_path()])),
+            std::iter::once((0, None, vec![l1.as_path(), l4.as_path()])),
         );
 
         let mut snapshots = shared.lock().expect("lock");
         assert!(
             snapshots
-                .record(0, "L1", 0, "field_one", b"proc field_one {}")
+                .record(0, "L1", 0, None, "field_one", b"proc field_one {}")
                 .expect("record")
                 .is_none(),
             "the untouched L1 was written a second time"
         );
         assert!(
             snapshots
-                .record(0, "L4", 0, "draw_one", b"proc draw_one { edited }")
+                .record(0, "L4", 0, None, "draw_one", b"proc draw_one { edited }")
                 .expect("record")
                 .is_some(),
             "the edited L4 was skipped"
@@ -1103,7 +1281,7 @@ mod tests {
         let tmp = tempfile::tempdir().expect("tempdir");
         let mut snaps = Snapshots::new(tmp.path());
         let path = snaps
-            .record(0, "L1", 0, "../../etc/passwd", b"x")
+            .record(0, "L1", 0, None, "../../etc/passwd", b"x")
             .expect("record")
             .expect("new");
 
@@ -1169,7 +1347,7 @@ mod tests {
             (1, "Field", 0, "blob"),
         ] {
             snaps
-                .record(slot, layer, index, name, name.as_bytes())
+                .record(slot, layer, index, None, name, name.as_bytes())
                 .expect("record")
                 .expect("new");
         }
@@ -1194,6 +1372,12 @@ mod tests {
             "`L410` did not read back as the eleventh renderer of L4"
         );
         assert_eq!(address(found("blob")), (1, "Field", 0));
+        // Recorded with no Set, so read back with none — and not with a word
+        // standing in for one, which is what the `Option` is for.
+        assert!(
+            listing.versions.iter().all(|v| v.set.is_none()),
+            "a version written with no Set came back filed under one: {listing:?}"
+        );
 
         // And the row points at the snapshot rather than describing it.
         assert_eq!(
@@ -1219,7 +1403,7 @@ mod tests {
         let mut snaps = Snapshots::new(tmp.path());
         let write = |snaps: &mut Snapshots, name: &str| {
             snaps
-                .record(0, "L4", 0, name, name.as_bytes())
+                .record(0, "L4", 0, None, name, name.as_bytes())
                 .expect("record")
                 .expect("new")
         };
@@ -1275,7 +1459,7 @@ mod tests {
         let tmp = tempfile::tempdir().expect("tempdir");
         let mut snaps = Snapshots::new(tmp.path());
         let kept = snaps
-            .record(0, "L4", 0, "sprites", b"kept")
+            .record(0, "L4", 0, None, "sprites", b"kept")
             .expect("record")
             .expect("new");
         let root = tmp.path().join(DIR);
@@ -1300,6 +1484,12 @@ mod tests {
         // panic on a boundary rather than pass the name over — a file somebody
         // else put in the directory taking the listing down with it.
         std::fs::write(day.join("123456é90_slot0_L4_x.kir"), "x").expect("write");
+        // **And a name with an `@` whose tail is not something `record` could
+        // have written**, `a.b` being outside `sanitize`'s alphabet. Refused
+        // outright rather than read back as a procedure with an `@` in its
+        // name: this reader is the inverse of the naming and nothing else, so
+        // a name it could not have produced is somebody else's file.
+        std::fs::write(day.join("120000-000_slot0_L4_x@a.b.kir"), "x").expect("write");
 
         let listing = list(tmp.path(), 100).expect("listed");
         assert_eq!(
@@ -1309,9 +1499,197 @@ mod tests {
         );
         assert_eq!(listing.versions[0].file, kept);
         assert_eq!(
-            listing.unclaimed, 9,
+            listing.unclaimed, 10,
             "what was passed over was not reported: {listing:?}"
         );
+    }
+
+    /// **A version carries the Set the slot was running, and the reader gets it
+    /// back off the name.**
+    ///
+    /// The load-bearing half of *a version is filed under the Set*: `record`'s
+    /// argument goes in and the same string comes out of `list`, which opens
+    /// no file — so the id is in the layout rather than in something a reader
+    /// would have to fetch.
+    #[test]
+    fn a_version_written_under_a_set_reads_back_under_it() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let mut snaps = Snapshots::new(tmp.path());
+        let written = snaps
+            .record(0, "L4", 0, Some("star_vortex"), "beat_strokes", b"x")
+            .expect("record")
+            .expect("new");
+
+        let name = written
+            .file_name()
+            .expect("a name")
+            .to_string_lossy()
+            .to_string();
+        assert!(
+            name.ends_with("_beat_strokes@star_vortex.kir"),
+            "the Set is not in the name: {name}"
+        );
+
+        let listing = list(tmp.path(), 100).expect("listed");
+        assert_eq!(listing.versions.len(), 1, "{listing:?}");
+        let row = &listing.versions[0];
+        assert_eq!(
+            row.set.as_deref(),
+            Some("star_vortex"),
+            "the row does not say which Set this was a version of: {listing:?}"
+        );
+        // And the rest of the address survived the new field rather than being
+        // eaten by it — `@` is the separator and `_` is still the other one.
+        assert_eq!(
+            (row.slot, row.layer, row.index, row.proc_name.as_str()),
+            (0, "L4", 0, "beat_strokes"),
+            "{listing:?}"
+        );
+        assert_eq!(row.file, written);
+    }
+
+    /// **Two Sets on one slot are two chains, and the second is not swallowed
+    /// as the first's unchanged source.**
+    ///
+    /// This is the whole gap. A library load moves a slot to different
+    /// material, and the two sides of it were indistinguishable: one chain,
+    /// one `last`, and the incoming Set's first version skipped whenever its
+    /// source happened to match what the outgoing one had — so that Set's
+    /// history began at its first *edit*, which is the hole `seed` exists to
+    /// close one level up.
+    ///
+    /// **Byte-identical on purpose.** Different sources would pass under the
+    /// old key too and would prove nothing about it.
+    #[test]
+    fn two_sets_on_one_slot_are_two_chains() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let mut snaps = Snapshots::new(tmp.path());
+        assert!(snaps
+            .record(0, "L4", 0, Some("drift_cloud"), "shell", b"same")
+            .expect("record")
+            .is_some());
+        assert!(
+            snaps
+                .record(0, "L4", 0, Some("star_vortex"), "shell", b"same")
+                .expect("record")
+                .is_some(),
+            "the Set loaded onto this slot had its first version skipped as the \
+             Set before it having already written those bytes"
+        );
+        // And the dedup is not lost, only re-keyed: the same Set writing the
+        // same bytes again is still one row.
+        assert!(
+            snaps
+                .record(0, "L4", 0, Some("star_vortex"), "shell", b"same")
+                .expect("record")
+                .is_none(),
+            "an unchanged source was written again once the key grew a field"
+        );
+        // **And a slot loaded back to a Set it has already played dedups
+        // against what that Set last had.** The memory is per chain, and the
+        // chain came back — so switching between two Sets is not a file per
+        // switch.
+        assert!(
+            snaps
+                .record(0, "L4", 0, Some("drift_cloud"), "shell", b"same")
+                .expect("record")
+                .is_none(),
+            "coming back to a Set wrote its unchanged source a second time"
+        );
+
+        let listing = list(tmp.path(), 100).expect("listed");
+        assert_eq!(listing.versions.len(), 2, "{listing:?}");
+        let mut sets: Vec<&str> = listing
+            .versions
+            .iter()
+            .map(|v| v.set.as_deref().unwrap_or("<none>"))
+            .collect();
+        sets.sort();
+        assert_eq!(
+            sets,
+            vec!["drift_cloud", "star_vortex"],
+            "the two sides of a load are not distinguishable: {listing:?}"
+        );
+        // Same node, same source, same millisecond — the Set is the only thing
+        // telling these two rows apart, which is the point.
+        assert_ne!(listing.versions[0].file, listing.versions[1].file);
+    }
+
+    /// **A run with no Set files versions under none, and a save does not go
+    /// back and re-file them.**
+    ///
+    /// Both of the cases where there is no id, in the order they happen. A run
+    /// launched with a pair on the command line has none at all — there is
+    /// nothing to write, and `Option` is what says so rather than a word an
+    /// operator is free to name a Set. Then something saves what is playing,
+    /// and from that point the answer to *what is this slot running* may be a
+    /// Set — but the versions already filed were versions of what the slot was
+    /// running when they were written, and nothing renames a file this module
+    /// has already written.
+    #[test]
+    fn a_run_with_no_set_files_under_none_and_a_later_id_does_not_reach_back() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let mut snaps = Snapshots::new(tmp.path());
+        let before = snaps
+            .record(0, "L4", 0, None, "flares", b"before")
+            .expect("record")
+            .expect("new");
+        let after = snaps
+            .record(0, "L4", 0, Some("kept_take"), "flares", b"after")
+            .expect("record")
+            .expect("new");
+
+        // The name a run with no Set writes is the name it has always written,
+        // which is what keeps every version recorded before there was a field
+        // readable.
+        assert!(
+            !before
+                .file_name()
+                .expect("named")
+                .to_string_lossy()
+                .contains('@'),
+            "a version with no Set was filed under one: {}",
+            before.display()
+        );
+
+        let listing = list(tmp.path(), 100).expect("listed");
+        let row = |file: &Path| {
+            listing
+                .versions
+                .iter()
+                .find(|v| v.file == file)
+                .unwrap_or_else(|| panic!("no row for {}: {listing:?}", file.display()))
+        };
+        assert_eq!(
+            row(&before).set,
+            None,
+            "the earlier version was re-filed under the Set a later save made: {listing:?}"
+        );
+        assert_eq!(row(&after).set.as_deref(), Some("kept_take"), "{listing:?}");
+        // The bytes each row points at are still each row's, which is what
+        // says the two are versions and not one row rewritten.
+        assert_eq!(std::fs::read(&before).expect("read"), b"before");
+        assert_eq!(std::fs::read(&after).expect("read"), b"after");
+    }
+
+    /// A Set id reaches this from a name an operator typed, and `mcp`'s
+    /// `checked_id` is not on every route in. A path component is not where to
+    /// find out that the two disagree about what an id is.
+    #[test]
+    fn a_set_id_cannot_escape_the_history_directory() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let mut snaps = Snapshots::new(tmp.path());
+        let path = snaps
+            .record(0, "L1", 0, Some("../../etc"), "field", b"x")
+            .expect("record")
+            .expect("new");
+
+        assert!(
+            path.starts_with(tmp.path().join(DIR)),
+            "{} escaped the history root",
+            path.display()
+        );
+        assert!(!path.to_string_lossy().contains(".."), "{}", path.display());
     }
 
     /// **The cap bounds the walk, and the listing says it stopped.**
@@ -1327,7 +1705,7 @@ mod tests {
         let mut snaps = Snapshots::new(tmp.path());
         for name in ["v1", "v2", "v3"] {
             snaps
-                .record(0, "L4", 0, name, name.as_bytes())
+                .record(0, "L4", 0, None, name, name.as_bytes())
                 .expect("record")
                 .expect("new");
         }
