@@ -9996,10 +9996,11 @@ fn master_into(ui: &Ui, pal: &Palette, row: &MasterRow) {
 /// the source.
 const LIBRARY_TITLE: &str = "Library";
 
-/// **The word the foot's pill starts with**, which is the first half of the
-/// mock's own `load &rarr; A`.
+/// **The word in the foot's button**, which is the whole of the mock's own
+/// `load` — the first of the three the readout `load &rarr; A` became
+/// (ADR-0305).
 ///
-/// **The arrow is not here, and that is the change**: it was typed, as
+/// **The arrow is not here, and that is the older change**: it was typed, as
 /// `\u{2192}`, and `egui`'s default face has no rightwards arrow — so the
 /// panel drew `load □ A` and the pill's one job, saying where a press would
 /// land, was done through a tofu. Whether a glyph is in the default face is a
@@ -10055,8 +10056,8 @@ const STAR_WAIST: f32 = 0.46;
 
 // -- what one Set holds and declares, opened under its row ------------------
 
-/// **The word the foot's second capsule reads**, which is the mock's own
-/// `read` — the chip between the count and `load &rarr; A`.
+/// **The word the foot's first capsule reads**, which is the mock's own
+/// `read` — the chip between the count and the `load` button.
 ///
 /// **It carries no lit state**, which the note *Reading a Set before you spend
 /// a load on it* argues rather than leaves out: a run of lines appears under
@@ -10723,9 +10724,11 @@ fn chip_width(ctx: &egui::Context, name: &str) -> f32 {
 /// the row's value, and `path_into`, which paints it.
 ///
 /// **It is a readout and takes no press.** Nothing in [`crate::input::claim`]
-/// hit-tests it, for the load pill's reason in the foot: re-pointing the bay
-/// is another drop, and the gesture that points it is not one this panel can
-/// offer as a capsule.
+/// hit-tests it, and the reason is its own rather than the foot's: re-pointing
+/// the bay is another drop, and the gesture that points it is not one this
+/// panel can offer as a capsule. **The foot's own readout stopped being one on
+/// 2026-09-08** — `load &rarr; A` is a button and a pulldown now (ADR-0305) —
+/// which is why this row no longer cites it.
 ///
 /// [P-0090]: ../../../docs/principles/0090-a-surface-offers-it-never-decides.md
 ///
@@ -10790,14 +10793,13 @@ fn chip_width(ctx: &egui::Context, name: &str) -> f32 {
 ///
 /// # What is in the mock's bay and is here, which is the load route
 ///
-/// **`.lib-row.cursor` and the `load → A` pill in the foot.** These two are
-/// the whole of the *key's* route, and `console.html`'s *How a Set reaches a
-/// deck* is what settles their shape: *"what was missing was never the
-/// operation but the route"*, and that route is the arrangement — the cursor
-/// says which Set, the deck selection says which deck, so **a load is *"a
-/// cursor and a key with no pointer anywhere in it"***. So the cursor is
-/// drawn, the pill is a **readout** that says where a press lands *before* the
-/// press, and the pill answers no pointer: `tests/library.rs` holds that.
+/// **`.lib-row.cursor`, and the three things the foot's readout became.**
+/// `console.html`'s *How a Set reaches a deck* is what settles their shape:
+/// *"what was missing was never the operation but the route"*, and there are
+/// three routes now. The **key** is the cursor and the deck *selection* — *"a
+/// cursor and a key with no pointer anywhere in it"* — the **drag** names both
+/// operands in one gesture, and the **button** in the foot takes the Set from
+/// the cursor and the deck from the pulldown beside it.
 ///
 /// **The cursor is moved by a pointer as well as by the keys**, and that is
 /// the drag below arriving rather than a second control: a press on a row
@@ -10805,32 +10807,35 @@ fn chip_width(ctx: &egui::Context, name: &str) -> f32 {
 /// hand, because the mark on a row is what this bay already draws for *which
 /// row* and the mock draws nothing else a carry could use.
 ///
-/// # The pill does not answer a press, and that is not the same as being inert
+/// # The foot was a readout until 2026-09-08, and what it is now
 ///
-/// It is worth saying which of the two it is, because a capsule that reads
-/// `load → A` and does nothing when it is pressed reads like a control
-/// somebody forgot to wire. It is not one. **The pill is a readout and the
-/// panel's route to this row is the drag** — `console.html`: *"Dragging a row
-/// onto a strip is a second route to the same command, and never the first …
-/// it names both operands in the one gesture, which makes it the only way to
-/// load a deck without selecting it first"*, and the operations page carries
-/// that gesture as this row's panel badge, reading `library → deck`. **It is
-/// the drag that badge names and never this capsule**: [`LibraryBay::take`]
-/// picks a row up, [`crate::panel::Panel::carry`] holds it, and
-/// [`Mixer::dropped`] is where it lands.
+/// `load → A` said where a *key* press would land before it was made and
+/// answered no pointer at all: nothing in [`crate::input::claim`] hit-tested
+/// it, and this section used to end *what this bay owes is the drag; what it
+/// must not grow is a button*. **It grew one, and the argument that was
+/// against it is in
+/// [ADR-0305](../../../docs/adr/0305-the-library-bays-load-is-a-button-and-a-pulldown-and-the-deck-it-names-is-not-the-selection.md)
+/// rather than deleted**, because it is a good argument that lost to one fact:
+/// a readout reading the selection cannot aim a load at a deck without taking
+/// the keys off the deck being played.
 ///
-/// **So a press on the pill would be a third route nobody specified**, and it
-/// would be the wrong one twice over: it would name the deck from the
-/// selection, which is what the *key* already does, so it would add a pointer
-/// to the one gesture both pages describe as having none — and it would leave
-/// the gesture that is specified still undrawn. What this bay owes is the
-/// drag; what it must not grow is a button.
+/// **So the foot is three things and two of them are controls.**
+/// [`LibraryBay::load`] lays out all three; [`LibraryBay::aim`] is what a
+/// press on either capsule asks for, and the `→` between them is a label on
+/// the foot's own ground that answers no pointer — which is the sentence this
+/// section used to make about the whole pill, kept where it is still true.
 ///
-/// **This row's badge moved when the drag landed, and the pill had nothing to
-/// do with it.** A chip is the control the page names for its row and a press
-/// on it is what made *that* badge true; the drag is the control this page
-/// names for this row, a press on a row and a release over a strip are what
-/// made this one true, and the capsule in the foot is a readout either way.
+/// **The deck is [`View::target`] and never [`View::selection`]**, and that is
+/// the whole of the record: the ring on a strip and the letter in this foot
+/// are free to name two different decks, `l` goes on loading onto the ring's,
+/// and a press on the pulldown emits nothing at all.
+///
+/// **This row's badge names the button as well as the drag now.** A chip is
+/// the control the page names for its row; when the drag landed, a press on a
+/// row and a release over a strip are what made this badge true, and
+/// `operations.html` read `library → deck`. It reads `load button, or library
+/// → deck` since ADR-0305, and the two routes arrive at one
+/// `Operation::LoadSet`.
 ///
 /// # Nothing here writes a Set out, and what is missing is a gesture
 ///
@@ -10975,29 +10980,208 @@ pub struct LibraryBay {
     pub reading: Option<Block>,
 }
 
-/// **The foot's `load → A` pill, laid out**: the capsule, the word in it, the
-/// arrow's box and the letter.
+/// **What the foot's load control is aimed at**, and whether its list is down.
+///
+/// [`Filters`]' shape one row up: the three values [`LibraryBay::load`] needs
+/// to lay itself out, read off the [`View`] once for the frame and handed in,
+/// so the capsule that is painted and the capsule a press lands on are one
+/// derivation of one reading. See [`View::target`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Target {
+    /// **Which deck a press on `load` lands on**, as a slot number — the
+    /// letter the pulldown shows. See [`View::target_deck`], which is where
+    /// the argument for a second mark is.
+    ///
+    /// **A deck [`DECK_LETTERS`] has no letter for is a caller's error**, not
+    /// a state: [`View::aim_at`] refuses one, exactly as [`View::select`]
+    /// refuses a selection past the strips.
+    pub deck: u8,
+    /// **How many decks the pulldown offers**, which is how many strips the
+    /// mixer is drawing — [`View::mixer`]'s length, arriving the way every
+    /// other reading of the deck does.
+    ///
+    /// `console.html`: *"A deck the mixer is drawing no strip for is not in the
+    /// list, which is the count `0`–`3` are refused on"*. So this is
+    /// [`View::select`]'s own count read a second time and not a second rule:
+    /// the strips are what both of them count.
+    pub decks: usize,
+    /// **Whether the list is down.** The console's own state, like
+    /// [`Arrangement::menu`] — see [`View::target_open`].
+    pub open: bool,
+}
+
+impl Target {
+    /// **The letter the pulldown shows**, which is the letter of the deck a
+    /// press on `load` lands on.
+    ///
+    /// Panics on a deck there is no letter for, which is
+    /// [`LibraryBay::row`]'s rule: the caller has invented a deck, and
+    /// [`View::aim_at`] is what stops one being invented here.
+    pub fn letter(&self) -> &'static str {
+        DECK_LETTERS[usize::from(self.deck)]
+    }
+}
+
+/// **What a press on the foot's load control asks for**, and it is a control
+/// in three parts: a button, a label and a pulldown.
+///
+/// [`Ask`]'s shape three bays along, and the two enums are the same division:
+/// every arm is either a move of this control's own state or one named
+/// operation, and never a load performed here ([P-0090]). The pulldown asks
+/// for nothing at all — picking a deck is this bay's own mark moving, the way
+/// the cursor in the list above it is — which is why it has an arm of its own
+/// rather than an `Operation`.
+///
+/// [P-0090]: ../../../docs/principles/0090-a-surface-offers-it-never-decides.md
+#[derive(Debug, Clone, PartialEq)]
+pub enum Aim {
+    /// Put the list down — a press on the pulldown with it shut.
+    Open,
+    /// Take it away — a press on the pulldown again, or anywhere else while it
+    /// is down. **The press is spent on the dismissal**, which is
+    /// [`crate::input::claim`]'s rule 2 said in the control: a list that is
+    /// down is a hand mid-choice, and the next press is part of that gesture.
+    Shut,
+    /// **A deck named**, and nothing asked for: the target moves to this slot
+    /// and the list goes away. [`View::aim_at`] is the one door into it.
+    Deck(u8),
+    /// **The load, named** — `Operation::LoadSet { deck, set }`, with the deck
+    /// off the pulldown and the Set off the list's cursor.
+    Load(Operation),
+    /// **A press on `load` with no row under the cursor**, which is a library
+    /// listing nothing. [`crate::panel::Released::Nowhere`]'s answer one bay
+    /// along: the control says what it did with the press rather than going
+    /// quiet, and nothing is emitted for a load with one operand missing.
+    NoSet,
+}
+
+/// **The foot's load control, laid out**: the `load` button, the `→` label,
+/// the pulldown and the list under it.
 ///
 /// [`AudioInPill`]'s shape two bays along and for the same reason — one
 /// derivation, so that what [`library_into`] paints and what a test asks about
-/// are the same rectangles. **It is not a control**: nothing in
-/// [`crate::input::claim`] hit-tests any of these, because the route this
-/// capsule reads for is *"a cursor and a key with no pointer anywhere in
-/// it"* — and the route that does take a pointer starts in the list above it,
-/// on a row ([`LibraryBay::take`]). `tests/library.rs` is what fails the day
-/// the capsule takes a press.
+/// are the same rectangles.
+///
+/// # It was one capsule and a readout until 2026-09-08
+///
+/// `load → A` was a **readout**: the cursor said which Set, the deck selection
+/// said which deck, and the pill said where a press would land before it was
+/// made — so a load was *"a cursor and a key with no pointer anywhere in it"*
+/// and nothing in [`crate::input::claim`] hit-tested any of it. What that
+/// could not do is aim a load at a deck without taking the keys off the deck
+/// being played, and that is what the split bought
+/// ([ADR-0305](../../../docs/adr/0305-the-library-bays-load-is-a-button-and-a-pulldown-and-the-deck-it-names-is-not-the-selection.md)).
+///
+/// **Two of the three parts are controls and the middle one is not.** The
+/// button asks for the load, the pulldown names the deck, and the `→` between
+/// them is punctuation on the foot's own ground — untipped in the mock, like
+/// the `5 of 27` at the other end of the same row, because this page tips
+/// controls.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct LoadPill {
-    /// **The capsule**, [`size::PILL_H`] tall at the far end of the foot.
-    pub pill: Rect,
-    /// Where [`LOAD_PILL`]'s word is painted, inside the capsule's padding.
+pub struct Load {
+    /// **The `load` button**, [`size::PILL_H`] tall, one
+    /// [`size::LIB_FOOT_GAP`] before the label.
+    pub button: Rect,
+    /// Where [`LOAD_PILL`]'s word is painted, inside the button's padding.
     pub text: Rect,
-    /// **The arrow's box**, [`LOAD_ARROW`] square between the word and the
-    /// letter. Drawn rather than typed — see [`LOAD_ARROW`], and
-    /// [`arrow_mark`], which draws it.
+    /// **The `→` label's box**, [`LOAD_ARROW`] square between the two
+    /// capsules and on neither of them. Drawn rather than typed — see
+    /// [`LOAD_ARROW`], and [`arrow_mark`], which draws it.
+    ///
+    /// **It takes no press**, which is the one thing in this foot that is
+    /// neither a control nor a reading of a value: it says how to read the two
+    /// capsules either side of it, and `tests/library.rs` sweeps it with the
+    /// foot's own ground.
     pub arrow: Rect,
-    /// Where the deck's letter is painted, at the far end of the capsule.
+    /// **The pulldown's capsule**, at the far end of the foot.
+    pub deck: Rect,
+    /// Where the deck's letter is painted, inside the capsule's padding.
     pub letter: Rect,
+    /// The `▾` after it. Drawn rather than typed — see [`CHEVRON_W`], which is
+    /// the same mark the two menu pills in the transport row already carry.
+    pub chevron: Rect,
+    /// **How many decks the list offers**, which is [`Target::decks`] while it
+    /// is down and **zero** while it is shut — [`ArrangementPill::rows`]'s
+    /// shape, and what stops [`Load::row`] handing out a rectangle for a list
+    /// that is not there.
+    pub rows: usize,
+}
+
+impl Load {
+    /// Whether `p` is on the `load` button.
+    pub fn hit_button(&self, p: karakuri_layout::Point) -> bool {
+        self.button.contains(Pos2::new(p.x, p.y))
+    }
+
+    /// Whether `p` is on the pulldown's capsule.
+    pub fn hit_deck(&self, p: karakuri_layout::Point) -> bool {
+        self.deck.contains(Pos2::new(p.x, p.y))
+    }
+
+    /// **The list under the pulldown, or `None` while it is shut** — and
+    /// `None` for a console with no strip to offer, which is every test in
+    /// this crate that does not hand a mixer in.
+    ///
+    /// # It hangs up, where the arrangement pill's menu hangs down
+    ///
+    /// Both hang into the room there is. That pill is in the transport row at
+    /// the top of the console, so its card has the whole window under it;
+    /// this one is in the **foot** of a bay, which is the bottom of it, and
+    /// what is under it is whatever the operator has dragged the boundary to.
+    /// So the card stands on the pulldown's top edge, one [`size::PILL_GAP`]
+    /// clear of it, over this bay's own list.
+    ///
+    /// **The rows are not counted against the room**, which is the other half
+    /// of the same difference: the arrangement's card lists a *store* and says
+    /// `n of m` where the window cannot hold it, and this one lists at most
+    /// [`DECKS`] rows — a window too short for four rows of type is a window
+    /// with no transport row in it either. It is held inside the viewport so
+    /// a very short console draws it over the bays above rather than off the
+    /// top.
+    pub fn list(&self, viewport: Rect) -> Option<Rect> {
+        if self.rows == 0 {
+            return None;
+        }
+        let height = size::LIB_LIST_PAD * 2.0 + size::LIB_ROW_H * self.rows as f32;
+        let width = self
+            .deck
+            .width()
+            .max(size::LIB_ROW_H + (size::LIB_ROW_PAD_X + size::LIB_LIST_PAD) * 2.0);
+        Some(held_inside(
+            &viewport,
+            self.deck.min.x,
+            self.deck.min.y - size::PILL_GAP - height,
+            width,
+            height,
+        ))
+    }
+
+    /// **Where one row of the list is**, from the top of `card` — the decks in
+    /// [`DECK_LETTERS`] order, stacked with no gap between them, which is
+    /// `.lib-list`'s own reading and [`ArrangementPill::row`]'s.
+    ///
+    /// Panics on a row this list has not got, which is that method's rule: a
+    /// caller has invented a deck.
+    pub fn row(&self, card: Rect, index: usize) -> Rect {
+        assert!(index < self.rows, "deck {index} of a list of {}", self.rows);
+        Rect::from_min_size(
+            Pos2::new(
+                card.min.x + size::LIB_LIST_PAD,
+                card.min.y + size::LIB_LIST_PAD + size::LIB_ROW_H * index as f32,
+            ),
+            egui::vec2(card.width() - size::LIB_LIST_PAD * 2.0, size::LIB_ROW_H),
+        )
+    }
+
+    /// **Which deck `p` is on**, or `None` for a point on no row — the card's
+    /// padding, or anywhere off it.
+    pub fn picked(&self, viewport: Rect, p: karakuri_layout::Point) -> Option<u8> {
+        let card = self.list(viewport)?;
+        let at = Pos2::new(p.x, p.y);
+        (0..self.rows)
+            .find(|index| self.row(card, *index).contains(at))
+            .map(|index| index as u8)
+    }
 }
 
 impl LibraryBay {
@@ -11115,19 +11299,21 @@ impl LibraryBay {
         format!("{} of {}", self.rows, self.total)
     }
 
-    /// **The foot's pill, `width` wide, at the far end of the foot.**
+    /// **A capsule `width` wide at the far end of the foot**, which is where
+    /// the pulldown goes and what everything else in the row is measured back
+    /// from.
     ///
     /// `.lib-foot` is a flex row of the count, a `.sep { flex: 1 }` and the
-    /// pill, so the count is one [`size::LIB_FOOT_PAD_X`] in from the left and
-    /// the pill is one in from the right with the whole of the leftover
-    /// between them. Nothing else in the row has a width, so the spacer's
-    /// share is the only arithmetic and it is a subtraction.
+    /// three capsules, so the count is one [`size::LIB_FOOT_PAD_X`] in from the
+    /// left and the last item is one in from the right with the whole of the
+    /// leftover between them. Nothing else in the row has a width, so the
+    /// spacer's share is the only arithmetic and it is a subtraction.
     ///
     /// **Taken as an argument rather than derived**, because a capsule is as
     /// wide as the words in it and this derivation asks `egui` for nothing —
     /// [`library`]'s own rule. The caller measures the galley it is about to
-    /// paint and hands the number in, so the box the pill is drawn in and the
-    /// box a test asks about are one statement.
+    /// paint and hands the number in, so the box the capsule is drawn in and
+    /// the box a test asks about are one statement.
     pub fn pill(&self, width: f32) -> Rect {
         Rect::from_min_size(
             Pos2::new(
@@ -11138,24 +11324,32 @@ impl LibraryBay {
         )
     }
 
-    /// **The foot's pill, measured and laid out**: the word, the arrow's box
-    /// and the letter, inside the capsule [`LibraryBay::pill`] places.
+    /// **The foot's load control, measured and laid out**: the `load` button,
+    /// the `→` label between them, the pulldown and how many decks its list
+    /// holds.
     ///
-    /// **One derivation for the paint and for a test**, which is
-    /// [`ArrangementPill`]'s arrangement one bay along: the capsule is as wide
-    /// as what is in it, and two measurements would be a pill drawn in one box
-    /// and asserted in another. [`library_into`] paints from this and
-    /// `tests/library.rs` asks it where the capsule is.
+    /// **One derivation for the paint and for the press**, which is
+    /// [`ArrangementPill`]'s arrangement one bay along: each capsule is as
+    /// wide as what is in it, and two measurements would be a control drawn in
+    /// one box and pressed in another. [`library_into`] paints from this,
+    /// [`crate::input::claim`] hit-tests it and `tests/library.rs` asks it
+    /// where the capsules are.
+    ///
+    /// **Laid out from the right, because the pulldown is the far end of the
+    /// row.** `.lib-foot`'s `gap: 8px` ([`size::LIB_FOOT_GAP`]) is between
+    /// every pair of children, so the label and the button are stepped back
+    /// from the pulldown by it and [`LibraryBay::read_chip`] is stepped back
+    /// from the button by it again. The pulldown is as wide as a one-letter
+    /// deck name and the button is as wide as `load`, so a row measured
+    /// forwards from the count would move both capsules whenever the letter
+    /// did.
     ///
     /// **Why it takes the context**: a word's width is `egui`'s to answer and
     /// nobody else's, which is [`pill_width`]'s reason and [`mixer`]'s. Before
-    /// the first pass there are no fonts, and a zero-width word makes a pill
-    /// of the padding and the mark — which is what a console that has drawn
-    /// nothing has.
-    ///
-    /// `letter` is [`DECK_LETTERS`]', handed in rather than indexed here
-    /// because which deck is selected is [`View`]'s and this is a box.
-    pub fn load(&self, ctx: &egui::Context, letter: &str) -> LoadPill {
+    /// the first pass there are no fonts, and a zero-width word makes a
+    /// capsule of the padding and the mark — which is what a console that has
+    /// drawn nothing has.
+    pub fn load(&self, ctx: &egui::Context, at: Target) -> Load {
         let run = |text: &str| {
             ctx.fonts_mut(|f| {
                 f.layout_no_wrap(
@@ -11166,48 +11360,67 @@ impl LibraryBay {
                 .size()
             })
         };
-        let (word, mark) = (run(LOAD_PILL), run(letter));
-        // **The gap either side of the mark is the console's gap between a
-        // word and a drawn mark**, which is what the two menu pills already
-        // put between their text and their chevron and what a sink puts
-        // between its dot and its name.
-        let width = word.x + size::SINK_GAP + LOAD_ARROW + size::SINK_GAP + mark.x;
-        let pill = self.pill(width + size::PILL_PAD_X * 2.0);
-        let mid = pill.center().y;
-        let text = Rect::from_min_size(
-            Pos2::new(pill.min.x + size::PILL_PAD_X, mid - word.y * 0.5),
-            word,
+        let (word, mark) = (run(LOAD_PILL), run(at.letter()));
+        let mid = self.foot.center().y;
+        // **The pulldown**, and the gap inside it between the letter and the
+        // chevron is the one gap the mock states inside a capsule — the same
+        // `.sink` gap `arr · night ▾` puts between its words and its mark.
+        let deck = self.pill(size::PILL_PAD_X * 2.0 + mark.x + size::SINK_GAP + CHEVRON_W);
+        let letter = Rect::from_min_size(
+            Pos2::new(deck.min.x + size::PILL_PAD_X, mid - mark.y * 0.5),
+            mark,
         );
+        let chevron = Rect::from_center_size(
+            Pos2::new(deck.max.x - size::PILL_PAD_X - CHEVRON_W * 0.5, mid),
+            egui::vec2(CHEVRON_W, CHEVRON_H),
+        );
+        // **The label, on the foot's own ground and on neither capsule.**
         let arrow = Rect::from_center_size(
-            Pos2::new(text.max.x + size::SINK_GAP + LOAD_ARROW * 0.5, mid),
+            Pos2::new(deck.min.x - size::LIB_FOOT_GAP - LOAD_ARROW * 0.5, mid),
             egui::vec2(LOAD_ARROW, LOAD_ARROW),
         );
-        LoadPill {
-            pill,
-            text,
-            arrow,
-            letter: Rect::from_min_size(
-                Pos2::new(pill.max.x - size::PILL_PAD_X - mark.x, mid - mark.y * 0.5),
-                mark,
+        let button = Rect::from_min_size(
+            Pos2::new(
+                arrow.min.x - size::LIB_FOOT_GAP - (word.x + size::PILL_PAD_X * 2.0),
+                mid - size::PILL_H * 0.5,
             ),
+            egui::vec2(word.x + size::PILL_PAD_X * 2.0, size::PILL_H),
+        );
+        Load {
+            button,
+            text: Rect::from_min_size(
+                Pos2::new(button.min.x + size::PILL_PAD_X, mid - word.y * 0.5),
+                word,
+            ),
+            arrow,
+            deck,
+            letter,
+            chevron,
+            // **Zero while it is shut**, which is what stops [`Load::row`]
+            // handing out a rectangle for a list nobody opened.
+            rows: match at.open {
+                true => at.decks,
+                false => 0,
+            },
         }
     }
 
     /// **The foot's `read` chip, laid out**: the capsule between the count
-    /// and the load pill.
+    /// and the `load` button.
     ///
     /// `.lib-foot` is a flex row of the count, a `.sep { flex: 1 }` and the
-    /// two capsules one [`size::LIB_FOOT_GAP`] apart, so this is measured back
-    /// from where [`LibraryBay::load`] put the pill rather than forward from
-    /// the count: the load pill is as wide as the deck letter in it, and a
-    /// chip placed from the left would move whenever that letter did.
+    /// capsules one [`size::LIB_FOOT_GAP`] apart, so this is measured back
+    /// from where [`LibraryBay::load`] put the button rather than forward from
+    /// the count: the capsules to its right are as wide as the words and the
+    /// letter in them, and a chip placed from the left would move whenever any
+    /// of them did.
     ///
     /// **One derivation for the paint and the press**, which is
     /// [`LibraryBay::load`]'s own rule one capsule along — [`library_into`]
     /// paints this and [`LibraryBay::read`] hit-tests it, so the capsule a
     /// press lands on is the capsule the word is in.
-    pub fn read_chip(&self, ctx: &egui::Context, letter: &str) -> Rect {
-        let load = self.load(ctx, letter).pill;
+    pub fn read_chip(&self, ctx: &egui::Context, at: Target) -> Rect {
+        let load = self.load(ctx, at).button;
         let width = pill_width(ctx, READ_PILL);
         Rect::from_min_size(
             Pos2::new(load.min.x - size::LIB_FOOT_GAP - width, load.min.y),
@@ -11218,7 +11431,7 @@ impl LibraryBay {
     /// **What a press at `p` on the `read` chip asks for**, or `None` where
     /// there is no chip under it.
     ///
-    /// # The operand is the cursor, which is the load pill's operand
+    /// # The operand is the cursor, which is the load button's operand
     ///
     /// `console.html`'s note: *"Its operand is the cursor, which is the same
     /// operand the pill beside it already uses — so the route costs one chip
@@ -11242,14 +11455,14 @@ impl LibraryBay {
     pub fn read(
         &self,
         ctx: &egui::Context,
-        letter: &str,
+        at: Target,
         set: Option<&str>,
         p: karakuri_layout::Point,
     ) -> Option<Read> {
         if ctx.cumulative_pass_nr() == 0 {
             return None;
         }
-        if !self.read_chip(ctx, letter).contains(Pos2::new(p.x, p.y)) {
+        if !self.read_chip(ctx, at).contains(Pos2::new(p.x, p.y)) {
             return None;
         }
         match self.reading {
@@ -11258,6 +11471,75 @@ impl LibraryBay {
                 id: set?.to_owned(),
             })),
         }
+    }
+
+    /// **What a press at `p` on the foot's load control asks for**, or `None`
+    /// where the press was on nothing this control owns.
+    ///
+    /// The same derivation [`crate::input::claim`] hit-tests, asked a second
+    /// time rather than copied — [`ArrangementPill::ask`]'s arrangement, and
+    /// the reason is the same: the control that claims a press and the control
+    /// that acts on it cannot come apart.
+    ///
+    /// # The three answers a press can give, and which mark each one moves
+    ///
+    /// - **The pulldown** puts its list down, or takes it away again. Neither
+    ///   is an operation and neither moves a deck.
+    /// - **A row of that list** is [`Aim::Deck`]: the target moves to the deck
+    ///   that was picked and **nothing is asked for**, exactly as a press on a
+    ///   row of the listing above asks for nothing (`LibraryBay::take`). The
+    ///   deck selection does not move — that is the whole of what the second
+    ///   mark is for, and `View::select` is not called from here.
+    /// - **The button** is `Operation::LoadSet { deck, set }`, with the deck
+    ///   off [`Target::deck`] and the Set off the cursor. With no row under
+    ///   the cursor it is [`Aim::NoSet`] and nothing is emitted: a load with
+    ///   one operand missing is not a load, and answering `None` would leave
+    ///   the press claimed and unaccounted for.
+    ///
+    /// **While the list is down, every press is the dismissal**, which is
+    /// [`ArrangementPill::ask`]'s rule and `input::claim`'s rule 2: the card
+    /// is drawn over this bay's own list, so a press on the rows underneath it
+    /// belongs to the card and not to what it is covering. So the button
+    /// answers [`Aim::Shut`] while the list is down rather than loading
+    /// through it.
+    ///
+    /// **`None` before the first pass**, which is [`LibraryBay::read`]'s guard
+    /// and [`mixer`]'s: there are no fonts until `egui` has run one, so there
+    /// is no capsule width to measure and nothing has been drawn to press.
+    pub fn aim(
+        &self,
+        ctx: &egui::Context,
+        viewport: Rect,
+        at: Target,
+        set: Option<&str>,
+        p: karakuri_layout::Point,
+    ) -> Option<Aim> {
+        if ctx.cumulative_pass_nr() == 0 {
+            return None;
+        }
+        let load = self.load(ctx, at);
+        if load.hit_deck(p) {
+            return Some(match at.open {
+                true => Aim::Shut,
+                false => Aim::Open,
+            });
+        }
+        if at.open {
+            return Some(match load.picked(viewport, p) {
+                Some(deck) => Aim::Deck(deck),
+                None => Aim::Shut,
+            });
+        }
+        if !load.hit_button(p) {
+            return None;
+        }
+        Some(match set {
+            Some(id) => Aim::Load(Operation::LoadSet {
+                deck: at.deck,
+                set: id.to_owned(),
+            }),
+            None => Aim::NoSet,
+        })
     }
 
     /// **What a press at `p` on the list takes in hand**, or `None` where
@@ -11740,7 +12022,7 @@ fn library_into(
     bay: &LibraryBay,
     listed: Listed<'_>,
     cursor: usize,
-    letter: &str,
+    at: Target,
     open: Option<Opened<'_>>,
 ) {
     let Listed { sets, starred } = listed;
@@ -11815,45 +12097,113 @@ fn library_into(
         pal.faint,
     );
 
-    // **The `read` chip**, between the count and the load pill and drawn as
-    // every other capsule on this panel is — [`pill_at`]'s hairline round
+    // **The `read` chip**, between the count and the `load` button and drawn
+    // as every other capsule on this panel is — [`pill_at`]'s hairline round
     // `--c-dim`. **It does not light**, open or shut, and [`READ_PILL`] is
     // where that is argued: the block above it is the state, and this bay's
     // one accent is spent on the load beside it.
-    pill_at(ui, pal, bay.read_chip(ui.ctx(), letter), READ_PILL);
+    pill_at(ui, pal, bay.read_chip(ui.ctx(), at), READ_PILL);
 
+    let load = bay.load(ui.ctx(), at);
     // **`.pill.lav`, and it is the one pill on this panel with no border**:
     // `border-color: transparent; color: var(--c-lav); background:
     // color-mix(in srgb, var(--c-lav) 15%, transparent)`. Every other capsule
     // here is [`pill_at`]'s hairline round `--c-dim`, and the difference is
-    // the point — this one is a *readout of where a press lands*, so it is
-    // drawn in the colour the selection ring on the strip is drawn in and a
-    // reader can follow the letter to the deck.
-    //
-    // **The arrow between the word and the letter is drawn**, which is the
-    // whole of what [`LOAD_ARROW`] is: the mock's `&rarr;` was typed here and
-    // `egui`'s default face has no U+2192, so the pill read `load □ A` — a
-    // readout of where a press lands, with a tofu where the *lands* was.
-    // Where each of the three goes is [`LibraryBay::load`]'s answer, so this
-    // paints and derives nothing.
-    let at = bay.load(ui.ctx(), letter);
+    // the point — `console.html`: *"`load` is lav because it is the press this
+    // bay exists for, and a second lav chip beside it would make the colour
+    // mean two things at a width of eight characters"*.
     painter.rect_filled(
-        at.pill,
+        load.button,
         // `border-radius: 999px` on a box this short is a capsule.
         CornerRadius::same((size::PILL_H * 0.5) as u8),
         tint(pal.lav, 15),
     );
-    let word = |rect: Rect, text: &str| {
+    let galley = painter.layout_no_wrap(
+        LOAD_PILL.to_owned(),
+        FontId::new(size::BASE, FontFamily::Proportional),
+        pal.lav,
+    );
+    painter.galley(load.text.min, galley, pal.lav);
+
+    // **The `→` between the two capsules is drawn and is on neither of them**,
+    // which is the whole of what [`LOAD_ARROW`] is: the mock's `&rarr;` was
+    // typed here and `egui`'s default face has no U+2192, so the row read
+    // `load □ A` — a label saying how to read two controls, with a tofu where
+    // the reading was. It is `--c-faint`, which is `.lib-foot`'s own colour
+    // and the colour the count at the other end of the row is in: it is the
+    // foot's furniture rather than either control's, and a mark in the lav
+    // would put this bay's accent on a thing nobody can press.
+    arrow_mark(&painter, load.arrow.center(), LOAD_ARROW, pal.faint, false);
+
+    // **The pulldown, drawn as the `read` chip is and not as the button is.**
+    // `console.html`: *"It is deliberately not lavender. Lavender here is the
+    // deck the keys are addressed to, and this is the one letter on the
+    // console that is allowed to name a different one."* So it is
+    // [`pill_at`]'s hairline round `--c-dim` with the chevron the two menu
+    // pills in the transport row already carry.
+    pill_at(ui, pal, load.deck, at.letter());
+    painter.add(egui::Shape::convex_polygon(
+        vec![
+            load.chevron.left_top(),
+            load.chevron.right_top(),
+            Pos2::new(load.chevron.center().x, load.chevron.max.y),
+        ],
+        pal.dim,
+        Stroke::NONE,
+    ));
+}
+
+/// **The pulldown's list, painted** — the card and a row per deck the mixer is
+/// drawing a strip for.
+///
+/// Where everything goes is [`Load`]'s, so this paints and derives nothing.
+/// Drawn from [`View::draw`] **after the bays** for the arrangement menu's
+/// reason: the card hangs out of the foot it belongs to and over this bay's
+/// own list, so a card painted from inside the Library arm would go on before
+/// the rows and end up under them.
+///
+/// The card is the arrangement menu's card term for term — the panel's own
+/// fill, a hairline and the shadow — because it is the same object one bay
+/// along and a second treatment would be a second answer to *what does a list
+/// hanging off a capsule look like* (`console.html` draws neither, which is
+/// what makes this the console's own).
+///
+/// **The row the target is on is drawn in `--c-text` and the rest in
+/// `--c-dim`**, which is the arrangement menu's own reading of *which of these
+/// is in use*.
+fn deck_list_into(ui: &Ui, pal: &Palette, load: &Load, at: Target, card: Rect) {
+    let painter = ui.painter();
+    painter.add(pal.shadow.as_shape(card, CornerRadius::same(8)));
+    painter.rect_filled(card, CornerRadius::same(8), pal.panel);
+    painter.rect_stroke(
+        card,
+        CornerRadius::same(8),
+        Stroke::new(size::HAIRLINE, pal.line),
+        StrokeKind::Inside,
+    );
+    // `take` rather than a range, because the rows are the letters: a list
+    // longer than [`DECK_LETTERS`] is a deck this crate has no letter for, and
+    // `View::aim_at` is what stops one being asked for.
+    for (index, letter) in DECK_LETTERS.iter().enumerate().take(load.rows) {
+        let row = load.row(card, index);
+        let ink = match index == usize::from(at.deck) {
+            true => pal.text,
+            false => pal.dim,
+        };
         let galley = painter.layout_no_wrap(
-            text.to_owned(),
+            (*letter).to_owned(),
             FontId::new(size::BASE, FontFamily::Proportional),
-            pal.lav,
+            ink,
         );
-        painter.galley(rect.min, galley, pal.lav);
-    };
-    word(at.text, LOAD_PILL);
-    arrow_mark(&painter, at.arrow.center(), LOAD_ARROW, pal.lav, false);
-    word(at.letter, letter);
+        painter.galley(
+            Pos2::new(
+                row.min.x + size::LIB_ROW_PAD_X,
+                row.center().y - galley.size().y * 0.5,
+            ),
+            galley,
+            ink,
+        );
+    }
 }
 
 /// **What the list is drawing this frame**: the rows, and which of them the
@@ -12020,9 +12370,9 @@ fn reading_into(painter: &egui::Painter, pal: &Palette, block: &Block, reading: 
 ///   — a word at [`size::BASE`] in a capsule with no border at all.
 /// - `.scope.sel { color: var(--c-lav); background: color-mix(in srgb,
 ///   var(--c-lav) 15%, transparent) }` — **the same wash and the same colour
-///   the load pill is drawn in**, and that is the mock's own doing rather than
-///   a shortcut here: both say *this is where a press lands*, one about a deck
-///   and one about a library.
+///   the `load` button is drawn in**, and that is the mock's own doing rather
+///   than a shortcut here: both say *this is where a press lands*, one about a
+///   deck and one about a library.
 ///
 /// **One row and not a wrap, and at the mock's own width that costs the fourth
 /// chip its right-hand half.** `.scopes` carries a wrapping flex, and this
@@ -12981,7 +13331,7 @@ impl Param {
 ///   readout and are.
 /// - **`keep`**, the pill beside it: *"Keep deck A as a Set, exactly as it is
 ///   on screen … It goes into the library under a name."* That is a write into
-///   the store, which is the Library bay's `load → A` from the other end —
+///   the store, which is the Library bay's `load` from the other end —
 ///   and it is the end that is still open. A load re-points a slot's source
 ///   and lets the worker build it; a keep has to read a *running* Set back out
 ///   and name it, which is `Set::published`'s side of the seam and a different
@@ -15342,13 +15692,56 @@ pub struct View {
     /// [`View::arrangement`]'s rule: what a *pointer* is at is not something
     /// the program can be told, because the console is what refuses a deck
     /// there is no strip for. Zero until somebody says otherwise — deck A,
-    /// which is the strip the mock rings and the deck the mock's `load → A`
-    /// names.
+    /// which is the strip the mock rings.
     ///
-    /// Read by [`mixer_into`] for the ring and by [`library`] for the letter
-    /// on the load pill, and those two are the whole of it: `console.html`'s
-    /// crossfader read it as well, and there is no crossfader.
+    /// **Read by [`mixer_into`] for the ring and by nothing else on the
+    /// panel.** The Library bay's foot read it for its letter until
+    /// 2026-09-08 and reads [`View::target`] now (ADR-0305), which is what
+    /// lets a load be aimed at a deck the keys are not addressed to;
+    /// `console.html`'s crossfader read it as well, and there is no
+    /// crossfader. What still fills its `deck` in from here is every
+    /// deck-addressed *key*, `l` included.
     selection: u8,
+    /// **Which deck the Library bay's load is aimed at**, and the third
+    /// pointer this console owns.
+    ///
+    /// **It is not [`View::selection`] and that is the point.** The selection
+    /// is what a *key* press is addressed to; this is what the *button* in the
+    /// Library bay's foot lands on, and the two are free to name two different
+    /// decks — which is the one thing the selection cannot do, and the whole of
+    /// what the pulldown bought
+    /// ([ADR-0305](../../../docs/adr/0305-the-library-bays-load-is-a-button-and-a-pulldown-and-the-deck-it-names-is-not-the-selection.md)).
+    /// `l` goes on reading the selection.
+    ///
+    /// **It writes no record and no operation names it**, which is
+    /// [`View::cursor_row`]'s argument one mark along: picking a deck in the
+    /// pulldown changes what the *next* press will ask for and nothing about
+    /// what any deck is playing, so nothing downstream can be the model of
+    /// record for it and a host that kept a copy would be keeping the
+    /// console's state on its behalf. `Operation::SelectDeck` is emphatically
+    /// not what a pick emits: that operation moves the selection, and this one
+    /// must not.
+    ///
+    /// **Private, with [`View::aim_at`] the only way in**, which is
+    /// [`View::selection`]'s rule and for its reason: the console is what
+    /// refuses a deck there is no strip for.
+    ///
+    /// Zero until somebody says otherwise — deck A, which is the letter the
+    /// mock's pulldown reads. **Kept across everything that is not a deck**:
+    /// changing the scope, narrowing the listing and walking the cursor all
+    /// leave it alone, because none of them is about a deck.
+    target: u8,
+    /// **Whether the pulldown's list is down**, and it is the console's own
+    /// state rather than a reading — [`Arrangement::menu`]'s argument on a
+    /// third control: what a *control* is doing is not something the program
+    /// can be the model of record for.
+    ///
+    /// **Private, with [`View::open_target`] and [`View::shut_target`] the
+    /// only ways in.** `open_target` refuses a console the mixer is drawing no
+    /// strip for: a card with no rows in it is a gesture with nothing to pick
+    /// and nothing to leave by, and `input::claim`'s rule 2 would give it
+    /// every press on the console until a second one shut it.
+    target_open: bool,
     /// **Which Set in the Library bay a load would take**, the mock's
     /// `.lib-row.cursor`, and the second of this console's two pointers.
     ///
@@ -15566,6 +15959,14 @@ impl View {
             // *nothing* to be: a console with no deck draws no strips and so
             // no ring, and one with no store draws no rows and so no cursor.
             selection: 0,
+            // **Deck A, and it is a third mark rather than a copy of the
+            // first.** Both start on A because that is where the mock draws
+            // both, and nothing keeps them together after that: `select` moves
+            // one and `aim_at` moves the other.
+            target: 0,
+            // **Shut**, which is not a fourth mark: a list is down or it is
+            // not there, and the pulldown draws the same either way.
+            target_open: false,
             cursor_row: 0,
             // **Nothing open**, which is not a fourth mark: a reading is a
             // block of rows or it is not there, and the chip that opens one
@@ -15592,10 +15993,11 @@ impl View {
     /// **Address the keys to `deck`**, and answer whether that moved anything.
     ///
     /// **A deck the mixer has no strip for is refused**, and that is the whole
-    /// of the rule: the selection is drawn as a ring round a strip and read as
-    /// a letter on the library's load pill, so a selection past the deck's
-    /// slots would be a ring nowhere and a letter naming a deck the press
-    /// would be turned down on. [`View::mixer`] is *"one per slot the deck
+    /// of the rule: the selection is drawn as a ring round a strip and is what
+    /// every deck-addressed key names its deck by, so a selection past the
+    /// deck's slots would be a ring nowhere and a key aimed at a deck the
+    /// press would be turned down on. [`View::aim_at`] refuses on the same
+    /// count one mark along. [`View::mixer`] is *"one per slot the deck
     /// has"*, so its length is the deck's own count arriving the way every
     /// other reading does — and a console with no deck behind it has no strip
     /// to select, which is every test in this crate.
@@ -15615,6 +16017,94 @@ impl View {
         let moved = self.selection != deck;
         self.selection = deck;
         moved
+    }
+
+    /// **What the Library bay's load control is aimed at**, as the one value
+    /// [`LibraryBay::load`] lays itself out from — see [`Target`], and
+    /// [`View::target_deck`] for the argument.
+    ///
+    /// Read once for the frame and handed to the paint and to the press,
+    /// exactly as [`View::filters`] is: the capsule that is drawn and the
+    /// capsule a press lands on are one derivation of one reading.
+    pub fn target(&self) -> Target {
+        Target {
+            deck: self.target,
+            decks: self.mixer.len(),
+            open: self.target_open,
+        }
+    }
+
+    /// **Which deck a press on the Library bay's `load` button lands on** —
+    /// see [`View::target`] the field, which is where the argument is.
+    pub fn target_deck(&self) -> u8 {
+        self.target
+    }
+
+    /// **Aim the load at `deck`**, put the list away, and answer whether
+    /// anything moved.
+    ///
+    /// **A deck the mixer has no strip for is refused**, which is
+    /// [`View::select`]'s rule read a second time and not a second rule: the
+    /// letter says where a press lands, so a target past the deck's slots
+    /// would be a letter naming a deck the press would be turned down on.
+    /// `console.html`: *"A deck the mixer is drawing no strip for is not in the
+    /// list, which is the count `0`–`3` are refused on"*.
+    ///
+    /// **It refuses rather than clamping**, for `select`'s reason: a pick of
+    /// deck D at a two-slot deck means *deck D*, and clamping would aim the
+    /// load at deck B, which is a different deck than the one asked for.
+    ///
+    /// **The list goes away here**, because a pick is one gesture and this is
+    /// the whole of it: nothing is emitted, so there is no host arm to end it
+    /// in, and a list left down after a pick would be a card still claiming
+    /// every press on the console. It is put away even where the deck did not
+    /// move — picking the deck already aimed at is still a hand finishing what
+    /// it started.
+    ///
+    /// **The deck selection does not move**, and nothing here touches it: that
+    /// is the whole of what this mark is for.
+    ///
+    /// The `bool` is [`View::select`]'s: a caller repaints on a move and not
+    /// on a press.
+    pub fn aim_at(&mut self, deck: u8) -> bool {
+        if usize::from(deck) >= self.mixer.len() {
+            return false;
+        }
+        let moved = self.target != deck || self.target_open;
+        self.target = deck;
+        self.target_open = false;
+        moved
+    }
+
+    /// **Whether the pulldown's list is down** — see [`View::target_open`] the
+    /// field.
+    pub fn target_open(&self) -> bool {
+        self.target_open
+    }
+
+    /// **Put the list down**, and answer whether it went down.
+    ///
+    /// **Refused where the mixer is drawing no strip**, which is the field's
+    /// own rule: a card with no rows in it offers nothing to pick, and
+    /// [`crate::input::claim`]'s rule 2 would give it every press on the
+    /// console until a second press shut it again. A console with no deck
+    /// behind it draws no mixer either, so there is nothing this refusal hides.
+    pub fn open_target(&mut self) -> bool {
+        if self.mixer.is_empty() || self.target_open {
+            return false;
+        }
+        self.target_open = true;
+        true
+    }
+
+    /// **Take the list away**, and answer whether there was one down.
+    ///
+    /// [`View::shut_reading`]'s shape: a caller repaints on a move, so a
+    /// dismissal of nothing costs no frame.
+    pub fn shut_target(&mut self) -> bool {
+        let was = self.target_open;
+        self.target_open = false;
+        was
     }
 
     /// **Which row of the Library bay the cursor is on** — see
@@ -16364,14 +16854,13 @@ impl View {
         // transition row is laid out from it and painted from it, and `draw`
         // takes `&mut self` while the arms below borrow the slices beside it.
         let transition_at = self.transition;
-        // **The load pill's letter, read here rather than in the paint**: it
-        // is a readout of `selection` and the bay is what draws it, so the one
-        // place the letter is chosen is the one place the ring's slot is read.
-        // **The word and the arrow are not built with it any more** — the
-        // arrow is a mark rather than a character (`LOAD_ARROW`), so there is
-        // no string for the three of them to be, and `LibraryBay::load` is
-        // where they are laid out together.
-        let load = DECK_LETTERS[usize::from(selection)];
+        // **What the foot's load control is aimed at, read once for the
+        // frame** beside the pointers above it and for their reason: `draw`
+        // takes `&mut self` and the arm below borrows the slices this reads
+        // its deck count off. **It is not `selection`** — the pulldown is this
+        // bay's own mark and the two are free to name two different decks,
+        // which is `View::target` the field.
+        let load = self.target();
         let waiting = self.staging.as_slice();
         let panes = self.inspector.as_slice();
         // **The seventh pointer, read once for the frame** beside the panes it
@@ -16674,6 +17163,20 @@ impl View {
             if let Some(pill) = arrangement(ui.ctx(), panel.layout(), values, audio, tracking, arr)
             {
                 arrangement_into(ui, &pal, &pill, arr);
+            }
+            // **The Library bay's deck list, over everything for the two
+            // cards' reason** — it hangs out of that bay's foot and up over
+            // its own rows, so a card painted from inside the arm would go on
+            // before them. It can never be down while either of those is,
+            // because `input`'s rule 2 sends the press that would open a
+            // second one to whichever is already open.
+            if load.open {
+                if let Some(bay) = library(panel.layout(), scopes, sets, opened, pointed) {
+                    let at = bay.load(ui.ctx(), load);
+                    if let Some(card) = at.list(to_egui(panel.layout().viewport())) {
+                        deck_list_into(ui, &pal, &at, load, card);
+                    }
+                }
             }
         });
     }

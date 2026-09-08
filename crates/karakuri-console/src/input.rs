@@ -269,11 +269,11 @@
 //!    `solo` capsule and a preview cell, and it is rule 3's ordinary price
 //!    rather than anything about this chip: everything from the capsule's
 //!    middle upwards is the panel's. Along the row it clears everything —
-//!    [`crate::room::size::LIB_FOOT_GAP`]'s 8 to the load pill on its right,
-//!    and the whole of the foot's leftover to the count on its left.
+//!    [`crate::room::size::LIB_FOOT_GAP`]'s 8 to the `load` button on its
+//!    right, and the whole of the foot's leftover to the count on its left.
 //!    `tests/library.rs` measures it, and it is measured rather than inherited
-//!    from the load pill it sits beside, which happens to stand at the same
-//!    4.75 and is not a control at all.
+//!    from the capsules it sits beside, which stand at the same 4.75 and pay
+//!    the same rim.
 //!
 //!    **One of them is a whole strip, and it is the first control here that is
 //!    not drawn as one.** [`crate::view::Mixer::select`] is the
@@ -532,7 +532,7 @@ use crate::panel::{Panel, GRAB};
 use crate::view::{
     arrangement, audio_in, bay_grip, deck_head, deck_name, inspector, keep_pill, library, look,
     master, mcp_pill, mixer, outputs, program_bay, program_head, tracker_group, transition,
-    transport, Field, Scope, View, BAY_GRIPS, DECKS, DECK_LETTERS, REGIONS,
+    transport, Field, Scope, View, BAY_GRIPS, DECKS, REGIONS,
 };
 
 /// **What each of rule 4's derivations answers for**, one row per probe and in
@@ -544,7 +544,8 @@ use crate::view::{
 /// parameter row's fader, the
 /// Program bay head's `solo`, the four deck preview cells,
 /// the Library bay's scope chips, its two filter fields, the `read` chip in
-/// its foot and the list above it, and the four class pills.
+/// its foot, the `load` button and deck pulldown beside it, the list above
+/// them, and the four class pills.
 ///
 /// **One probe per derivation, cheapest answer first**, and [`on_mcp`] is last
 /// because it is the dearest probe here — each class lays out its bay's whole
@@ -608,6 +609,23 @@ use crate::view::{
 /// What a press on it means depends on whether a reading is open, and that is
 /// inside `LibraryBay::read` where the block is.
 ///
+/// **The `load` button and the deck pulldown are two on one row, and it is
+/// the newest row here** (ADR-0305). They were one *readout* until
+/// 2026-09-08 — `load → A`, which said where the key would land and answered
+/// no pointer at all — and the split is what made them controls. One row
+/// because they are one derivation, and `claims: 2` because a pointer reaches
+/// two capsules through it: the tracker group's three is the same shape, and
+/// so is a strip's five.
+///
+/// **The pulldown counts one and not [`DECKS`]**, which is the `read` chip's
+/// argument rather than the preview cells': the capsule is one press whatever
+/// the mixer is drawing, and how many decks its list then offers is
+/// `Load::picked`'s answer inside the card. **The card itself is not counted
+/// at all** — rule 2 above claims every press while it is down, exactly as it
+/// does for the two cards in the transport row. And the `→` between the two
+/// capsules is not counted because it is not a control: it is a label, and
+/// `tests/library.rs` sweeps it with the foot's ground.
+///
 /// **The filter row's count is two and is a constant**, unlike the scope row
 /// above it: the row is `holds` and `layer` because
 /// [`karakuri_operation::Operation::ListSets`] carries two things to narrow
@@ -635,7 +653,7 @@ use crate::view::{
 /// answering a different question. So the **list** is the control and which row
 /// is inside [`crate::view::LibraryBay::take`], which is the `read` chip's
 /// row read the other way round.
-pub const PROBES: [Probe; 24] = [
+pub const PROBES: [Probe; 25] = [
     Probe {
         name: "the Outputs row's sink",
         claims: 1,
@@ -740,6 +758,11 @@ pub const PROBES: [Probe; 24] = [
         name: "the read chip in the Library bay's foot",
         claims: 1,
         ask: on_read,
+    },
+    Probe {
+        name: "the Library bay's load button and deck pulldown",
+        claims: 2,
+        ask: on_load,
     },
     Probe {
         name: "the Library bay's stars",
@@ -1154,11 +1177,47 @@ fn on_read(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
     .is_some_and(|bay| {
         bay.read(
             ctx,
-            DECK_LETTERS[usize::from(view.selection())],
+            view.target(),
             view.library.get(view.cursor_row()).map(String::as_str),
             p,
         )
         .is_some()
+    })
+}
+
+/// **The `load` button and the deck pulldown beside it, derived
+/// once for both**: the pulldown is as wide as the letter in it and
+/// the button is laid out back from it, so a second derivation would
+/// put the capsule a press lands on somewhere the word is not. It is
+/// a mixer strip's arrangement in a foot rather than in a column.
+///
+/// **Two controls in one row of this table** (ADR-0305). They were
+/// one *readout* until 2026-09-08 — `load → A`, which said where the
+/// key would land and answered no pointer at all — so this row is
+/// what the split cost: the button asks for
+/// `Operation::LoadSet` naming the pulldown's deck, and the pulldown
+/// names that deck.
+///
+/// **The `→` between them is not one of the two**, which is the
+/// whole of why `hit_button` and `hit_deck` are two questions rather
+/// than one box: the label is punctuation on the foot's own ground,
+/// and a press on it belongs to neither capsule.
+///
+/// **The list the pulldown puts down is not hit-tested here.** Rule 2
+/// above claims every press while it is down, exactly as it does for
+/// the two cards in the transport row, so this probe is only ever
+/// asked in the state where there is no card.
+fn on_load(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    library(
+        panel.layout(),
+        &view.scopes,
+        &view.library,
+        view.opened(),
+        view.pointed(),
+    )
+    .is_some_and(|bay| {
+        let load = bay.load(ctx, view.target());
+        load.hit_button(p) || load.hit_deck(p)
     })
 }
 
@@ -1308,6 +1367,14 @@ pub fn claim(panel: &mut Panel, ctx: &egui::Context, view: &View, p: Point) -> C
         // is an operation the rest of the time is not one while it is open,
         // and the next press is part of that gesture (ADR-0292).
         || view.naming_set().is_some()
+        // **And the Library bay's deck list, which is a third card**: it is
+        // drawn over that bay's own rows, so while it is down a press inside
+        // it belongs to the card and not to the listing it is covering — and a
+        // press anywhere else is the dismissal (ADR-0305). It can never be
+        // down while either of the two above is, for the reason they can never
+        // both be down: the press that would open the second one lands while
+        // the first is open, so this claims it and it shuts that one.
+        || view.target_open()
     {
         return Claim::Panel;
     }

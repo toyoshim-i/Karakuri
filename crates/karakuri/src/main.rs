@@ -295,7 +295,7 @@ use karakuri_console::view::{
     deck_head as deck_head_row, deck_name, inspector as inspector_pane, keep_pill,
     library as library_bay, look as look_row, master as master_row, mcp_pill, mixer as mixer_bay,
     outputs, picture_rect, preview_rects, program_bay, program_head, tracker_group,
-    transition as transition_row, transport as transport_row, Ask, AudioAsk, AudioIn, Basis,
+    transition as transition_row, transport as transport_row, Aim, Ask, AudioAsk, AudioIn, Basis,
     Budgeted, Chosen, Go, Kind, McpPill, Picture, Read, Reading, Scope, Taken, Tracker,
     TransitionSettings, View, DECKS, DECK_LETTERS, REGIONS,
 };
@@ -2111,6 +2111,51 @@ impl Readout {
                     did = self.arranged(ask);
                     return (claim, did);
                 }
+                // **The Library bay's load control, and its list is a third
+                // card**, so it is asked here rather than beside the bay's own
+                // rows below: the card hangs up out of that bay's foot and
+                // over its list, and while it is down a press anywhere on the
+                // console belongs to it (`input::claim`'s rule 2, ADR-0305).
+                // A press outside it is the dismissal, which is why the `None`
+                // below is `Aim::Shut` — the same shape the two pills above
+                // are in, and for their reason.
+                //
+                // **The three cards can never be down together**: the press
+                // that would open a second one lands while the first is open,
+                // so whichever is open claims it and that press shuts it.
+                //
+                // **Both operands go in with the point.** The deck is the
+                // pulldown's (`View::target`) and never the deck selection —
+                // that is the whole of the record — and the Set is the row
+                // under the cursor, which this side read out of the store
+                // (ADR-0156).
+                let aimed = library_bay(
+                    self.panel.layout(),
+                    &self.view.scopes,
+                    &self.view.library,
+                    self.view.opened(),
+                    self.view.pointed(),
+                )
+                .and_then(|bay| {
+                    bay.aim(
+                        ctx,
+                        view::to_egui(self.panel.layout().viewport()),
+                        self.view.target(),
+                        self.view
+                            .library
+                            .get(self.view.cursor_row())
+                            .map(String::as_str),
+                        at,
+                    )
+                });
+                if self.view.target_open() {
+                    did = self.aimed(aimed.unwrap_or(Aim::Shut));
+                    return (claim, did);
+                }
+                if let Some(ask) = aimed {
+                    did = self.aimed(ask);
+                    return (claim, did);
+                }
                 // **The tracker group's three, derived once for all of
                 // them** — the offset's figure is as wide as the number in it
                 // and the octave is laid out from where the tap ends, so they
@@ -2375,7 +2420,7 @@ impl Readout {
                 //
                 // **The Set under the cursor goes in with the point**, because
                 // the operand of a reading is the cursor — the same operand
-                // the pill beside it reads, which is what
+                // the `load` button beside it reads, which is what
                 // `console.html`'s note means by *"the route costs one chip in
                 // the foot and nothing else"*.
                 if let Some(ask) = library_bay(
@@ -2388,7 +2433,7 @@ impl Readout {
                 .and_then(|bay| {
                     bay.read(
                         ctx,
-                        DECK_LETTERS[usize::from(self.view.selection())],
+                        self.view.target(),
                         self.view
                             .library
                             .get(self.view.cursor_row())
@@ -2735,6 +2780,57 @@ impl Readout {
             Ask::Operation(operation) => {
                 self.view.arrangement.shut();
                 Acted::Emitted(Some(operation))
+            }
+        }
+    }
+
+    /// **What a press on the Library bay's load control did** — the button,
+    /// the pulldown, or a row of the list it puts down (ADR-0305).
+    ///
+    /// [`Readout::arranged`]'s shape one bay along, and the two are the same
+    /// division: every arm is either this console's own state moving or one
+    /// operation emitted down the path every other operation takes. **Nothing
+    /// is performed here**, and in particular nothing writes a file: a
+    /// `LoadSet` is `played`'s, exactly as it is for the key and for the drop.
+    ///
+    /// **A pick moves no deck selection**, which is what the record is about:
+    /// `View::aim_at` writes the bay's own mark and never `View::select`, so
+    /// the ring on the strip and the letter in the foot are free to name two
+    /// different decks. It also puts the list away, because a pick is one
+    /// gesture and nothing here is emitted for a caller to end it in.
+    fn aimed(&mut self, ask: Aim) -> Acted {
+        match ask {
+            Aim::Open => {
+                println!(
+                    "load: aimed at deck {} — pick a deck, or press `load` to send \
+                     the cursor's Set there",
+                    deck_letter(self.view.target_deck())
+                );
+                self.view.open_target();
+                Acted::Nothing
+            }
+            Aim::Shut => {
+                self.view.shut_target();
+                Acted::Nothing
+            }
+            // **The whole of a pick**, and it asks for nothing: the mark is
+            // the console's, exactly as the library cursor is, and no
+            // operation in the vocabulary names it. `Operation::SelectDeck` is
+            // emphatically not what this is — that one moves the keys.
+            Aim::Deck(deck) => {
+                self.view.aim_at(deck);
+                Acted::Nothing
+            }
+            // **Down the path the key and the drop already take.** `played`
+            // performs `LoadSet` by re-pointing the slot's source, so all
+            // three routes arrive at the same place (ADR-0228).
+            Aim::Load(operation) => Acted::Emitted(Some(operation)),
+            // **A load with one operand missing is not a load**, and the
+            // press says so rather than going quiet: P-0083, and the same
+            // sentence `Released::Nowhere` is answered with one bay along.
+            Aim::NoSet => {
+                println!("load: nothing under the cursor — this library is listing no Sets");
+                Acted::Nothing
             }
         }
     }
@@ -3649,8 +3745,11 @@ impl Readout {
              in a gap takes the boundary and it follows the pointer. a press on a LIBRARY \n\
              row takes that Set in hand and nothing happens until you let it go: over a \n\
              mixer strip it loads that deck, anywhere else it loads nothing. that is the \n\
-             second way in to the same command `l` performs, and the only one that names \n\
-             both the Set and the deck in one gesture. everywhere else \n\
+             third way in to the same command `l` performs, and the only one that names \n\
+             both the Set and the deck in one gesture. the second is the `load` button in \n\
+             that bay's foot, which lands on the deck the pulldown beside it names rather \n\
+             than on the deck the keys are addressed to, so a load can be aimed without \n\
+             moving the selection (ADR-0305). everywhere else \n\
              `karakuri_console::input::claim` decides, and the {CONTROLS} controls its rule \n\
              4 hit-tests are painted shapes with no widget behind them — nothing but that \n\
              rule knows a press landed on one. the number is that crate's own constant, \n\
@@ -7001,9 +7100,10 @@ fn declared(root: &std::path::Path, id: &str) -> Result<Reading, String> {
 /// **The three marks are the mock's own** — an en dash between the ends of the
 /// range and a middle dot before the default — and both are in the face the
 /// panel draws with, which is asserted rather than assumed
-/// ([`the_marks_a_reading_is_spelled_with_are_in_the_face`]): the `load → A`
-/// pill was typed with a U+2192 the default face does not carry and drew
-/// `load □ A` for a release.
+/// ([`the_marks_a_reading_is_spelled_with_are_in_the_face`]): the Library
+/// bay's foot read `load → A` with the arrow typed as a U+2192 the default
+/// face does not carry, and drew `load □ A` for a release. The arrow is drawn
+/// rather than typed now, and is a label between two capsules (ADR-0305).
 ///
 /// **A default that is not a literal is a word and not a blank.** The card's
 /// `default` is absent where the declaration's expression is not a number this
@@ -17055,6 +17155,80 @@ mod tests {
         );
     }
 
+    /// **What the load control's five asks do to this program**, and that a
+    /// pick moves this bay's mark and nothing else (ADR-0305).
+    ///
+    /// [`every_ask_the_pill_makes_is_acted_on_and_shuts_the_menu`]'s shape one
+    /// bay along, and it is here rather than in `karakuri-console` for the
+    /// reason that test is: `Readout::aimed` is the host's half of the seam,
+    /// and the console's own tests cannot reach it.
+    ///
+    /// **The claim a reader will doubt is the third one.** *Surely picking a
+    /// deck selects it* — and it must not: `Operation::SelectDeck` moves the
+    /// keys, and this mark is the one that is allowed to name another deck. So
+    /// the selection is read before and after.
+    #[test]
+    fn every_ask_the_load_control_makes_is_acted_on_and_moves_only_this_bays_mark() {
+        let mut readout = Readout::new(1440.0, 900.0);
+        readout.panel.solve();
+        readout.view.mixer = (0..4)
+            .map(|slot| view::Strip {
+                name: format!("slot{slot}"),
+                tally: view::Tally::Live,
+                requested: view::Tally::Live,
+                gain: 0.5,
+                gain_to: None,
+                opacity: 0.5,
+                opacity_to: None,
+                blend: BlendMode::Over,
+                mask: view::Mask::None,
+                mask_angle: 0.0,
+                level: None,
+            })
+            .collect();
+        assert!(readout.view.select(1), "the keys did not go to deck B");
+
+        assert_eq!(readout.aimed(Aim::Open), Acted::Nothing);
+        assert!(readout.view.target_open(), "the list did not come down");
+        assert_eq!(readout.aimed(Aim::Shut), Acted::Nothing);
+        assert!(!readout.view.target_open());
+
+        // **A pick names a deck, asks for nothing, and puts the list away.**
+        readout.aimed(Aim::Open);
+        assert_eq!(readout.aimed(Aim::Deck(2)), Acted::Nothing);
+        assert_eq!(
+            readout.view.target_deck(),
+            2,
+            "the pick did not aim the load"
+        );
+        assert_eq!(
+            readout.view.selection(),
+            1,
+            "a pick in the pulldown moved the deck selection, which is the one thing this \
+             control must not do"
+        );
+        assert!(
+            !readout.view.target_open(),
+            "the list stayed down after a pick"
+        );
+
+        // **And the load goes down the path the key and the drop take.**
+        let want = Operation::LoadSet {
+            deck: 2,
+            set: "drift_night".to_owned(),
+        };
+        assert_eq!(
+            readout.aimed(Aim::Load(want.clone())),
+            Acted::Emitted(Some(want)),
+            "the load did not go down the path every other emitted operation takes"
+        );
+        assert_eq!(
+            readout.aimed(Aim::NoSet),
+            Acted::Nothing,
+            "a press with no Set under the cursor emitted something"
+        );
+    }
+
     /// **What the menu's five asks do to this program**, and that every one of
     /// them that acts shuts the card.
     #[test]
@@ -17929,7 +18103,7 @@ mod tests {
                 readout.view.pointed(),
             )
             .expect("the bay lists its rows")
-            .read_chip(&ctx, DECK_LETTERS[usize::from(readout.view.selection())]);
+            .read_chip(&ctx, readout.view.target());
             Point::new(at.min.x + 2.0, at.center().y)
         };
 
@@ -17971,10 +18145,10 @@ mod tests {
     /// with.**
     ///
     /// [`spelled`] writes `0 – 8 · 2` with an en dash and a middle dot, and
-    /// the `load → A` pill is what this test exists because of: it was typed
-    /// with a U+2192 `egui`'s default face does not carry, and the panel drew
-    /// `load □ A` for a release — *a readout of where a press lands, with a
-    /// tofu where the lands was*. A range with a tofu in it would be the same
+    /// the Library bay's old `load → A` pill is what this test exists because
+    /// of: its arrow was typed with a U+2192 `egui`'s default face does not
+    /// carry, and the panel drew `load □ A` for a release — *a readout of
+    /// where a press lands, with a tofu where the lands was*. A range with a tofu in it would be the same
     /// failure on every row of every reading.
     ///
     /// **The minus is here too**, because a declared range can start below
@@ -21444,6 +21618,28 @@ mod press_handler {
             "the read chip in the Library bay's foot",
             "library_bay(",
             &["bay.read("],
+        ),
+        // **The `load` button and the deck pulldown beside it**, and they are
+        // one call rather than two: `LibraryBay::aim` is the whole of that
+        // control's offer — the press on the button, the press on the
+        // capsule, the press on a row of the list and the dismissal — which is
+        // the shape the two cards in the transport row are already in, and why
+        // neither entry names `Load::picked`, the sub-question `aim` composes.
+        // They are told apart by nothing but this table, exactly as the
+        // audio-in and arrangement pills are.
+        // **The `load` button and the deck pulldown beside it**, one entry
+        // for two controls because they are one derivation and one ask:
+        // `LibraryBay::aim` is the whole of that control's offer — the press
+        // on the button, the press on the capsule, the press on a row of the
+        // list it puts down, and the dismissal — which is the shape the two
+        // cards in the transport row are each in, and why this names no
+        // `Load::picked`, the sub-question `aim` composes. The console's row
+        // claims two; this table's rows are that table's rows, so there is one
+        // here (ADR-0305).
+        (
+            "the Library bay's load button and deck pulldown",
+            "library_bay(",
+            &["bay.aim("],
         ),
         // **The star at the left of each row**, asked before the row it is in
         // so that the smaller box wins — the same derivation again, told apart
