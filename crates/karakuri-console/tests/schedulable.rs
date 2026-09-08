@@ -149,6 +149,7 @@ fn running() -> Transport {
         fps: Some(58.0),
         frame_ms: 12.4,
         budget_ms: Some(16.6),
+        health: Some(karakuri_console::view::Stage::Landed),
     }
 }
 

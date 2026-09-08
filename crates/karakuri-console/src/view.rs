@@ -131,11 +131,14 @@
 //! which is the card styling, and neither carries a `.bay-head`
 //! ([ADR-0159](../../../docs/adr/0159-the-consoles-words-are-the-manuals-and-the-middle-one-is-not-a-pane.md)).
 //!
-//! # The transport row is four readouts and one control
+//! # The transport row is five readouts and one control
 //!
-//! [`Kind::Transport`] draws the tempo, the beat grid, the bar and the frame
-//! readout — **the four things in the mock's row that are a value somebody
-//! measured rather than a control over something that does not exist.** The
+//! [`Kind::Transport`] draws the tempo, the beat grid, the bar, the frame
+//! readout and the health capsule — **the things in the mock's row that are a
+//! value somebody measured rather than a control over something that does not
+//! exist.** The capsule was the fifth, on 2026-09-08: it is drawn as a
+//! `.pill` and is no more a control than the frame readout beside it, which is
+//! the reading a press proves rather than the shape of the box. The
 //! ones the console cannot know are named in [`transport`], one by one, with
 //! what is missing behind each; the paragraph above is the whole of the
 //! argument and this row is where it costs the most, because **most of what the
@@ -2284,6 +2287,42 @@ pub struct Transport {
     /// the rule the whole of this value follows: a reading nobody has is not
     /// drawn as a plausible one.
     pub budget_ms: Option<f32>,
+    /// **What the last write did** — the mock's `landed` capsule at the end of
+    /// this row, and `None` until a write has done anything.
+    ///
+    /// # It is [`Stage`] and not a fourth spelling of the same three words
+    ///
+    /// `docs/manual/console.html` gives the pill and the Staging lane's rows
+    /// one sentence apiece and they are the same three answers — *"landed,
+    /// rolled back for cost, or failed to build"* under *Health, in the
+    /// transport*, and *"whether it is on screen: landed, rolled back for
+    /// costing too much, or refused"* on a candidate row. A second enum here
+    /// would be `docs/contributing.md` §4's *a name meaning two things* built
+    /// on purpose, so [`Stage`] has two readers and one set of words.
+    ///
+    /// **The two readings are not the same reading, which is why both are
+    /// drawn.** A candidate row is one deck slot with a verdict *outstanding*
+    /// and leaves the lane the moment the watchdog says the version held the
+    /// budget — *"empty is this lane's ordinary state"*. This is the last
+    /// verdict there was, on whichever slot, and it stands after the lane has
+    /// emptied. So the lane answers *what is unsettled* and this answers *what
+    /// did the last write do*, which is the row the operations page gives this
+    /// pill and gives the lane's controls a different one.
+    ///
+    /// # `None` is *nothing has been written*, and it draws no capsule
+    ///
+    /// Not a word for it, not a dash, and not an `armed` pill reading
+    /// `landed` about a build nobody made — the rule the two fields above
+    /// follow, and the Staging lane's own *"no row, no placeholder, and no
+    /// standing sentence"*. A run in which nobody rewrites a procedure never
+    /// draws this, which is most runs.
+    ///
+    /// **Two `swap::Event`s leave it alone rather than clearing it.** The
+    /// watchdog's verdict in favour settles a candidate and does not take the
+    /// last write off the screen, and a lost build worker says nothing about a
+    /// write that already happened — `crates/karakuri/src/main.rs`'s
+    /// `staging`, which is where the one drain feeds both readings.
+    pub health: Option<Stage>,
 }
 
 impl Transport {
@@ -2347,7 +2386,7 @@ impl Transport {
     }
 }
 
-/// **The transport row, laid out**: where each of the four readouts goes, and
+/// **The transport row, laid out**: where each of the five readouts goes, and
 /// which beat is lit.
 ///
 /// # One derivation, for the reason [`Outputs`] is one
@@ -2362,13 +2401,15 @@ impl Transport {
 /// arithmetic something `tests/transport.rs` can ask about without a device,
 /// which is the whole of how this crate is checked.
 ///
-/// # None of these four is a control, and that is the answer rather than an
+/// # None of these five is a control, and that is the answer rather than an
 /// omission
 ///
 /// A point in this row that is not inside a boundary's [`GRAB`] and not on one
 /// of this row's controls is `egui`'s. What is left beside them — a tempo, a
-/// beat, a bar and a frame time — is four readouts, and a readout is not
-/// something a press acts on.
+/// beat, a bar, a frame time and what the last write did — is five readouts,
+/// and a readout is not something a press acts on. **The last of them is drawn
+/// as a capsule and is still one**: the shape is the mock's, and what makes a
+/// thing a control here is that a press on it asks for something.
 /// `tests/transport.rs` asserts it over the row rather than leaving it to be
 /// inferred from the absence of a hit test, and it asks with the pill drawn so
 /// that the assertion cannot pass on the control having gone.
@@ -2377,7 +2418,7 @@ impl Transport {
 /// deliberate.** [`arrangement`] is laid out from [`TransportRow::bar`] and
 /// held clear of [`TransportRow::frame`], so the pill's place is this
 /// derivation's answer rather than a second one; and it is a separate function
-/// because the *row* is four readouts and a tempo, where the pill is neither.
+/// because the *row* is its readouts and a tempo, where the pill is neither.
 ///
 /// # What is in the mock's row and is deliberately not here
 ///
@@ -2396,10 +2437,6 @@ impl Transport {
 ///   shape over a file that does exist, which is the manual's own argument for
 ///   putting the arrangement family in this row — and [`audio_in`] is the same
 ///   shape a third time, over a device.
-/// - `landed` is what the last write did — *landed, rolled back for cost, or
-///   failed to build*. That is a build watcher's verdict over a hot swap, and
-///   nothing writes a procedure while this panel runs, so the pill would be
-///   reporting on a write that never happens.
 /// - `● rec` is recording the session to the store as it happens. There is no
 ///   session recorder behind this panel and no record stream is written from
 ///   it.
@@ -2411,6 +2448,16 @@ impl Transport {
 /// `.tracker` — holds four more. A list of what is missing is checkable one
 /// item at a time; a total of what a row holds is a second count of the mock,
 /// and it had already gone stale once, when `audio-in` left this list.
+///
+/// **`landed` left it on 2026-09-08 and it is the one item here that never
+/// was a control.** What was written against it was that *"nothing writes a
+/// procedure while this panel runs, so the pill would be reporting on a write
+/// that never happens"*, and that was already false when it was read again:
+/// `crates/karakuri` watches every slot's sources, so a save from any editor
+/// builds, swaps and is judged, and every verdict of that is drawn in the
+/// Staging lane. This row is where the same stream says *what the last write
+/// did* — [`Transport::health`], which is a value the harness hands in and not
+/// a control this crate offers.
 ///
 /// **Three items left it on 2026-09-08** — `tap`, `offset` and the octave's
 /// `½ ×2` — which is M5.4's own work: [`tracker_group`] draws them, and what
@@ -2463,7 +2510,14 @@ pub fn transport(
         Color32::PLACEHOLDER,
         Color32::PLACEHOLDER,
     ));
-    transport_row(row, &values, bpm, label, bar, frame)
+    // **The health capsule, measured only where there is a verdict to draw.**
+    // `.pill`'s `padding: 0 8px` around one word — there is no chevron here
+    // and no second span, because nothing about this capsule opens and it
+    // says one thing.
+    let health = values
+        .health
+        .map(|stage| size::PILL_PAD_X * 2.0 + width(span(stage.word(), Color32::PLACEHOLDER)));
+    transport_row(row, &values, bpm, label, bar, frame, health)
 }
 
 /// **The faint word beside the number**, and the mock's own capitalisation
@@ -2493,8 +2547,18 @@ pub struct TransportRow {
     pub at: f32,
     /// `bar 37`.
     pub bar: Rect,
-    /// The frame readout, pushed to the right edge by the `.sep`.
+    /// The frame readout, pushed to the right by the `.sep` — against the
+    /// row's right padding where there is no verdict to draw, and one
+    /// [`size::TRANSPORT_GAP`] before [`TransportRow::health`] where there is.
     pub frame: Rect,
+    /// **The health capsule**, and `None` where [`Transport::health`] is —
+    /// which is every run until somebody rewrites a procedure.
+    ///
+    /// **It is the last thing in the row, so it takes the right padding and
+    /// the frame readout is laid out backwards from it.** The mock puts
+    /// `● rec` after it and that pill is not drawn (see [`transport`]); a gap
+    /// left for it would be a space kept for a control that does not exist.
+    pub health: Option<Rect>,
     /// **The values these rectangles were measured from.**
     ///
     /// Carried rather than passed to the painter beside this, for
@@ -2689,6 +2753,7 @@ fn transport_row(
     label_w: f32,
     bar_w: f32,
     frame_w: f32,
+    health_w: Option<f32>,
 ) -> Option<TransportRow> {
     let mid = row.center().y;
     // An inline span at the console's own type: `font-size: 11px` at
@@ -2715,20 +2780,39 @@ fn transport_row(
         Pos2::new(grid.max.x + size::TRANSPORT_GAP, mid - span_h * 0.5),
         egui::vec2(bar_w, span_h),
     );
-    // The `.sep`: everything after it is against the right padding.
+    // The `.sep`: everything after it is against the right padding. **The
+    // last of those is the health capsule where there is one**, so the right
+    // padding is claimed by whichever of the two ends the row, and the frame
+    // readout is laid out backwards from there — which is the same "from the
+    // right edge backwards" the readout has always been laid out by, asked of
+    // the thing beside it rather than of the row.
+    let right = row.max.x - size::TRANSPORT_PAD_X;
+    let health = health_w.map(|w| {
+        Rect::from_min_size(
+            Pos2::new(right - w, mid - size::PILL_H * 0.5),
+            egui::vec2(w, size::PILL_H),
+        )
+    });
+    let frame_end = match health {
+        Some(pill) => pill.min.x - size::TRANSPORT_GAP,
+        None => right,
+    };
     let frame = Rect::from_min_size(
-        Pos2::new(
-            row.max.x - size::TRANSPORT_PAD_X - frame_w,
-            mid - span_h * 0.5,
-        ),
+        Pos2::new(frame_end - frame_w, mid - span_h * 0.5),
         egui::vec2(frame_w, span_h),
     );
     // The same rule `picture_rect` states, on the two ends of the row: the
     // number is the tallest thing in it and the frame readout is the furthest
     // right, so a row that holds both holds everything between them — and the
     // last clause is the wrap the mock does and this does not.
+    //
+    // **The capsule is inside the same `and`, and the whole row goes when it
+    // does not fit.** It is one of the row's readouts rather than a control
+    // drawn over it, so a window too narrow to hold it draws nothing — which
+    // is the answer this row already gives, one item along.
     match row.contains_rect(bpm)
         && row.contains_rect(frame)
+        && health.is_none_or(|pill| row.contains_rect(pill))
         && frame.min.x >= bar.max.x + size::TRANSPORT_GAP
     {
         true => Some(TransportRow {
@@ -2739,6 +2823,7 @@ fn transport_row(
             at: t.position(),
             bar,
             frame,
+            health,
             values: *t,
         }),
         false => None,
@@ -2921,6 +3006,20 @@ fn transport_into(ui: &Ui, pal: &Palette, row: &TransportRow) {
         row.frame,
         painter.layout_job(frame_job(t, pal.text, pal.faint)),
     );
+
+    // **The health capsule**, in the mock's own `.pill.armed` and only for the
+    // verdict the mock draws it on. `armed` is this console's *live in the
+    // good sense* — the same treatment the audio-in pill wears with an input
+    // open and the wipe shape wears with a shape chosen — so it is the word
+    // for a build that is on screen and the wrong one for a build that is
+    // not: a rollback drawn in the mint that says *this is working* would
+    // read as the opposite of what it means. The other two take the plain
+    // `.pill`, which is the mock's other treatment and not a third one
+    // invented here; a colour of alarm is a decision `console.html` has not
+    // taken for this capsule and is not taken for it here.
+    if let (Some(rect), Some(stage)) = (row.health, t.health) {
+        pill_into(ui, pal, rect, stage.word(), stage == Stage::Landed);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -11085,6 +11184,16 @@ const STAGING_TITLE: &str = "Staging";
 /// it** — *"Whether it is on screen: landed, rolled back for costing too much,
 /// or refused"*.
 ///
+/// # Two readers, and one set of words
+///
+/// This is the Staging lane's [`Candidate::stage`] and the transport row's
+/// [`Transport::health`]. The page gives them one sentence each and they are
+/// the same three answers, so a second enum for the capsule would be
+/// `docs/contributing.md` §4's *a name meaning two things*. What differs is
+/// **which** verdict each is showing, not what a verdict is: a lane row is a
+/// slot whose verdict is still outstanding and leaves on `Accepted`, and the
+/// capsule is the last verdict there was and stands after the lane empties.
+///
 /// # One variant per `swap::Event` a verdict is outstanding on, and no fourth
 ///
 /// `karakuri_engine::swap::Event` has five variants and this has three. The
@@ -11127,10 +11236,16 @@ pub enum Stage {
 }
 
 impl Stage {
-    /// **The word drawn at the far end of the row**, which is
-    /// `console.html`'s and the mock's own: the deck head's `landed` pill
-    /// names the same three answers in the same words — *"the other answers
-    /// are rolled back for cost, and failed to build"*.
+    /// **The word drawn at the far end of a candidate row, and the word in
+    /// the transport's health capsule**, which is `console.html`'s and the
+    /// mock's own: the capsule names the same three answers in the same
+    /// words — *"the other answers are rolled back for cost, and failed to
+    /// build"*.
+    ///
+    /// **That capsule is in the transport row and this said *the deck head*
+    /// until 2026-09-08**, which was wrong rather than stale: there is no
+    /// `landed` pill on a deck head anywhere in the mock, and the one the
+    /// sentence is quoting is `.transport`'s.
     pub fn word(self) -> &'static str {
         match self {
             Stage::Landed => "landed",
@@ -13815,6 +13930,21 @@ impl View {
     /// pending would be the signal going quiet at the moment it is worth
     /// having. It is also why this is not folded into
     /// [`View::mixer_declares`]: two rates, two deadlines, two regions.
+    ///
+    /// # The health capsule declares nothing, and that is the right answer
+    /// rather than an omission
+    ///
+    /// [`Transport::health`] changes when a build lands, is thrown out or
+    /// fails to assemble, which is a person saving a file — so its own
+    /// `moves_in` is *not until something happens*, and a region cannot
+    /// declare that. It does not have to: **the unit of declaration is the
+    /// region and not the presentation** ([`Declared`] — *"a second rate would
+    /// be a second declaration; a second user of one rate is not"*), and the
+    /// region it is in is already drawn at [`BEAT_STALENESS`] for as long as
+    /// there is a row at all. A staleness written for the capsule would be a
+    /// rate for something that does not move (ADR-0283), and it could only
+    /// ever be slower than the beat's, so it would change nothing a window
+    /// does — [`View::animating`] takes the soonest.
     fn transport_declares(&self, layout: &karakuri_layout::Layout) -> Option<Declared> {
         let row = layout
             .find("transport")

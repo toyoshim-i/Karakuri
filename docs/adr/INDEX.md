@@ -311,6 +311,7 @@ number; new records continue from the end.
 | [ADR-0281](0281-every-route-reaches-every-write-and-a-read-is-the-routes-own-interface-design.md) | Every route reaches every write, and a read is the route's own interface design | 2026-09-08 | accepted |
 | [ADR-0282](0282-a-rebuild-inherits-the-values-somebody-moved-and-reads-the-rest-from-the-code.md) | A rebuild inherits the values somebody moved and reads the rest from the code | 2026-09-08 | accepted |
 | [ADR-0283](0283-a-region-declares-when-its-picture-next-changes-not-that-something-is-pending.md) | A region declares when its picture next changes, not that something is pending | 2026-09-08 | accepted |
+| [ADR-0284](0284-a-readout-is-drawn-and-the-panel-badge-does-not-move-because-the-meter-counts-a-gesture.md) | A readout is drawn and the panel badge does not move, because the meter counts a gesture | 2026-09-08 | accepted |
 
 ## Retired numbers
 
