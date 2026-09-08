@@ -1364,8 +1364,10 @@ fn the_selection_is_one_ring_and_it_is_round_the_strip_it_names() {
 }
 
 /// **A deck the bay has no strip for cannot be selected**, which is what keeps
-/// the library's `load → A` honest: a letter naming a deck the press would be
-/// refused on is worse than no letter at all.
+/// every deck-addressed key honest — and the Library bay's deck pulldown is
+/// refused on the same count, one mark along (`View::aim_at`, ADR-0305): a
+/// mark naming a deck the press would be refused on is worse than no mark at
+/// all.
 ///
 /// It refuses rather than clamping: `3` on a two-slot deck means *deck D*, and
 /// answering *deck B* would move the mix under a hand that asked for nothing

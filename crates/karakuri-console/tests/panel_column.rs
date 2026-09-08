@@ -376,8 +376,8 @@ fn sample(variant: &str) -> Operation {
         },
         // **The `read` chip in the Library bay's foot**, and the one emission
         // in this list whose operand is a *pointer of this console's own*: the
-        // id is the Set under the cursor, which is where the load pill beside
-        // it reads its operand too. The value is any id, because what the
+        // id is the Set under the cursor, which is where the `load` button
+        // beside it reads its Set too. The value is any id, because what the
         // badge claims is that an operator reaches the row.
         //
         // **One of its two presses emits nothing**, and that is not a gap in

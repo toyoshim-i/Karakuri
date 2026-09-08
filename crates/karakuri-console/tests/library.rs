@@ -32,8 +32,8 @@ use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::{Panel, GRAB};
 use karakuri_console::room::{size, Room};
 use karakuri_console::view::{
-    library, mcp_pill, Field, Filters, LibraryBay, Published, Read, Reading, Scope, View,
-    DECK_LETTERS, HOLDS_UNSET, LAYERS, LAYER_UNSET,
+    library, mcp_pill, Aim, Field, Filters, LibraryBay, Published, Read, Reading, Scope, Target,
+    View, DECK_LETTERS, HOLDS_UNSET, LAYERS, LAYER_UNSET,
 };
 use karakuri_layout::{Point, Rect};
 use karakuri_operation::gate::{Class, Open};
@@ -73,6 +73,16 @@ fn console(viewport: Rect) -> Panel {
     panel.solve();
     panel
 }
+
+/// **What the foot's load control is aimed at**, everywhere in this file that
+/// is not about the pulldown: deck A, no strips behind it and the list shut,
+/// which is what [`View::new`] answers and what every console here that has
+/// not been handed a mixer is.
+const AIMED: Target = Target {
+    deck: 0,
+    decks: 0,
+    open: false,
+};
 
 /// The bay, laid out with the mock's names.
 fn bay(panel: &Panel) -> LibraryBay {
@@ -614,12 +624,12 @@ fn a_folded_or_soloed_or_short_bay_lists_nothing() {
 // ---------------------------------------------------------------------------
 
 /// **The scope chips answer a press, and so do the two filter fields, the
-/// `read` chip and the rows of the list — and nothing else in this bay
-/// does.**
+/// three capsules in the foot and the rows of the list — and nothing else in
+/// this bay does.**
 ///
 /// The mock draws four scope chips, two filter fields, a `+`, a row cursor,
-/// the `read` chip and the `load → A` pill. **The chips are the first of them
-/// that is a control here**, and the reason is the page rather than the code: `console.html`
+/// and the foot's `read`, `load`, `→` and `A ▾`. **The chips are the first of
+/// them that is a control here**, and the reason is the page rather than the code: `console.html`
 /// puts the affordance on each chip — *"Click to show it; click another scope
 /// to leave it"* — and `docs/manual/operations.html` names the row as *Choose
 /// which scope the library shows*'s home.
@@ -648,15 +658,18 @@ fn a_folded_or_soloed_or_short_bay_lists_nothing() {
 /// What a row press asks for is `carry.rs`'s; what this test adds is that the
 /// list's own ground under the last row is still nobody's.
 ///
-/// **The pill is the one part of this bay that is deliberately not a
-/// control**, and that is a specification rather than something left unbuilt:
-/// the same note settles that the *key*'s route is *"a cursor and a key with
-/// no pointer anywhere in it"*, and the pill is what says where that key
-/// lands. So the two claims in this file are separate tests, because they are
-/// separate sentences: this one, and
-/// [`the_load_pill_takes_no_press_and_a_row_is_where_the_drag_begins`].
+/// **The `load` button and the deck pulldown beside it are the fifth and the
+/// sixth**, and they were one readout until 2026-09-08: `load → A` said where
+/// the *key* would land and answered no pointer at all. ADR-0305 split it, so
+/// what this test says about them is what it says about the `read` chip — and
+/// what is left in the foot that is *not* a control is the `→` between them,
+/// which is swept with the ground. Where each of the two lands is
+/// [`a_press_on_load_asks_for_the_deck_the_pulldown_names`]'s and
+/// [`a_pick_in_the_pulldown_names_a_deck_and_asks_for_nothing`]'s; the label's
+/// own silence is
+/// [`the_label_between_the_two_capsules_takes_no_press_and_a_row_is_where_the_drag_begins`]'s.
 ///
-/// # The bay's corners do not reach the pill, and the two numbers say why
+/// # The bay's corners do not reach the foot's capsules, and the two numbers say why
 ///
 /// The bay's own rectangle inset past [`GRAB`](karakuri_console::panel::GRAB)
 /// is where the sweep used to stop, and it is **two pixels short of the box
@@ -769,28 +782,34 @@ fn the_chips_the_fields_the_read_chip_and_the_rows_are_the_bays_controls_and_not
         right - left > 0.0,
         "the foot's content box is {left} to {right}, which is no box to sweep"
     );
-    // **The two capsules at the far end of the row are stepped over**, and
-    // they are stepped over for two different reasons: the `read` chip is a
-    // control and is asked about below, and the `load → A` pill is a readout
-    // that [`a_load_is_a_cursor_and_a_key_with_no_pointer_anywhere_in_it`]
-    // sweeps on its own. What is left is the foot's ground — the count, and
-    // the gap between it and them.
-    let chip = bay.read_chip(&ctx, DECK_LETTERS[0]);
-    let pill = bay.load(&ctx, DECK_LETTERS[0]).pill;
+    // **The three capsules at the far end of the row are stepped over**, and
+    // all three are controls: the `read` chip and the `load` button are asked
+    // about below, and the pulldown is
+    // [`the_label_between_the_two_capsules_takes_no_press_and_a_row_is_where_the_drag_begins`]'s.
+    // What is left is the foot's ground — the count, the gap between it and
+    // them, and the `→` label between the two capsules, which is the one thing
+    // in this row that is drawn and is not a control.
+    let chip = bay.read_chip(&ctx, AIMED);
+    let load = bay.load(&ctx, AIMED);
     let mut swept = 0;
     for step in 0..=10 {
         let t = step as f32 / 10.0;
         let p = egui::pos2(left + (right - left) * t, bay.foot.center().y);
-        if chip.contains(p) || pill.contains(p) {
+        if chip.contains(p) || load.button.contains(p) || load.deck.contains(p) {
             continue;
         }
         points.push(p);
         swept += 1;
     }
     assert!(
-        swept >= 5,
-        "only {swept} points of the foot's ground were swept, and the two capsules cannot be          most of a row this wide"
+        swept >= 4,
+        "only {swept} points of the foot's ground were swept, and the three capsules cannot be \
+         most of a row this wide"
     );
+    // **The label's own box**, asked explicitly rather than left to the sweep
+    // above: it is between two controls and a press on it must belong to
+    // neither of them.
+    points.push(load.arrow.center());
     // **The list's own ground under the last row**, which is where the rows
     // stop and the foot has not started: a `.lib-row` is a stride and the list
     // is whatever is left of the bay, so what is below the last of them is
@@ -831,17 +850,20 @@ fn the_chips_the_fields_the_read_chip_and_the_rows_are_the_bays_controls_and_not
         }
     }
 
-    // **And the `read` chip is the panel's**, asked at the same two pixels in
-    // from its own left edge the chips above are — its right-hand end is the
-    // gap before the load pill and its bottom rim is under the boundary's
-    // grab, which is [`the_read_chip_clears_every_boundary_but_the_one_under
-    // _the_bay`]'s subject and not this test's.
-    let probe = egui::pos2(chip.min.x + 2.0, chip.center().y);
-    assert_eq!(
-        claim(&mut panel, &ctx, &view, Point::new(probe.x, probe.y)),
-        Claim::Panel,
-        "the console gave `egui` a press on the `read` chip at {probe:?}"
-    );
+    // **And the three capsules in the foot are the panel's**, each asked at
+    // the same two pixels in from its own left edge the chips above are —
+    // their right-hand ends are the gaps between them and their bottom rims
+    // are under the boundary's grab, which is
+    // [`the_read_chip_clears_every_boundary_but_the_one_under_the_bay`]'s
+    // subject and not this test's.
+    for (what, capsule) in [("read", chip), ("load", load.button), ("deck", load.deck)] {
+        let probe = egui::pos2(capsule.min.x + 2.0, capsule.center().y);
+        assert_eq!(
+            claim(&mut panel, &ctx, &view, Point::new(probe.x, probe.y)),
+            Claim::Panel,
+            "the console gave `egui` a press on the `{what}` capsule at {probe:?}"
+        );
+    }
 
     // A guard, so this cannot pass by testing nothing — and a floor under the
     // reach, so the foot's sweep, the scope row's ground and the rows cannot
@@ -856,58 +878,69 @@ fn the_chips_the_fields_the_read_chip_and_the_rows_are_the_bays_controls_and_not
     );
 }
 
-/// **The load pill takes no press, and a row is where the drag begins.**
+/// **The label between the two capsules takes no press, and a row is where the
+/// drag begins.**
 ///
-/// `console.html`'s two sentences about the same row, and they are one test
-/// because they are one decision taken twice. The `load → A` pill is a
-/// **readout** — *"what the control owes instead is to say where it lands
-/// before the press"* — and the *key*'s route is *"a cursor and a key with no
-/// pointer anywhere in it"*, so a press on the pill would add a pointer to the
-/// one gesture that page describes as having none, and it would name the deck
-/// from the selection, which is exactly what `l` already does.
+/// **This test's premise moved on 2026-09-08 and the half that is gone is
+/// named here rather than deleted**, because a reader meeting it will
+/// otherwise re-propose what it used to say. It was *the load pill takes no
+/// press*: `load → A` was a readout, the *key*'s route was *"a cursor and a
+/// key with no pointer anywhere in it"*, and a press on the capsule would have
+/// added a pointer to the one gesture both pages described as having none.
+/// ADR-0305 split the readout into a button, a label and a pulldown, so two of
+/// those three now take a press and are asserted in
+/// [`the_chips_the_fields_the_read_chip_and_the_rows_are_the_bays_controls_and_nothing_else_is`].
 ///
-/// **The panel's own route is the drag**, which that page calls *"a second
-/// route to the same command, and never the first"* — *"it names both operands
-/// in the one gesture, which makes it the only way to load a deck without
-/// selecting it first"*. So the row a hand presses is the panel's and the
-/// capsule beside it is not, and that asymmetry is the specification rather
-/// than a thing left unbuilt. What a row press then asks for is `carry.rs`'s.
+/// **What is left of the first half is the label**, and it is the same
+/// sentence about a smaller thing: the `→` is punctuation on the foot's own
+/// ground, untipped in the mock like the `5 of 27` at the other end of the
+/// row, and a press on it belongs to neither capsule beside it.
 ///
-/// The pill's own box is asked rather than the foot's middle, because the box
-/// is where a press would land: it is measured off the same galley the paint
-/// lays out, so the rectangle asserted here and the capsule drawn are one
+/// **The second half is unchanged.** The panel's own route into *Load material
+/// into a deck* was and is the drag — `console.html` calls it *"a third route
+/// to the same command, and never the first"* — so the row a hand presses is
+/// the panel's, and what a row press asks for is `carry.rs`'s.
+///
+/// The label's own box is asked rather than the foot's middle, because the box
+/// is where a press would land: it is measured off the same derivation the
+/// paint lays out, so the rectangle asserted here and the mark drawn are one
 /// statement.
 #[test]
-fn the_load_pill_takes_no_press_and_a_row_is_where_the_drag_begins() {
+fn the_label_between_the_two_capsules_takes_no_press_and_a_row_is_where_the_drag_begins() {
     let (mut view, mut panel) = showing_mock();
     let ctx = drawn_once();
     let bay = bay(&panel);
     view.mixer = std::iter::repeat_with(strip).take(4).collect();
 
-    // **The pill, as wide as what is in it** — the word, the arrow's box and
-    // the letter, inside a `.pill`'s padding either side. Asked of
-    // `LibraryBay::load`, which is the derivation the paint uses, so the box
-    // swept here is the capsule drawn.
-    let pill = bay.load(&ctx, DECK_LETTERS[0]).pill;
-    assert!(
-        bay.foot.contains_rect(pill),
-        "the pill at {pill:?} is not inside the foot at {:?}",
-        bay.foot
-    );
+    // **The three, as wide as what is in them** — asked of `LibraryBay::load`,
+    // which is the derivation the paint uses, so the boxes swept here are the
+    // boxes drawn.
+    let load = bay.load(&ctx, view.target());
+    for (what, box_) in [
+        ("load", load.button),
+        ("→", load.arrow),
+        ("deck", load.deck),
+    ] {
+        assert!(
+            bay.foot.contains_rect(box_),
+            "the `{what}` box at {box_:?} is not inside the foot at {:?}",
+            bay.foot
+        );
+    }
 
-    // **Across the pill at the foot's own centre line**, and not its top and
-    // bottom edges: `.lib-foot` is 26 tall and a `.pill` is 16.5, so the
+    // **Across the label at the foot's own centre line**, and not its top and
+    // bottom edges: `.lib-foot` is 26 tall and a `.pill` is 16.5, so a
     // capsule's edges are 4.75 off the foot's — and the foot's bottom edge is
     // the bay's, which is a boundary. 4.75 against a `GRAB` of 6 means a
-    // boundary would take a press on the capsule's own rim, which is
-    // `input.rs`'s rule 3 rather than anything about this row. **It is also
-    // the plainest evidence this was never meant to be a control**: every
-    // capsule on this console that *is* one clears the grab, and this one does
-    // not.
-    let points: Vec<egui::Pos2> = (0..=6)
+    // boundary would take a press on a capsule's own rim, which is
+    // `input.rs`'s rule 3 and is the price every capsule in this foot pays.
+    let points: Vec<egui::Pos2> = (0..=4)
         .map(|step| {
-            let t = step as f32 / 6.0;
-            egui::pos2(pill.min.x + pill.width() * t, pill.center().y)
+            let t = step as f32 / 4.0;
+            egui::pos2(
+                load.arrow.min.x + load.arrow.width() * t,
+                load.arrow.center().y,
+            )
         })
         .collect();
     assert!(
@@ -919,15 +952,27 @@ fn the_load_pill_takes_no_press_and_a_row_is_where_the_drag_begins() {
         assert_eq!(
             claim(&mut panel, &ctx, &view, Point::new(p.x, p.y)),
             Claim::Egui,
-            "the console took the pointer at {p:?} — the pill says where a load lands and the \
-             key is what puts it there"
+            "the console took the pointer at {p:?} — the `→` says how to read the two capsules \
+             either side of it and is not one of them"
         );
     }
 
-    // **And the contrast, on the row the drag does begin on**, so that this
-    // cannot pass by a bay that takes no press anywhere: the capsule is
-    // `egui`'s and the row two lines above it is the panel's, in one console
-    // in one state.
+    // **And the contrast, on the two capsules the label sits between**, so
+    // that this cannot pass by a foot that takes no press anywhere: the label
+    // is `egui`'s and both capsules are the panel's, in one console in one
+    // state.
+    for (what, capsule) in [("load", load.button), ("deck", load.deck)] {
+        let at = capsule.center();
+        assert_eq!(
+            claim(&mut panel, &ctx, &view, Point::new(at.x, at.y)),
+            Claim::Panel,
+            "the `{what}` capsule beside the label went to `egui`, so the sweep above is \
+             measuring a foot that takes no press at all"
+        );
+    }
+
+    // **And the row the drag begins on**, which is the half of this test that
+    // did not move.
     let first = bay.row(0).center();
     assert_eq!(
         claim(&mut panel, &ctx, &view, Point::new(first.x, first.y)),
@@ -1673,31 +1718,35 @@ fn the_cursor_stays_inside_the_rows_that_are_listed() {
     assert_eq!(empty.cursor_row(), 0);
 }
 
-/// **The foot's pill says where a press would land, and the letter follows the
-/// deck selection.**
+/// **The foot says where a press would land, and the letter follows the
+/// pulldown rather than the deck selection.**
 ///
-/// `console.html`: *"The letter on the pill is the whole warning … What the
+/// `console.html`: *"The letter in the pulldown is the whole warning … What the
 /// control owes instead is to say where it lands before the press."* So this
 /// asserts what is painted rather than a rectangle, and asserts it again after
-/// the selection moves — a pill that read `load → A` whatever was selected
-/// would pass the first half and be a lie for the other three decks.
+/// the mark moves — a foot that read `A` whatever was aimed at would pass the
+/// first half and be a lie for the other three decks.
 ///
-/// **The letter is its own galley now**, because the arrow between the word
-/// and it is drawn rather than typed — see
-/// [`the_foots_arrow_is_drawn_rather_than_typed`]. So the reading this asserts
-/// is the letter alone, which is the half of the pill that moves.
+/// **And it asserts which of the two marks the letter is**, which is the whole
+/// of ADR-0305: the letter used to be [`View::selection`], so a test that only
+/// walked one mark would pass against the readout this replaced. The second
+/// half moves the *selection* with the target standing still and reads the
+/// foot again.
+///
+/// **The letter is its own galley**, because the arrow beside it is drawn
+/// rather than typed — see [`the_foots_arrow_is_drawn_rather_than_typed`].
 #[test]
 fn the_foot_says_which_deck_a_press_would_land_on() {
     let (mut view, mut panel) = showing_mock();
     let bay = bay(&panel);
-    // Four strips, so all four decks can be selected. What a strip *reads* is
+    // Four strips, so all four decks can be aimed at. What a strip *reads* is
     // not this bay's business — only that there is one.
     view.mixer = std::iter::repeat_with(strip).take(4).collect();
 
     for deck in 0..4u8 {
         assert!(
-            view.select(deck) || deck == 0,
-            "deck {deck} could not be selected with four strips"
+            view.aim_at(deck) || deck == 0,
+            "deck {deck} could not be aimed at with four strips"
         );
         let want = DECK_LETTERS[usize::from(deck)];
         let drawn = shapes_inside(&mut view, &mut panel, bay.foot);
@@ -1706,18 +1755,40 @@ fn the_foot_says_which_deck_a_press_would_land_on() {
                 shape,
                 egui::Shape::Text(at) if at.galley.text() == want
             )),
-            "the selection is deck {deck} and the foot's pill does not read `{want}`: {drawn:#?}"
+            "the load is aimed at deck {deck} and the foot does not read `{want}`: {drawn:#?}"
         );
         // **And the word is still beside it**, so a letter drawn alone in an
-        // empty capsule cannot pass this.
+        // empty foot cannot pass this.
         assert!(
             drawn.iter().any(|shape| matches!(
                 shape,
                 egui::Shape::Text(at) if at.galley.text() == "load"
             )),
-            "the foot's pill does not say `load`: {drawn:#?}"
+            "the foot does not say `load`: {drawn:#?}"
         );
     }
+
+    // **The other mark, moved on its own.** The keys go to deck C and the load
+    // stays aimed at deck A, which is the state the readout this replaced
+    // could not be in: the letter must not follow the ring.
+    assert!(view.aim_at(0), "the load did not come back to deck A");
+    assert!(view.select(2), "the selection did not move to deck C");
+    let drawn = shapes_inside(&mut view, &mut panel, bay.foot);
+    assert!(
+        drawn.iter().any(|shape| matches!(
+            shape,
+            egui::Shape::Text(at) if at.galley.text() == "A"
+        )),
+        "the load is aimed at deck A and the foot stopped saying so: {drawn:#?}"
+    );
+    assert!(
+        !drawn.iter().any(|shape| matches!(
+            shape,
+            egui::Shape::Text(at) if at.galley.text() == "C"
+        )),
+        "the foot's letter followed the deck selection, which is the readout ADR-0305 replaced: \
+         {drawn:#?}"
+    );
 }
 
 /// **The foot's arrow is drawn rather than typed, because `egui`'s default
@@ -1745,7 +1816,7 @@ fn the_foots_arrow_is_drawn_rather_than_typed() {
     let (mut view, mut panel) = showing_mock();
     let ctx = drawn_once();
     let bay = bay(&panel);
-    let at = bay.load(&ctx, DECK_LETTERS[0]);
+    let at = bay.load(&ctx, AIMED);
 
     assert!(
         at.text.max.x <= at.arrow.min.x && at.arrow.max.x <= at.letter.min.x,
@@ -1773,6 +1844,266 @@ fn the_foots_arrow_is_drawn_rather_than_typed() {
         )),
         "no triangle is painted in the arrow's box at {:?}: {drawn:#?}",
         at.arrow
+    );
+}
+
+/// The viewport the pulldown's list is held inside, as `egui`'s rectangle —
+/// the same one `View::draw` hands it.
+fn viewport(panel: &Panel) -> egui::Rect {
+    to_egui(panel.layout().viewport())
+}
+
+/// **A press on `load` asks for the deck the pulldown names, and never the one
+/// the selection is on.**
+///
+/// This is ADR-0305's decision at the seam it crosses: the operation carries
+/// the deck, and which deck it carries is the whole of what the split bought.
+/// **The two marks are pulled apart before the press** — the keys addressed to
+/// deck C, the load aimed at deck B — because a console where they agree
+/// cannot tell the two readings apart, and that is exactly the state the
+/// readout this replaced was always in.
+///
+/// **And a press with no row under the cursor says so rather than emitting.**
+/// A load names a Set and a deck; with the listing empty there is no Set, and
+/// a `LoadSet` carrying a name nobody chose would be worse than a press that
+/// declines out loud (`Aim::NoSet`, and P-0083).
+#[test]
+fn a_press_on_load_asks_for_the_deck_the_pulldown_names() {
+    let (mut view, panel) = showing_mock();
+    let ctx = drawn_once();
+    let bay = bay(&panel);
+    view.mixer = std::iter::repeat_with(strip).take(4).collect();
+    assert!(view.select(2), "the keys did not go to deck C");
+    assert!(view.aim_at(1), "the load was not aimed at deck B");
+
+    let at = view.target();
+    let load = bay.load(&ctx, at);
+    let probe = Point::new(load.button.center().x, load.button.center().y);
+    assert_eq!(
+        bay.aim(
+            &ctx,
+            viewport(&panel),
+            at,
+            view.library.get(view.cursor_row()).map(String::as_str),
+            probe
+        ),
+        Some(Aim::Load(Operation::LoadSet {
+            deck: 1,
+            set: "drift_night".to_owned(),
+        })),
+        "the press did not ask to load the cursor's Set onto the pulldown's deck"
+    );
+    assert_eq!(
+        view.selection(),
+        2,
+        "asking for the load moved the deck selection"
+    );
+
+    // **A library that lists nothing has no Set to load**, and the button is
+    // still drawn because the foot is what the count is in.
+    let empty = library(panel.layout(), SCOPES, &[], None, None).expect("the bay draws its foot");
+    let load = empty.load(&ctx, at);
+    assert_eq!(
+        empty.aim(
+            &ctx,
+            viewport(&panel),
+            at,
+            None,
+            Point::new(load.button.center().x, load.button.center().y)
+        ),
+        Some(Aim::NoSet),
+        "a press on `load` over a listing with nothing in it asked for a Set with no name"
+    );
+}
+
+/// **A pick in the pulldown names a deck, asks for nothing, and moves neither
+/// the ring nor the cursor.**
+///
+/// Three claims because they are the three the control owes: the capsule puts
+/// the list down, a row of that list is `Aim::Deck` and no `Operation` at all,
+/// and performing it leaves [`View::selection`] where it was. The third is the
+/// one a reader will doubt — *surely picking a deck selects it* — and it is
+/// exactly what ADR-0305 refused: `Operation::SelectDeck` moves the keys, and
+/// this mark is the one that does not.
+///
+/// **The list goes away with the pick**, which is the gesture ending: nothing
+/// is emitted, so there is no host arm to end it in, and a card left down
+/// would go on claiming every press on the console (`input::claim`'s rule 2).
+#[test]
+fn a_pick_in_the_pulldown_names_a_deck_and_asks_for_nothing() {
+    let (mut view, panel) = showing_mock();
+    let ctx = drawn_once();
+    let bay = bay(&panel);
+    view.mixer = std::iter::repeat_with(strip).take(4).collect();
+
+    // The capsule, with the list shut.
+    let shut = view.target();
+    let load = bay.load(&ctx, shut);
+    assert_eq!(load.rows, 0, "a list is drawn under a shut pulldown");
+    assert_eq!(load.list(viewport(&panel)), None);
+    assert_eq!(
+        bay.aim(
+            &ctx,
+            viewport(&panel),
+            shut,
+            Some("drift_night"),
+            Point::new(load.deck.center().x, load.deck.center().y)
+        ),
+        Some(Aim::Open),
+        "a press on the pulldown did not put its list down"
+    );
+
+    assert!(view.open_target(), "the list did not come down");
+    let open = view.target();
+    let load = bay.load(&ctx, open);
+    let card = load.list(viewport(&panel)).expect("the list is down");
+    assert!(
+        card.max.y <= load.deck.min.y,
+        "the card at {card:?} hangs down over the bay below rather than up over this bay's own \
+         list, which is what a foot has room for"
+    );
+    assert!(
+        viewport(&panel).contains_rect(card),
+        "the card at {card:?} is outside the viewport at {:?}",
+        viewport(&panel)
+    );
+    assert_eq!(load.rows, 4, "the list is not one row per strip");
+
+    let row = load.row(card, 2);
+    assert_eq!(
+        bay.aim(
+            &ctx,
+            viewport(&panel),
+            open,
+            Some("drift_night"),
+            Point::new(row.center().x, row.center().y)
+        ),
+        Some(Aim::Deck(2)),
+        "a press on the third row did not name deck C"
+    );
+
+    // And performing it moves this bay's mark and nothing else.
+    assert!(view.aim_at(2), "the pick did not move the target");
+    assert_eq!(view.target_deck(), 2);
+    assert_eq!(
+        view.selection(),
+        0,
+        "a pick in the pulldown moved the deck selection"
+    );
+    assert_eq!(view.cursor_row(), 0, "a pick moved the library cursor");
+    assert!(!view.target_open(), "the list stayed down after a pick");
+}
+
+/// **The pulldown offers the decks the mixer is drawing strips for, and no
+/// others** — and a console with no strip at all cannot put a list down.
+///
+/// `console.html`: *"A deck the mixer is drawing no strip for is not in the
+/// list, which is the count `0`–`3` are refused on"*. So this is
+/// [`View::select`]'s own refusal read a second time, asserted in both
+/// directions: three strips list three decks, and deck D is turned down rather
+/// than clamped to the last one there is.
+///
+/// **The empty case is the one that would bite**, and it is why `open_target`
+/// refuses: a card with no rows in it offers nothing to pick and nothing to
+/// leave by, and rule 2 would hand it every press on the console until a
+/// second press shut it.
+#[test]
+fn the_pulldown_offers_the_decks_the_mixer_is_drawing_and_no_others() {
+    let (mut view, panel) = showing_mock();
+    let ctx = drawn_once();
+    let bay = bay(&panel);
+    view.mixer = std::iter::repeat_with(strip).take(3).collect();
+
+    assert!(view.open_target(), "the list did not come down");
+    let load = bay.load(&ctx, view.target());
+    assert_eq!(
+        load.rows, 3,
+        "the list offers {} decks against three strips",
+        load.rows
+    );
+    assert!(
+        !view.aim_at(3),
+        "the load was aimed at deck D, which the mixer is drawing no strip for"
+    );
+    assert_eq!(view.target_deck(), 0, "a refused pick moved the target");
+    assert!(
+        view.target_open(),
+        "a refused pick put the list away, so the refusal reads as a pick"
+    );
+
+    // **A console with no deck behind it**, which is every other test in this
+    // file: there is nothing to offer, so there is no list to put down.
+    let mut bare = View::new(Room::Day);
+    bare.library = mock();
+    bare.scopes = Scope::ALL.to_vec();
+    assert!(
+        !bare.open_target(),
+        "a list came down over a console the mixer is drawing nothing for"
+    );
+    assert_eq!(bay.load(&ctx, bare.target()).rows, 0);
+    assert_eq!(bay.load(&ctx, bare.target()).list(viewport(&panel)), None);
+}
+
+/// **While the list is down, every press on the console is part of that
+/// gesture.**
+///
+/// `input::claim`'s rule 2, which the two cards in the transport row are
+/// already under: the card is drawn over this bay's own rows, so a press
+/// inside it belongs to the card and a press anywhere else is the dismissal.
+/// Both halves are asserted, because a rule that only claimed the card would
+/// leave the first press outside it doing whatever it does the rest of the
+/// time — loading a deck, or moving a fader.
+#[test]
+fn while_the_list_is_down_every_press_is_part_of_that_gesture() {
+    let (mut view, mut panel) = showing_mock();
+    let ctx = drawn_once();
+    let bay = bay(&panel);
+    view.mixer = std::iter::repeat_with(strip).take(4).collect();
+    assert!(view.open_target(), "the list did not come down");
+
+    let at = view.target();
+    let load = bay.load(&ctx, at);
+    let card = load.list(viewport(&panel)).expect("the list is down");
+    // A row of the card, a point on the card's own padding, and a point far
+    // away from the bay altogether.
+    let elsewhere = bay.row(0).center();
+    assert!(
+        !card.contains(elsewhere),
+        "the point off the card is on it, so this test measures nothing"
+    );
+    for probe in [
+        load.row(card, 1).center(),
+        egui::pos2(card.center().x, card.min.y + size::LIB_LIST_PAD * 0.5),
+        elsewhere,
+    ] {
+        assert_eq!(
+            claim(&mut panel, &ctx, &view, Point::new(probe.x, probe.y)),
+            Claim::Panel,
+            "the console gave `egui` a press at {probe:?} with the deck list down"
+        );
+    }
+
+    // And what the two that are not a row ask for is the dismissal.
+    for probe in [
+        egui::pos2(card.center().x, card.min.y + size::LIB_LIST_PAD * 0.5),
+        elsewhere,
+    ] {
+        assert_eq!(
+            bay.aim(
+                &ctx,
+                viewport(&panel),
+                at,
+                Some("drift_night"),
+                Point::new(probe.x, probe.y)
+            ),
+            Some(Aim::Shut),
+            "a press at {probe:?} with the list down did not take it away"
+        );
+    }
+    assert!(view.shut_target(), "there was no list down to take away");
+    assert!(
+        !view.shut_target(),
+        "shutting nothing said it shut something"
     );
 }
 
@@ -2164,12 +2495,12 @@ fn the_read_chip_asks_for_the_set_under_the_cursor() {
     let (mut view, panel) = showing_mock();
     let ctx = drawn_once();
     let bay = bay(&panel);
-    let chip = bay.read_chip(&ctx, DECK_LETTERS[0]);
+    let chip = bay.read_chip(&ctx, AIMED);
     let probe = Point::new(chip.min.x + 2.0, chip.center().y);
     let ask = |view: &View, bay: &LibraryBay| {
         bay.read(
             &ctx,
-            DECK_LETTERS[0],
+            AIMED,
             view.library.get(view.cursor_row()).map(String::as_str),
             probe,
         )
@@ -2201,20 +2532,20 @@ fn the_read_chip_asks_for_the_set_under_the_cursor() {
         "the chip itself stopped answering, so the gap beside it measures nothing"
     );
     assert_eq!(
-        bay.read(&ctx, DECK_LETTERS[0], Some("drift_night"), gap),
+        bay.read(&ctx, AIMED, Some("drift_night"), gap),
         None,
-        "the gap between the `read` chip and the load pill answered a press"
+        "the gap between the `read` chip and the `load` button answered a press"
     );
 
     // **A library that lists nothing has no Set to read**, and the chip is
     // still drawn because the foot is what the count is in. A press on it asks
     // nothing rather than asking for a Set with no name.
     let empty = library(panel.layout(), SCOPES, &[], None, None).expect("the bay draws its foot");
-    let chip = empty.read_chip(&ctx, DECK_LETTERS[0]);
+    let chip = empty.read_chip(&ctx, AIMED);
     assert_eq!(
         empty.read(
             &ctx,
-            DECK_LETTERS[0],
+            AIMED,
             None,
             Point::new(chip.center().x, chip.center().y)
         ),
@@ -2229,11 +2560,11 @@ fn the_read_chip_asks_for_the_set_under_the_cursor() {
     let open = library(panel.layout(), SCOPES, &view.library, view.opened(), None)
         .expect("the bay lists its rows");
     assert!(open.reading.is_some(), "nothing was open to close");
-    let chip = open.read_chip(&ctx, DECK_LETTERS[0]);
+    let chip = open.read_chip(&ctx, AIMED);
     assert_eq!(
         open.read(
             &ctx,
-            DECK_LETTERS[0],
+            AIMED,
             Some("drift_night"),
             Point::new(chip.min.x + 2.0, chip.center().y)
         ),
@@ -2428,7 +2759,7 @@ fn a_reading_is_drawn_only_under_the_row_it_is_a_reading_of() {
 }
 
 /// **The `read` chip clears every boundary but the one under the bay**, and
-/// the number is the same 4.75 the load pill beside it stands at.
+/// the number is the same 4.75 the two capsules beside it stand at.
 ///
 /// `input.rs`'s rule 3 gives a boundary first refusal, so what this measures is
 /// what that costs here: a `.lib-foot` is 26 tall and a `.pill` is 16.5,
@@ -2442,7 +2773,7 @@ fn the_read_chip_clears_every_boundary_but_the_one_under_the_bay() {
     let (view, mut panel) = showing_mock();
     let ctx = drawn_once();
     let bay = bay(&panel);
-    let chip = bay.read_chip(&ctx, DECK_LETTERS[0]);
+    let chip = bay.read_chip(&ctx, AIMED);
     let region = to_egui(rect_of(panel.layout(), "library"));
 
     // The three edges that clear it: the two ends of the capsule and its top.
@@ -2625,7 +2956,7 @@ fn a_reading_with_nothing_to_declare_says_so_rather_than_drawing_blanks() {
 /// block above it is the state … the one colour this bay spends on an act is
 /// spent on the load beside it."* So this asserts the word is painted in the
 /// foot and that the capsule's own fill is not there in either state — a
-/// second lav capsule beside `load → A` would make the colour mean two things
+/// second lav capsule beside `load` would make the colour mean two things
 /// at a width of eight characters.
 #[test]
 fn the_read_chip_says_read_and_never_lights() {
@@ -2648,7 +2979,7 @@ fn the_read_chip_says_read_and_never_lights() {
             }
         );
         let ctx = drawn_once();
-        let chip = bay(&panel).read_chip(&ctx, DECK_LETTERS[0]);
+        let chip = bay(&panel).read_chip(&ctx, AIMED);
         assert!(
             !drawn.iter().any(|shape| matches!(
                 shape,

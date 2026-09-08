@@ -373,8 +373,8 @@ which neither is. ADR-0262's decision stands as the first cut until somebody ans
   inlined), and why the operation carries no destination is ADR-0260's. **What nobody has decided is
   what an operator presses**, and `docs/manual/console.html` draws no send control at all — so under
   `docs/contributing.md` §5 step 3 the page moves before the panel can. The two shapes on the table
-  are a third pill in the bay's foot beside `read` and `load → A`, reading its destination the way
-  `load → A` reads its deck; or a drag from a row onto the `.path` row. **The other half of the row
+  are a third pill in the bay's foot beside `read` and the `load` button, reading its destination
+  the way the load's pulldown reads its deck (ADR-0305); or a drag from a row onto the `.path` row. **The other half of the row
   is built**: a press on a `presets` or `folder` row takes that Set in.
 - ***Walk the edit history* has a history to read, and waits on the control.** The lister is
   `history::list`, and a panel run writes into `<store>/history/` now: one `Snapshots` for the run,
@@ -384,13 +384,21 @@ which neither is. ADR-0262's decision stands as the first cut until somebody ans
   The writing was M5.10's and it has landed; what is left is the manual naming the control and this
   bay drawing it.
 
-**And one question about a control that is built.** `load → A` is a **readout** — the cursor says
-which Set, the deck selection says which deck, and the pill says where a press will land before it
-is made, which is what makes a load *"a cursor and a key with no pointer anywhere in it"* (ADR-0264,
-ADR-0265). The maintainer has asked whether it should be split — `load` a button, `→` a label, `A` a
-pulldown over A–D — which would let a load name a deck without moving the selection. **That is a
-third route to naming a deck** (the selection and the drag are the other two) and it spends the
-keyboard-only property, so it is a new record rather than a repair. It is open.
+**And one question about a control that is built is answered.** `load → A` was a **readout** — the
+cursor said which Set, the deck selection said which deck, and the pill said where a press would
+land before it was made, which is what made a load *"a cursor and a key with no pointer anywhere in
+it"* (ADR-0264, ADR-0265). The maintainer asked on 2026-09-08 whether it should be split, and it is:
+`load` is a button, `→` is a label and `A` is a pulldown over the decks the mixer draws, in
+[ADR-0305](adr/0305-the-library-bays-load-is-a-button-and-a-pulldown-and-the-deck-it-names-is-not-the-selection.md).
+A press on the button loads the cursor's Set onto **the pulldown's deck** and leaves the selection
+where it is; `l` still loads onto the selection. **That is a third route to naming a deck** — the
+selection and the drag's release are the other two — and the bill is paid rather than argued away.
+**The keyboard-only property is kept and not spent**: the maintainer answered the same day that the
+keyboard reaches the split control through the focus grammar, *"a–d picks the slot, return presses
+send"* being one shape of it, so what is owed is a key route and not a redesign. **It is owed to
+M5.13**, which is where the grammar and the free letters are, and this bay binds no new letter now:
+`a` is already promised there. Until it lands, the pulldown is reached with a pointer and `l` is the
+keyboard's whole route to the row.
 
 *Send a Set to somebody* waited on a destination the vocabulary could carry, and
 [ADR-0260](adr/0260-sending-a-set-is-a-read-and-a-reads-answer-goes-where-the-surface-that-asked-puts-answers.md)
@@ -531,7 +539,7 @@ favourite, and where it does not travel*, *Where the presets come from, and why 
 than found*, *A Set has two forms, and loading one is packaging it*, and *How a Set reaches a deck*.
 *Every deck runs from its own copy* is here too, because a library load is what writes into
 `<store>/scratch/`. The mock tips four of the five scope chips, the two filter fields, two stars
-and the `load → A` pill; `my sets`, the path and the rows carry none.
+and the load's button and pulldown; `my sets`, the path and the rows carry none.
 
 #### M5.4 — Transport
 

@@ -363,9 +363,10 @@ fn the_row_reads_the_path_and_comes_up_out_of_its_faint_while_one_is_over_the_wi
 // ---------------------------------------------------------------------------
 
 /// **Nothing in the row takes a press.** Re-pointing the bay is another drop,
-/// so a capsule here would be a control nobody specified — the load pill's own
-/// rule in the foot, one row of furniture along. `claim` gives every point of
-/// it to `egui`.
+/// so a capsule here would be a control nobody specified. `claim` gives every
+/// point of it to `egui`. **The foot's own readout stopped being one on
+/// 2026-09-08** (ADR-0305), so this rule is this row's rather than a rule it
+/// shares with the capsules below it.
 #[test]
 fn the_path_row_answers_no_press() {
     let mut panel = console(PLAUSIBLE);
