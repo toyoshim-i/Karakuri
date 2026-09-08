@@ -7983,6 +7983,50 @@ fn apply(record: &Record, deck: &mut Deck, look: &mut Look) -> Option<String> {
         // stop whatever was moving them: a `Control` is per slot and this is
         // not, so nothing in the engine can be moving it and there is nothing
         // for a hand to win against.
+        // **The one record that reaches inside a Set**, and the row the
+        // Inspector bay was blocked on. `Deck::write_param` is the public road
+        // and it compiles nothing — the map is packed into the uniform by the
+        // next `Set::prepare`, so the value is on screen on the next frame.
+        //
+        // **Decoded by `mix::change` rather than here**, which is the one arm
+        // in this function that does not take the short path, and the reason is
+        // the expansion: a `vec3` value is three writes under the component
+        // keys ADR-0268 made, and spelling that a second time in this file is
+        // the drift `karakuri-operation-record` exists to end. It is also what
+        // refuses a slot this deck has not got, in the sentence every other
+        // surface refuses one with — so `held` is not asked first here.
+        Record::Ride { .. } => {
+            let writes = match karakuri_environment::mix::change(record, deck.slot_count()) {
+                Ok(Some(karakuri_environment::mix::Change::Ride { slot, writes })) => {
+                    let mut reached = 0;
+                    for write in &writes {
+                        match deck.write_param(slot, write) {
+                            Ok(n) => reached += n,
+                            Err(refused) => return Some(format!("  {refused}")),
+                        }
+                    }
+                    (slot, writes, reached)
+                }
+                Ok(_) => return None,
+                Err(refused) => return Some(format!("  {refused}")),
+            };
+            let (slot, writes, reached) = writes;
+            match reached {
+                0 => Some(format!(
+                    "  {}",
+                    karakuri_environment::no_such_param(slot, &writes[0].key)
+                )),
+                _ => Some(format!(
+                    "  knob: deck {} -> WriteParam -> Record::Ride -> {} on {reached} node(s)",
+                    deck_letter(slot as u8),
+                    writes
+                        .iter()
+                        .map(|w| format!("{} = {:.3}", w.key, w.value))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )),
+            }
+        }
         Record::MasterOut { value } => {
             deck.set_out(value);
             Some(format!(
