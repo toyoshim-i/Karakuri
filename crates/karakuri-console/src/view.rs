@@ -10591,10 +10591,36 @@ pub enum Scope {
     /// What ships with the program: the `.kset` files in the presets root,
     /// which is a directory the program is **told** (ADR-0230) rather than one
     /// it works out. Read-only — a row here is taken into the store and then
-    /// loaded, which is why opening one leaves a row in [`Scope::MySets`].
+    /// loaded, and the row that leaves is under [`Scope::AllSets`]: a Set the
+    /// store holds is what a take-in makes, and [`Scope::MySets`] is the
+    /// **starred** subset of that, so it appears there only if somebody
+    /// presses its star
+    /// ([ADR-0299](../../../docs/adr/0299-my-sets-is-the-starred-subset-and-the-star-is-kept-beside-the-sets.md)).
+    /// This sentence said `my sets` until that record was written.
     Presets,
     /// A directory somebody names during the run.
     Folder,
+    /// `history`: **the versions of one Set**, and the one chip here whose
+    /// rows are not Sets.
+    ///
+    /// Every write that compiled is kept under `<store>/history/` — gated on
+    /// compiling rather than on landing — and this is the reading of them:
+    /// most recent first, each row naming when it was written, which node it
+    /// was a version of and what that procedure called itself. The Set it is
+    /// narrowed to is the one the load pulldown's deck is running
+    /// ([`View::target_deck`]), which is the host's answer for
+    /// [`View::library`]'s reason: a version's Set id rides the aim a load
+    /// sends and this crate reaches no store.
+    ///
+    /// **A deck running no Set lists nothing**, and that is an answer rather
+    /// than an absence: those versions are filed under *no Set*, and a
+    /// narrowing to a Set matches none of them rather than all of them.
+    ///
+    /// **Landing on a row is `Operation::RestoreProcedure`** and never
+    /// `Operation::LoadSet` — see [`LibraryBay::land`], and
+    /// [`Scope::lists_sets`] for the four controls in this bay that have
+    /// nothing to name while it is marked.
+    History,
 }
 
 impl Scope {
@@ -10606,7 +10632,13 @@ impl Scope {
     /// A `+` is drawn after them there and is not here: it is the arena's own
     /// gap drawn a fifth time, which [`outputs`] already names, and adding a
     /// scope is what [`Scope::Folder`] is waiting on anyway.
-    pub const ALL: [Scope; 4] = [Scope::AllSets, Scope::MySets, Scope::Presets, Scope::Folder];
+    pub const ALL: [Scope; 5] = [
+        Scope::AllSets,
+        Scope::MySets,
+        Scope::Presets,
+        Scope::Folder,
+        Scope::History,
+    ];
 
     /// The chip's word, `style.css`'s own — lower case, because `.scope` sets
     /// no `text-transform` where a bay head does.
@@ -10616,7 +10648,23 @@ impl Scope {
             Scope::MySets => "my sets",
             Scope::Presets => "presets",
             Scope::Folder => "folder",
+            Scope::History => "history",
         }
+    }
+
+    /// **Whether a row of this scope is a Set**, which is true of four of the
+    /// five and false of [`Scope::History`], whose rows are versions.
+    ///
+    /// **Every control in this bay whose operand is a Set id asks this**, and
+    /// it is one question rather than four: the star, the `read` chip, the
+    /// `load` button and the carry all read the row under a cursor as an id,
+    /// and a version handed to any of them would name a Set no store holds.
+    /// See [`View::sets`] and [`View::versions`], which is where the answer is
+    /// applied — the controls take the listing they can act on, so a scope
+    /// whose rows they cannot name hands them nothing rather than being
+    /// special-cased at each of them.
+    pub fn lists_sets(self) -> bool {
+        !matches!(self, Scope::History)
     }
 }
 
@@ -10650,14 +10698,31 @@ impl Scope {
 /// written down where a maintainer reads it rather than performed here.
 ///
 /// [P-0090]: ../../../docs/principles/0090-a-surface-offers-it-never-decides.md
+///
+/// # The fifth chip asks a different row, and the row is why
+///
+/// [`Scope::History`] is a scope chip and [`Operation::WalkHistory`] is what a
+/// press on it names, where the other four name
+/// [`Operation::SelectScope`]. One press is one operation, and the one to name
+/// is the row that describes what was asked for: the four are libraries of
+/// Sets and *"the one thing about the library that is not closed"*, where the
+/// fifth is the edit history and has a row of its own on the page.
+///
+/// **The payload is what settles it.** `SelectScope` cannot say *which*, so a
+/// `SelectScope` emitted for this chip would be indistinguishable from one
+/// emitted for `all` — a record saying a library was chosen for a press that
+/// asked for a history. `console.html`'s *Walking a Set's edit history* is
+/// where that is argued on the page, which is where it is decided.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Chosen {
     /// **The chip the pointer was on**, which is a value of the row this
     /// console was handed rather than a position in it: the caller marks it
     /// through [`View::select_scope`], which refuses a scope with no chip.
     pub scope: Scope,
-    /// **[`Operation::SelectScope`], and its payload is `Undecided`** — see
-    /// this type's own documentation for why the chip is not in it.
+    /// **What the press names**: [`Operation::SelectScope`] for the four
+    /// library chips, whose payload is `Undecided`, and
+    /// [`Operation::WalkHistory`] for [`Scope::History`] — see this type's own
+    /// documentation for both.
     pub operation: Operation,
 }
 
@@ -11610,6 +11675,57 @@ impl LibraryBay {
             })
     }
 
+    /// **What a press at `p` on a row of the `history` listing asks for**, or
+    /// `None` where there is no drawn row under it.
+    ///
+    /// # It is a load, and it is not [`Operation::LoadSet`]
+    ///
+    /// A row here is a version of one node rather than a Set, so what a press
+    /// on it asks for is `Operation::RestoreProcedure` carrying that version —
+    /// *put a node's previous version back*, which is the row
+    /// `docs/manual/operations.html` names for landing and says so at the walk
+    /// beside it: *"landing is not this row"*. Nothing else in this bay
+    /// changes: the version is written over that node's working copy and the
+    /// watcher builds it, so the load is the path an edit already takes
+    /// (ADR-0228).
+    ///
+    /// # Both operands are marks this console keeps
+    ///
+    /// The **deck** is [`Target::deck`] — the pulldown in the foot, which is
+    /// what narrowed the listing to a Set in the first place, so the rows a
+    /// hand is looking at and the deck a press lands on cannot come apart. The
+    /// **version** is the row, by the word the host handed in: this crate
+    /// reads no store (ADR-0156), and the name is matched back against the
+    /// listing that produced it, which is `SetTransfer::Take`'s arrangement
+    /// and the rule that keeps a path out of a payload.
+    ///
+    /// # It takes the versions and [`LibraryBay::take`] takes the Sets
+    ///
+    /// The two are one press on one rectangle and they are told apart by which
+    /// listing is handed in: [`View::sets`] is empty under `history` and
+    /// [`View::versions`] is empty everywhere else, so exactly one of them can
+    /// answer and neither has to be told what the scope is. A carry of a
+    /// version would be a Set named by a word no store holds, and a landing on
+    /// a Set would be a node named by a word that addresses none.
+    ///
+    /// **The rows are walked rather than divided**, which is `take`'s rule and
+    /// for its reason: a reading pushes the rows under it down by a whole
+    /// block, so [`LibraryBay::row`] is the arithmetic and asking it per row is
+    /// what keeps the row a press lands on the row the paint drew.
+    pub fn land(
+        &self,
+        versions: &[String],
+        at: Target,
+        p: karakuri_layout::Point,
+    ) -> Option<Operation> {
+        let p = Pos2::new(p.x, p.y);
+        let row = (0..self.rows).find(|index| self.row(*index).contains(p))?;
+        Some(Operation::RestoreProcedure {
+            deck: at.deck,
+            revision: karakuri_operation::Revision::Picked(versions.get(row)?.clone()),
+        })
+    }
+
     /// **Every scope chip and its box**, left to right in the order the row
     /// was handed them — the same walk [`scopes_into`] paints and
     /// [`LibraryBay::chip`] hit-tests, so the capsule a press lands on is the
@@ -11705,7 +11821,15 @@ impl LibraryBay {
             .find(|(_, chip)| chip.contains(p))
             .map(|(scope, _)| Chosen {
                 scope,
-                operation: Operation::SelectScope { scope: Undecided },
+                // **The row the press names follows the chip**, which is
+                // [`Chosen`]'s own section and not a special case here: four
+                // chips choose among libraries of Sets and the fifth asks for
+                // an edit history, and those are two rows of
+                // `docs/manual/operations.html`.
+                operation: match scope {
+                    Scope::History => Operation::WalkHistory { step: Undecided },
+                    _ => Operation::SelectScope { scope: Undecided },
+                },
             })
     }
 
@@ -16611,6 +16735,41 @@ impl View {
     /// it*).
     pub fn scope(&self) -> Option<Scope> {
         self.scopes.get(self.marked()).copied()
+    }
+
+    /// **The listing, where its rows are Sets** — [`View::library`] under the
+    /// four library scopes, and **empty** under [`Scope::History`], whose rows
+    /// are versions.
+    ///
+    /// **One place the question is asked, rather than four.** The star, the
+    /// `read` chip, the `load` button and the carry all read a row as a Set
+    /// id, and each of them already refuses a listing shorter than the rows
+    /// drawn rather than clamping — so handing them nothing is the refusal
+    /// they already have, said once. See [`Scope::lists_sets`].
+    ///
+    /// **A console with no scope row at all still lists Sets.** [`View::scope`]
+    /// answers `None` there, and a bay nobody has told what libraries there
+    /// are is every test in this crate that does not say otherwise — so the
+    /// absence of a scope is not the absence of a listing.
+    pub fn sets(&self) -> &[String] {
+        match self.scope() {
+            Some(scope) if !scope.lists_sets() => &[],
+            _ => &self.library,
+        }
+    }
+
+    /// **The listing, where its rows are versions of one Set** —
+    /// [`View::library`] under [`Scope::History`] and **empty** under every
+    /// other scope, which is [`View::sets`]' answer the other way round.
+    ///
+    /// The one reader is [`LibraryBay::land`], and the pair is what lets one
+    /// press on one rectangle mean a carry or a landing without either method
+    /// being told which scope is marked.
+    pub fn versions(&self) -> &[String] {
+        match self.scope() {
+            Some(Scope::History) => &self.library,
+            _ => &[],
+        }
     }
 
     /// Which chip is marked, as a position — clamped to the row that is drawn,

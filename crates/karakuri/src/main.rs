@@ -2174,8 +2174,13 @@ impl Readout {
                         ctx,
                         view::to_egui(self.panel.layout().viewport()),
                         self.view.target(),
+                        // **The Sets, which is empty under `history`**:
+                        // this button loads a Set and that scope's rows are
+                        // versions, so it answers `Aim::NoSet` there rather
+                        // than naming a load of a word no store holds
+                        // (`view::View::sets`).
                         self.view
-                            .library
+                            .sets()
                             .get(self.view.cursor_row())
                             .map(String::as_str),
                         at,
@@ -2487,8 +2492,11 @@ impl Readout {
                     bay.read(
                         ctx,
                         self.view.target(),
+                        // **The Sets, for the load button's reason one
+                        // control along**: `Operation::ReadSet` names a Set
+                        // this store holds, and a `history` row is a version.
                         self.view
-                            .library
+                            .sets()
                             .get(self.view.cursor_row())
                             .map(String::as_str),
                         at,
@@ -2520,7 +2528,10 @@ impl Readout {
                     self.view.opened(),
                     self.view.pointed(),
                 )
-                .and_then(|bay| bay.starred(&self.view.library, &self.view.starred, at))
+                // **The Sets, for the `read` chip's reason one control up**: a star is
+                // a control over a Set this store holds, and a `history` row is
+                // not one.
+                .and_then(|bay| bay.starred(self.view.sets(), &self.view.starred, at))
                 {
                     return (claim, Acted::Emitted(Some(operation)));
                 }
@@ -2549,9 +2560,29 @@ impl Readout {
                     self.view.opened(),
                     self.view.pointed(),
                 )
-                .and_then(|bay| bay.take(&self.view.library, at))
+                .and_then(|bay| bay.take(self.view.sets(), at))
                 {
                     return (claim, self.took(at, taken));
+                }
+                // **The same rows, meaning the other thing.** Under
+                // `history` a row is a version rather than a Set, so a press
+                // on it is a landing — `Operation::RestoreProcedure` on the
+                // deck the load pulldown names — where the carry above takes
+                // nothing in hand because `View::sets` handed it nothing.
+                // The two are told apart by which listing goes in with the
+                // point and not by an arm that asks the scope, so exactly one
+                // of them can answer and `input::claim`'s one row for this
+                // rectangle stays one row.
+                if let Some(operation) = library_bay(
+                    self.panel.layout(),
+                    &self.view.scopes,
+                    &self.view.library,
+                    self.view.opened(),
+                    self.view.pointed(),
+                )
+                .and_then(|bay| bay.land(self.view.versions(), self.view.target(), at))
+                {
+                    return (claim, self.landed(operation));
                 }
                 // **The transition row's four capsules, derived once for all
                 // of them**, exactly as `claim` does it: the three settings
@@ -3221,9 +3252,16 @@ impl Readout {
     /// else on this route ever moves the cursor back.
     ///
     /// **That is still no operation.** `read_reading` reads the store and
-    /// writes the answer into the view; it emits nothing, so the press this
-    /// file's own doc calls *"the one offer on this console whose press names
-    /// no operation"* goes on naming none (ADR-0265).
+    /// writes the answer into the view; it emits nothing, so the press
+    /// `karakuri_console::input`'s own doc calls *"the one offer on this
+    /// console whose press names no operation"* goes on naming none
+    /// (ADR-0265).
+    ///
+    /// **That sentence is now qualified rather than untrue**: it is about the
+    /// four scopes whose rows are Sets. Under `history` the same rectangle is
+    /// [`Readout::landed`], which names `Operation::RestoreProcedure` outright
+    /// — and this method is not reached there, because `View::sets` hands the
+    /// carry nothing (ADR-0308).
     fn took(&mut self, p: Point, taken: Taken) -> Acted {
         let Taken { row, set } = taken;
         // **The mark first, and the hand after it.** Both are this console's
@@ -3244,6 +3282,41 @@ impl Readout {
             true => Acted::Pointed,
             false => Acted::Nothing,
         }
+    }
+
+    /// **A press on a row of the Library bay's `history` scope**, which lands
+    /// that version on the node it was a version of.
+    ///
+    /// [`Readout::took`]'s neighbour on the same rectangle, and the two are
+    /// the same press meaning two things: a row of a library is a Set to take
+    /// in hand and a row of a history is a version to put back. Which of them
+    /// answers is decided by which listing went in with the point
+    /// (`view::View::sets`, `view::View::versions`) rather than by an arm here
+    /// asking the scope.
+    ///
+    /// **It emits and performs nothing**, which is [`Readout::asked_to_read`]'s
+    /// division: what a landing does is write a file the store owns, and the
+    /// store is the window's rather than the readout's. [`restored`] is where
+    /// it is done, on the branch every emitted operation already takes.
+    ///
+    /// **The cursor is not moved.** A carry moves it because the mark on a row
+    /// is what a drag has to draw and because `l` reads it afterwards; a
+    /// landing reads neither — the row is the operand and the deck is the
+    /// pulldown's — so moving the mark would be this press quietly re-aiming
+    /// the key beside it.
+    fn landed(&mut self, operation: Operation) -> Acted {
+        println!(
+            "press: {} — the version is written over that node's working copy and its \
+             watcher builds it, judged against the budget like any edit",
+            match &operation {
+                Operation::RestoreProcedure {
+                    deck,
+                    revision: karakuri_operation::Revision::Picked(version),
+                } => format!("`{version}` put back on deck {}", deck_letter(*deck)),
+                other => format!("{other:?}"),
+            }
+        );
+        Acted::Emitted(Some(operation))
     }
 
     /// A press on the Outputs row's one control. **The dot says what it did**
@@ -7259,12 +7332,25 @@ fn spelled(min: &str, max: &str, default: Option<String>) -> String {
 /// which is the press on the `read` chip, and the key that moves the cursor
 /// while a reading is open, because the reading follows the cursor.
 fn read_reading(view: &mut View, store: &std::path::Path) -> String {
-    let Some(id) = view.library.get(view.cursor_row()).cloned() else {
+    // **The Sets, which is empty under `history`**: a reading is what a Set
+    // declares and a row of that scope is a version, so the cursor has no
+    // operand there — `view::View::sets`.
+    let Some(id) = view.sets().get(view.cursor_row()).cloned() else {
         // A press with no row under the cursor asks nothing —
         // `LibraryBay::read` answers `None` for it — so this is reachable only
-        // from a cursor that moved in a listing that went empty in between.
+        // from a cursor that moved in a listing that went empty in between, or
+        // from a reading left open while the bay was marked `history`: the
+        // block is not drawn there (`View::opened` matches the row's name), and
+        // it is put away here rather than left holding an answer about a Set
+        // nobody can see.
         view.shut_reading();
-        return String::from("  read: this bay lists nothing, so there is no Set to read");
+        return String::from(match view.scope() {
+            Some(scope) if !scope.lists_sets() => {
+                "  read: `history` lists the versions of a Set rather than Sets, so there is \
+                 nothing under the cursor for a reading to be about"
+            }
+            _ => "  read: this bay lists nothing, so there is no Set to read",
+        });
     };
     match declared(store, &id) {
         Ok(reading) => {
@@ -7601,10 +7687,20 @@ fn folder_files(dir: Option<&std::path::Path>) -> Vec<FileRow> {
 /// went quiet and a scope that is empty are the same experience — which is the
 /// rule every other refusal in this file is written to.
 ///
-/// `pointed` is whether the bay has a directory at all, and it is read only by
-/// the `folder` arm: the other three are the same sentence whatever this
-/// window has been dropped on.
-fn why_nothing(scope: Scope, pointed: bool) -> &'static str {
+/// **The fifth is a third kind again, and it has two sentences of its own.**
+/// `history` lists the versions of the Set the load pulldown's deck is
+/// running, so it can be empty because that deck is running *no Set* — a run
+/// launched on a pair somebody typed, whose versions are filed under none
+/// (ADR-0276, ADR-0304) — or because the Set it is running has not been
+/// edited yet. The first is the one worth spelling out: a listing narrowed to
+/// a Set matches a `None` row not at all rather than matching every one of
+/// them, so *nothing here* is the true answer and not a filter that misfired.
+///
+/// `pointed` is whether the bay has a directory at all and `running` is
+/// whether the pulldown's deck names a Set; each is read by one arm only, and
+/// the other four are the same sentence whatever this window has been dropped
+/// on and whatever any deck is playing.
+fn why_nothing(scope: Scope, pointed: bool, running: bool) -> &'static str {
     match scope {
         Scope::AllSets => {
             "this store holds no Sets yet, which is a library nobody has filled: `k` keeps \
@@ -7628,6 +7724,17 @@ fn why_nothing(scope: Scope, pointed: bool) -> &'static str {
             "the folder this bay is pointed at holds no Set file, which is a directory \
              nobody has put one in: a folder scope lists `.kbset` and `.kset` files, and a \
              directory of `.kir` parts is not a library"
+        }
+        Scope::History if !running => {
+            "the deck the `load` pulldown names is playing a typed pair rather than a Set, so \
+             its versions are filed under no Set at all and a listing narrowed to one matches \
+             none of them — aim that pulldown at a deck you have loaded a Set onto, or load \
+             one"
+        }
+        Scope::History => {
+            "this Set has no versions yet — every write that compiles is kept, so edit one of \
+             its nodes, or let a model write one, and the version it replaced is the first row \
+             here"
         }
     }
 }
@@ -7784,7 +7891,11 @@ fn folder_dropped(
                 true => "the `folder` chip is marked",
                 false => "this console draws no `folder` chip, so nothing is marked",
             };
-            let said = listing(view, store, presets, folder.as_deref());
+            // **`None`, and it cannot be anything else here**: this drop has
+            // just marked the `folder` chip, so the listing being re-asked is
+            // a directory's and never a history's, and a Set id handed in
+            // would be a value nothing reads.
+            let said = listing(view, store, presets, folder.as_deref(), None);
             // **And the cursor goes back to the top of a listing it has never
             // seen**, which is `View::select_scope`'s own rule reached the
             // other way: that method resets the cursor when the *mark* moves,
@@ -7836,18 +7947,42 @@ fn set_file(path: &std::path::Path) -> bool {
 /// states one scope down and the reason this is not called from the frame
 /// handler.
 ///
-/// All four answer with rows now, and each of the four can still answer with
-/// none — [`why_nothing`] is where the four sentences are, and it is one
+/// All five answer with rows now, and each of the five can still answer with
+/// none — [`why_nothing`] is where the sentences are, and it is one
 /// function so that a scope which stops being empty stops being empty in one
-/// place. **Two of them depend on something that happened during the run**:
+/// place. **Three of them depend on something that happened during the run**:
 /// `folder` is `None` until somebody drops a directory on this window
-/// ([`folder_dropped`]), and `my sets` is empty until somebody presses a star
-/// ([`favourite`]).
+/// ([`folder_dropped`]), `my sets` is empty until somebody presses a star
+/// ([`favourite`]), and `history` is empty until the deck the load pulldown
+/// names is running a Set that has been edited.
+///
+/// # `history` is the one scope that is not a directory of Sets
+///
+/// Its rows are the versions of **one Set** — the one the load pulldown's
+/// deck is running, which `running` carries — and they come off
+/// `karakuri_environment::history::list`, most recent first, in that
+/// function's own order rather than in one applied here (ADR-0263's argument
+/// on a different listing).
+///
+/// **The narrowing is a Set and never a deck**, which is why `running` is an
+/// id rather than a slot: two decks playing one Set have one history between
+/// them, and a version is filed under the Set the slot was running
+/// (ADR-0304). **A `None` row matches no Set** rather than matching every one
+/// of them — a version written where there was no Set is a version of
+/// nothing, and treating it as a wildcard would put another run's edits under
+/// whatever Set happens to be loaded now (ADR-0276's own consequence).
+///
+/// **The cap is on the walk and not on the Set.** [`HISTORY_MOST`] rows are
+/// asked for and the narrowing happens after, so a store whose day directories
+/// hold several Sets' versions lists fewer of each; `Listing::stopped_short`
+/// is what says the walk stopped with days unread, and it is said out loud
+/// beside the count rather than left for the foot's `n of m` to imply.
 fn listing(
     view: &mut View,
     store: &std::path::Path,
     presets: Option<&karakuri_environment::places::Presets>,
     folder: Option<&std::path::Path>,
+    running: Option<&str>,
 ) -> String {
     let Some(scope) = view.scope() else {
         return String::from(
@@ -7867,6 +8002,14 @@ fn listing(
     let held = match scope {
         Scope::AllSets | Scope::MySets => library(store),
         _ => Vec::new(),
+    };
+    // **What the walk found, and what it did not.** Read here rather than
+    // inside the arm below so that the sentence about it is written where
+    // every other sentence about this listing is; `None` for every scope that
+    // is not a history, which is every scope that is a directory of Sets.
+    let walked = match scope {
+        Scope::History => Some(walked(store, running)),
+        _ => None,
     };
     view.holds = holds_choices(&held);
     // **The marks, beside the listing they are a subset of.** They are read on
@@ -7917,6 +8060,14 @@ fn listing(
         // disk (ADR-0156). Pointed nowhere it lists nothing and the sentence
         // about it is [`why_nothing`]'s.
         Scope::Folder => folder_listing(folder),
+        // **The versions of the Set the load pulldown's deck is running**,
+        // already narrowed and already in order — see [`walked`], and this
+        // function's own head for why the narrowing is a Set rather than a
+        // deck and why a `None` row matches nothing.
+        Scope::History => walked
+            .as_ref()
+            .map(|found| found.rows.clone())
+            .unwrap_or_default(),
     };
     // **Only where the filter was applied.** `layer` survives a scope change —
     // it is the console's own value and not a position in a listing — so a bay
@@ -7926,7 +8077,13 @@ fn listing(
     let narrowed = matches!(scope, Scope::AllSets | Scope::MySets)
         .then(|| narrowing(holds.as_deref(), spelled.as_deref()))
         .flatten();
-    match (view.library.len(), narrowed) {
+    // **What the walk has to say beside the count**, and it is empty for every
+    // other scope: a truncated listing that read as a whole one is the failure
+    // `Listing::stopped_short` exists to prevent, and the foot's `n of m`
+    // counts the rows this side handed over rather than the ones it did not
+    // reach.
+    let aside = walked.map(|found| found.said).unwrap_or_default();
+    let line = match (view.library.len(), narrowed) {
         // **A filter that hid everything is a different nothing from an empty
         // library**, and it is the one kind `why_nothing` cannot name: the
         // store is not empty, and what to do about it is press a field rather
@@ -7945,7 +8102,7 @@ fn listing(
         (0, None) => format!(
             "  library: `{}` lists nothing — {}",
             scope.name(),
-            why_nothing(scope, folder.is_some())
+            why_nothing(scope, folder.is_some(), running.is_some())
         ),
         (listed, Some(narrowed)) => format!(
             "  library: `{}` lists {listed} of {} Set{}, {narrowed}",
@@ -7957,14 +8114,158 @@ fn listing(
             }
         ),
         (listed, None) => format!(
-            "  library: `{}` lists {listed} Set{}",
+            "  library: `{}` lists {listed} {}",
             scope.name(),
-            match listed {
-                1 => "",
-                _ => "s",
+            match (scope, listed) {
+                (Scope::History, 1) => "version",
+                (Scope::History, _) => "versions",
+                (_, 1) => "Set",
+                (_, _) => "Sets",
             }
         ),
+    };
+    format!("{line}{aside}")
+}
+
+/// **How many rows of the edit history one walk asks for.**
+///
+/// `karakuri_environment::history::list` takes the number from its caller and
+/// has no default, because *"what a bay can afford to draw and what a model can
+/// afford to be handed are different numbers"* (P-0090) — so this is the
+/// panel's answer and nowhere else's.
+///
+/// **Larger than any bay can draw, and small enough that the walk stops after a
+/// handful of days.** The Library bay's list is one row per
+/// `view::size::LIB_ROW_H`, so a full-height bay on a tall display draws a few
+/// tens of them; the cost of the walk is one `read_dir` per day directory
+/// entered and no file opened at all, and it stops entering them once it has
+/// this many. What lies past it is not counted — counting it is the cost the
+/// cap exists not to pay — and `Listing::stopped_short` says the walk stopped,
+/// which is the property that matters.
+const HISTORY_MOST: usize = 200;
+
+/// **The rows the `history` scope lists, and the sentence about how they were
+/// found.**
+///
+/// Split out of [`listing`] because it is the one arm of that function that
+/// has something to say beside the count: the walk is capped and it is capped
+/// on *days opened* rather than on this Set's rows, so a listing that stopped
+/// short has to say so or it reads as the whole history.
+///
+/// **A row is the name the store filed the version under**, less the Set id
+/// every row here shares — see [`version_row`], which is also how a landing
+/// finds the file again.
+struct Walked {
+    rows: Vec<String>,
+    said: String,
+}
+
+fn walked(store: &std::path::Path, running: Option<&str>) -> Walked {
+    // **No Set, no rows, and not an error.** The deck is playing a pair
+    // somebody typed; its versions are filed under no Set, and `why_nothing`
+    // is where that is said in words.
+    let Some(id) = running else {
+        return Walked {
+            rows: Vec::new(),
+            said: String::new(),
+        };
+    };
+    let found = match karakuri_environment::history::list(store, HISTORY_MOST) {
+        Ok(found) => found,
+        // Said rather than swallowed, and the scope lists nothing: a history
+        // that would not open is a different fact from a Set with no versions,
+        // and the two must not draw the same empty list in silence.
+        Err(why) => {
+            return Walked {
+                rows: Vec::new(),
+                said: format!("\n  history: {why} — so this scope lists nothing"),
+            };
+        }
+    };
+    let rows: Vec<String> = found
+        .versions
+        .iter()
+        // **`Some(id)` and never `None`.** A version written where there was
+        // no Set is a version of nothing, so it matches no Set rather than
+        // every one of them (ADR-0276).
+        .filter(|version| version.set.as_deref() == Some(id))
+        .map(version_row)
+        .collect();
+    let mut said = String::new();
+    if found.stopped_short {
+        said.push_str(
+            "\n  history: the walk stopped with days unread, so this is part of what is \
+             there rather than all of it",
+        );
     }
+    if found.unclaimed > 0 {
+        said.push_str(&format!(
+            "\n  history: {} entr{} under `history/` that this layout does not claim {} \
+             passed over",
+            found.unclaimed,
+            match found.unclaimed {
+                1 => "y",
+                _ => "ies",
+            },
+            match found.unclaimed {
+                1 => "was",
+                _ => "were",
+            }
+        ));
+    }
+    Walked { rows, said }
+}
+
+/// **The Set the load pulldown's deck is running**, or `None` for a deck
+/// playing the pair the run was launched with.
+///
+/// **It is read off the aim and off nothing else**, which is ADR-0304: the id
+/// rides the `watch::Aim` a load sends, restated by every rewiring, and
+/// `Gfx::material` beside it is the mixer strip's *readout* — the pair at
+/// launch, and never an id a listing can match.
+///
+/// **The pulldown and not the selection**, which is ADR-0305 read on a second
+/// control: the letter in that foot is what says where a load lands, so it is
+/// what says whose history the `history` scope is showing. A target past the
+/// slots the deck has answers `None`, which `View::aim_at` already refuses and
+/// this does not depend on.
+///
+/// **Owned, because the caller is about to take `&mut View`.** One `String` per
+/// press on a path that is about to read a directory.
+fn aimed_set(gfx: &Gfx, view: &View) -> Option<String> {
+    gfx.engine
+        .aimed
+        .get(usize::from(view.target_deck()))
+        .and_then(|aiming| aiming.at.set.clone())
+}
+
+/// **One version, as a row of the Library bay's list and as the word a landing
+/// names it by.**
+///
+/// It is the name [`karakuri_environment::history::Snapshots::record`] wrote,
+/// less the `@<set>` every row of one walk shares and less the `.kir` — when,
+/// which slot, which layer and index, and what the procedure called itself,
+/// which is what `Version`'s own head says a row is for.
+///
+/// **One spelling, used twice.** The bay is handed this and hands it back at
+/// the press, and [`restored`] rebuilds it per candidate to find the file
+/// again — so the row an operator pressed and the version that is landed
+/// cannot come apart, and no path crosses the seam. That is
+/// `SetTransfer::Take`'s arrangement: the panel re-asks the listing and finds
+/// the row by the word that was pressed.
+///
+/// **The index is spelled only when it is not the first**, which is `record`'s
+/// own rule read back rather than a second one: a `_0` on every L4 of every
+/// ordinary run is noise in the way of what a person is scanning for.
+fn version_row(version: &karakuri_environment::history::Version) -> String {
+    let at = match version.index {
+        0 => String::new(),
+        index => index.to_string(),
+    };
+    format!(
+        "{}_slot{}_{}{at}_{}",
+        version.at, version.slot, version.layer, version.proc_name
+    )
 }
 
 /// **What a take-in did**: the file it read, the id that file filed itself
@@ -9951,6 +10252,198 @@ fn played(gfx: &mut Gfx, operation: &Operation) -> Option<String> {
     }
 }
 
+/// **A version put back** — a row of the Library bay's `history` scope landed
+/// on the node it was a version of, and `None` for every operation that is not
+/// one.
+///
+/// # It is a load, and it goes the way every other load goes
+///
+/// The snapshot's bytes are written over that node's **working copy** under
+/// `<store>/scratch/`, where the slot's watcher is already looking, and
+/// nothing else is touched: no deck, no aim, no channel. So the worker reads
+/// it, compiles it off the render thread, swaps it at a frame boundary and
+/// rolls it back on its own if it cannot hold the budget — which is
+/// [`loading`]'s argument met from the other end, and
+/// `docs/adr/0228-a-library-load-re-points-the-slots-source-and-never-installs-a-set.md`
+/// is where it is written down. Nothing is installed.
+///
+/// **The version it replaces is kept by the same act.** The watcher snapshots
+/// at its compile-success point
+/// (`docs/adr/0089-history-is-gated-on-compiling-not-on-landing.md`), so what
+/// was on the node before this write is the next row of the very listing the
+/// press came off — a landing you did not mean is itself undoable.
+///
+/// # Finding the file again, and why no path crosses the seam
+///
+/// The console says a **name** — [`version_row`]'s spelling, the one it was
+/// handed — and this re-asks `history::list` and rebuilds that spelling per
+/// candidate to find the row. That is `SetTransfer::Take`'s arrangement
+/// exactly: *"the panel's route re-asks the listing and finds the row by the
+/// word that was pressed, so no surface spells a path"*.
+///
+/// **Which node the file is is asked of the aim rather than of the launch
+/// copies.** `mcp::Slots` is built here out of what each watcher is *pointed
+/// at* — `Aiming::at` — so the answer follows a library load, where the one
+/// this program hands the MCP server is the pair each slot was materialised
+/// with at startup. `Slots::file` is the one walk that turns
+/// `(slot, layer, index)` into a file, and it is asked rather than repeated.
+///
+/// # Five refusals, and each says where the deck is still pointed
+///
+/// A slot the deck has not got, a deck playing no Set at all, a version that
+/// is not one of that Set's, a node the deck does not hold, and a file that is
+/// gone or will not be written. `rm -rf history/2026/07` is this store's whole
+/// retention policy, so the fourth is an ordinary state of a working store and
+/// the sentence names the file rather than calling it damaged
+/// ([P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md)).
+fn restored(gfx: &Gfx, operation: &Operation) -> Option<String> {
+    let Operation::RestoreProcedure { deck, revision } = operation else {
+        return None;
+    };
+    let picked = match revision {
+        karakuri_operation::Revision::Picked(name) => name,
+        // **The staging lane's one step back, and nothing on this panel asks
+        // for it.** Said rather than dropped: an arm that answered `None` here
+        // would be a press performed by nobody, and this program is where the
+        // page's `has` badge is checked.
+        karakuri_operation::Revision::Previous(node) => {
+            return Some(format!(
+                "  put back: a node's *previous* version is the staging lane's route and \
+                 nothing on this panel asks for it, so {:?}:{} on deck {} was not put back",
+                node.layer,
+                node.index,
+                deck_letter(*deck),
+            ));
+        }
+    };
+    let slot = usize::from(*deck);
+    let letter = deck_letter(*deck);
+    let count = gfx.engine.aimed.len();
+    let Some(aiming) = gfx.engine.aimed.get(slot) else {
+        return Some(format!(
+            "  put back: deck {letter} refused — this deck has {count} slot{}, so `{picked}` \
+             has nowhere to land",
+            match count {
+                1 => "",
+                _ => "s",
+            }
+        ));
+    };
+    let Some(id) = aiming.at.set.as_deref() else {
+        return Some(format!(
+            "  put back: deck {letter} is playing the pair this run was launched with rather \
+             than a Set, so it has no history to put `{picked}` back from — load a Set onto \
+             that deck first; nothing moved"
+        ));
+    };
+    // **Built out of the aims and not out of the launch copies**, which is
+    // this function's own head: `Aiming::at` is where each watcher is pointed
+    // *now*, so a slot that has had a Set loaded onto it resolves to that
+    // Set's scratch files.
+    let slots = karakuri_environment::mcp::Slots(
+        gfx.engine
+            .aimed
+            .iter()
+            .map(|aiming| {
+                (
+                    aiming.at.head.path.clone(),
+                    aiming
+                        .at
+                        .rest
+                        .iter()
+                        .map(|node| node.path.clone())
+                        .collect(),
+                )
+            })
+            .collect(),
+    );
+    Some(put_back(&gfx.store, slot, letter, id, picked, &slots))
+}
+
+/// **The half of [`restored`] that reaches a disk**, split out for the reason
+/// [`seeded`] is a free function: `main` cannot be entered from a test, a
+/// `Gfx` cannot be built without a device, and what this does is worth
+/// asserting — it writes over the file a deck is playing from.
+///
+/// Everything it needs is an argument: the store to walk, the slot and its
+/// letter, the Set the slot is running, the row that was pressed, and where
+/// that slot's nodes are ([`karakuri_environment::mcp::Slots`], built by the
+/// caller out of the aims). The three refusals here are the three that are
+/// about **files** — a version that is not in the listing, a node this slot
+/// does not hold, and a file that will not be read or written — where the two
+/// about the *deck* are the caller's and are answered before this is reached.
+fn put_back(
+    store: &std::path::Path,
+    slot: usize,
+    letter: &str,
+    id: &str,
+    picked: &str,
+    slots: &karakuri_environment::mcp::Slots,
+) -> String {
+    let found = match karakuri_environment::history::list(store, HISTORY_MOST) {
+        Ok(found) => found,
+        Err(why) => {
+            return format!(
+                "  put back: the edit history could not be read: {why} — nothing moved, and \
+                 what is on deck {letter} is still running"
+            );
+        }
+    };
+    let Some(version) = found
+        .versions
+        .iter()
+        // **`Some(id)` and never `None`**, which is [`walked`]'s filter said
+        // again where it decides what is written rather than what is drawn: a
+        // version filed under no Set is a version of nothing, and landing one
+        // because a `None` read as a wildcard would put another run's edit on
+        // a deck.
+        .filter(|version| version.set.as_deref() == Some(id))
+        .find(|version| version_row(version) == picked)
+    else {
+        return format!(
+            "  put back: `{picked}` is not one of `{id}`'s versions in the last {HISTORY_MOST} \
+             this store wrote — a day directory an operator deleted by hand is the ordinary \
+             way that happens, since `rm -rf history/YYYY/MM` is the whole of the retention \
+             policy; nothing moved, and deck {letter} is still playing `{id}`"
+        );
+    };
+    let source = match std::fs::read(&version.file) {
+        Ok(source) => source,
+        Err(e) => {
+            return format!(
+                "  put back: {}: {e} — the row is a name and the file behind it is gone, so \
+                 nothing moved and deck {letter} is still playing `{id}`",
+                version.file.display()
+            );
+        }
+    };
+    let target = match slots.file(slot, version.layer, version.index) {
+        Ok(path) => path.clone(),
+        Err(why) => {
+            return format!(
+                "  put back: deck {letter} does not hold the node `{picked}` was a version \
+                 of — {why}; `{id}` has been edited since, or this version came off another \
+                 slot. Nothing moved."
+            );
+        }
+    };
+    match std::fs::write(&target, &source) {
+        Ok(()) => format!(
+            "  put back: deck {letter} {}:{} <- `{picked}` -> written into {}; the worker \
+             builds it and the budget judges it, and the version it replaces is kept because \
+             the rebuild compiles it",
+            version.layer,
+            version.index,
+            target.display()
+        ),
+        Err(e) => format!(
+            "  put back: {}: {e} — nothing moved, and what is on deck {letter} is still \
+             running",
+            target.display()
+        ),
+    }
+}
+
 /// **The record, applied to the deck**, and what to say about it.
 ///
 /// **This is not the half ADR-0185 promised to delete, and it did not go with
@@ -11689,6 +12182,14 @@ impl App {
                     if let Some(line) = played(gfx, operation) {
                         println!("{line}");
                     }
+                    // **A version put back, performed where the load beside it
+                    // is.** `written` answers `Silent(OnLanding)` for it — the
+                    // `Record::Procedure` is written at the swap, by the same
+                    // path a save takes — so what this file owes is the write
+                    // into the scratch and nothing else. See [`restored`].
+                    if let Some(line) = restored(gfx, operation) {
+                        println!("{line}");
+                    }
                     // **The transition row's three settings, performed on the
                     // console's own pointer**, and it is here for the reason
                     // the selection is one line up: `Operation::SetTransition`
@@ -12021,6 +12522,12 @@ impl ApplicationHandler for App {
                 &self.store,
                 self.presets.as_ref(),
                 self.folder.as_deref(),
+                // **No Set, and it is the answer rather than a value not to
+                // hand**: every slot launches on the pair the command line
+                // settled, so nothing is running a Set until somebody loads
+                // one (ADR-0304), and the mark is on `all` two lines up
+                // either way.
+                None,
             )
         );
         // **And the arrangement pill's menu, once for the run**, for
@@ -12142,6 +12649,7 @@ impl ApplicationHandler for App {
             if let Some(gfx) = self.gfx.as_mut() {
                 self.keeping.requests(&mut gfx.engine, &self.store);
                 if self.keeping.finished_saves() {
+                    let running = aimed_set(gfx, &self.readout.view);
                     println!(
                         "{}",
                         listing(
@@ -12149,6 +12657,7 @@ impl ApplicationHandler for App {
                             &self.store,
                             self.presets.as_ref(),
                             self.folder.as_deref(),
+                            running.as_deref(),
                         )
                     );
                 }
@@ -12342,6 +12851,11 @@ impl ApplicationHandler for App {
                             | Operation::SetFavourite { .. }
                     ))
                 ) {
+                    // **Whose history, read before the listing is rewritten**:
+                    // a scope press can be the one that marks `history`, and
+                    // what that scope lists is the Set the load pulldown's deck
+                    // is running (`aimed_set`).
+                    let running = aimed_set(gfx, &self.readout.view);
                     println!(
                         "{}",
                         listing(
@@ -12349,6 +12863,7 @@ impl ApplicationHandler for App {
                             &self.store,
                             self.presets.as_ref(),
                             self.folder.as_deref(),
+                            running.as_deref(),
                         )
                     );
                 }
@@ -12805,6 +13320,10 @@ impl ApplicationHandler for App {
                     // on a frame (P-0091).
                     Key::Character("e") => {
                         if self.readout.view.step_scope() {
+                            // Whose history, for the press branch's reason:
+                            // `e` is the key that steps onto the `history`
+                            // chip as readily as the pointer names it.
+                            let running = aimed_set(gfx, &self.readout.view);
                             println!(
                                 "{}",
                                 listing(
@@ -12812,6 +13331,7 @@ impl ApplicationHandler for App {
                                     &self.store,
                                     self.presets.as_ref(),
                                     self.folder.as_deref(),
+                                    running.as_deref(),
                                 )
                             );
                         }
@@ -12895,7 +13415,18 @@ impl ApplicationHandler for App {
                     Key::Character("l") => {
                         let deck = self.readout.view.selection();
                         let at = self.readout.view.cursor_row();
-                        let row = self.readout.view.library.get(at).cloned();
+                        // **The Sets, which is empty under `history`**: a row
+                        // of that scope is a version and this key loads a Set,
+                        // so the arm below names it rather than this line
+                        // handing a word no store holds to a load
+                        // (`view::View::sets`).
+                        let row = self.readout.view.sets().get(at).cloned();
+                        // Whose history, for `why_nothing`'s `history` arm —
+                        // which this key cannot reach, because the arm below
+                        // answers that scope first, and which is passed anyway
+                        // because a sentence chosen by a caller is a sentence
+                        // that can be chosen wrongly.
+                        let running = aimed_set(gfx, &self.readout.view).is_some();
                         // **What the take-in half of this press asked for**,
                         // where a press that took nothing in leaves it
                         // `Repaint::Never` — see the preset arm below for why
@@ -12995,6 +13526,23 @@ impl ApplicationHandler for App {
                                     }
                                 }
                             }
+                            // **A row of `history` is a version and not a
+                            // Set**, so this key has nothing to load and says
+                            // so rather than falling through to the sentence
+                            // below, which would report a listing as empty
+                            // while it is drawing rows. What lands a version is
+                            // a press on the row itself —
+                            // `Operation::RestoreProcedure`, on the deck the
+                            // load pulldown names rather than on the selection.
+                            (Some(Scope::History), _) => {
+                                println!(
+                                    "  load: `history` lists the versions of a Set rather than \
+                                     Sets, so there is nothing here for `l` to load — press a \
+                                     row to put that version back on its node, or mark `all` \
+                                     and load a Set"
+                                );
+                                Acted::Nothing
+                            }
                             // A row of `all` or of `my sets`, which is a Set
                             // this store already holds and is the route
                             // ADR-0228 built.
@@ -13018,7 +13566,8 @@ impl ApplicationHandler for App {
                                         None => "the library",
                                     },
                                     match scope {
-                                        Some(scope) => why_nothing(scope, self.folder.is_some()),
+                                        Some(scope) =>
+                                            why_nothing(scope, self.folder.is_some(), running),
                                         None => "this console was handed no scopes at all",
                                     }
                                 );
@@ -13308,6 +13857,7 @@ impl ApplicationHandler for App {
                 // the frame for the reason written there.
                 self.keeping.requests(&mut gfx.engine, &self.store);
                 if self.keeping.finished_saves() {
+                    let running = aimed_set(gfx, &self.readout.view);
                     // **The one thing in this program that adds a Set**, so the
                     // bay that lists them is re-read on the frame it landed —
                     // and only on that frame. A directory read is not a thing to
@@ -13321,6 +13871,7 @@ impl ApplicationHandler for App {
                             &self.store,
                             self.presets.as_ref(),
                             self.folder.as_deref(),
+                            running.as_deref(),
                         )
                     );
                 }
@@ -15674,6 +16225,172 @@ mod tests {
         std::fs::remove_dir_all(&root).expect("clean up");
     }
 
+    /// **A version, written where `history::list` reads them.**
+    ///
+    /// The name is `Snapshots::record`'s own — a `HHMMSS-mmm` stamp, the slot,
+    /// the layer with its index where it is not the first, the procedure name,
+    /// and `@<set>` where there was a Set — and it is spelled here rather than
+    /// recorded through that type because what these tests are about is the
+    /// *reading*: a version filed under a Set, one filed under none, and the
+    /// difference between them.
+    fn version_file(root: &std::path::Path, day: &str, name: &str, body: &str) {
+        let dir = root.join("history").join(day);
+        std::fs::create_dir_all(&dir).expect("a day directory");
+        std::fs::write(dir.join(name), body).expect("a version");
+    }
+
+    /// **The `history` scope lists the versions of the Set the load pulldown's
+    /// deck is running, and a version filed under no Set is not one of them.**
+    ///
+    /// That last clause is the one ADR-0276 wrote down and ADR-0308 had to
+    /// obey: *"a narrowing must treat a `None` row as matching no Set rather
+    /// than as a wildcard."* A run launched on a pair somebody typed files
+    /// every version it writes under none, so a wildcard would put the whole of
+    /// that run's editing under whatever Set the operator loaded afterwards —
+    /// silently, in a bay whose rows are names.
+    ///
+    /// **And a deck running nothing lists nothing**, with the sentence saying
+    /// which nothing it is. A CPU test: `listing` reaches a disk and no device.
+    #[test]
+    fn a_history_listing_is_one_sets_versions_and_a_none_row_is_nobodys() {
+        let root = scratch_dir("history-listing");
+        std::fs::create_dir_all(&root).expect("a store root");
+        version_file(
+            &root,
+            "2026/09/08",
+            "143052-271_slot0_L4_beat_strokes@x.kir",
+            "kind L4\n",
+        );
+        version_file(
+            &root,
+            "2026/09/08",
+            "142930-004_slot0_L1_drift_shell@x.kir",
+            "kind L1\n",
+        );
+        // **Under no Set at all**, which is the row that must not match.
+        version_file(
+            &root,
+            "2026/09/08",
+            "142800-000_slot1_L4_soft_points.kir",
+            "kind L4\n",
+        );
+        // **And under another Set**, so that *narrowed to `x`* is a claim with
+        // something to be wrong about.
+        version_file(
+            &root,
+            "2026/09/07",
+            "235959-999_slot2_L4_other_thing@y.kir",
+            "kind L4\n",
+        );
+
+        let mut view = View::new(karakuri_console::room::Room::Day);
+        view.scopes = Scope::ALL.to_vec();
+        assert!(view.select_scope(Scope::History), "the mark did not move");
+
+        let said = listing(&mut view, &root, None, None, Some("x"));
+        assert_eq!(
+            view.library,
+            vec![
+                "20260908-143052-271_slot0_L4_beat_strokes".to_owned(),
+                "20260908-142930-004_slot0_L1_drift_shell".to_owned(),
+            ],
+            "the walk listed {:?} — a row of another Set, or a row filed under none, was \
+             treated as one of `x`'s",
+            view.library
+        );
+        assert!(
+            said.contains("history") && said.contains('2'),
+            "the line does not say what the scope listed: {said}"
+        );
+
+        // **A deck running the pair the run launched with**, which is every
+        // deck of a fresh run: the versions under `None` are exactly the rows
+        // this would list if a `None` matched anything, so an empty listing
+        // here is the same claim as above read from the other side.
+        let said = listing(&mut view, &root, None, None, None);
+        assert!(
+            view.library.is_empty(),
+            "a deck running no Set listed {:?}",
+            view.library
+        );
+        assert!(
+            said.contains("typed pair"),
+            "the line does not say why the scope is empty: {said}"
+        );
+
+        std::fs::remove_dir_all(&root).expect("clean up");
+    }
+
+    /// **A landing writes the version's bytes over the node's working copy, and
+    /// a file that is gone is refused by name.**
+    ///
+    /// The write is the whole of what a landing does on this side: nothing
+    /// touches a deck, nothing sends an aim, and the watcher already looking at
+    /// that file is what builds it — ADR-0228's argument met from the other
+    /// end. So what this asserts is the **bytes** and the **path**: the file
+    /// the version was of, resolved through the slot's own nodes rather than
+    /// through the copies the run launched with.
+    ///
+    /// **The refusal names the file**, because `rm -rf history/2026/07` is this
+    /// store's whole retention policy: a row whose file an operator deleted by
+    /// hand is an ordinary state, and P-0083 says a refusal carries what the
+    /// next attempt needs.
+    ///
+    /// A CPU test: [`put_back`] takes a store, a slot and a `Slots`, and no
+    /// device.
+    #[test]
+    fn a_landing_writes_the_versions_bytes_over_the_nodes_working_copy() {
+        let root = scratch_dir("history-landing");
+        let scratch = root.join(karakuri_environment::scratch::DIR);
+        std::fs::create_dir_all(&scratch).expect("a scratch");
+        let head = scratch.join("A0-drift_shell.kir");
+        let rest = scratch.join("A1-soft_points.kir");
+        std::fs::write(&head, "kind L1\n// what is playing\n").expect("the head");
+        std::fs::write(&rest, "kind L4\n// what is playing\n").expect("the renderer");
+        let slots = karakuri_environment::mcp::Slots(vec![(head.clone(), vec![rest.clone()])]);
+
+        version_file(
+            &root,
+            "2026/09/08",
+            "143052-271_slot0_L4_soft_points@x.kir",
+            "kind L4\n// the version an operator picked\n",
+        );
+        let picked = "20260908-143052-271_slot0_L4_soft_points";
+
+        let said = put_back(&root, 0, "A", "x", picked, &slots);
+        assert!(
+            said.contains(&rest.display().to_string()),
+            "the line does not name the file it wrote: {said}"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&rest).expect("the renderer's working copy"),
+            "kind L4\n// the version an operator picked\n",
+            "the version's bytes are not what the node is playing from"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&head).expect("the head's working copy"),
+            "kind L1\n// what is playing\n",
+            "landing on the L4 wrote over the L1 as well"
+        );
+
+        // **The file behind the row is gone**, which is the retention policy
+        // being used: the name is still in nothing this program keeps, so the
+        // walk is re-asked and the row is simply not there.
+        std::fs::remove_dir_all(root.join("history")).expect("the operator's own `rm -rf`");
+        let said = put_back(&root, 0, "A", "x", picked, &slots);
+        assert!(
+            said.contains(picked) && said.contains("nothing moved"),
+            "a landing on a version that is gone did not say so: {said}"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&rest).expect("the renderer's working copy"),
+            "kind L4\n// the version an operator picked\n",
+            "a refused landing wrote something"
+        );
+
+        std::fs::remove_dir_all(&root).expect("clean up");
+    }
+
     /// A temporary directory of this test's own, named after the test that
     /// wants it — the shape every other CPU test in this file uses.
     pub(crate) fn scratch_dir(what: &str) -> std::path::PathBuf {
@@ -16158,7 +16875,7 @@ mod tests {
         // the mark *moved*, and a console handed this row is already on it.
         assert_eq!(view.scope(), Some(Scope::AllSets));
 
-        let said = listing(&mut view, &root, Some(&presets), None);
+        let said = listing(&mut view, &root, Some(&presets), None, None);
         assert_eq!(view.library, vec!["night01".to_owned()]);
         assert!(said.contains("all") && said.contains('1'), "{said}");
 
@@ -16166,7 +16883,7 @@ mod tests {
         // (ADR-0299): the store holds a Set and the operator has not chosen
         // it, so the subset is empty for an answer rather than for an absence.
         assert!(view.select_scope(Scope::MySets));
-        let said = listing(&mut view, &root, Some(&presets), None);
+        let said = listing(&mut view, &root, Some(&presets), None, None);
         assert!(
             view.library.is_empty(),
             "`my sets` listed {:?} and nothing has been starred",
@@ -16188,7 +16905,7 @@ mod tests {
             .is_some(),
             "`favourite` answered nothing for a `SetFavourite`"
         );
-        let said = listing(&mut view, &root, Some(&presets), None);
+        let said = listing(&mut view, &root, Some(&presets), None, None);
         assert_eq!(view.library, vec!["night01".to_owned()], "{said}");
         assert!(
             view.starred.contains("night01"),
@@ -16209,7 +16926,7 @@ mod tests {
 
         assert!(view.select_scope(Scope::Presets));
         assert_eq!(view.scope(), Some(Scope::Presets));
-        let said = listing(&mut view, &root, Some(&presets), None);
+        let said = listing(&mut view, &root, Some(&presets), None, None);
         assert!(
             view.library.iter().any(|id| id == "beat_cloud"),
             "the `presets` scope lists {:?}",
@@ -16224,7 +16941,7 @@ mod tests {
         // which is `a_folder_dropped_on_the_window_points_the_bay_at_it`.
         for scope in [Scope::MySets, Scope::Folder] {
             assert!(view.select_scope(scope));
-            let said = listing(&mut view, &root, Some(&presets), None);
+            let said = listing(&mut view, &root, Some(&presets), None, None);
             assert!(
                 view.library.is_empty(),
                 "`{}` listed {:?}, and nothing in this run put a row there",
@@ -16232,14 +16949,14 @@ mod tests {
                 view.library
             );
             assert!(
-                said.contains(scope.name()) && said.contains(why_nothing(scope, false)),
+                said.contains(scope.name()) && said.contains(why_nothing(scope, false, false)),
                 "`{}` lists nothing and says `{said}`",
                 scope.name()
             );
         }
         assert_ne!(
-            why_nothing(Scope::MySets, false),
-            why_nothing(Scope::Folder, false),
+            why_nothing(Scope::MySets, false, false),
+            why_nothing(Scope::Folder, false, false),
             "the two scopes that answer nothing are empty for two different reasons and this \
              program gives one sentence for both"
         );
@@ -16247,13 +16964,13 @@ mod tests {
         // that is empty and a scope that is broken: `my sets` is the starred
         // subset, so the way to fill it is a star and the sentence names one.
         assert!(
-            why_nothing(Scope::MySets, false).contains("star"),
+            why_nothing(Scope::MySets, false, false).contains("star"),
             "the `my sets` sentence does not say what fills it: {}",
-            why_nothing(Scope::MySets, false)
+            why_nothing(Scope::MySets, false, false)
         );
         assert_ne!(
-            why_nothing(Scope::AllSets, false),
-            why_nothing(Scope::MySets, false),
+            why_nothing(Scope::AllSets, false, false),
+            why_nothing(Scope::MySets, false, false),
             "a store nobody has saved into and a store nobody has starred in are given one \
              sentence"
         );
@@ -16263,18 +16980,18 @@ mod tests {
         // narrow what a store already holds, and which store is asked at all
         // never was the operation's. What the sentence owes now is the way in.
         assert!(
-            why_nothing(Scope::Folder, false).contains("drag")
-                && why_nothing(Scope::Folder, false).contains("dropped"),
+            why_nothing(Scope::Folder, false, false).contains("drag")
+                && why_nothing(Scope::Folder, false, false).contains("dropped"),
             "the `folder` sentence does not say how a directory is chosen: {}",
-            why_nothing(Scope::Folder, false)
+            why_nothing(Scope::Folder, false, false)
         );
         // **And a folder that *has* been pointed somewhere is a third kind of
         // nothing**, which is the sentence that arrived with the drop: an
         // empty scope for want of a gesture and one for want of a Set file in
         // the directory are the same drawing and not the same fact.
         assert_ne!(
-            why_nothing(Scope::Folder, false),
-            why_nothing(Scope::Folder, true),
+            why_nothing(Scope::Folder, false, false),
+            why_nothing(Scope::Folder, true, false),
             "a folder nobody has pointed anywhere and a folder holding no Set are given one \
              sentence"
         );
@@ -16359,7 +17076,7 @@ mod tests {
         assert_eq!(folder.as_deref(), Some(empty.as_path()));
         assert!(view.library.is_empty(), "{:?}", view.library);
         assert!(
-            said.contains(why_nothing(Scope::Folder, true)),
+            said.contains(why_nothing(Scope::Folder, true, false)),
             "a folder holding no Set said `{said}`"
         );
         // **The chip is marked on this one too**, and the sentence says so:
@@ -19412,7 +20129,7 @@ mod tests {
 
         // Unnarrowed: both Sets, and the candidates are what their nodes are
         // called — sorted, deduplicated, and read off the *unfiltered* listing.
-        let said = listing(&mut view, &root, None, None);
+        let said = listing(&mut view, &root, None, None, None);
         assert_eq!(view.library.len(), 2, "the bay lists {:?}", view.library);
         assert_eq!(
             view.holds,
@@ -19424,7 +20141,7 @@ mod tests {
 
         // Narrowed by what a node is called.
         assert!(view.narrow(Some("drift_shell"), None));
-        let said = listing(&mut view, &root, None, None);
+        let said = listing(&mut view, &root, None, None, None);
         assert_eq!(view.library, vec!["night01".to_owned()], "{said}");
         assert!(
             said.contains("1 of 2") && said.contains("drift_shell"),
@@ -19434,7 +20151,7 @@ mod tests {
         // And by which layer a Set uses, which is the other half of the row and
         // is answered against the whole Set rather than against one node.
         assert!(view.narrow(None, Some(Layer::L4)));
-        let said = listing(&mut view, &root, None, None);
+        let said = listing(&mut view, &root, None, None, None);
         assert_eq!(view.library, vec!["veil02".to_owned()], "{said}");
         assert!(said.contains("L4"), "{said}");
 
@@ -19442,11 +20159,11 @@ mod tests {
         // store**, and the line says which: the store is not empty, and what to
         // do about it is press a field rather than save a Set.
         assert!(view.narrow(Some("drift_shell"), Some(Layer::L4)));
-        let said = listing(&mut view, &root, None, None);
+        let said = listing(&mut view, &root, None, None, None);
         assert!(view.library.is_empty(), "the bay lists {:?}", view.library);
         assert!(
             said.contains("none of the 2 Sets here")
-                && !said.contains(why_nothing(Scope::AllSets, false)),
+                && !said.contains(why_nothing(Scope::AllSets, false, false)),
             "{said}"
         );
 
@@ -19465,10 +20182,10 @@ mod tests {
         )
         .expect("`favourite` answered nothing for a `SetFavourite`");
         assert!(view.select_scope(Scope::MySets));
-        let said = listing(&mut view, &root, None, None);
+        let said = listing(&mut view, &root, None, None, None);
         assert_eq!(view.library, vec!["night01".to_owned()], "{said}");
         assert!(view.narrow(None, Some(Layer::L4)));
-        let said = listing(&mut view, &root, None, None);
+        let said = listing(&mut view, &root, None, None, None);
         assert!(
             view.library.is_empty(),
             "`my sets` lists {:?} under a filter that names the Set that is not starred",
@@ -21954,7 +22671,16 @@ mod press_handler {
         // so that the smaller box wins — the same derivation again, told apart
         // from the row below it by the call.
         ("the Library bay's stars", "library_bay(", &["bay.starred("]),
-        ("the Library bay's list", "library_bay(", &["bay.take("]),
+        // **The list's row names two calls**, because one rectangle means two
+        // things: a press on a library row takes a Set in hand and a press on
+        // a `history` row lands that version on its node. They are one control
+        // in `input::PROBES` for the reason the load's two capsules are one
+        // there — one derivation, one press — and the handler owes both.
+        (
+            "the Library bay's list",
+            "library_bay(",
+            &["bay.take(", "bay.land("],
+        ),
         // **The four class pills**, one derivation asked four times: they are
         // in four different regions and cannot be one laid-out box, but they
         // are one type and one question.

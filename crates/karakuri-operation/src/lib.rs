@@ -207,6 +207,45 @@ pub struct NodeAt {
     pub index: u32,
 }
 
+/// **Which version [`Operation::RestoreProcedure`] puts back**, and the two
+/// arms are the two things a surface can say rather than two features.
+///
+/// **A surface says the half it holds**
+/// ([ADR-0192](../../docs/adr/0192-an-operation-asks-for-what-a-surface-can-say-and-the-record-stays-whole.md)).
+/// A staging lane row is a node with one unsettled version on it: it names the
+/// node and means *the one this replaced*, and it holds no listing to pick a
+/// row out of. A row of the Library bay's `history` scope is a version the
+/// operator picked out of a listing, and what that row carries is the name the
+/// store filed it under.
+///
+/// **One enum rather than a `version: Option<String>` beside the `node`.**
+/// That shape can say a node and a version at once, and the two can then
+/// disagree — a version of `L4:0` addressed to `L2:1` is a payload with two
+/// answers to *which node*, and the one that would win is whichever the
+/// performer read. Here the address is inside the arm that owns it, and a
+/// disagreement cannot be spelled.
+///
+/// **Neither arm is a path.** A path may sit in a payload only where every
+/// route that fills it derives it from something the program itself produced,
+/// and no surface here spells one: a walk's row is a *name*, matched back
+/// against the listing that produced it, exactly as `SetTransfer::Take`'s file
+/// is found again by the word that was pressed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Revision {
+    /// **The version this node's present source replaced.** One step, and
+    /// never a cursor — walking further is [`Operation::WalkHistory`].
+    Previous(NodeAt),
+    /// **A version an operator picked out of a walk**, by the name the store
+    /// filed it under — `20260908-143052-271_slot0_L4_beat_strokes`.
+    ///
+    /// **The name is the node's address as well as the moment**, because that
+    /// is how a version is filed
+    /// (`docs/adr/0276-a-versions-set-id-goes-in-the-snapshots-name-and-a-run-without-one-writes-none.md`),
+    /// so this arm needs no [`NodeAt`] beside it and a second spelling of the
+    /// address is not invented here.
+    Picked(String),
+}
+
 /// Which parameter of a deck's Set.
 ///
 /// **`node` absent is a wildcard, not node 0** — every node of the Set that
@@ -1420,27 +1459,32 @@ operations! {
     /// Send a Set to somebody, and take one in.
     TransferSet { transfer: SetTransfer } => "Send a Set to somebody, and take one in",
 
-    /// **Every compile writes into the store's history, and there is a reader
-    /// for it now.**
+    /// **The listing, and the Library bay draws it**: a fifth scope chip whose
+    /// rows are the versions of one Set, most recent first, off
+    /// `karakuri_environment::history::list`.
     ///
-    /// **Still undecided, and one of the two reasons this used to give has
-    /// stopped being true.** *The store has no reader* was the first of them
-    /// and it is false: `karakuri_environment::history::list` reads
-    /// `<store>/history/` back, most recent first, and every row carries the
-    /// node it was a version of and the Set the slot was running when it was
-    /// written — so the rows a walk would step through are readable today, and
-    /// so is the narrowing to one Set that makes a walk about something.
+    /// **Landing on a row is not this operation.** It is
+    /// [`Operation::RestoreProcedure`], which carries a [`Revision`] now that a
+    /// surface can name one. This row is the walk, and the page says so: *what
+    /// versions has this had* is a list, landing on one is a load, and neither
+    /// word is *undo*.
     ///
-    /// **What is missing is the other half: no surface has a control**, and the
-    /// manual's own row marks all four routes empty. A walk needs a cursor and
-    /// a direction, or a revision to land on, or a count of steps, and the
-    /// answer among those is *a revision to land on*, because a row is what an
-    /// operator picks. It is not written into the payload here, because a
-    /// payload is what a surface can say
-    /// ([ADR-0192](../../../docs/adr/0192-an-operation-asks-for-what-a-surface-can-say-and-the-record-stays-whole.md))
-    /// and no surface can say a revision yet. Naming the operation is what this
-    /// row is for; giving it fields ahead of the control that fills them would
-    /// be designing undo here.
+    /// **The payload is still [`Undecided`], and the three shapes it was
+    /// choosing between are answered rather than open.** A cursor and a
+    /// direction is the console's own mark, which has no row on the page at
+    /// all; a count of steps is something no surface offers; and a revision to
+    /// land on is the landing's, where it now is. What is left for a walk to
+    /// carry is *which history*, and that is the one thing no surface spells.
+    ///
+    /// **A walk is narrowed by a Set and not by a deck**, which is why the
+    /// deck the panel can say is not the answer either: two decks running one
+    /// Set have one history between them, and a version is filed under the Set
+    /// the slot was running
+    /// (`docs/adr/0304-the-set-a-version-is-filed-under-rides-the-aim-that-re-points-the-slot.md`).
+    /// The id rides the aim, so it is the host's answer and never a surface's —
+    /// which is [`Operation::ListSets`]'s own division read on a history:
+    /// *which* store is being asked at all is the scope's question and never
+    /// that operation's payload.
     WalkHistory { step: Undecided } => "Walk the edit history",
 
     // ----- Procedures ---------------------------------------------------
@@ -1506,9 +1550,12 @@ operations! {
     /// most wants back, a real attempt that was rolled back for cost, is
     /// exactly the one that is there.
     ///
-    /// **One step, and never a cursor.** Back to the version this one
-    /// replaced. Walking further is [`Operation::WalkHistory`] and needs the
-    /// address that row says nobody has settled.
+    /// **Which version is a [`Revision`], because two surfaces can ask and
+    /// each says a different half.** A staging lane row names the node and
+    /// means the version its source replaced — one step, never a cursor. A row
+    /// of the Library bay's `history` scope names the version itself, and that
+    /// name carries the node with it. Walking the versions is
+    /// [`Operation::WalkHistory`], which is the listing this picks out of.
     ///
     /// **Not [`Operation::WriteProcedure`] carrying that file's text, and the
     /// reason is the surface.** A write takes a `source: String` because
@@ -1527,7 +1574,7 @@ operations! {
     /// session in which the operator put a version back and that replayed with
     /// the version they threw away is the hole `Record::Procedure` was added
     /// to close.
-    RestoreProcedure { deck: u8, node: NodeAt } => "Put a node's previous version back",
+    RestoreProcedure { deck: u8, revision: Revision } => "Put a node's previous version back",
 
     // ----- Arranging the console ----------------------------------------
 

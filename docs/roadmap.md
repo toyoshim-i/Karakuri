@@ -250,9 +250,9 @@ panel column, both of which move on their own.
 What the range assumed and excluded went to the sub-milestones that own it: the two undrawn bays
 to M5.8 and M5.9, the pointer decision to M5.11, M4's thumbnail judgement to M5.3, a second `Sink`
 to M5.6, and the sequencer's producer to M5.9. Of the five `Undecided` operations, *choosing where
-the frame goes* is M5.6's and *the camera* is M5.5's; *walking the edit history* is M5.3's and left
-the no-home section; and *moving a boundary* and *"edit the file instead"* carry no `plan` badge in either
-column and are in no sub-milestone. The arena's insert and remove is above.
+the frame goes* is M5.6's and *the camera* is M5.5's; *walking the edit history* is M5.3's, is
+built, and left the no-home section; and *moving a boundary* and *"edit the file instead"* carry no
+`plan` badge in either column and are in no sub-milestone. The arena's insert and remove is above.
 
 #### M5.1 — Program — **closed**
 
@@ -311,11 +311,13 @@ Inspector's pane head rather than in this bay, because a press has to say *which
 head can where a key cannot (ADR-0287). It is one of this bay's rows by the page's own grouping and
 another bay's control, which is this exit rule's one defect and is worth knowing before counting
 badges here. *Send a Set to somebody* is what
-this milestone is blocked on, below. ***Walk the edit history* is the third, and it left *Rows the
-manual has not given a home* to get here** — that list holds it on the reading that it is undo, a
-surface over the store's history files and a later milestone. It is not undo. It is a listing of the
-versions a Set has had and a load of the one you pick, which is this bay's shape and nothing else:
-the Library already lists, already reads, and already loads. What that costs is below.
+this milestone is blocked on, below, and it is the **one** row of this bay still carrying a `plan`.
+***Walk the edit history* was the third and it is built**, on 2026-09-08: it left *Rows the manual
+has not given a home* on the reading that it is undo, and it is not undo — it is a listing of the
+versions a Set has had and a load of the one you pick, which is this bay's shape and nothing else.
+The control is a fifth scope chip and the landing is a press on a row
+([ADR-0308](adr/0308-the-library-bays-fifth-chip-walks-one-sets-history-and-a-row-lands-that-version-on-a-node.md)),
+and task 2 below is what it cost.
 
 ***Read what one Set holds and declares* is `has`**, on 2026-09-06. The bay opens a reading under
 the cursor's row and it follows the cursor: every published key with its range and default, the
@@ -364,9 +366,11 @@ time, the keyboard whole while it is open. So the deferral is spent and the ques
 which neither is. ADR-0262's decision stands as the first cut until somebody answers it.
 
 **Exit.** No `plan` badge in the panel column of this bay's rows on
-[every operation](manual/operations.html).
+[every operation](manual/operations.html). **One is left**, on 2026-09-08: *Send a Set to somebody,
+and take one in*, reading `library`. *Walk the edit history* was the other and its badge moved to
+`has` with ADR-0308.
 
-**Blocked on. Two rows, and one of them on a decision.**
+**Blocked on. One row, and it is on a gesture rather than a decision.**
 
 - ***Send a Set to somebody* waits on the gesture, and nothing else.** Where it lands is ADR-0267's
   (the folder the bay is pointed at), what it writes is ADR-0231's (a `.kbset` with every source
@@ -376,13 +380,13 @@ which neither is. ADR-0262's decision stands as the first cut until somebody ans
   are a third pill in the bay's foot beside `read` and the `load` button, reading its destination
   the way the load's pulldown reads its deck (ADR-0305); or a drag from a row onto the `.path` row. **The other half of the row
   is built**: a press on a `presets` or `folder` row takes that Set in.
-- ***Walk the edit history* has a history to read, and waits on the control.** The lister is
-  `history::list`, and a panel run writes into `<store>/history/` now: one `Snapshots` for the run,
+- ***Walk the edit history* is built and is no longer blocked on anything.** The lister is
+  `history::list`, and a panel run writes into `<store>/history/`: one `Snapshots` for the run,
   seeded before the window from the files each deck is about to play and handed to every slot's
   watcher, with the Set a version is filed under carried on the aim a library load sends
   ([ADR-0304](adr/0304-the-set-a-version-is-filed-under-rides-the-aim-that-re-points-the-slot.md)).
-  The writing was M5.10's and it has landed; what is left is the manual naming the control and this
-  bay drawing it.
+  The writing was M5.10's; the manual named the control and this bay draws it on 2026-09-08, which
+  is task 2 below. **So this list holds one row rather than two.**
 
 **And one question about a control that is built is answered.** `load → A` was a **readout** — the
 cursor said which Set, the deck selection said which deck, and the pill said where a press would
@@ -490,69 +494,66 @@ never a payload; the second is what is left.
    and anything else that is not a directory. A drop points the bay, marks the `folder` chip and
    lists what is in it, in one gesture. **So nothing in this bay waits on a directory any more**,
    and the `plan` badges left are the ones under *Blocked on* above.
-2. **The bay walking the edit history. The lister is built** —
+2. **The bay walking the edit history — built on 2026-09-08.** The lister was
    `karakuri_environment::history::list`, most recent first, foreign entries skipped and counted,
-   capped on days opened before a day is read and saying when it stopped short. What is left is the
-   manual naming the control and the bay drawing it.
+   capped on days opened before a day is read and saying when it stopped short. What was left was
+   the manual naming the control and the bay drawing it, and both have landed:
+   [ADR-0308](adr/0308-the-library-bays-fifth-chip-walks-one-sets-history-and-a-row-lands-that-version-on-a-node.md).
 
-   **Building it turned up a gap, and the gap is closed.** `Snapshots::record` addresses a version
-   by `(slot, layer, index)` and **the layout carries no Set id anywhere**, so as the files stand
-   the two sides of a library load on one slot are indistinguishable and *a Set's history* is not
-   answerable from them. **The id is written from now on, and it costs an argument rather than a
-   design.** Every route that edits is addressed by slot — `mcp::write_procedure` resolves
-   `Slots::path(slot, layer, index)` and refuses a node the slot does not hold, and an operator's
-   own editor is pointed at that slot's scratch copy — so at the moment of a write the program knows
-   which Set the slot is running. **It is kept where a re-point moves it**: this program carries the
-   id per slot on that slot's `watch::Aim`, sent by the load and restated by every rewiring, and
-   `Gfx::material` is the mixer strip's readout beside it rather than the id
-   ([ADR-0304](adr/0304-the-set-a-version-is-filed-under-rides-the-aim-that-re-points-the-slot.md)).
-   What is
-   left open is only what to write where there is no Set: a run launched with a pair on the command
-   line has no id, and `k` writes a new one mid-chain. **Both are answered and the writer is
-   built** ([ADR-0276](adr/0276-a-versions-set-id-goes-in-the-snapshots-name-and-a-run-without-one-writes-none.md)):
-   the id goes in the snapshot's *name*, behind `@`, because a row is a name and `list` opens no
-   file; a run with no Set writes none and `Version::set` is an `Option`; and a save does not move
-   the slot, so only a load re-files a chain. **A narrowing must treat a `None` row as matching no
-   Set rather than as a wildcard** — which is this bay's to get right, the filter being answered
-   where ADR-0262 says. Rows are a Set's versions. The page owes the
-   rest: the row
-   moves into *The library*, the control is another scope chip beside the ones `Scope::ALL` draws —
-   `all`, `my sets`, `presets` and `folder`, and there is no `favourites` chip: ADR-0299 made
-   *my sets* the starred subset and `all` is what lists everything the store holds —
-   the order is stated in the row's own sentence as *List what the store
-   holds* states its, landing on a row is a **load**, and `WalkHistory`'s payload is *a revision to
-   land on*. `Operation::WalkHistory`'s doc gave *"the store has no reader"* as half its reason for
-   `Undecided`; that half was false and the doc is corrected. The payload is unchanged, and what it
-   now waits on is only the control.
+   **What is built.** A fifth scope chip, `history`, last in `Scope::ALL` beside `all`, `my sets`,
+   `presets` and `folder`. Its rows are the versions of the Set the **load pulldown's** deck is
+   running — `View::target_deck` (ADR-0305) on the console, `engine.aimed[slot].at.set` on the host
+   (ADR-0304) — most recent first, in `history::list`'s own order, with the foot's `n of m` counting
+   the rows drawn against the rows handed over and the walk saying out loud when it stopped short or
+   passed something over (`Listing::stopped_short`, `unclaimed`). **A `None` row matches no Set**,
+   so a deck playing the pair the run launched with lists nothing and `why_nothing` says which
+   nothing it is. A row is one line in the name column — when, which slot, which layer and index,
+   and what the procedure called itself — because this bay draws no time column for any scope and
+   one drawn for this scope alone would make its rows a second kind of thing.
 
-   The paragraph this replaces read: `karakuri_environment::history` has `Snapshots::record`, `seed`
-   and `stamped_id` and **no lister**: nothing opens `<store>/history/`
-   to answer *what versions has this had*. Once it can, *Walk the edit history* is a scope in this
-   bay — the rows are versions, the reading is the one already built, and landing on one is the load
-   already built. That also settles `WalkHistory { step: Undecided }`, whose own doc offers three
-   shapes and whose answer is the second: **a revision to land on**, because a row is what an
-   operator picked. The manual names the control first (`docs/contributing.md` §5 step 3), and until
-   it does this row's panel cell reads `—`.
+   **Landing on a row is a load**, and it is *Put a node's previous version back* rather than this
+   row: the snapshot's bytes are written over that node's working copy under `<store>/scratch/` for
+   the pulldown's deck, and the watcher builds it, judges it and rolls it back like any edit
+   (ADR-0228) — the version it replaces is kept because the rebuild compiles it (ADR-0089).
+   `Operation::RestoreProcedure` carries a `Revision` now, which is `Previous(NodeAt)` for the
+   staging lane's one step back and `Picked(String)` for a row of this walk; `WalkHistory` keeps
+   `Undecided`, because the three shapes its doc offered are answered rather than open and what is
+   left for a walk to carry is *which history* — an id no surface spells.
+
+   **Two badges moved to `has`**: *Walk the edit history* reads `library history chip` and *Put a
+   node's previous version back* reads `library history row`. The second is grouped under
+   *Procedures* and its `has` came from this bay, which is **M5.7's** exit rule meeting the same
+   defect *Keep what a deck is playing* is this one's — see that sub-milestone's *Rows*.
+
+   **What is still owed, and it is one thing.** The keyboard reaches this scope through `e`, which
+   steps onto the chip, and reaches no row of it: landing is a pointer press, exactly as the load
+   button and the pulldown are, and the key route is **M5.13's** with theirs (ADR-0305's *what is
+   owed is a key route*). Nothing else about this row is open. The cap is on the walk rather than on
+   the Set — `history::list` is asked for a number of rows and the narrowing happens after — so a
+   store whose day directories hold several Sets' versions lists fewer of each; that is stated at
+   `listing` and said in the line the press prints rather than left to be discovered.
 
 **What was *not* here has landed, and it landed where it moved to.** This program records a history:
 one `Snapshots` for the run, seeded from what each deck is about to play and handed to every
 watcher, so a hand at an editor and a model writing over MCP both leave the version they replaced
-behind them. That was M5.10's, under *Every write that compiles is a version*, and what is left for
-this bay is the control that walks them.
+behind them. That was M5.10's, under *Every write that compiles is a version*. **The control that
+walks them is this bay's and it is drawn**, which is task 2 above and ADR-0308.
 
 **Also here.** The Set browser's live previews and the thumbnail beside them.
 The bay lists what the store holds already; the previews are what waits, and what a thumbnail is
 *of* is M4's decision handed here to judge. Neither has a row on the page, so neither is in this
 exit condition.
 
-The scope row is done and the mock puts one shape over it: the list already carries **presets**
-beside `all`, `my sets` and a folder — there is no `favourites` chip, and this sentence named one
-until ADR-0299 was read against `Scope::ALL` — and it says the scope list is itself extensible.
+The scope row is done and the mock puts one shape over it: the list carries **presets** beside
+`all`, `my sets`, a folder and now `history` — there is no `favourites` chip, and this sentence
+named one until ADR-0299 was read against `Scope::ALL` — and it says the scope list is itself
+extensible.
 
-**The bay's prose, as tooltips.** The library half of *Library, and staging under it*, and five
+**The bay's prose, as tooltips.** The library half of *Library, and staging under it*, and six
 notes under it: *A folder scope reads Sets, and a bundle is not a third thing*, *What keeps a
 favourite, and where it does not travel*, *Where the presets come from, and why it is told rather
-than found*, *A Set has two forms, and loading one is packaging it*, and *How a Set reaches a deck*.
+than found*, *A Set has two forms, and loading one is packaging it*, *How a Set reaches a deck*, and
+*Walking a Set's edit history*, which ADR-0308 added.
 *Every deck runs from its own copy* is here too, because a library load is what writes into
 `<store>/scratch/`. The mock tips every scope chip including the `+`, both filter fields, the `.path`
 row, a starred star and an unstarred one, and the foot's `read`, the load's button and its pulldown.
@@ -937,7 +938,14 @@ so this is the smallest of the nine items.
 
 #### M5.7 — Staging
 
-**Rows.** Two carry a `plan` panel badge: *Keep a candidate*, *Put a node's previous version back*.
+**Rows.** One carries a `plan` panel badge: *Keep a candidate*. **The other is *Put a node's
+previous version back*, and its badge reads `has` for a route that is not this bay's** — a press on
+a row of the Library bay's `history` scope, ADR-0308. That is this exit rule's second defect and it
+is the same one M5.3 already carries in the other direction, where *Keep what a deck is playing* is
+that bay's row and the Inspector's control: **a badge is one string and a row can have two homes**,
+so the grep below passes over a lane that still draws nothing for it. What this bay owes for that
+row is items 4 and 7, unchanged, and the exit condition is worth reading against them rather than
+against the badge.
 
 **Exit.** No `plan` badge in the panel column of this bay's rows on
 [every operation](manual/operations.html).
@@ -970,7 +978,8 @@ this list never named at all.
 5. **A reader for the edit history — built, and it is M5.3's now.** `history::list` answers
    *what versions has this had*, most recent first, and ADR-0276 puts the Set a version belongs to
    in its name. The row it serves is *Walk the edit history*, which left *Rows the manual has not
-   given a home* because it is a listing and a load rather than undo.
+   given a home* because it is a listing and a load rather than undo — and which the Library bay
+   draws now (ADR-0308).
 6. **A history to read at all — it was M5.10's, not this bay's, and it is written.** `storing_to`
    puts a build's sources under a content address; `snapshotting_to` keeps every version that
    compiled, and both programs hand a watcher one now. This file says twice elsewhere that the
@@ -983,9 +992,13 @@ this list never named at all.
    and an arm in the press handler.
 
 *Keep a candidate* waits on item 4 and item 7 and has no hazard — it writes nothing, and what it
-changes is the lane. *Put a node's previous version back* waits on 6 and 7; where it writes is
-already answered, because `working_copies()` materialises one scratch copy per slot before the
-window opens, so a restore moves the deck and the operator's editor names the same file.
+changes is the lane. *Put a node's previous version back* waits on 7; item 6 is built, and **the
+operation itself is reached from another bay now** — the Library's `history` rows land a version an
+operator picked, which is `Revision::Picked`, where this lane's route is `Revision::Previous` and
+means *the one this replaced* (ADR-0308). Where it writes was already answered, because
+`working_copies()` materialises one scratch copy per slot before the window opens, so a restore
+moves the deck and the operator's editor names the same file; ADR-0308's `put_back` is that write,
+and this lane's control would reach it with the other arm.
 
 **Also here.** The **staging lane**. The bay draws a row per slot and the producer it was gated on
 is wired. What the lane still omits is the node address, `origin`, the timestamp and the head's
@@ -1165,8 +1178,10 @@ every slot launches on the pair the command line settled, which is no Set at all
 sends the id on the `watch::Aim` that re-points the slot, so the versions written after a load are
 filed under the Set that was loaded and a rewiring restates it. `Gfx::material` is not that answer
 and was never a candidate for it — that field is a *readout*, one name per slot, and at launch it is
-the pair rather than any id. **What is left here is the reading**, which is M5.3's task 2 and not
-this sub-milestone's.
+the pair rather than any id. **The reading was M5.3's task 2 and it is built** — a fifth scope chip
+in the Library bay whose rows are one Set's versions, with a landing on them
+([ADR-0308](adr/0308-the-library-bays-fifth-chip-walks-one-sets-history-and-a-row-lands-that-version-on-a-node.md))
+— so nothing here is owed to it.
 
 **Blocked on.** The bays above, for the rest. A row whose operation the engine cannot yet perform has
 nothing for MCP to route to. MCP is a mouth rather than the control stick, so it follows the bays
@@ -1273,17 +1288,17 @@ can name a folded bay. The key may still earn its place as a bulk act; its recor
 
 #### Rows the manual has not given a home
 
-Three rows carry a `plan` panel badge over a panel cell reading `—`, and only two of them are
-here: *Wire a procedure's input to a node* and *Narrow the published interface*. **The third is
-*Walk the edit history*, which is M5.3's now** — and the page has caught up **halfway**: the row
-sits in *The library*'s group, so it is already inside M5.3's exit grep, and what has not moved is
-the panel cell and the tip. That ordering is `docs/contributing.md` §5's rather than drift: the bay
-cannot draw a control the page has not named, and naming it is the first half of that milestone's
-second task. **So this section describes a half-finished page edit rather than a homeless row**, and
-the row falls out of no sub-milestone's exit. Nothing on the console is specified to reach the other
-two, so
-no bay holds them and none of M5.1 to M5.9 can close them. **The manual has to name a home before
+**Two rows carry a `plan` panel badge over a panel cell reading `—`**: *Wire a procedure's input to
+a node* and *Narrow the published interface*. Nothing on the console is specified to reach either,
+so no bay holds them and none of M5.1 to M5.9 can close them. **The manual has to name a home before
 they can be scheduled.** There is no drawing to owe until it does.
+
+**A third was here and it has been built.** *Walk the edit history* left this list on the reading
+that it is a listing and a load rather than undo, became M5.3's, and landed on 2026-09-08 as a fifth
+scope chip in the Library bay with a landing on its rows
+([ADR-0308](adr/0308-the-library-bays-fifth-chip-walks-one-sets-history-and-a-row-lands-that-version-on-a-node.md)).
+The half-finished page edit this section used to describe — the row in *The library*'s group with
+its panel cell and tip still unmoved — is finished: the badge reads `library history chip`.
 
 *Narrow the published interface* has a second blocker behind the missing control: it is upstream of
 the Inspector, and until something publishes, every control that bay will ever draw is a wildcard.
@@ -1292,14 +1307,15 @@ the Inspector, and until something publishes, every control that bay will ever d
 *Walk the edit history* was here because the operations page calls the surface over those files
 *undo* and *a later milestone*, and undo is nobody's bay. It is not undo. A Set's history is a list
 of the versions it has had, walking it is a listing, and landing on one is a load — all three of
-which the Library bay already does — so the row is M5.3's. **What it needed was a lister, and that is
-built**: `karakuri_environment::history::list`. **What it needed next was a history to read, and a
-panel run writes one now** — one `Snapshots` for the run, seeded before the window and handed to
-every slot's watcher, with the Set a version is filed under moved by a library load. That was
-M5.10's, and neither M5.3's task 2 nor this paragraph said the walk depended on it. **A blocker that
-names a milestone rather than a mechanism is a blocker nobody can check**: this one survived two
-readings of this file before the question *what actually stops it* was asked of it, and naming the
-mechanism is what got it built. What is left is the page naming the control.
+which the Library bay already does — so the row became M5.3's. **What it needed was a lister**:
+`karakuri_environment::history::list`. **What it needed next was a history to read, and a panel run
+writes one** — one `Snapshots` for the run, seeded before the window and handed to every slot's
+watcher, with the Set a version is filed under moved by a library load. That was M5.10's, and
+neither M5.3's task 2 nor this paragraph said the walk depended on it. **A blocker that names a
+milestone rather than a mechanism is a blocker nobody can check**: this one survived two readings of
+this file before the question *what actually stops it* was asked of it, and naming the mechanism is
+what got it built. **The page then named the control and the bay drew it**, which is the whole of
+the distance between *homeless* and *built* and took three records to cross.
 
 #### The console's own shape
 

@@ -113,7 +113,8 @@
                 <span class="scope" data-tip="The Sets you have starred, which is the chip beside this one narrowed to the rows wearing a &#9733;. It is not the listing of what this store holds and it is not a fifth place a Set can be: the star is kept beside the Sets, in the store, so this scope is a question asked of `all` and never a collection of its own. That is why a preset packaged on load and a recording&#39;s head both land in the library and neither turns up here: they are Sets of yours the moment they are written, and they are yours to keep the moment you press the star. Empty means nothing is starred rather than that nothing is here &mdash; press the star at the left of a row under `all`. Click to show it; click another scope to leave it. &#8853; MIDI: unassigned &mdash; the operations page names the choosing now, as `Choose which scope the library shows`, and leaves this column empty on purpose: a map line names a word from a closed list, and this list grows when a directory is added.">my sets</span>
                 <span class="scope" data-tip="What ships with the program rather than what you wrote, and it is read-only: nothing is written here, and a Set you load out of it is packaged into the store with the rest of your Sets &mdash; which is how a preset becomes one of yours. Where these files are is told to the program when it starts rather than compiled into it &mdash; a program has no reliable way to ask where it is &mdash; so an installed copy is pointed at what the packaging put beside it, and `--presets DIR` says it by hand. With nobody saying, four places are looked at in order and the first that is a library wins &mdash; a directory with a `.kir` in it, which is not the same question as whether something is there: beside the running binary, `../Resources/examples` for a macOS app, then `../share/karakuri/examples` for a unix prefix, then `examples` in its own directory for a folder somebody copied, and last the workspace tree baked in at compile time, which is what keeps a run out of the repository behaving as it always did and fails on any other machine. Which of the four answered is said at startup and read back off the answer. A `--presets` naming a directory that is not there is refused, naming the flag, rather than quietly replaced by one of the four, because a path an operator typed is an instruction. Told nothing and finding nothing, the scope is empty and the program says so at startup rather than pretending &mdash; an empty tier is a library nobody has filled rather than something gone wrong. &#8853; MIDI: unassigned &mdash; the operations page names the choosing now, as `Choose which scope the library shows`, and leaves this column empty on purpose: a map line names a word from a closed list, and this list grows when a directory is added.">presets</span>
                 <span class="scope" data-tip="A folder, and what it lists is Sets. A Set file and a bundle are one file &mdash; the same `.kbset`, differing only in whether the sources are appended inside it &mdash; so this scope draws one kind of row, not two. A `.kset` is listed here as well and is still one row: it names its parts by relative path rather than by content, so taking it in resolves them first. A `.kir` is not one of them: it is a single node's source addressed by its content, and nothing takes one. A row here is taken into the store and then loaded, which is one press because taking it in is what gives it a name &mdash; and it is not a row you play from directly, since the Set is in the library before it is on a deck. Two limits, and a row costs them whichever of the two forms it is in. A name you already own is refused rather than overwritten and the row asks for a rename, because an id that arrived inside somebody else&#39;s file is not the instruction that an id you typed is. And a part named from outside the file&#39;s own directory is not read, with the path said out loud, because a Set somebody handed you is not a way of asking this machine for its files. A Set file with nothing inlined arrives only where this library already holds every artifact it names, and where it does not it is refused naming the node that is missing rather than being called a bad file. Which directory is said by dropping one on this window: a folder dragged off the desktop points the bay and marks this chip in the one gesture, and it is the only way in &mdash; no path is typed here, and no flag names one before the run. The row under the scopes reads the folder that was chosen, and a second drop re-points the bay rather than adding a chip. &#8853; MIDI: unassigned &mdash; a map line names a state from a closed list and a directory is not one.">folder</span>
-                <span class="scope" data-tip="Add a scope, and this is what the control would be for rather than an account of a press: nothing in the vocabulary adds one, and the only scope that arrives while the program is running is a folder, which is asked for by dropping a directory on this window &mdash; a drop marks the chip beside this one, and a second drop re-points the bay rather than adding a third. What it is drawn for is that a library is asked questions rather than read end to end, so what you browse gets both wider and narrower with use, and this list is the one thing about the library that is not closed. &#8853; MIDI: unassigned &mdash; a map line names a word from a closed list, and this list grows when a directory is added.">+</span>
+                <span class="scope" data-tip="The versions of the Set the load pulldown&#39;s deck is running, most recent first &mdash; every write that compiled, kept where a person can find it. A row says when it was written, which node it was a version of and what that procedure called itself, and landing on one puts that version back on the node through the same check, build and budget an edit takes. This is the one chip here whose rows are not Sets: the four beside it list Sets and this lists the versions of one, so the star, `read` and `load` have nothing to name while it is marked and say so rather than acting on a row that is not a Set. What it is narrowed to is a <em>Set</em> and never a deck &mdash; two decks playing one Set have one history between them &mdash; and a deck playing a pair somebody typed has none at all, because a version written where there was no Set is filed under none and a narrowing to a Set never matches one of those. Which deck is asked is the pulldown in this bay&#39;s foot, so aiming that letter at another deck is what changes the listing. Empty means this Set has no versions yet rather than that something is wrong: edit one of its nodes and the version it replaced is here. Click to show it; click another scope to leave it. &#8853; MIDI: unassigned &mdash; a map line names a slot, a range or a word from a closed list, and a version is none of the three.">history</span>
+                <span class="scope" data-tip="Add a scope, and this is what the control would be for rather than an account of a press: nothing in the vocabulary adds one, and the only scope that arrives while the program is running is a folder, which is asked for by dropping a directory on this window &mdash; a drop marks the `folder` chip two along, and a second drop re-points the bay rather than adding a sixth. What it is drawn for is that a library is asked questions rather than read end to end, so what you browse gets both wider and narrower with use, and this list is the one thing about the library that is not closed. &#8853; MIDI: unassigned &mdash; a map line names a word from a closed list, and this list grows when a directory is added.">+</span>
               </div>
               <div class="path" data-tip="Where this library is pointed, and it names a directory rather than a Set. It is the `folder` scope's own row and it is drawn whichever scope is marked, because it is two things at once: the walk inside a folder &mdash; the words either side of the `&#8250;` are one path, so the row says both where you were pointed and where you have got to &mdash; and the place a send lands, which has to be on screen before the press rather than after it. What sets it is a folder dragged off the desktop and let go over this window; nothing here takes a path in letters, and there is no dialog to open. Until one has been dropped the row is not drawn at all and this bay is a line shorter, which is the same answer the staging lane gives to an empty lane: a row saying there is no folder would be a sentence about an absence. While a folder is over the window it reads the path a release would set, in the panel's text ink rather than its faint &mdash; and that is the whole of the mark, because a folder coming in from outside carries no pointer position and no rectangle can be ringed for it. It is a readout and not a control: nothing in it takes a press, and re-pointing the bay is another drop. &#8853; MIDI: unassigned &mdash; a map line names a slot, a range or a word from a closed list, and a directory is none of the three.">~/sets/tour&#8209;2026/night&#8209;b &nbsp;&#8250;&nbsp; opening</div>
               <div class="lib-filters"><span class="field" data-tip="What the Sets in this library are made of, as a filter: the rows under it are narrowed to the Sets holding a node whose name contains this word. Unset here &mdash; `holds&hellip;` is the placeholder, and a field that is set reads the word instead. Click to step to the next name, and off the end back to unset, so every state it can be in is one a press can leave. It steps rather than takes letters, and the reason for that has changed rather than gone: this console has two letter&#8209;taking flows now &mdash; an arrangement&#39;s name, and a Set&#39;s id typed into an Inspector pane head &mdash; and each is bounded to one path component, which is not what a filter is. A filter is an unbounded fragment, so neither flow reaches this field and the second does not imply a third. What that leaves is an open question rather than an unasked one, and it is this bay&#39;s to answer: this is a first cut rather than the finished control, and the finished one is not necessarily a field that takes letters. What it steps through is the node names this store's Sets actually carry, so a name nothing holds is one this field cannot ask for. It narrows `all`, which is what `List what the store holds` lists, and `my sets` with it, since that scope is the starred part of the same listing; press it while `presets` or `folder` is marked and the panel says the narrowing is not this bay's library rather than appearing to do nothing. &#8853; MIDI: unassigned &mdash; the operations page leaves that column empty rather than waiting: a listing is an answer, and an answer goes back to the surface that asked for it, which a map line is not.">holds&hellip;</span><span class="field" data-tip="Which layer a Set has to use, as a filter: the rows under it are narrowed to the Sets with a node on that layer. Unset here &mdash; `layer&hellip;` is the placeholder, and a field that is set reads the layer instead. Click to step through `L1`, `L2`, `L3`, `L4` and `FIELD`, and off the end back to unset. It steps rather than takes letters, and unlike the field beside it that is settled rather than open: five is a closed list, and stepping a closed list is the right control whatever is decided next door. Its five are the five the `list_sets` tool takes and the inspector writes, so a filter set by pressing and one set by name are the same word. Set both fields and the question is which of the Sets holding that name also have something on this layer &mdash; each half asked of the whole Set rather than of one node. It narrows `all`, which is what `List what the store holds` lists, and `my sets` with it, since that scope is the starred part of the same listing; press it while `presets` or `folder` is marked and the panel says the narrowing is not this bay's library rather than appearing to do nothing. &#8853; MIDI: unassigned &mdash; the operations page leaves that column empty rather than waiting: a listing is an answer, and an answer goes back to the surface that asked for it, which a map line is not.">layer&hellip;</span></div>
@@ -1534,8 +1535,9 @@
         <h3>Library, and staging under it</h3>
         <p>
           A scope and a walk, not one flat list: everything this store holds,
-          the starred part of it, app presets, a folder &mdash; and the scope
-          list is itself extensible.
+          the starred part of it, app presets, a folder &mdash; and the walk is
+          the fifth chip, which is the versions one Set has had rather than a
+          library of Sets. The scope list is itself extensible.
           Staging is where candidates wait, whether they came from you or from an
           agent; <strong>a rejected one costs nothing</strong>, because the
           previous artifact is still in the library.
@@ -2600,6 +2602,87 @@
           closed list, and a Set id is none of the three, which is the same
           sentence that keeps <code>load</code> off a map and is the same
           operand behind both.
+        </p>
+      </div>
+
+      <div class="note">
+        <h3>Walking a Set's edit history</h3>
+        <p>
+          <strong>The fifth chip is <code>history</code>, and its rows are
+          versions rather than Sets.</strong> Every write that compiles is kept
+          under <code>&lt;store&gt;/history/</code> &mdash; gated on
+          <em>compiling</em> and not on landing, so the version that was rolled
+          back for costing too much is in there and is often the one you want
+          &mdash; and this is where they are read. It is a scope on this bay
+          because the three things a walk needs are the three things this bay
+          already does: it lists, it reads, and landing on a row is a load.
+          <strong>It is not undo</strong>, and the word is avoided here for the
+          same reason the operations page avoids it: <em>what versions has this
+          had</em> is a list, and landing on one is a load.
+        </p>
+        <p>
+          <strong>It is narrowed to a Set, and the Set is the one the load
+          pulldown's deck is running.</strong> Not the deck: two decks playing
+          one Set have one history between them, and the deck is only how this
+          bay arrives at the id. So the letter in the foot points the listing
+          as well as the load, and it is the one control that moves these rows
+          &mdash; the scope chips, the two filter fields and the cursor do not.
+          <strong>A deck playing a pair somebody typed lists nothing</strong>,
+          and that is an answer rather than an absence: a version written where
+          there was no Set is filed under <em>none</em>, and a narrowing to a
+          Set matches none of those rather than all of them. The panel says
+          which of the two kinds of empty it is, in the words it says every
+          other empty scope in.
+        </p>
+        <p>
+          <strong>A row is one line, in the name column, and the time is inside
+          it.</strong> The mock draws a <code>.dim</code> time beside each Set
+          and the panel draws none, for want of a spelling; a history row does
+          not get one either, because a row of this scope and a row of
+          <code>all</code> are rows of one list and a column drawn for one of
+          them would make them two kinds of thing. So the row is the name the
+          store filed the version under, less the Set id every row here shares:
+          when, which slot, which layer and index, and what the procedure called
+          itself &mdash; which is what a person scanning a night's work is
+          scanning for. Most recent first, which is the listing's own order and
+          not this bay's, and the foot's <code>n of m</code> counts the rows
+          drawn against the rows handed over exactly as it does for a library.
+        </p>
+        <p>
+          <strong>Landing on a row is a load, and it installs nothing.</strong>
+          The snapshot's bytes are written over that node's working copy under
+          <code>&lt;store&gt;/scratch/</code> for the deck the pulldown names,
+          and the watcher already looking at that file builds it off the render
+          thread, swaps it at a frame boundary and rolls it back on its own if
+          it cannot hold the budget &mdash; the path an edit already takes, and
+          the reason a load was never allowed to hand a built Set to a slot.
+          <strong>The version it replaces is kept by the same act</strong>,
+          because the rebuild compiles it and compiling is the gate, so a
+          landing you did not mean is itself a row of this listing.
+        </p>
+        <p>
+          <strong>Four refusals, each naming what is in the way and where the
+          deck is still pointed.</strong> A deck playing no Set has nothing to
+          put back. A version that is not one of that Set's is not landed on a
+          deck that is playing something else. A node that deck does not hold
+          &mdash; the Set it is running has no L3, or fewer of them &mdash; is
+          named as what the slot does hold. And a file that is gone is named:
+          <code>rm&nbsp;-rf&nbsp;history/2026/07</code> is the whole of the
+          retention policy, so a row whose file an operator deleted by hand is
+          an ordinary state of a working store and not a fault.
+        </p>
+        <p>
+          <strong>The chip and the row are two rows of the operations page, and
+          the chip is not the one its neighbours are.</strong> A press on the
+          other four asks <em>choose which scope the library shows</em>, whose
+          payload cannot say which was chosen; a press on this one asks
+          <em>walk the edit history</em>, because that is what was asked for and
+          a scope operation emitted here would say a library was chosen for a
+          press that asked for a history. Landing asks <em>put a node's previous
+          version back</em>, which is under Procedures and carries the version
+          an operator picked. There is no third operation, and the cursor moving
+          through these rows asks for nothing, exactly as it asks for nothing in
+          a library.
         </p>
       </div>
 

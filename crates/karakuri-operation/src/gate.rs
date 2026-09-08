@@ -734,7 +734,7 @@ mod tests {
             },
             Operation::RestoreProcedure {
                 deck: 0,
-                node: node(),
+                revision: crate::Revision::Previous(node()),
             },
             Operation::MoveBoundary {
                 boundary: Undecided,

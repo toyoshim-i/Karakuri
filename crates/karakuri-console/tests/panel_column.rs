@@ -403,6 +403,35 @@ fn sample(variant: &str) -> Operation {
             deck: 0,
             set: "night01".to_owned(),
         },
+        // **The Library bay's fifth scope chip**, and the one emission in this
+        // list that is a *listing* asked for by a control whose four
+        // neighbours ask for a different row: `history` is not a library of
+        // Sets, so a press on it names *Walk the edit history* where a press
+        // on `all` names *Choose which scope the library shows*
+        // (`view::Chosen`, ADR-0308). The payload is `Undecided` for
+        // `SelectScope`'s reason read on a history: what a walk would carry is
+        // *which* history, and no surface spells a Set id — the panel narrows
+        // it to whatever the load pulldown's deck is running, which is the
+        // host's answer.
+        "WalkHistory" => Operation::WalkHistory {
+            step: karakuri_operation::Undecided,
+        },
+        // **A press on a row of that scope**, and the one emission in this
+        // list whose operand is a *version* rather than a Set: the row is the
+        // name the store filed the version under, and the deck is the
+        // pulldown's. The value is any picked revision, because what the badge
+        // claims is that an operator reaches the row.
+        //
+        // **The other arm of `Revision` has no producer here**, and that is
+        // not a gap in this inventory: the staging lane's one-step-back is the
+        // route that would fill it, and that lane draws no control yet. This
+        // file counts operations rather than arms.
+        "RestoreProcedure" => Operation::RestoreProcedure {
+            deck: 0,
+            revision: karakuri_operation::Revision::Picked(
+                "20260908-143052-271_slot0_L4_beat_strokes".to_owned(),
+            ),
+        },
         // **The `keep` capsule in each Inspector pane's head**, and the `id`
         // is `None` because the capsule types no name: this console's one
         // letter-taking flow is bounded to naming an arrangement, so a keep
