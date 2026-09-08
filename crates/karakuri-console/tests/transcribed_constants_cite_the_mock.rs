@@ -109,6 +109,8 @@
 //! the checked-in source, and carry floors so the scan cannot silently pass by
 //! finding nothing.
 
+use karakuri_console::room::Palette;
+use karakuri_console::view::{Band, BAND_BLUE_MS, BAND_PURPLE_MS, BAND_RED_MS, BAND_YELLOW_MS};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -640,4 +642,185 @@ fn every_transcribed_constant_matches_the_source_it_cites() {
         "only {} rules parsed out of {STYLESHEET}",
         sheet.len()
     );
+}
+
+// ---------------------------------------------------------------------------
+// The risk badge's five bands
+// ---------------------------------------------------------------------------
+//
+// **A number transcribed out of `console.html`'s prose rather than out of a
+// declaration, which is why it is checked here and not above.** The scan above
+// resolves a citation of the form `` `selector` `` and `` `property: value` ``,
+// and the band boundaries are written as English — *"Green, up to 4 ms: four
+// of these at 60 Hz."* They are exactly the kind of number this file exists
+// for, and none of them can be reached by that machinery, so they get a reader
+// of their own.
+//
+// The direction that matters is still the other one: **the page is the
+// specification and it is the one that moves**, and nothing about rewriting a
+// sentence in it tells you that a Rust constant was reading it.
+
+/// The page the bands are specified on: *What a deck preview cell shows, and
+/// when*, and deck A's caption tooltip.
+const PAGE: &str = "docs/manual/console.html";
+
+/// **Every reading of one band's boundary in the page.**
+///
+/// A band's name, as a whole word, with a figure in milliseconds after it and
+/// nothing but the qualifier — *up to*, *over*, *about* — in between. An
+/// occurrence with no `ms` after it inside the window is prose about a colour
+/// rather than a statement of the scale (*"drawn green by default"*), and a
+/// window is what tells the two apart without this file having to hold a copy
+/// of the sentences.
+///
+/// **Whole word, because `red` is inside `coloured`, `prepared` and
+/// `required`**, all three of which are on this page.
+fn boundaries_in(page: &str, word: &str) -> Vec<f64> {
+    /// Far enough to clear `</strong>, up to ` and no further: the next
+    /// sentence's own figures must not be in reach.
+    const WINDOW: usize = 40;
+
+    let lower = page.to_lowercase();
+    let mut out = Vec::new();
+    let mut from = 0;
+    while let Some(at) = lower[from..].find(word).map(|n| from + n) {
+        let end = at + word.len();
+        from = end;
+        let before = lower[..at].chars().next_back();
+        let after = lower[end..].chars().next();
+        if before.is_some_and(|c| c.is_ascii_alphanumeric())
+            || after.is_some_and(|c| c.is_ascii_alphanumeric())
+        {
+            continue;
+        }
+        let window = &lower[end..lower.len().min(end + WINDOW)];
+        let Some(ms) = window.find(" ms") else {
+            continue;
+        };
+        // The last figure before the unit, which is the one the unit is on.
+        if let Some(last) = numbers(&window[..ms]).last() {
+            out.push(*last);
+        }
+    }
+    out
+}
+
+/// **The five bands' boundaries are the ones `docs/manual/console.html`
+/// states**, and they are stated there twice.
+///
+/// `view::BAND_BLUE_MS` and its three siblings are the console's own table —
+/// `karakuri-engine` produces a number of milliseconds and has no opinion
+/// about how many of a thing an operator can mix — and they are a
+/// transcription out of the page like every constant above.
+///
+/// **Two readings per band, and they must agree.** The scale is written on
+/// deck A's caption tooltip and again in the body under *What a deck preview
+/// cell shows, and when*, which is the duplication the manual's own rule warns
+/// about: *"the same prose sits in three places … and duplication produces
+/// gaps and contradictions"*. So this asserts every reading of a band rather
+/// than the first, and a page that moved a boundary in one passage and not the
+/// other fails here rather than shipping two scales.
+///
+/// **Green and blue are one boundary read from both ends** — *"Green, up to 4
+/// ms"* and *"Blue, over 4 ms"* — which is the four-boundary table stated as
+/// five bands, and is why [`BAND_BLUE_MS`] is named for the band it lets you
+/// into rather than the one it leaves.
+#[test]
+fn the_band_boundaries_are_the_ones_the_console_page_states() {
+    let page = fs::read_to_string(workspace().join(PAGE)).expect("the console page");
+    let page = squash(&page);
+
+    for (band, want) in [
+        // The one boundary that is written from both sides.
+        (Band::Green, BAND_BLUE_MS),
+        (Band::Blue, BAND_BLUE_MS),
+        (Band::Yellow, BAND_YELLOW_MS),
+        (Band::Red, BAND_RED_MS),
+        (Band::Purple, BAND_PURPLE_MS),
+    ] {
+        let read = boundaries_in(&page, band.word());
+        assert!(
+            read.len() >= 2,
+            "{PAGE} states {}'s boundary {} time(s), and it is specified twice — on deck A's \
+             caption tooltip and in the body. Has a passage been rewritten?",
+            band.word(),
+            read.len()
+        );
+        for reading in &read {
+            assert_eq!(
+                *reading,
+                f64::from(want),
+                "\n{PAGE} says {} is at {reading} ms and the console's table says {want}.\nThe \
+                 page is the specification: if it moved on purpose, the constant follows it.\n",
+                band.word()
+            );
+        }
+    }
+
+    // **The rule that turns four boundaries into five bands**, in the page's
+    // own words. `view::band_of` is written as `>=` and falls through to
+    // green because of this sentence, and a page that dropped it would leave
+    // the one half of the table that cannot be read off the numbers.
+    assert!(
+        page.contains("A value on a boundary rounds to the worse band"),
+        "{PAGE} no longer says that a value on a boundary rounds to the worse band, and \
+         `view::band_of` is written from that sentence"
+    );
+
+    // And the scale's own derivation, which is where 4 ms comes from at all:
+    // four slots to a frame, 16.7 ms at 60 Hz.
+    assert!(page.contains("16.7 ms at 60 Hz is about 4 ms each"));
+}
+
+/// **The five band colours are the room's own five**, and neither room wears
+/// the other's.
+///
+/// `--c-band-green` and its four siblings are stated twice in the stylesheet
+/// like every other `--c-*`: once for the page under
+/// `@media (prefers-color-scheme: …)` and once on `.console.day` and
+/// `.console.night`, which is what the room switch toggles. **The
+/// `.console.*` pair is what `room` transcribes**, so it is the pair this
+/// reads — the page's are the surrounding document's and only happen to agree.
+///
+/// This is the check the twelve moods above it do not have. `Palette` sits
+/// outside the scan at the top of this file — `SOURCES` starts at
+/// `pub mod size {`, so no colour in `room.rs` is held against the stylesheet
+/// by anything. These five are held because they are new; the other twelve are
+/// named in the report that added them.
+#[test]
+fn the_band_colours_are_the_rooms_own_five() {
+    let root = workspace();
+    let css = fs::read_to_string(root.join(STYLESHEET)).expect("the stylesheet");
+    let mut sheet = Vec::new();
+    rules(&strip_css_comments(&css), &mut sheet);
+
+    for (selector, pal) in [
+        (".console.day", Palette::DAY),
+        (".console.night", Palette::NIGHT),
+    ] {
+        for band in Band::ALL {
+            let property = format!("--c-band-{}", band.word());
+            let found = declared(&sheet, selector, &property)
+                .unwrap_or_else(|| panic!("{STYLESHEET} has no `{selector}`"))
+                .unwrap_or_else(|| panic!("`{selector}` in {STYLESHEET} does not set {property}"));
+            let [r, g, b, _] = band.colour(&pal).to_srgba_unmultiplied();
+            assert_eq!(
+                found,
+                format!("#{r:02x}{g:02x}{b:02x}"),
+                "\n{selector} {{ {property}: {found} }} and the palette carries \
+                 #{r:02x}{g:02x}{b:02x}.\nThe stylesheet is the specification.\n"
+            );
+        }
+
+        // **The class the mock draws the dot with**, one per band, each
+        // setting the property above and nothing else. It is what makes
+        // `Band::word` a transcription rather than a name somebody picked.
+        for band in Band::ALL {
+            let selector = format!(".risk.{}", band.word());
+            let found = declared(&sheet, &selector, "background")
+                .unwrap_or_else(|| panic!("{STYLESHEET} has no `{selector}`"))
+                .unwrap_or_else(|| panic!("`{selector}` does not set a background"));
+            assert_eq!(found, format!("var(--c-band-{})", band.word()));
+        }
+    }
 }

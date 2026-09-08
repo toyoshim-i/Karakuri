@@ -519,6 +519,14 @@ pub fn standing(operation: &Operation, running: Running<'_>) -> Standing {
         Operation::SaveSet { .. } => Standing::Open,
         Operation::ListSets { .. } => Standing::Open,
         Operation::SelectScope { .. } => Standing::Open,
+        // **A star changes nothing that is on air.** P-0094's question asked
+        // of it comes back empty on every count: at its worst, on the frame it
+        // goes wrong, with the operator's attention on the room, it has written
+        // one line into a small file beside the library and moved no deck, no
+        // fader and no pixel. It is `SelectScope`'s neighbour for the same
+        // reason it is on the page — both are about which Sets an operator is
+        // looking at, and neither is about what any of them is doing.
+        Operation::SetFavourite { .. } => Standing::Open,
         Operation::ReadSet { .. } => Standing::Open,
         Operation::TransferSet { .. } => Standing::Open,
         Operation::WalkHistory { .. } => Standing::Open,
@@ -697,6 +705,10 @@ mod tests {
                 layer: None,
             },
             Operation::SelectScope { scope: Undecided },
+            Operation::SetFavourite {
+                id: "a".into(),
+                favourite: true,
+            },
             Operation::ReadSet { id: "a".into() },
             Operation::TransferSet {
                 transfer: SetTransfer::Send { id: "a".into() },
@@ -806,19 +818,20 @@ mod tests {
         }
     }
 
-    /// **40 closed, 23 open, 63 total** — ADR-0235's count less the one row
-    /// ADR-0240 retired. It is still the one number that says the
-    /// classification was applied to the whole vocabulary rather than to the
-    /// rows somebody remembered: the record read 41, 23, 64, and
-    /// *Choose what the output shows* leaving the vocabulary takes one off the
-    /// closed side and off the total.
+    /// **40 closed, 24 open, 64 total** — ADR-0235's count less the one row
+    /// ADR-0240 retired and plus the one ADR-0299 added. It is still the one
+    /// number that says the classification was applied to the whole vocabulary
+    /// rather than to the rows somebody remembered: the record read 41, 23, 64,
+    /// *Choose what the output shows* leaving the vocabulary took one off the
+    /// closed side and off the total, and *Star a Set, or take the star off*
+    /// puts one back on the open side and on the total.
     ///
     /// **Counted with the deck `LoadSet` names live**, because that is how the
     /// record counts it: the row is listed under *what a live deck is drawing*
     /// and the 40 includes it. It is the one row whose standing is not a
     /// function of the operation alone, so the split is a split *given a
     /// reading* — and the reading that makes it 40 is the one the class was
-    /// drawn for. With nothing live it is 39 and 24, which is the same
+    /// drawn for. With nothing live it is 39 and 25, which is the same
     /// classification and not a second one.
     #[test]
     fn the_classification_is_the_split_adr_0235_states() {
@@ -833,7 +846,7 @@ mod tests {
                 }
             }
         }
-        assert_eq!((closed, open, closed + open), (40, 23, 63));
+        assert_eq!((closed, open, closed + open), (40, 24, 64));
     }
 
     fn members(class: Class) -> Vec<&'static str> {

@@ -1473,3 +1473,124 @@ fn a_sandbox_set_refuses_a_part_the_way_the_library_does() {
     }
     assert!(!dir.path().join("sandbox").join("night01.kbset").exists());
 }
+
+/// **A store nobody has starred in answers with nothing, and is not an error.**
+///
+/// `favourites.json` is not established by `Store::open` the way the four
+/// directories are, because an empty file and no file say the same thing and
+/// only one of them is a write into a store somebody only wanted to read.
+#[test]
+fn an_unstarred_store_has_no_favourites_and_no_file() {
+    let dir = tempdir().unwrap();
+    let store = Store::open(dir.path()).unwrap();
+
+    assert!(store.favourites().unwrap().is_empty());
+    assert!(!dir.path().join(Store::FAVOURITES_FILE).exists());
+}
+
+/// **A star round-trips, and a second press of the same state writes nothing.**
+///
+/// The `false` back is the state already being the one asked for, which is what
+/// keeps `Operation::SetFavourite` a state rather than a toggle: pressing
+/// *star this* twice says the same thing twice, and the second one must not
+/// touch the file.
+#[test]
+fn a_star_round_trips_and_the_same_state_twice_writes_nothing() {
+    let dir = tempdir().unwrap();
+    let store = Store::open(dir.path()).unwrap();
+    store
+        .write_set(
+            "drift_night",
+            &[Line::new(Record::Set {
+                id: "drift_night".into(),
+                v: 1,
+            })],
+        )
+        .unwrap();
+
+    assert!(store.set_favourite("drift_night", true).unwrap());
+    assert_eq!(
+        store.favourites().unwrap().into_iter().collect::<Vec<_>>(),
+        vec!["drift_night".to_string()]
+    );
+    assert!(
+        !store.set_favourite("drift_night", true).unwrap(),
+        "starring what is already starred reported a write"
+    );
+
+    assert!(store.set_favourite("drift_night", false).unwrap());
+    assert!(store.favourites().unwrap().is_empty());
+    assert!(
+        !store.set_favourite("drift_night", false).unwrap(),
+        "unstarring what is not starred reported a write"
+    );
+}
+
+/// **Starring a Set this store does not hold is refused with the id back**, and
+/// nothing is written — the star is a control on a row, and a row is a Set the
+/// store holds.
+#[test]
+fn starring_a_set_the_store_does_not_hold_is_refused() {
+    let dir = tempdir().unwrap();
+    let store = Store::open(dir.path()).unwrap();
+
+    match store.set_favourite("nothing_here", true) {
+        Err(StoreError::NoSet(id)) => assert_eq!(id, "nothing_here"),
+        other => panic!("expected NoSet, got {other:?}"),
+    }
+    assert!(!dir.path().join(Store::FAVOURITES_FILE).exists());
+}
+
+/// **A stale mark survives the Set leaving and can be taken off**, which is the
+/// whole of what happens to one.
+///
+/// Nothing in this program deletes or renames a Set, so a mark goes stale only
+/// when a hand removes the file — and the answer is that the id stays, a
+/// listing that intersects it with `list_sets` draws no row for it, and the
+/// star can still be taken off without the Set coming back first.
+#[test]
+fn a_star_outlives_the_set_and_can_still_be_taken_off() {
+    let dir = tempdir().unwrap();
+    let store = Store::open(dir.path()).unwrap();
+    store
+        .write_set(
+            "gone",
+            &[Line::new(Record::Set {
+                id: "gone".into(),
+                v: 1,
+            })],
+        )
+        .unwrap();
+    store.set_favourite("gone", true).unwrap();
+
+    fs::remove_file(dir.path().join("sets").join("gone.kbset")).unwrap();
+
+    assert!(
+        store.favourites().unwrap().contains("gone"),
+        "a question pruned a mark, and a question writes nothing"
+    );
+    assert!(
+        store.list_sets().unwrap().is_empty(),
+        "the listing this is intersected with still holds the Set"
+    );
+    assert!(
+        store.set_favourite("gone", false).unwrap(),
+        "a stale mark could not be taken off without the Set coming back"
+    );
+    assert!(store.favourites().unwrap().is_empty());
+}
+
+/// **A favourites file that will not parse is said out loud**, because a
+/// silently empty answer reads exactly like a library nobody has starred in and
+/// the whole of `my sets` would go quiet with nothing to notice.
+#[test]
+fn a_favourites_file_that_is_not_a_list_of_ids_is_an_error() {
+    let dir = tempdir().unwrap();
+    let store = Store::open(dir.path()).unwrap();
+    fs::write(dir.path().join(Store::FAVOURITES_FILE), b"{ not a list }").unwrap();
+
+    match store.favourites() {
+        Err(StoreError::Favourites { .. }) => {}
+        other => panic!("expected Favourites, got {other:?}"),
+    }
+}

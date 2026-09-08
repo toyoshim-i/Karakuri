@@ -89,7 +89,7 @@ fn parent_is_the_split_whose_children_list_holds_the_node() {
     );
 }
 
-/// `visible_children` is what a divider index counts, and folding the middle
+/// `placed_children` is what a divider index counts, and folding the middle
 /// of three is what tells it apart from `children`.
 ///
 /// Both halves matter. The list skips what is folded, **and** the index that
@@ -97,14 +97,14 @@ fn parent_is_the_split_whose_children_list_holds_the_node() {
 /// `children` would — which is the mistake every caller that reconstructed
 /// this filter was one line away from.
 #[test]
-fn visible_children_skips_what_is_folded_and_that_is_what_an_index_counts() {
+fn placed_children_skips_what_is_folded_and_that_is_what_an_index_counts() {
     let mut l = solved();
     let ids = console_ids(&l);
 
     let all: Vec<NodeId> = l.children(ids.panes).to_vec();
     assert_eq!(all.len(), 3);
     assert_eq!(
-        l.visible_children(ids.panes).collect::<Vec<_>>(),
+        l.placed_children(ids.panes).collect::<Vec<_>>(),
         all,
         "nothing is folded, so every child is visible"
     );
@@ -112,7 +112,7 @@ fn visible_children_skips_what_is_folded_and_that_is_what_an_index_counts() {
     l.collapse(ids.centre);
     l.solve();
 
-    let visible: Vec<NodeId> = l.visible_children(ids.panes).collect();
+    let visible: Vec<NodeId> = l.placed_children(ids.panes).collect();
     assert_eq!(
         visible,
         vec![ids.left, ids.right],
@@ -134,11 +134,11 @@ fn visible_children_skips_what_is_folded_and_that_is_what_an_index_counts() {
     // A visible child of a folded split is still listed: it is folded by its
     // ancestor rather than by itself, and everything under a fold solves to
     // zero extent rather than to nothing.
-    assert_eq!(l.visible_children(ids.centre).count(), 2);
+    assert_eq!(l.placed_children(ids.centre).count(), 2);
     assert!(!l.visible(l.children(ids.centre)[0]));
 
     // A view has none, and asking is not an error.
-    assert_eq!(l.visible_children(id(&l, "library")).count(), 0);
+    assert_eq!(l.placed_children(id(&l, "library")).count(), 0);
 }
 
 /// A boundary is the **gap between a pair**: the rectangle from the far edge
@@ -217,7 +217,7 @@ fn folding_the_far_side_of_a_boundary_leaves_no_boundary_rather_than_a_position(
     let last = solved().boundaries().filter(|(s, _)| *s == root).count() - 1;
 
     let mut l = solved();
-    let far_side = l.visible_children(root).nth(last + 1).expect("a far side");
+    let far_side = l.placed_children(root).nth(last + 1).expect("a far side");
     let before = l.boundary(root, last).expect("a boundary before the fold");
     assert!(
         near(before.y + before.h, l.rect(far_side).y),
@@ -236,7 +236,7 @@ fn folding_the_far_side_of_a_boundary_leaves_no_boundary_rather_than_a_position(
     // an assertion about an index that was simply out of range: the child
     // before the boundary now runs to the split's own far edge, and that edge
     // is a plausible number for a boundary that is not there.
-    let near_side = l.visible_children(root).nth(last).expect("a near side");
+    let near_side = l.placed_children(root).nth(last).expect("a near side");
     let (child, split) = (l.rect(near_side), l.rect(root));
     assert!(
         near(child.y + child.h, split.y + split.h),
@@ -247,7 +247,7 @@ fn folding_the_far_side_of_a_boundary_leaves_no_boundary_rather_than_a_position(
     // The near side folded instead: the same index, the other way round, and
     // the same answer.
     let mut l = solved();
-    let near_side = l.visible_children(root).nth(last).expect("a near side");
+    let near_side = l.placed_children(root).nth(last).expect("a near side");
     l.collapse(near_side);
     l.solve();
     assert_eq!(l.boundary(root, last), None);
@@ -272,7 +272,7 @@ fn boundaries_are_exactly_the_ones_that_have_a_pair() {
             let n = l.boundaries().filter(|(s, _)| *s == split).count();
             assert_eq!(
                 n,
-                l.visible_children(split).count().saturating_sub(1),
+                l.placed_children(split).count().saturating_sub(1),
                 "{:?} has the wrong number of boundaries",
                 l.name(split)
             );
@@ -472,7 +472,7 @@ fn every_answer_holds_of_an_arrangement_whose_splits_have_no_names() {
     assert_eq!(l.name(ids.panes), None);
     assert_eq!(l.parent(ids.left), Some(ids.panes));
     assert!(!l.is_view(ids.panes));
-    assert_eq!(l.visible_children(ids.panes).count(), 3);
+    assert_eq!(l.placed_children(ids.panes).count(), 3);
     assert!(l.boundary(ids.panes, 1).is_some());
     assert!(l.boundaries().any(|(s, i)| s == ids.panes && i == 1));
 

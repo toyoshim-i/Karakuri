@@ -136,29 +136,40 @@
 //! console can be *asked* for and what a hand on the panel can *do* are
 //! different questions, and this file pins both.
 //!
-//! # There is no fifth pass yet, and what is missing is the registration
+//! # There is no fifth pass yet, and the two folds owe different things
 //!
-//! **Two more painted controls exist and neither is reachable.**
-//! `karakuri_console::view::bay_grip` is the grip in a bay head and
-//! `view::pane_edge` is the band on a pane's own outer edge; both answer a
-//! `view::FoldGrip`, both ask for [`Op::Fold`], and
+//! **`karakuri_console::view::bay_grip` is the grip in a bay head**, it answers
+//! a `view::FoldGrip` asking for [`Op::Fold`], and
 //! [ADR-0295](../../../docs/adr/0295-the-grip-is-the-fold-and-a-panes-outer-edge-is-the-other-one.md)
-//! is where they are decided. They are the panel homes
-//! `docs/manual/operations.html` names for *Fold a bay away* and *Fold a pane
-//! away* — **bay head** and **pane edge** — and `tests/fold_grip.rs` measures
-//! both rectangles, both clearances and both presses.
+//! is where it was decided. It is the panel home
+//! `docs/manual/operations.html` names for *Fold a bay away* — **bay head** —
+//! and `tests/fold_grip.rs` measures the rectangle, the clearances and the
+//! press.
 //!
-//! **What neither has is step one.** A press reaches a painted control through
-//! [`claim`], a row in `karakuri_console::input::PROBES`, and an arm in
-//! `crates/karakuri/src/main.rs`'s press handler; the derivations landed
-//! without either, so a press on a grip or on a pane's edge still goes to
-//! `egui` and reaches nothing at all. **So the two rows are not reached and
-//! their badges stay `plan`**, which is what
-//! [`every_arrangement_operation_the_pointer_reaches_is_marked_built`] would
-//! otherwise fail on, in the direction that says the page is behind the panel.
-//! A fifth pass belongs here the day the registration lands — driven exactly as
-//! the fourth is, [`claim`] first — and flipping either badge before then would
-//! be the page claiming a control an operator cannot find.
+//! **What it does not have is step one.** A press reaches a painted control
+//! through [`claim`], a row in `karakuri_console::input::PROBES`, and an arm in
+//! `crates/karakuri/src/main.rs`'s press handler; the derivation landed without
+//! either, so a press on a grip still goes to `egui` and reaches nothing at
+//! all. **So that row is not reached and its badge stays `plan`**, which is
+//! what [`every_arrangement_operation_the_pointer_reaches_is_marked_built`]
+//! would otherwise fail on, in the direction that says the page is behind the
+//! panel. A fifth pass belongs here the day the registration lands — driven
+//! exactly as the fourth is, [`claim`] first — and flipping the badge before
+//! then would be the page claiming a control an operator cannot find.
+//!
+//! **The pane's half is a different shape and owes nothing at all.** ADR-0295
+//! gave *Fold a pane away* a band on the pane's outer edge; that band lay over
+//! the outer three pixels of every Library row, so it was never registered and
+//! [ADR-0300](../../../docs/adr/0300-a-pane-folds-by-dragging-its-boundary-out-and-comes-back-by-dragging-it-in.md)
+//! replaced it with a **drag**: a pane's boundary pulled past the pane's own
+//! minimum closes it, and the divider the closed pane keeps at the window's
+//! edge brings it back. A boundary is claimed by `input`'s rule 3 before any
+//! control is asked and the window loop already routes a boundary drag into
+//! `Panel`, so there is no `PROBES` row and no press arm to write — **the row
+//! is reachable today**. What it is waiting on is the badge on
+//! `docs/manual/operations.html` and the demonstration here, which move
+//! together; the grid does not find the fold on its own, and why is on
+//! [`reached_by_the_pointer`].
 //!
 //! # What the sweep cannot see, and which way each one fails
 //!
@@ -218,7 +229,7 @@ use std::path::{Path, PathBuf};
 use common::{drawn_once, running, showing};
 use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::{Dragged, Op, Outcome, Panel, Pressed};
-use karakuri_console::view::{arrangement, program_head, Ask};
+use karakuri_console::view::{arrangement, bay_grip, program_head, Ask, BAY_GRIPS, REGIONS};
 use karakuri_layout::{Axis, NodeId, Point};
 use karakuri_operation::gate::Open;
 
@@ -665,18 +676,42 @@ fn dragged_to(axis: Axis, at: Point) -> Point {
 /// [`reached_through_a_painted_control`], which is a different route and not
 /// a finer grid.
 ///
-/// # What the grid still asserts, now that a press *can* reset the console
+/// # What the grid still asserts, now that a drag *can* fold a pane
 ///
-/// **Nothing reachable through [`Panel::press`] folds, unfolds or solos**, and
-/// that is the invariant the second pass compares [`shape`] for. It is
-/// narrower than it was and it is still the right one: the arrangement pill
-/// can now reset the whole console from a press, but not through this route —
-/// `Panel::press` hit-tests boundaries and regions and knows nothing about a
-/// painted control, so **the grid cannot land on the pill however fine it
-/// gets**. A `shape` that changed under this sweep would therefore still be
-/// what it always was: a control nobody accounted for, reached by a route
-/// nobody meant to open. It panics naming where the press was rather than
-/// guessing which of the section's rows it lands on.
+/// **This sentence has moved and the assertion has not**, which is worth
+/// saying plainly because the two used to be the same thing. It read *nothing
+/// reachable through [`Panel::press`] folds, unfolds or solos*, and as a claim
+/// about the code that is **no longer true**: a boundary beside a pane that
+/// keeps its edge, dragged `panel::GRAB` past that pane's own minimum, closes
+/// it — `Panel::press`, `moved`, `released`, and a fold at the end of it
+/// (ADR-0300). `tests/fold_grip.rs` is where that is demonstrated.
+///
+/// **What holds the assertion up now is the grid's own reach**, and it is
+/// stated here rather than left to be rediscovered. The sweep drags [`DRAG`]
+/// = 24 pixels in **one direction only** — right along a row, down a column —
+/// and every boundary it can take hold of has at least that much room to give
+/// that way at this viewport, so no drag it makes reaches a pane's minimum,
+/// let alone `GRAB` past it. It is a narrower guarantee than it was: *the grid
+/// never asks for a fold*, rather than *no press can produce one*.
+///
+/// **So a failure here now has three readings and not two.** A control nobody
+/// accounted for, reached by a route nobody meant to open, which is what it
+/// always was; *or* the pull that closes a pane has come within the grid's
+/// reach, in which case what the sweep has found is **Fold a pane away** and
+/// that row's panel badge is owed — it is `plan` on
+/// `docs/manual/operations.html` and this file is what would have to insert
+/// the row here for it to be `has`; *or* a region that keeps its edge has been
+/// added where the grid does have room. It panics naming where the press was
+/// rather than guessing which, which is the same reason it never guessed a row
+/// before.
+///
+/// **The row is not inserted here today**, and that is deliberate rather than
+/// an oversight: the badge and the demonstration move together
+/// ([`every_arrangement_operation_the_pointer_reaches_is_marked_built`] fails
+/// in one direction and
+/// [`every_arrangement_row_marked_built_is_reached_by_the_pointer`] in the
+/// other), and flipping a badge on `docs/manual/operations.html` is not this
+/// crate's.
 ///
 /// So the two passes are not two grids of different resolution. **A control
 /// this crate paints is invisible to any grid driven through `Panel::press`**,
@@ -732,13 +767,17 @@ fn reached_by_the_pointer() -> BTreeSet<&'static str> {
             let now = shape(&mut p);
             assert_eq!(
                 now, before,
-                "a press at ({x}, {y}) folded, unfolded or soloed something, and nothing \
-                 reachable through `Panel::press` is supposed to: this route is `press`, \
-                 `moved` and `released` over `Layout::hit`, and none of the three changes what \
-                 is folded. A control this crate *paints* cannot be reached from here at all — \
-                 see `reached_through_a_painted_control` — so this is a new route rather than \
-                 a new control. Say which row of `{SECTION}` it lands on, add it to \
-                 `reached_by_the_pointer`, and flip that row's panel badge"
+                "a press at ({x}, {y}) folded, unfolded or soloed something, and no drag this \
+                 grid makes is supposed to: it drags {DRAG} pixels one way, and every boundary \
+                 it can take hold of has that much room to give that way at this viewport — so \
+                 none of them reaches a pane's own minimum, let alone the `GRAB` past it that \
+                 closes a pane (ADR-0300). Three readings, and the header has them: the pull \
+                 that closes a pane has come within this grid's reach, in which case this is \
+                 *Fold a pane away* and its badge is owed; or a region that keeps its edge has \
+                 been added where the grid has room; or this is a route into `{SECTION}` \
+                 nobody accounted for. A control this crate *paints* cannot be reached from \
+                 here at all — see `reached_through_a_painted_control`. Say which row it lands \
+                 on, add it to `reached_by_the_pointer`, and flip that row's panel badge"
             );
             // A drag moved a boundary, so the arrangement the next press lands
             // on is not the one this pass started from.
@@ -765,6 +804,80 @@ fn reached_by_the_pointer() -> BTreeSet<&'static str> {
 
     reached.extend(reached_through_a_painted_control());
     reached.extend(reached_through_the_program_bays_head());
+    reached.extend(reached_through_the_grip_in_a_bay_head());
+    reached
+}
+
+/// **The fifth pass: the grip in a bay head, driven the way the fourth pass
+/// drives the `solo` pill beside it.**
+///
+/// A grip is a painted control in the third pass's sense — [`claim`] says the
+/// press is the panel's, the derivation that drew it says what the press asks
+/// for, and the caller performs it — so the sweep above is blind to it by
+/// construction, exactly as it is to `solo`.
+///
+/// **A pane is not here and needs no pass.** It folds by its own boundary
+/// being pulled past the narrowest it goes
+/// ([ADR-0300](../../../docs/adr/0300-a-pane-folds-by-dragging-its-boundary-out-and-comes-back-by-dragging-it-in.md)),
+/// which is `Panel::press` and `Panel::moved` — the **first** pass's route.
+/// That pass does not reach it either, and its own doc says why: the sweep
+/// drags `DRAG` pixels in one direction, and no boundary it can grab has a
+/// pane's minimum within that reach. So both fold rows arrive here through the
+/// grip, which is what `rows_of(Op::Fold)` answering both of them means.
+///
+/// **A fresh panel per bay**, because a folded bay has no rectangle: a second
+/// derivation would be asked about a console the first press changed.
+fn reached_through_the_grip_in_a_bay_head() -> BTreeSet<&'static str> {
+    let mut reached = BTreeSet::new();
+    let ctx = drawn_once();
+    let view = showing(&[]);
+
+    let mut found = 0usize;
+    for region in REGIONS {
+        let mut p = panel();
+        let default = shape(&mut p);
+        let Some(grip) = bay_grip(p.layout(), region.name) else {
+            continue;
+        };
+        found += 1;
+        let at = point_of(grip.grip.center());
+        assert_eq!(
+            claim(&mut p, &ctx, &view, at),
+            Claim::Panel,
+            "`claim` gives a press on `{}`'s grip to `egui`, so no route into `{SECTION}` from \
+             this control exists however it is drawn",
+            region.name
+        );
+        let op = grip.op();
+        let outcome = p.op(op);
+        p.solve();
+        assert!(
+            matches!(outcome, Outcome::Folded { folded: true, .. }),
+            "a press on `{}`'s grip asked for `{op:?}` and answered {outcome:?}, which folded \
+             nothing",
+            region.name
+        );
+        assert_ne!(
+            shape(&mut p),
+            default,
+            "`{}`'s grip folded and left the console looking exactly as it did, so the row was \
+             demonstrated and did not do what its row on {PAGE} says",
+            region.name
+        );
+        reached.extend(rows_of(op));
+    }
+
+    // **The floor that says the walk found the grips rather than missed
+    // them.** `bay_grip` answers `None` for a head that declares no grip, so a
+    // rename that made it answer `None` for every head would insert nothing
+    // and report both fold rows unreached — which fails the assertion above
+    // with a message about the page rather than about this walk.
+    assert_eq!(
+        found, BAY_GRIPS,
+        "the walk found {found} grips and `BAY_GRIPS` says {BAY_GRIPS} — this pass has stopped \
+         measuring rather than found the control gone"
+    );
+
     reached
 }
 

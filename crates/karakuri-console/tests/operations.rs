@@ -9,6 +9,13 @@ use common::{assert_sane, assert_within_bounds, id_of, near, rect_of, rects, sol
 /// the region that grows is the centre, because the centre is the only
 /// flexible track in `.body-grid` (`minmax(340px, 1fr)`) and the mock's two
 /// side tracks are fixed pixel widths.
+///
+/// **The centre takes the pane's width and not the divider beside it**, which
+/// is what ADR-0300 changed and what it buys: a pane keeps its edge when it
+/// folds, so the gap stays where the pane was, at the window's own edge, and
+/// a hand can take hold of it and pull the pane back in. A fold that took the
+/// divider too would leave nothing there at all, and `z` would be the only way
+/// back.
 #[test]
 fn folding_the_left_pane_gives_its_width_to_the_centre() {
     let mut layout = solved(PLAUSIBLE);
@@ -20,10 +27,11 @@ fn folding_the_left_pane_gives_its_width_to_the_centre() {
     assert_sane(&layout);
     assert_within_bounds(&layout);
 
-    // The centre took the pane's width *and* the divider that is no longer
-    // drawn beside it. Nothing else moved: the right pane is exactly where and
-    // what it was.
-    assert!(near(rect_of(&layout, "centre").w, centre.w + 340.0 + 10.0));
+    // The centre took the pane's width, and not the divider — the pane is
+    // closed rather than gone, so the gap it keeps is still drawn. Nothing
+    // else moved: the right pane is exactly where and what it was.
+    assert!(layout.is_closed(id_of(&layout, "left-pane")));
+    assert!(near(rect_of(&layout, "centre").w, centre.w + 340.0));
     assert!(near(rect_of(&layout, "right-pane").w, right.w));
     assert!(near(rect_of(&layout, "right-pane").x, right.x));
     assert!(near(rect_of(&layout, "left-pane").w, 0.0));
@@ -48,7 +56,8 @@ fn folding_the_right_pane_gives_its_width_to_the_centre() {
     layout.solve();
     assert_sane(&layout);
 
-    assert!(near(rect_of(&layout, "centre").w, centre.w + 400.0 + 10.0));
+    assert!(layout.is_closed(id_of(&layout, "right-pane")));
+    assert!(near(rect_of(&layout, "centre").w, centre.w + 400.0));
     assert!(near(rect_of(&layout, "left-pane").w, left.w));
 }
 

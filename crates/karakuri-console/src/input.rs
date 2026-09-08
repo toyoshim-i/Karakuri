@@ -520,9 +520,9 @@ use karakuri_operation::gate::Class;
 
 use crate::panel::{Panel, GRAB};
 use crate::view::{
-    arrangement, audio_in, deck_head, deck_name, inspector, keep_pill, library, look, master,
-    mcp_pill, mixer, outputs, program_bay, program_head, tracker_group, transition, transport,
-    Field, Scope, View, DECKS, DECK_LETTERS,
+    arrangement, audio_in, bay_grip, deck_head, deck_name, inspector, keep_pill, library, look,
+    master, mcp_pill, mixer, outputs, program_bay, program_head, tracker_group, transition,
+    transport, Field, Scope, View, BAY_GRIPS, DECKS, DECK_LETTERS, REGIONS,
 };
 
 /// **What each of rule 4's derivations answers for**, one row per probe and in
@@ -618,7 +618,7 @@ use crate::view::{
 /// answering a different question. So the **list** is the control and which row
 /// is inside [`crate::view::LibraryBay::take`], which is the `read` chip's
 /// row read the other way round.
-pub const PROBES: [Probe; 22] = [
+pub const PROBES: [Probe; 23] = [
     Probe {
         name: "the Outputs row's sink",
         claims: 1,
@@ -698,6 +698,11 @@ pub const PROBES: [Probe; 22] = [
         name: "the Program bay head's solo",
         claims: 1,
         ask: on_solo,
+    },
+    Probe {
+        name: "the grip in a bay head",
+        claims: BAY_GRIPS,
+        ask: on_grip,
     },
     Probe {
         name: "the deck preview cells",
@@ -1014,6 +1019,23 @@ fn on_param(panel: &Panel, _ctx: &egui::Context, view: &View, p: Point) -> bool 
     view.inspector.iter().enumerate().any(|(index, pane)| {
         inspector(panel.layout(), index, pane).is_some_and(|at| at.owns(pane, p))
     })
+}
+
+/// **The grip in a bay head, one derivation asked once per bay** — the class
+/// pills' arrangement rather than a strip's: they are in four different heads
+/// and cannot be one laid-out box, but they are one type and one question. It
+/// asks `egui` for nothing — a grip is six dots at a fixed width — so this is
+/// the cheapest probe here beside the preview cells, and the only control in a
+/// bay head that exists before the first frame.
+///
+/// **A pane needs no row here.** A pane folds by its own boundary being pulled
+/// past the narrowest it goes, which rule 3 above claims before rule 4 is
+/// reached at all
+/// ([ADR-0300](../../../docs/adr/0300-a-pane-folds-by-dragging-its-boundary-out-and-comes-back-by-dragging-it-in.md)).
+fn on_grip(panel: &Panel, _ctx: &egui::Context, _view: &View, p: Point) -> bool {
+    REGIONS
+        .iter()
+        .any(|region| bay_grip(panel.layout(), region.name).is_some_and(|grip| grip.hit(p)))
 }
 
 /// **The one control this console has in a bay head**, and the only

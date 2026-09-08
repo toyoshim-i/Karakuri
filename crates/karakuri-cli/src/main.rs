@@ -22,8 +22,14 @@
 // ADR-0214 and ADR-0215, and they are reached here by name so that every call
 // site below reads exactly as it did. What is left in this file is the window,
 // the arguments, the key handler and `Live` — a surface over them.
+/// **The step count this run's frames advance by**, and it is
+/// `karakuri-environment`'s rather than this file's since ADR-0297: a frame's
+/// step count is the live half of P-0092 and there is one derivation of it, now
+/// that two programs make it. ADR-0215 had already decided the placement —
+/// *"`Clock` moves and `Live` does not"* — and this is the move.
+use clock::Clock;
 use karakuri_environment::{
-    audio, compile, history, mcp, midi, mix, places, render, scratch, session, setfile,
+    audio, clock, compile, history, mcp, midi, mix, places, render, scratch, session, setfile,
     tempo_source, watch,
 };
 // **Brought into scope rather than reached through their modules**, because
@@ -71,10 +77,6 @@ use winit::window::{Window, WindowId};
 /// reads advances by this, so a value here that drifted from the engine's would
 /// put beats in the wrong place with nothing to show for it.
 const DT: f32 = karakuri_engine::set::DT;
-
-/// Past this the simulation falls behind rather than catching up. Unbounded
-/// catch-up turns a load spike into a death spiral.
-const MAX_STEPS: u8 = 4;
 
 const SEED: u32 = 19_274;
 
@@ -4594,71 +4596,6 @@ fn report_governing(report: &karakuri_engine::governor::Report, why: &str) {
             "  slot {} parked, request held: {:?}",
             decision.slot, decision.reason
         );
-    }
-}
-
-/// The one measurement in the program: elapsed real time as a step count, which
-/// is exactly what a `tick` record carries.
-///
-/// **Its own type so that reading it borrows only itself.** A frame acquires a
-/// target, and only then commits — measuring the clock among other things — and
-/// the committing work is a closure holding the deck and the recorder. A method
-/// on `Live` would have borrowed all of it at once and the closure could not be
-/// written. Splitting the clock out is what makes the ordering expressible.
-///
-/// **`steps` is told what time it is rather than asking.** One line of
-/// plumbing, and it is what makes the thing this type exists to guarantee
-/// checkable: that a frame which does not draw leaves its interval for the next
-/// one instead of consuming it. With `Instant::now()` inside, a test could
-/// state no elapsed time and could therefore assert nothing but tautologies —
-/// which is exactly what the first test written against it did.
-struct Clock {
-    last: Instant,
-    /// Fractional steps carried between frames, so a frame rate that does not
-    /// divide the step rate still advances at the right average rate. The same
-    /// accumulator shape as spawn quantisation, for the same reason.
-    carry: f32,
-    /// The last measured frame interval.
-    interval: f32,
-}
-
-impl Clock {
-    fn new(now: Instant) -> Clock {
-        Clock {
-            last: now,
-            carry: 0.0,
-            interval: DT,
-        }
-    }
-
-    /// How many steps to advance by, called **once by every frame that runs**.
-    ///
-    /// It used to say *only by a frame that is going ahead*, because a frame
-    /// that found no surface committed nothing and this was not reached — the
-    /// interval it did not use was left for the next frame to count. A frame no
-    /// longer belongs to a sink (see [`frame::compose`]), so every frame the
-    /// loop runs reads the clock and there is nothing to carry between frames.
-    ///
-    /// `last` still moves here and nowhere else, and that is still what makes a
-    /// gap survive: the frame loop not running at all — a paused event loop, a
-    /// window the system stopped asking to redraw — is counted whole by the
-    /// next frame, up to `MAX_STEPS`.
-    fn steps(&mut self, now: Instant) -> u8 {
-        let elapsed = now.duration_since(self.last).as_secs_f32();
-        self.last = now;
-        // Kept because the output lag a beat correction leads by starts with
-        // the frame queue, which is a number of *frames* — and the frame rate
-        // is the display's, not `dt`'s. See `audio::Audio::output_lag`.
-        self.interval = elapsed;
-
-        self.carry += elapsed / DT;
-        let whole = self.carry.floor();
-        self.carry -= whole;
-        (whole as u32).min(u32::from(MAX_STEPS)) as u8
-    }
-
-    fn interval(&self) -> f32 {
-        self.interval
     }
 }
 
@@ -9284,95 +9221,6 @@ proc points {
              and no more: {counted:?}"
         );
         assert!(counted[0].starts_with("1 record after"), "{counted:?}");
-    }
-
-    // -- the clock ---------------------------------------------------------
-    //
-    // These three came here with `frame` when the frame loop moved to
-    // `karakuri-engine`. They never touched a sink and never took a device:
-    // they are about [`Clock`], which is this program's and stays here, because
-    // reading a clock is the one thing a live run does that a replay must not.
-
-    /// **The interval of a frame that never ran is not lost — the next frame
-    /// counts it.**
-    ///
-    /// **This used to be about a frame that found nowhere to draw**, which was
-    /// the only way the clock could go unread: `frame::compose` withheld the
-    /// committing closure from a refused frame, so `Clock::steps` was not
-    /// called and the interval carried. That is no longer a case at all —
-    /// every frame `frame::compose` composes reads the clock, whatever the
-    /// sinks answered — and the property it was checking is the same one, now
-    /// carrying the gap where the frame loop itself does not run: a paused
-    /// event loop, a window the operating system stopped sending redraws to, a
-    /// long stall. The arithmetic below never mentioned a sink, which is why
-    /// the assertion stands unchanged while its subject moved.
-    ///
-    /// The claim the frame loop's ordering rests on, and until `steps` could be
-    /// told what time it is there was no way to state it: the first version of
-    /// this test asserted that the step count did not exceed `MAX_STEPS` (it
-    /// cannot: `steps` clamps to it) and that the carry was under one (it is:
-    /// `steps` subtracts its own floor). Both survived deleting the body of
-    /// `Clock::steps`.
-    ///
-    /// Two clocks over the same span, one reading it in two frames and one in
-    /// a single frame because the other was abandoned, must hand out the same
-    /// total. That is what "the time survives" means, and it is false for any
-    /// clock that resets `last` somewhere other than a frame that goes ahead.
-    #[test]
-    fn a_frame_that_never_ran_leaves_its_time_for_the_next_one() {
-        let start = Instant::now();
-        let ms = |n: u64| start + std::time::Duration::from_millis(n);
-
-        let mut drew_every_frame = Clock::new(start);
-        let both =
-            u32::from(drew_every_frame.steps(ms(16))) + u32::from(drew_every_frame.steps(ms(32)));
-
-        // The same thirty-two milliseconds, with the frame at 16 ms never run
-        // at all: `steps` is not called, so `last` does not move.
-        let mut skipped_one = Clock::new(start);
-        let one = u32::from(skipped_one.steps(ms(32)));
-
-        assert_eq!(
-            one, both,
-            "the abandoned frame's interval was dropped rather than carried"
-        );
-        assert!(both > 0, "thirty-two milliseconds is at least one step");
-    }
-
-    /// The carry is what makes that true across a frame rate that does not
-    /// divide the step rate: whole steps out, the fraction kept.
-    #[test]
-    fn the_clock_hands_out_whole_steps_and_keeps_the_fraction() {
-        let start = Instant::now();
-        let mut clock = Clock::new(start);
-        let mut total = 0u32;
-        // Sixty frames of 16 ms is 960 ms, and at `DT` per step that is a known
-        // number of steps — known well enough that dropping the carry loses
-        // several of them.
-        for i in 1..=60u64 {
-            total += u32::from(clock.steps(start + std::time::Duration::from_millis(i * 16)));
-        }
-        let expected = (0.960 / f64::from(DT)).floor() as u32;
-        assert_eq!(
-            total, expected,
-            "the fraction between frames was dropped: {total} steps for 960 ms"
-        );
-    }
-
-    /// And the anti-spiral clamp holds: a stall does not become a catch-up.
-    #[test]
-    fn a_long_gap_falls_behind_rather_than_catching_up() {
-        // **The stream's cap, not this crate's copy of it.** `Clock::steps`
-        // clamps to the `MAX_STEPS` above, and a `tick` that named more steps
-        // than a reader will accept is unreplayable — so the assertion is
-        // against the number the record format publishes, and the two agreeing
-        // is what is being checked.
-        use karakuri_store::record::MAX_STEPS;
-
-        let start = Instant::now();
-        let mut clock = Clock::new(start);
-        let steps = clock.steps(start + std::time::Duration::from_secs(5));
-        assert_eq!(steps, MAX_STEPS, "five seconds is not four steps' worth");
     }
 }
 

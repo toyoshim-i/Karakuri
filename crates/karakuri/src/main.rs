@@ -294,16 +294,16 @@ use karakuri_console::view::{
     self, arrangement as arrangement_pill, audio_in as audio_in_pill, bay_grip, class_at,
     deck_head as deck_head_row, deck_name, inspector as inspector_pane, keep_pill,
     library as library_bay, look as look_row, master as master_row, mcp_pill, mixer as mixer_bay,
-    outputs, pane_edge, picture_rect, preview_rects, program_bay, program_head, tracker_group,
-    transition as transition_row, transport as transport_row, Ask, AudioAsk, AudioIn, Chosen, Go,
-    Kind, McpPill, Picture, Read, Reading, Scope, Taken, Tracker, TransitionSettings, View, DECKS,
-    DECK_LETTERS,
+    outputs, picture_rect, preview_rects, program_bay, program_head, tracker_group,
+    transition as transition_row, transport as transport_row, Ask, AudioAsk, AudioIn, Basis,
+    Budgeted, Chosen, Go, Kind, McpPill, Picture, Read, Reading, Scope, Taken, Tracker,
+    TransitionSettings, View, DECKS, DECK_LETTERS, REGIONS,
 };
 // **How many slots a deck can hold**, which is how many this one has — see
 // [`SLOTS`]. Not re-exported at the crate root, and asked of the module that
 // declares it rather than transcribed here.
 use karakuri_engine::deck::MAX_SLOTS;
-use karakuri_engine::governor::{Reason, Report};
+use karakuri_engine::governor::{Basis as Spent, Reason, Report};
 // The engine's own `Published`, and its node kinds under the word the address
 // uses for them: `Kind` is already the console's *region* kind on this side,
 // and one word cannot be two things in one file.
@@ -314,6 +314,7 @@ use karakuri_engine::{
     compose, Blend, Committed, Control, Deck, Event, Gpu, HotSwap, Look, Mask, MaskKind, Present,
     Residency, Set, Sink, Skip, TonemapOp, DEFAULT_BUDGET_MS,
 };
+use karakuri_environment::clock::Clock;
 use karakuri_environment::{audio, mcp, mix, session, setfile, watch, Asked, Opening};
 use karakuri_ir::Kind as Layer;
 use karakuri_layout::{Axis, Hit, Layout, NodeId, Point};
@@ -1178,8 +1179,11 @@ impl Costs {
                  Sequencer, which are a head and nothing else. \
                  That is NOT the workspace's \
                  reference workload. The \
-                 engine half is four slots of `{}` — {} elements each at {}x{}, one step a \
-                 frame apiece. The other three are allocated, one of them parked, and \
+                 engine half is four slots of `{}` — {} elements each at {}x{}, and each \
+                 advances by the frame's own measured step count, which on a 60 Hz \
+                 display is one step a frame apiece and on a faster one is one step \
+                 every second or third frame (ADR-0297). The other three are allocated, \
+                 one of them parked, and \
                  every one of them steps and draws into its own cell on every frame \
                  (ADR-0269), so all four simulations and all four draws are in these \
                  numbers — and five presents at the canvas's own shape: each slot's \
@@ -1375,6 +1379,21 @@ impl Readout {
         match self.panel.moved(p)? {
             boundary @ Dragged::Boundary { .. } => {
                 println!("{}", self.say_drag(boundary));
+                None
+            }
+            // **A pane closed by pulling its boundary out through its own
+            // edge, or brought back by pulling that edge in**
+            // (`docs/adr/0300-a-pane-folds-by-dragging-its-boundary-out-and-comes-back-by-dragging-it-in.md`).
+            // `Panel` performed it, because the arrangement is its own, so
+            // this says what happened and asks for nothing: a fold writes no
+            // session record.
+            Dragged::Pane(op) => {
+                let (what, id) = match op {
+                    Op::Fold(id) => ("folded — drag its edge back in", id),
+                    Op::Unfold(id) => ("back, at its own minimum", id),
+                    other => unreachable!("a pane drag asks for a fold, not {other:?}"),
+                };
+                println!("  drag: {} {what}", self.label(id));
                 None
             }
             Dragged::Fader(operation) => Some(operation),
@@ -1872,6 +1891,22 @@ impl Readout {
                 {
                     return (claim, Acted::Operated(self.soloed(head.op())));
                 }
+                // **The grip in a bay head**, and it is the `solo` capsule's
+                // neighbour in the same head: one derivation per bay, asked
+                // whether the point is on the mark, and `FoldGrip::op` for what
+                // a press folds. A fold is the console's own shape and writes
+                // no record, so this leaves by the door the Outputs dot's fold
+                // leaves by rather than through `written`.
+                //
+                // **Asked before the Library bay's rows**, so a capsule in a
+                // head is asked before the list under it — and a pane needs no
+                // arm at all, because it folds by its own boundary and rule 3
+                // claims that before any control is asked (ADR-0300).
+                if let Some(grip) = REGIONS.iter().find_map(|region| {
+                    bay_grip(self.panel.layout(), region.name).filter(|grip| grip.hit(at))
+                }) {
+                    return (claim, Acted::Operated(self.folded(grip.op())));
+                }
                 // **The four class pills**, and this is the one press in this
                 // file that leaves by neither of the other two doors. See
                 // `Readout::opened`, which is where the reason is.
@@ -2310,11 +2345,17 @@ impl Readout {
     /// `docs/manual/console.html` says what it is for — *"Solo the program
     /// view: the panel folds away and only the picture is left, which is also
     /// how you capture this window."*
-    /// A press on a fold control. **It says what it did**, because the point of
-    /// both is that they are the fold `f` performs, reached from the console's
-    /// own shape instead of from the keyboard. One operation and no toggle: a
-    /// folded node has no rectangle, so neither control is drawn afterwards
-    /// (ADR-0295), and the way back is `z`.
+    /// A press on the grip in a bay head. **It says what it did**, because the
+    /// point of the control is that it is the fold `f` performs, reached from
+    /// the console's own shape instead of from the keyboard. One operation and
+    /// no toggle: a folded bay has no rectangle, so the grip is not drawn
+    /// afterwards and the way back is `z`.
+    ///
+    /// **One control and not two.** ADR-0295 gave a pane a band on its outer
+    /// edge and this doc described both; ADR-0300 replaced that half — a pane
+    /// folds by its own boundary being pulled past the narrowest it goes, and
+    /// comes back by that boundary being dragged in, so it needs no press arm
+    /// and its way back is not `z` alone.
     fn folded(&mut self, op: Op) -> Outcome {
         let Op::Fold(id) = op else {
             unreachable!("a fold control asked for {op:?}")
@@ -4056,16 +4097,46 @@ fn number_for<T: std::str::FromStr>(
 /// slowly than the files it is watching.
 const SERVED: Duration = Duration::from_millis(100);
 
-/// **One simulation step per frame drawn, and no clock anywhere.**
-///
-/// [P-0092](../../../docs/principles/0092-the-same-inputs-produce-the-same-frame.md)
-/// says simulation time comes from a record and never from a clock. There is
-/// no record here — this program is not a session — so the honest
-/// third option is neither: a fixed count per frame, which makes the picture's
-/// motion a function of frames drawn and of nothing else. It is not a
-/// performance, and a `karakuri-cli` that measured an interval and wrote a
-/// `tick` is what a performance is.
-const STEPS_A_FRAME: u8 = 1;
+// -- where `STEPS_A_FRAME` was ------------------------------------------
+//
+// **The step count is measured now, and the constant that stood here said the
+// opposite until 2026-09-08.** Its documentation read: *"P-0092 says simulation
+// time comes from a record and never from a clock. There is no record here —
+// this program is not a session — so the honest third option is neither: a
+// fixed count per frame … It is not a performance, and a `karakuri-cli` that
+// measured an interval and wrote a `tick` is what a performance is."* **Both
+// halves of that were wrong.**
+//
+// **P-0092 does not say *never from a clock*.** Its first sentence is *"Time
+// comes from a record: live, the engine derives the step count from real time
+// and writes it in; replaying, it reads the number back and derives nothing"* —
+// the clock read is the **live** path of the rule, not a thing the rule
+// forbids. What it forbids is a clock reached from inside the simulation, and a
+// replay deriving the count again. A fixed count is not a third option between
+// those; it is a refusal to take the measurement the record is shaped to carry.
+//
+// **And *this program is not a session* stopped being true with ADR-0289**,
+// which gave the transport row a `rec` toggle that opens a recorder and writes
+// a stream from this window.
+//
+// **What it cost was not about recordings.** `DT` is 1/60 s, this window is
+// `PresentMode::Fifo`, and `karakuri_signal`'s oscillator advances by
+// simulation steps and never by wall clock — so one step per frame *drawn* made
+// simulation time advance at the display's refresh rate divided by sixty.
+// Correct at 60 Hz by coincidence, **double speed on a 120 Hz display**, and
+// 0.6755x on a console with every sink folded and the beat declaring at
+// `BEAT_STALENESS`. `README.md` promises the oscillator follows the room, and
+// the beat grid is that oscillator.
+//
+// The live count is `App::clock` — `karakuri_environment::clock::Clock`, the
+// derivation `karakuri-cli` already made, moved to where ADR-0215 said it goes.
+// See `docs/adr/0297-the-panels-tick-is-measured-and-the-fixed-step-a-frame-ran-the-room-at-the-displays-rate.md`.
+//
+// **This is a comment and not a `#[cfg(test)]` constant**, which is what it
+// briefly was: several tests below scan this file for its own code and bound
+// the scan at *the first `#[cfg(test)]`*, so a test-only item up here silences
+// every one of them — five failed at once and said so. The fixture the tests
+// still want is `gpu::STEPS_A_FRAME`, beside the frames that use it.
 
 /// **The look this window opens under**, and it is where [`Engine::look`]
 /// starts rather than what every frame is drawn under.
@@ -5103,7 +5174,9 @@ impl Sessions {
              `--replay {id}` will need nothing else. A replay starts that material from the \
              top: a Set file says what is playing and at what values and carries no running \
              state, so material that accumulates begins again rather than continuing the picture \
-             on screen now",
+             on screen now. Its ticks carry the step count measured between one frame and the \
+             last, capped at four, so the replay runs at the speed this run ran and not at the \
+             speed the machine playing it draws",
             deck_letter(HEAD_SLOT as u8)
         );
         let root = root.to_path_buf();
@@ -6017,9 +6090,10 @@ fn live(view: &View) -> bool {
 ///   `Oscillator::bpm` and `Oscillator::beats` are its tempo and its musical
 ///   position. `beats` is unbounded and monotone, so which dot is lit and
 ///   which bar it is are arithmetic on it and the console does that
-///   arithmetic. The deck advances it inside `render`, one step a frame
-///   (`STEPS_A_FRAME`), so this reads the position as of the end of the last
-///   frame.
+///   arithmetic. The deck advances it inside `render`, by the frame's own
+///   measured step count ([`App::clock`], and not the fixed one a frame
+///   carried until 2026-09-08), so this reads the position as of the end of
+///   the last frame.
 /// - **The frame's cost.** `Cost::whole` — the same three fields the reading
 ///   sums under *"the whole frame is a median"*, for the frame just drawn.
 ///   Nothing is timed twice: `Costs::push` kept the last `Cost` and this
@@ -7632,6 +7706,43 @@ fn destination(deck: &Deck, slot: usize, control: Control) -> Option<f32> {
     deck.transitions_on(slot)
         .find(|t| t.control() == control)
         .map(|t| t.to())
+}
+
+/// **What each preview cell's risk badge reads**, from the pass that decided
+/// it — one entry per deck slot, in slot order.
+///
+/// `Decision::budgeted_ms` is the number the governor spent and
+/// `Decision::basis` says which of its two numbers that is (ADR-0296). The
+/// console reads the number into five bands and carries the basis undrawn
+/// (ADR-0298), so both halves cross and neither is spent twice.
+///
+/// **`Basis::Unbudgetable` is written as `None`**, and that is the whole of
+/// what this function decides. It is a slot nothing measured and nothing
+/// estimated, it is not a zero, and a zero here would draw a **green** dot.
+///
+/// **A deck with more slots than the row has cells contributes nothing past
+/// the fourth**, which is the reading `View::select` refuses a key on.
+fn costs(governed: &Report) -> [Option<Budgeted>; DECKS] {
+    let mut out = [None; DECKS];
+    for decision in &governed.decisions {
+        let Some(cell) = out.get_mut(decision.slot) else {
+            continue;
+        };
+        *cell = match (decision.budgeted_ms, decision.basis) {
+            (Some(ms), Spent::Estimated) => Some(Budgeted {
+                ms,
+                basis: Basis::Estimated,
+            }),
+            (Some(ms), Spent::Measured) => Some(Budgeted {
+                ms,
+                basis: Basis::Measured,
+            }),
+            // `Unbudgetable`, and a number arriving without a basis — which
+            // cannot happen, and is not worth inventing a band for if it does.
+            _ => None,
+        };
+    }
+    out
 }
 
 fn mixer(deck: &Deck, names: &[String], out: &mut Vec<view::Strip>) {
@@ -9684,6 +9795,29 @@ struct App {
     /// into. What they share is the arrangement — a press gathers, a thread
     /// works, and the outcome is said at the frame it arrives.
     recording: Sessions,
+    /// **How far a frame advances the session**, derived from the interval it
+    /// measures — [`karakuri_environment::clock::Clock`], which is the same
+    /// derivation `karakuri-cli` makes because there is one of them.
+    ///
+    /// This is P-0092's live half: *"live, the engine derives the step count
+    /// from real time and writes it in"*. The number is read once per composed
+    /// frame, handed to [`measure_audio`] as this frame's advance, committed as
+    /// [`Committed::steps`], and pushed as the `tick` that closes the frame
+    /// where a recording is running — one measurement reaching four places
+    /// rather than four answers to how long a frame was.
+    ///
+    /// **It is on [`App`] rather than on [`Gfx`]**, which is [`Sessions`]'
+    /// reason read one field along: a window remade is a display remade, and a
+    /// session's clock is not the surface's. A clock rebuilt with the swapchain
+    /// would restart the count in the middle of a stream that is still being
+    /// written.
+    ///
+    /// **The run's first frame is capped**, and that is the cap doing its job
+    /// rather than an accident to correct: this is started before the window
+    /// exists, so everything between here and the first composed frame — the
+    /// device, the compile, the first Sets — is one gap, and a gap is counted
+    /// whole up to `MAX_STEPS` (ADR-0006).
+    clock: Clock,
 }
 
 /// **What this run holds so that a deck can be kept, and rewired.**
@@ -10229,6 +10363,7 @@ impl App {
                 in_flight: 0,
             },
             recording: Sessions::new(),
+            clock: Clock::new(Instant::now()),
         }
     }
 
@@ -10675,6 +10810,12 @@ impl ApplicationHandler for App {
         // that the panel's first frame draws the deck as it actually is rather
         // than a settled version of it that the second frame corrects.
         let governed = engine.ask_to_prime(&gpu);
+        // **The four risk badges, from the pass that just decided them.** The
+        // dot is as fresh as the last governor pass and no fresher: a Set that
+        // swaps in arrives unestimated and a resize drops the estimate
+        // (ADR-0296), so this is written again wherever a later `Deck::govern`
+        // report is kept.
+        self.readout.view.costs = costs(&governed);
         let info = gpu.adapter.get_info();
         self.costs.taken_on = format!(
             "{:?} — {} ({:?})",
@@ -12085,6 +12226,24 @@ impl ApplicationHandler for App {
                 // that. Two calls would be two answers to *is anything making
                 // texels*, taken either side of the whole frame.
                 let live = live(&self.readout.view);
+                // **This frame's step count, measured once and read three
+                // ways.** It is P-0092's live half — *"live, the engine derives
+                // the step count from real time and writes it in"* — and it is
+                // how much session this frame is worth to the room below, what
+                // the deck is committed with, and what the `tick` that closes
+                // the frame carries.
+                //
+                // **Read here rather than at the top of the handler**, which is
+                // ADR-0078: a frame that is discarded must not already have
+                // been recorded. Everything above this line that can abandon a
+                // frame has already returned — a surface to remake, one to ask
+                // again for, an idle window, a validation fault — and
+                // everything below it composes. `Clock::last` moves only in
+                // this call, so a frame the handler returned from early leaves
+                // its interval for the next one, and a stretch where this
+                // window drew nothing at all is counted whole by the frame that
+                // ends it, up to the cap.
+                let steps = self.clock.steps(Instant::now());
                 // **The room, read before the row that reads the grid it
                 // moves.** A measurement taken after `transport` would be a
                 // tempo drawn one frame behind the correction that made it,
@@ -12094,7 +12253,8 @@ impl ApplicationHandler for App {
                 measure_audio(
                     &mut gfx.audio,
                     &mut gfx.engine.deck,
-                    self.costs.rate_now(),
+                    self.clock.interval(),
+                    steps,
                     self.recording.recorder(),
                 );
                 // **The verdict it carries is the one `staging` left behind
@@ -12179,6 +12339,15 @@ impl ApplicationHandler for App {
                     &mut took,
                     &mut self.readout.health,
                 ) {
+                    // **And the risk badges, because a Set that landed is a
+                    // Set nothing has estimated.** ADR-0296 drops the estimate
+                    // on an install, so the slot that just swapped is governed
+                    // on its measurement until something estimates it again —
+                    // and a dot left saying what the Set before it cost would
+                    // be the meter this whole sub-milestone exists to stop.
+                    // This is the one place in the program that knows a Set
+                    // landed, which is why it is here rather than per frame.
+                    self.readout.view.costs = costs(&gfx.engine.deck.govern());
                     inspector(
                         &gfx.engine.deck,
                         &gfx.material,
@@ -12355,10 +12524,7 @@ impl ApplicationHandler for App {
                                 println!("a sink stopped taking frames: {why}");
                             }
                         },
-                        |_| Committed {
-                            steps: STEPS_A_FRAME,
-                            look: *look,
-                        },
+                        |_| Committed { steps, look: *look },
                         // -- the panel, into the frame's encoder ------
                         |encoder| {
                             monitor(present, previews, slot_bind_groups, encoder);
@@ -12463,19 +12629,21 @@ impl ApplicationHandler for App {
                 // the audio it heard, the tempo correction it made, and every
                 // record a press between the last two frames applied.
                 //
-                // **[`STEPS_A_FRAME`] and not a measured interval.** That
-                // constant says this program advances one step per frame drawn
-                // and reads no clock, which is what P-0092 asks of a program
-                // with no record behind it — and a stream of `tick { steps: 1
-                // }` is that statement written down, so a replay steps exactly
-                // where this run stepped. It is deliberately not
-                // `karakuri-cli`'s measured count: this window is not timing a
-                // performance against a wall clock, and a tick that claimed it
-                // was would be a number nothing here measured.
+                // **The measured count, which is what a `tick` is for.**
+                // This block used to read *"`STEPS_A_FRAME` and not a measured
+                // interval … this window is not timing a performance against a
+                // wall clock, and a tick that claimed it was would be a number
+                // nothing here measured"*, and that had P-0092 backwards: the
+                // rule's live path **is** the measurement — *"live, the engine
+                // derives the step count from real time and writes it in"* —
+                // and what a replay must not do is derive it again. A `tick`
+                // that says `1` because nothing was measured is the number
+                // nothing measured, and P-0095 is the other half of why: this
+                // stream's ticks are now taken the one way `Record::Tick` says
+                // they are taken, so a reader can tell how the number was
+                // arrived at (ADR-0297).
                 if let Some(recorder) = self.recording.recorder() {
-                    recorder.push(Record::Tick {
-                        steps: STEPS_A_FRAME,
-                    });
+                    recorder.push(Record::Tick { steps });
                 }
 
                 self.costs.push(cost);
@@ -12905,17 +13073,28 @@ fn retargeted(open: &mut Option<audio::Audio>, operation: &Operation) -> Option<
 /// binding goes through the deck rather than round it.
 ///
 /// `interval` is how fast frames are actually arriving, which is half the
-/// output lag a beat correction leads by. It is [`Costs::rate_now`] inverted
-/// — the same measurement the transport row draws as `fps`, asked once more
-/// rather than measured a second time, so the number the row shows and the
-/// number the lag is built from cannot disagree. `None` is a window that has
-/// not drawn a stretch yet, and `Audio::frame` ignores an interval outside
-/// `(0, 1)`: the smoothed value simply holds, which is the right answer for a
-/// frame nobody can time.
+/// output lag a beat correction leads by, and `steps` is how much session this
+/// frame is worth. **Both are [`App::clock`]'s one measurement**, which is
+/// `karakuri-cli`'s arrangement of the same call: the interval the step count
+/// was derived from is the interval the lag is built from, so the two cannot
+/// disagree about how long this frame was.
+///
+/// **It used to be [`Costs::rate_now`] inverted**, on the argument that the
+/// row's `fps` and the lag should be one number. They are not one question.
+/// `rate_now` is *frames drawn on an untouched window over the stretch since
+/// something touched it* — the still-panel reading — so it is `None` on every
+/// frame near a pointer, a key or a resize, and its stretch counts frames that
+/// were asked for as zero while the seconds go on running. The lag wants the
+/// interval between this frame and the last one, on the frames an operator is
+/// working, which is exactly the number the clock takes for the `tick`.
+/// `Audio::frame` still ignores an interval outside `(0, 1)`: the smoothed
+/// value holds, which is the right answer for the first frame of a run and for
+/// one that followed a stall.
 fn measure_audio(
     open: &mut Option<audio::Audio>,
     deck: &mut Deck,
-    interval: Option<f64>,
+    interval: f32,
+    steps: u8,
     recorder: Option<&mut session::Recorder>,
 ) {
     let Some(open) = open.as_mut() else {
@@ -12924,8 +13103,8 @@ fn measure_audio(
     let mut signals = *deck.signals();
     let (_audio, tempo) = open.frame(
         &mut signals,
-        interval.map(|rate| 1.0 / rate as f32).unwrap_or(0.0),
-        f32::from(STEPS_A_FRAME) * DT,
+        interval,
+        f32::from(steps) * DT,
         audio::Grid::Owned,
     );
     deck.set_signals(signals);
@@ -15892,18 +16071,77 @@ mod tests {
             "the boundary did not move: the left pane went from {was} to {wide}"
         );
 
-        // Now back the other way, past what the left pane will go below, and
-        // let go there. **The pointer ends nowhere near the boundary**, which
-        // is the ordinary end of a drag and the case that catches a release
-        // routed after `released` rather than before it.
+        // Now back the other way, to exactly what the left pane will not go
+        // below. The boundary started at 340 and the pointer took hold 5 past
+        // it, so 180 back from where it grabbed asks for the pane's own
+        // minimum and no further.
+        let stop = Point::new(start.x - 180.0, start.y);
+        assert_eq!(readout.pointer(&ctx, Pointer::Moved(stop)).0, Claim::Panel);
+        readout.panel.solve();
+        assert!(
+            (pane_width(&readout) - 160.0).abs() < 0.01,
+            "the left pane's stated minimum did not hold the drag: {}",
+            pane_width(&readout)
+        );
+
+        // And on past it, and let go there. **The pointer ends nowhere near
+        // the boundary**, which is the ordinary end of a drag and the case
+        // that catches a release routed after `released` rather than before
+        // it.
+        //
+        // **A pull this far past a pane's own minimum closes the pane**
+        // (`docs/adr/0300-a-pane-folds-by-dragging-its-boundary-out-and-comes-back-by-dragging-it-in.md`),
+        // which is what the assertion above used to say instead: the minimum
+        // holds a drag that stops at it, and a drag that goes on through it is
+        // asking for the fold. The pane keeps its edge, so the boundary is
+        // still there at the window's own edge and another drag brings it
+        // back — none of which is this test's subject, which is that the
+        // window loop's routing never lets go of the gesture.
         let far = Point::new(start.x - 200.0, start.y);
         assert_eq!(readout.pointer(&ctx, Pointer::Moved(far)).0, Claim::Panel);
         assert_eq!(readout.pointer(&ctx, Pointer::Up).0, Claim::Panel);
 
         readout.panel.solve();
+        let left = readout
+            .panel
+            .layout()
+            .find("left-pane")
+            .expect("a left pane");
+        assert!(
+            readout.panel.layout().is_closed(left),
+            "a drag 40 past the left pane's own minimum left it {} wide rather than closing it",
+            pane_width(&readout)
+        );
+
+        // **And the way back, through the same routing.** A closed pane keeps
+        // its boundary at the window's own edge, so the gesture that brings it
+        // back is a second drag on that boundary — pressed, pulled inward, let
+        // go. This is the sufficient half of *Fold a pane away* for the row
+        // that needs it: `karakuri-console` cannot depend on this file, so
+        // whether a hand on a real window reaches the fold is a test here.
+        let edge = readout
+            .panel
+            .layout()
+            .boundary(readout.panel.layout().parent(left).expect("a body row"), 0)
+            .expect("a closed pane keeps its boundary");
+        let held = Point::new(edge.x + edge.w * 0.5, start.y);
+        assert_eq!(readout.pointer(&ctx, Pointer::Moved(held)).0, Claim::Panel);
+        assert_eq!(readout.pointer(&ctx, Pointer::Down).0, Claim::Panel);
+        assert_eq!(
+            readout
+                .pointer(&ctx, Pointer::Moved(Point::new(held.x + 40.0, held.y)))
+                .0,
+            Claim::Panel
+        );
+        assert_eq!(readout.pointer(&ctx, Pointer::Up).0, Claim::Panel);
+        readout.panel.solve();
+        assert!(
+            !readout.panel.layout().is_closed(left),
+            "the boundary the closed pane kept was dragged inward and the pane did not come back"
+        );
         assert!(
             (pane_width(&readout) - 160.0).abs() < 0.01,
-            "the left pane's stated minimum did not hold the drag: {}",
+            "the pane came back {} wide rather than at the minimum it declares",
             pane_width(&readout)
         );
 
@@ -19685,6 +19923,15 @@ mod press_handler {
             "program_head(",
             &["head.hit(", "head.op("],
         ),
+        // **The grip in each bay head**, the capsule above's neighbour in the
+        // same head: one derivation asked once per bay, because four heads
+        // cannot be one laid-out box. A pane has no row here and needs none —
+        // it folds by its own boundary, which rule 3 claims (ADR-0300).
+        (
+            "the grip in a bay head",
+            "bay_grip(",
+            &["grip.hit(", "grip.op("],
+        ),
         // **The four deck preview cells**, asked at the release alone — see
         // the head of this table.
         (
@@ -20178,6 +20425,16 @@ mod gpu {
     /// copy of the arithmetic here would be a test agreeing with itself about
     /// the one thing it is checking.
     use karakuri_engine::letterbox;
+
+    /// **What a frame these tests compose advances by.**
+    ///
+    /// A stated count rather than a measured one, and it is honest here for the
+    /// reason it was not in the live path: these frames are composed to assert
+    /// what was *drawn* — a cell that took a pass, the rectangle it was aimed
+    /// at — and they time nothing at all, so this is a fixture rather than a
+    /// measurement withheld. The live count is `App::clock`, which measures the
+    /// interval and writes it into the `tick` (ADR-0297).
+    const STEPS_A_FRAME: u8 = 1;
 
     /// **A [`Keeping`] with nothing served and nothing yet built**, which is
     /// what a run holds on its first frame.

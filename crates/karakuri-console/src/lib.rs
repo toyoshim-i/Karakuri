@@ -396,6 +396,15 @@ fn left_pane() -> Spec {
         ],
     )
     .named("left-pane")
+    // **A fold on this pane leaves its edge behind** — zero width, and the
+    // divider beside it still drawn at the window's own edge, so the pane
+    // that is not on screen can still be taken hold of and pulled back in
+    // (ADR-0300). The two side panes are the only regions that declare it,
+    // and the manual is why: *"a **left pane** and a **right pane**, which
+    // fold away to give room, and the **centre**, which is what they give it
+    // to"*. Everything else on this console is stacked among neighbours and
+    // folds the ordinary way, with `z` as the way back.
+    .keeps_its_edge()
     // `.body-grid`'s first track: `340px` (ADR-0239).
     .fixed(340.0)
     // Minimum: a library row at its narrowest useful — `.lib-list` padding
@@ -673,6 +682,15 @@ fn right_pane() -> Spec {
         ],
     )
     .named("right-pane")
+    // **A fold on this pane leaves its edge behind** — zero width, and the
+    // divider beside it still drawn at the window's own edge, so the pane
+    // that is not on screen can still be taken hold of and pulled back in
+    // (ADR-0300). The two side panes are the only regions that declare it,
+    // and the manual is why: *"a **left pane** and a **right pane**, which
+    // fold away to give room, and the **centre**, which is what they give it
+    // to"*. Everything else on this console is stacked among neighbours and
+    // folds the ordinary way, with `z` as the way back.
+    .keeps_its_edge()
     // `.body-grid`'s third track: `400px` (ADR-0239).
     .fixed(400.0)
     // Minimum: four mixer strips still side by side, which is the narrowest

@@ -148,7 +148,7 @@ fn a_node_set_aside_takes_no_extent_and_no_divider() {
     assert!(near(l.rect(left).w, 150.0), "left is {}", l.rect(left).w);
     assert!(near(l.rect(right).w, 848.0), "right is {}", l.rect(right).w);
     assert_eq!(
-        l.visible_children(root).collect::<Vec<_>>(),
+        l.placed_children(root).collect::<Vec<_>>(),
         vec![left, right],
         "a node that is out is still a child a divider index counts"
     );

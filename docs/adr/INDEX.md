@@ -323,6 +323,10 @@ number; new records continue from the end.
 | [ADR-0293](0293-a-rung-may-sit-under-the-floor-because-what-it-hides-is-bounded-and-paid.md) | A rung may sit under the floor, because what it hides is bounded and paid | 2026-09-08 | accepted |
 | [ADR-0295](0295-the-grip-is-the-fold-and-a-panes-outer-edge-is-the-other-one.md) | The grip is the fold, and a pane's outer edge is the other one | 2026-09-08 | accepted |
 | [ADR-0296](0296-the-governor-budgets-on-the-estimate-where-it-answers-and-on-the-measurement-where-it-does-not.md) | The governor budgets on the estimate where it answers, and on the measurement where it does not | 2026-09-08 | accepted |
+| [ADR-0297](0297-the-panels-tick-is-measured-and-the-fixed-step-a-frame-ran-the-room-at-the-displays-rate.md) | The panel's tick is measured, and the fixed step a frame ran the room at the display's rate | 2026-09-08 | accepted |
+| [ADR-0298](0298-the-badge-is-the-band-of-the-number-the-governor-spent-and-how-it-was-taken-crosses-the-seam-undrawn.md) | The badge is the band of the number the governor spent, and how it was taken crosses the seam undrawn | 2026-09-08 | accepted |
+| [ADR-0299](0299-my-sets-is-the-starred-subset-and-the-star-is-kept-beside-the-sets.md) | `my sets` is the starred subset, and the star is kept beside the Sets | 2026-09-08 | accepted |
+| [ADR-0300](0300-a-pane-folds-by-dragging-its-boundary-out-and-comes-back-by-dragging-it-in.md) | A pane folds by dragging its boundary out, and comes back by dragging it in | 2026-09-08 | accepted |
 
 ## Retired numbers
 

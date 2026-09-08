@@ -71,6 +71,22 @@ fn label(p: &Panel, id: NodeId) -> String {
     }
 }
 
+/// **Whether a boundary is one a drag can fold a pane at** — a region beside
+/// it whose fold leaves its edge behind (ADR-0300).
+///
+/// The two tests below drag every boundary far past every stop, which is the
+/// gesture that closes such a pane; what they are about is a boundary that
+/// *moves*, so those two are left to `tests/fold_grip.rs`, where the fold is
+/// the subject rather than the accident. Read off the arrangement rather than
+/// listed, so a third pane declaring it is skipped here without anybody
+/// editing this file.
+fn folds_a_pane(p: &Panel, split: NodeId, index: usize) -> bool {
+    match p.pair(split, index) {
+        Some((a, b)) => p.layout().keeps_its_edge(a) || p.layout().keeps_its_edge(b),
+        None => false,
+    }
+}
+
 /// Every divider in the arrangement, dragged and dragged back — including far
 /// past whatever stops it — leaves the arrangement exactly as it was, and at
 /// least one of them moves on the way.
@@ -78,6 +94,12 @@ fn label(p: &Panel, id: NodeId) -> String {
 /// The second half is the point: `set_divider` takes an absolute coordinate,
 /// so the frames spent past a stop contribute nothing to accumulate. A caller
 /// that fed it deltas would come back short.
+///
+/// **A boundary beside a pane that keeps its edge is not one of these, and
+/// that is a change rather than an exemption.** A drag far past that pane's
+/// own minimum closes it, and bringing the pointer back does not open it: one
+/// gesture asks for one fold, and the way back is another gesture
+/// (ADR-0300). `tests/fold_grip.rs` is where both halves are demonstrated.
 #[test]
 fn a_drag_out_and_back_leaves_the_arrangement_where_it_was() {
     let mut probe = Panel::new(1600.0, 1000.0);
@@ -122,6 +144,9 @@ fn a_drag_out_and_back_leaves_the_arrangement_where_it_was() {
                 grabbed += 1;
             }
             _ => continue,
+        }
+        if folds_a_pane(&p, split, index) {
+            continue;
         }
 
         let _ = p.moved(offset(axis, point, 40.0));
@@ -189,6 +214,13 @@ fn a_drag_past_the_left_edge_of_the_window() {
 /// pointer event is hundreds of identical lines a second into a terminal that
 /// has to keep up with them. So the first move past the stop comes back
 /// `held`, and the two hundred after it come back with nothing to say at all.
+///
+/// **A boundary beside a pane that keeps its edge answers the first move with
+/// a fold instead** (ADR-0300): pulling on past the stop is what closes the
+/// pane, so what the drag has to say is *that* rather than *held*. The
+/// property under test is the same one either way and the two hundred moves
+/// after it are what it is about — the pane is closed, its boundary does not
+/// move again, and one gesture asks for one fold.
 #[test]
 fn a_drag_held_at_a_stop_says_so_once() {
     let mut probe = Panel::new(1600.0, 1000.0);
@@ -205,8 +237,10 @@ fn a_drag_held_at_a_stop_says_so_once() {
         // a hand held against the edge of the window does.
         let held = p.moved(offset(axis, point, -9000.0));
         assert!(
-            matches!(&held, Some(Dragged::Boundary { held, .. }) if held.is_some()),
-            "a drag 9000px past every stop did not report one holding it: {held:?}"
+            matches!(&held, Some(Dragged::Boundary { held, .. }) if held.is_some())
+                || matches!(&held, Some(Dragged::Pane(Op::Fold(_)))),
+            "a drag 9000px past every stop did not report one holding it, or the fold it \
+             performed instead: {held:?}"
         );
         let at = boundary(&p, split, index).expect("a boundary");
         let mut said = 0;
@@ -444,13 +478,19 @@ fn a_drag_reports_where_it_landed_and_moves_only_the_pair() {
         let span = axis.extent(p.layout().rect(a)) + axis.extent(p.layout().rect(b));
         let siblings: Vec<NodeId> = p
             .layout()
-            .visible_children(split)
+            .placed_children(split)
             .filter(|c| *c != a && *c != b)
             .collect();
         let others: Vec<Rect> = siblings.iter().map(|c| p.layout().rect(*c)).collect();
 
         let point = grab_point(&p, split, index).expect("a gap to aim at");
         if !matches!(p.press(point), Pressed::Grabbed { .. }) {
+            continue;
+        }
+        // A drag 9000px out through a pane's own edge closes the pane rather
+        // than moving the boundary, which is `tests/fold_grip.rs`'s subject
+        // and not this one's — see `folds_a_pane`.
+        if folds_a_pane(&p, split, index) {
             continue;
         }
         checked += 1;
@@ -503,7 +543,10 @@ fn a_drag_reports_where_it_landed_and_moves_only_the_pair() {
             "the boundary is not the far edge of the child before it"
         );
     }
-    assert!(checked > 0, "no divider could be grabbed at all");
+    assert!(
+        checked >= 4,
+        "only {checked} dividers could be grabbed and dragged without folding a pane"
+    );
 }
 
 /// A fold during a drag takes the boundary away, and the release says so.

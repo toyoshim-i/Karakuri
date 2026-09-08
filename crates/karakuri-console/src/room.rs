@@ -21,7 +21,9 @@
 //!
 //! # What is transcribed and what is interpreted
 //!
-//! Twelve of the fourteen properties are plain hex and are copied. Two are not:
+//! Seventeen of the twenty-one properties are plain hex and are copied — the
+//! twelve moods, and the risk badge's five bands. Four are `rgba(…)` or a
+//! shadow, and are written out:
 //!
 //! - **`--c-shadow` is two shadows by day and one by night.** `epaint` draws
 //!   one, so the day pair is collapsed to its larger member — the `0 4px 14px`
@@ -31,6 +33,9 @@
 //!   control is drawn in this pass. They are transcribed anyway, because they
 //!   are two lines and the alternative is reading the stylesheet a second time
 //!   for them.
+//! - **`--c-tint` is the fourth**, and it is the plain case the rule below
+//!   covers: a colour at an alpha, premultiplied here because
+//!   `Color32::from_rgba_unmultiplied` is not `const`.
 //!
 //! `color-mix(in srgb, X 14%, transparent)` appears throughout the mock's
 //! controls and is exactly a colour at that alpha, so where it is needed it is
@@ -120,6 +125,28 @@ pub struct Palette {
     pub glow: Color32,
     /// `--c-glowp`: the same on a pink one.
     pub glow_pink: Color32,
+    /// `--c-band-green`: the first of the risk badge's five, and the only one
+    /// of the five that is not a warning of some degree.
+    ///
+    /// **These five are the one group here that is not a mood.** Every colour
+    /// above says what a thing *is* — armed, on air, an address — and each is
+    /// used wherever that thing is drawn. The bands say where one number fell
+    /// on one scale, they are used in exactly one place
+    /// ([`view::caption_into`](crate::view::caption_into)), and the mock gives
+    /// them custom properties of their own rather than reaching for `--c-mint`
+    /// and `--c-pink`: a green dot is not *live in the good sense* and a red
+    /// one is not *on air*. Transcribed as five because the stylesheet states
+    /// five, and read through [`view::Band`](crate::view::Band), which is
+    /// where the number becomes one of them.
+    pub band_green: Color32,
+    /// `--c-band-blue`.
+    pub band_blue: Color32,
+    /// `--c-band-yellow`.
+    pub band_yellow: Color32,
+    /// `--c-band-red`.
+    pub band_red: Color32,
+    /// `--c-band-purple`.
+    pub band_purple: Color32,
     /// `--c-shadow`, collapsed to one — see the module documentation.
     pub shadow: Shadow,
 }
@@ -145,6 +172,11 @@ impl Palette {
         glow: rgba(0x17, 0xb4, 0xab, 77),
         // rgba(238,91,156,0.30)
         glow_pink: rgba(0xee, 0x5b, 0x9c, 77),
+        band_green: rgb(0x2c, 0x9e, 0x63),
+        band_blue: rgb(0x3a, 0x7b, 0xd5),
+        band_yellow: rgb(0xd3, 0x9a, 0x1c),
+        band_red: rgb(0xd2, 0x4b, 0x46),
+        band_purple: rgb(0x7d, 0x5b, 0xd6),
         // 0 4px 14px rgba(43,48,80,0.07)
         shadow: Shadow {
             offset: [0, 4],
@@ -174,6 +206,11 @@ impl Palette {
         glow: rgba(0x5f, 0xef, 0xe4, 107),
         // rgba(255,143,198,0.42)
         glow_pink: rgba(0xff, 0x8f, 0xc6, 107),
+        band_green: rgb(0x4f, 0xd6, 0x8f),
+        band_blue: rgb(0x6f, 0xa8, 0xff),
+        band_yellow: rgb(0xff, 0xcf, 0x6b),
+        band_red: rgb(0xff, 0x7a, 0x72),
+        band_purple: rgb(0xb4, 0x92, 0xff),
         // 0 2px 18px rgba(0,0,0,0.5)
         shadow: Shadow {
             offset: [0, 2],
@@ -346,6 +383,17 @@ pub mod size {
 
     /// `.caption`'s `gap: 5px`, between the letter and the word beside it.
     pub const PREVIEW_CAPTION_GAP_X: f32 = 5.0;
+
+    /// `.risk`'s `width: 6px; height: 6px`: the risk badge, a dot at the far
+    /// end of a cell's caption. Square in the stylesheet and round on the
+    /// panel, because `.risk` also carries `border-radius: 999px` — which on
+    /// a box this size is a circle of half this across.
+    ///
+    /// **It is one number and not two on purpose.** A badge that could be
+    /// drawn 6 by 5 is a badge that can be drawn wrong, and the stylesheet
+    /// states the two equal; the ellipse this would need is not a shape the
+    /// mock has anywhere.
+    pub const PREVIEW_RISK: f32 = 6.0;
 
     /// `.transport`'s `padding: 9px 12px`. The 9 is the same 9 the
     /// arrangement's 48 was written from (`lib.rs`: 9 + 30 + 9), so the row's

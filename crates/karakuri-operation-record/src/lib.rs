@@ -1242,6 +1242,28 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
         | Operation::SaveArrangement { .. }
         | Operation::RestoreArrangement { .. }
         | Operation::SelectScope { .. }
+        // **A star is this room's statement about the library, and
+        // `console.html` refused the other two places by name.** In the Set
+        // file it travels with the material and has to be *written*, so a Set
+        // would jump to the top of a listing ordered by when it was made and a
+        // favourite would be indistinguishable from an edit. In the session it
+        // is a thing that happened at a moment: a press with `rec` off would
+        // keep nothing, and a replay would hand the favourite back as an event
+        // rather than as something that is true. So it is kept beside the Sets,
+        // in the store, and nothing in the stream carries it.
+        //
+        // **`Surface` rather than `NoRecord`, and that is the arm to think
+        // about**, because a star does not live in this console the way a fold
+        // does — it is on the disk and it outlives the run. It is here for
+        // `Operation::SaveArrangement`'s reason one line up: `NoRecord` is
+        // where an operation goes when the record vocabulary has no row for
+        // what it does **and that is a gap**, and this is the opposite. The
+        // vocabulary having no row for a favourite is the decision, taken
+        // against the stream by name on `docs/manual/console.html` and recorded
+        // in `docs/adr/0299-…`. Nothing is owed, and a replay reconstructs
+        // nothing from a star: a session played back in somebody else's room
+        // would otherwise arrive carrying this room's attention.
+        | Operation::SetFavourite { .. }
         | Operation::SizeWindow { .. } => Written::Silent(Silent::Surface),
 
         // ----- Silent: it asks rather than changes -------------------------
