@@ -192,6 +192,16 @@ that produced it, which is `SetTransfer::Take`'s own arrangement.
   file stays one walk. `crates/karakuri`'s `restored` builds the `Slots` it hands `put_back` **out
   of the aims** — `Aiming::at`, where each watcher is pointed now — rather than out of the launch
   copies, so the answer follows a library load.
+
+  > **Annotated 2026-09-08.** **The stale half is fixed and this second `Slots` is gone**
+  > ([ADR-0309](0309-a-slots-files-are-published-where-its-aim-is-sent-and-the-server-reads-them-live.md)).
+  > Building one here was the workaround for the MCP server's own being the launch working copies,
+  > taken before the window and never written again — so a model reading, writing or rewiring a deck
+  > a Set had been loaded onto was answered about the material that deck had stopped running, and
+  > answered *successfully*. `mcp::Slots` is now a shared handle the host writes on every re-point
+  > and the server resolves through on every call, `Aiming::publish` is the one place that writes
+  > it, and `restored` reads `Engine::pointing` rather than deriving a second one. What this
+  > consequence says about `Slots::file` being public and delegating to `path` is unchanged.
 - **The cap is on the walk and not on the Set.** `HISTORY_MOST` rows are asked for and the narrowing
   happens after, so a store whose day directories hold several Sets' versions lists fewer of each.
   `Listing::stopped_short` and `Listing::unclaimed` are said out loud beside the count rather than

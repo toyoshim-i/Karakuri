@@ -5327,6 +5327,17 @@ struct Engine {
     /// for the reason the whole of [`Engine`] is on this side: the channel is
     /// `karakuri-environment`'s and the engine takes no environment.
     aimed: Vec<Aiming>,
+    /// **Where this deck says which files its slots are running**, for the
+    /// readers that are not on this thread — see [`Aiming::pointing`], which is
+    /// a clone of this, and [`karakuri_environment::mcp::Slots`].
+    ///
+    /// **The engine keeps it so that the two readers ask one handle.** The MCP
+    /// server was handed the launch working copies and the landing on a row of
+    /// the edit history built a second `Slots` of its own out of the aims
+    /// (ADR-0308); the first went stale on the first library load and the
+    /// second was the workaround for it. There is one now, this is it, and
+    /// [`restored`] reads it rather than rebuilding one.
+    pointing: karakuri_environment::mcp::Slots,
     /// **Every node the run launched with**, in file order, with the bytes each
     /// one was compiled from — see [`karakuri_environment::compile::Placed`].
     ///
@@ -5381,9 +5392,57 @@ struct Aiming {
     aim: std::sync::mpsc::Sender<watch::Aim>,
     /// Where that watcher is pointed, kept in step with what has been sent.
     at: watch::Aim,
+    /// **Where that answer is published for the readers that are not on this
+    /// thread**, which today are the MCP server and the landing on a row of
+    /// the edit history — see [`karakuri_environment::mcp::Slots`].
+    ///
+    /// **A publication and not a second answer.** `at` above is the derivation
+    /// ([`Aiming`]'s own head); this is a clone of the run's one handle, and
+    /// nothing writes it except [`Aiming::publish`], which reads `at`. The
+    /// server used to be handed the launch working copies instead, and after a
+    /// library load it resolved every address against the files the deck had
+    /// stopped running — a `read_procedure` that answered about the wrong
+    /// material, a `write_procedure` that wrote where no watcher was looking,
+    /// and a node the loaded Set does hold refused for not existing
+    /// (`docs/principles/0094-…`, and ADR-0308's *Doubted*, which recorded it
+    /// and worked around it for the landing alone).
+    pointing: karakuri_environment::mcp::Slots,
+    /// Which slot this is, so a publication lands on the row it is about. It is
+    /// the index [`Engine::aimed`] is in, which is the deck letter.
+    slot: usize,
 }
 
 impl Aiming {
+    /// **A watcher, and the handle where this slot's files are published.**
+    ///
+    /// It publishes at construction as well as on every re-point, because a
+    /// window remade makes these again and puts every slot back on the pair the
+    /// run launched with (ADR-0304): a handle left holding the layout a load
+    /// had put there would outlive the deck that was running it.
+    fn new(
+        aim: std::sync::mpsc::Sender<watch::Aim>,
+        at: watch::Aim,
+        pointing: karakuri_environment::mcp::Slots,
+        slot: usize,
+    ) -> Aiming {
+        let aiming = Aiming {
+            aim,
+            at,
+            pointing,
+            slot,
+        };
+        aiming.publish();
+        aiming
+    }
+
+    /// **Say where this watcher is pointed**, from the aim and from nothing
+    /// else. One write, after the caller has finished writing files and before
+    /// the aim goes out, so a call arriving mid-load sees one layout or the
+    /// other and never half of either.
+    fn publish(&self) {
+        self.pointing.re_point(self.slot, &self.at);
+    }
+
     /// **Point the watcher at what it is already looking at, with `edges`
     /// instead**, and answer whether it is still there to be pointed.
     ///
@@ -5393,6 +5452,11 @@ impl Aiming {
     /// fact from *the slot is recompiling*.
     fn re_aim(&mut self, edges: Vec<karakuri_engine::set::Edge>) -> Result<(), ()> {
         self.at.edges = edges;
+        // **Said again although a rewiring moves no file**, which is the point
+        // of putting it here rather than at the one call that does: this is one
+        // of the two places an aim leaves this program, and a publication that
+        // covered only the other would be a rule somebody has to remember.
+        self.publish();
         self.aim.send(restated(&self.at)).map_err(|_| ())
     }
 
@@ -5404,6 +5468,7 @@ impl Aiming {
     /// with, which is the hardest version of this mistake to see.
     fn re_point(&mut self, aim: watch::Aim) -> Result<(), ()> {
         self.at = aim;
+        self.publish();
         self.aim.send(restated(&self.at)).map_err(|_| ())
     }
 }
@@ -6334,6 +6399,11 @@ fn rewired(
 /// `Sender` is live or was dropped at construction, and a swap has always
 /// landed at a frame boundary (ADR-0005). What is new on a *frame* is a
 /// build's install, which is the mechanism this deck was already built on.
+// **Eight, and each is a distinct thing this slot's watcher needs**: a device, a
+// pair, a live Set, which slot it is, its salt, where builds go, where its
+// layout is published and where its versions are kept. A struct bundling them
+// would be one type with one construction site and one reader.
+#[allow(clippy::too_many_arguments)]
 fn watched(
     gpu: &Gpu,
     sources: &Sources,
@@ -6343,6 +6413,10 @@ fn watched(
     // Where this watcher puts what it builds, and where it says so — or `None`
     // for a harness with no store to write into. See [`Engine::new`].
     stored: Option<(std::sync::Arc<Store>, std::sync::mpsc::Sender<watch::Built>)>,
+    // **The run's one published layout**, made in [`main`] beside the opening
+    // and for the same reason — see [`Aiming::pointing`]. This slot's row of it
+    // is written here, at construction, and again on every re-point.
+    pointing: karakuri_environment::mcp::Slots,
     // **The run's one history**, seeded in [`main`] from the same files this
     // slot watches, and `None` for a harness with no store — the same
     // condition `stored` above is `None` under, and a separate argument
@@ -6434,7 +6508,7 @@ fn watched(
         DEFAULT_BUDGET_MS,
         Box::new(watching),
     );
-    (swap, Aiming { aim, at })
+    (swap, Aiming::new(aim, at, pointing, slot))
 }
 
 impl Engine {
@@ -6443,6 +6517,10 @@ impl Engine {
     /// gives the picture and deck A's cell their first rectangles, so no frame
     /// has to correct a guess and there is no second derivation here to drift
     /// from the one in [`Engine::aim`].
+    // Eight, for [`watched`]'s reason: the last three are the run-wide handles
+    // this constructor hands every watcher it makes, and each has a different
+    // owner in [`main`].
+    #[allow(clippy::too_many_arguments)]
     fn new(
         gpu: &Gpu,
         renderer: &mut egui_wgpu::Renderer,
@@ -6465,6 +6543,14 @@ impl Engine {
         // empty dedup memory: the first rebuild after a remake would file every
         // untouched procedure as a new version.
         snapshots: Option<history::Shared>,
+        // **Where this deck says which files each of its slots is running**,
+        // handed in rather than made here: [`main`] gives the same handle to
+        // [`karakuri_environment::mcp::serve`] and to this, so a model's
+        // address and the file a watcher is polling are one answer — which is
+        // exactly the arrangement the opening already has. It is not
+        // `Option` and does not depend on `--mcp`, because the landing on a row
+        // of the edit history reads it too ([`restored`]).
+        pointing: karakuri_environment::mcp::Slots,
     ) -> Engine {
         assert!(
             slots.len() == SLOTS,
@@ -6571,6 +6657,7 @@ impl Engine {
                 stored
                     .as_ref()
                     .map(|(store, tx)| (std::sync::Arc::clone(store), tx.clone())),
+                pointing.clone(),
                 snapshots.clone(),
             );
             swaps.push(swap);
@@ -6675,6 +6762,7 @@ impl Engine {
             look: LOOK,
             freed: 0,
             aimed,
+            pointing,
             placed,
         }
     }
@@ -10282,11 +10370,15 @@ fn played(gfx: &mut Gfx, operation: &Operation) -> Option<String> {
 /// word that was pressed, so no surface spells a path"*.
 ///
 /// **Which node the file is is asked of the aim rather than of the launch
-/// copies.** `mcp::Slots` is built here out of what each watcher is *pointed
-/// at* — `Aiming::at` — so the answer follows a library load, where the one
-/// this program hands the MCP server is the pair each slot was materialised
-/// with at startup. `Slots::file` is the one walk that turns
+/// copies.** [`Engine::pointing`] is the run's one `mcp::Slots`, written out of
+/// what each watcher is *pointed at* — `Aiming::at` — so the answer follows a
+/// library load. `Slots::file` is the one walk that turns
 /// `(slot, layer, index)` into a file, and it is asked rather than repeated.
+///
+/// **This used to build a `Slots` of its own here**, because the one the MCP
+/// server held was the launch working copies and went stale on the first load
+/// (ADR-0308's *Doubted*). The server reads this same handle now, so the second
+/// one is gone rather than kept beside it.
 ///
 /// # Five refusals, and each says where the deck is still pointed
 ///
@@ -10336,28 +10428,18 @@ fn restored(gfx: &Gfx, operation: &Operation) -> Option<String> {
              that deck first; nothing moved"
         ));
     };
-    // **Built out of the aims and not out of the launch copies**, which is
-    // this function's own head: `Aiming::at` is where each watcher is pointed
-    // *now*, so a slot that has had a Set loaded onto it resolves to that
-    // Set's scratch files.
-    let slots = karakuri_environment::mcp::Slots(
-        gfx.engine
-            .aimed
-            .iter()
-            .map(|aiming| {
-                (
-                    aiming.at.head.path.clone(),
-                    aiming
-                        .at
-                        .rest
-                        .iter()
-                        .map(|node| node.path.clone())
-                        .collect(),
-                )
-            })
-            .collect(),
-    );
-    Some(put_back(&gfx.store, slot, letter, id, picked, &slots))
+    // **The run's one published layout, asked rather than rebuilt** — this
+    // function's own head. [`Engine::pointing`] is written from `Aiming::at` on
+    // every re-point, so a slot that has had a Set loaded onto it resolves to
+    // that Set's scratch files here and answers a model the same way.
+    Some(put_back(
+        &gfx.store,
+        slot,
+        letter,
+        id,
+        picked,
+        &gfx.engine.pointing,
+    ))
 }
 
 /// **The half of [`restored`] that reaches a disk**, split out for the reason
@@ -10367,8 +10449,8 @@ fn restored(gfx: &Gfx, operation: &Operation) -> Option<String> {
 ///
 /// Everything it needs is an argument: the store to walk, the slot and its
 /// letter, the Set the slot is running, the row that was pressed, and where
-/// that slot's nodes are ([`karakuri_environment::mcp::Slots`], built by the
-/// caller out of the aims). The three refusals here are the three that are
+/// that slot's nodes are ([`karakuri_environment::mcp::Slots`], the run's one
+/// published layout, which the caller reads off [`Engine::pointing`]). The three refusals here are the three that are
 /// about **files** — a version that is not in the listing, a node this slot
 /// does not hold, and a file that will not be read or written — where the two
 /// about the *deck* are the caller's and are answered before this is reached.
@@ -11422,6 +11504,15 @@ struct App {
     /// slot is running, and it lives on the aim, one per slot, moved by a load
     /// — see [`Aiming`] and [`watch::Aim::set`].
     snapshots: history::Shared,
+    /// **The run's one published layout**, made in [`main`], handed to
+    /// [`karakuri_environment::mcp::serve`] there and to every [`Engine`] this
+    /// opens — see [`karakuri_environment::mcp::Slots`] and [`Aiming::pointing`].
+    ///
+    /// **Here rather than on [`Gfx`]**, for [`App::snapshots`]' reason exactly:
+    /// the server is bound before the window and outlives every window this run
+    /// remakes, so a handle rebuilt with the swapchain would leave the server
+    /// reading one nothing writes.
+    pointing: karakuri_environment::mcp::Slots,
     /// **Everything a save and a rewiring need that is not the deck** — see
     /// [`Keeping`].
     keeping: Keeping,
@@ -11953,6 +12044,7 @@ impl App {
         snapshots: history::Shared,
         mcp: Option<mcp::Reporter>,
         opening: Opening,
+        pointing: mcp::Slots,
     ) -> App {
         let mut readout = Readout::new(WINDOW.0 as f32, WINDOW.1 as f32);
         // **The one handle, and it lives on the readout because that is where
@@ -11986,6 +12078,7 @@ impl App {
             built_tx,
             held,
             snapshots,
+            pointing,
             keeping: Keeping {
                 mcp,
                 edges: Vec::new(),
@@ -12448,6 +12541,7 @@ impl ApplicationHandler for App {
             self.scale as f32,
             Some((std::sync::Arc::clone(&self.held), self.built_tx.clone())),
             Some(self.snapshots.clone()),
+            self.pointing.clone(),
         );
         // **What every deck is playing, seeded from the compile that just
         // built them**, before a frame has run — see [`Playing::at_launch`].
@@ -15163,6 +15257,29 @@ fn main() {
     // pill that opens a class the server never sees. All four classes start
     // shut, which is the state ADR-0235 says a run starts in.
     let opening = Opening::closed();
+    // **Which files each deck is running, and the one handle that answers it**
+    // — see [`karakuri_environment::mcp::Slots`], and [`Aiming::pointing`] for
+    // what writes it. Made here beside the opening and for the same reason:
+    // the MCP server binds before the window and reads through it on every
+    // call, every watcher this run makes publishes its own slot into it, and a
+    // second one would be a load the server never sees.
+    //
+    // **One pair per deck, and they are the working copies rather than the two
+    // paths the operator typed.** The server addresses a slot and reads and
+    // writes the files behind it, and the files behind a deck are its own copy
+    // — see [`working_copies`]. Handing it the typed paths would let a model
+    // rewrite the preset library.
+    //
+    // **Seeded here because the socket is bound before there is a watcher**,
+    // and this is what every watcher is about to be pointed at: `watched`
+    // builds each slot's launch aim out of this same `running`, and
+    // [`Aiming::new`] restates it into this handle the moment the window opens.
+    let pointing = mcp::Slots::of(
+        running
+            .iter()
+            .map(|pair| (pair.l1.clone(), vec![pair.l4.clone()]))
+            .collect(),
+    );
     // **Before the window, for the reason the working copies are**: `serve`
     // binds a socket, and a socket that is already taken has to be a sentence
     // on a terminal. Everything after `run_app` is inside a `winit` callback,
@@ -15172,20 +15289,13 @@ fn main() {
     // would look exactly like one whose client is connected and idle.
     let mcp = match launch.mcp {
         Some(port) => {
-            // **One pair per deck, and they are the working copies rather than
-            // the two paths the operator typed.** The server addresses a slot
-            // and reads and writes the files behind it, and the files behind a
-            // deck are its own copy — see [`working_copies`]. Handing it the
-            // typed paths would let a model rewrite the preset library.
-            let slots = mcp::Slots(
-                running
-                    .iter()
-                    .map(|pair| (pair.l1.clone(), vec![pair.l4.clone()]))
-                    .collect(),
-            );
             match mcp::serve(
                 port,
-                slots,
+                // **Shared and not copied**, which is the whole of the fix:
+                // the server resolves an address through this on every call,
+                // so a library load that re-points a deck moves what a model
+                // reads and writes with it.
+                pointing.clone(),
                 launch.store.clone(),
                 // **True, and not a flag read from anywhere.** Every slot in
                 // this program is built over a `watch::Watch` ([`watched`]) and
@@ -15225,7 +15335,7 @@ fn main() {
     event_loop.set_control_flow(ControlFlow::Wait);
     event_loop
         .run_app(&mut App::new(
-            launch, running, held, snapshots, mcp, opening,
+            launch, running, held, snapshots, mcp, opening, pointing,
         ))
         .expect("run");
 }
@@ -16347,7 +16457,7 @@ mod tests {
         let rest = scratch.join("A1-soft_points.kir");
         std::fs::write(&head, "kind L1\n// what is playing\n").expect("the head");
         std::fs::write(&rest, "kind L4\n// what is playing\n").expect("the renderer");
-        let slots = karakuri_environment::mcp::Slots(vec![(head.clone(), vec![rest.clone()])]);
+        let slots = karakuri_environment::mcp::Slots::of(vec![(head.clone(), vec![rest.clone()])]);
 
         version_file(
             &root,
@@ -17337,9 +17447,9 @@ mod tests {
         let (tx, rx) = std::sync::mpsc::channel();
         // **An [`Aiming`] and not a bare sender**, because a load keeps where it
         // pointed the watcher — see the assertion at the end of this test.
-        let mut aiming = Aiming {
-            aim: tx,
-            at: watch::Aim {
+        let mut aiming = Aiming::new(
+            tx,
+            watch::Aim {
                 head: karakuri_environment::compile::Named::bare("nowhere.kir"),
                 rest: Vec::new(),
                 layering: Layering::Overdraw,
@@ -17357,7 +17467,11 @@ mod tests {
                 // of this program starts and what the launch seed files under.
                 set: None,
             },
-        };
+            // What this test asserts is the *aim*; where the layout is
+            // published is `a_load_moves_what_the_mcp_server_resolves_against`.
+            karakuri_environment::mcp::Slots::unpointed(),
+            ASKED_TO_PRIME,
+        );
         let line = loading(
             &root,
             ASKED_TO_PRIME,
@@ -17447,6 +17561,187 @@ mod tests {
             aiming.at.live,
             Some(0),
             "a load that failed moved where the watcher is pointed"
+        );
+
+        std::fs::remove_dir_all(&root).expect("clean up");
+    }
+
+    /// **A load moves what the MCP server resolves an address against, and it
+    /// moves nothing else's.**
+    ///
+    /// This program built the `mcp::Slots` it handed the server out of the
+    /// **launch** working copies and never wrote it again. A library load
+    /// writes new scratch files and re-points that slot's watcher at them
+    /// (ADR-0228), so from the first load onwards every address the server
+    /// resolved was the layout the deck had stopped running: `read_procedure`
+    /// answered about the wrong material, `write_procedure` wrote a file no
+    /// watcher was polling and reported that it was being built, and a node the
+    /// loaded Set does hold was refused for not existing. None of the three
+    /// fails — they are plausible wrong answers on the surface whose reader is
+    /// a program in a loop (`docs/principles/0094-…`). ADR-0308 recorded it and
+    /// worked around it for the landing alone.
+    ///
+    /// **The assertion is `Slots::file`, which is the walk the server writes
+    /// through**: `write_procedure` and `read_procedure` resolve an address with
+    /// `Slots::path`, and `file` is that same private walk with the layer taken
+    /// as a word. So the path asserted here is the path the server would write
+    /// to.
+    ///
+    /// **Three things.** The loaded slot resolves to the new scratch file and
+    /// not to the launch copy; a renderer the launch pair had and the loaded Set
+    /// has not is refused **naming what the slot holds now** (P-0083); and the
+    /// slot nobody loaded onto has not moved, because a publication per slot
+    /// that overwrote the deck would be a worse defect than the one being
+    /// fixed.
+    ///
+    /// A CPU test: a store and a scratch are directories, and nothing here takes
+    /// a device.
+    #[test]
+    fn a_load_moves_what_the_mcp_server_resolves_against() {
+        use karakuri_environment::setfile;
+        use karakuri_store::Hash;
+
+        let root = scratch_dir("mcp-load");
+        let store = Store::open(&root).expect("a store to load from");
+
+        // A Set of two nodes, through the checker exactly as a load out of the
+        // library goes. `soft_points` is the renderer's name, which is what the
+        // scratch file is called after.
+        let examples = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples");
+        let nodes: Vec<setfile::Node> = [
+            (karakuri_ir::Kind::L1, "lattice_shell.kir"),
+            (karakuri_ir::Kind::L4, "soft_points.kir"),
+        ]
+        .into_iter()
+        .map(|(layer, file)| {
+            let src = std::fs::read_to_string(examples.join(file)).expect("an example");
+            let hash = Hash::of(src.as_bytes());
+            store.put_artifact(src.as_bytes()).expect("store a source");
+            setfile::Node {
+                hash,
+                layer,
+                index: 0,
+                name: None,
+            }
+        })
+        .collect();
+        setfile::save(
+            &store,
+            Asked::Operator,
+            "night02",
+            setfile::Saving {
+                nodes: &nodes,
+                capacities: &[2048],
+                params: &[],
+                bindings: &[],
+                edges: &[],
+                camera: &karakuri_engine::camera::Orbit::default(),
+                layering: Layering::Overdraw,
+                live: None,
+                seeds: &[0x0bad_cafe],
+            },
+        )
+        .expect("write the Set file");
+
+        // The launch layout: two decks, and the one about to be loaded onto
+        // holds **two** renderers, so `L4:1` is a real address before the press
+        // and the refusal asserted below is a change rather than a constant.
+        let launch = |name: &str, kind: &str| {
+            let path = root.join(name);
+            std::fs::write(&path, format!("proc launched {{\n  kind {kind}\n}}\n"))
+                .expect("a launch copy");
+            path
+        };
+        let a_l1 = launch("A0-launch.kir", "L1");
+        let a_l4 = launch("A1-launch.kir", "L4");
+        let b_l1 = launch("B0-launch.kir", "L1");
+        let b_l4 = launch("B1-launch.kir", "L4");
+        let b_l4_second = launch("B2-launch.kir", "L4");
+        let pointing = karakuri_environment::mcp::Slots::of(vec![
+            (a_l1.clone(), vec![a_l4.clone()]),
+            (b_l1, vec![b_l4.clone(), b_l4_second.clone()]),
+        ]);
+        assert_eq!(
+            pointing
+                .file(ASKED_TO_PRIME, "L4", 0)
+                .expect("the launch L4"),
+            b_l4,
+            "the fixture does not start on the launch copies"
+        );
+
+        // The slot's watcher, pointed where the run launched it. `Aiming::new`
+        // publishes that, which is what a window remade does too.
+        let (tx, _rx) = std::sync::mpsc::channel();
+        let mut aiming = Aiming::new(
+            tx,
+            watch::Aim {
+                head: karakuri_environment::compile::Named::bare(&b_l4),
+                rest: Vec::new(),
+                layering: Layering::Overdraw,
+                live: None,
+                capacity: None,
+                seed_salt: 0,
+                salts: Vec::new(),
+                camera: karakuri_engine::camera::Orbit::default(),
+                overrides: Vec::new(),
+                published: Vec::new(),
+                bindings: Vec::new(),
+                edges: Vec::new(),
+                authorities: Vec::new(),
+                set: None,
+            },
+            pointing.clone(),
+            ASKED_TO_PRIME,
+        );
+
+        loading(
+            &root,
+            ASKED_TO_PRIME,
+            slot_salt(ASKED_TO_PRIME),
+            &mut aiming,
+            "night02",
+        )
+        .unwrap_or_else(|e| panic!("the load failed: {e}"));
+
+        // **The new scratch file, and not the launch copy.**
+        let landed = pointing
+            .file(ASKED_TO_PRIME, "L4", 0)
+            .expect("the loaded Set's renderer");
+        assert_eq!(
+            landed,
+            root.join(karakuri_environment::scratch::DIR)
+                .join("B1-soft_points.kir"),
+            "a write addressed to deck B's renderer would not reach the file its \
+             watcher is polling"
+        );
+        assert_ne!(
+            landed, b_l4,
+            "the address resolved against the layout the deck stopped running"
+        );
+        assert_eq!(
+            pointing
+                .file(ASKED_TO_PRIME, "L1", 0)
+                .expect("the loaded Set's geometry"),
+            root.join(karakuri_environment::scratch::DIR)
+                .join("B0-lattice_shell.kir")
+        );
+
+        // **The second renderer is gone, and the refusal says what is there
+        // now** rather than reporting a range the deck stopped holding.
+        let refused = pointing
+            .file(ASKED_TO_PRIME, "L4", 1)
+            .expect_err("`night02` holds one renderer");
+        assert_eq!(
+            refused, "slot 1 holds one L4 and `index` is 1",
+            "the refusal does not name what the deck holds now"
+        );
+
+        // **And nothing else moved.** A publication that wrote the deck rather
+        // than the slot would be a worse defect than the one this fixes.
+        assert_eq!(
+            pointing.file(ON_AIR, "L4", 0).expect("deck A is untouched"),
+            a_l4,
+            "the load moved a deck nobody named"
         );
 
         std::fs::remove_dir_all(&root).expect("clean up");
@@ -21031,9 +21326,9 @@ mod tests {
             to: to.to_string(),
         };
         let (tx, rx) = std::sync::mpsc::channel();
-        let mut aims = vec![Aiming {
-            aim: tx,
-            at: watch::Aim {
+        let mut aims = vec![Aiming::new(
+            tx,
+            watch::Aim {
                 head: karakuri_environment::compile::Named {
                     name: Some("grid".into()),
                     path: std::path::PathBuf::from("A0-grid.kir"),
@@ -21054,7 +21349,9 @@ mod tests {
                 // below about `restated` rather than about a default.
                 set: Some("night01".to_owned()),
             },
-        }];
+            karakuri_environment::mcp::Slots::unpointed(),
+            0,
+        )];
         let mut edges = Vec::new();
 
         let said = rewired(
@@ -23267,6 +23564,7 @@ mod gpu {
             1.0,
             None,
             None,
+            mcp::Slots::unpointed(),
         );
 
         let root = scratch_dir("kept");
@@ -23344,6 +23642,15 @@ mod gpu {
             working_copies(&root, &shipped(), SLOTS).expect("the copies this deck runs from");
         let store = std::sync::Arc::new(Store::open(&root).expect("store"));
         let (built_tx, built) = std::sync::mpsc::channel();
+        // **One handle for the deck and the server**, which is [`main`]'s
+        // arrangement and not a second one: the engine's watchers publish into
+        // it and the server resolves through it.
+        let pointing = mcp::Slots::of(
+            running
+                .iter()
+                .map(|pair| (pair.l1.clone(), vec![pair.l4.clone()]))
+                .collect(),
+        );
         let mut engine = Engine::new(
             &gpu,
             &mut renderer,
@@ -23352,21 +23659,11 @@ mod gpu {
             1.0,
             Some((std::sync::Arc::clone(&store), built_tx)),
             None,
+            pointing.clone(),
         );
 
-        let reporter = mcp::serve(
-            0,
-            mcp::Slots(
-                running
-                    .iter()
-                    .map(|pair| (pair.l1.clone(), vec![pair.l4.clone()]))
-                    .collect(),
-            ),
-            root.clone(),
-            true,
-            Opening::closed(),
-        )
-        .expect("an ephemeral port");
+        let reporter = mcp::serve(0, pointing, root.clone(), true, Opening::closed())
+            .expect("an ephemeral port");
         let port = reporter.port();
 
         let mut keeping = keeping();
@@ -23488,6 +23785,7 @@ mod gpu {
             1.0,
             None,
             None,
+            mcp::Slots::unpointed(),
         );
         // One name per slot, which is what `Gfx::material` is: every slot
         // opens on the same pair, and a load is what makes them differ.
@@ -23619,6 +23917,7 @@ mod gpu {
             1.0,
             None,
             None,
+            mcp::Slots::unpointed(),
         );
         // **Built at what the file declares**, which is the other half of
         // `the_capacity_is_the_l1s_own_declaration_and_the_l4_declares_none`:
@@ -23955,6 +24254,7 @@ mod gpu {
             1.0,
             None,
             None,
+            mcp::Slots::unpointed(),
         );
 
         // The picture's, in both axes, and **neither of them is the window's**
@@ -24055,6 +24355,7 @@ mod gpu {
             1.0,
             None,
             None,
+            mcp::Slots::unpointed(),
         );
         let first = engine.picture.id;
         assert_eq!(engine.picture.size, want);
@@ -24188,6 +24489,7 @@ mod gpu {
             1.0,
             None,
             None,
+            mcp::Slots::unpointed(),
         );
 
         // **A cell has a slot behind it or it has nothing**, and that is the
@@ -24487,6 +24789,7 @@ mod gpu {
             1.0,
             None,
             None,
+            mcp::Slots::unpointed(),
         );
 
         // **The cell's, in both axes** — not the row's, not the picture's and
@@ -24656,6 +24959,7 @@ mod gpu {
             1.0,
             None,
             None,
+            mcp::Slots::unpointed(),
         );
 
         // The strips, written the way the frame writes them.
@@ -24783,6 +25087,7 @@ mod gpu {
             1.0,
             None,
             None,
+            mcp::Slots::unpointed(),
         );
         let material = vec![shipped().material(); engine.deck.slot_count()];
         let here = usize::from(SELECTED);
@@ -25024,6 +25329,7 @@ mod gpu {
             1.0,
             None,
             None,
+            mcp::Slots::unpointed(),
         );
 
         assert_eq!(
@@ -25097,7 +25403,16 @@ mod gpu {
         // assertion below would be reading a different refusal.
         let reference = reference();
         let slots: Vec<Sources> = std::iter::repeat_n(reference.clone(), SLOTS).collect();
-        let mut engine = Engine::new(&gpu, &mut renderer, &slots, panel.layout(), 1.0, None, None);
+        let mut engine = Engine::new(
+            &gpu,
+            &mut renderer,
+            &slots,
+            panel.layout(),
+            1.0,
+            None,
+            None,
+            mcp::Slots::unpointed(),
+        );
         let material = vec![reference.material(); engine.deck.slot_count()];
 
         // **Before the pass, and this is the deck this program opens with.**
@@ -25328,6 +25643,7 @@ mod gpu {
             1.0,
             None,
             None,
+            mcp::Slots::unpointed(),
         );
         let material = vec![shipped().material(); engine.deck.slot_count()];
         let over = (UNDER + 1) % engine.deck.slot_count();
@@ -25553,6 +25869,7 @@ mod gpu {
             1.0,
             None,
             None,
+            mcp::Slots::unpointed(),
         );
         let material = vec![shipped().material(); engine.deck.slot_count()];
 
@@ -25739,6 +26056,7 @@ mod gpu {
             1.0,
             None,
             None,
+            mcp::Slots::unpointed(),
         );
         let material = vec![shipped().material(); engine.deck.slot_count()];
 
@@ -25918,6 +26236,7 @@ mod gpu {
             1.0,
             None,
             None,
+            mcp::Slots::unpointed(),
         );
         engine.look = STARTS_AT;
 
@@ -26130,6 +26449,7 @@ mod gpu {
             1.0,
             None,
             None,
+            mcp::Slots::unpointed(),
         );
 
         // A different window on a different display, so nothing asserted below
