@@ -463,6 +463,28 @@ fn walk(dir: &Path, into: &mut Vec<PathBuf>) {
 ///
 /// Sorted and deduplicated by title, because the question is which rows are
 /// reached and one row may be reached from more than one file.
+/// **Every `.rs` file under [`SRC`], as one string**, for [`DRAWN`]'s markers
+/// to be looked for in.
+///
+/// Comments are **not** cut, unlike [`emissions`]: a marker naming a field or
+/// a function is looked for as text, and a mention of one in a doc comment is
+/// a mention of a thing that exists. The failure this guards against is a
+/// readout that stopped being drawn, and deleting a field deletes the lines
+/// that talk about it.
+fn code_of_src() -> String {
+    let dir = workspace().join(SRC);
+    let mut files = Vec::new();
+    walk(&dir, &mut files);
+    files.sort();
+    files
+        .iter()
+        .map(|path| {
+            fs::read_to_string(path)
+                .unwrap_or_else(|e| panic!("{} could not be read: {e}", path.display()))
+        })
+        .collect()
+}
+
 fn emissions() -> Vec<Operation> {
     let dir = workspace().join(SRC);
     let mut files = Vec::new();
@@ -548,6 +570,74 @@ fn elsewhere() -> BTreeSet<String> {
 /// Read verbatim and never decoded, for `mcp.rs`'s reason: a `gap` badge says
 /// `&mdash;` and a home that needed decoding to match would be a home nobody
 /// could find on the console page.
+/// **What a readout the panel draws is drawn by**, one row per readout: the
+/// title on [`PAGE`] and a marker in [`SRC`] that draws it.
+///
+/// # Why a `has` badge can be satisfied by this and not only by an emission
+///
+/// [`every_panel_route_the_page_marks_built_is_emitted_by_a_console_control`]
+/// demands that some line of this crate construct `Operation::<the variant>`,
+/// and for a **write** that is the only way a surface reaches an operation: a
+/// fader that moves nothing is not a fader. **A readout has no gesture at
+/// all.** It is answered without being asked, so there is no press to attach
+/// an emission to, and inventing one would be ADR-0264's own rejected
+/// alternative in a worse form.
+///
+/// [ADR-0284](../../../docs/adr/0284-a-readout-is-drawn-and-the-panel-badge-does-not-move-because-the-meter-counts-a-gesture.md)
+/// left the badge at `plan` and named the correction to start from: relax the
+/// check for rows the page marks `read`, and hold the drawing somewhere that
+/// can see it. **What it turned that shape down for was what it would stop
+/// checking** — relaxing for a class of rows removes the emission check for
+/// *every* member of it, including the two that are `has` today because a
+/// gesture really does emit. This table is the answer to that objection: the
+/// check is not relaxed, it is given a second way to be met, and the second
+/// way is as mechanical as the first. A row that is neither emitted nor drawn
+/// still fails.
+///
+/// **A hand-written table, and the precedent is `press_handler::ASKED`** in
+/// `crates/karakuri/src/main.rs` — the same shape, the same failure mode, and
+/// the same answer to it: an entry that names nothing fails, and a badge with
+/// no entry fails. What this one cannot see is the *seam* — that the value
+/// reaching the readout is the one the deck said — because `karakuri-console`
+/// cannot see `crates/karakuri`. That half is the window's own test, named
+/// beside each entry.
+const DRAWN: [(&str, &str); 1] = [
+    // **The transport row's health capsule** — `landed`, `rolled back` or
+    // `failed`, taken off the one drain that writes the Staging lane. The
+    // drawing is `tests/transport.rs`'s; the seam is `crates/karakuri`'s
+    // `the_swap_report_says_what_the_lane_says`, which takes a device because
+    // a `swap::Event` cannot be made without one.
+    ("Find out what a write did", "pub health: Option<Stage>"),
+];
+
+/// **The titles the page marks `read`**, off the mark
+/// [ADR-0281](../../../docs/adr/0281-every-route-reaches-every-write-and-a-read-is-the-routes-own-interface-design.md)
+/// put in each one's `op-head`: *it only asks, so a column left empty here is
+/// that way in's own design and not something owed*.
+fn reads() -> BTreeSet<String> {
+    let html = page();
+    let mut found = BTreeSet::new();
+    for row in html.split(ROW).skip(1) {
+        let Some(close) = row.find("</h3>") else {
+            continue;
+        };
+        let Some(open) = row[..close].rfind("<h3>") else {
+            continue;
+        };
+        let head = &row[close..];
+        let head = &head[..head.find("</div>").unwrap_or(head.len())];
+        if head.contains(r#"<span class="op-kind">read</span>"#) {
+            found.insert(row[open + "<h3>".len()..close].to_owned());
+        }
+    }
+    assert!(
+        found.len() >= 4,
+        "only {} rows of {PAGE} carry the `read` mark — a mark that matches almost nothing is          one this file would not notice had been renamed",
+        found.len()
+    );
+    found
+}
+
 fn panel_routes() -> Vec<(String, String, String)> {
     let html = page();
     let mut found = Vec::new();
@@ -641,6 +731,46 @@ fn every_operation_a_console_control_emits_has_a_panel_route_marked_built() {
     }
 }
 
+/// **[`DRAWN`], held against the page and the source it stands between.**
+///
+/// Written to fail rather than to pass, on
+/// [`the_unreachable_exemption_is_still_the_state_of_the_page`]'s terms: a
+/// table that names a row the page no longer marks `read`, or a marker no
+/// longer in the source, is a second way to meet a `has` badge that has
+/// stopped being met. It is also what stops the table being used on a
+/// **write** row, where an emission is the only honest evidence.
+#[test]
+fn every_drawn_entry_names_a_read_row_the_page_marks_built_and_a_drawing_that_is_there() {
+    let reads = reads();
+    let routes = panel_routes();
+    let src = code_of_src();
+    for (title, mark) in DRAWN {
+        assert!(
+            reads.contains(title),
+            "`{title}` is in `DRAWN` and {PAGE} does not mark it `read` — this table is a \
+             second way to meet a `has` badge and it is only ever available to a readout. A \
+             write reaches an operation by emitting it"
+        );
+        let row = routes
+            .iter()
+            .find(|(row, _, _)| row == title)
+            .unwrap_or_else(|| panic!("`{title}` is in `DRAWN` and {PAGE} has no row for it"));
+        assert_eq!(
+            row.1, "has",
+            "`{title}` is in `DRAWN` and {PAGE} marks it `{}` in the panel column — an entry \
+             here is the evidence behind a built badge, so a row that is not built does not \
+             need one and should not carry one",
+            row.1
+        );
+        assert!(
+            src.contains(mark),
+            "`{title}` is in `DRAWN` naming `{mark}`, and no file under {SRC} contains it — \
+             the drawing this badge stands on has gone, or been renamed. The badge is `plan` \
+             again, or this marker is"
+        );
+    }
+}
+
 /// **The one exemption, held against the page it exempts.**
 ///
 /// [`UNREACHABLE`] is a list written by hand, so it is written to fail rather
@@ -702,9 +832,19 @@ fn every_panel_route_the_page_marks_built_is_emitted_by_a_console_control() {
          holds, which would pass this test by finding nothing",
         claimed.len()
     );
+    let reads = reads();
+    let src = code_of_src();
     for (title, _, home) in claimed {
+        // **A row the page marks `read` may be met by a drawing instead**, and
+        // only by one this file can name and find. See [`DRAWN`]: a readout is
+        // answered without being asked, so there is no gesture to emit at, and
+        // the check is given a second way to be met rather than relaxed.
+        let drawn = reads.contains(title.as_str())
+            && DRAWN
+                .iter()
+                .any(|(row, mark)| row == title && src.contains(mark));
         assert!(
-            emitted.contains(title.as_str()),
+            emitted.contains(title.as_str()) || drawn,
             "{PAGE} marks `{title}` built in the panel column, and no control in {SRC} emits \
              it — the page claims a control an operator cannot find. Either the control went \
              and the badge is `plan` again, or it never emitted this operation"

@@ -311,7 +311,11 @@ number; new records continue from the end.
 | [ADR-0281](0281-every-route-reaches-every-write-and-a-read-is-the-routes-own-interface-design.md) | Every route reaches every write, and a read is the route's own interface design | 2026-09-08 | accepted |
 | [ADR-0282](0282-a-rebuild-inherits-the-values-somebody-moved-and-reads-the-rest-from-the-code.md) | A rebuild inherits the values somebody moved and reads the rest from the code | 2026-09-08 | accepted |
 | [ADR-0283](0283-a-region-declares-when-its-picture-next-changes-not-that-something-is-pending.md) | A region declares when its picture next changes, not that something is pending | 2026-09-08 | accepted |
-| [ADR-0284](0284-a-readout-is-drawn-and-the-panel-badge-does-not-move-because-the-meter-counts-a-gesture.md) | A readout is drawn and the panel badge does not move, because the meter counts a gesture | 2026-09-08 | accepted |
+| [ADR-0284](0284-a-readout-is-drawn-and-the-panel-badge-does-not-move-because-the-meter-counts-a-gesture.md) | A readout is drawn and the panel badge does not move, because the meter counts a gesture | 2026-09-08 | superseded by [ADR-0288](0288-a-read-rows-built-badge-is-met-by-an-emission-or-by-a-drawing-this-file-can-find.md) |
+| [ADR-0285](0285-a-renderers-floor-is-bounded-from-its-declared-ranges-or-refused.md) | A renderer's floor is bounded from its declared ranges, or refused | 2026-09-08 | accepted |
+| [ADR-0286](0286-a-parameter-row-writes-the-control-it-draws-and-carries-the-range-rather-than-the-position.md) | A parameter row writes the control it draws, and carries the range rather than the position | 2026-09-08 | accepted |
+| [ADR-0287](0287-the-keep-pill-files-under-a-stamp-because-the-consoles-one-letter-taking-flow-is-an-arrangements-name.md) | The keep pill files under a stamp, because the console's one letter-taking flow is an arrangement's name | 2026-09-08 | accepted |
+| [ADR-0288](0288-a-read-rows-built-badge-is-met-by-an-emission-or-by-a-drawing-this-file-can-find.md) | A read row's built badge is met by an emission or by a drawing this file can find | 2026-09-08 | accepted |
 
 ## Retired numbers
 
