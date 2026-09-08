@@ -668,9 +668,24 @@ pub enum SetTransfer {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Recording {
     /// Begin one, under this id or under a stamp.
+    ///
+    /// **Before the first frame, and a mechanism rather than a habit says so.**
+    /// A replay reconstructs a session from its head, and the head is a Set
+    /// file written from the material the run began on — which is only the
+    /// deck's state at the instant the run begins. `karakuri_store::project`'s
+    /// `key_for` says the rest: the projection that would fold a session down
+    /// to the deck state it ends at does not exist, and nothing needs one,
+    /// because a session is replayed from the top rather than resumed from its
+    /// end. So a recording begun mid-performance replays the launch deck
+    /// against a late performance's records — not a partial session but a
+    /// wrong one, which
+    /// [P-0092](../../../docs/principles/0092-the-same-inputs-produce-the-same-frame.md)
+    /// refuses. `Recorder::open`'s position is that consequence.
     Start { id: Option<String> },
     /// End the one running. **Nothing does this today** — `--record-session`
-    /// is a launch flag and the run stops when the program does.
+    /// is a launch flag and the run stops when the program does. Unlike
+    /// [`Recording::Start`] nothing refuses it: the mock draws the `rec` pill
+    /// already on and names one gesture on it, *click to stop*.
     Stop,
 }
 

@@ -554,8 +554,8 @@ fn the_cursor_during_a_fader_drag_is_not_a_resize() {
     assert_eq!(cursor(&mut panel), egui::CursorIcon::ResizeHorizontal);
 }
 
-/// **No knob is inside a boundary's grab**, which is what keeps rule 2 ahead
-/// of rule 3 from ever costing anything in this bay.
+/// **No knob is inside a boundary's grab**, which is what keeps rule 3 ahead
+/// of rule 4 from ever costing anything in this bay.
 ///
 /// ADR-0176 measured the Outputs chip against `GRAB` rather than asserting in
 /// prose that it cleared it, and this is that measurement over every knob of
@@ -598,7 +598,7 @@ fn no_knob_is_inside_a_boundarys_grab() {
                         karakuri_layout::Hit::Divider { .. }
                     ),
                     "a boundary grabs {probe:?}, which is on {what} of strip {slot} — the \
-                     control is dead there, and `input`'s rule 2 is what would have to change"
+                     control is dead there, and `input`'s rule 3 is what would have to change"
                 );
                 assert_eq!(
                     claim(&mut panel, &ctx, &showing(&strips), point(probe)),
