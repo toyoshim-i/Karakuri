@@ -4,7 +4,7 @@ title: A readout is drawn and the panel badge does not move, because the meter c
 status: accepted
 date: 2026-09-08
 supersedes: []
-superseded_by: []
+superseded_by: [0288]
 principles: []
 tags: [console, manual, operations, m5]
 ---
