@@ -287,9 +287,9 @@ use karakuri_console::view::{
     self, arrangement as arrangement_pill, audio_in as audio_in_pill, class_at,
     deck_head as deck_head_row, inspector as inspector_pane, library as library_bay,
     look as look_row, master as master_row, mcp_pill, mixer as mixer_bay, outputs, picture_rect,
-    preview_rects, program_bay, program_head, transition as transition_row, Ask, AudioAsk, AudioIn,
-    Chosen, Go, Kind, McpPill, Picture, Read, Reading, Scope, Taken, TransitionSettings, View,
-    DECKS, DECK_LETTERS,
+    preview_rects, program_bay, program_head, tracker_group, transition as transition_row, Ask,
+    AudioAsk, AudioIn, Chosen, Go, Kind, McpPill, Picture, Read, Reading, Scope, Taken, Tracker,
+    TransitionSettings, View, DECKS, DECK_LETTERS,
 };
 // **How many slots a deck can hold**, which is how many this one has — see
 // [`SLOTS`]. Not re-exported at the crate root, and asked of the module that
@@ -1616,6 +1616,7 @@ impl Readout {
                     self.panel.layout(),
                     self.view.transport,
                     self.view.audio.as_ref(),
+                    self.view.tracker,
                     &self.view.arrangement,
                 );
                 let asked = pill
@@ -1629,6 +1630,33 @@ impl Readout {
                     did = self.arranged(ask);
                     return (claim, did);
                 }
+                // **The tracker group's three, derived once for all of
+                // them** — the offset's figure is as wide as the number in it
+                // and the octave is laid out from where the tap ends, so they
+                // are three questions about one laid-out group, exactly as the
+                // look's two are about theirs. Nothing here can overlap either
+                // card: both are asked above, and each takes every press on
+                // the console while it is down.
+                //
+                // **The three are asked in the order they sit in the row**,
+                // and no two of them can answer for one point:
+                // `TrackerGroup::owns` is the union of exactly these three.
+                let group = tracker_group(
+                    ctx,
+                    self.panel.layout(),
+                    self.view.transport,
+                    self.view.audio.as_ref(),
+                    self.view.tracker,
+                );
+                let tracked = group.as_ref().and_then(|group| {
+                    group
+                        .tapped(at)
+                        .or_else(|| group.octave(at))
+                        .or_else(|| group.nudge(at))
+                });
+                if let Some(operation) = tracked {
+                    return (claim, Acted::Emitted(Some(operation)));
+                }
                 // **The two look controls, derived once for both** — the
                 // exposure track's place is measured from the tone map
                 // capsule's, so they are two questions about one laid-out
@@ -1640,6 +1668,7 @@ impl Readout {
                     self.panel.layout(),
                     self.view.transport,
                     self.view.audio.as_ref(),
+                    self.view.tracker,
                     &self.view.arrangement,
                     self.view.look,
                 );
@@ -2611,11 +2640,13 @@ impl Readout {
             }
         );
         println!(
-            "five things the mock draws in that row are NOT drawn, and each is a control \
-             over machinery that is in neither this crate nor this program: tap, learn, map, \
+            "four things the mock draws in that row are NOT drawn, and each is a control \
+             over machinery that is in neither this crate nor this program: learn, map, \
              landed and rec. `view::transport` names them one by one with what is missing \
-             behind each. `audio-in` was the sixth until this program opened an input: it is \
-             drawn now, it says which room is being heard, and its card lists the others."
+             behind each. the list was six: `audio-in` left it when this program opened an \
+             input, and `tap` and the octave left it with the offset track beside them — \
+             they are drawn, they are pressed, and each emits the operation its key already \
+             emitted."
         );
         // **What the pill is actually reading, off the view rather than off a
         // sentence.** The legend was found lying five ways on 2026-08-30 by
@@ -2632,15 +2663,19 @@ impl Readout {
                     "the `audio-in` pill reads `{device}` and is drawn armed. energy, onset and \
                      band0..7 on the session's bus are measured from that input every frame, and \
                      the beat lock corrects the oscillator the transport row above draws. `b` \
-                     taps, `,` and `.` move the grid an octave, and a press on the pill lists \
-                     what else this machine has."
+                     taps, `,` and `.` move the grid an octave, `o` and `p` step the offset, and \
+                     the three controls beside the pill are those same operations under a \
+                     pointer — the tap capsule, the `1/2 x2` pair, and an 80px track that sets \
+                     the offset outright. a press on the pill lists what else this machine has."
                 ),
                 None => String::from(
                     "the `audio-in` pill reads `none`, which is a state and not a fault: no \
                      input is open, every signal name answers what it answered before audio \
                      existed, and the grid free-runs at the session tempo. a press on the pill \
-                     lists what this machine has, and `b`, `,` and `.` say so rather than \
-                     doing nothing."
+                     lists what this machine has, and `b`, `,` and `.` — and the tap capsule \
+                     and the octave beside the pill — say so rather than doing nothing. there \
+                     is no offset track: an offset belongs to a session and there is none, so \
+                     the row closes up rather than drawing one at a number nobody chose."
                 ),
             }
         );
@@ -9057,6 +9092,7 @@ impl App {
     /// write*.
     fn performed(
         gfx: &mut Gfx,
+        started: Instant,
         readout: &mut Readout,
         acted: &Acted,
         otherwise: Repaint,
@@ -9084,6 +9120,26 @@ impl App {
             Acted::Operated(outcome) => Change::Operated(outcome).repaint(),
             Acted::Emitted(operation) => {
                 if let Some(operation) = operation.as_ref() {
+                    // **The two that reach the room's tracker, and they leave
+                    // this arm rather than falling through it.** `written`
+                    // answers `Owed(NotSettled)` for both — a tap's record is
+                    // the *beat lock's* answer, and none of the tapped tempo,
+                    // the phase error or the output lag is a value a `Current`
+                    // carries — so going on would print *"nothing moved, and
+                    // nothing here decides it"* about a press that moved the
+                    // grid. They do end in a record, and
+                    // `karakuri_environment::audio` is what writes it: see
+                    // [`tapped`], where the gap and what would close it are
+                    // written down.
+                    //
+                    // **This is the one place a tap is performed**, which is
+                    // what makes the `tap` pill and `b` one control rather than
+                    // two spellings of one: both emit `Operation::TapBeat` and
+                    // both arrive here.
+                    if let Some(line) = tracked(gfx, started, operation) {
+                        println!("{line}");
+                        return Change::Emitted(Some(operation)).repaint();
+                    }
                     // **The two operations that reach a disk**, and they are
                     // taken first because they are not about the deck at all:
                     // an arrangement is the console's own state, `written`
@@ -9437,6 +9493,16 @@ impl ApplicationHandler for App {
         // `audio-in · none`, where `None` would be a console nobody had told
         // and would draw no pill at all — on a program that did look.
         self.readout.view.audio = Some(told(audio.as_ref()));
+        // **And what the other three controls in that group read**, for the
+        // Master bay's level's reason one bay over: the legend reports what
+        // each bay draws by asking the view, so a group whose values have not
+        // been written yet reports itself as not drawn — on a run that draws
+        // it. It is written again on every frame; this is the first, and the
+        // tempo is the same oscillator `listening` was told about.
+        self.readout.view.tracker = Some(tracking(
+            audio.as_ref(),
+            engine.deck.signals().oscillator().bpm(),
+        ));
         self.readout
             .print_legend(budget, &governed, self.presets.as_ref(), &self.store);
 
@@ -9620,6 +9686,7 @@ impl ApplicationHandler for App {
                 // frame for every one of them.
                 let repaint = App::performed(
                     gfx,
+                    self.started,
                     &mut self.readout,
                     &acted,
                     Change::Pointer(claim).repaint(),
@@ -9722,6 +9789,7 @@ impl ApplicationHandler for App {
                                 let [take, load] = preset_press(deck, taken);
                                 took = App::performed(
                                     gfx,
+                                    self.started,
                                     &mut self.readout,
                                     &Acted::Emitted(Some(take)),
                                     Repaint::Never,
@@ -9753,6 +9821,7 @@ impl ApplicationHandler for App {
                 // is what combines them.
                 let repaint = App::performed(
                     gfx,
+                    self.started,
                     &mut self.readout,
                     &acted,
                     Change::Pointer(claim).repaint(),
@@ -9841,6 +9910,7 @@ impl ApplicationHandler for App {
                     };
                     let repaint = App::performed(
                         gfx,
+                        self.started,
                         &mut self.readout,
                         &acted,
                         Change::Naming(moved).repaint(),
@@ -9897,8 +9967,13 @@ impl ApplicationHandler for App {
                         };
                         let deck = digit.as_bytes()[0] - b'0';
                         let acted = Acted::Emitted(Some(Operation::SelectDeck { deck }));
-                        let repaint =
-                            App::performed(gfx, &mut self.readout, &acted, Repaint::Never);
+                        let repaint = App::performed(
+                            gfx,
+                            self.started,
+                            &mut self.readout,
+                            &acted,
+                            Repaint::Never,
+                        );
                         App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
                         return;
                     }
@@ -10007,8 +10082,13 @@ impl ApplicationHandler for App {
                         // own pointer either way.
                         let acted =
                             Acted::Emitted(Some(Operation::SelectScope { scope: Undecided }));
-                        let repaint =
-                            App::performed(gfx, &mut self.readout, &acted, Repaint::Never);
+                        let repaint = App::performed(
+                            gfx,
+                            self.started,
+                            &mut self.readout,
+                            &acted,
+                            Repaint::Never,
+                        );
                         App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
                         return;
                     }
@@ -10046,8 +10126,13 @@ impl ApplicationHandler for App {
                             // and a key press is not one of them.
                             id: None,
                         }));
-                        let repaint =
-                            App::performed(gfx, &mut self.readout, &acted, Repaint::Never);
+                        let repaint = App::performed(
+                            gfx,
+                            self.started,
+                            &mut self.readout,
+                            &acted,
+                            Repaint::Never,
+                        );
                         self.keeping.save_set(
                             &gfx.engine,
                             &self.store,
@@ -10118,6 +10203,7 @@ impl ApplicationHandler for App {
                                         let [take, load] = preset_press(deck, taken);
                                         took = App::performed(
                                             gfx,
+                                            self.started,
                                             &mut self.readout,
                                             &Acted::Emitted(Some(take)),
                                             Repaint::Never,
@@ -10181,9 +10267,14 @@ impl ApplicationHandler for App {
                         // frames where one is drawn. `Repaint::soonest` is
                         // what combines them, and its own rule is why it is
                         // safe: it can only bring a frame forward.
-                        let repaint =
-                            App::performed(gfx, &mut self.readout, &acted, Repaint::Never)
-                                .soonest(took);
+                        let repaint = App::performed(
+                            gfx,
+                            self.started,
+                            &mut self.readout,
+                            &acted,
+                            Repaint::Never,
+                        )
+                        .soonest(took);
                         App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
                         return;
                     }
@@ -10229,8 +10320,13 @@ impl ApplicationHandler for App {
                         let gain =
                             gain_key(name, gfx.engine.deck.gain(slot)).expect("the arm this is in");
                         let acted = Acted::Emitted(Some(Operation::SetGain { deck, gain }));
-                        let repaint =
-                            App::performed(gfx, &mut self.readout, &acted, Repaint::Never);
+                        let repaint = App::performed(
+                            gfx,
+                            self.started,
+                            &mut self.readout,
+                            &acted,
+                            Repaint::Never,
+                        );
                         App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
                         return;
                     }
@@ -10253,8 +10349,13 @@ impl ApplicationHandler for App {
                         let opacity = opacity_key(name, gfx.engine.deck.opacity(slot))
                             .expect("the arm this is in");
                         let acted = Acted::Emitted(Some(Operation::SetOpacity { deck, opacity }));
-                        let repaint =
-                            App::performed(gfx, &mut self.readout, &acted, Repaint::Never);
+                        let repaint = App::performed(
+                            gfx,
+                            self.started,
+                            &mut self.readout,
+                            &acted,
+                            Repaint::Never,
+                        );
                         App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
                         return;
                     }
@@ -10278,8 +10379,13 @@ impl ApplicationHandler for App {
                         };
                         let blend = after_blend(blend_mode(gfx.engine.deck.blend(slot)));
                         let acted = Acted::Emitted(Some(Operation::SetBlendMode { deck, blend }));
-                        let repaint =
-                            App::performed(gfx, &mut self.readout, &acted, Repaint::Never);
+                        let repaint = App::performed(
+                            gfx,
+                            self.started,
+                            &mut self.readout,
+                            &acted,
+                            Repaint::Never,
+                        );
                         App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
                         return;
                     }
@@ -10288,40 +10394,48 @@ impl ApplicationHandler for App {
                     // arrangement, and the first of three that need an input
                     // open. What it does and why it does not go through
                     // `written` is [`tapped`].
+                    //
+                    // **It emits and goes through [`App::performed`] like
+                    // every other key here**, and it did not until the `tap`
+                    // pill landed: this arm called [`tapped`] itself, because
+                    // `performed` would have printed the `Owed` line about a
+                    // press that moved the grid. `performed` takes the two
+                    // tracker operations out before it reaches that line
+                    // ([`tracked`]), so the key and the pill are now one route
+                    // — which is what P-0090 asks of every other control on
+                    // this panel.
                     Key::Character("b") => {
-                        println!(
-                            "{}",
-                            tapped(
-                                &mut gfx.audio,
-                                &mut gfx.engine.deck,
-                                Instant::now(),
-                                self.started,
-                            )
-                        );
-                        App::wants(
+                        let acted = Acted::Emitted(Some(Operation::TapBeat));
+                        let repaint = App::performed(
                             gfx,
-                            &mut self.egui_due,
-                            &mut self.costs,
-                            Change::Emitted(Some(&Operation::TapBeat)).repaint(),
+                            self.started,
+                            &mut self.readout,
+                            &acted,
+                            Repaint::Never,
                         );
+                        App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
                         return;
                     }
                     // **The grid, an octave either way**, and the two keys the
                     // page specifies for it. Refused where the result would
                     // leave the trackable range, which is the beat lock's call
-                    // — see [`scaled`].
+                    // — see [`scaled`]. It emits and leaves by
+                    // [`App::performed`] for the arm above's reason, so the two
+                    // keys and the two halves of the `½ ×2` chip are one route.
                     Key::Character(",") | Key::Character(".") => {
                         let by = match key.logical_key.as_ref() {
                             Key::Character(",") => GridScale::Halve,
                             _ => GridScale::Double,
                         };
-                        println!("{}", scaled(&mut gfx.audio, &mut gfx.engine.deck, by));
-                        App::wants(
+                        let acted = Acted::Emitted(Some(Operation::ScaleGrid { by }));
+                        let repaint = App::performed(
                             gfx,
-                            &mut self.egui_due,
-                            &mut self.costs,
-                            Change::Emitted(Some(&Operation::ScaleGrid { by })).repaint(),
+                            self.started,
+                            &mut self.readout,
+                            &acted,
+                            Repaint::Never,
                         );
+                        App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
                         return;
                     }
                     // **The latency offset, and the third of the three keys
@@ -10366,8 +10480,13 @@ impl ApplicationHandler for App {
                                 Acted::Nothing
                             }
                         };
-                        let repaint =
-                            App::performed(gfx, &mut self.readout, &acted, Repaint::Never);
+                        let repaint = App::performed(
+                            gfx,
+                            self.started,
+                            &mut self.readout,
+                            &acted,
+                            Repaint::Never,
+                        );
                         App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
                         return;
                     }
@@ -10534,6 +10653,16 @@ impl ApplicationHandler for App {
                 // frame is committed under, so the capsule names the operator
                 // the picture went through rather than one a press asked for
                 // and nothing has applied yet.
+                // **And what the tracker's other three read**, beside the
+                // frame they are about and after `measure_audio` for the
+                // transport row's own reason: a correction that landed this
+                // frame moves the tempo, and the octave halves are that tempo
+                // against the range. Drawing them from the tempo before the
+                // correction would inert a half a press could still reach.
+                self.readout.view.tracker = Some(tracking(
+                    gfx.audio.as_ref(),
+                    gfx.engine.deck.signals().oscillator().bpm(),
+                ));
                 self.readout.view.look = Some(look(&gfx.engine.look));
                 // **And what the Master bay's out row reads**, which is the
                 // other end of the same chain: this level is applied where the
@@ -11239,6 +11368,74 @@ fn measure_audio(open: &mut Option<audio::Audio>, deck: &mut Deck, interval: Opt
     }
 }
 
+/// **What the tracker's three controls read this frame**: the offset the open
+/// session is holding, and which way the grid can still be moved an octave.
+///
+/// [`transport`]'s shape one group along the same row — a function of what this
+/// program can see and of nothing the console could work out for itself.
+///
+/// **The offset is `None` where nothing is open**, and that is the state rather
+/// than a default: an offset belongs to a session, and
+/// `karakuri_environment::audio`'s `DEFAULT_LATENCY_OFFSET_MS` is where the
+/// *next* session starts rather than a value anything is holding now. The
+/// console draws no track at all for it, which is `View::audio`'s own rule one
+/// control to the left.
+///
+/// **The two octave halves are the range against the session tempo**, which is
+/// exactly what `Audio::octave` refuses on — `BeatLock::octave` is
+/// `BPM_RANGE.contains(&(bpm * factor))` and nothing else — so the chip the
+/// panel draws inert is the press the lock would turn down. The range is asked
+/// for by name through `karakuri_environment::audio`, which is the door this
+/// program takes its audio through; a `60.0..=200.0` written here would be a
+/// second copy of the tracker's own bound.
+///
+/// **The tempo is the session's oscillator**, which is the number the transport
+/// row draws and the number the lock multiplies: one reading, so the chip that
+/// is drawn and the press that is refused cannot come apart.
+///
+/// **Not `Audio::octave` asked twice**, which is the obvious alternative and is
+/// wrong twice over: it *performs* the move, and it needs a session, where both
+/// halves are drawn on a console with no input open — the refusal that is
+/// *drawn* is the range's, and the one for a room that is not being listened to
+/// is said out loud by [`scaled`].
+fn tracking(open: Option<&audio::Audio>, bpm: f32) -> Tracker {
+    Tracker {
+        offset_ms: open.map(audio::Audio::latency_offset_ms),
+        halve: audio::BPM_RANGE.contains(&(bpm * 0.5)),
+        double: audio::BPM_RANGE.contains(&(bpm * 2.0)),
+    }
+}
+
+/// **The two operations that move the room's tracker**, performed against the
+/// session this program opened — and `None` for every operation that is not one
+/// of them.
+///
+/// [`attached`]'s and [`nudged`]'s shape, and it is deliberately **not** beside
+/// them in [`App::performed`]: those two are `Silent(NoRecord)`, so the line
+/// `unwritten` prints after them is true and they fall through to it. These two
+/// are `Owed(NotSettled)`, so the arm that calls this leaves as soon as it
+/// answers — the reason is written at the call, and what the alternatives were
+/// is
+/// [ADR-0278](../../../docs/adr/0278-an-operation-no-record-can-be-written-for-leaves-the-window-before-it-is-written.md).
+///
+/// **`Instant::now()` is read here rather than passed in**, because the instant
+/// a tap means is the instant it arrived and this is the last place that is
+/// still true. `started` is the run's own origin and comes from the caller: it
+/// is `App::started`, the one this program measures every tap against, and a
+/// second origin taken here would put two taps on two clocks.
+fn tracked(gfx: &mut Gfx, started: Instant, operation: &Operation) -> Option<String> {
+    match operation {
+        Operation::TapBeat => Some(tapped(
+            &mut gfx.audio,
+            &mut gfx.engine.deck,
+            Instant::now(),
+            started,
+        )),
+        Operation::ScaleGrid { by } => Some(scaled(&mut gfx.audio, &mut gfx.engine.deck, *by)),
+        _ => None,
+    }
+}
+
 /// **A tap on the beat**, performed against the room this program is listening
 /// to, and what to say about it.
 ///
@@ -11584,8 +11781,8 @@ mod tests {
     /// the music, positive and it leads."*
     ///
     /// A pair of keys wired the wrong way round reads correct and points
-    /// backwards, and nothing an operator can see from the panel would say so
-    /// — the console draws no offset. The step is asked of
+    /// backwards, and it is the sign the manual says is the half that gets read
+    /// wrong. The step is asked of
     /// `karakuri_environment::audio` rather than transcribed, so this checks
     /// which way each key goes and that both go by the one constant the
     /// command line's own `o` and `p` use.
@@ -11689,6 +11886,211 @@ mod tests {
 
         // Every other operation is somebody else's, on `attached`'s terms.
         assert_eq!(nudged(&mut open, &Operation::TapBeat), None);
+    }
+
+    /// **The console's copy of the offset's two ends and its step are this
+    /// crate's own**, held against the originals here because this is the one
+    /// package that can see both.
+    ///
+    /// `karakuri-console` restates `LATENCY_OFFSET_RANGE` and
+    /// `LATENCY_OFFSET_STEP_MS` because it depends on nothing that could reach
+    /// them (ADR-0156) and a track has to know its own ends to be laid out.
+    /// That is `EXPOSURE_STOPS`' arrangement one control along — and it is
+    /// **not** its position, which is the reason this test exists: the
+    /// exposure's bounds are private to `karakuri-cli` and nothing in the
+    /// workspace can compare them, where these two are public and this binary
+    /// names both crates. A restatement nobody can check is a copy; one that is
+    /// checked is a transcription with a guard, which is
+    /// `docs/contributing.md` §4's second way of making a statement hold.
+    ///
+    /// **And the track's width falls out of the two**, which is what makes one
+    /// pixel one press: eighty five-millisecond steps across four hundred
+    /// milliseconds, and eighty pixels of track.
+    #[test]
+    fn the_consoles_offset_track_spans_the_sessions_own_range() {
+        assert_eq!(
+            view::LATENCY_OFFSET_MIN_MS,
+            *audio::LATENCY_OFFSET_RANGE.start(),
+            "the console lays a track out to a floor the session does not clamp to, so a press \
+             at the left-hand end asks for a value the offset cannot be moved to"
+        );
+        assert_eq!(
+            view::LATENCY_OFFSET_MAX_MS,
+            *audio::LATENCY_OFFSET_RANGE.end(),
+            "the console lays a track out to a ceiling the session does not clamp to"
+        );
+        assert_eq!(
+            view::LATENCY_OFFSET_STEP_MS,
+            audio::LATENCY_OFFSET_STEP_MS,
+            "the track is drawn one pixel per press against a press this program does not make, \
+             so pointing at it and stepping it reach two different sets of values"
+        );
+        assert_eq!(
+            view::OFFSET_TRACK_W,
+            (audio::LATENCY_OFFSET_RANGE.end() - audio::LATENCY_OFFSET_RANGE.start())
+                / audio::LATENCY_OFFSET_STEP_MS,
+            "the track is not as many pixels as there are presses between its ends"
+        );
+    }
+
+    /// **Which half of the octave the panel draws live is the half the beat
+    /// lock would accept**, and neither number is written down twice.
+    ///
+    /// `BeatLock::octave` refuses when `BPM_RANGE` does not contain
+    /// `bpm * factor` and nothing else, so [`tracking`] asks the range the same
+    /// question before the press. The tempos here are the mock's own and the
+    /// two edges of the range: **at 128 only `½` is live**, which is exactly
+    /// what `docs/manual/console.html` draws and says — *"128.0 doubled is 256
+    /// and the tracker searches 60 to 200 BPM"*.
+    ///
+    /// **The range is under two octaves wide**, which is the mock's other
+    /// claim about this control — *"the two halves are never both
+    /// available"* — and it is asserted here rather than assumed, because it is
+    /// the whole reason the chip has two faces instead of one.
+    #[test]
+    fn the_octave_halves_the_panel_draws_live_are_the_ones_the_lock_would_take() {
+        let range = audio::BPM_RANGE;
+        assert!(
+            range.end() / range.start() < 4.0,
+            "the trackable range is two octaves or more, so both halves of the octave can be \
+             live at once and the control the mock draws is the wrong shape"
+        );
+
+        // The mock's tempo: `½` to 64, which is inside; `×2` to 256, which is
+        // not.
+        let mock = tracking(None, 128.0);
+        assert!(
+            mock.halve,
+            "the panel inerts `½` at the tempo the mock draws it live at"
+        );
+        assert!(
+            !mock.double,
+            "the panel offers `×2` at 128.0, where the lock would refuse 256 — a control that \
+             undoes itself two seconds later is worse than one that says no"
+        );
+
+        // Both ends of the range, where exactly one of the two is reachable.
+        let low = tracking(None, *range.start());
+        assert!(
+            !low.halve && low.double,
+            "at the floor only doubling is available"
+        );
+        let high = tracking(None, *range.end());
+        assert!(
+            high.halve && !high.double,
+            "at the ceiling only halving is available"
+        );
+
+        // And the offset is the session's or it is nothing: with none open
+        // there is no value to draw a track at, which is what stops the panel
+        // showing `DEFAULT_LATENCY_OFFSET_MS` as though something held it.
+        assert_eq!(
+            tracking(None, 128.0).offset_ms,
+            None,
+            "the panel was handed an offset on a console with no session, so it would draw a \
+             track pointing at a number nobody chose"
+        );
+    }
+
+    /// **A press on each of the tracker group's three reaches the operation
+    /// its key already reaches**, and each of the three leaves this window by
+    /// the door its record decides.
+    ///
+    /// # Why the three are not one answer
+    ///
+    /// The offset is `Silent(NoRecord)` and falls through [`App::performed`] to
+    /// [`nudged`], which is where every route into the session's offset ends.
+    /// The tap and the octave are `Owed(NotSettled)` — a tap's record is the
+    /// *beat lock's* answer and no `Current` carries it — so `performed` takes
+    /// them out before `unwritten` can print *"nothing moved, and nothing here
+    /// decides it"* about a press that moved the grid. **That difference is the
+    /// whole of [`tracked`]**, and this is what says the three presses land on
+    /// the right side of it.
+    ///
+    /// It needs no device: `view::tracker_group` is a derivation over numbers,
+    /// which is what makes the panel's arithmetic testable at all (ADR-0156).
+    #[test]
+    fn a_press_on_the_tracker_group_reaches_the_operation_its_key_reaches() {
+        let ctx = drawn_once();
+        let mut readout = Readout::new(1440.0, 900.0);
+        readout.panel.solve();
+        readout.view.transport = Some(view::Transport {
+            bpm: 128.0,
+            beats: 144.0,
+            beats_per_bar: 4,
+            fps: Some(58.0),
+            frame_ms: 12.4,
+            budget_ms: Some(16.6),
+        });
+        let mut told = AudioIn::NONE;
+        told.device = Some("Scarlett 2i2".to_owned());
+        readout.view.audio = Some(told);
+        readout.view.tracker = Some(Tracker {
+            offset_ms: Some(-15.0),
+            halve: true,
+            double: false,
+        });
+
+        let group = tracker_group(
+            &ctx,
+            readout.panel.layout(),
+            readout.view.transport,
+            readout.view.audio.as_ref(),
+            readout.view.tracker,
+        )
+        .expect("the transport row draws the tracker group");
+        let offset = group.offset.expect("an open session is holding an offset");
+        let point = |at: egui::Pos2| Point::new(at.x, at.y);
+
+        // ---- the tap and the octave: owed, and taken out before `written` --
+        for (at, expected, what) in [
+            (group.tap.center(), Operation::TapBeat, "the tap capsule"),
+            (
+                group.halve.center(),
+                Operation::ScaleGrid {
+                    by: GridScale::Halve,
+                },
+                "the octave's `½`",
+            ),
+        ] {
+            let p = point(at);
+            let asked = group
+                .tapped(p)
+                .or_else(|| group.octave(p))
+                .unwrap_or_else(|| panic!("a press on {what} asked for nothing"));
+            assert_eq!(
+                asked, expected,
+                "{what} does not name the operation its key names"
+            );
+            assert_eq!(
+                written(&asked, &Current::default()),
+                Written::Owed(Owed::NotSettled),
+                "{what}'s operation is no longer owed a record — this window takes it out of \
+                 `performed` before `unwritten` on exactly that grounds, and the arm that does \
+                 it is now describing something that is not true"
+            );
+        }
+
+        // ---- the offset: silent, and it ends where every offset ends -------
+        let middle = point(offset.grip.center());
+        let asked = group.nudge(middle).expect("a press on the offset track");
+        assert_eq!(
+            asked,
+            Operation::SetLatencyOffset { ms: 0.0 },
+            "the middle of a symmetric track does not ask for zero"
+        );
+        assert_eq!(
+            written(&asked, &Current::default()),
+            Written::Silent(Silent::NoRecord),
+            "the offset started owing a record, and this window applies it to the session \
+             instead of handing it to `apply`"
+        );
+        let mut open: Option<audio::Audio> = None;
+        let line = nudged(&mut open, &asked).expect("`nudged` answered nothing for the press");
+        assert!(
+            line.contains(NO_ROOM_FOR_AN_OFFSET),
+            "a press on the track with nothing open does not say what the key says: {line}"
+        );
     }
 
     /// **The legend this window prints for one key**, or a panic naming the
@@ -16928,11 +17330,25 @@ mod key_column {
                  whatever followed",
                 body.len()
             );
-            assert!(
-                body.contains("App::performed(gfx, &mut self.readout, &acted, Repaint::Never)"),
-                "{what}'s arm does not end at the tail every press goes through, so `arm` is \
-                 not returning the arm: {body}"
-            );
+            // **The tail, in two pieces rather than as one quoted call.** It
+            // was the whole `App::performed(…)` argument list until
+            // `App::performed` grew a `started` and `rustfmt` broke the call
+            // over six lines — at which point the flattened text reads
+            // `App::performed( gfx, self.started, …` and a quotation of the
+            // call is a bet on how wide the arguments happen to be. What has
+            // to hold is that the arm reaches that function and then asks for
+            // the frame, and both of those are checkable without knowing
+            // where the line was wrapped.
+            for tail in [
+                "App::performed(",
+                "App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);",
+            ] {
+                assert!(
+                    body.contains(tail),
+                    "{what}'s arm does not end at the tail every press goes through — it never \
+                     reaches `{tail}`, so `arm` is not returning the arm: {body}"
+                );
+            }
         }
     }
 
@@ -17264,6 +17680,16 @@ mod press_handler {
         // They are asked through one local, so it is the derivation above each
         // that tells the two entries apart.
         ("the audio-in pill", "audio_in_pill(", &["pill.ask("]),
+        // **The tracker group's three, derived once for all of them**, and
+        // the first row added to the console's table since it landed. The
+        // offset's figure is as wide as the number in it and the octave is
+        // laid out from where the tap ends, so a second derivation would put
+        // the chip a press lands on somewhere the mark is not.
+        (
+            "the tracker group's three",
+            "tracker_group(",
+            &["group.tapped(", "group.octave(", "group.nudge("],
+        ),
         ("the arrangement pill", "arrangement_pill(", &["pill.ask("]),
         // **The two look controls, derived once for both** — the exposure
         // track's place is measured from the tone map capsule's, so they are
@@ -20559,6 +20985,7 @@ mod gpu {
             panel.layout(),
             view.transport,
             view.audio.as_ref(),
+            view.tracker,
             &view.arrangement,
             view.look,
         )
@@ -20625,6 +21052,7 @@ mod gpu {
             panel.layout(),
             view.transport,
             view.audio.as_ref(),
+            view.tracker,
             &view.arrangement,
             Some(look(&engine.look)),
         )

@@ -620,21 +620,73 @@ drawn here.
 **Exit.** No `plan` badge in the panel column of this bay's rows on
 [every operation](manual/operations.html).
 
-**Blocked on.** Nothing. This is the cheapest bay on the page: every table row is a control beside a
-readout the row already draws.
+**Three of the six are built, on 2026-09-08** — *Tap the beat*, *Halve or double the grid* and
+*Nudge the latency offset* — and they are one group and one control row: `view::tracker_group`
+finishes the four things `.tracker` puts round the audio-in pill, one row of `input::PROBES` and one
+entry of `press_handler::ASKED`. Two records came out of it. The offset is drawn as a **track and
+not the capsule the mock had**, because a press has to name a value and a capsule can only ask for
+the next one ([ADR-0277](adr/0277-the-latency-offset-is-a-track-because-a-capsule-cannot-name-a-value.md)) — the
+mock and both manual pages moved first. And the tap and the octave **leave `App::performed` before
+`written` is reached**, which is what lets one press and one key be one route
+([ADR-0278](adr/0278-an-operation-no-record-can-be-written-for-leaves-the-window-before-it-is-written.md));
+`b`, `,` and `.` emit now instead of performing the operation themselves.
 
-One thing to know before drawing the first two. *Tap the beat* and *Halve or double the grid* reach
-`karakuri_environment::audio` directly rather than going through `written`, because `written(TapBeat)`
-and `written(ScaleGrid)` both answer `Owed(NotSettled)`. That is a gap in `karakuri-operation-record`
-and not in the panel, and it does not stop either control.
+**Blocked on.** *"Nothing"* was true of three of the six and is not true of the other three. This
+said *"the cheapest bay on the page: every table row is a control beside a readout the row already
+draws"*, and the three that are built were exactly that. Each of the remaining three wants a decision
+before it wants code, and none of the three decisions is this bay's to take alone.
+
+- ***Set the free-run tempo* has no shape and no meaning while a tracker is running.** The row's
+  panel home is `transport`, and the only thing the mock draws there for it is the `128.0` figure —
+  which `view::transport` states is one of four **readouts** and `karakuri-console/tests/transport.rs`
+  asserts is not a control. So the shape is undecided in the same way the offset's was, and unlike
+  the offset the manual has not already argued it. Worse, the *meaning* is undecided: with an input
+  open `BeatLock::update` returns a `Trim` on every frame and `apply_tempo` pulls the oscillator
+  toward the estimate, so a tempo set from the panel is trimmed away within a second — and
+  `--bpm` does a second job the panel would have to decide about, seeding the tracker's octave window
+  (`Audio::open(selector, …, session_bpm)`). **The plumbing is not the problem**: `Signals::correct`
+  and `karakuri_environment::audio::apply_tempo` are both public and both reachable from
+  `crates/karakuri`, and `written(SetFreeRunTempo)` already answers a `Record::Tempo` — what is
+  missing is an arm for it in that file's `apply`, which is one match arm. **And this program has no
+  launch route either**: `crates/karakuri` has no `--bpm` flag at all and runs at
+  `Signals::default()`'s 120.0, so the row's `CLI has` badge is `karakuri-cli`'s alone.
+- ***Find out what a write did* is a readout, and whether a readout may carry a `has` panel badge is
+  not settled.** The panel already holds every verdict, on every run and not only under `--mcp`:
+  `Deck::events` is drained once a frame in `staging`, and `view::Stage` already spells the mock's
+  own three words — `landed`, `rolled back`, `refused`. What is missing is the pill in the transport
+  row, and behind it a rule: `karakuri-console/tests/panel_column.rs` requires that a control
+  **emit** the operation before the page may mark the panel column `has`, and a readout emits
+  nothing. ADR-0264 settled which *gesture* of a reading emits; it did not settle a reading with no
+  gesture. That rule governs six rows and not one, so it is a decision above this bay.
+- ***Record the session* is machinery and not a rectangle.** `crates/karakuri` constructs no
+  `session::Recorder`, has no `--record-session` flag and writes no record stream at all — the three
+  greps return nothing. And `Recorder` cannot be started or stopped on a press as it stands:
+  `Recorder::open` creates a file and spawns a writer thread, which `karakuri-cli` says out loud is
+  done *"before the first frame and never on one"*, and `finish` consumes the recorder.
+  `Recording::Stop`'s own documentation says the same from the vocabulary's side — *"Nothing does
+  this today"*. A `rec` pill is that whole lifecycle, and it moves the row's `when` from **launch**
+  to **immediate**.
+
+**A `Closed` class does not refuse a hand.** Worth writing down beside the last of those, because it
+reads the other way at first: `gate::audit` is called in exactly one place in the workspace,
+`karakuri-environment`'s MCP server. The panel's press path never consults it. So *Record the
+session* being `Closed(InputsAndOutputs)` constrains a model and says nothing about a pill.
+
+One thing to know before drawing the first two, and it still holds. *Tap the beat* and *Halve or
+double the grid* reach `karakuri_environment::audio` directly rather than going through `written`,
+because `written(TapBeat)` and `written(ScaleGrid)` both answer `Owed(NotSettled)`. That is a gap in
+`karakuri-operation-record` and not in the panel, and it did not stop either control: what it cost
+was one early return in `App::performed` and the record that argues for it (ADR-0278). **The gap is
+still open**, and closing it means saying what a `Current` carries about a beat lock.
 
 **The bay's prose, as tooltips.** Six notes: *The beat moves, always*, *The octave is a person's,
 and only one half of it is ever live*, *Health, in the transport*, *The latency offset, and which
 offset it is*, *The arrangement is a file, and the reset is one of them*, and *The look is two
 controls, and they sit where a frame leaves* — the tone map and the exposure track, drawn in this
 row and belonging to the master chain. This is the bay the mock has already tipped: every control
-here but `tap` and the tempo figure carries a `data-tip`. The item is those two, and reading the six
-notes against what the tips already say.
+here but `tap` and the tempo figure carried a `data-tip`. **`tap` has one now**, written with the
+control on 2026-09-08, so the item is the tempo figure and reading the six notes against what the
+tips already say.
 
 #### M5.5 — Inspector
 
@@ -696,7 +748,8 @@ knob and the bay with no way to turn one.
 
 **Three more this bay owes, and none of them is a row.** They were recorded, verified and left in
 prose, which is how a bay's exit — a grep over one column — could be met while its pane drew
-nothing an operator could reach.
+nothing an operator could reach. **One of the three is now done** — the centre's declared minimum,
+below — so what is owed here is two.
 
 - **A pane draws a node group whole or not at all, and there is no scroll position anywhere in the
   crate.** With the pair a bare run opens on, the first group is the L1's at 26.5 + 19 x 22.5 =
@@ -704,12 +757,18 @@ nothing an operator could reach.
   row is drawn**. `view.rs` says outright that this is the first region of the console that
   genuinely wants a scroll. The decision in front of it — scroll, or a group that can be part-drawn
   — is this bay's rather than the arrangement's.
-- **`centre`'s declared minimum is the mock's CSS track and not a reading of its content.** 340
-  where the `.param` grid wants 207 in a pane before its fader has any width, and a divider drag
-  reaches a 340 centre at *any* window width, so no window minimum can hold it (ADR-0272). Closing
-  it moves `centre` to 2 x 207 + 9 = 423 and the arrangement's declared width minimum to 775, which
-  is a change to the arrangement and wants its own record. **It is the item above on the other
-  axis**: the Inspector's declared minima do not fit the Inspector's contents.
+- **`centre`'s declared minimum was the mock's CSS track and not a reading of its content, and is
+  now the second — done.** 340 where the `.param` grid wants 207 in a pane before its fader has any
+  width, and a divider drag reaches a 340 centre at *any* window width, so no window minimum could
+  hold it (ADR-0272).
+  [ADR-0279](adr/0279-the-centre-is-two-parameter-rows-wide-because-a-pane-that-cannot-draw-a-fader-is-not-a-minimum.md)
+  closed it on the axis it was on: an inspector pane declares **208** — one parameter row with a
+  fader in it — and the centre declares 2 x 208 + 9 = **425**, taking `MINIMUM_VIEWPORT` to
+  777 x 658.5. **It is not the 423 and 775 this entry used to name**: the fader is the `1fr` track
+  and is drawn only where what is left over is positive, so at a pane of exactly 207 there is no
+  fader and the figure closes nothing — the record carries the measurement. **It was the item below
+  on the other axis**, and that one is still owed: the Inspector's declared minimum does not fit the
+  Inspector's contents down the column, and no minimum can fix that one.
 - **Adding and removing a node**, which *What no sub-milestone owns* names and which the node
   editor below is the drawing half of. **The engine half is not this bay's and should not be
   smuggled in**: `karakuri-layout`'s arena has no insert or remove and `NodeId` is a bare index, so
@@ -1085,17 +1144,21 @@ can be dragged under the arrangement's own minima — where the solve scales eve
 (ADR-0250) and the Mixer stops drawing strips while the deck previews carry on, so the pointer loses
 the deck selection and the keys keep it.
 [ADR-0272](adr/0272-the-window-has-a-minimum-and-only-one-of-adr-0250s-three-cases-is-real.md) takes
-the decision and `karakuri-console` publishes the number as `MINIMUM_VIEWPORT` — 692 x 658.5, the
+the decision and `karakuri-console` publishes the number as `MINIMUM_VIEWPORT` — 777 x 658.5, the
 declared minima summed along each axis, with a test recomputing both from the tree, and
 `crates/karakuri/src/main.rs`'s window attributes set it — so the constant is enforced rather than
 claimed.
 
-**And it leaves one thing undone that a window minimum cannot reach**: `centre`'s declared minimum
-of 340 is `.body-grid`'s CSS track rather than a reading of its content, and the inspector's
-`.param` grid wants 207 in a pane before its fader has any width — so at a 340 centre the parameter
-faders are not drawn, and a divider drag reaches that centre at *any* window width. Closing it moves
-`centre`'s minimum to 2 x 207 + 9 = 423 and the arrangement's declared width minimum to 775, which
-is a change to the arrangement and wants its own record.
+**And it left one thing undone that a window minimum could not reach, which is now done**:
+`centre`'s declared minimum of 340 was `.body-grid`'s CSS track rather than a reading of its
+content, and the inspector's `.param` grid wants 207 in a pane before its fader has any width — so
+at a 340 centre the parameter faders were not drawn, and a divider drag reaches that centre at *any*
+window width.
+[ADR-0279](adr/0279-the-centre-is-two-parameter-rows-wide-because-a-pane-that-cannot-draw-a-fader-is-not-a-minimum.md)
+moved the arrangement instead of the window: a pane declares 208, the centre 2 x 208 + 9 = 425, and
+`MINIMUM_VIEWPORT` is **777 x 658.5**. The 423 and 775 this paragraph used to name are one pixel per
+pane short — the fader is the leftover track and wants *more* than the row's 207, where the mixer's
+threshold is met *at* its 172 — and the record carries both measurements.
 
 Nothing in this section is blocked.
 

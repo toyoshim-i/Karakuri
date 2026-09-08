@@ -334,6 +334,22 @@ fn sample(variant: &str) -> Operation {
         // thing for it to see, because what the badge claims is that an
         // operator reaches *the row*, and the row is one operation over
         // whichever scopes the list holds.
+        // **The three the tracker group emits**, and two of them are the only
+        // controls on this console whose operation reaches the *room* rather
+        // than the deck, the arrangement or the store. A tap carries nothing
+        // at all — the instant is when the operation arrives — and the octave
+        // carries the direction; the value is either half, because what the
+        // badge claims is that an operator reaches the row and the row is one
+        // operation over both.
+        "TapBeat" => Operation::TapBeat,
+        "ScaleGrid" => Operation::ScaleGrid {
+            by: karakuri_operation::GridScale::Halve,
+        },
+        // **The offset track in the same group**, and the value is any offset:
+        // the operation is absolute, the press names where along the track it
+        // landed, and what the badge claims is that an operator reaches the
+        // row.
+        "SetLatencyOffset" => Operation::SetLatencyOffset { ms: -15.0 },
         "SelectScope" => Operation::SelectScope {
             scope: karakuri_operation::Undecided,
         },

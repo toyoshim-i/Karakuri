@@ -509,16 +509,16 @@ use karakuri_operation::gate::Class;
 use crate::panel::{Panel, GRAB};
 use crate::view::{
     arrangement, audio_in, deck_head, inspector, library, look, master, mcp_pill, mixer, outputs,
-    program_bay, program_head, transition, Field, Scope, View, DECKS, DECK_LETTERS,
+    program_bay, program_head, tracker_group, transition, Field, Scope, View, DECKS, DECK_LETTERS,
 };
 
 /// **What each of rule 4's derivations answers for**, one row per probe and in
 /// the order [`claim`] asks them: the Outputs sink, the audio-in pill, the
-/// arrangement pill, the look group's two, a strip's five, the transition
-/// row's four, the Master bay's one, a deck head's four, the Program bay
-/// head's `solo`, the four deck preview cells, the Library bay's scope chips,
-/// its two filter fields, the `read` chip in its foot and the list above it,
-/// and the four class pills.
+/// tracker group's three, the arrangement pill, the look group's two, a
+/// strip's five, the transition row's four, the Master bay's one, a deck
+/// head's four, the Program bay head's `solo`, the four deck preview cells,
+/// the Library bay's scope chips, its two filter fields, the `read` chip in
+/// its foot and the list above it, and the four class pills.
 ///
 /// **One probe per derivation, cheapest answer first**, and [`on_mcp`] is last
 /// because it is the dearest probe here — each class lays out its bay's whole
@@ -538,21 +538,26 @@ use crate::view::{
 /// derivation that is not a row here is never asked, so it is not a control at
 /// all; and [`CONTROLS`] is summed over the same rows, so the number this
 /// crate exports and the questions it is a count of cannot come apart. It was
-/// two parallel arrays until 2026-09-07 — a hand-summed `[usize; 15]` beside a
-/// `[&dyn Fn; 15]` inside [`claim`] — and one value carrying both is
+/// two parallel arrays until 2026-09-07 — a hand-summed `[usize; N]` beside a
+/// `[&dyn Fn; N]` inside [`claim`] — and one value carrying both is
 /// [ADR-0274](../../../docs/adr/0274-a-control-is-a-row-in-the-consoles-own-table.md).
 ///
 /// **A control added inside a derivation already here is still a number to
 /// raise**: a sixth chip on a strip is one more thing a press reaches, and
 /// [`on_strip`] would go on asking five questions while its row went on saying
 /// five. What has changed is that the probe and the count are now one line
-/// apart instead of two arrays apart, and that **three of the fifteen no
+/// apart instead of two arrays apart, and that **three of these rows no
 /// longer carry a number at all** — the class pills, the preview cells and the
 /// scope chips each count the list their probe walks, so a fifth of any of the
 /// three raises [`CONTROLS`] on its own. The rest are caught where every other
 /// fact about a control is: the clearance test the rule above says each one
 /// owes, `tests/mask.rs` being the most recent of them, and this row is what
 /// has to be raised beside it.
+///
+/// **The tracker group's row is the first one added under this table**, and it
+/// is what the table is for: the count moved from 36 to 39 and
+/// `karakuri/src/main.rs`'s own array stopped compiling until the window said
+/// how it asks the three. Nothing was scanned and nothing was summed by hand.
 ///
 /// **That is not a hypothetical, and the strip's row is the case it happened
 /// to.** [`crate::view::Mixer::select`] landed with the deck selection,
@@ -597,7 +602,7 @@ use crate::view::{
 /// answering a different question. So the **list** is the control and which row
 /// is inside [`crate::view::LibraryBay::take`], which is the `read` chip's
 /// row read the other way round.
-pub const PROBES: [Probe; 15] = [
+pub const PROBES: [Probe; 16] = [
     Probe {
         name: "the Outputs row's sink",
         claims: 1,
@@ -607,6 +612,11 @@ pub const PROBES: [Probe; 15] = [
         name: "the audio-in pill",
         claims: 1,
         ask: on_audio,
+    },
+    Probe {
+        name: "the tracker group's three",
+        claims: 3,
+        ask: on_tracker,
     },
     Probe {
         name: "the arrangement pill",
@@ -697,7 +707,7 @@ pub struct Probe {
     /// The derivation that draws those controls, asked whether the point is on
     /// one of them — and nothing is stored.
     ///
-    /// **A `fn` and not a closure, because every one of the fifteen wants
+    /// **A `fn` and not a closure, because every one of these rows wants
     /// exactly the four values [`claim`] itself takes**: the panel for its
     /// solved layout, the `egui` context for a galley, the view for what the
     /// deck and the store said this frame, and the point. The derivations have
@@ -766,9 +776,33 @@ fn on_pill(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
         panel.layout(),
         view.transport,
         view.audio.as_ref(),
+        view.tracker,
         &view.arrangement,
     )
     .is_some_and(|pill| pill.hit(p))
+}
+
+/// **The tracker group's other three, derived once for all of
+/// them**, which is a strip's arrangement in a row rather than in a
+/// column: the offset's figure is as wide as the number in it and
+/// the octave is laid out from where the tap ends, so a second walk
+/// would put the chip a press lands on somewhere the mark is not.
+///
+/// **Asked after the two pills and before the arrangement's**,
+/// which is the order the row is laid out in and is what makes this
+/// the cheap answer it is: it derives the row and the audio-in pill,
+/// where [`on_pill`] derives this group as well. A console told
+/// nothing about the tracker pays one branch — the `tracker?` is
+/// [`tracker_group`]'s first line.
+fn on_tracker(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    tracker_group(
+        ctx,
+        panel.layout(),
+        view.transport,
+        view.audio.as_ref(),
+        view.tracker,
+    )
+    .is_some_and(|group| group.owns(p))
 }
 
 /// **The bay is derived once for all of its controls**, since a
@@ -824,6 +858,7 @@ fn on_look(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
         panel.layout(),
         view.transport,
         view.audio.as_ref(),
+        view.tracker,
         &view.arrangement,
         view.look,
     )

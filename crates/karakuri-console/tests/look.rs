@@ -84,6 +84,7 @@ fn group(panel: &Panel, ctx: &egui::Context, at: Look) -> LookRow {
         panel.layout(),
         Some(mock()),
         None,
+        None,
         &Arrangement::NONE,
         Some(at),
     )
@@ -120,8 +121,15 @@ const EVERY: [Tonemap; 4] = [
 fn the_look_group_is_the_rows_own_geometry() {
     let (panel, ctx) = console(SMALLEST);
     let strip = rect_of(panel.layout(), "transport");
-    let pill = arrangement(&ctx, panel.layout(), Some(mock()), None, &Arrangement::NONE)
-        .expect("the row draws the pill");
+    let pill = arrangement(
+        &ctx,
+        panel.layout(),
+        Some(mock()),
+        None,
+        None,
+        &Arrangement::NONE,
+    )
+    .expect("the row draws the pill");
     let row = group(&panel, &ctx, mock_look());
 
     assert!(
@@ -403,6 +411,7 @@ fn a_control_that_has_not_been_drawn_is_not_there() {
             panel.layout(),
             Some(mock()),
             None,
+            None,
             &Arrangement::NONE,
             Some(mock_look())
         ),
@@ -416,6 +425,7 @@ fn a_control_that_has_not_been_drawn_is_not_there() {
             panel.layout(),
             None,
             None,
+            None,
             &Arrangement::NONE,
             Some(mock_look())
         ),
@@ -427,6 +437,7 @@ fn a_control_that_has_not_been_drawn_is_not_there() {
             &ctx,
             panel.layout(),
             Some(mock()),
+            None,
             None,
             &Arrangement::NONE,
             None
@@ -672,6 +683,7 @@ fn a_press_reaches_both_operations_the_way_the_window_loop_reaches_them() {
             &ctx,
             panel.layout(),
             view.transport,
+            None,
             None,
             &view.arrangement,
             view.look,
