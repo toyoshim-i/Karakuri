@@ -194,7 +194,9 @@ ADR-0259 makes a key press an address into whichever bay has focus, so no bay ch
 more and none can be held to them: the column is now one mechanism's, the way the MIDI column is the
 map's. M5.2 is the sub-milestone this was noticed in — it had finished its panel column and was
 being held open by four key badges naming letters the record had just retired. **ADR-0226 is unchanged by the split**: M5 closes when M5.1 to
-M5.9 close and the two sections at the end of this list close with them.
+M5.9 close and the two sections *Rows the manual has not given a home* and *The console's own
+shape* close with them — named rather than placed, because M5.14 now sits after both and *at the end
+of this list* stopped locating them.
 
 ##### Every bay ends by rewriting its own prose as tooltips
 
@@ -1116,8 +1118,11 @@ can name a folded bay. The key may still earn its place as a bulk act; its recor
 
 #### Rows the manual has not given a home
 
-Two rows carry a `plan` panel badge over a panel cell reading `—`: *Wire a procedure's input to a
-node* and *Narrow the published interface*. Nothing on the console is specified to reach either, so
+Three rows carry a `plan` panel badge over a panel cell reading `—`, and only two of them are
+here: *Wire a procedure's input to a node* and *Narrow the published interface*. **The third is
+*Walk the edit history*, which is M5.3's now** — a decision moved the row and the page has not caught
+up, which is `docs/contributing.md` §5's ordering rather than drift: the bay cannot draw a control
+the page has not named, and naming it is the first half of that milestone's second task. Nothing on the console is specified to reach either, so
 no bay holds them and none of M5.1 to M5.9 can close them. **The manual has to name a home before
 they can be scheduled.** There is no drawing to owe until it does.
 
