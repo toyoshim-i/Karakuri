@@ -202,10 +202,15 @@ pub struct Watch {
     ///
     /// **The run's own selection is not tracked here**, and that is a limit
     /// rather than an oversight: `r` moves the fold at a frame this watcher
-    /// never sees, so a rebuild restates what the *slot was loaded with*. It is
-    /// what the params do with a value a record has moved since, and for the
-    /// same reason — a request has to be reproducible from a record stream, and
-    /// what a hand did later is in the stream as a `select`.
+    /// never sees, so a rebuild restates what the *slot was loaded with*, and
+    /// the reason is a request's: it has to be reproducible from a record
+    /// stream, and what a hand did later is in the stream as a `select`.
+    ///
+    /// **The params used to be the example of this and are no longer**: a value
+    /// a hand moved is carried across the swap by the Set itself
+    /// (`docs/adr/0282-a-rebuild-inherits-the-values-somebody-moved-and-reads-the-rest-from-the-code.md`),
+    /// because `Set` knows which of its values somebody stated and nothing here
+    /// knows which renderer `r` last folded to.
     live: Option<u32>,
     /// `--capacity` when it was given, and otherwise `None` — each geometry
     /// then runs at the default its own `capacity` declaration names.
@@ -256,7 +261,35 @@ pub struct Watch {
     /// loaded" and "the default loaded" are the same Set, and an `Option` here
     /// would be a distinction nothing downstream could act on.
     camera: karakuri_engine::camera::Orbit,
+    /// **The values this slot was aimed with**, stated on the build the aim
+    /// causes and on no other — see [`Watch::stated`] beside it.
+    ///
+    /// **It used to be restated on every rebuild**, on the terms the salts, the
+    /// camera and the bindings still are, and that is what made a knob
+    /// unturnable: a slot pointed at a Set file carries *every declaration of
+    /// every node* here, because a live save writes them all, so restating them
+    /// put every parameter back to the file on the next save of any `.kir` and
+    /// there was nothing an operator could do to a live Set that survived it.
+    /// What replaces the restatement is
+    /// [`karakuri_engine::Set::carry_moved_from`]: the values somebody stated
+    /// travel across the swap on the Set itself, which is where they already
+    /// were.
+    ///
+    /// **The aim's own build still states them, and has to.** At that moment
+    /// nothing has applied them to anything — the aim is a description of a Set
+    /// that is not built yet — so there is no live Set to inherit them from, and
+    /// the same clause is what makes a *load* beat a ride: a value this build
+    /// states is this build's answer for that key. See `carry_moved_from`.
     overrides: Vec<karakuri_engine::ParamWrite>,
+    /// **Whether the overrides above have been applied to the Set this slot is
+    /// running.** `true` from [`Watch::new`], because the caller built that Set
+    /// with them and handed it over live; `false` from [`Watch::repointed`],
+    /// because an aim describes a Set nothing has built yet.
+    ///
+    /// A `bool` and not a count: what it decides is whether *this* build is the
+    /// one that has to state the values, and there is exactly one such build per
+    /// aim.
+    stated: bool,
     /// The interface, restated on every rebuild for the same reason the
     /// bindings are — and the more urgent one: a `control:` binding whose
     /// control did not survive the swap holds its param where it found it.
@@ -393,6 +426,14 @@ impl Watch {
             salts,
             camera,
             overrides,
+            // **Already applied**, which is what a constructed watcher is: every
+            // caller builds the slot's first Set with these values and hands it
+            // to `HotSwap::new` as the live one. Stating them again on the first
+            // save would be this build answering for a key the operator may
+            // have ridden since, which is exactly the clause in
+            // `Set::carry_moved_from` that makes a load beat a ride — and this
+            // is not a load.
+            stated: true,
             published,
             bindings,
             edges,
@@ -575,6 +616,11 @@ impl Watch {
         self.salts = salts;
         self.camera = camera;
         self.overrides = overrides;
+        // **Not yet applied to anything.** An aim describes a Set that does not
+        // exist, so the build below is the one that has to state its values —
+        // and stating them is what makes the loaded Set's numbers beat whatever
+        // the outgoing Set was carrying. See `Watch::stated`.
+        self.stated = false;
         self.published = published;
         self.bindings = bindings;
         self.edges = edges;
@@ -767,6 +813,15 @@ impl Watch {
             l4s,
             names,
         } = material;
+        // **Taken rather than read**, so that the aim's values are stated once
+        // and the flag cannot be left true by a path that returns early: every
+        // `None` above this line is a build that did not happen, and the values
+        // are still owed to the one that does. See `Watch::stated`.
+        let params = if std::mem::replace(&mut self.stated, true) {
+            Vec::new()
+        } else {
+            self.overrides.clone()
+        };
         Some(Request {
             id,
             // **Each geometry at the capacity it declares**, and `--capacity`
@@ -817,7 +872,15 @@ impl Watch {
             // pointing, so a request that left this out would hand the engine a
             // Set aimed at `Orbit::default()` however the operator loaded it.
             camera: self.camera,
-            params: self.overrides.clone(),
+            // **The aim's values on the aim's own build, and nothing after
+            // it.** Everything else on this request is restated because the
+            // engine would otherwise re-derive it; parameter values are the one
+            // thing the outgoing Set already holds and can hand over, which is
+            // what `Set::carry_moved_from` does at the install. Restating them
+            // here as well would pin every one of them to what the slot was
+            // aimed with and make a ride impossible to keep — see
+            // `Watch::overrides`.
+            params,
             published: self.published.clone(),
             bindings: self.bindings.clone(),
             // **Who may move each node, restated with them.** Empty in every
@@ -976,6 +1039,105 @@ mod tests {
             vec![Some(salts[0]), Some(salts[1])],
             "a rebuild handed the engine salts other than the ones the slot is running at"
         );
+    }
+
+    /// **The values a slot was aimed with are stated once, and a later rebuild
+    /// states none of them** — which is the whole of what
+    /// `karakuri_engine::Set::carry_moved_from` needed from this side.
+    ///
+    /// It is the one field on a request that stopped being restated, and the
+    /// reason is that it is the one the engine does not re-derive: a salt, a
+    /// camera, a fold and an edge all come back at some default the moment a
+    /// request stops naming them, and a parameter value does not — the outgoing
+    /// Set is holding it. Restating them made a knob unturnable, and worst
+    /// exactly where an operator is most likely to be turning one: a slot
+    /// pointed at a Set file carries **every declaration of every node** here,
+    /// because that is what a live save writes, so every parameter went back to
+    /// the file on the next save of any `.kir` and nothing an operator did to a
+    /// live Set survived it.
+    ///
+    /// **Both halves are asserted from one watcher**, because either alone is
+    /// the wrong rule: a watcher that never stated them would build the aimed
+    /// Set without the values it was aimed with, and one that always stated them
+    /// is what this replaces.
+    #[test]
+    fn the_values_a_slot_was_aimed_with_are_stated_once() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let files = ["drift_shell.kir", "soft_points.kir"];
+        let paths: Vec<PathBuf> = files.iter().map(|f| tmp.path().join(f)).collect();
+        for (file, path) in files.iter().zip(&paths) {
+            std::fs::copy(root.join("examples").join(file), path).expect("copy an example");
+        }
+        let named = |at: usize| crate::compile::Named::bare(paths[at].clone());
+        let aimed_with = vec![karakuri_engine::ParamWrite::everywhere("exposure", 0.125)];
+
+        let (aim, aimed) = std::sync::mpsc::channel();
+        let mut watch = Watch::new(
+            0,
+            named(0),
+            vec![named(1)],
+            karakuri_engine::set::Layering::Overdraw,
+            None,
+            Some(4096),
+            1,
+            vec![1],
+            karakuri_engine::camera::Orbit::default(),
+            // **What this watcher was constructed with, and it is never
+            // stated**: the caller built the live Set with these and handed it
+            // over, so the first save owes the operator whatever is on the Set
+            // rather than whatever the flags said before the run started.
+            aimed_with.clone(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        )
+        .aimed_by(aimed);
+
+        std::fs::write(&paths[0], format!("// a save\n{}", read(&paths[0]))).expect("edit");
+        let request = rebuild(&mut watch).expect("a build");
+        assert!(
+            request.params.is_empty(),
+            "a save restated the values the run was started with, so a knob ridden \
+             since could not survive it"
+        );
+
+        aim.send(Aim {
+            head: named(0),
+            rest: vec![named(1)],
+            layering: karakuri_engine::set::Layering::Overdraw,
+            live: None,
+            capacity: Some(4096),
+            seed_salt: 1,
+            salts: vec![1],
+            camera: karakuri_engine::camera::Orbit::default(),
+            overrides: aimed_with.clone(),
+            published: Vec::new(),
+            bindings: Vec::new(),
+            edges: Vec::new(),
+            authorities: Vec::new(),
+        })
+        .expect("the watcher is alive");
+        let request = rebuild(&mut watch).expect("the aim's own build");
+        assert_eq!(
+            request.params.len(),
+            1,
+            "the aim's own build has nothing to inherit from — the Set it describes \
+             does not exist yet — so it is the one build that has to state them"
+        );
+
+        std::fs::write(&paths[0], format!("// another save\n{}", read(&paths[0]))).expect("edit");
+        let request = rebuild(&mut watch).expect("a build");
+        assert!(
+            request.params.is_empty(),
+            "the aim's values were stated a second time, which pins every one of \
+             them to the file for the rest of the run"
+        );
+    }
+
+    fn read(path: &std::path::Path) -> String {
+        std::fs::read_to_string(path).expect("read back")
     }
 
     /// **A rebuild restates the camera the slot is aimed with**, rather than

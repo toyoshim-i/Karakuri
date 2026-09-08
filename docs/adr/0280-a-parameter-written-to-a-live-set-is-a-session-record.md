@@ -145,6 +145,18 @@ take the show down.
 
 ### 6. What a rebuild does with it is **not** settled here, and is a bigger record
 
+**Settled, and smaller than this section makes it look —
+[ADR-0282](0282-a-rebuild-inherits-the-values-somebody-moved-and-reads-the-rest-from-the-code.md).**
+The diagnosis below is right and the conclusion drawn from it is not: telling a declared value from
+a moved one *does* need a record of which parameters were written, and `Set` can keep that record
+itself — one set of keys per node, marked where a value is written, which is one field beside
+`params` rather than a channel or a change to where a request is applied. The two costs weighed
+against the engine's home did not survive contact: the request still states what it states and is
+still reproducible from a record stream, and what the install adds is an inheritance the worker had
+no way to state. The one thing this section names that the answer really does give up is the last
+of them — an override for a dropped name re-landing when the name comes back — and 0282 gives it up
+on purpose. Left as written below, because what it says happened is what happened.
+
 A `--watch` rebuild restates `swap::Request::params`, which comes from `Watch::overrides`, which only
 a re-point writes. So a knob moved today is walked back to where the slot was loaded on the next
 save of any `.kir`, silently.
@@ -170,7 +182,10 @@ list lives, and both homes cost more than this record does.
   across at the frame boundary. One call, and it contradicts the argument written on eight
   `Request` fields — *"a request that depends on what happens to be live is not reproducible from a
   record stream"* — and moves where a rebuild's parameters are applied from the worker to the
-  install. It also loses a case the list keeps: an override for a name a rebuild dropped survives in
+  install. *(The second half of that sentence was wrong when it was written: a request's parameters
+  are still applied at the worker, and what the install adds is an inheritance beside them —
+  [ADR-0282](0282-a-rebuild-inherits-the-values-somebody-moved-and-reads-the-rest-from-the-code.md)
+  §3.)* It also loses a case the list keeps: an override for a name a rebuild dropped survives in
   `overrides` and re-lands when the name comes back, where a Set that never held it has nothing to
   carry.
 
@@ -247,4 +262,6 @@ would be the second spelling of an address the workspace keeps in one place.
   node's authority* still have none: `Deck` has no `bind` and no `set_authority`, and both are the
   same one-line shape as `Deck::write_param` once somebody decides what each records.
 - **A ridden knob still does not survive a rebuild**, by §6, and that is now a written question
-  rather than an unnoticed one.
+  rather than an unnoticed one. *(Answered on the same day by
+  [ADR-0282](0282-a-rebuild-inherits-the-values-somebody-moved-and-reads-the-rest-from-the-code.md):
+  it survives.)*
