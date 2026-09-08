@@ -393,6 +393,36 @@ fn sample(variant: &str) -> Operation {
             deck: 0,
             set: "night01".to_owned(),
         },
+        // **The `keep` capsule in each Inspector pane's head**, and the `id`
+        // is `None` because the capsule types no name: this console's one
+        // letter-taking flow is bounded to naming an arrangement, so a keep
+        // files under a stamp exactly as the `k` key's does (ADR-0287). What
+        // the badge claims is that an operator reaches the row.
+        "SaveSet" => Operation::SaveSet { deck: 0, id: None },
+        // **The renderer chips in the Inspector's node groups**, and one
+        // operation is one row however many chips name it — the same
+        // arrangement `SetSync` and `SetTransition` are in. A press on a deck
+        // that overdraws, or on the one chip of a Set with a single renderer,
+        // is drawn and not claimed, which is `Wipe`'s reading of a refusal
+        // under a named condition.
+        "SelectRenderer" => Operation::SelectRenderer {
+            deck: 0,
+            renderer: 0,
+        },
+        // **A parameter row's fader in an Inspector pane**, and the one
+        // emission in this list that names something *inside* a Set rather
+        // than a level on it: the address is `ParamAt`, a `None` node is the
+        // wildcard the interface published, and a component of a vector is
+        // its own row and its own key (ADR-0268). The value is any write,
+        // because what the badge claims is that an operator reaches the row.
+        "WriteParam" => Operation::WriteParam {
+            deck: 0,
+            param: karakuri_operation::ParamAt {
+                node: None,
+                key: "exposure".to_owned(),
+            },
+            value: karakuri_operation::ParamValue::Scalar(0.5),
+        },
         other => panic!(
             "`{SRC}` constructs `Operation::{other}` and this file has no value for it — a \
              control started emitting an operation nobody accounted for. Add an arm here, and \

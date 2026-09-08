@@ -377,7 +377,7 @@ fn a_drag_asks_for_a_master_out_at_both_ends() {
         .expect("the master out's knob");
 
     for (end, want) in [(it.fader.track.min.x, 0.0), (it.fader.track.max.x, 1.0_f32)] {
-        panel.grab(at(it.fader.knob.center()), grab);
+        panel.grab(at(it.fader.knob.center()), grab.clone());
         let to = Point::new(end, it.fader.knob.center().y);
         assert_eq!(
             panel.moved(to),

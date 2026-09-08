@@ -11815,12 +11815,75 @@ pub struct Param {
     pub name: String,
     /// What it holds.
     pub value: f32,
-    /// **Where it sits in its published range**, `[0, 1]` — the fader's fill.
+    /// **What the Set published it over**, low then high — `Published::range`,
+    /// which *"narrows, never redefines"* the range the procedure declared.
     ///
-    /// A position and not a range plus a value, because the fader is the only
-    /// reader and a second derivation of *where along the track* is a second
-    /// answer. Whoever publishes the control has the range.
-    pub at: f32,
+    /// # It used to be the position and is now the range, and that is a
+    /// decision rather than a widening
+    ///
+    /// This field read `at: f32`, *"where it sits in its published range,
+    /// `[0, 1]`"*, and its own argument was that **the fader is the only
+    /// reader**, so a range plus a value would be a second derivation of
+    /// *where along the track*. A fader a hand can move has a second reader —
+    /// the grab, which turns a pointer back into a value — and that one needs
+    /// the range whichever way this field is spelled. So the position is
+    /// [`Param::at`], derived here, and the two directions are one statement
+    /// in one place: [`ParamGrip`] and
+    /// [ADR-0286](../../../docs/adr/0286-a-parameter-row-writes-the-control-it-draws-and-carries-the-range-rather-than-the-position.md).
+    pub range: [f32; 2],
+    /// **Which control this row is**, as the vocabulary addresses one —
+    /// `Published::at` and `Published::key`, carried over unchanged.
+    ///
+    /// **Not the group the row was drawn in**, which is the other reading and
+    /// is the one ADR-0286 refuses: a wildcard covering exactly one node is
+    /// *drawn* in that node's group, and it goes on meaning every node that
+    /// declares the key. See [`ParamGrip`].
+    ///
+    /// The vocabulary's own type rather than a pair of this crate's, because
+    /// the operation carries exactly this and a second spelling of an address
+    /// is what `karakuri-operation` exists to stop
+    /// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
+    pub param: karakuri_operation::ParamAt,
+}
+
+impl Param {
+    /// **Where the value sits in the published range**, `[0, 1]` — the
+    /// fader's fill, and what a knob's centre is put on.
+    ///
+    /// **A range of no width is a control with one position**, and the fader
+    /// sits at its start rather than at a division by zero. That is the guard
+    /// the harness used to carry when this was a field; it is here now, so
+    /// there is one place a degenerate range is answered for.
+    pub fn at(&self) -> f32 {
+        let [low, high] = self.range;
+        match high > low {
+            false => 0.0,
+            true => unit((self.value - low) / (high - low)),
+        }
+    }
+
+    /// **What this control holds with its fader at `at`** — [`Param::at`]
+    /// inverted, and the whole of what a hand on this row asks for.
+    ///
+    /// `at` is a position on `[0, 1]`, which is what [`Grab::value`] answers,
+    /// and it is clamped here for [`unit`]'s reason rather than trusted: a
+    /// published range narrows and never redefines, so a value outside it is
+    /// one the procedure did not say it still looks like itself over.
+    pub fn valued(&self, at: f32) -> f32 {
+        let [low, high] = self.range;
+        low + (high - low) * unit(at)
+    }
+
+    /// **Whether a hand can move this row at all.**
+    ///
+    /// `Grab::new`'s refusal read on the value axis instead of on the track: a
+    /// published range of no width is a control with one position, so a knob
+    /// on it is a handle with nowhere to go and every drag of it would ask for
+    /// the value it already holds. The row is still **drawn** — the fill and
+    /// the figure say what it is — and it is not taken hold of.
+    fn movable(&self) -> bool {
+        self.range[1] > self.range[0]
+    }
 }
 
 /// **The Inspector's pane, laid out**: the head that says which deck, the deck
@@ -11954,6 +12017,219 @@ impl InspectorPane {
             egui::vec2(self.body.width(), group_h(&nodes[index])),
         )
     }
+
+    /// **What a press at `p` on a renderer chip asks for**, or `None` off
+    /// every chip this pane drew.
+    ///
+    /// # The row is a choice only where the deck composites and holds two
+    ///
+    /// [Every operation](../../../docs/manual/operations.html) states the
+    /// condition on the row itself — *"Only where the deck composites and
+    /// holds two or more. One-way: no position in the cycle folds them all
+    /// back in"* — and `docs/manual/console.html` states it from the chips'
+    /// side: *"This Set composites, so one renderer is live and the rest are
+    /// not."* Under overdraw every renderer draws, so a selection would name a
+    /// state the picture is not in; with one renderer there is nothing to
+    /// choose between. **Both are drawn and neither is claimed**, which is
+    /// [`DeckHead::arrow`]'s arrangement on an inert scrub and this crate's
+    /// own rule stated at [`crate::input`]: *a control claims what it acts on
+    /// and no more*. The chips keep their shape either way, because a row that
+    /// vanished when a deck stopped compositing would move every parameter row
+    /// under it out from under the hand.
+    ///
+    /// **Every chip of a live row is claimed, the lit one included.** It names
+    /// a destination, which is what an operation on this panel is
+    /// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)),
+    /// and pressing the lit one is the selection the deck already has asked
+    /// for again — the anchor's shape two rows up. A chip that stopped being
+    /// pressable the moment it lit would take the claim out from under a hand
+    /// on the beat the swap landed.
+    ///
+    /// # What is asked before what
+    ///
+    /// The body, then the group's row, then the chips — [`LibraryBay::chip`]'s
+    /// order one bay along and for its reason: the chips are laid end to end
+    /// from the row's left padding and [`inspector_into`] clips the paint to
+    /// the pane, so a chip that finishes outside the pane is a target only for
+    /// the part of it that is drawn. The row is the pane's own width, so that
+    /// clip is this row's `contains`.
+    ///
+    /// **It costs a galley lookup per chip and only inside a renderer row**,
+    /// which is [`LibraryBay::chips`]' price: a chip is as wide as the word in
+    /// it, and the walk stops at the one under the pointer.
+    pub fn select_renderer(
+        &self,
+        ctx: &egui::Context,
+        pane: &Pane,
+        p: karakuri_layout::Point,
+    ) -> Option<Operation> {
+        // Fonts are not valid until `egui` has run a pass — [`deck_head`]'s
+        // guard, and before the first one there is no chip drawn to press.
+        if ctx.cumulative_pass_nr() == 0 {
+            return None;
+        }
+        let at = Pos2::new(p.x, p.y);
+        if !self.body.contains(at) {
+            return None;
+        }
+        (0..self.shown).find_map(|index| {
+            let node = pane.nodes.get(index)?;
+            if !a_choice(pane, node) {
+                return None;
+            }
+            let row = rend_row_in(self.group(&pane.nodes, index));
+            if !row.contains(at) {
+                return None;
+            }
+            rend_chips(ctx, row, &node.renderers)
+                .find(|(_, chip)| chip.contains(at))
+                .map(|(renderer, _)| Operation::SelectRenderer {
+                    deck: pane.deck as u8,
+                    renderer: renderer as u32,
+                })
+        })
+    }
+
+    /// **What a press at `p` takes hold of in this pane**, or `None` where
+    /// there is nothing under it a hand can move.
+    ///
+    /// # It is the knob, and the track is deliberately not a target
+    ///
+    /// [`Mixer::grab`]'s rule and [`MasterRow::grab`]'s, and it is this bay's
+    /// for the same reason read one bay along: a parameter at 0.2 whose track
+    /// was clicked would put the value at the far end of its published range,
+    /// on stage, because a hand landed three pixels off a knob. The mock draws
+    /// a `.fader s` on every `.param` and deliberately draws none on the
+    /// transport's exposure track, which is what tells a control with a handle
+    /// from one that is set outright — *"a handle that jumped to the pointer
+    /// would be a lie about what a handle is"*.
+    ///
+    /// **The `.param` rows carry no tooltip in the mock**, which is where the
+    /// mixer's version of this rule is written down (*"a press on the track
+    /// off the knob does nothing, which is every fader in this bay's rule"*),
+    /// so the page does not yet say it for this bay. The console's answer is
+    /// the mixer's; `docs/manual/console.html` is where it has to be said.
+    ///
+    /// # A row with nowhere to go is not taken hold of
+    ///
+    /// [`Param::movable`]: a published range of no width is a control with one
+    /// position. The row is drawn — a fill at the start and a figure — and it
+    /// is not a handle, which is `Grab::new`'s own refusal read on the value
+    /// axis instead of on the track.
+    ///
+    /// # Only what is drawn
+    ///
+    /// `0..shown`, so a group the pane had no room for is not reachable by a
+    /// press either — which is the whole of what [`InspectorPane::shown`]
+    /// means and is why a pane below roughly 534px has no parameter a hand can
+    /// reach. That is a scroll position this crate does not have rather than
+    /// anything this derivation can answer.
+    pub fn grip<'a>(&self, pane: &'a Pane, p: karakuri_layout::Point) -> Option<ParamGrip<'a>> {
+        let p = Pos2::new(p.x, p.y);
+        // The manual's *deck* is the code's *slot*, and a deck holds
+        // `MAX_SLOTS` of them — `DECKS`, which is 4 — so the index is a `u8`
+        // with room to spare. [`Mixer::grab`]'s note, one bay along.
+        let deck = pane.deck as u8;
+        (0..self.shown).find_map(|index| {
+            let node = pane.nodes.get(index)?;
+            let group = self.group(&pane.nodes, index);
+            node.params
+                .iter()
+                .enumerate()
+                .find_map(|(at, param)| match param.movable() {
+                    false => None,
+                    true => {
+                        let fader = param_fader(param_rect(group, node, at), param)?;
+                        fader
+                            .knob
+                            .contains(p)
+                            .then_some(ParamGrip { deck, param, fader })
+                    }
+                })
+        })
+    }
+
+    /// **Whether `p` is on a parameter fader's knob**, which is what
+    /// [`crate::input::claim`] asks — the knob, and not the track under it.
+    pub fn owns(&self, pane: &Pane, p: karakuri_layout::Point) -> bool {
+        self.grip(pane, p).is_some()
+    }
+
+    /// **What a press at `p` takes hold of**, as the model holds every other
+    /// fader — [`grabbed`], so a parameter fader keeps whatever it grabbed at
+    /// and the value does not jump under the hand.
+    pub fn grab(&self, pane: &Pane, p: karakuri_layout::Point) -> Option<Grab> {
+        let grip = self.grip(pane, p)?;
+        grabbed(
+            grip.fader,
+            Knob::Param {
+                deck: grip.deck,
+                param: grip.param.param.clone(),
+                range: grip.param.range,
+            },
+            Pos2::new(p.x, p.y),
+        )
+    }
+}
+
+/// **A parameter fader taken hold of**: which deck, which control, and the
+/// track the value rides.
+///
+/// # What it answers, and what it deliberately does not
+///
+/// The brief on this control is *a pointer landing on a parameter row's fader
+/// answers which deck, which parameter and what value*, and those are the
+/// three things here: [`deck`](Self::deck), [`param`](Self::param)'s
+/// [`Param::param`], and [`Param::valued`] at wherever the drag gets to.
+///
+/// **It is not a `Grab`, and that is the seam rather than a gap.** A
+/// [`crate::panel::Knob`] is what turns a track position into an
+/// [`Operation`], and the arm for this control is
+/// [`crate::panel::Knob`]'s to grow — see the module the operation is
+/// constructed in. What is here is everything the view can answer without it:
+/// where the knob is, which is geometry and the value it was drawn from, and
+/// which control it belongs to, which is what the harness read off
+/// `Set::published`. The one line that closes it reads
+///
+/// ```ignore
+/// grabbed(
+///     grip.fader,
+///     Knob::Param {
+///         deck: grip.deck,
+///         param: grip.param.param.clone(),
+///         range: grip.param.range,
+///     },
+///     Pos2::new(p.x, p.y),
+/// )
+/// ```
+///
+/// and it is [`grabbed`] — the same inverse of [`fader`] the mixer's two
+/// knobs and the master out are taken hold of through, so a parameter fader
+/// keeps whatever it grabbed at and the value does not jump.
+///
+/// # The control it names is the published one, not the group it was drawn in
+///
+/// [`Param::param`] is `Published::at` and `Published::key` carried over, so a
+/// **wildcard** row stays a wildcard: `None` means every node that declares
+/// the key, and the engine refuses one that spans nodes under disagreeing
+/// authorities (ADR-0223). The row was *placed* in a group by resolving that
+/// wildcard where it covered exactly one node, and writing what the placement
+/// resolved to would narrow the control to the node it happens to reach today
+/// — [ADR-0286](../../../docs/adr/0286-a-parameter-row-writes-the-control-it-draws-and-carries-the-range-rather-than-the-position.md).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ParamGrip<'a> {
+    /// **Which deck's**, which is the manual's word for what the code calls a
+    /// slot — [`Pane::deck`], the deck this pane is pointed at, and not
+    /// [`View::selection`].
+    pub deck: u8,
+    /// **The row a hand landed on**, borrowed from the pane it was drawn from
+    /// rather than copied: the address, the range and the value it holds are
+    /// all on it already, and a copy of any of them here would be a second
+    /// statement about one control.
+    pub param: &'a Param,
+    /// **The track it took hold of**, at the value the row was drawn at — what
+    /// [`grabbed`] measures the grip's offset and travel from.
+    pub fader: Fader,
 }
 
 /// **How tall one node group is**: its head, the renderer row if it has one,
@@ -11970,6 +12246,96 @@ fn group_h(node: &Node) -> f32 {
             false => size::REND_ROW_H,
         }
         + size::PARAM_H * node.params.len() as f32
+}
+
+/// **Where a node group's renderer row is**: `.rend-row` under `.node-head`,
+/// the full width of the group and [`size::REND_ROW_H`] tall.
+///
+/// **One formula, because the row is painted *and* pressed.** [`node_into`]
+/// walks a group from the top and [`InspectorPane::select_renderer`] asks
+/// where the chips in it are; the same arithmetic written twice is two answers
+/// that can disagree, which is [`deck_head`]'s rule one row up — *the
+/// derivation that draws a control is the one that hit-tests it*.
+///
+/// Asked only where [`Node::renderers`] is not empty. On a group that has none
+/// the rectangle it answers is where the first parameter row goes, which is
+/// [`group_h`]'s own arithmetic read the other way.
+fn rend_row_in(group: Rect) -> Rect {
+    let top = group.min.y + size::NODE_HEAD_H;
+    Rect::from_min_max(
+        Pos2::new(group.min.x, top),
+        Pos2::new(group.max.x, top + size::REND_ROW_H),
+    )
+}
+
+/// **Whether this group's renderer chips are a choice a press can make**, and
+/// it is [`Renderer::live`]'s own condition asked of the row rather than of
+/// one chip: the deck composites, and it holds more than one renderer.
+///
+/// The manual's row carries the whole of it — *"Only where the deck composites
+/// and holds two or more"* — and [`InspectorPane::select_renderer`] is where
+/// the argument for drawing the other two cases and claiming neither is
+/// written.
+fn a_choice(pane: &Pane, node: &Node) -> bool {
+    pane.composite && node.renderers.len() > 1
+}
+
+/// **One renderer chip's width**: the name at [`size::BASE`] inside
+/// [`size::REND_PAD_X`] either side, which is what `.rend` is as wide as. Its
+/// `border: 1px solid var(--c-line)` is counted in [`size::REND_H`] down the
+/// chip and not across it, exactly as `.mini`'s is in [`deck_head`].
+///
+/// Asked of `egui` rather than derived, for [`chip_width`]'s reason one bay
+/// along: a capsule is as wide as the word in it, and the only thing that
+/// knows how wide a word is is the thing that will paint it.
+fn rend_width(ctx: &egui::Context, name: &str) -> f32 {
+    ctx.fonts_mut(|f| {
+        f.layout_no_wrap(
+            name.to_owned(),
+            FontId::new(size::BASE, FontFamily::Proportional),
+            Color32::PLACEHOLDER,
+        )
+        .size()
+        .x
+    }) + size::REND_PAD_X * 2.0
+}
+
+/// **Every renderer chip and its box**, left to right in draw order — the same
+/// walk [`rend_row_into`] paints and [`InspectorPane::select_renderer`]
+/// hit-tests, so the capsule a press lands on is the capsule the wash is drawn
+/// in.
+///
+/// [`LibraryBay::chips`]' arrangement one bay along, down to the reason it is
+/// an iterator: a `Vec` of rectangles would be an allocation on a path asked
+/// once per pointer event and once per frame.
+///
+/// **The index is the renderer's own, in draw order** — the numbering
+/// `Operation::SelectRenderer`, `--param L4:1:…` and a `select` record all
+/// use, so what comes out of a press is a position in the Set rather than a
+/// position in whatever this row managed to draw.
+///
+/// **The boxes are not clipped and the paint is.** `.rend-row` wraps in the
+/// mock and this console draws one row of it (see [`rend_row_into`]), so a
+/// chip past the pane's right edge is yielded whole here and held to the part
+/// of it that is drawn where the press is answered.
+pub fn rend_chips<'a>(
+    ctx: &'a egui::Context,
+    row: Rect,
+    renderers: &'a [Renderer],
+) -> impl Iterator<Item = (usize, Rect)> + 'a {
+    let mut x = row.min.x + size::REND_ROW_PAD_L;
+    // One padding down from the top of the row, which is where `.rend-row`
+    // puts it: its padding is `3px 10px 6px 12px`, so a chip is not centred in
+    // the row and the space under it is twice the space over it.
+    let top = row.min.y + size::REND_ROW_PAD_T;
+    renderers.iter().enumerate().map(move |(index, rend)| {
+        let chip = Rect::from_min_size(
+            Pos2::new(x, top),
+            egui::vec2(rend_width(ctx, &rend.name), size::REND_H),
+        );
+        x += chip.width() + size::REND_GAP;
+        (index, chip)
+    })
 }
 
 /// **One pane of the Inspector, derived** — see [`InspectorPane`] for what is
@@ -12442,6 +12808,129 @@ pub fn deck_head(ctx: &egui::Context, at: &InspectorPane, pane: &Pane) -> Option
     })
 }
 
+/// **The `keep` pill in a pane's head, laid out** — the capsule at the right
+/// of `.half-head`, and the one control in this bay that performs rather than
+/// sets.
+///
+/// # It keeps the pane's deck, and `k` keeps the selection
+///
+/// The mock draws one of these per pane and the tooltip names the pane's own
+/// deck: *"Keep deck A as a Set, exactly as it is on screen."* So this carries
+/// [`Pane::deck`] the way [`DeckHead::deck`] does, and a press answers with
+/// the deck the pill was measured for — a pill in the second pane keeps that
+/// pane's deck while the selection stays where the operator put it. The key
+/// `k` keeps *the selected deck*, because a bare key press cannot say which,
+/// and the two are one operation asked for from two ends
+/// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
+///
+/// # What it files it under
+///
+/// [`Operation::SaveSet`] with **no id**, which is the same call the key makes
+/// and is a decision rather than an omission: naming a Set from here would be
+/// a second letter-taking flow, and this console has one, bounded to an
+/// arrangement's name
+/// ([ADR-0287](../../../docs/adr/0287-the-keep-pill-files-under-a-stamp-because-the-consoles-one-letter-taking-flow-is-an-arrangements-name.md)).
+/// What the store does with a `None` is `karakuri_environment::accepted_save`'s
+/// convention — a stamp, because *"an operator looks for the time they saved
+/// it"*.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct KeepPill {
+    /// **The capsule**, which is what a press has to land in. The mock gives
+    /// the whole pill the click and so does this — [`ArrangementPill::pill`]'s
+    /// own reading.
+    pub pill: Rect,
+    /// Which deck this pill keeps, as [`Pane::deck`] — carried so that a press
+    /// answers with the deck it was measured for, which is
+    /// [`DeckHead::deck`]'s reason one row down.
+    pub deck: usize,
+}
+
+impl KeepPill {
+    /// Whether `p` is on the capsule, which is the whole of what this control
+    /// owns: there is no menu under it and no second target beside it.
+    pub fn hit(&self, p: karakuri_layout::Point) -> bool {
+        self.pill.contains(Pos2::new(p.x, p.y))
+    }
+
+    /// **What a press at `p` asks for**, or `None` off the capsule.
+    ///
+    /// The same derivation [`crate::input::claim`] hit-tests, asked a second
+    /// time rather than copied — [`DeckHead::sync`]'s arrangement, and the
+    /// reason is the same one row up: the pill that claims a press and the
+    /// pill that acts on it cannot come apart.
+    ///
+    /// **It refuses nothing.** What a keep costs and whether the store will
+    /// take it are the instrument's answers rather than this surface's, and
+    /// the operation is *"on a worker"* on the page it is specified on — the
+    /// press leaves and the answer arrives later.
+    pub fn keep(&self, p: karakuri_layout::Point) -> Option<Operation> {
+        self.hit(p).then_some(Operation::SaveSet {
+            deck: self.deck as u8,
+            // **`None`, and it is the payload saying so rather than this
+            // control inventing a stamp** — the sentence
+            // `crates/karakuri/src/main.rs` already writes over the `k` arm,
+            // and the same one: *"a caller that can type a name is not made to
+            // take a timestamp"*, and this control is not one of them.
+            id: None,
+        })
+    }
+}
+
+/// **The pane head's pill, derived** — [`inspector`] answers where the head is
+/// and this answers where the capsule in it is, which is [`deck_head`]'s
+/// division one row down.
+///
+/// `.sep`'s `flex: 1` puts it hard against the head's right-hand padding, and
+/// **one padding down from the top rather than centred in the row**: the rule
+/// at the bottom is inside `.half-head`, so the row's middle is half a pixel
+/// below the middle of its content box — which is the scope row's own note one
+/// bay along, on a row built the same way.
+///
+/// # What it costs to ask
+///
+/// **One galley lookup per pane**, for the word in the capsule, on a pointer
+/// event and on a frame — [`deck_head`]'s three beside it, and paid the same
+/// way.
+///
+/// # `None` is a head that cannot hold it
+///
+/// [`deck_head`]'s rule and [`look`]'s: *a control that does not fit in the
+/// row it is drawn in is no control at all, rather than half of one*. The
+/// words to its left are a readout and are clipped; the pill is a target and
+/// is not drawn where it would be cut.
+pub fn keep_pill(ctx: &egui::Context, at: &InspectorPane, pane: &Pane) -> Option<KeepPill> {
+    // Fonts are not valid until `egui` has run a pass, exactly as in
+    // [`deck_head`] — and on the frame before the first one there is nothing
+    // drawn here to press.
+    if ctx.cumulative_pass_nr() == 0 {
+        return None;
+    }
+    let head = at.head;
+    let w = pill_width(ctx, KEEP_LABEL);
+    let pill = Rect::from_min_size(
+        Pos2::new(
+            head.max.x - size::HALF_HEAD_PAD_X - w,
+            head.min.y + size::HALF_HEAD_PAD_Y,
+        ),
+        egui::vec2(w, size::PILL_H),
+    );
+    // **Measured against `.half-head`'s content box and not against the row**,
+    // because a flex item cannot be laid out inside its parent's padding: the
+    // capsule is placed from the right-hand padding, so what it runs off is
+    // the left one, and a head with less room between its two paddings than
+    // the word needs draws none. [`positive`] is what says the head is a row
+    // at all — a pane with no height has one that is not.
+    let room = head.width() - size::HALF_HEAD_PAD_X * 2.0;
+    (positive(head) && pill.width() <= room).then_some(KeepPill {
+        pill,
+        deck: pane.deck,
+    })
+}
+
+/// **The word in the capsule**, which is the mock's own and is the row's name
+/// in the panel column of [every operation](../../../docs/manual/operations.html).
+const KEEP_LABEL: &str = "keep";
+
 /// **What the pane head reads**: the mock's `deck A · drift_night`.
 fn showing_text(pane: &Pane) -> String {
     format!(
@@ -12487,7 +12976,24 @@ const COMPOSITE_LABEL: &str = "composite";
 /// is the same `with_clip_rect` the picture, a preview cell and the library's
 /// list are each drawn inside.
 fn inspector_into(ui: &Ui, pal: &Palette, at: &InspectorPane, pane: &Pane) {
-    let painter = ui.painter().with_clip_rect(at.head);
+    // **Derived here and hit-tested by `claim` off the same call**, and asked
+    // before the words are painted rather than after: `.half-head` is a flex
+    // row with `.sep` between them, so the readout is what gives way when the
+    // pane is narrow and the pill keeps its place. `None` is a head with no
+    // room for the capsule, which draws none — see [`keep_pill`].
+    let keep = keep_pill(ui.ctx(), at, pane);
+    // What is left of the head for the two words: everything up to the pill,
+    // one `.half-head` gap short of it. A name too long for that is clipped,
+    // which is the row's own answer to a long name either way — the head is a
+    // clip rectangle and there is no ellipsis in this console to draw.
+    let words = match keep {
+        Some(pill) => Rect::from_min_max(
+            at.head.min,
+            Pos2::new(pill.pill.min.x - size::HALF_HEAD_GAP, at.head.max.y),
+        ),
+        None => at.head,
+    };
+    let painter = ui.painter().with_clip_rect(words);
     let mut x = at.head.min.x + size::HALF_HEAD_PAD_X;
     let label = painter.layout_job(span_at(SHOWING_LABEL, size::BASE, pal.faint));
     let y = at.head.center().y - label.size().y * 0.5;
@@ -12503,7 +13009,10 @@ fn inspector_into(ui: &Ui, pal: &Palette, at: &InspectorPane, pane: &Pane) {
         what,
         pal.text,
     );
-    // `.half-head`'s own `border-bottom`, the bottom pixel of the row.
+    // `.half-head`'s own `border-bottom`, the bottom pixel of the row — drawn
+    // through the whole head rather than through the words' clip, which stops
+    // one gap short of the pill.
+    let painter = ui.painter().with_clip_rect(at.head);
     let rule = at.head.max.y - size::HAIRLINE * 0.5;
     painter.line_segment(
         [
@@ -12512,6 +13021,18 @@ fn inspector_into(ui: &Ui, pal: &Palette, at: &InspectorPane, pane: &Pane) {
         ],
         Stroke::new(size::HAIRLINE, pal.hair),
     );
+    // `.pill` in its one treatment. **The mock draws the first pane's `keep`
+    // as `.pill.on` and the second pane's as a plain `.pill`**, and neither
+    // the mock nor `docs/manual/console.html` says what the lit one is
+    // reading: deck A is on air *and* holds the selection *and* is the first
+    // pane, and a console that picked one of those would be drawing a state
+    // off a guess. So one treatment, which is
+    // [ADR-0200](../../../docs/adr/0200-a-bays-first-pass-draws-the-values-that-exist-and-omits-the-rest.md)'s
+    // rule met by a capsule rather than by an omission: a keep is a press and
+    // not a setting, and there is nothing here for a wash to be *on*.
+    if let Some(pill) = keep {
+        pill_at(ui, pal, pill.pill, KEEP_LABEL);
+    }
 
     // **Derived here and hit-tested by `claim` off the same call**, which is
     // the rule every other control on this panel is drawn under. `None` is a
@@ -12678,30 +13199,17 @@ fn node_into(painter: &egui::Painter, pal: &Palette, rect: Rect, node: &Node) {
         auth_into(painter, pal, head, authority);
     }
 
-    let mut y = head.max.y;
+    // **Where the renderer row is, asked rather than measured here**: a press
+    // has to resolve to the same rectangle the chips were drawn in, and
+    // [`rend_row_in`] is the one place that arithmetic is written.
     if !node.renderers.is_empty() {
-        rend_row_into(
-            painter,
-            pal,
-            Rect::from_min_max(
-                Pos2::new(rect.min.x, y),
-                Pos2::new(rect.max.x, y + size::REND_ROW_H),
-            ),
-            &node.renderers,
-        );
-        y += size::REND_ROW_H;
+        rend_row_into(painter, pal, rend_row_in(rect), &node.renderers);
     }
-    for param in &node.params {
-        param_into(
-            painter,
-            pal,
-            Rect::from_min_max(
-                Pos2::new(rect.min.x, y),
-                Pos2::new(rect.max.x, y + size::PARAM_H),
-            ),
-            param,
-        );
-        y += size::PARAM_H;
+    // **Where a row is, asked rather than accumulated.** The running sum this
+    // loop used to keep was a second answer to the same question the moment a
+    // press had to be resolved to a row — see [`param_rect`].
+    for (index, param) in node.params.iter().enumerate() {
+        param_into(painter, pal, param_rect(rect, node, index), param);
     }
 }
 
@@ -12772,17 +13280,19 @@ fn auth_into(painter: &egui::Painter, pal: &Palette, head: Rect, authority: Auth
 /// was, and the pane's own arithmetic is what says whether a group is drawn at
 /// all. A chip past the right-hand edge is clipped, which is the same answer
 /// the pane gives a group past the bottom.
+///
+/// **Where each chip goes is [`rend_chips`]', so this paints and derives
+/// nothing** — the change this pass made to it, and [`deck_head_into`]'s rule
+/// one row up: the row used to be a running sum here and a press had nowhere
+/// to ask what it had landed on.
 fn rend_row_into(painter: &egui::Painter, pal: &Palette, row: Rect, renderers: &[Renderer]) {
-    let mut x = row.min.x + size::REND_ROW_PAD_L;
-    let y = row.min.y + size::REND_ROW_PAD_T;
-    for rend in renderers {
+    for (index, rect) in rend_chips(painter.ctx(), row, renderers) {
+        let rend = &renderers[index];
         let galley = painter.layout_no_wrap(
             rend.name.clone(),
             FontId::new(size::BASE, FontFamily::Proportional),
             pal.dim,
         );
-        let w = galley.size().x + size::REND_PAD_X * 2.0;
-        let rect = Rect::from_min_size(Pos2::new(x, y), egui::vec2(w, size::REND_H));
         let radius = CornerRadius::same((size::REND_H * 0.5) as u8);
         match rend.live {
             true => {
@@ -12817,7 +13327,6 @@ fn rend_row_into(painter: &egui::Painter, pal: &Palette, row: Rect, renderers: &
                 false => pal.dim,
             },
         );
-        x += w + size::REND_GAP;
     }
 }
 
@@ -12877,35 +13386,80 @@ fn param_into(painter: &egui::Painter, pal: &Palette, row: Rect, param: &Param) 
         value,
         pal.text,
     );
-    let track = Rect::from_min_size(
+    if let Some(fader) = param_fader(row, param) {
+        fader_into(painter, pal, fader, false, None);
+    }
+}
+
+/// **One parameter row's fader, laid out** — the track between the name and
+/// the figure, what the value fills of it, and the knob on the fill's moving
+/// edge. `None` where the row is too narrow to have a track at all.
+///
+/// # One derivation, asked twice
+///
+/// [`param_into`] paints this and [`InspectorPane::grip`] hit-tests it, which
+/// is [`Mixer::grab`]'s rule and [`MasterRow::grab`]'s: two copies of where a
+/// knob is would be a knob painted where a hand cannot take hold of it. **The
+/// value is part of the geometry** — the knob sits on the fill's moving edge,
+/// so where it is depends on what the deck said this frame, and the row a hand
+/// grabs is the row it saw.
+///
+/// **`.param`'s middle track**, which is the `1fr` of `grid-template-columns:
+/// 15px 88px 1fr 58px`: the ordinal, the name and the figure are stated widths
+/// and this is what is left between them. `lib.rs` measures the pane's own
+/// minimum off exactly that — *"the fader is the `1fr` track and is drawn only
+/// where what is left over is positive"* (ADR-0279) — and this is where that
+/// `positive` is asked.
+fn param_fader(row: Rect, param: &Param) -> Option<Fader> {
+    let left = row.min.x + size::PARAM_PAD_L;
+    let right = row.max.x - size::PARAM_PAD_R;
+    let track = Rect::from_min_max(
         Pos2::new(
-            name_x + size::PARAM_NAME_W + size::PARAM_GAP,
+            left + size::PARAM_ORD_W + size::PARAM_GAP + size::PARAM_NAME_W + size::PARAM_GAP,
             row.center().y - size::FADER_H * 0.5,
         ),
-        egui::vec2(
-            (right - size::PARAM_VAL_W - size::PARAM_GAP)
-                - (name_x + size::PARAM_NAME_W + size::PARAM_GAP),
-            size::FADER_H,
+        Pos2::new(
+            right - size::PARAM_VAL_W - size::PARAM_GAP,
+            row.center().y + size::FADER_H * 0.5,
         ),
     );
-    if positive(track) {
+    match positive(track) {
+        false => None,
         // `.fader b` fills its 5px track edge to edge, so the inset is zero —
         // the one argument that tells this fader from the mixer's vertical
         // one, which `fader` takes for exactly this reason.
-        fader_into(
-            painter,
-            pal,
-            fader(
-                track,
-                Axis::Row,
-                param.at,
-                0.0,
-                egui::vec2(size::FADER_KNOB_W, size::FADER_KNOB_H),
-            ),
-            false,
-            None,
-        );
+        true => Some(fader(
+            track,
+            Axis::Row,
+            param.at(),
+            0.0,
+            egui::vec2(size::FADER_KNOB_W, size::FADER_KNOB_H),
+        )),
     }
+}
+
+/// **Where the `index`th parameter row of `node` goes** inside the group
+/// rectangle [`InspectorPane::group`] answered.
+///
+/// [`InspectorPane::group`]'s walk one level in, and a function rather than a
+/// running sum inside [`node_into`] for the reason the deck head was lifted out
+/// of `inspector_into`: a press had nowhere to ask what it had landed on. The
+/// head is [`size::NODE_HEAD_H`], the renderer row is [`size::REND_ROW_H`]
+/// where the group has one, and the rows are [`size::PARAM_H`] each from
+/// there — which is [`group_h`] read as an offset instead of as a total, and
+/// the two are checked against each other in `tests/param_fader.rs`.
+fn param_rect(group: Rect, node: &Node, index: usize) -> Rect {
+    let top = group.min.y
+        + size::NODE_HEAD_H
+        + match node.renderers.is_empty() {
+            true => 0.0,
+            false => size::REND_ROW_H,
+        }
+        + size::PARAM_H * index as f32;
+    Rect::from_min_max(
+        Pos2::new(group.min.x, top),
+        Pos2::new(group.max.x, top + size::PARAM_H),
+    )
 }
 
 /// The console's view: which room it is in, and the frame's plan, kept so a
@@ -15170,7 +15724,11 @@ mod tests {
                         ord: n + 1,
                         name: format!("p{n}"),
                         value: 0.5,
-                        at: 0.5,
+                        range: [0.0, 1.0],
+                        param: karakuri_operation::ParamAt {
+                            node: None,
+                            key: format!("p{n}"),
+                        },
                     })
                     .collect(),
             }],

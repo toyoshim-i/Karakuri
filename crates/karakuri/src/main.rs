@@ -285,7 +285,7 @@ use karakuri_console::repaint::{Change, Repaint};
 use karakuri_console::room::Room;
 use karakuri_console::view::{
     self, arrangement as arrangement_pill, audio_in as audio_in_pill, class_at,
-    deck_head as deck_head_row, inspector as inspector_pane, library as library_bay,
+    deck_head as deck_head_row, inspector as inspector_pane, keep_pill, library as library_bay,
     look as look_row, master as master_row, mcp_pill, mixer as mixer_bay, outputs, picture_rect,
     preview_rects, program_bay, program_head, tracker_group, transition as transition_row, Ask,
     AudioAsk, AudioIn, Chosen, Go, Kind, McpPill, Picture, Read, Reading, Scope, Taken, Tracker,
@@ -300,6 +300,7 @@ use karakuri_engine::governor::{Reason, Report};
 // uses for them: `Kind` is already the console's *region* kind on this side,
 // and one word cannot be two things in one file.
 use karakuri_engine::set::{Layering, Published};
+use karakuri_engine::transition::Selection;
 use karakuri_engine::transport::Sync as EngineSync;
 use karakuri_engine::{
     compose, Blend, Committed, Control, Deck, Event, Gpu, HotSwap, Look, Mask, MaskKind, Present,
@@ -1423,8 +1424,8 @@ impl Readout {
             Some(Released::Let { knob }) => {
                 println!(
                     "release: {} lets go of the {}",
-                    knob_where(knob),
-                    knob_word(knob)
+                    knob_where(&knob),
+                    knob_word(&knob)
                 );
                 Acted::Nothing
             }
@@ -1750,6 +1751,45 @@ impl Readout {
                 if let Some(operation) = deck_head {
                     return (claim, Acted::Emitted(Some(operation)));
                 }
+                // **The Inspector pane heads' `keep`, one pane at a time.**
+                // It keeps the deck the pane is *showing* rather than the deck
+                // the selection is on, which is what `k` keeps: a bare key
+                // press cannot say which deck and a capsule drawn inside a
+                // pane can (ADR-0287). The capsule is derived from the
+                // laid-out pane, exactly as the deck head above it is, and the
+                // write itself is at the call site because a disk write is not
+                // a thing to do on a frame.
+                let keep = self
+                    .view
+                    .inspector
+                    .iter()
+                    .enumerate()
+                    .find_map(|(index, pane)| {
+                        let at_pane = inspector_pane(self.panel.layout(), index, pane)?;
+                        let pill = keep_pill(ctx, &at_pane, pane)?;
+                        pill.keep(at)
+                    });
+                if let Some(operation) = keep {
+                    return (claim, Acted::Emitted(Some(operation)));
+                }
+                // **The renderer chips, one pane at a time**, and the pane is
+                // the whole derivation: which group and which chip are inside
+                // `InspectorPane::select_renderer`, which is the `read` chip's
+                // arrangement in the Library bay. A press on an overdrawn
+                // deck's chips, or on the one chip of a Set with one renderer,
+                // answers `None` — drawn and not claimed.
+                let chosen = self
+                    .view
+                    .inspector
+                    .iter()
+                    .enumerate()
+                    .find_map(|(index, pane)| {
+                        let at_pane = inspector_pane(self.panel.layout(), index, pane)?;
+                        at_pane.select_renderer(ctx, pane, at)
+                    });
+                if let Some(operation) = chosen {
+                    return (claim, Acted::Emitted(Some(operation)));
+                }
                 // **The Program bay head's `solo`**, and it is the one
                 // control on this panel that acts on the console's own shape
                 // from inside a bay rather than from the Outputs row. What it
@@ -1928,10 +1968,28 @@ impl Readout {
                 // fader it was is inside the `Knob`. The two bays cannot
                 // overlap, so the order is arbitrary — the mixer is asked
                 // first because it has five questions to this one's one.
-                let knob = bay.as_ref().and_then(|bay| bay.grab(at)).or_else(|| {
-                    master_row(ctx, self.panel.layout(), self.view.master_out)
-                        .and_then(|row| row.grab(at))
-                });
+                let knob = bay
+                    .as_ref()
+                    .and_then(|bay| bay.grab(at))
+                    .or_else(|| {
+                        master_row(ctx, self.panel.layout(), self.view.master_out)
+                            .and_then(|row| row.grab(at))
+                    })
+                    // **A parameter fader is a `Grab` like a strip's**, so it
+                    // joins the knob rather than taking an arm of its own —
+                    // the Master bay's arrangement one bay along, and which
+                    // fader it was is inside the `Knob`. No two of the three
+                    // bays overlap, so the order between them is arbitrary.
+                    .or_else(|| {
+                        self.view
+                            .inspector
+                            .iter()
+                            .enumerate()
+                            .find_map(|(index, pane)| {
+                                let at_pane = inspector_pane(self.panel.layout(), index, pane)?;
+                                at_pane.grab(pane, at)
+                            })
+                    });
                 let chip = bay.as_ref().and_then(|bay| bay.blend(at));
                 let tally = bay.as_ref().and_then(|bay| bay.tally(at));
                 let mask = bay.as_ref().and_then(|bay| bay.mask(at));
@@ -1947,8 +2005,8 @@ impl Readout {
                             "press ({:.0}, {:.0}): {} — the {} is in hand",
                             at.x,
                             at.y,
-                            knob_where(grab.knob()),
-                            knob_word(grab.knob())
+                            knob_where(&grab.knob()),
+                            knob_word(&grab.knob())
                         );
                         self.panel.grab(at, grab);
                     }
@@ -3271,11 +3329,12 @@ fn deck_letter(deck: u8) -> &'static str {
 }
 
 /// Which fader, in the bay's own word for it.
-fn knob_word(knob: Knob) -> &'static str {
+fn knob_word(knob: &Knob) -> &'static str {
     match knob {
         Knob::Trim { .. } => "trim",
         Knob::Fader { .. } => "fader",
         Knob::Out => "out",
+        Knob::Param { .. } => "parameter",
     }
 }
 
@@ -3287,7 +3346,7 @@ fn knob_word(knob: Knob) -> &'static str {
 /// — so a line that said *deck A* over it would be naming a slot nothing in
 /// the gesture ever touched. `Knob::deck` is what answers, and this is the
 /// only caller: everything that *acts* takes the deck out of the operation.
-fn knob_where(knob: Knob) -> String {
+fn knob_where(knob: &Knob) -> String {
     match knob.deck() {
         Some(deck) => format!("deck {}", deck_letter(deck)),
         None => "master".to_owned(),
@@ -7078,6 +7137,21 @@ fn layer_word(layer: Layer) -> &'static str {
     }
 }
 
+/// **A node's layer as the vocabulary names one.** `karakuri_ir::Kind` and
+/// `karakuri_operation::Layer` are two spellings of one list, and this is the
+/// converter between them; `mcp.rs`'s `layer_of` is the other instance and is
+/// private to that crate. A match rather than a cast, for [`layer_word`]'s
+/// reason: a sixth kind stops the build here.
+fn asked_layer(layer: Layer) -> karakuri_operation::Layer {
+    match layer {
+        Layer::L1 => karakuri_operation::Layer::L1,
+        Layer::L2 => karakuri_operation::Layer::L2,
+        Layer::L3 => karakuri_operation::Layer::L3,
+        Layer::L4 => karakuri_operation::Layer::L4,
+        Layer::Field => karakuri_operation::Layer::Field,
+    }
+}
+
 /// **Which node a published control belongs to**, and `None` where it belongs
 /// to no one node.
 ///
@@ -7195,20 +7269,33 @@ fn inspector(deck: &Deck, names: &[String], out: &mut Vec<view::Pane>) {
         let published = set.published();
         let mut rows: Vec<(Option<(Layer, u32)>, view::Param)> = Vec::new();
         for (at, control) in published.iter().enumerate() {
-            let [low, high] = control.range;
-            let value = set.published_value(&control.name).unwrap_or(low);
+            let value = set
+                .published_value(&control.name)
+                .unwrap_or(control.range[0]);
             rows.push((
                 node_of(set, control),
                 view::Param {
                     ord: at + 1,
                     name: control.name.clone(),
                     value,
-                    at: match high > low {
-                        // A range of no width is a control with one position,
-                        // and the fader sits at its start rather than at a
-                        // division by zero.
-                        false => 0.0,
-                        true => (value - low) / (high - low),
+                    // **The range and not the position.** A fader a hand can
+                    // move has a second reader — the grab — so the map from a
+                    // value to a place on the track is one statement in one
+                    // place, `view::Param::at` and `view::Param::valued`, and
+                    // the guard on a range of no width went with it
+                    // (ADR-0286).
+                    range: control.range,
+                    // **The control the interface published, and not the
+                    // group `node_of` put the row in.** A wildcard stays a
+                    // wildcard, so a bare name goes on meaning every node that
+                    // declares the key and meets `Set::write_param`'s
+                    // authority refusal (ADR-0286, ADR-0223).
+                    param: karakuri_operation::ParamAt {
+                        node: control.at.map(|(layer, index)| karakuri_operation::NodeAt {
+                            layer: asked_layer(layer),
+                            index,
+                        }),
+                        key: control.key.clone(),
                     },
                 },
             ));
@@ -8168,6 +8255,39 @@ fn apply(record: &Record, deck: &mut Deck, look: &mut Look) -> Option<String> {
                  -> deck.transport({slot}).scrub_beats() = {:+.2} beats",
                 deck_letter(slot as u8),
                 deck.transport(slot).scrub_beats()
+            ))
+        }
+        // **A choice and not a position, so nothing interpolates and nothing
+        // is left running.** `Record::Select` carries the slot, the renderer
+        // and the instant alone — *"half way to renderer 2" does not name a
+        // picture* — and `Deck::schedule_selection` is what it decodes to: a
+        // later selection on a slot replaces the earlier one, which is
+        // `Deck::schedule`'s own rule for a fade.
+        //
+        // **The renderer is not checked here and is checked at the beat.** The
+        // Set in a slot can change under a hot swap between the schedule and
+        // the instant, so a selection that no longer names a renderer is
+        // dropped where it is applied. The *slot* is checked, by `held`,
+        // because a deck does not change size.
+        //
+        // **It says nothing about a slot that overdraws**, and that is carried
+        // rather than refused: `Record::Select` names an edge into the Set's
+        // L5 and a slot built without a composite fold has none, so refusing
+        // it would make a replay fail on a line describing a performance that
+        // happened.
+        Record::Select {
+            slot,
+            renderer,
+            start,
+        } => {
+            let slot = held(deck, slot)?;
+            deck.schedule_selection(Selection::new(slot, renderer as usize, start));
+            Some(format!(
+                "  renderer: deck {} -> SelectRenderer {{ renderer: {renderer} }} -> \
+                 Record::Select {{ start: {start:.3} }} -> deck.selections_on({slot}) = {} \
+                 armed, landing on the beat grid",
+                deck_letter(slot as u8),
+                deck.selections_on(slot).count()
             ))
         }
         _ => None,
@@ -9875,6 +9995,23 @@ impl ApplicationHandler for App {
                 // whether the block is down — `view::View::reading`.
                 if matches!(acted, Acted::Emitted(Some(Operation::ReadSet { .. }))) {
                     println!("{}", read_reading(&mut self.readout.view, &self.store));
+                }
+                // **And a press that asked to keep a deck is a Set to
+                // write**, here for the reason the two above are: the engine
+                // and the store are the window's, and a disk write is not a
+                // thing to do on a frame (P-0091). It is `k`'s own call with
+                // the deck the *pill* named rather than the one the selection
+                // is on, and `Asked::Operator` because a hand on this panel is
+                // the operator's own act.
+                if let Acted::Emitted(Some(Operation::SaveSet { deck, ref id })) = acted {
+                    self.keeping.save_set(
+                        &gfx.engine,
+                        &self.store,
+                        Asked::Operator,
+                        usize::from(deck),
+                        id.clone(),
+                        None,
+                    );
                 }
                 // **And a press that moved the library cursor owes that same
                 // read**, because the rule is the cursor's and not the
@@ -17887,10 +18024,39 @@ mod press_handler {
         // and `deck_head_row` answers the control. The fourth control the row
         // counts is the scrub's second arrow, which `scrub` answers for both
         // of.
+        // **The Inspector pane heads' `keep`**, and it is the deck head's
+        // arrangement one row up: the pane is derived per index and the
+        // capsule from the pane, so the derivation named here is the inner
+        // one. What the press hands back is an operation; the write itself is
+        // at the call site, because a disk write is not a thing to do on a
+        // frame.
+        (
+            "the Inspector pane heads' keep",
+            "keep_pill(",
+            &["pill.keep("],
+        ),
         (
             "a deck head's four",
             "deck_head_row(",
             &["head.sync(", "head.reanchor(", "head.scrub("],
+        ),
+        // **The renderer chips**, and the pane is the whole derivation: which
+        // group and which chip are inside `select_renderer`, which is the
+        // `read` chip's arrangement in the Library bay. So the derivation
+        // named here is the *outer* one, unlike the two rows above it.
+        (
+            "the renderer chips",
+            "inspector_pane(",
+            &["at_pane.select_renderer("],
+        ),
+        // **A parameter row's fader, one Inspector pane at a time**, and it is
+        // the Master bay's `grab` on a third type bound to a third local: the
+        // pane is derived per index and the fader from the pane, so the
+        // derivation named here is the outer one, as the chips' above is.
+        (
+            "a parameter row's fader",
+            "inspector_pane(",
+            &["at_pane.grab("],
         ),
         // **The Program bay head's `solo`**, and the two calls are the Outputs
         // sink's arrangement one bay over: the head answers whether the point
