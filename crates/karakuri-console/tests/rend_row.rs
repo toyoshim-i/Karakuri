@@ -108,7 +108,7 @@ fn chips(
     index: usize,
     pane: &Pane,
 ) -> (InspectorPane, Vec<egui::Rect>) {
-    let at_pane = inspector(panel.layout(), index, pane).expect("a pane with room in it");
+    let at_pane = inspector(panel.layout(), index, pane, 0.0).expect("a pane with room in it");
     assert!(
         at_pane.shown > 0,
         "the pane drew no group at all, so there is no renderer row in it to measure"
@@ -162,7 +162,7 @@ fn chip_w(ctx: &egui::Context, name: &str) -> f32 {
 fn the_row_sits_under_the_node_head_and_is_the_rest_of_the_group() {
     let pane = mock();
     let (panel, _) = console(PLAUSIBLE);
-    let at_pane = inspector(panel.layout(), 0, &pane).expect("a pane with room in it");
+    let at_pane = inspector(panel.layout(), 0, &pane, 0.0).expect("a pane with room in it");
     let group = at_pane.group(&pane.nodes, 0);
     let row = row_of(group);
 
@@ -420,23 +420,45 @@ fn a_press_off_every_chip_asks_for_nothing() {
     }
 }
 
-/// **A group the pane had no room to draw is not pressable**, which is
-/// `InspectorPane::shown` reaching a control: what is not drawn is not a
-/// target, and a pane that has run out is a pane that has run out.
+/// **A row the pane's body does not reach is not pressable**, which is the
+/// clip reaching a control: what is not drawn is not a target.
+///
+/// **The body says so and no longer `shown`.** A pane scrolls now
+/// (ADR-0307), so *what is on screen* is the body rectangle rather than a
+/// count of whole groups — `InspectorPane::drawn` walks it, `grip` and this
+/// refuse a press outside it, and `inspector_into` clips the paint to it. The
+/// body is emptied down to nothing here, which is a pane folded to its two
+/// heads.
 #[test]
-fn a_group_the_pane_did_not_draw_is_not_pressable() {
+fn a_row_the_body_does_not_reach_is_not_pressable() {
     let pane = mock();
     let (panel, ctx) = console(PLAUSIBLE);
     let (at_pane, boxes) = chips(&panel, &ctx, 0, &pane);
-    let empty = InspectorPane {
-        shown: 0,
+    // **Cut between the group's head and its renderer row.** The group is
+    // still drawn — its head is inside the body — so `InspectorPane::drawn`
+    // has nothing to say about these points and what refuses them is the body
+    // rectangle itself.
+    let row = row_of(at_pane.group(&pane.nodes, 0));
+    let clipped = InspectorPane {
+        body: egui::Rect::from_min_max(at_pane.body.min, egui::pos2(at_pane.body.max.x, row.min.y)),
         ..at_pane
     };
+    assert!(
+        clipped.drawn(&pane.nodes).contains(&0),
+        "the guard on the assertions below: the group is still drawn"
+    );
     for (index, chip) in boxes.iter().enumerate() {
+        assert!(
+            at_pane
+                .select_renderer(&ctx, &pane, at(chip.center()))
+                .is_some(),
+            "chip {index} is not pressable on the pane that drew the whole row, so this test \
+             cannot tell a clip from a miss"
+        );
         assert_eq!(
-            empty.select_renderer(&ctx, &pane, at(chip.center())),
+            clipped.select_renderer(&ctx, &pane, at(chip.center())),
             None,
-            "chip {index} of a group the pane never drew was claimed"
+            "chip {index} below the pane's body was claimed, where the paint is clipped away"
         );
     }
 }

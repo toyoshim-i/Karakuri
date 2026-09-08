@@ -109,7 +109,8 @@ fn the_capsule_is_hard_against_the_heads_right_hand_padding() {
     for viewport in [SMALLEST, PLAUSIBLE] {
         let (panel, ctx) = console(viewport);
         for index in 0..PANES {
-            let at_pane = inspector(panel.layout(), index, &pane).expect("a pane with room in it");
+            let at_pane =
+                inspector(panel.layout(), index, &pane, 0.0).expect("a pane with room in it");
             let pill = keep_pill(&ctx, &at_pane, &pane).expect("a head with room for its capsule");
             let head = at_pane.head;
 
@@ -157,7 +158,7 @@ fn the_capsule_is_hard_against_the_heads_right_hand_padding() {
 fn a_head_too_narrow_for_the_capsule_draws_none() {
     let pane = mock();
     let (panel, ctx) = console(PLAUSIBLE);
-    let at_pane = inspector(panel.layout(), 0, &pane).expect("a pane with room in it");
+    let at_pane = inspector(panel.layout(), 0, &pane, 0.0).expect("a pane with room in it");
     let full = at_pane.head;
     // Exactly wide enough for the capsule inside its two paddings, and one
     // pixel narrower than that.
@@ -186,7 +187,7 @@ fn a_head_too_narrow_for_the_capsule_draws_none() {
 fn a_console_that_has_not_drawn_has_no_capsule() {
     let pane = mock();
     let (panel, _) = console(PLAUSIBLE);
-    let at_pane = inspector(panel.layout(), 0, &pane).expect("a pane with room in it");
+    let at_pane = inspector(panel.layout(), 0, &pane, 0.0).expect("a pane with room in it");
     assert_eq!(keep_pill(&egui::Context::default(), &at_pane, &pane), None);
 }
 
@@ -205,7 +206,8 @@ fn the_capsule_clears_every_boundarys_grab() {
     for viewport in [SMALLEST, PLAUSIBLE] {
         let (panel, ctx) = console(viewport);
         for (index, name) in PANE_NAMES.iter().enumerate() {
-            let at_pane = inspector(panel.layout(), index, &pane).expect("a pane with room in it");
+            let at_pane =
+                inspector(panel.layout(), index, &pane, 0.0).expect("a pane with room in it");
             let pill = keep_pill(&ctx, &at_pane, &pane).expect("a head with room for its capsule");
 
             let clearance = at_pane.head.max.x - pill.pill.max.x;
@@ -260,7 +262,7 @@ fn a_press_keeps_this_panes_deck_under_no_name() {
     let (panel, ctx) = console(PLAUSIBLE);
     for deck in 0..4 {
         let pane = showing(deck);
-        let at_pane = inspector(panel.layout(), 0, &pane).expect("a pane with room in it");
+        let at_pane = inspector(panel.layout(), 0, &pane, 0.0).expect("a pane with room in it");
         let pill = keep_pill(&ctx, &at_pane, &pane).expect("a head with room for its capsule");
         assert_eq!(
             pill.keep(at(pill.pill.center())),
@@ -284,7 +286,8 @@ fn two_panes_keep_the_two_decks_they_are_showing() {
         .iter()
         .enumerate()
         .map(|(index, pane)| {
-            let at_pane = inspector(panel.layout(), index, pane).expect("a pane with room in it");
+            let at_pane =
+                inspector(panel.layout(), index, pane, 0.0).expect("a pane with room in it");
             let pill = keep_pill(&ctx, &at_pane, pane).expect("a head with room for its capsule");
             pill.keep(at(pill.pill.center()))
                 .expect("a press on the capsule")
@@ -306,7 +309,7 @@ fn two_panes_keep_the_two_decks_they_are_showing() {
 fn a_press_off_the_capsule_asks_for_nothing() {
     let pane = mock();
     let (panel, ctx) = console(PLAUSIBLE);
-    let at_pane = inspector(panel.layout(), 0, &pane).expect("a pane with room in it");
+    let at_pane = inspector(panel.layout(), 0, &pane, 0.0).expect("a pane with room in it");
     let pill = keep_pill(&ctx, &at_pane, &pane).expect("a head with room for its capsule");
     let head = at_pane.head;
     for probe in [
@@ -406,7 +409,7 @@ fn the_wash_follows_the_deck_on_air_and_not_the_pane() {
             panel.solve();
             let ctx = drawn_once();
             let pane = showing(index);
-            let at = inspector(panel.layout(), index, &pane)
+            let at = inspector(panel.layout(), index, &pane, 0.0)
                 .unwrap_or_else(|| panic!("pane {index} is drawn at a plausible window"));
             let pill = keep_pill(&ctx, &at, &pane)
                 .unwrap_or_else(|| panic!("pane {index} draws its capsule"))

@@ -332,6 +332,7 @@ number; new records continue from the end.
 | [ADR-0304](0304-the-set-a-version-is-filed-under-rides-the-aim-that-re-points-the-slot.md) | The Set a version is filed under rides the aim that re-points the slot | 2026-09-08 | accepted |
 | [ADR-0305](0305-the-library-bays-load-is-a-button-and-a-pulldown-and-the-deck-it-names-is-not-the-selection.md) | The Library bay's load is a button and a pulldown, and the deck it names is not the selection | 2026-09-08 | accepted |
 | [ADR-0306](0306-the-grid-head-is-one-pill-because-the-bar-is-one-bar-and-the-count-follows-the-mode.md) | The grid head is one pill because the bar is one bar and the count follows the mode | 2026-09-08 | accepted |
+| [ADR-0307](0307-the-inspectors-pane-scrolls-and-the-position-is-the-panes-own.md) | The Inspector's pane scrolls, and the position is the pane's own | 2026-09-08 | accepted |
 
 ## Retired numbers
 

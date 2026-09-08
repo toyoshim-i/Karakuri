@@ -517,6 +517,30 @@
 //! only whether `egui` is also told. A button or a wheel is exclusive: one of
 //! the two, never both.
 //!
+//! # The wheel is routed by region and not by control
+//!
+//! [`wheeled`] is the fifth rule's shape for the one event that is not a
+//! press, and it is a separate function rather than a row of [`PROBES`]
+//! because the two questions are different ones. A press asks *is the pointer
+//! on a control*; a wheel asks *whose region is the pointer in*, and the
+//! Inspector's panes are the only regions on this console that answer yes —
+//! a pane's body scrolls under its two heads
+//! ([ADR-0307](../../../docs/adr/0307-the-inspectors-pane-scrolls-and-the-position-is-the-panes-own.md)).
+//!
+//! **A row in [`PROBES`] would have been wrong twice.** [`CONTROLS`] is
+//! printed to an operator as *what the pointer reaches here*, and a pane's
+//! body is not something a press reaches — nothing happens when you click it.
+//! And the probes are asked on a press as well as on a wheel, so a row here
+//! would claim every press on a pane's ground and hand it to an arm that has
+//! nothing to do with it.
+//!
+//! **Rules 1 and 2 hold over it unchanged**, and it asks them itself: a drag
+//! in hand keeps the gesture — a wheel in the middle of a boundary drag scrolls
+//! nothing and is still withheld from `egui` by [`claim`] — and a card that is
+//! down is a hand mid-choice, so the wheel is not the pane's while one is
+//! open. Rule 3 has nothing to say: a boundary's grab is about where a press
+//! lands, and a wheel does not take hold of anything.
+//!
 //! # Deciding a release before it is performed
 //!
 //! [`Panel::released`] takes the drag out of hand, so [`claim`] on a release
@@ -1009,7 +1033,7 @@ fn on_master(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool 
 /// one [`crate::view::View::draw`] paints from.
 fn on_deck_name(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
     view.inspector.iter().enumerate().any(|(index, pane)| {
-        inspector(panel.layout(), index, pane)
+        inspector(panel.layout(), index, pane, view.scroll_in(index))
             .and_then(|at| deck_name(ctx, &at, pane, view.naming_set_in(index)))
             .is_some_and(|named| named.hit(p))
     })
@@ -1021,7 +1045,7 @@ fn on_deck_name(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bo
 /// up. One galley lookup per pane, for the word in the capsule.
 fn on_keep(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
     view.inspector.iter().enumerate().any(|(index, pane)| {
-        inspector(panel.layout(), index, pane)
+        inspector(panel.layout(), index, pane, view.scroll_in(index))
             .and_then(|at| keep_pill(ctx, &at, pane))
             .is_some_and(|pill| pill.hit(p))
     })
@@ -1035,7 +1059,7 @@ fn on_keep(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
 /// [`View::inspector`] is empty, and this iterates over nothing.
 fn on_deck_head(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
     view.inspector.iter().enumerate().any(|(index, pane)| {
-        inspector(panel.layout(), index, pane)
+        inspector(panel.layout(), index, pane, view.scroll_in(index))
             .and_then(|at| deck_head(ctx, &at, pane))
             .is_some_and(|head| head.owns(p))
     })
@@ -1050,7 +1074,7 @@ fn on_deck_head(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bo
 /// on, and only until the chip under the pointer.
 fn on_rend(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
     view.inspector.iter().enumerate().any(|(index, pane)| {
-        inspector(panel.layout(), index, pane)
+        inspector(panel.layout(), index, pane, view.scroll_in(index))
             .is_some_and(|at| at.select_renderer(ctx, pane, p).is_some())
     })
 }
@@ -1062,7 +1086,8 @@ fn on_rend(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
 /// nothing.
 fn on_param(panel: &Panel, _ctx: &egui::Context, view: &View, p: Point) -> bool {
     view.inspector.iter().enumerate().any(|(index, pane)| {
-        inspector(panel.layout(), index, pane).is_some_and(|at| at.owns(pane, p))
+        inspector(panel.layout(), index, pane, view.scroll_in(index))
+            .is_some_and(|at| at.owns(pane, p))
     })
 }
 
@@ -1396,4 +1421,50 @@ pub fn claim(panel: &mut Panel, ctx: &egui::Context, view: &View, p: Point) -> C
             }
         }
     }
+}
+
+/// **Which Inspector pane a wheel at `p` turns**, or `None` where the wheel
+/// belongs to nobody here.
+///
+/// See the module documentation's *The wheel is routed by region and not by
+/// control* for why this is not a row of [`PROBES`]. The caller's whole job
+/// with the answer is [`crate::view::View::scroll_by`] on the index it names,
+/// and to treat the event as the panel's — a wheel this answers `None` to goes
+/// to `egui` exactly as it did before there was anything to scroll.
+///
+/// **The whole pane and not its body.** The wheel is aimed with the pointer
+/// and the two heads are part of the thing being scrolled, so a hand resting
+/// over the deck head turns the list under it — which is what
+/// `docs/manual/console.html` says: *"the wheel over the pane"*.
+///
+/// **The derivation that draws the pane is the one that answers this**, which
+/// is rule 4's own arrangement: [`inspector`] is asked with the position that
+/// pane is scrolled to, so the rectangle a wheel is measured against is the
+/// rectangle the frame drew.
+pub fn wheeled(panel: &mut Panel, view: &View, p: Point) -> Option<usize> {
+    // Rule 1: a gesture in progress is not re-decided, and a wheel is not part
+    // of it. `claim` gives the event to the panel either way; what this says
+    // is that nothing scrolls.
+    if panel.dragging() {
+        return None;
+    }
+    // Rule 2, the same four cards and the same order as [`claim`]: a hand
+    // mid-choice is not a hand on a pane.
+    if view.arrangement.open()
+        || view.audio.as_ref().is_some_and(|audio| audio.open())
+        || view.naming_set().is_some()
+        || view.target_open()
+    {
+        return None;
+    }
+    panel.solve();
+    let at = egui::Pos2::new(p.x, p.y);
+    view.inspector.iter().enumerate().find_map(|(index, pane)| {
+        let laid = inspector(panel.layout(), index, pane, view.scroll_in(index))?;
+        laid.head
+            .union(laid.deck_head)
+            .union(laid.body)
+            .contains(at)
+            .then_some(index)
+    })
 }

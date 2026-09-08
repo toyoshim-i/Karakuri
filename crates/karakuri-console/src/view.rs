@@ -10914,9 +10914,20 @@ fn chip_width(ctx: &egui::Context, name: &str) -> f32 {
 /// `5 of 27` is how many rows are listed against how many the scope holds, and
 /// both halves are here: the total is what the harness handed over, and the
 /// count is how many rows the bay had room for. So a library taller than its
-/// list says so in the one place the mock puts it, and nothing scrolls —
-/// which is honest, because there is no scroll position anywhere in this
-/// crate and inventing one would be a control.
+/// list says so in the one place the mock puts it, and **this bay** does not
+/// scroll — which is honest, because it has no scroll position and inventing
+/// one here would be a control.
+///
+/// **The crate has one now and it is not this bay's.** An Inspector pane
+/// scrolls ([`InspectorPane::scroll`],
+/// [ADR-0307](../../../docs/adr/0307-the-inspectors-pane-scrolls-and-the-position-is-the-panes-own.md)),
+/// so the sentence this paragraph used to end with — *there is no scroll
+/// position anywhere in this crate* — is no longer true and is narrowed here
+/// rather than left to be read as one. What is unchanged is the reason **this
+/// list** does not have one: a pane's position is the console's own state
+/// reached by the wheel, and this bay's list is walked by a cursor that a load
+/// reads, so a row out of reach here is a row a press would name and not one a
+/// hand could see.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LibraryBay {
     /// `.scopes`: the row of chips between the bay head and the list, one
@@ -13393,7 +13404,9 @@ impl Param {
 ///   row goes.
 /// - **The `L4` group's authority chip.** See [`Node::authority`].
 ///
-/// **And one is the pane running out of room.** See [`InspectorPane::shown`].
+/// **And one is the pane running out of room**, which is what
+/// [`InspectorPane::scroll`] answers: the pane scrolls, and
+/// [`InspectorPane::shown`] is what it says about that.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct InspectorPane {
     /// `.half-head`, along the top of the pane, with its rule on the bottom.
@@ -13403,42 +13416,85 @@ pub struct InspectorPane {
     /// What is left under the two heads, where the node groups stack from the
     /// top with a hairline between them.
     pub body: Rect,
-    /// **How many node groups are drawn**, which is how many fit **whole** in
-    /// [`body`](Self::body).
+    /// **How far this pane's body is scrolled, in force this frame** — the
+    /// stored position clamped against what there is to scroll through, and
+    /// never the stored position itself.
     ///
-    /// # The pane overflows, and this is the console's first scroll position
+    /// # Clamped here and stored nowhere
     ///
-    /// A Set of any size does not fit in 237 pixels of pane, and **there is no
-    /// scroll position anywhere in this crate**: the Library bay says so at
-    /// its own foot (*"nothing scrolls — which is honest, because there is no
-    /// scroll position anywhere in this crate and inventing one would be a
-    /// control"*), and this is the first region of the console that genuinely
-    /// wants one rather than merely tolerating the lack.
+    /// The clamp is `0 ..= (content - body height)`, and both ends of that
+    /// range move when the pane is dragged — so a clamp written back into
+    /// [`View`] would be a resize rewriting what an operator scrolled to. That
+    /// is
+    /// [ADR-0250](../../../docs/adr/0250-below-the-minima-the-arrangement-scales-rather-than-being-rewritten.md)'s
+    /// rejected *clamp the stored size during the solve*, one region in, and
+    /// [P-0082](../../../docs/principles/0082-looking-never-writes-back.md) is
+    /// the rule: **a shorter pane draws less of the same position and stores
+    /// nothing**, so dragging it back reproduces what was on screen exactly
+    /// rather than nearly.
     ///
-    /// So what does not fit is not drawn, and a group is drawn whole or not at
-    /// all — the same `floor` [`LibraryBay::rows`] takes, on rows of unequal
-    /// height. **A half group is worse than a missing one**: a node head with
-    /// two of its five parameters under it reads as a node with two
-    /// parameters, where a group that is simply not there reads as a pane that
-    /// has run out, which is what it is.
+    /// What [`View::scroll_by`] does clamp is the *content*, which is a
+    /// reading of the deck rather than a viewport — see it for why the two are
+    /// not the same clamp.
+    pub scroll: f32,
+    /// **How tall everything in this pane is**: [`group_h`] over every node
+    /// with a [`size::HAIRLINE`] between two of them, whether or not any of it
+    /// is on screen.
     ///
-    /// **Zero is a state and not a `None`.** A pane too short for its first
-    /// group still says which deck it is showing and what that deck's clock is
-    /// doing, which is the whole content of the two heads; it is
-    /// [`inspector`]'s `None` that means *there is no pane here to draw*.
+    /// It is the number [`scroll`](Self::scroll) is clamped against and the
+    /// number [`View::scroll_by`] is clamped against, derived in one place so
+    /// the two cannot disagree.
+    pub content: f32,
+    /// **How many node groups this pane is showing whole**, which is the `n`
+    /// of the `n of m` its head reads — [`pane_count`], and rule 04 of
+    /// [the manual](../../../docs/manual/index.html): *"A list that showed you
+    /// part of itself says so and says how much."*
+    ///
+    /// # It is the readout's number and not the walk's
+    ///
+    /// [`InspectorPane::drawn`] is what is painted and what a press is
+    /// hit-tested against, and it is the wider of the two: a group cut by the
+    /// top edge or the bottom one is drawn as far as the pane goes and can be
+    /// pressed where it is drawn. This counts the ones that are **whole**, so
+    /// that `m of m` means *nothing is out of sight* and can never be read off
+    /// a pane with a group hanging over an edge.
+    ///
+    /// **It used to be how many were drawn, and the two were one number.**
+    /// A pane drew a group whole or not at all, because there was no position
+    /// to scroll to — so below roughly 534px of Inspector bay not one
+    /// parameter row was drawn, in the bay whose whole content is parameter
+    /// rows. The maintainer's answer to that was *the pane scrolls*, and this
+    /// is the half of the old rule that survives it: a part-drawn group is no
+    /// longer a lie about what a node has, because the count says how many are
+    /// whole and the rest is one notch of the wheel away
+    /// ([ADR-0307](../../../docs/adr/0307-the-inspectors-pane-scrolls-and-the-position-is-the-panes-own.md)).
+    ///
+    /// **Zero is a state and not a `None`.** A pane too short to hold one
+    /// group whole still says which deck it is showing and what that deck's
+    /// clock is doing, and still draws as much of the group as it has room
+    /// for; it is [`inspector`]'s `None` that means *there is no pane here to
+    /// draw*.
     pub shown: usize,
 }
 
 impl InspectorPane {
-    /// Where the `index`th of the drawn groups goes, and how tall it is.
+    /// Where the `index`th group goes, and how tall it is — **in the pane's
+    /// own coordinates, with [`scroll`](Self::scroll) already taken off**, so
+    /// a group above the body has a negative-going top and one below it a top
+    /// past `body.max.y`.
     ///
     /// Derived rather than stored for [`LibraryBay::row`]'s reason — the
     /// groups are a walk and a `Vec` of rectangles would be an allocation a
     /// frame does not need — but a walk rather than a stride, because a group
-    /// is as tall as what is in it. `index` past [`shown`](Self::shown) is a
-    /// caller's error and not a state; the one caller iterates `0..shown`.
+    /// is as tall as what is in it.
+    ///
+    /// **Every index in `nodes` is an answer**, where this used to refuse
+    /// anything past `shown`: a scrolled pane has groups off both edges and
+    /// [`drawn`](Self::drawn) is what says which of them reach the picture, so
+    /// the rectangle has to exist before that question can be asked. Past the
+    /// end of `nodes` is still a caller's error.
     pub fn group(&self, nodes: &[Node], index: usize) -> Rect {
-        let top = self.body.min.y
+        let top = self.body.min.y - self.scroll
             + nodes
                 .iter()
                 .take(index)
@@ -13448,6 +13504,37 @@ impl InspectorPane {
             Pos2::new(self.body.min.x, top),
             egui::vec2(self.body.width(), group_h(&nodes[index])),
         )
+    }
+
+    /// **Which groups reach the picture**, as a range into `nodes` — the ones
+    /// a scrolled body has any of on screen, cut edges included.
+    ///
+    /// It is what [`inspector_into`] paints and what
+    /// [`InspectorPane::grip`] and [`InspectorPane::select_renderer`] walk, so
+    /// a control is hit-tested over exactly the groups that were drawn. **It
+    /// is not [`shown`](Self::shown)**, which counts the whole ones and is the
+    /// readout's number: a fader in a group cut by the bottom edge is drawn
+    /// and is pressable, and the group it is in is not counted as shown.
+    ///
+    /// A walk rather than arithmetic, for [`group`](Self::group)'s reason: the
+    /// groups are of unequal height. Empty where the pane's body has no
+    /// height at all, which is a folded pane.
+    pub fn drawn(&self, nodes: &[Node]) -> std::ops::Range<usize> {
+        let mut first = nodes.len();
+        let mut last = 0;
+        let mut top = self.body.min.y - self.scroll;
+        for (index, node) in nodes.iter().enumerate() {
+            let bottom = top + group_h(node);
+            if bottom > self.body.min.y && top < self.body.max.y {
+                first = first.min(index);
+                last = index + 1;
+            }
+            top = bottom + size::HAIRLINE;
+        }
+        match first < last {
+            true => first..last,
+            false => 0..0,
+        }
     }
 
     /// **What a press at `p` on a renderer chip asks for**, or `None` off
@@ -13504,7 +13591,7 @@ impl InspectorPane {
         if !self.body.contains(at) {
             return None;
         }
-        (0..self.shown).find_map(|index| {
+        self.drawn(&pane.nodes).find_map(|index| {
             let node = pane.nodes.get(index)?;
             if !a_choice(pane, node) {
                 return None;
@@ -13549,20 +13636,33 @@ impl InspectorPane {
     /// is not a handle, which is `Grab::new`'s own refusal read on the value
     /// axis instead of on the track.
     ///
-    /// # Only what is drawn
+    /// # Only what is drawn, and only where it is drawn
     ///
-    /// `0..shown`, so a group the pane had no room for is not reachable by a
-    /// press either — which is the whole of what [`InspectorPane::shown`]
-    /// means and is why a pane below roughly 534px has no parameter a hand can
-    /// reach. That is a scroll position this crate does not have rather than
-    /// anything this derivation can answer.
+    /// Two conditions, and they are two because the pane scrolls.
+    /// [`drawn`](Self::drawn) is the groups that reach the picture, which is
+    /// what a press may land in; **`body.contains` is what keeps a row that
+    /// has gone under a head from taking the press anyway**. A group scrolled
+    /// off the top still has a rectangle — [`group`](Self::group) answers one
+    /// for every index — and that rectangle overlaps the deck head and the
+    /// pane head above it, where the paint is clipped away and a knob is
+    /// therefore not on screen. Without this check the pane would claim a
+    /// press on a knob nobody can see, under a control that is drawn there;
+    /// with it, a press outside the body reaches this bay's other derivations
+    /// and no other, exactly as `select_renderer` beside it already asked.
+    ///
+    /// **The clip is the authority and this is the same rectangle**, which is
+    /// [`inspector_into`]'s `with_clip_rect(at.body)` asked as a question
+    /// rather than applied as a paint.
     pub fn grip<'a>(&self, pane: &'a Pane, p: karakuri_layout::Point) -> Option<ParamGrip<'a>> {
         let p = Pos2::new(p.x, p.y);
+        if !self.body.contains(p) {
+            return None;
+        }
         // The manual's *deck* is the code's *slot*, and a deck holds
         // `MAX_SLOTS` of them — `DECKS`, which is 4 — so the index is a `u8`
         // with room to spare. [`Mixer::grab`]'s note, one bay along.
         let deck = pane.deck as u8;
-        (0..self.shown).find_map(|index| {
+        self.drawn(&pane.nodes).find_map(|index| {
             let node = pane.nodes.get(index)?;
             let group = self.group(&pane.nodes, index);
             node.params
@@ -13664,13 +13764,30 @@ pub struct ParamGrip<'a> {
     pub fader: Fader,
 }
 
+/// **How tall everything in a pane comes to**: [`group_h`] over every node,
+/// with a [`size::HAIRLINE`] between two of them.
+///
+/// **One function because two callers must agree.** [`pane_box`] clamps the
+/// position in force against it and [`View::scroll_by`] clamps the stored one,
+/// and the same sum written twice is two answers to how far a pane scrolls.
+fn content_h(nodes: &[Node]) -> f32 {
+    let mut total = 0.0;
+    for (index, node) in nodes.iter().enumerate() {
+        if index > 0 {
+            total += size::HAIRLINE;
+        }
+        total += group_h(node);
+    }
+    total
+}
+
 /// **How tall one node group is**: its head, the renderer row if it has one,
 /// and a [`size::PARAM_H`] row per parameter.
 ///
 /// The hairline between two groups is **not** in here and is added by whoever
 /// stacks them — `.node-group`'s `border-bottom` is `0` on the last of them,
 /// so *n* groups carry *n - 1* rules, which is [`size::PREVIEW_GAP`]'s reading
-/// of a gap one axis along.
+/// of a gap one axis along, and [`content_h`] is where that sum is taken.
 fn group_h(node: &Node) -> f32 {
     size::NODE_HEAD_H
         + match node.renderers.is_empty() {
@@ -13773,7 +13890,14 @@ pub fn rend_chips<'a>(
 /// **One pane of the Inspector, derived** — see [`InspectorPane`] for what is
 /// drawn here and for the nine things in the mock's pane that are not.
 ///
-/// `index` is which pane, into [`PANE_NAMES`]. `layout` must be solved:
+/// `index` is which pane, into [`PANE_NAMES`]. `scroll` is the position that
+/// pane is scrolled to — [`View::scroll_in`], the console's own state and not
+/// a reading — and it is **taken here rather than applied by the painter**,
+/// because a control is hit-tested off the derivation that draws it and an
+/// offset added on one side of that seam and not the other is two answers
+/// about where a knob is. It arrives unclamped and leaves clamped:
+/// [`InspectorPane::scroll`] is what is in force, and nothing is written back
+/// (P-0082). `layout` must be solved:
 /// [`Layout::rect`](karakuri_layout::Layout::rect) refuses to answer from a
 /// dirty one. Like [`library`] this asks `egui` for nothing: every box in the
 /// pane is either the full width of the pane or a track of the mock's own
@@ -13798,13 +13922,14 @@ pub fn inspector(
     layout: &karakuri_layout::Layout,
     index: usize,
     pane: &Pane,
+    scroll: f32,
 ) -> Option<InspectorPane> {
     let region = to_egui(layout.rect(layout.find(PANE_NAMES.get(index)?)?));
     let under_head = Rect::from_min_max(
         Pos2::new(region.min.x, region.min.y + size::HEAD_H),
         region.max,
     );
-    pane_box(under_head, &pane.nodes)
+    pane_box(under_head, &pane.nodes, scroll)
 }
 
 /// The arithmetic of a pane, away from the layout it reads.
@@ -13825,7 +13950,7 @@ pub fn inspector(
 /// groups at all, so there is no row for a leftover to sit under. It shows as
 /// the bay's own card below the last group, which is every other empty body in
 /// this pass.
-fn pane_box(region: Rect, nodes: &[Node]) -> Option<InspectorPane> {
+fn pane_box(region: Rect, nodes: &[Node], scroll: f32) -> Option<InspectorPane> {
     let head = Rect::from_min_max(
         region.min,
         Pos2::new(region.max.x, region.min.y + size::HALF_HEAD_H),
@@ -13849,31 +13974,48 @@ fn pane_box(region: Rect, nodes: &[Node]) -> Option<InspectorPane> {
     if !positive(head) || !positive(deck_head) || deck_head.max.y > region.max.y {
         return None;
     }
-    // A walk and not a division: the groups are of unequal height, so *how
-    // many fit* is asked one at a time and stops at the first that does not.
-    // A group that would cross the bottom edge is not drawn at all — see
-    // `InspectorPane::shown`.
-    let mut used = 0.0;
+    // How tall the whole stack is, from the one function `View::scroll_by`
+    // clamps the stored position against as well.
+    let content = content_h(nodes);
+    // **The clamp is here and the store is not touched.** `max(0.0)` is what
+    // a pane taller than its content answers — there is nothing to scroll
+    // through, so the position in force is the top whatever an operator once
+    // spun the wheel to, and the position they spun to is still where they
+    // left it when the pane comes back (P-0082, ADR-0250).
+    let scroll = scroll.clamp(0.0, (content - body.height()).max(0.0));
+    // **How many are whole**, which is the readout's number and not the walk's
+    // — `InspectorPane::drawn` is the walk. A group is whole when both its
+    // edges are inside the body: the top one after the scroll has been taken
+    // off, and the bottom one before the body's own.
     let mut shown = 0;
-    for node in nodes {
-        let rule = match shown {
+    let mut top = -scroll;
+    for (index, node) in nodes.iter().enumerate() {
+        let rule = match index {
             0 => 0.0,
             _ => size::HAIRLINE,
         };
-        let next = used + rule + group_h(node);
-        if next > body.height() {
-            break;
+        top += rule;
+        let bottom = top + group_h(node);
+        if top >= -EPSILON && bottom <= body.height() + EPSILON {
+            shown += 1;
         }
-        used = next;
-        shown += 1;
+        top = bottom;
     }
     Some(InspectorPane {
         head,
         deck_head,
         body,
+        scroll,
+        content,
         shown,
     })
 }
+
+/// **What counts as touching an edge**, for [`pane_box`]'s *is this group
+/// whole* — a hair either way, because both sides of that comparison are sums
+/// of `f32` constants and a group that exactly fills the body would otherwise
+/// be counted or not by the last bit of a float.
+const EPSILON: f32 = 0.001;
 
 /// **What the anchor reads**, and `None` under free sync.
 ///
@@ -14478,6 +14620,93 @@ impl DeckName {
     }
 }
 
+/// **What the count at the right of a pane head reads** — `n of m`, the node
+/// groups this pane is showing whole out of the ones the deck has.
+///
+/// The Library foot's `5 of 27` counted on this bay's items rather than on
+/// that one's rows, which is what
+/// [ADR-0259](../../../docs/adr/0259-the-keyboard-is-addressed-to-the-bay-that-has-focus-and-a-global-letter-is-a-convenience-or-the-operators-own.md)
+/// says a pane's items are: *"Items are its panes; a pane's controls are its
+/// deck head and its node groups"*. A percentage would be a number about a
+/// rectangle, and what an operator counts is groups.
+pub fn count_text(at: &InspectorPane, pane: &Pane) -> String {
+    format!("{} of {}", at.shown, pane.nodes.len())
+}
+
+/// **The count in a pane head, derived** — where the run goes, or `None` for a
+/// head with no room for it between the label and the capsule.
+///
+/// It is a **readout**: nothing hit-tests it, it names no operation, and it
+/// carries no row on [every operation](../../../docs/manual/operations.html) —
+/// the mixer head's `3 of 3 · page 1` one bay along, and the reason is the
+/// same one that keeps the Library's cursor off that page. What it is *for* is
+/// rule 04 — *"A list that showed you part of itself says so and says how
+/// much"* — which is the whole of what a scrolled pane owes a reader, and is
+/// why this is derived beside the two controls in the row rather than painted
+/// wherever there happened to be space.
+///
+/// # Where it sits, and what gives way to what
+///
+/// `.half-head` is a flex row: the label and the run are at the left, `.sep`
+/// takes what is over, and the capsule is hard against the right-hand padding.
+/// This goes one [`size::HALF_HEAD_GAP`] to the left of the capsule — the
+/// mixer head's order, where the readout is left of the pill — and the run to
+/// its left is what gives way when the pane is narrowed, because the run is
+/// the one thing in the row that is clipped rather than dropped.
+///
+/// **`None` is a head that cannot hold it**, which is [`keep_pill`]'s rule
+/// read on a readout: measured against the room between the label and the
+/// capsule, so a head that would have to draw this over the words draws none
+/// of it. A pane at the declared minimum of 208 has room for all three
+/// ([ADR-0279](../../../docs/adr/0279-the-centre-is-two-parameter-rows-wide-because-a-pane-that-cannot-draw-a-fader-is-not-a-minimum.md)),
+/// so this `None` is a pane below what the arrangement admits rather than a
+/// state rule 04 is broken in.
+pub fn pane_count(
+    ctx: &egui::Context,
+    at: &InspectorPane,
+    pane: &Pane,
+    naming: Option<&str>,
+) -> Option<Rect> {
+    // Fonts are not valid until `egui` has run a pass — [`keep_pill`]'s guard,
+    // and before the first one there is no head painted to read.
+    if ctx.cumulative_pass_nr() == 0 {
+        return None;
+    }
+    let head = at.head;
+    if !positive(head) {
+        return None;
+    }
+    let run = |text: &str| {
+        ctx.fonts_mut(|f| {
+            f.layout_no_wrap(
+                text.to_owned(),
+                FontId::new(size::BASE, FontFamily::Proportional),
+                Color32::PLACEHOLDER,
+            )
+            .size()
+            .x
+        })
+    };
+    let right = match keep_pill(ctx, at, pane) {
+        Some(pill) => pill.pill.min.x - size::HALF_HEAD_GAP,
+        None => head.max.x - size::HALF_HEAD_PAD_X,
+    };
+    // Where the run beside it would start: the label inside the left padding,
+    // and one gap. This is measured against that rather than against the
+    // head's edge so that a head narrow enough to want the room for its words
+    // keeps it — the words are what says *which deck*, and a count of groups
+    // on a pane whose deck has gone unnamed is a number about nothing.
+    let left = head.min.x + size::HALF_HEAD_PAD_X + run(head_label(naming)) + size::HALF_HEAD_GAP;
+    let w = run(&count_text(at, pane));
+    let top = head.min.y + size::HALF_HEAD_PAD_Y;
+    (right - w >= left).then(|| {
+        Rect::from_min_max(
+            Pos2::new(right - w, top),
+            Pos2::new(right, top + size::PILL_H),
+        )
+    })
+}
+
 /// **The pane head's name, derived** — [`inspector`] answers where the head is
 /// and this answers where the run in it is, which is [`keep_pill`]'s division
 /// along the same row.
@@ -14534,11 +14763,16 @@ pub fn deck_name(
         })
     };
     // **The same clip [`inspector_into`] paints the words inside**, written
-    // once here and read there: everything up to the capsule, one `.half-head`
-    // gap short of it, and the whole head where there is no capsule.
-    let limit = match keep_pill(ctx, at, pane) {
-        Some(pill) => pill.pill.min.x - size::HALF_HEAD_GAP,
-        None => head.max.x,
+    // once here and read there: everything up to whatever is next along the
+    // row, one `.half-head` gap short of it. That is the count where the head
+    // has room for one ([`pane_count`]), the capsule where it has not, and the
+    // head's own edge where it has neither.
+    let limit = match pane_count(ctx, at, pane, naming) {
+        Some(count) => count.min.x - size::HALF_HEAD_GAP,
+        None => match keep_pill(ctx, at, pane) {
+            Some(pill) => pill.pill.min.x - size::HALF_HEAD_GAP,
+            None => head.max.x,
+        },
     };
     let left = head.min.x + size::HALF_HEAD_PAD_X + run(head_label(naming)) + size::HALF_HEAD_GAP;
     let text = match naming {
@@ -14768,14 +15002,19 @@ fn inspector_into(
     // pane is narrow and the pill keeps its place. `None` is a head with no
     // room for the capsule, which draws none — see [`keep_pill`].
     let keep = keep_pill(ui.ctx(), at, pane);
-    // What is left of the head for the two words: everything up to the pill,
-    // one `.half-head` gap short of it. A name too long for that is clipped,
-    // which is the row's own answer to a long name either way — the head is a
-    // clip rectangle and there is no ellipsis in this console to draw.
-    let words = match keep {
-        Some(pill) => Rect::from_min_max(
+    // **And the count beside it**, which is what rule 04 asks of a pane that
+    // is showing part of itself — derived here off the same head and painted
+    // below, exactly as the capsule is. See [`pane_count`].
+    let count = pane_count(ui.ctx(), at, pane, naming);
+    // What is left of the head for the two words: everything up to whatever is
+    // next along the row, one `.half-head` gap short of it. A name too long for
+    // that is clipped, which is the row's own answer to a long name either way
+    // — the head is a clip rectangle and there is no ellipsis in this console
+    // to draw.
+    let words = match count.map(|c| c.min.x).or(keep.map(|pill| pill.pill.min.x)) {
+        Some(x) => Rect::from_min_max(
             at.head.min,
-            Pos2::new(pill.pill.min.x - size::HALF_HEAD_GAP, at.head.max.y),
+            Pos2::new(x - size::HALF_HEAD_GAP, at.head.max.y),
         ),
         None => at.head,
     };
@@ -14851,6 +15090,18 @@ fn inspector_into(
             false => pill_at(ui, pal, pill.pill, KEEP_LABEL),
         }
     }
+    // **The count, in the label's own ink**: `.half-head`'s `color:
+    // var(--c-faint)`, which is what the mock gives every readout in this row
+    // and what the Library foot gives its own `5 of 27`. It is painted inside
+    // the head's clip and not the words' — the words stop short of it.
+    if let Some(rect) = count {
+        let galley = painter.layout_job(span_at(&count_text(at, pane), size::BASE, pal.faint));
+        painter.galley(
+            Pos2::new(rect.min.x, rect.center().y - galley.size().y * 0.5),
+            galley,
+            pal.faint,
+        );
+    }
 
     // **Derived here and hit-tested by `claim` off the same call**, which is
     // the rule every other control on this panel is drawn under. `None` is a
@@ -14860,16 +15111,23 @@ fn inspector_into(
         deck_head_into(ui, pal, &head, pane);
     }
 
+    // **The clip is what makes a scrolled pane safe**, and it is the same
+    // rectangle [`InspectorPane::grip`] refuses a press outside: a group cut
+    // by the top edge is painted with its head under the deck head and clipped
+    // away there, and a press on the part that is not on screen reaches
+    // nothing.
     let painter = ui.painter().with_clip_rect(at.body);
-    for index in 0..at.shown {
+    for index in at.drawn(&pane.nodes) {
         let node = &pane.nodes[index];
         let rect = at.group(&pane.nodes, index);
         node_into(&painter, pal, rect, node);
         // `.node-group`'s `border-bottom: 1px solid var(--c-hair)`, which
-        // `:last-child` does not carry — so it goes *between* two groups and
-        // the one after the last drawn group is not drawn either, because
-        // there is nothing under it to separate from.
-        if index + 1 < at.shown {
+        // `:last-child` does not carry — so it goes *between* two groups, and
+        // the last node's is not drawn whether or not the pane is scrolled far
+        // enough to have it on screen. It is `nodes.len()` and no longer the
+        // count of what is drawn, because a group cut by the bottom edge has
+        // a rule under it and the next group is what it separates from.
+        if index + 1 < pane.nodes.len() {
             let rule = rect.max.y + size::HAIRLINE * 0.5;
             painter.line_segment(
                 [Pos2::new(rect.min.x, rule), Pos2::new(rect.max.x, rule)],
@@ -15857,6 +16115,39 @@ pub struct View {
     /// only ways in** — [`View::selection`]'s rule, and see [`Naming`] for why
     /// there is one of these and not one per pane.
     naming: Option<Naming>,
+    /// **How far each Inspector pane is scrolled**, one position per pane, and
+    /// the console's eighth pointer.
+    ///
+    /// **A pointer and not a reading**, which is [`View::cursor_row`]'s
+    /// argument arriving at a second bay: no operation names it, nothing
+    /// downstream could be the model of record for it, and a host that kept a
+    /// copy would be keeping the console's state on its behalf. It is not part
+    /// of the arrangement either — `karakuri-layout`'s tree holds sizes and
+    /// folds, which is what a saved arrangement carries — so a save does not
+    /// take it and a restore does not move it
+    /// ([ADR-0307](../../../docs/adr/0307-the-inspectors-pane-scrolls-and-the-position-is-the-panes-own.md)).
+    ///
+    /// **It cannot live in [`View::inspector`]**, which is [`View::naming`]'s
+    /// reason one field up: a pane is rewritten whenever a Set lands, so a
+    /// position kept in one would go back to the top every time a build
+    /// arrived — and a knob under an operator's hand would leave the screen on
+    /// a frame nobody touched.
+    ///
+    /// **One per pane and not one per deck.** Two panes pointed at one deck
+    /// are two places in one list, because what is scrolled is the pane; a
+    /// position filed under the deck would move the pane an operator is not
+    /// looking at.
+    ///
+    /// **Stored unclamped against the *pane*, clamped at the draw.** See
+    /// [`InspectorPane::scroll`] and [`View::scroll_by`], which are the two
+    /// halves of that: the pane's height is a viewport and P-0082 is why a
+    /// solve may not write through it.
+    ///
+    /// **Private, with [`View::scroll_by`] and [`View::scroll_in`] the only
+    /// ways in**, which is [`View::selection`]'s rule. Zero until somebody
+    /// turns a wheel, which is every test in this crate and is a pane at the
+    /// top of what its deck holds.
+    scroll: [f32; PANES],
     /// **What the next fade, crossfade or wipe means** — the wipe's front
     /// shape and angle, the grid it starts on and how long it lasts — and the
     /// fourth of this console's pointers.
@@ -15951,6 +16242,10 @@ impl View {
             // is every test in this crate that does not say otherwise: the two
             // pane heads are readouts until a hand lands on one of them.
             naming: None,
+            // Every pane at the top of what its deck holds, which is where a
+            // run starts and is every test in this crate that does not turn a
+            // wheel.
+            scroll: [0.0; PANES],
             // Nothing outstanding on any slot, which is a console with no
             // engine behind it and is also every ordinary frame of one that
             // has. Room for as many rows as a deck can ever have slots, so
@@ -16138,8 +16433,10 @@ impl View {
     ///
     /// **The cursor is held inside the rows that are drawn, not inside the
     /// store.** This bay has no scroll position and inventing one would be a
-    /// control (`view::library`); what it does instead is list what fits and
-    /// say `n of m`. So the reachable Sets are the listed ones, and a cursor
+    /// control (`view::library`) — the Inspector's panes have one and reach it
+    /// with the wheel, which is a different bay and a different answer
+    /// ([`InspectorPane::scroll`]); what this one does instead is list what
+    /// fits and say `n of m`. So the reachable Sets are the listed ones, and a cursor
     /// allowed past them would sit on a row nobody can see, under a pill that
     /// says a press will load it. The foot already says how many are out of
     /// reach.
@@ -16197,6 +16494,52 @@ impl View {
         }
         let moved = row != self.cursor_row;
         self.cursor_row = row;
+        moved
+    }
+
+    /// **How far one Inspector pane is scrolled**, as it is stored — the
+    /// number [`inspector`] clamps and never the one it clamped.
+    ///
+    /// Zero for a pane index past [`PANES`], which is a caller's error and not
+    /// a state: the bay has two panes and `PANE_NAMES` is what says so.
+    pub fn scroll_in(&self, pane: usize) -> f32 {
+        self.scroll.get(pane).copied().unwrap_or(0.0)
+    }
+
+    /// **Turn one pane's wheel by `by` pixels**, positive down the list, and
+    /// answer whether the stored position moved.
+    ///
+    /// # Two clamps, and only one of them is here
+    ///
+    /// This one is against the **content** — how tall everything the deck
+    /// publishes comes to — and it is a reading of the deck rather than of a
+    /// viewport, so a stored position bounded by it is not a position any
+    /// resize can rewrite. Without it a wheel spun over a short Set would put
+    /// the number in the thousands and an operator would have to spin it all
+    /// the way back before anything moved, which is *"a control you cannot see
+    /// being moved"* by another name.
+    ///
+    /// The other clamp is against the pane's own height and belongs where the
+    /// pane is laid out — [`InspectorPane::scroll`], which is
+    /// [P-0082](../../../docs/principles/0082-looking-never-writes-back.md):
+    /// a shorter pane draws less of the same position and stores nothing, so
+    /// dragging it back reproduces the picture exactly rather than nearly
+    /// (ADR-0250's argument one region in).
+    ///
+    /// **A pane this console is not showing anything in refuses the wheel**
+    /// rather than storing a position for it, which is [`View::point_at`]'s
+    /// rule: what a pointer can be at is something drawn.
+    pub fn scroll_by(&mut self, pane: usize, by: f32) -> bool {
+        let Some(showing) = self.inspector.get(pane) else {
+            return false;
+        };
+        let Some(at) = self.scroll.get_mut(pane) else {
+            return false;
+        };
+        let content = content_h(&showing.nodes);
+        let next = (*at + by).clamp(0.0, content);
+        let moved = next != *at;
+        *at = next;
         moved
     }
 
@@ -16874,6 +17217,11 @@ impl View {
         let load = self.target();
         let waiting = self.staging.as_slice();
         let panes = self.inspector.as_slice();
+        // **The eighth pointer, read once for the frame beside the panes it is
+        // about** — how far each of them is scrolled. It is `Copy` and two
+        // `f32`s wide, and it is read here for the reason the seventh below is:
+        // `draw` takes `&mut self` and the loop already borrows `inspector`.
+        let scrolled = self.scroll;
         // **The seventh pointer, read once for the frame** beside the panes it
         // points into — `draw` takes `&mut self`, and a head asked inside the
         // loop below would be a second borrow of the same struct.
@@ -17136,7 +17484,7 @@ impl View {
             // sit inside the Inspector bay's card, which the loop has already
             // painted, and nothing else on the panel overlaps them.
             for (index, pane) in panes.iter().enumerate().take(PANES) {
-                if let Some(at) = inspector(panel.layout(), index, pane) {
+                if let Some(at) = inspector(panel.layout(), index, pane, scrolled[index]) {
                     inspector_into(
                         ui,
                         &pal,
@@ -18214,7 +18562,7 @@ mod tests {
     #[test]
     fn a_pane_is_two_heads_and_what_is_left() {
         let pane = one_node(2);
-        let at = pane_box(pane_at(400.0), &pane.nodes).expect("a pane with room in it");
+        let at = pane_box(pane_at(400.0), &pane.nodes, 0.0).expect("a pane with room in it");
         assert_eq!(at.head.height(), 27.5);
         assert_eq!(at.deck_head.height(), 25.5);
         assert_eq!(at.head.max.y, at.deck_head.min.y);
@@ -18234,23 +18582,24 @@ mod tests {
     fn the_bays_minimum_is_the_least_a_pane_can_draw() {
         let pane = one_node(2);
         let pane_h = 151.5 - size::HEAD_H;
-        let at = pane_box(pane_at(pane_h), &pane.nodes).expect("a pane at the minimum");
+        let at = pane_box(pane_at(pane_h), &pane.nodes, 0.0).expect("a pane at the minimum");
         assert_eq!(
             at.shown, 1,
             "one node and two of its parameters is what the minimum is written from"
         );
-        let short = pane_box(pane_at(pane_h - 0.5), &pane.nodes).expect("still two heads");
+        let short = pane_box(pane_at(pane_h - 0.5), &pane.nodes, 0.0).expect("still two heads");
         assert_eq!(
             short.shown, 0,
             "half a pixel under the minimum and the group no longer fits"
         );
     }
 
-    /// **A group is drawn whole or not at all**, which is the pane having no
-    /// scroll position: a node head with two of its five parameters under it
-    /// reads as a node with two parameters.
+    /// **A group the pane cannot hold whole is not counted as shown**, which
+    /// is what the head's `n of m` means since the pane started scrolling: it
+    /// is drawn, as far as the pane goes, and it is not one of the ones the
+    /// readout says are on screen.
     #[test]
-    fn a_group_that_does_not_fit_whole_is_not_drawn() {
+    fn a_group_that_does_not_fit_whole_is_not_counted() {
         let pane = Pane {
             nodes: vec![one_node(2).nodes[0].clone(), one_node(5).nodes[0].clone()],
             ..one_node(2)
@@ -18263,14 +18612,19 @@ mod tests {
         let at = pane_box(
             pane_at(size::HALF_HEAD_H + size::DECK_HEAD_H + body),
             &pane.nodes,
+            0.0,
         )
         .expect("a pane with room in it");
-        assert_eq!(at.shown, 1, "the second group is short by one row");
+        assert_eq!(
+            at.shown, 1,
+            "the second group is short by one row, so one is whole"
+        );
 
         // One row more and both are drawn.
         let at = pane_box(
             pane_at(size::HALF_HEAD_H + size::DECK_HEAD_H + body + size::PARAM_H),
             &pane.nodes,
+            0.0,
         )
         .expect("a pane with room in it");
         assert_eq!(at.shown, 2);
@@ -18289,7 +18643,7 @@ mod tests {
             ],
             ..one_node(2)
         };
-        let at = pane_box(pane_at(400.0), &pane.nodes).expect("a pane with room in it");
+        let at = pane_box(pane_at(400.0), &pane.nodes, 0.0).expect("a pane with room in it");
         assert_eq!(at.shown, 3);
         let first = at.group(&pane.nodes, 0);
         let second = at.group(&pane.nodes, 1);
@@ -18395,7 +18749,7 @@ mod tests {
             Pos2::new(0.0, 0.0),
             egui::vec2(size::PARAM_PAD_L + size::PARAM_PAD_R, 400.0),
         );
-        assert!(pane_box(narrow, &pane.nodes).is_none());
+        assert!(pane_box(narrow, &pane.nodes, 0.0).is_none());
     }
 
     /// **There are two panes and there is no third.**
@@ -18422,12 +18776,12 @@ mod tests {
         assert_eq!(PANES, 2, "the mock's `.insp-split` is `1fr 9px 1fr`");
         for index in 0..PANES {
             assert!(
-                inspector(&layout, index, &pane).is_some(),
+                inspector(&layout, index, &pane, 0.0).is_some(),
                 "pane {index} is in the arrangement and has room in it"
             );
         }
         assert!(
-            inspector(&layout, PANES, &pane).is_none(),
+            inspector(&layout, PANES, &pane, 0.0).is_none(),
             "a third pane is a pane the arrangement has not got"
         );
         assert!(View::new(Room::Day).inspector.is_empty());
@@ -18456,7 +18810,7 @@ mod tests {
         let pane = one_node(2);
         let bay = to_egui(layout.rect(layout.find("inspector").expect("the bay is named")));
         for index in 0..PANES {
-            let at = inspector(&layout, index, &pane).expect("a pane with room in it");
+            let at = inspector(&layout, index, &pane, 0.0).expect("a pane with room in it");
             assert_eq!(
                 at.head.min.y,
                 bay.min.y + size::HEAD_H,

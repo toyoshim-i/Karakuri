@@ -45,7 +45,8 @@ use common::{drawn_once, near, rect_of, PLAUSIBLE, SMALLEST};
 use karakuri_console::panel::{Panel, GRAB};
 use karakuri_console::room::{size, Room};
 use karakuri_console::view::{
-    deck_name, inspector, keep_pill, InspectorPane, Pane, View, PANES, PANE_NAMES, SYNCS,
+    deck_name, inspector, keep_pill, pane_count, InspectorPane, Pane, View, PANES, PANE_NAMES,
+    SYNCS,
 };
 use karakuri_layout::{Point, Rect};
 use karakuri_operation::{Operation, Sync};
@@ -119,7 +120,8 @@ fn the_run_sits_one_gap_after_the_label() {
     for viewport in [SMALLEST, PLAUSIBLE] {
         let (panel, ctx) = console(viewport);
         for index in 0..PANES {
-            let at_pane = inspector(panel.layout(), index, &pane).expect("a pane with room in it");
+            let at_pane =
+                inspector(panel.layout(), index, &pane, 0.0).expect("a pane with room in it");
             let named = deck_name(&ctx, &at_pane, &pane, None).expect("a head with room for it");
             let head = at_pane.head;
 
@@ -143,9 +145,22 @@ fn the_run_sits_one_gap_after_the_label() {
                 named.name.height(),
                 size::PILL_H
             );
+            // **As wide as the run, or as wide as what the row leaves it** —
+            // the count at the right of the head is placed before this and the
+            // words stop one gap short of it, so at the narrowest viewport the
+            // arrangement admits the *name* is clipped rather than the count
+            // dropped. Both halves are asserted, because the derivation is a
+            // `min` of exactly these two.
+            let count =
+                pane_count(&ctx, &at_pane, &pane, None).expect("a head with room for its count");
+            let room = count.min.x - size::HALF_HEAD_GAP - named.name.min.x;
             assert!(
-                near(named.name.width(), run(&ctx, "deck A · drift_night")),
-                "the run's box is {} wide and `deck A · drift_night` measures {}",
+                near(
+                    named.name.width(),
+                    run(&ctx, "deck A · drift_night").min(room)
+                ),
+                "the run's box is {} wide, `deck A · drift_night` measures {} and the row leaves \
+                 it {room}",
                 named.name.width(),
                 run(&ctx, "deck A · drift_night")
             );
@@ -167,7 +182,8 @@ fn the_run_stops_one_gap_short_of_the_capsule() {
     for viewport in [SMALLEST, PLAUSIBLE] {
         let (panel, ctx) = console(viewport);
         for index in 0..PANES {
-            let at_pane = inspector(panel.layout(), index, &pane).expect("a pane with room in it");
+            let at_pane =
+                inspector(panel.layout(), index, &pane, 0.0).expect("a pane with room in it");
             let named = deck_name(&ctx, &at_pane, &pane, None).expect("a head with room for it");
             let pill = keep_pill(&ctx, &at_pane, &pane).expect("a head with room for its capsule");
             assert!(
@@ -196,7 +212,7 @@ fn a_name_too_long_for_the_head_is_clipped_at_the_capsule() {
         ..mock()
     };
     let (panel, ctx) = console(PLAUSIBLE);
-    let at_pane = inspector(panel.layout(), 0, &pane).expect("a pane with room in it");
+    let at_pane = inspector(panel.layout(), 0, &pane, 0.0).expect("a pane with room in it");
     let named = deck_name(&ctx, &at_pane, &pane, None).expect("a head with room for some of it");
     let pill = keep_pill(&ctx, &at_pane, &pane).expect("a head with room for its capsule");
     assert!(
@@ -220,7 +236,7 @@ fn a_name_too_long_for_the_head_is_clipped_at_the_capsule() {
 fn a_head_with_no_room_for_the_run_draws_none() {
     let pane = mock();
     let (panel, ctx) = console(PLAUSIBLE);
-    let at_pane = inspector(panel.layout(), 0, &pane).expect("a pane with room in it");
+    let at_pane = inspector(panel.layout(), 0, &pane, 0.0).expect("a pane with room in it");
     let full = at_pane.head;
     let narrowed = |w: f32| InspectorPane {
         head: egui::Rect::from_min_size(full.min, egui::vec2(w, full.height())),
@@ -256,7 +272,7 @@ fn a_head_with_no_room_for_the_run_draws_none() {
 fn a_console_that_has_not_drawn_has_no_run() {
     let pane = mock();
     let (panel, _) = console(PLAUSIBLE);
-    let at_pane = inspector(panel.layout(), 0, &pane).expect("a pane with room in it");
+    let at_pane = inspector(panel.layout(), 0, &pane, 0.0).expect("a pane with room in it");
     assert_eq!(
         deck_name(&egui::Context::default(), &at_pane, &pane, None),
         None
@@ -278,7 +294,8 @@ fn the_run_clears_every_boundarys_grab() {
     for viewport in [SMALLEST, PLAUSIBLE] {
         let (panel, ctx) = console(viewport);
         for (index, name) in PANE_NAMES.iter().enumerate() {
-            let at_pane = inspector(panel.layout(), index, &pane).expect("a pane with room in it");
+            let at_pane =
+                inspector(panel.layout(), index, &pane, 0.0).expect("a pane with room in it");
             let named = deck_name(&ctx, &at_pane, &pane, None).expect("a head with room for it");
 
             let clearance = named.name.min.x - at_pane.head.min.x;
@@ -332,7 +349,8 @@ fn the_chevrons_place_is_beside_the_run_and_is_not_claimed() {
     for viewport in [SMALLEST, PLAUSIBLE] {
         let (panel, ctx) = console(viewport);
         for index in 0..PANES {
-            let at_pane = inspector(panel.layout(), index, &pane).expect("a pane with room in it");
+            let at_pane =
+                inspector(panel.layout(), index, &pane, 0.0).expect("a pane with room in it");
             let named = deck_name(&ctx, &at_pane, &pane, None).expect("a head with room for it");
 
             assert!(
@@ -372,7 +390,7 @@ fn the_chevrons_place_is_beside_the_run_and_is_not_claimed() {
 fn a_press_off_the_run_is_not_on_it() {
     let pane = mock();
     let (panel, ctx) = console(PLAUSIBLE);
-    let at_pane = inspector(panel.layout(), 0, &pane).expect("a pane with room in it");
+    let at_pane = inspector(panel.layout(), 0, &pane, 0.0).expect("a pane with room in it");
     let named = deck_name(&ctx, &at_pane, &pane, None).expect("a head with room for it");
     let pill = keep_pill(&ctx, &at_pane, &pane).expect("a head with room for its capsule");
     let head = at_pane.head;
@@ -555,7 +573,7 @@ fn the_capsule_is_the_unnamed_route_and_is_unchanged() {
     let pane = mock();
     let (panel, ctx) = console(PLAUSIBLE);
     let mut view = view_of([showing(0), showing(1)]);
-    let at_pane = inspector(panel.layout(), 0, &pane).expect("a pane with room in it");
+    let at_pane = inspector(panel.layout(), 0, &pane, 0.0).expect("a pane with room in it");
     let pill = keep_pill(&ctx, &at_pane, &pane).expect("a head with room for its capsule");
 
     view.name_set(0);
@@ -610,7 +628,7 @@ fn the_head_reads_keep_as_while_it_is_asking() {
     let mut panel = Panel::new(PLAUSIBLE.w, PLAUSIBLE.h);
     panel.solve();
     let mut view = view_of([showing(0), showing(1)]);
-    let head = inspector(panel.layout(), 0, &view.inspector[0])
+    let head = inspector(panel.layout(), 0, &view.inspector[0], 0.0)
         .expect("a pane with room in it")
         .head;
 
@@ -644,7 +662,7 @@ fn the_head_reads_keep_as_while_it_is_asking() {
 
     // **And the other head is untouched**, which is what one field at a time
     // looks like on screen.
-    let other = inspector(panel.layout(), 1, &view.inspector[1])
+    let other = inspector(panel.layout(), 1, &view.inspector[1], 0.0)
         .expect("a pane with room in it")
         .head;
     let untouched = words_inside(&mut view, &mut panel, other);

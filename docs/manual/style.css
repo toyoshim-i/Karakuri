@@ -454,6 +454,10 @@
   .divider-v { background: var(--c-hair); border-radius: 999px; cursor: col-resize; display: flex; align-items: center; justify-content: center; color: var(--c-faint); font-size: 9px; }
   .half-head { display: flex; align-items: center; gap: 6px; padding: 5px 10px; border-bottom: 1px solid var(--c-hair); color: var(--c-faint); }
   .half-head .what { color: var(--c-text); font-weight: 500; }
+  /* How much of the pane is on screen, in the Library foot's own ink and
+     measure: a readout rather than a bar, because this console draws no
+     scrollbar anywhere. */
+  .half-head .shown { font-size: 10px; white-space: nowrap; }
 
   .node-group { border-bottom: 1px solid var(--c-hair); }
   .node-group:last-child { border-bottom: 0; }
