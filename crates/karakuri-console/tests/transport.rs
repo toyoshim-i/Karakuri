@@ -1,4 +1,4 @@
-//! **The transport row: four readouts, no controls, and nothing at all where
+//! **The transport row: five readouts, no controls, and nothing at all where
 //! there is no engine.**
 //!
 //! Five things, and the first two are why this file exists rather than a few
@@ -16,7 +16,7 @@
 //!    ([ADR-0212](../../../docs/adr/0212-the-beat-is-a-light-that-travels-and-it-declares-for-itself.md)).
 //! 3. Where everything in the row is, derived from the row's own geometry and
 //!    the mock's boxes.
-//! 4. **That the four readouts are not controls**, which is the answer stated
+//! 4. **That the five readouts are not controls**, which is the answer stated
 //!    rather than inferred from the absence of a hit test: `claim` gives every
 //!    point of this row to `egui` unless a boundary has it — or unless it is
 //!    on the arrangement pill, which is the one control this row has and is
@@ -35,7 +35,7 @@ use common::{drawn_once, id_of, near, rect_of, showing, solved, PLAUSIBLE, SMALL
 use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::Panel;
 use karakuri_console::room::{size, Room};
-use karakuri_console::view::{beat_at, transport, Transport, TransportRow, View};
+use karakuri_console::view::{beat_at, transport, Stage, Transport, TransportRow, View};
 use karakuri_layout::{Point, Rect};
 
 /// **The mock's own transport, as numbers**, and this file's name for
@@ -171,12 +171,33 @@ fn the_readouts_are_the_rows_own_geometry() {
         size::BEAT_W * 4.0 + size::BEAT_GAP * 3.0
     );
 
-    // The frame readout: `.sep { flex: 1 }` puts it against the right padding.
+    // **`.sep { flex: 1 }` puts what follows it against the right padding, and
+    // the last of those is the health capsule** — the mock draws `landed`
+    // after the frame readout, so the capsule takes the padding and the frame
+    // readout is one row gap before it.
+    let health = row
+        .health
+        .expect("the mock's row draws its `landed` capsule");
     assert!(
-        near(strip.x + strip.w - row.frame.max.x, size::TRANSPORT_PAD_X),
-        "the frame readout ends {} from the right edge and the padding is {}",
-        strip.x + strip.w - row.frame.max.x,
+        near(strip.x + strip.w - health.max.x, size::TRANSPORT_PAD_X),
+        "the health capsule ends {} from the right edge and the padding is {}",
+        strip.x + strip.w - health.max.x,
         size::TRANSPORT_PAD_X
+    );
+    assert!(
+        near(health.min.x - row.frame.max.x, size::TRANSPORT_GAP),
+        "the frame readout and the capsule are {} apart and `.transport`'s gap is {}",
+        health.min.x - row.frame.max.x,
+        size::TRANSPORT_GAP
+    );
+    // `.pill`'s own box: `padding: 0 8px` round one word, at the row's type.
+    assert!(near(health.height(), size::PILL_H));
+    assert!(near(health.center().y, mid), "the capsule is not centred");
+    assert!(
+        health.width() > size::PILL_PAD_X * 2.0,
+        "the capsule is {} wide and its padding alone is {}, so there is no word in it",
+        health.width(),
+        size::PILL_PAD_X * 2.0
     );
     assert!(
         row.frame.min.x > row.bar.max.x,
@@ -192,6 +213,7 @@ fn the_readouts_are_the_rows_own_geometry() {
         (row.grid, "the beat grid"),
         (row.bar, "the bar"),
         (row.frame, "the frame readout"),
+        (health, "the health capsule"),
     ] {
         assert!(
             strip.contains_rect(rect),
@@ -300,7 +322,7 @@ fn shapes_inside(view: &mut View, panel: &mut Panel, rect: egui::Rect) -> Vec<eg
 ///
 /// So this counts what lands inside the row on a frame drawn each way. One
 /// shape with nothing behind it, which is the card; more than one with the
-/// mock's values, which is the four readouts — and the difference is the whole
+/// mock's values, which is the five readouts — and the difference is the whole
 /// claim.
 #[test]
 fn a_console_with_no_engine_draws_nothing_in_the_row() {
@@ -975,6 +997,144 @@ fn a_missing_rate_or_budget_drops_its_own_words_and_nothing_else() {
 }
 
 // ---------------------------------------------------------------------------
+// What the last write did
+// ---------------------------------------------------------------------------
+
+/// **The capsule draws the verdict it was handed, in the three words the page
+/// uses, and draws nothing at all where there is none.**
+///
+/// The four states are asserted through the paint pass rather than off
+/// [`TransportRow::health`], because a rectangle is not a drawing: the
+/// rectangle was there before this pill was painted into it, and a version of
+/// [`view::transport_into`] that laid the capsule out and never painted it
+/// would satisfy every geometric assertion in this file. So this reads the
+/// words off the frame, which is `a_missing_rate_or_budget_drops_its_own_words`
+/// one item along and the same reason.
+///
+/// **`None` is the state worth the most here.** A run in which nobody has
+/// rewritten a procedure is most of most runs, and the failure it guards
+/// against is an `armed` capsule reading `landed` about a build nobody made —
+/// the panel asserting on startup that a write it never saw is on screen.
+#[test]
+fn the_health_capsule_draws_the_verdict_and_nothing_where_there_is_none() {
+    let mut panel = Panel::new(PLAUSIBLE.w, PLAUSIBLE.h);
+    panel.solve();
+    let strip = rect_of(panel.layout(), "transport");
+    let strip =
+        egui::Rect::from_min_size(egui::pos2(strip.x, strip.y), egui::vec2(strip.w, strip.h));
+    let mut view = View::new(Room::Day);
+
+    let words = |view: &mut View, panel: &mut Panel| -> Vec<String> {
+        shapes_inside(view, panel, strip)
+            .into_iter()
+            .filter_map(|shape| match shape {
+                egui::Shape::Text(text) => Some(text.galley.text().to_owned()),
+                _ => None,
+            })
+            .collect()
+    };
+
+    for (stage, word) in [
+        (Stage::Landed, "landed"),
+        (Stage::RolledBack, "rolled back"),
+        (Stage::Refused, "refused"),
+    ] {
+        view.transport = Some(Transport {
+            health: Some(stage),
+            ..mock()
+        });
+        let drawn = words(&mut view, &mut panel);
+        assert!(
+            drawn.iter().any(|line| line == word),
+            "the row was handed {stage:?} and drew {drawn:?}"
+        );
+        // And exactly that one of the three, which is what says the match is
+        // a mapping rather than a constant that happens to be right once.
+        for other in ["landed", "rolled back", "refused"] {
+            assert_eq!(
+                other == word,
+                drawn.iter().any(|line| line == other),
+                "the row was handed {stage:?} and `{other}` is on it: {drawn:?}"
+            );
+        }
+    }
+
+    // Nothing written yet: no capsule, no word, and no box for one.
+    view.transport = Some(Transport {
+        health: None,
+        ..mock()
+    });
+    let quiet = words(&mut view, &mut panel);
+    for word in ["landed", "rolled back", "refused"] {
+        assert!(
+            !quiet.iter().any(|line| line == word),
+            "nothing has been written and the row says `{word}`: {quiet:?}"
+        );
+    }
+    // The frame readout has the right padding back, which is where `.sep`
+    // leaves it when it is the last thing in the row.
+    let ctx = drawn_once();
+    let row = transport(&ctx, panel.layout(), view.transport).expect("a row");
+    assert_eq!(row.health, None);
+    assert!(
+        near(strip.max.x - row.frame.max.x, size::TRANSPORT_PAD_X),
+        "with no capsule the frame readout ends {} from the right edge and the padding is {}",
+        strip.max.x - row.frame.max.x,
+        size::TRANSPORT_PAD_X
+    );
+}
+
+/// **`.pill.armed` is spent on the one verdict that means the build is on
+/// screen**, and the other two take the plain `.pill`.
+///
+/// The mock draws this capsule `armed` and draws it on `landed`, and armed is
+/// this console's *live in the good sense* — the wash the audio-in pill wears
+/// with an input open. A rollback wearing it would say the opposite of what it
+/// means, and nothing about the *word* would be wrong, which is why this is
+/// asserted on the fill and not on the text: `landed` and `rolled back` are
+/// both spelled correctly by a version that washes both.
+#[test]
+fn the_capsule_is_washed_only_where_the_build_is_on_screen() {
+    let mut panel = Panel::new(PLAUSIBLE.w, PLAUSIBLE.h);
+    panel.solve();
+    let ctx = drawn_once();
+    let mut view = View::new(Room::Day);
+
+    for (stage, washed) in [
+        (Stage::Landed, true),
+        (Stage::RolledBack, false),
+        (Stage::Refused, false),
+    ] {
+        let values = Transport {
+            health: Some(stage),
+            ..mock()
+        };
+        view.transport = Some(values);
+        let capsule = transport(&ctx, panel.layout(), Some(values))
+            .expect("a row")
+            .health
+            .expect("a capsule");
+        // `rect_filled` against `rect_stroke`: the armed treatment fills the
+        // capsule with a wash of the mint and the plain one draws a hairline
+        // round nothing.
+        let filled = shapes_inside(&mut view, &mut panel, capsule)
+            .into_iter()
+            .any(|shape| match shape {
+                egui::Shape::Rect(rect) => rect.fill.a() > 0,
+                _ => false,
+            });
+        assert_eq!(
+            filled, washed,
+            "a {stage:?} capsule is {} and the mock washes only the verdict that is on              screen",
+            match filled {
+                true => "washed",
+                false => "not washed",
+            }
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Nothing here is a control
 // ---------------------------------------------------------------------------
 
@@ -991,7 +1151,7 @@ fn a_missing_rate_or_budget_drops_its_own_words_and_nothing_else() {
 /// the pill is a control in this row, it has a decision about the pointer,
 /// and `tests/arrangement_pill.rs` is that decision written down — the
 /// clearance it keeps, the boundary band it does not sit in, and the rule an
-/// open menu changes. What is left here is the four readouts, and they are
+/// open menu changes. What is left here is the five readouts, and they are
 /// still readouts: a tempo, a beat, a bar and a frame time are things a press
 /// does not act on, and every *other* control the mock draws in this row is
 /// one of the six things `view::transport` names and does not draw.
@@ -1032,6 +1192,18 @@ fn the_readouts_in_the_transport_row_are_not_controls() {
         (row.dot(row.dots - 1).center(), "the last beat"),
         (row.bar.center(), "the bar"),
         (row.frame.center(), "the frame readout"),
+        (
+            // **The health capsule**, which is drawn as a capsule and is not
+            // one: it is what the last write did, and there is nothing to
+            // press. It is in this list rather than in a sentence for the
+            // reason the four above it are — the answer is stated where a
+            // control added here without a decision about the pointer would
+            // fail it.
+            row.health
+                .expect("the mock's row draws its capsule")
+                .center(),
+            "the health capsule",
+        ),
         (
             // **Past the pill**, which is where the empty middle of this row
             // now starts: the mock's `learn`, `tap` and the rest are still
@@ -1082,14 +1254,15 @@ fn the_values_are_the_harnesss_and_are_stored_nowhere() {
     let one = mock();
     let two = Transport {
         // Every field different, and each one visible somewhere in the row: a
-        // wider number, a different dot, a different bar, and a frame readout
-        // with no rate and no budget in it.
+        // wider number, a different dot, a different bar, a frame readout
+        // with no rate and no budget in it, and no health capsule at all.
         bpm: 92.5,
         beats: 6.0,
         beats_per_bar: 3,
         fps: None,
         frame_ms: 4.0,
         budget_ms: None,
+        health: None,
     };
 
     let first = transport(&ctx, panel.layout(), Some(one)).expect("a row");

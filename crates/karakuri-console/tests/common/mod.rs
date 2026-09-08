@@ -406,5 +406,8 @@ pub fn mock_transport() -> karakuri_console::view::Transport {
         fps: Some(58.0),
         frame_ms: 12.4,
         budget_ms: Some(16.6),
+        // **The `landed` capsule at the end of the row**, which the mock
+        // draws `armed`: the last procedure written is on screen.
+        health: Some(karakuri_console::view::Stage::Landed),
     }
 }

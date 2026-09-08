@@ -1265,6 +1265,20 @@ struct Readout {
     /// audit read one value. Without the flag the pills still write it and only
     /// this program and its tests read it back.
     opening: Opening,
+    /// **What the last write did**, which the transport row's health capsule
+    /// draws — `view::Transport::health`, kept here because that value is
+    /// rebuilt whole every frame by `transport` and a verdict arrives on one
+    /// frame in a thousand.
+    ///
+    /// **The one reading in this struct that is a stream rather than a
+    /// state.** Everything else the row draws is asked of the deck on the
+    /// frame it is drawn on; a `swap::Event` exists once, in the drain
+    /// `staging` makes, and is gone. So the last one is remembered here for
+    /// the same reason `view.staging`'s rows are remembered in the view: it is
+    /// the drain that forces it, not a preference.
+    ///
+    /// `None` until a build produces a verdict, which is most of most runs.
+    health: Option<view::Stage>,
 }
 
 impl Readout {
@@ -1274,6 +1288,8 @@ impl Readout {
             view: View::new(Room::Day),
             // Four classes shut, which is what a run starts with (ADR-0235).
             opening: Opening::closed(),
+            // Nothing has been written yet, so the capsule is not drawn.
+            health: None,
         }
     }
 
@@ -5478,6 +5494,11 @@ fn transport(
     costs: &Costs,
     budget_ms: Option<f32>,
     live: bool,
+    // **What the last write did**, which is the one thing in this row that is
+    // not read off the deck here: a verdict exists once, in the drain
+    // `staging` makes, so it is remembered in `Readout::health` and handed
+    // over rather than asked for.
+    health: Option<view::Stage>,
 ) -> Option<view::Transport> {
     let last = costs.last?;
     let grid = deck.signals().oscillator();
@@ -5491,6 +5512,7 @@ fn transport(
             .map(|rate| rate as f32),
         frame_ms: ms(last.whole()) as f32,
         budget_ms,
+        health,
     })
 }
 
@@ -6868,6 +6890,23 @@ fn mixer(deck: &Deck, names: &[String], out: &mut Vec<view::Strip>) {
 /// its verdict outstanding, and that is `HotSwap::begin_frame_parked`'s own
 /// rule read from the surface: a slot that is not drawn is not judged.
 ///
+/// # It writes the transport's health capsule too, and the two are not the
+/// same reading
+///
+/// `view::Transport::health` is *what the last write did* and the lane is
+/// *what is still outstanding*, so the two disagree in both directions and
+/// both are the mock's: a run in which the last build landed and was then
+/// accepted draws `landed` in the transport with an empty lane, and a run in
+/// which one slot rolled back while a later one landed draws `landed` in the
+/// transport with a `rolled back` row under it. The capsule carries no deck
+/// letter, which is why it can only say the second of those and why the lane
+/// is where the address is.
+///
+/// **They are written from one drain because there is only one.**
+/// `Deck::events` empties the channel; a second pass for the capsule would
+/// read nothing at all, which is the same sentence the reporter above is
+/// written under.
+///
 /// # It answers whether the live Set changed, because something else has to
 /// know
 ///
@@ -6902,6 +6941,18 @@ fn staging(
     // Collected rather than acted on here, because `Deck::events` borrows the
     // deck for as long as it is being read.
     took: &mut Vec<(usize, Option<u64>)>,
+    // **What the transport row's health capsule reads**, off the same drain
+    // and for the same reason the reporter above is fed from here:
+    // `Deck::events` empties the channel, so a second reader that came back
+    // for it would find nothing.
+    //
+    // **Kept across frames rather than rewritten per frame**, which is what
+    // makes it a different reading from the lane beside it: a row leaves the
+    // lane when nothing is outstanding, and the last verdict there was does
+    // not stop having happened. `Verdict::Settled` and `Verdict::Nothing`
+    // therefore leave this alone — the watchdog saying a version held the
+    // budget is not a write, and a lost build worker is not one either.
+    health: &mut Option<view::Stage>,
 ) -> bool {
     let mut landed = false;
     for slot in 0..deck.slot_count() {
@@ -6925,7 +6976,18 @@ fn staging(
                 Verdict::Waiting(_, view::Stage::Landed | view::Stage::RolledBack)
             );
             match verdict(&event) {
-                Verdict::Waiting(label, stage) => settle(out, slot, label, stage),
+                Verdict::Waiting(label, stage) => {
+                    // **The newest verdict of the drain wins, whichever slot
+                    // it came from.** The capsule is one word with no address
+                    // on it — `console.html` draws it beside the frame
+                    // readout and gives it no deck letter — so what it can
+                    // honestly say is *what the last write did*, and one save
+                    // of the pair this program watches builds every slot.
+                    // Which slot each verdict was about is the lane's, one row
+                    // per deck, and that is why both are drawn.
+                    *health = Some(stage);
+                    settle(out, slot, label, stage)
+                }
                 // Nothing is outstanding on this slot any more, so it has no
                 // row. `retain` rather than an index: the rows are as many as
                 // the deck has slots and at most one of them is this one.
@@ -10719,8 +10781,21 @@ impl ApplicationHandler for App {
                 // operator watches to tell a lock from a coincidence. See
                 // `measure_audio`.
                 measure_audio(&mut gfx.audio, &mut gfx.engine.deck, self.costs.rate_now());
-                self.readout.view.transport =
-                    transport(&gfx.engine.deck, &self.costs, gfx.budget_ms, live);
+                // **The verdict it carries is the one `staging` left behind
+                // below**, which is one frame back: the drain runs after this
+                // line and the events it drains were emitted by the previous
+                // frame's `compose` anyway, so the capsule reaches the screen
+                // on the frame after the lane's row does. The row is drawn at
+                // `BEAT_STALENESS` for as long as there is one, so that frame
+                // is at most 24.67 ms away and there is always another —
+                // P-0094, and `View::transport_declares`.
+                self.readout.view.transport = transport(
+                    &gfx.engine.deck,
+                    &self.costs,
+                    gfx.budget_ms,
+                    live,
+                    self.readout.health,
+                );
                 // **And what the two look controls at the end of that row
                 // read**, beside the frame they are about. It is the look this
                 // frame is committed under, so the capsule names the operator
@@ -10780,6 +10855,7 @@ impl ApplicationHandler for App {
                     &mut self.readout.view.staging,
                     self.keeping.mcp.as_ref(),
                     &mut took,
+                    &mut self.readout.health,
                 ) {
                     inspector(
                         &gfx.engine.deck,
@@ -12094,6 +12170,9 @@ mod tests {
             fps: Some(58.0),
             frame_ms: 12.4,
             budget_ms: Some(16.6),
+            // The mock's `landed`, so the group is measured against the row
+            // the mock draws rather than a shorter one.
+            health: Some(view::Stage::Landed),
         });
         let mut told = AudioIn::NONE;
         told.device = Some("Scarlett 2i2".to_owned());
@@ -18545,11 +18624,20 @@ mod gpu {
         // boundary, which is `begin_frame`.
         let mut rows: Vec<view::Candidate> = Vec::new();
         let mut took: Vec<(usize, Option<u64>)> = Vec::new();
+        // The transport's health capsule, off the same drain, so this test
+        // reads both halves of what one verdict writes.
+        let mut health: Option<view::Stage> = None;
         let deadline = Instant::now() + Duration::from_secs(30);
         while took.is_empty() && Instant::now() < deadline {
             std::thread::sleep(Duration::from_millis(50));
             drop(engine.deck.begin_frame(&gpu.device, &gpu.queue));
-            staging(&mut engine.deck, &mut rows, keeping.mcp.as_ref(), &mut took);
+            staging(
+                &mut engine.deck,
+                &mut rows,
+                keeping.mcp.as_ref(),
+                &mut took,
+                &mut health,
+            );
         }
         assert!(
             !took.is_empty(),
@@ -18563,6 +18651,22 @@ mod gpu {
             row.stage,
             view::Stage::Landed,
             "the build did not land, so this test is not about what it says it is"
+        );
+
+        // **And the transport's health capsule, which is the same drain's
+        // other reader.** A `swap::Event` cannot be made without a device, so
+        // this is where *the window writes down what the last write did* is
+        // checked at all: `karakuri-console` can be asked whether a capsule
+        // draws the verdict it was handed, and nothing in that crate can be
+        // asked whether this program hands it one. A version that drew the
+        // capsule perfectly and never filled `Readout::health` would leave
+        // every console test green — which is the seam `mod press_handler`
+        // exists for, on the readout's side, where the scan it uses cannot
+        // see anything at all.
+        assert_eq!(
+            health,
+            Some(view::Stage::Landed),
+            "the lane was told what the build did and the transport row was not"
         );
 
         // **The same sentence, out of the server.** `swap_outcome` answers with
@@ -21042,6 +21146,7 @@ mod gpu {
             fps: Some(58.0),
             frame_ms: 12.4,
             budget_ms: Some(16.6),
+            health: Some(view::Stage::Landed),
         });
         view.look = Some(look(&engine.look));
         assert_eq!(
