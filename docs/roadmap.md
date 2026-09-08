@@ -953,7 +953,8 @@ against the badge.
 **Blocked on.** Both rows, and this list said six items when three of them were already answered.
 Two were built on 2026-08-30, nine days before this section was last rewritten, and one belongs to
 another milestone. What is left is one decision, one dependency somebody else owns, and one item
-this list never named at all.
+this list never named at all. **A second unnamed one has since been built and is item 8**, which
+is what the *Two findings* paragraph below was carrying instead of this list.
 
 1. **A store the build path can write — built.** This said `watched()` *"calls neither
    `Watch::storing_to` nor `Watch::snapshotting_to`, which its own documentation says outright"*.
@@ -990,6 +991,13 @@ this list never named at all.
    has none either. *"Nothing in the list is a drawing — the row is already painted"* was true about
    paint and false about reach: with item 4 decided, both controls still owe a probe, a table entry
    and an arm in the press handler.
+8. **A source the checker turned down had nowhere to say so — built.** `Source::poll` answered
+   `Option<Request>`, so a watcher that refused a `.kir` printed its diagnostics and returned the
+   same answer a poll that saw no edit returns; the lane drew nothing. It answers `Option<Polled>`
+   now, `swap::Event::SourceRefused` is the outcome, and the lane and the health capsule both say
+   `did not compile`
+   ([ADR-0310](adr/0310-a-source-can-say-it-refused-and-the-lane-draws-it.md)). It was never in
+   this list, which is why it is here and why the paragraph below it says what is left.
 
 *Keep a candidate* waits on item 4 and item 7 and has no hazard — it writes nothing, and what it
 changes is the lane. *Put a node's previous version back* waits on 7; item 6 is built, and **the
@@ -1004,22 +1012,33 @@ and this lane's control would reach it with the other arm.
 is wired. What the lane still omits is the node address, `origin`, the timestamp and the head's
 count, each named at the code and none of them a row on the page.
 
-**Two findings this lane exists for, and neither has a row anywhere.** After
+**Two findings this lane exists for, and one of them has a row now.** After
 `Event::RolledBack` the watchdog puts the previous *Set* back on screen and **does not put the
 previous file back**, while the watcher re-reads every file on every rebuild — so the picture is
 the old version, the disk is the over-budget one, and the next unrelated save swaps it in again.
 **The rollback itself is said in two places now** — the lane draws a `rolled back` row and the
 transport's health capsule draws the same word — so what is unsaid is narrower than this used to
 claim: that the *file* still holds the version that was refused, and that the next save of anything
-in that slot brings it back. And **a checker refusal reaches no row at all**: a
-`.kir` the checker turns down produces no `Request`, so the disagreement an operator most wants
-to see is said on stderr. Closing the second is an engine change, `Source::poll` having no way to
-say *I refused*.
+in that slot brings it back. And **a checker refusal reached no row at all** until 2026-09-08: a
+`.kir` the checker turned down produced no `Request`, so the disagreement an operator most wants
+to see was said on stderr. Closing it was the engine change this said it was — `Source::poll`
+having no way to say *I refused*.
 
-**Both are blockers 7 and 8 rather than prose, and the first is a *Live safety* item as well.**
-Neither has a row, so this bay's exit — the two rows' badges — can be met with both still true, and
-a picture that disagrees with the disk while nothing says so is the one thing that section refuses.
-The lane exists to say exactly these two things.
+**The second of the two is closed.** `Source::poll` answers `Polled::Build` or
+`Polled::Refused`, the deck reports the second as `swap::Event::SourceRefused` beside its four
+other verdicts, and the lane draws a row on a fourth word — `did not compile`, carrying the first
+diagnostic and a count of the rest, with the whole set still going to stderr and to a model over
+`--mcp`. The transport's health capsule says it too, and
+[ADR-0310](adr/0310-a-source-can-say-it-refused-and-the-lane-draws-it.md) is the record, with the
+two things it deliberately leaves: the *node* the refusal is about is still not on the row, which
+is item 4 above, and a refusal arriving while that slot has a candidate on trial waits for the
+verdict.
+
+**The first is an item in the list above rather than prose, and it is a *Live safety* item as
+well.** It has no row, so this bay's exit — the two rows' badges — can be met with it still true,
+and a picture that disagrees with the disk while nothing says so is the one thing that section
+refuses. This said *both* and *blockers 7 and 8* until 2026-09-08. The lane exists to say both of
+these things and it now says one of them.
 
 **The bay's prose, as tooltips.** The staging half of *Library, and staging under it* — a candidate
 waits whether it came from you or from an agent, and a rejected one costs nothing — and *The staging

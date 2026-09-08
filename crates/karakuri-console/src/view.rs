@@ -12727,38 +12727,38 @@ fn filters_into(ui: &Ui, pal: &Palette, bay: &LibraryBay, at: Filters<'_>) {
 /// the source.
 const STAGING_TITLE: &str = "Staging";
 
-/// **Where a candidate stands, in the three words `console.html` uses for
+/// **Where a candidate stands, in the four words `console.html` uses for
 /// it** — *"Whether it is on screen: landed, rolled back for costing too much,
-/// or refused"*.
+/// refused, or did not compile"*.
 ///
 /// # Two readers, and one set of words
 ///
 /// This is the Staging lane's [`Candidate::stage`] and the transport row's
 /// [`Transport::health`]. The page gives them one sentence each and they are
-/// the same three answers, so a second enum for the capsule would be
+/// the same four answers, so a second enum for the capsule would be
 /// `docs/contributing.md` §4's *a name meaning two things*. What differs is
 /// **which** verdict each is showing, not what a verdict is: a lane row is a
 /// slot whose verdict is still outstanding and leaves on `Accepted`, and the
 /// capsule is the last verdict there was and stands after the lane empties.
 ///
-/// # One variant per `swap::Event` a verdict is outstanding on, and no fourth
+/// # One variant per `swap::Event` a verdict is outstanding on, and no fifth
 ///
-/// `karakuri_engine::swap::Event` has five variants and this has three. The
+/// `karakuri_engine::swap::Event` has six variants and this has four. The
 /// two that are not here are the two that leave nothing outstanding:
 /// `Accepted` is the watchdog saying the version held the budget, at which
 /// point the file and the picture agree and the row leaves the lane; and
 /// `WorkerLost` is about the *worker* rather than about a version — nothing
 /// will be built again, and no candidate changed state when it happened.
 ///
-/// **`Refused` is a build that failed and not a source the checker turned
-/// down**, which is the page's own sentence — *"Refused on a row is a build
-/// that failed"*. A `.kir` that does not check never reaches the engine
-/// at all: `karakuri_environment::watch::Watch::poll` prints the diagnostics
-/// on the worker thread and returns `None`, so no `Request` is made, no
-/// `Event` is emitted, and **this lane cannot draw it** — which is a real gap,
-/// because a source the checker refused is exactly a file that disagrees with
-/// the picture. What `Event::Rejected` carries is a `SetError`: the files
-/// checked, and the *Set* they were assembled into would not build.
+/// **`Refused` and `NotCompiled` are two states and not two spellings**, which
+/// is the page's own distinction: *"Refused on a row is a build that failed"*
+/// — the files checked and the Set they were assembled into would not build —
+/// against a `.kir` the *checker* turned down, where there was never a Set to
+/// build. The second of them reached no row at all until 2026-09-08, because
+/// `karakuri_environment::watch::Watch::poll` printed its diagnostics and
+/// answered *nothing to build*; it now answers
+/// `karakuri_engine::swap::Polled::Refused` and the deck reports it
+/// (`docs/adr/0310-a-source-can-say-it-refused-and-the-lane-draws-it.md`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Stage {
     /// `Event::Swapped` — the build is the live Set and is on screen. The
@@ -12780,14 +12780,24 @@ pub enum Stage {
     /// running Set is still running, with its `t` and its live count
     /// untouched, and the disk holds material that does not assemble.
     Refused,
+    /// `Event::SourceRefused` — the checker turned the source down, so nothing
+    /// was built at all: no Set, no candidate, and **no version**, because the
+    /// edit history is gated on compiling
+    /// (`docs/adr/0089-history-is-gated-on-compiling-not-on-landing.md`). The
+    /// picture is whatever was already playing and the disk holds material
+    /// that does not check.
+    ///
+    /// **It is the one row that carries a sentence** — see
+    /// [`Candidate::said`], which is why.
+    NotCompiled,
 }
 
 impl Stage {
     /// **The word drawn at the far end of a candidate row, and the word in
     /// the transport's health capsule**, which is `console.html`'s and the
-    /// mock's own: the capsule names the same three answers in the same
-    /// words — *"the other answers are rolled back for cost, and failed to
-    /// build"*.
+    /// mock's own: the capsule names the same four answers in the same
+    /// words — *"the other answers are rolled back for cost, failed to
+    /// build, and did not compile"*.
     ///
     /// **That capsule is in the transport row and this said *the deck head*
     /// until 2026-09-08**, which was wrong rather than stale: there is no
@@ -12798,6 +12808,7 @@ impl Stage {
             Stage::Landed => "landed",
             Stage::RolledBack => "rolled back",
             Stage::Refused => "refused",
+            Stage::NotCompiled => "did not compile",
         }
     }
 }
@@ -12811,9 +12822,13 @@ impl Stage {
 /// built, because a `karakuri_engine::Request` restates every node of a slot —
 /// so a verdict is over a build rather than over a node. The label is what the
 /// build calls itself (every node's `proc` name, joined), and the slot is
-/// which `HotSwap` the verdict came out of. Those two and the verdict are the
-/// three fields here; see [`staging`] for the four things the mock's and the
-/// page's row have that are not.
+/// which `HotSwap` the verdict came out of. Those two and the verdict are
+/// three of the four fields here; see [`staging`] for the four things the
+/// mock's and the page's row have that are not.
+///
+/// **The fourth is [`said`](Self::said)**, and it is here on the same rule
+/// rather than against it: `Event::SourceRefused` carries the diagnostics, so
+/// they are a thing the wire has and not a thing this crate derives.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Candidate {
     /// **Which deck slot the verdict is about**, drawn as
@@ -12857,6 +12872,33 @@ pub struct Candidate {
     pub name: String,
     /// Whether it is on screen — [`Stage`].
     pub stage: Stage,
+    /// **What the checker said**, one line per diagnostic, and empty on every
+    /// stage but [`Stage::NotCompiled`].
+    ///
+    /// # Why this row carries a sentence when no other one does
+    ///
+    /// The three verdicts above it are about a build the operator can see the
+    /// result of: a landed one is on screen, a rolled-back one has the
+    /// previous Set on screen, and a refused one names a Set that would not
+    /// assemble. A source the checker turned down has produced nothing to
+    /// look at, so the word alone tells an operator that a save did not take
+    /// and nothing whatever about why. *A refusal carries what the next
+    /// attempt needs* (`docs/principles/0083-…`), and on a lane the row is
+    /// where it can carry it.
+    ///
+    /// # The whole list, and the row draws the first of it
+    ///
+    /// Every diagnostic in a file is reported at once so a repair is one round
+    /// trip, and the terminal and the MCP surface both get the lot. A row is
+    /// one line, so [`staging_into`] draws the first and says how many others
+    /// there are. The list is here rather than the first-and-a-count because
+    /// the count is the list's own length, and two fields that must agree are
+    /// two fields that can stop agreeing.
+    ///
+    /// **Formatted where the file was read**, which is the build worker: these
+    /// are the strings `karakuri_engine::swap::Refusal` carried, moved through
+    /// the event rather than built on the frame they arrive on.
+    pub said: Vec<String>,
 }
 
 /// **The Staging lane, laid out**: where the candidate rows go and how many of
@@ -12867,7 +12909,9 @@ pub struct Candidate {
 /// `console.html` specifies a row as four things — the node, what the
 /// procedure calls itself, whether it is on screen, and when it arrived — and
 /// the mock draws a fifth with no value behind it. This draws **the deck, the
-/// name and the verdict**, and [ADR-0200](../../../docs/adr/0200-a-bays-first-pass-draws-the-values-that-exist-and-omits-the-rest.md)
+/// name and the verdict**, and, on the one verdict that has produced nothing
+/// to look at, **what the checker said** ([`Candidate::said`]), and
+/// [ADR-0200](../../../docs/adr/0200-a-bays-first-pass-draws-the-values-that-exist-and-omits-the-rest.md)
 /// is why the rest is omitted outright rather than drawn hollow.
 ///
 /// - **The node — `L4:0`, the address the inspector writes on a node head.**
@@ -12918,9 +12962,9 @@ pub struct Candidate {
 ///
 /// The rows are the caller's ([`View::staging`]), read off
 /// `karakuri_engine::deck::Deck`'s per-slot events: a slot gets a row when its
-/// newest event is `Swapped`, `Rejected` or `RolledBack`, and loses it on
-/// `Accepted` — the watchdog saying the version held the budget, which is the
-/// one outcome that leaves the file and the picture agreeing.
+/// newest event is `Swapped`, `Rejected`, `RolledBack` or `SourceRefused`, and
+/// loses it on `Accepted` — the watchdog saying the version held the budget,
+/// which is the one outcome that leaves the file and the picture agreeing.
 ///
 /// **What that stands in for is the operator's own verdict, and it is not the
 /// same judgement.** *Keeping* is taste and the watchdog's verdict is cost;
@@ -13071,6 +13115,11 @@ fn staging_box(region: Rect, total: usize) -> Option<StagingBay> {
 ///   to it in the mock. The mock puts the producer there and this puts the
 ///   verdict, for the reason [`staging`] gives: the producer has no value
 ///   behind it and the verdict is the whole of what the row is for.
+/// - **what the checker said**, in the same faint and at the same size,
+///   between the name and the verdict — drawn only where there is one, which
+///   is [`Stage::NotCompiled`] and nothing else. It is not a term from the
+///   mock, which draws no such row; it is [`Candidate::said`], and the
+///   argument for it is there.
 ///
 /// **A name too long for the track is clipped rather than elided**, which is
 /// the mock's own answer — `.cand` sets no `text-overflow` — and the clip is
@@ -13097,6 +13146,7 @@ fn staging_into(ui: &Ui, pal: &Palette, bay: &StagingBay, candidates: &[Candidat
         );
 
         let name = painter.layout_job(span_at(&candidate.name, size::BASE, pal.dim));
+        let named = name.size().x;
         painter.galley(
             Pos2::new(
                 row.min.x + size::CAND_PAD_X + after + size::CAND_GAP,
@@ -13105,6 +13155,35 @@ fn staging_into(ui: &Ui, pal: &Palette, bay: &StagingBay, candidates: &[Candidat
             name,
             pal.dim,
         );
+
+        // **What the checker said, after the name and in the faint** — see
+        // [`Candidate::said`]. The first diagnostic, with a count of the
+        // others after it, at the same size the verdict is drawn at: this is
+        // the row's second reading and not its first, and a line of `2:8:
+        // parse: unknown kind` set in the name's size would read as the
+        // material's name.
+        //
+        // Drawn before the verdict and inside the same clip, so a long
+        // diagnostic goes under the word rather than over it — the rule the
+        // name is already drawn under, and for its reason: the verdict is the
+        // one thing in the row that must stay readable.
+        if let Some(first) = candidate.said.first() {
+            let rest = candidate.said.len() - 1;
+            let text = match rest {
+                0 => first.clone(),
+                1 => format!("{first} · 1 more"),
+                more => format!("{first} · {more} more"),
+            };
+            let said = painter.layout_job(span_at(&text, size::CAND_WHO_SIZE, pal.faint));
+            painter.galley(
+                Pos2::new(
+                    row.min.x + size::CAND_PAD_X + after + size::CAND_GAP + named + size::CAND_GAP,
+                    row.center().y - said.size().y * 0.5,
+                ),
+                said,
+                pal.faint,
+            );
+        }
 
         let word = painter.layout_job(span_at(
             candidate.stage.word(),

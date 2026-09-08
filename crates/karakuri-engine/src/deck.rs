@@ -1187,8 +1187,9 @@ impl Deck {
             // is a measurement of a different image, on exactly the terms a
             // pre-resize measurement is, so it is retired on those terms too.
             // Nothing else in `Event` changes the material: `Accepted` only
-            // ends a trial, and `Rejected` and `WorkerLost` change nothing at
-            // all.
+            // ends a trial, and `Rejected`, `SourceRefused` and `WorkerLost`
+            // change nothing at all — the last of the three because nothing
+            // was built for it in the first place.
             let replaced = slot.swap.pending_events()[seen..]
                 .iter()
                 .any(|e| matches!(e, Event::Swapped { .. } | Event::RolledBack { .. }));

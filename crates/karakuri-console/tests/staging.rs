@@ -17,7 +17,7 @@
 //! deleting the argument would make a suite fail, and what would be added back
 //! is what the page refuses.
 //!
-//! Six things:
+//! Seven things:
 //!
 //! 1. **With nothing outstanding the bay draws the shapes of a bay with no
 //!    body**, asserted against the Sequencer bay — the lane's twin in this
@@ -42,10 +42,17 @@
 //! 6. **Nothing in it is a control**, asked of a full lane as well as an empty
 //!    one — a row is a readout, and *keep* and *put a node's previous version
 //!    back* are the two controls this pass does not add.
+//! 7. **A row the checker turned down carries what it said**, which is the
+//!    one row that draws a sentence: nothing was built for it, so the word
+//!    alone says a save did not take and nothing about why (ADR-0310).
 //!
-//! And the three words a row can end in are the manual's own, which is
-//! ADR-0159 asked of this bay: *"landed, rolled back for costing too much, or
-//! refused by the checker"*.
+//! And the four words a row can end in are the manual's own, which is
+//! ADR-0159 asked of this bay: *"whether it is on screen: landed, rolled back
+//! for costing too much, refused, or did not compile"*. **This quoted
+//! *refused by the checker* until 2026-09-08**, which was a paraphrase of a
+//! sentence the page does not have and had the two refusals the other way
+//! round: *refused* is a build that failed, and the checker's is the fourth
+//! word.
 //!
 //! None of it needs a window or a device.
 
@@ -99,6 +106,24 @@ fn candidate(deck: usize, name: &str, stage: Stage) -> Candidate {
         deck,
         name: name.to_owned(),
         stage,
+        // **Empty, because every verdict but one is about a build.** The row
+        // that carries a sentence is `Stage::NotCompiled`'s, and
+        // [`refused_candidate`] is the one that builds it.
+        said: Vec::new(),
+    }
+}
+
+/// One candidate the checker turned down, with what it said.
+///
+/// `karakuri_engine::swap::Refusal` carries one line per diagnostic, formatted
+/// on the build worker; these are the shape those lines have — where, which
+/// stage, and what.
+fn refused_candidate(deck: usize, name: &str, said: &[&str]) -> Candidate {
+    Candidate {
+        deck,
+        name: name.to_owned(),
+        stage: Stage::NotCompiled,
+        said: said.iter().map(|line| (*line).to_owned()).collect(),
     }
 }
 
@@ -474,14 +499,116 @@ fn a_row_is_a_well_and_three_things_in_it() {
     );
 }
 
-/// **The three words a row can end in are the manual's own**, which is
+/// **A row the checker turned down draws what it said, and says how many more
+/// there are.**
+///
+/// The three verdicts above this one are about a build an operator can see the
+/// result of; this one has produced nothing to look at, so the word alone says
+/// that a save did not take and nothing whatever about why — and *a refusal
+/// carries what the next attempt needs*
+/// (`docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md`).
+///
+/// **Read off the frame rather than counted**, unlike the row test above:
+/// what is being checked is that a particular sentence is painted, and a
+/// version that laid the diagnostic out and drew a blank galley would satisfy
+/// any count. The count is asserted beside it, because *one* diagnostic and
+/// *four* are the same row otherwise, and the second is the one where a
+/// repair takes more than one edit.
+#[test]
+fn a_row_the_checker_turned_down_draws_the_first_diagnostic_and_counts_the_rest() {
+    let mut panel = console(PLAUSIBLE);
+    let mut view = View::new(Room::Day);
+    let lane = to_egui(rect_of(panel.layout(), "staging"));
+
+    let words = |view: &mut View, panel: &mut Panel| -> Vec<String> {
+        let ctx = drawn_once();
+        let mut out = ctx.run_ui(egui::RawInput::default(), |ui| view.draw(ui, panel));
+        out.textures_delta.clear();
+        out.shapes
+            .into_iter()
+            .filter(|clipped| {
+                let bounds = clipped.shape.visual_bounding_rect();
+                bounds.is_finite() && lane.contains_rect(bounds)
+            })
+            .filter_map(|clipped| match clipped.shape {
+                egui::Shape::Text(text) => Some(text.galley.text().to_owned()),
+                _ => None,
+            })
+            .collect()
+    };
+
+    // One diagnostic: the line itself, and no count beside it — there is
+    // nothing to count.
+    view.staging = vec![refused_candidate(
+        1,
+        "drift_shell.kir",
+        &["3:5: parse: expected `}`"],
+    )];
+    let one = words(&mut view, &mut panel);
+    assert!(
+        one.iter().any(|line| line == "3:5: parse: expected `}`"),
+        "the row drew {one:?} and the checker said `3:5: parse: expected `}}``"
+    );
+    assert!(
+        one.iter().any(|line| line == "did not compile"),
+        "the row drew {one:?} and the verdict is `did not compile`"
+    );
+    assert!(
+        !one.iter().any(|line| line.contains("more")),
+        "one diagnostic and the row counted others: {one:?}"
+    );
+
+    // Three: the first of them, and two more said as a number rather than
+    // drawn — a row is one line.
+    view.staging = vec![refused_candidate(
+        1,
+        "drift_shell.kir",
+        &[
+            "3:5: parse: expected `}`",
+            "7:1: type: unknown builtin `curl2`",
+            "9:2: cost: 6344 ops/element exceeds the 4096 ops/element ceiling",
+        ],
+    )];
+    let three = words(&mut view, &mut panel);
+    assert!(
+        three
+            .iter()
+            .any(|line| line.starts_with("3:5: parse: expected `}`")),
+        "the row drew {three:?} and the first diagnostic is `3:5: parse: expected `}}``"
+    );
+    assert!(
+        three.iter().any(|line| line.contains("2 more")),
+        "three diagnostics and the row does not say two are not drawn: {three:?}"
+    );
+    assert!(
+        !three.iter().any(|line| line.contains("curl2")),
+        "the second diagnostic was drawn on a row that has room for one: {three:?}"
+    );
+
+    // **And no other row carries one.** A landed candidate with the same name
+    // draws the name and the verdict and nothing else, which is what says the
+    // sentence belongs to the stage rather than to the row.
+    view.staging = vec![candidate(1, "drift_shell.kir", Stage::Landed)];
+    let landed = words(&mut view, &mut panel);
+    assert!(
+        !landed.iter().any(|line| line.contains("parse")),
+        "a landed row drew a diagnostic: {landed:?}"
+    );
+}
+
+/// **The four words a row can end in are the manual's own**, which is
 /// ADR-0159 asked of this bay: the console's words are the manual's.
 ///
 /// `console.html` says what a row's third thing is — *"whether it is on
-/// screen: landed, rolled back for costing too much, or refused by the
-/// checker"* — and the deck head's `landed` pill names the same three answers
+/// screen: landed, rolled back for costing too much, refused, or did not
+/// compile"* — and the transport's health capsule names the same four answers
 /// in the same words. A word invented here would be the specification written
 /// backwards.
+///
+/// **The fourth is the one this most needs to hold.** *Refused* is a build
+/// that failed and *did not compile* is a source the checker turned down, and
+/// the two are one keystroke away from being spelled the same on this side and
+/// argued as different on the page (ADR-0310).
 #[test]
 fn the_verdicts_are_the_manuals_words() {
     let page = std::fs::read_to_string(
@@ -489,7 +616,12 @@ fn the_verdicts_are_the_manuals_words() {
     )
     .expect("the console page is the specification");
     let mut asked = 0;
-    for stage in [Stage::Landed, Stage::RolledBack, Stage::Refused] {
+    for stage in [
+        Stage::Landed,
+        Stage::RolledBack,
+        Stage::Refused,
+        Stage::NotCompiled,
+    ] {
         let word = stage.word();
         assert!(
             page.contains(word),
@@ -497,12 +629,13 @@ fn the_verdicts_are_the_manuals_words() {
         );
         asked += 1;
     }
-    assert_eq!(asked, 3, "not every verdict was asked");
-    // And they are three words rather than one written three times.
+    assert_eq!(asked, 4, "not every verdict was asked");
+    // And they are four words rather than one written four times.
     let words = [
         Stage::Landed.word(),
         Stage::RolledBack.word(),
         Stage::Refused.word(),
+        Stage::NotCompiled.word(),
     ];
     for (index, word) in words.iter().enumerate() {
         assert!(

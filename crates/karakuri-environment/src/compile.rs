@@ -30,16 +30,59 @@ pub fn load(path: &Path) -> Result<(Checked, String), String> {
     Ok((checked, src))
 }
 
+/// **Every diagnostic from one refused file, in the two forms it has readers
+/// for.**
+///
+/// A terminal takes the whole of it — the message, the line under it and the
+/// caret, and the hint where there is one — and that is what every caller
+/// before this one wanted. A *row* cannot: the Staging lane draws one line per
+/// candidate, so what it can hold is the head of the first diagnostic and a
+/// count of the rest ([`karakuri_engine::swap::Refusal`], and
+/// `docs/principles/0083-…`, whose one-round-trip half is what keeps the
+/// whole report on the terminal and on the MCP surface rather than trimming it
+/// everywhere).
+///
+/// **[`Diagnostics::said`] is the first line of each rendered diagnostic and
+/// not a second rendering of it.** `IrError::render` writes *line:col: stage:
+/// message* and then the source line, the caret and the hint, so the head of
+/// what a terminal reads and the whole of what a row reads are one derivation
+/// rather than two that can drift
+/// (`docs/principles/0087-name-the-property-never-the-shape.md`).
+pub struct Diagnostics {
+    /// Rendered against the source it came from, diagnostics separated by a
+    /// blank line — what was printed before this type existed, unchanged.
+    pub report: String,
+    /// The same diagnostics, one line each: where, which stage, and what.
+    pub said: Vec<String>,
+}
+
+impl std::fmt::Display for Diagnostics {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.report)
+    }
+}
+
 /// The same five stages, over source already in hand rather than a path.
 ///
 /// A Set file's procedures arrive as bytes out of the store, so they have no
 /// path to name in a diagnostic; everything else about validating them is
 /// identical, and it is the same function.
 pub fn check(src: &str) -> Result<Checked, String> {
+    compile(src).map_err(|diagnostics| diagnostics.report)
+}
+
+/// [`check`], with the diagnostics kept apart rather than joined.
+///
+/// **For the one caller that has a row to draw them on**, which is
+/// [`crate::watch::Watch`]: a refusal it used to print and drop is now an
+/// outcome the deck reports and the Staging lane draws, and the lane needs the
+/// first diagnostic on its own. Everything else about the two is the same
+/// call.
+pub fn diagnose(src: &str) -> Result<Checked, Diagnostics> {
     compile(src)
 }
 
-fn compile(src: &str) -> Result<Checked, String> {
+fn compile(src: &str) -> Result<Checked, Diagnostics> {
     let proc = karakuri_ir::parse(src).map_err(|e| render(&e, src))?;
     let checked = karakuri_ir::check::check(&proc).map_err(|e| render(&e, src))?;
     let cost = karakuri_ir::cost::estimate(&checked).map_err(|e| render(&e, src))?;
@@ -69,12 +112,21 @@ fn compile(src: &str) -> Result<Checked, String> {
     Ok(checked)
 }
 
-fn render(errors: &[karakuri_ir::IrError], src: &str) -> String {
-    errors
+fn render(errors: &[karakuri_ir::IrError], src: &str) -> Diagnostics {
+    let rendered: Vec<String> = errors.iter().map(|e| e.render(src)).collect();
+    // **The head of each rendered diagnostic**, which `IrError::render` writes
+    // as `line:col: stage: message` before the source line and the caret. Taken
+    // from the render rather than re-derived, so the sentence a row draws
+    // cannot come to disagree with the one a terminal prints — there is one
+    // formatting of a diagnostic in this workspace and this is a slice of it.
+    let said = rendered
         .iter()
-        .map(|e| e.render(src))
-        .collect::<Vec<_>>()
-        .join("\n\n")
+        .map(|d| d.lines().next().unwrap_or_default().to_owned())
+        .collect();
+    Diagnostics {
+        report: rendered.join("\n\n"),
+        said,
+    }
 }
 
 /// A `.kir` named on the command line, with the name the operator gave it.

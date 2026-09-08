@@ -1040,6 +1040,7 @@ fn the_health_capsule_draws_the_verdict_and_nothing_where_there_is_none() {
         (Stage::Landed, "landed"),
         (Stage::RolledBack, "rolled back"),
         (Stage::Refused, "refused"),
+        (Stage::NotCompiled, "did not compile"),
     ] {
         view.transport = Some(Transport {
             health: Some(stage),
@@ -1052,7 +1053,7 @@ fn the_health_capsule_draws_the_verdict_and_nothing_where_there_is_none() {
         );
         // And exactly that one of the three, which is what says the match is
         // a mapping rather than a constant that happens to be right once.
-        for other in ["landed", "rolled back", "refused"] {
+        for other in ["landed", "rolled back", "refused", "did not compile"] {
             assert_eq!(
                 other == word,
                 drawn.iter().any(|line| line == other),
@@ -1067,7 +1068,7 @@ fn the_health_capsule_draws_the_verdict_and_nothing_where_there_is_none() {
         ..mock()
     });
     let quiet = words(&mut view, &mut panel);
-    for word in ["landed", "rolled back", "refused"] {
+    for word in ["landed", "rolled back", "refused", "did not compile"] {
         assert!(
             !quiet.iter().any(|line| line == word),
             "nothing has been written and the row says `{word}`: {quiet:?}"
@@ -1106,6 +1107,10 @@ fn the_capsule_is_washed_only_where_the_build_is_on_screen() {
         (Stage::Landed, true),
         (Stage::RolledBack, false),
         (Stage::Refused, false),
+        // The checker turned the source down, so nothing was built and the
+        // picture did not move — which is as far from *this is working* as a
+        // verdict gets.
+        (Stage::NotCompiled, false),
     ] {
         let values = Transport {
             health: Some(stage),

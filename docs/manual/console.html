@@ -97,7 +97,7 @@
             <span data-tip="Frame time against the budget. 12.4 ms of 16.6 &mdash; there is headroom. The budget is the display&#39;s own refresh interval, read off the window when it opens: the surface waits for the vsync, so a frame longer than one interval misses one, and that is the whole of what the number means. It is not the 20 ms a candidate Set has to hold to survive a swap &mdash; that one is measured offscreen at a fixed size, as a median over a window of frames, and what became of a write is the reading beside this one rather than this. The rate goes when nothing is live and the frame time stays, because a rate is a claim about now and a frame time is a fact about a frame that has already been drawn; the row drops the words it has no number for rather than printing a zero. A readout and not a control: nothing here takes a press. &#8853; MIDI: unassigned &mdash; a reading is not an operation, so there is no target for a map line to name.">
               <span class="val">58</span><span style="color:var(--c-faint)"> fps &middot; </span><span class="val">12.4</span><span style="color:var(--c-faint)">/16.6 ms</span>
             </span>
-            <span class="pill armed" data-tip="The last procedure written landed at a frame boundary and is on screen. The other answers are rolled back for cost, and failed to build. The rollback happens on its own whether or not anything is watching, and what was missing was any way to see that it had: unbreakable on stage is only reassuring if it is visible. It is also the one answer a write cannot give you itself, because a write that returns cleanly compiled, which is not the same as being on screen. Drawn as a capsule and a readout all the same: nothing here takes a press, and what makes a thing a control in this row is that a press on it asks for something. &#8853; MIDI: unassigned &mdash; a reading is not an operation, so there is no target for a map line to name.">landed</span>
+            <span class="pill armed" data-tip="The last procedure written landed at a frame boundary and is on screen. The other answers are rolled back for cost, failed to build, and did not compile &mdash; the last of them being the checker turning the source down, where nothing was built and the picture did not move. The rollback happens on its own whether or not anything is watching, and what was missing was any way to see that it had: unbreakable on stage is only reassuring if it is visible. It is also the one answer a write cannot give you itself, because a write that returns cleanly compiled, which is not the same as being on screen. Drawn as a capsule and a readout all the same: nothing here takes a press, and what makes a thing a control in this row is that a press on it asks for something. &#8853; MIDI: unassigned &mdash; a reading is not an operation, so there is no target for a map line to name.">landed</span>
             <span class="pill on" data-tip="Recording this session to the store as it happens &mdash; drawn lit while one is running, and plain while none is. It is one control with two ends: click to start a recording, click again to stop it, and the pill says which the next press will be before you make it. A recording is filed under the time you started it and never under a name you type, because a second head written into a stream that already exists is read back as edits rather than refused &mdash; so every press starts a new file. Its head is deck A&#39;s material exactly as it stands when you press, which is what makes starting one mid&#8209;performance possible at all; the other decks are not in it and will not replay. What that head cannot carry is how far anything has got: a Set file says what is playing and at what values and holds no running state, so a replay begins accumulating material again from the top rather than continuing the picture that was on screen. Neither end happens on the frame &mdash; starting one writes a Set file and opens another, stopping one waits for the writer to finish &mdash; so the press leaves, a thread does the work, and the outcome is said afterwards. The pill reads lit only once the writer exists, and a second press while either end is still in flight is refused rather than queued. &#8853; MIDI: unassigned &mdash; a map line names a slot, a range or a word from a closed list, and starting a recording is none of the three.">&#9679; rec</span>
           </div>
         </div>
@@ -152,7 +152,7 @@
               <div class="bay-head"><span>Staging</span><span>2 waiting</span></div>
               <div class="stage-list">
                 <div class="cand"><span class="dot" style="background:var(--c-lav)"></span><span>veil_02</span><span class="sep"></span><span class="who">you, 14:41</span></div>
-                <div class="cand"><span class="dot" style="background:var(--c-sun)"></span><span>drift_night&nbsp;b</span><span class="sep"></span><span class="who">agent</span></div>
+                <div class="cand" data-tip="One candidate, which is one deck slot whose newest build has a verdict outstanding. What the row ends in is that verdict, and it is one of four words. `landed` is on screen and being judged, for thirty frames against the budget. `rolled back` is the watchdog throwing a version out for cost and putting the previous Set back at the t it was parked at &mdash; and not the previous file, so the disk still holds the version that was thrown out. `refused` is a build that failed: the files checked, and the Set they were assembled into would not build. `did not compile` is the checker turning the source down before anything was built &mdash; no Set, no version, nothing in the edit history, and the picture is whatever was already playing. That last row carries the first diagnostic with the line and column it is at, and says how many more there are; every one of them goes to standard output and to the MCP surface as well, because the author of the next attempt may be a program in a loop and a refusal has to carry what that attempt needs. The row is addressed by the deck letter and not by the node: a verdict is over a build, and a rebuild restates every node of the slot. Nothing in it takes a press. &#8853; MIDI: unassigned &mdash; a row is a readout, and a map line names a slot, a range or a word from a closed list."><span class="dot" style="background:var(--c-sun)"></span><span>drift_night&nbsp;b</span><span class="sep"></span><span class="who">agent</span></div>
                 <div class="cand" style="justify-content:center;color:var(--c-faint)">a rejected candidate costs nothing</div>
               </div>
             </div>
@@ -1249,10 +1249,15 @@
         <h3>Health, in the transport</h3>
         <p>
           Frame time against the budget, and what the last write did &mdash;
-          <strong>landed, rolled back for cost, or failed to build</strong>. The
+          <strong>landed, rolled back for cost, failed to build, or did not
+          compile</strong>. The
           rollback already happens on its own; what was missing was any way to
           see that it had. Unbreakable on stage is only reassuring if it is
-          visible.
+          visible. The last of the four is the one where nothing happened at
+          all: the checker turned the source down, so no build was asked for
+          and the picture did not move &mdash; which the capsule says in the
+          plain treatment, because the mint that means <em>this is working</em>
+          is spent on the one verdict that puts a build on screen.
         </p>
       </div>
 
@@ -1585,7 +1590,8 @@
           on a node head. What the procedure <em>calls itself</em>, which is
           its own <code>proc</code> name, and the artifact's short hash where a
           file declares no name. Whether it is <em>on screen</em>: landed,
-          rolled back for costing too much, or refused, which is <em>find out
+          rolled back for costing too much, refused, or did not compile, which
+          is <em>find out
           what a write did</em> read against one node &mdash; a candidate you
           cannot see is not one you can judge. And <em>when</em> it arrived,
           formatted by the host and handed in, the way every other derived
@@ -1734,15 +1740,47 @@
           there to keep.
         </p>
         <p>
-          <strong>And there is one disagreement this lane still cannot show,
-          which is the one it would most like to.</strong> <em>Refused</em> on
-          a row is a build that failed &mdash; the files checked, and the Set
-          they were assembled into would not build. A <code>.kir</code> the
-          <em>checker</em> turns down never becomes a candidate at all: the
-          diagnostics are printed off the render thread and nothing is
-          requested, so no verdict is emitted and there is nothing for a row to
-          be about. That is exactly a file that disagrees with the picture, and
-          it is said on standard output and nowhere on this panel.
+          <strong>A source the checker turns down is the fourth word, and it
+          is the disagreement this lane was blind to.</strong>
+          <em>Refused</em> on a row is a build that failed &mdash; the files
+          checked, and the Set they were assembled into would not build. A
+          <code>.kir</code> the <em>checker</em> turns down never becomes a
+          build at all, and it used to reach no row either: the diagnostics
+          were printed off the render thread and nothing was requested, so no
+          verdict was emitted and there was nothing for a row to be about.
+          That is exactly a file that disagrees with the picture &mdash; the
+          thing this lane exists to say &mdash; and it was said on a terminal
+          nobody is watching mid&#8209;set. <strong>It is said here now, on
+          the word <em>did not compile</em></strong>, and that is a fourth
+          answer rather than a second spelling of <em>refused</em>: nothing
+          was built, so there is no candidate to keep and no version to walk
+          back to, and the picture is whatever was already playing.
+        </p>
+        <p>
+          <strong>The row carries the first diagnostic and says how many more
+          there are.</strong> A refusal is a message to the author of the next
+          attempt, and that author may be a program in a loop: it carries the
+          constraint and the numbers, and every diagnostic in a file is
+          reported at once so the repair is one round trip. A row is one line
+          and a file may be wrong in four places, so what the lane can honestly
+          hold is the first of them &mdash; the line, the column, the stage and
+          what it says &mdash; with the count of the rest beside it. The whole
+          set goes where there is room for it: to standard output, which is a
+          surface too and keeps the line it always printed, and to whoever is
+          holding the MCP end of the same write. <strong>The transport's
+          health capsule says it as well</strong>, on the same word, because
+          that capsule is <em>what the last write did</em> and this is what one
+          did.
+        </p>
+        <p>
+          <strong>And nothing is filed, which is the half worth saying at the
+          row.</strong> The edit history keeps every version that
+          <em>compiled</em>, kept whether or not it landed; a source the
+          checker turned down compiled nothing, so it is not a version, and
+          there is nothing in the store, nothing in the history, and nothing
+          for <em>put a node's previous version back</em> to reach for. The
+          slot's own last good version is still the one on screen and still the
+          newest thing filed, so a refusal costs the picture nothing at all.
         </p>
         <p>
           <strong>Rejecting is a write like any other, and can itself be rolled

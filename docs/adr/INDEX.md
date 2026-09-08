@@ -335,6 +335,7 @@ number; new records continue from the end.
 | [ADR-0307](0307-the-inspectors-pane-scrolls-and-the-position-is-the-panes-own.md) | The Inspector's pane scrolls, and the position is the pane's own | 2026-09-08 | accepted |
 | [ADR-0308](0308-the-library-bays-fifth-chip-walks-one-sets-history-and-a-row-lands-that-version-on-a-node.md) | The Library bay's fifth chip walks one Set's history, and a row lands that version on a node | 2026-09-08 | accepted |
 | [ADR-0309](0309-a-slots-files-are-published-where-its-aim-is-sent-and-the-server-reads-them-live.md) | A slot's files are published where its aim is sent, and the server reads them live | 2026-09-08 | accepted |
+| [ADR-0310](0310-a-source-can-say-it-refused-and-the-lane-draws-it.md) | A source can say it refused, and the lane draws it | 2026-09-08 | accepted |
 
 ## Retired numbers
 
