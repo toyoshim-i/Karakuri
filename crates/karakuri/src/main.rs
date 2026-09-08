@@ -9354,9 +9354,11 @@ fn mixer(deck: &Deck, names: &[String], out: &mut Vec<view::Strip>) {
 ///
 /// # What each verdict does to a row
 ///
-/// - **`Swapped`, `Rejected`, `RolledBack`** — the slot has a row, on
-///   `view::Stage`'s three words. Whether the build is on screen is exactly
-///   what separates them.
+/// - **`Swapped`, `Rejected`, `RolledBack`, `SourceRefused`** — the slot has a
+///   row, on `view::Stage`'s four words. Whether the build is on screen is
+///   what separates the first three, and the fourth is the one where there was
+///   no build: the checker turned the source down, so the row carries what it
+///   said as well as the word (ADR-0310).
 /// - **`Accepted`** — the watchdog says the version held the budget, so the
 ///   file and the picture agree and the row leaves the lane. It is not the
 ///   operator's verdict, which is *keep* and is taste rather than cost; with
@@ -9413,6 +9415,11 @@ fn staging(
     // procedure has no other way to learn that it was rolled back for cost, and
     // *it compiled* is not the same news as *it is on screen*.
     //
+    // **A checker's refusal goes out here with every diagnostic it had**, which
+    // is the round trip `docs/principles/0083-…` is about: the reader at this
+    // end is a program writing the next attempt, and the row beside it has room
+    // for the first line only.
+    //
     // **Reported from here rather than from a second drain.** `Deck::events`
     // empties the channel, so a loop that read it again would read nothing at
     // all: the lane and the server are told by one pass or one of them is told
@@ -9460,6 +9467,14 @@ fn staging(
                 verdict(&event),
                 Verdict::Waiting(_, view::Stage::Landed | view::Stage::RolledBack)
             );
+            // **The diagnostics, where there are any**, taken off the event
+            // beside the verdict rather than carried through `Verdict`: that
+            // type is `Copy` and is the mapping a CPU test asserts, and a
+            // slice on it would make it neither.
+            let said: &[String] = match &event {
+                Event::SourceRefused { said, .. } => said,
+                _ => &[],
+            };
             match verdict(&event) {
                 Verdict::Waiting(label, stage) => {
                     // **The newest verdict of the drain wins, whichever slot
@@ -9471,7 +9486,7 @@ fn staging(
                     // Which slot each verdict was about is the lane's, one row
                     // per deck, and that is why both are drawn.
                     *health = Some(stage);
-                    settle(out, slot, label, stage)
+                    settle(out, slot, label, stage, said)
                 }
                 // Nothing is outstanding on this slot any more, so it has no
                 // row. `retain` rather than an index: the rows are as many as
@@ -9507,6 +9522,12 @@ fn verdict(event: &Event) -> Verdict<'_> {
         Event::Swapped { label, .. } => Verdict::Waiting(label, view::Stage::Landed),
         Event::Rejected { label, .. } => Verdict::Waiting(label, view::Stage::Refused),
         Event::RolledBack { label, .. } => Verdict::Waiting(label, view::Stage::RolledBack),
+        // **A row, because the file and the picture disagree** — which is the
+        // whole of what this lane is for. Nothing was built, so nothing
+        // replaced what is playing and the operator's newest edit is on disk
+        // and nowhere else. The word is the checker's and not the build's:
+        // `Refused` above is a Set that would not assemble.
+        Event::SourceRefused { label, .. } => Verdict::Waiting(label, view::Stage::NotCompiled),
         Event::Accepted { .. } => Verdict::Settled,
         Event::WorkerLost => Verdict::Nothing,
     }
@@ -9522,7 +9543,18 @@ fn verdict(event: &Event) -> Verdict<'_> {
 /// draws them top to bottom and the deck letters are `A` through `D`, so a row
 /// that appeared later must not sit above one that appeared first. The insert
 /// is over at most `deck::MAX_SLOTS` entries.
-fn settle(out: &mut Vec<view::Candidate>, deck: usize, label: &str, stage: view::Stage) {
+fn settle(
+    out: &mut Vec<view::Candidate>,
+    deck: usize,
+    label: &str,
+    stage: view::Stage,
+    // **What the checker said**, and empty for every verdict that is about a
+    // build — see `view::Candidate::said`. Cloned rather than moved because
+    // the event is read through `verdict`, which borrows it for the label;
+    // it is a handful of short lines on the frame a refusal arrives, which is
+    // a frame on which no Set was built.
+    said: &[String],
+) {
     match out.iter_mut().find(|row| row.deck == deck) {
         Some(row) => {
             if row.name != label {
@@ -9530,6 +9562,11 @@ fn settle(out: &mut Vec<view::Candidate>, deck: usize, label: &str, stage: view:
                 row.name.push_str(label);
             }
             row.stage = stage;
+            // Rewritten whatever it was: the row is the slot's *newest*
+            // verdict, so a build that lands after a refusal must not leave
+            // the refusal's diagnostics under it.
+            row.said.clear();
+            row.said.extend(said.iter().cloned());
         }
         None => {
             let at = out.partition_point(|row| row.deck < deck);
@@ -9539,6 +9576,7 @@ fn settle(out: &mut Vec<view::Candidate>, deck: usize, label: &str, stage: view:
                     deck,
                     name: label.to_owned(),
                     stage,
+                    said: said.to_vec(),
                 },
             );
         }
@@ -16181,7 +16219,7 @@ mod tests {
     /// **Every verdict the engine can report says what it does to the lane,
     /// and a row leaves it only when the file and the picture agree.**
     ///
-    /// The five `swap::Event` variants are three answers: three that put a
+    /// The six `swap::Event` variants are three answers: four that put a
     /// row on the lane under one of `view::Stage`'s words, one that takes it
     /// off, and one that is not about a version at all. The one worth the
     /// test is `Accepted`: it is the **watchdog's** verdict and not the
@@ -16232,6 +16270,18 @@ mod tests {
             verdict(&rolled("a + b")),
             Verdict::Waiting("a + b", view::Stage::RolledBack)
         );
+        // **The checker's refusal, which is a fourth word and not the
+        // build's.** `Rejected` above is a Set that would not assemble;
+        // this is a source that never became one, and the two would be
+        // indistinguishable on the lane if they shared a `Stage`.
+        assert_eq!(
+            verdict(&Event::SourceRefused {
+                label: "drift_shell.kir".into(),
+                said: vec!["3:5: parse: expected `}`".to_owned()],
+            }),
+            Verdict::Waiting("drift_shell.kir", view::Stage::NotCompiled),
+            "a source the checker turned down reached no row, which is the silence the lane              exists to end"
+        );
         assert_eq!(
             verdict(&accepted),
             Verdict::Settled,
@@ -16248,15 +16298,15 @@ mod tests {
         // And the same three through `settle`, which is what a drain does with
         // them: one row per slot, in slot order, rewritten in place.
         let mut lane: Vec<view::Candidate> = Vec::new();
-        settle(&mut lane, 1, "b + b", view::Stage::Landed);
-        settle(&mut lane, 0, "a + a", view::Stage::Landed);
+        settle(&mut lane, 1, "b + b", view::Stage::Landed, &[]);
+        settle(&mut lane, 0, "a + a", view::Stage::Landed, &[]);
         assert_eq!(
             lane.iter().map(|row| row.deck).collect::<Vec<_>>(),
             vec![0, 1],
             "the rows are not in the order the letters are drawn in"
         );
 
-        settle(&mut lane, 0, "a + a", view::Stage::RolledBack);
+        settle(&mut lane, 0, "a + a", view::Stage::RolledBack, &[]);
         assert_eq!(
             lane.len(),
             2,
@@ -16268,10 +16318,37 @@ mod tests {
             "the name was not left as it was found"
         );
 
-        settle(&mut lane, 0, "c + c", view::Stage::Landed);
+        settle(&mut lane, 0, "c + c", view::Stage::Landed, &[]);
         assert_eq!(
             lane[0].name, "c + c",
             "a rebuild of other material kept the old name"
+        );
+
+        // **And a refusal's diagnostics reach the row, then leave it with the
+        // refusal.** The row is one slot's *newest* verdict, so a build that
+        // lands after a refusal must not be drawn under the sentence the
+        // refusal put there — which is a stale diagnostic beside material it
+        // is not about, and reads as a fault in the build that just worked.
+        let said = [
+            "3:5: parse: expected `}`".to_owned(),
+            "7:1: type: unknown builtin `curl2`".to_owned(),
+        ];
+        settle(
+            &mut lane,
+            0,
+            "drift_shell.kir",
+            view::Stage::NotCompiled,
+            &said,
+        );
+        assert_eq!(
+            lane[0].said, said,
+            "the lane row was told what the checker said and did not keep it"
+        );
+        settle(&mut lane, 0, "c + c", view::Stage::Landed, &[]);
+        assert!(
+            lane[0].said.is_empty(),
+            "a build landed on a row still carrying the refusal's diagnostics: {:?}",
+            lane[0].said
         );
 
         lane.retain(|row| row.deck != 0);

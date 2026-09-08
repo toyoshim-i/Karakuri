@@ -466,30 +466,103 @@ impl AuthorityAt {
     }
 }
 
+/// **Why a source turned material down before anything was built**, on its
+/// way to the render thread as [`Event::SourceRefused`].
+///
+/// # It is not a build, and every field here says so
+///
+/// There is no `id`. Every other thing the engine reports about carries one,
+/// because a caller matches an outcome back to the [`Request`] that produced
+/// it — and a refusal produced no request, put nothing in a store and filed no
+/// version, so an id here would be a thread to a build that does not exist.
+/// *Nothing compiled, so it is not a version* is the same rule the edit
+/// history is gated on (`docs/adr/0089-history-is-gated-on-compiling-not-on-landing.md`).
+///
+/// # Formatted where the file was read, which is the worker
+///
+/// Both fields are `String`s the source built on the worker thread, beside the
+/// four validation stages that produced them. The render thread moves them
+/// into an [`Event`] and allocates nothing
+/// (`docs/principles/0091-cost-is-known-before-it-is-paid.md`).
+pub struct Refusal {
+    /// **What the material calls itself** — the same slot in the sentence
+    /// [`Request::label`] fills, and read the same way by whatever draws it.
+    /// A source with no build to name it after names the file it was reading.
+    pub label: String,
+    /// **Every diagnostic, one line each**, in the order the checker produced
+    /// them.
+    ///
+    /// One line rather than a rendered block because the readers on this side
+    /// are a row and a status line; the full rendering, with the source line
+    /// and the caret under it, is the source's own to print and it still does
+    /// (`docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md`
+    /// — every diagnostic at once, so the repair is one round trip).
+    ///
+    /// **Never empty**: a refusal with nothing to say is a silence with a
+    /// message type, which is the thing this whole path exists to end.
+    pub said: Vec<String>,
+}
+
+/// **What one poll answers**: material to build, or a refusal to report.
+///
+/// # Why the answer is one value and not two calls
+///
+/// `poll` returned `Option<Request>` until 2026-09-08, so a source that had
+/// turned a file down had no way to say so: it printed its diagnostics and
+/// answered `None`, and `None` is *nothing happened*. A `.kir` the checker
+/// refuses is the opposite of nothing happening — it is the operator's newest
+/// edit disagreeing with what is on screen — and the disagreement was said on
+/// a terminal and on no surface at all
+/// (`docs/adr/0310-a-source-can-say-it-refused-and-the-lane-draws-it.md`).
+///
+/// # Neither variant is boxed, and the lint that asks for it is answered here
+///
+/// A [`Request`] is the larger of the two by an order of magnitude, so
+/// `clippy::large_enum_variant` asks for a `Box`. What that would buy is
+/// nothing: exactly one of these exists at a time, on the worker's stack,
+/// between a `poll` and the `match` that takes it apart — there is no
+/// collection of them and nothing holds one. What it would cost is a heap
+/// allocation and a deref on every build, and a `Box::new` at every
+/// construction site in every implementation of the trait below, which is the
+/// seam a caller writes against.
+#[allow(clippy::large_enum_variant)]
+pub enum Polled {
+    /// Build this.
+    Build(Request),
+    /// **Nothing was built and nothing changed**, and here is why. The live
+    /// Set keeps running, with its `t` and its live count untouched.
+    Refused(Refusal),
+}
+
 /// Where the worker gets its work.
 ///
 /// Implemented by the caller rather than here, because "what changed" is not
 /// the engine's business: a file watcher, a record stream, and a queue of
-/// generated material are the same shape from this side. A source that decides there is
-/// nothing to build — including because a `.kir` file failed to compile and it
-/// printed diagnostics instead — simply returns `None`, and nothing happens.
-/// That is how "a failed compile changes nothing" is enforced: a failure never
-/// produces a [`Request`] in the first place, so it cannot reach the render
-/// thread to be rejected there.
+/// generated material are the same shape from this side. A source with nothing
+/// to say returns `None` and nothing happens; a source that *refused*
+/// something — a `.kir` file the checker turned down — answers
+/// [`Polled::Refused`], which builds nothing either and is reported rather than
+/// passed over. That is how "a failed compile changes nothing" is still
+/// enforced: a refusal never produces a [`Request`], so it cannot reach the
+/// render thread as a Set to be rejected there.
 ///
 /// Called only on the worker thread. `poll` is expected to block for roughly
 /// [`POLL_INTERVAL`] when it has nothing to report.
 pub trait Source: Send {
-    fn poll(&mut self) -> Option<Request>;
+    fn poll(&mut self) -> Option<Polled>;
 }
 
 /// A channel is the simplest source there is: whoever holds the `Sender`
 /// decides when a rebuild happens. Tests use this, and so would an agent
 /// queueing generated material.
+///
+/// **It cannot refuse.** Whoever holds the `Sender` has a `Request` in hand,
+/// which means whatever checking there was has already passed; a source that
+/// wants to report a refusal implements the trait itself.
 impl Source for Receiver<Request> {
-    fn poll(&mut self) -> Option<Request> {
+    fn poll(&mut self) -> Option<Polled> {
         match self.recv_timeout(POLL_INTERVAL) {
-            Ok(request) => Some(request),
+            Ok(request) => Some(Polled::Build(request)),
             Err(RecvTimeoutError::Timeout) => None,
             // `Disconnected` returns immediately rather than after the
             // timeout, so sleep by hand — otherwise a dropped `Sender` turns
@@ -517,6 +590,16 @@ pub enum Event {
         label: Arc<str>,
         error: SetError,
     },
+    /// **The source turned material down before anything was built** — see
+    /// [`Refusal`]. Nothing changed here either, and the difference from
+    /// `Rejected` is which side of the request the refusal is on: `Rejected`
+    /// is *this Set would not build*, and this is *there was never a Set to
+    /// build*. Two words for one state would be a name meaning two things, so
+    /// they are two states with two words.
+    ///
+    /// **No `id`**, unlike every variant around it: nothing was requested, so
+    /// there is nothing for a caller to match it back to.
+    SourceRefused { label: Arc<str>, said: Vec<String> },
     /// The watchdog's verdict, in favour. The previous Set is released.
     Accepted {
         id: u64,
@@ -551,6 +634,15 @@ impl std::fmt::Display for Event {
             Event::Rejected { label, error, .. } => {
                 write!(f, "`{label}` was refused, nothing changed:\n{error}")
             }
+            // **Every diagnostic, not the first one.** The reader on the other
+            // end of this string is a terminal or a model in a loop, and both
+            // have room for the lot; the one-line-and-a-count reading is the
+            // lane's, where a row is a row (`docs/principles/0083-…`).
+            Event::SourceRefused { label, said } => write!(
+                f,
+                "`{label}` did not compile, nothing was built:\n{}",
+                said.join("\n")
+            ),
             Event::Accepted {
                 label,
                 id: _,
@@ -579,6 +671,25 @@ impl std::fmt::Display for Event {
             ),
         }
     }
+}
+
+/// **What the worker sends back**, which is a finished build or a refusal that
+/// never became one.
+///
+/// One channel and not two. A second channel would put the two on separate
+/// queues, so a refusal and the build that superseded it could arrive in
+/// either order and the lane would draw whichever won — where what the operator
+/// needs is the newest thing the source said, in the order it said it. This is
+/// an `mpsc` and `mpsc` is FIFO, so one queue is the ordering.
+///
+/// Unboxed for [`Polled`]'s reason, one step along: the wasted room is the
+/// difference between a refusal and a build, once per refusal, in an `mpsc`
+/// node that is allocated either way.
+#[allow(clippy::large_enum_variant)]
+enum Done {
+    Built(Built),
+    /// Reported and never installed: there is no Set here, and no candidate.
+    Refused(Refusal),
 }
 
 /// A finished build on its way back to the render thread.
@@ -657,7 +768,10 @@ pub struct HotSwap {
     /// is silently discarding a rollback nobody was told about.
     events: Vec<Event>,
 
-    built: Receiver<Built>,
+    /// **What the worker has finished with** — a build, or a refusal that
+    /// never became one. See [`Done`], and `install_if_ready`, which is the
+    /// only reader.
+    done: Receiver<Done>,
     /// Sets the render thread is done with, waiting for the worker to drop
     /// them. Dropping a Set releases its buffers, bind groups and pipelines,
     /// and a deallocation on the render thread is the same invariant as an
@@ -699,7 +813,7 @@ impl HotSwap {
         budget_ms: f32,
         source: Box<dyn Source>,
     ) -> HotSwap {
-        let (built_tx, built_rx) = mpsc::channel();
+        let (done_tx, done_rx) = mpsc::channel();
         let graveyard = Arc::new(Mutex::new(Vec::with_capacity(GRAVEYARD_CAPACITY)));
         let stop = Arc::new(AtomicBool::new(false));
         // **The viewport, until somebody names a size.** `Set::build` leaves a
@@ -722,7 +836,7 @@ impl HotSwap {
             std::thread::Builder::new()
                 .name("karakuri-build".into())
                 .spawn(move || {
-                    run_worker(device, queue, source, built_tx, graveyard, stop, measure_at)
+                    run_worker(device, queue, source, done_tx, graveyard, stop, measure_at)
                 })
                 .expect("spawn build worker")
         };
@@ -741,7 +855,7 @@ impl HotSwap {
             last_frame: None,
             frames: 0,
             events: Vec::with_capacity(EVENT_CAPACITY),
-            built: built_rx,
+            done: done_rx,
             measure_at,
             graveyard,
             retired: Vec::with_capacity(GRAVEYARD_CAPACITY),
@@ -788,7 +902,7 @@ impl HotSwap {
         // A receiver whose sender is already gone: `try_recv` says
         // `Disconnected` forever, which `install_if_ready` treats exactly like
         // "nothing waiting".
-        let (_, built_rx) = mpsc::channel();
+        let (_, done_rx) = mpsc::channel();
         let live_viewport = live.viewport();
         HotSwap {
             live,
@@ -804,7 +918,7 @@ impl HotSwap {
             last_frame: None,
             frames: 0,
             events: Vec::with_capacity(EVENT_CAPACITY),
-            built: built_rx,
+            done: done_rx,
             measure_at: Arc::new(AtomicU64::new(packed(live_viewport))),
             graveyard: Arc::new(Mutex::new(Vec::new())),
             retired: Vec::new(),
@@ -1196,6 +1310,17 @@ impl HotSwap {
         // and there is exactly one of it, so accepting a second candidate
         // would mean losing the only Set known to work. A build that finishes
         // during a trial stays in the channel until the verdict is in.
+        //
+        // **And so does a refusal, which is a cost rather than a decision.**
+        // Nothing is installed for one, so it could be reported here — but an
+        // `mpsc` cannot be read past and a `Built` taken out during a trial
+        // has nowhere to wait, so reporting the refusal early would mean
+        // holding the build in a field of this struct. What that buys is a
+        // judging window of latency on a slot that is being drawn, and on a
+        // *parked* slot, whose trial is frozen, it is however long the slot
+        // stays off air. That is the same wait that slot's own verdicts are
+        // already under (`begin_frame_parked`), which is what makes it a
+        // consistent silence rather than a new one.
         if self.trial.is_some() {
             return;
         }
@@ -1209,8 +1334,19 @@ impl HotSwap {
         // worker rather than dropped here.
         let mut newest: Option<Built> = None;
         loop {
-            match self.built.try_recv() {
-                Ok(next) => {
+            match self.done.try_recv() {
+                // **A refusal is reported where it is read and never held as
+                // the newest anything.** Nothing was built, so it is not a
+                // candidate to be superseded and it does not take the place of
+                // one: a save that does not compile followed by a save that
+                // does is a refusal and then a swap, in that order, and both
+                // are said. The strings are moved rather than copied, so this
+                // costs the render thread a `Vec` push.
+                Ok(Done::Refused(refusal)) => self.events.push(Event::SourceRefused {
+                    label: refusal.label.into(),
+                    said: refusal.said,
+                }),
+                Ok(Done::Built(next)) => {
                     if let Some(stale) = newest.replace(next) {
                         match stale.result {
                             Ok(set) => self.retire(set),
@@ -1419,7 +1555,7 @@ fn run_worker(
     device: wgpu::Device,
     queue: wgpu::Queue,
     mut source: Box<dyn Source>,
-    out: Sender<Built>,
+    out: Sender<Done>,
     graveyard: Arc<Mutex<Vec<Set>>>,
     stop: Arc<AtomicBool>,
     // **Read per build and never cached.** The render thread narrows it to a
@@ -1452,8 +1588,20 @@ fn run_worker(
         // — actually releasing the GPU resources — happens.
         drop(condemned);
 
-        let Some(request) = source.poll() else {
-            continue;
+        let request = match source.poll() {
+            Some(Polled::Build(request)) => request,
+            // **Straight back, with nothing built and nothing measured.** The
+            // sentences were formatted by the source on this thread, beside
+            // the stages that produced them, so what the render thread does
+            // with this is move two allocations into an `Event`.
+            Some(Polled::Refused(refusal)) => {
+                if out.send(Done::Refused(refusal)).is_err() {
+                    // The render thread is gone.
+                    break;
+                }
+                continue;
+            }
+            None => continue,
         };
         let id = request.id;
         let label: Arc<str> = request.label.into();
@@ -1655,12 +1803,12 @@ fn run_worker(
         }
 
         if out
-            .send(Built {
+            .send(Done::Built(Built {
                 id,
                 label,
                 result,
                 cost,
-            })
+            }))
             .is_err()
         {
             // The render thread is gone.

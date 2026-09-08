@@ -30,7 +30,7 @@ mod gpu {
     use std::sync::mpsc::{self, Sender};
     use std::time::{Duration, Instant};
 
-    use karakuri_engine::swap::{Event, HotSwap, Request, Source};
+    use karakuri_engine::swap::{Event, HotSwap, Polled, Refusal, Request, Source};
     use karakuri_engine::{Binding, Curve, Gpu, Present, Set, Signals, VideoSource};
     use karakuri_ir::typed::Checked;
 
@@ -200,12 +200,17 @@ proc wide_points {
         }
     }
 
-    /// A source that never has anything to build — what a `.kir` file that failed
-    /// to compile leaves behind. It still has to sleep, or it spins the worker.
+    /// A source that never has anything to build — a watcher over a file
+    /// nobody is editing. It still has to sleep, or it spins the worker.
+    ///
+    /// **This said *what a `.kir` file that failed to compile leaves behind*
+    /// until 2026-09-08**, and that is no longer what a refusal looks like
+    /// from here: a source that turned something down says so, and a source
+    /// with nothing to say is this — see [`Refusing`] and ADR-0310.
     struct Silent;
 
     impl Source for Silent {
-        fn poll(&mut self) -> Option<Request> {
+        fn poll(&mut self) -> Option<Polled> {
             std::thread::sleep(karakuri_engine::swap::POLL_INTERVAL);
             None
         }
@@ -971,7 +976,7 @@ proc wide_points {
     fn a_worker_that_dies_is_reported_once_and_does_not_disturb_the_live_set() {
         struct Exploding(u32);
         impl Source for Exploding {
-            fn poll(&mut self) -> Option<Request> {
+            fn poll(&mut self) -> Option<Polled> {
                 self.0 += 1;
                 if self.0 > 2 {
                     panic!("deliberate: a build worker that will not come back");
@@ -1002,6 +1007,120 @@ proc wide_points {
         );
         assert_eq!(h.swap.set().capacity(), FIRST, "the live Set was disturbed");
         assert!(!h.swap.on_trial());
+    }
+
+    /// **A source that refused reaches the render thread, and nothing else
+    /// about the frame changes.**
+    ///
+    /// The seam this is about is one word wide: `Source::poll` answered
+    /// `Option<Request>` until 2026-09-08, so a source that had turned a file
+    /// down said it on a terminal and answered `None` — which is the same
+    /// answer a source with nothing to report gives, and is why a checker's
+    /// diagnostics reached no surface in this instrument
+    /// (`docs/adr/0310-…`). So what is asserted here is that the refusal
+    /// **arrives**, that it arrives as its own word rather than as one of the
+    /// three the engine already had, and that it costs the live Set nothing.
+    ///
+    /// **`Silent` above is the negative control and it is not a spare one**:
+    /// every other test in this file drives the worker with it, so a version
+    /// that reported a refusal for *every* poll would take the whole file
+    /// down rather than passing here.
+    ///
+    /// It takes a device because a `HotSwap` does — `swap.rs`'s worker is the
+    /// thing under test, and it is spawned with a `wgpu::Device` and a queue.
+    #[test]
+    fn a_source_that_refused_says_so_and_the_live_set_is_untouched() {
+        /// One refusal and then nothing, which is a watcher over a file that
+        /// was saved once and does not check.
+        struct Refusing(bool);
+        impl Source for Refusing {
+            fn poll(&mut self) -> Option<Polled> {
+                std::thread::sleep(karakuri_engine::swap::POLL_INTERVAL);
+                if std::mem::replace(&mut self.0, false) {
+                    return Some(Polled::Refused(Refusal {
+                        label: "drift_shell.kir".to_owned(),
+                        said: vec![
+                            "3:5: parse: expected `}`".to_owned(),
+                            "7:1: type: unknown builtin `curl2`".to_owned(),
+                        ],
+                    }));
+                }
+                None
+            }
+        }
+
+        let mut h = Harness::new(
+            GENEROUS_MS,
+            FIRST,
+            (WIDTH, HEIGHT),
+            Box::new(Refusing(true)),
+        );
+        let started = Instant::now();
+        let mut said: Vec<(String, Vec<String>)> = Vec::new();
+        let mut others = 0;
+        while started.elapsed() < PATIENCE {
+            h.frame();
+            for event in h.swap.events() {
+                match event {
+                    Event::SourceRefused { label, said: lines } => {
+                        said.push((label.to_string(), lines))
+                    }
+                    _ => others += 1,
+                }
+            }
+            if !said.is_empty() && started.elapsed() > Duration::from_millis(500) {
+                break;
+            }
+        }
+
+        assert_eq!(
+            said.len(),
+            1,
+            "one refusal was polled and {} reached the render thread",
+            said.len()
+        );
+        assert_eq!(
+            others, 0,
+            "a refusal produced {others} other events, and nothing was built"
+        );
+        assert_eq!(said[0].0, "drift_shell.kir", "the refusal lost its file");
+        assert_eq!(
+            said[0].1,
+            vec![
+                "3:5: parse: expected `}`",
+                "7:1: type: unknown builtin `curl2`"
+            ],
+            "the diagnostics did not survive the channel"
+        );
+
+        // **Nothing was built, so nothing is on trial and nothing was
+        // replaced.** The capacity is what says which Set is live — see
+        // `FIRST` and `SECOND` — and a refusal that had reached
+        // `install_if_ready` as a candidate would be a swap.
+        assert!(
+            !h.swap.on_trial(),
+            "a refusal started a trial, and there is no Set to try"
+        );
+        assert_eq!(
+            h.swap.set().capacity(),
+            FIRST,
+            "the live Set was replaced by a build that never happened"
+        );
+
+        // And the whole of it goes to a terminal and to a model, which is the
+        // one-round-trip half of `docs/principles/0083-…`: the row draws the
+        // first line and this carries them all.
+        let printed = Event::SourceRefused {
+            label: said[0].0.as_str().into(),
+            said: said[0].1.clone(),
+        }
+        .to_string();
+        for line in &said[0].1 {
+            assert!(
+                printed.contains(line),
+                "the printed refusal drops `{line}`: {printed}"
+            );
+        }
     }
 
     // ---------------------------------------------------------------------------

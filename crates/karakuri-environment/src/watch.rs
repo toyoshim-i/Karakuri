@@ -49,15 +49,29 @@
 //! moving. That costs one extra interval of latency and removes a whole class
 //! of spurious diagnostics.
 //!
-//! A compile that fails prints every diagnostic it has and returns `None`.
-//! Nothing is requested, so nothing is built, so nothing is swapped — the
-//! running Set keeps running with its `t` and its element buffers untouched.
+//! ## A compile that fails
+//!
+//! It prints every diagnostic it has and answers
+//! [`Polled::Refused`](karakuri_engine::swap::Polled::Refused), carrying one
+//! line per diagnostic. Nothing is requested, so nothing is built, so nothing
+//! is swapped — the running Set keeps running with its `t` and its element
+//! buffers untouched — and nothing is filed either: a version is gated on
+//! compiling, so a refusal is not one.
+//!
+//! **It answered `None` until 2026-09-08**, which is the same answer a poll
+//! that saw no edit gives, so the refusal reached the terminal and no surface
+//! in the instrument at all
+//! (`docs/adr/0310-a-source-can-say-it-refused-and-the-lane-draws-it.md`). The
+//! two other ways a rebuild can come to nothing — a file that will not read,
+//! and a stack that will not sort into a Set — still print and answer `None`;
+//! that record says why the word this carries is the checker's and not theirs.
 
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::PathBuf;
 use std::sync::mpsc::Receiver;
 use std::time::Duration;
 
+use karakuri_engine::swap::{Polled, Refusal};
 use karakuri_engine::{Binding, Request, Source};
 
 use crate::compile;
@@ -549,7 +563,7 @@ impl Watch {
 }
 
 impl Source for Watch {
-    fn poll(&mut self) -> Option<Request> {
+    fn poll(&mut self) -> Option<Polled> {
         std::thread::sleep(INTERVAL);
 
         // **A re-point is acted on the poll it is seen, and a save is not.**
@@ -678,7 +692,7 @@ impl Watch {
     /// and everything after that decision is the same work. Two copies of it
     /// would be two answers to *what does a rebuild restate*, which is the
     /// question every field on this struct is documented against.
-    fn rebuild(&mut self) -> Option<Request> {
+    fn rebuild(&mut self) -> Option<Polled> {
         let slot = self.slot;
         eprintln!("slot {slot}: recompiling:");
         // Every file, not only the one that changed: the composition check
@@ -706,7 +720,7 @@ impl Watch {
         }
         let mut compiled = Vec::with_capacity(paths.len());
         for (named, src) in named.iter().zip(&srcs) {
-            match compile::check(src) {
+            match compile::diagnose(src) {
                 // **With the name the slot was spelled with, and with the text
                 // it compiled.** A watcher used to hand the sort bare paths, so
                 // every rebuild called each node whatever its procedure
@@ -721,12 +735,43 @@ impl Watch {
                     checked,
                     std::sync::Arc::from(src.as_str()),
                 )),
-                Err(report) => {
+                // **Said on the terminal and said to the deck.** The line below
+                // is the one this has always printed and it stays — a terminal
+                // is a surface too, and it is the only one a headless run has.
+                // What is new beside it is that the refusal now *reaches* the
+                // instrument: a `.kir` the checker turns down used to answer
+                // `None`, which is the same answer as "nothing happened", so
+                // the operator's newest edit disagreeing with what is on screen
+                // was said on a terminal nobody watches mid-set
+                // (`docs/adr/0310-a-source-can-say-it-refused-and-the-lane-draws-it.md`).
+                //
+                // **Nothing is filed, and nothing here has to undo that.**
+                // The store put and the history snapshot are both below this
+                // line, so a refusal reaches neither: nothing compiled, so
+                // there is no version, which is the gate the edit history is
+                // already on (ADR-0089). The slot's last good version is still
+                // the newest thing filed and still the thing on screen.
+                Err(diagnostics) => {
                     eprintln!(
-                        "{}:\n{report}\nslot {slot} unchanged; its Set is still running",
+                        "{}:\n{diagnostics}\nslot {slot} unchanged; its Set is still running",
                         named.path.display()
                     );
-                    return None;
+                    return Some(Polled::Refused(Refusal {
+                        // **The name the slot spelled this node with**, and
+                        // the file's own where it was spelled bare — not a
+                        // build's label, because there is no build and the
+                        // `proc` name is the very thing a file that will not
+                        // parse has not got. It is the one word that says
+                        // which file to open.
+                        label: named.name.clone().unwrap_or_else(|| {
+                            named
+                                .path
+                                .file_name()
+                                .map(|f| f.to_string_lossy().into_owned())
+                                .unwrap_or_default()
+                        }),
+                        said: diagnostics.said,
+                    }));
                 }
             }
         }
@@ -859,7 +904,7 @@ impl Watch {
         } else {
             self.overrides.clone()
         };
-        Some(Request {
+        Some(Polled::Build(Request {
             id,
             // **Each geometry at the capacity it declares**, and `--capacity`
             // over all of them — the rule the startup path follows, asked again
@@ -928,7 +973,7 @@ impl Watch {
             // stops the next save from taking it back.
             authorities: self.authorities.clone(),
             label,
-        })
+        }))
     }
 }
 
@@ -1016,14 +1061,107 @@ mod tests {
         (watch, paths)
     }
 
-    /// Polled until it builds, or four intervals, whichever is first. One poll
-    /// sees the change and the next acts on it — see "Debouncing" — so a build
-    /// that has not arrived by the fourth is a refusal.
-    fn rebuild(watch: &mut Watch) -> Option<Request> {
+    /// Polled until it answers, or four intervals, whichever is first. One
+    /// poll sees the change and the next acts on it — see "Debouncing" — so
+    /// nothing by the fourth is nothing at all.
+    fn polled(watch: &mut Watch) -> Option<Polled> {
         std::iter::repeat_with(|| watch.poll())
             .take(4)
             .flatten()
             .next()
+    }
+
+    /// [`polled`], for the tests that are about what a build states.
+    ///
+    /// **A refusal panics with its diagnostics rather than reading as
+    /// nothing.** A watcher that stopped compiling would otherwise turn every
+    /// assertion below into `expect("a build")` on a `None`, which says the
+    /// files never settled and is the wrong end of the failure entirely.
+    fn rebuild(watch: &mut Watch) -> Option<Request> {
+        match polled(watch)? {
+            Polled::Build(request) => Some(request),
+            Polled::Refused(refusal) => panic!(
+                "the checker turned `{}` down: {}",
+                refusal.label,
+                refusal.said.join("; ")
+            ),
+        }
+    }
+
+    /// **A `.kir` the checker turns down is an answer and not a silence**, and
+    /// the answer carries every diagnostic the checker had.
+    ///
+    /// This watcher printed its diagnostics and returned `None` until
+    /// 2026-09-08, and `None` is what a poll that saw nothing returns — so the
+    /// operator's newest edit disagreeing with the picture was said on a
+    /// terminal and reached no surface at all
+    /// (`docs/adr/0310-…`). The assertion is
+    /// therefore about the *shape* of the answer first and its contents
+    /// second: a refusal, with the file it is about and with what the checker
+    /// said in it.
+    ///
+    /// **The negative control is the same watcher afterwards.** A version that
+    /// refused everything would pass every assertion above the repair; the
+    /// repair is what says the refusal was about the bytes.
+    ///
+    /// **The fixture is prepended to rather than substituted in.** Both files
+    /// are ones this product can rewrite — `write_procedure` reaches them over
+    /// MCP — so what is written here has to break them whatever they contain,
+    /// which a line that is not a declaration does and a substitution does not
+    /// (`docs/contributing.md` §3).
+    #[test]
+    fn a_file_the_checker_turns_down_is_a_refusal_carrying_its_diagnostics() {
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let (mut watch, paths) = watch_over(tmp.path(), &["drift_shell.kir", "soft_points.kir"]);
+        rebuild(&mut watch).expect("the examples this slot was pointed at compile");
+
+        let good = std::fs::read_to_string(&paths[0]).expect("read the head");
+        std::fs::write(&paths[0], format!("not a declaration\n{good}")).expect("break the head");
+        let refusal = match polled(&mut watch) {
+            Some(Polled::Refused(refusal)) => refusal,
+            Some(Polled::Build(request)) => {
+                panic!(
+                    "a file that does not check was built as `{}`",
+                    request.label
+                )
+            }
+            None => panic!(
+                "a file that does not check produced nothing at all, which is what a poll \
+                 that saw no edit produces"
+            ),
+        };
+        assert!(
+            refusal.label.contains("drift_shell"),
+            "the refusal names `{}` and the file that does not check is drift_shell.kir",
+            refusal.label
+        );
+        assert!(
+            !refusal.said.is_empty(),
+            "a refusal with nothing in it is the silence this replaced"
+        );
+        // Where, which stage, and what — the head of what the terminal is
+        // printing, which is `compile::Diagnostics::said`'s own claim.
+        assert!(
+            refusal.said[0].starts_with("1:1: parse: "),
+            "the first diagnostic is `{}` and the broken line is the first one",
+            refusal.said[0]
+        );
+        assert!(
+            refusal.said.iter().all(|line| !line.contains('\n')),
+            "a diagnostic on this list is a line, and one of these is a block: {:?}",
+            refusal.said
+        );
+
+        // **The negative control.** The same watcher, the same slot, the file
+        // as it was: a build, which is what says the refusal above was the
+        // bytes and not this watcher having given up.
+        std::fs::write(&paths[0], &good).expect("repair the head");
+        let request = rebuild(&mut watch).expect("the repaired file compiles");
+        assert!(
+            request.label.contains("drift_shell"),
+            "the repaired slot built `{}`",
+            request.label
+        );
     }
 
     /// **A rebuild restates the salts the slot is running at**, rather than
@@ -1692,9 +1830,9 @@ mod tests {
         })
         .expect("the watcher is still here");
 
-        let request = watch
-            .poll()
-            .expect("the aim is built on the poll it arrives");
+        let Some(Polled::Build(request)) = watch.poll() else {
+            panic!("the aim is built on the poll it arrives");
+        };
         assert!(
             request.label.contains("lattice"),
             "the slot was aimed at `lattice_shell.kir` and built `{}`",
