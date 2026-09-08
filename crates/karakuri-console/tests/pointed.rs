@@ -19,7 +19,8 @@
 //!    press lands on it and re-pointing the bay is another drop.
 //! 4. That the row is the bay's and not the scope row's condition — a console
 //!    handed no chips at all still draws where it is pointed, because that is
-//!    also where a send lands (ADR-0267).
+//!    also where a send's save dialog opens (ADR-0311, which supersedes
+//!    ADR-0267's reading of the row as the destination itself).
 //!
 //! Only the ink test needs `egui`'s fonts. Every rectangle in this bay is the
 //! full width of the list, so the rest is arithmetic.
@@ -190,10 +191,9 @@ fn a_bay_pointed_nowhere_is_the_bay_it_was_and_one_pointed_costs_exactly_the_row
 }
 
 /// **The row is not the scope row's condition.** A console handed no chips at
-/// all still says where it is pointed, because that row is also where a send
-/// lands and a destination has to be on screen before the press (ADR-0267) —
-/// so it is drawn straight under the bay head, where the fields and the
-/// chips are not drawn at all.
+/// all still says where it is pointed, because that row is also where a send's
+/// save dialog opens (ADR-0311) — so it is drawn straight under the bay head,
+/// where the fields and the chips are not drawn at all.
 #[test]
 fn a_console_with_no_chips_still_says_where_it_is_pointed() {
     let panel = console(PLAUSIBLE);

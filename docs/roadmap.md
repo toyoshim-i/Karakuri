@@ -366,20 +366,29 @@ time, the keyboard whole while it is open. So the deferral is spent and the ques
 which neither is. ADR-0262's decision stands as the first cut until somebody answers it.
 
 **Exit.** No `plan` badge in the panel column of this bay's rows on
-[every operation](manual/operations.html). **One is left**, on 2026-09-08: *Send a Set to somebody,
-and take one in*, reading `library`. *Walk the edit history* was the other and its badge moved to
-`has` with ADR-0308.
+[every operation](manual/operations.html). **The condition is met, on 2026-09-09**: *Send a Set to
+somebody, and take one in* was the last row still reading `library`, and its badge moved to `has`
+with
+[ADR-0311](adr/0311-a-row-menu-loads-a-set-onto-a-named-deck-and-saves-it-through-the-systems-own-dialog.md).
+*Walk the edit history* was the one before it and moved with ADR-0308. **The exit rule's one defect
+is unchanged and is worth re-reading before this is called finished**: *Keep what a deck is playing*
+is one of this bay's rows by the page's grouping and is another bay's control, which is said under
+*Rows* above.
 
-**Blocked on. One row, and it is on a gesture rather than a decision.**
+**Blocked on. Nothing, as of 2026-09-09.**
 
-- ***Send a Set to somebody* waits on the gesture, and nothing else.** Where it lands is ADR-0267's
-  (the folder the bay is pointed at), what it writes is ADR-0231's (a `.kbset` with every source
-  inlined), and why the operation carries no destination is ADR-0260's. **What nobody has decided is
-  what an operator presses**, and `docs/manual/console.html` draws no send control at all — so under
-  `docs/contributing.md` §5 step 3 the page moves before the panel can. The two shapes on the table
-  are a third pill in the bay's foot beside `read` and the `load` button, reading its destination
-  the way the load's pulldown reads its deck (ADR-0305); or a drag from a row onto the `.path` row. **The other half of the row
-  is built**: a press on a `presets` or `folder` row takes that Set in.
+- ***Send a Set to somebody* waited on the gesture, and the gesture is a menu on a row.** A
+  secondary press on a Set's name opens a card carrying `Load to Slot A` to `Load to Slot D`, a
+  separator, and `Save as a kbset`; the loads emit the `Operation::LoadSet` the button already
+  emits, naming the menu's own row and the item's own deck, and the send emits
+  `SetTransfer::Send` and opens the system's own save dialog to name the file
+  ([ADR-0311](adr/0311-a-row-menu-loads-a-set-onto-a-named-deck-and-saves-it-through-the-systems-own-dialog.md)).
+  What it writes is still ADR-0231's — a `.kbset` with every source inlined — and why the operation
+  carries no destination is still ADR-0260's. **Neither of the two shapes this bullet used to name
+  was taken**: a third pill in the foot writing into the `.path` folder is that record's
+  alternative (a), and a drag onto the `.path` row is its (b). **Where it lands is no longer
+  ADR-0267's**, which this supersedes: the `.path` row stays the folder scope's readout and is
+  where the dialog opens, and it is not the destination.
 - ***Walk the edit history* is built and is no longer blocked on anything.** The lister is
   `history::list`, and a panel run writes into `<store>/history/`: one `Snapshots` for the run,
   seeded before the window from the files each deck is about to play and handed to every slot's
@@ -413,17 +422,27 @@ not change. The vocabulary holds four reads — `ReadSet`, `ListSets`, `ReadProc
 them; the command line prints a package to stdout for the same reason
 it prints a listing there.
 
-**What was left of that row was a control rather than a decision, and the form is now taken.**
+**What was left of that row was a control rather than a decision, and the form was taken twice.**
 ADR-0260 set out two candidates and chose neither — a save sheet, and the clipboard.
 [ADR-0267](adr/0267-the-panel-sends-into-the-folder-the-library-bay-is-pointed-at-and-the-destination-is-drawn-before-the-press.md)
-takes neither of them either: **the bay is already a file browser, so the directory it is pointed at
-is the destination**, and sending writes `<id>.kbset` there. The mock has been drawing that
-destination the whole time — a `.path` row reading `~/sets/tour-2026/night-b › opening`, under the
-scope chips in `docs/manual/console.html` — and **the row is drawn now**: `view::LibraryBay`'s *The
-`.path` row, and it is where this library is pointed* is its derivation, and the row left that
-bay's list of the mock's elements this crate has not built. It closes the loop the other two could
-not: the file lands where the listing can point at it, so `SetTransfer::Take`, which names a
-**file**, can consume what a send produced.
+took neither of them either: the bay is already a file browser, so the directory it is pointed at
+was the destination and a send wrote `<id>.kbset` there. **That record is superseded**, on
+2026-09-09, by
+[ADR-0311](adr/0311-a-row-menu-loads-a-set-onto-a-named-deck-and-saves-it-through-the-systems-own-dialog.md):
+the maintainer chose the save sheet after all, so **the destination is the file the operator names
+in the system's own dialog** and the folder scope is not an outbox.
+
+**What ADR-0267 was right about survives and is not undone.** The `.path` row is drawn —
+`view::LibraryBay`'s *The `.path` row, and it is where this library is pointed* is its derivation,
+and the row left that bay's list of the mock's elements this crate has not built — and it is the
+folder scope's own readout, which is ADR-0275's rather than ADR-0267's. What it is no longer is the
+place a send lands; what it still does for a send is say where the dialog opens. **The loop it
+closed is closed a different way**: a send names a file that does not exist yet, which is the one
+thing no listing here can point at, and that is exactly what a save dialog is for.
+
+**And the page edit that record said was owed is withdrawn rather than done.** It named
+`console.html`'s *"a folder is a way **in**"* as a sentence that had to turn round, because it had
+made the folder scope bidirectional. It is not bidirectional now, so the sentence stands.
 
 **And it is what put this milestone back on a blocker — one that has since been taken, and then
 built.** ADR-0267 needs `Scope::Folder` to have a directory, and no operation can carry one. This
@@ -455,8 +474,11 @@ pointer is a grab for as long as the gesture runs
 specified all three in `4ec14db` and none of them is a route, so none holds the operation's badge.
 **What is still not drawn is the Set**: there is no ghost under the pointer and no second mark on
 the row in hand, and both were declined in the design pass rather than left open.
-The pill beside it is a readout on purpose, so a press on it would be a third route
-nobody specified (`view::LibraryBay`).
+**And the routes to this row are four now**: the key, the `load` button, the drag, and a row's own
+menu, whose four load items name a deck outright and read neither mark (ADR-0305, ADR-0311). The
+sentence here used to say the pill beside the row was a readout on purpose and that a press on it
+would be a third route nobody specified; the pill became a button and a pulldown on 2026-09-08, and
+the menu is the fourth.
 
 **The work this milestone was waiting on, as tasks rather than as prose. The first of them has since
 been built and is kept for its argument**, which is what decided that a directory is the host's and
@@ -557,8 +579,9 @@ than found*, *A Set has two forms, and loading one is packaging it*, *How a Set 
 *Every deck runs from its own copy* is here too, because a library load is what writes into
 `<store>/scratch/`. The mock tips every scope chip including the `+`, both filter fields, the `.path`
 row, a starred star and an unstarred one, and the foot's `read`, the load's button and its pulldown.
-The Set rows carry none. This sentence counted the chips and put `my sets` and the path among the
-untipped; both have carried one.
+The Set rows carry none, and **the five items of a row's menu carry one each** while the separator
+between them carries none, because it is not a control (ADR-0311). This sentence counted the chips
+and put `my sets` and the path among the untipped; both have carried one.
 
 #### M5.4 — Transport
 

@@ -32,12 +32,12 @@ use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::{Panel, GRAB};
 use karakuri_console::room::{size, Room};
 use karakuri_console::view::{
-    library, mcp_pill, Aim, Field, Filters, LibraryBay, Published, Read, Reading, Scope, Target,
-    View, DECK_LETTERS, HOLDS_UNSET, LAYERS, LAYER_UNSET,
+    library, mcp_pill, Aim, Field, Filters, LibraryBay, Picked, Published, Read, Reading, RowItem,
+    Scope, Target, View, DECK_LETTERS, HOLDS_UNSET, LAYERS, LAYER_UNSET,
 };
 use karakuri_layout::{Point, Rect};
 use karakuri_operation::gate::{Class, Open};
-use karakuri_operation::Operation;
+use karakuri_operation::{Operation, SetTransfer};
 
 /// **The mock's own library, as names**: five Sets, in the order it draws
 /// them.
@@ -3253,4 +3253,304 @@ fn a_deck_running_no_set_draws_no_history_rows() {
         None,
         "a press on the empty list landed a version nobody can see"
     );
+}
+
+// ---------------------------------------------------------------------------
+// A row's own menu
+// ---------------------------------------------------------------------------
+//
+// **The card is the deck pulldown's one control along, and these tests are
+// that control's read against a different rectangle** — it hangs off a *row*
+// rather than off a capsule in the foot, it is opened by the secondary button
+// rather than by a press, and it carries one item that names no deck at all.
+// What is asserted here is the console's half: which row a press names, which
+// items the card carries, what each of them asks for, and that a card that is
+// down owns every press on the console. Which *button* opened it is the host's
+// and is asserted in `crates/karakuri` — this crate has never known which
+// button a press was (ADR-0311).
+
+/// **A secondary press on a row puts that row's menu down, and a press on
+/// nothing puts nothing down.**
+///
+/// Both halves, because a control that claimed every point of the list would
+/// pass a test made only of the first: the list's ground below the last row
+/// belongs to nobody, which is `input::claim`'s rule 4 — *a control claims what
+/// it acts on and no more* — and a `history` row is a version rather than a
+/// Set, which every item on this card names.
+#[test]
+fn a_secondary_press_names_a_row_and_a_press_on_nothing_names_none() {
+    let (mut view, panel) = showing_mock();
+    let ctx = drawn_once();
+    let bay = bay(&panel);
+    view.mixer = std::iter::repeat_with(strip).take(4).collect();
+    assert!(bay.rows >= 4, "the mock's bay drew {} rows", bay.rows);
+
+    let shut = view.menued();
+    assert_eq!(shut.row, None, "a console opens with a menu already down");
+    for row in 0..bay.rows.min(view.sets().len()) {
+        let at = bay.row(row).center();
+        assert_eq!(
+            bay.menu_ask(
+                &ctx,
+                viewport(&panel),
+                shut,
+                view.sets(),
+                Point::new(at.x, at.y)
+            ),
+            Some(Picked::Open(row)),
+            "a secondary press on row {row} did not name it"
+        );
+    }
+
+    // The list's own ground, below the last row the bay drew.
+    let ground = Point::new(bay.list.center().x, bay.list.max.y - 1.0);
+    assert!(
+        (0..bay.rows).all(|row| !bay.row(row).contains(egui::pos2(ground.x, ground.y))),
+        "the point below the last row is on one, so this test measures nothing"
+    );
+    assert_eq!(
+        bay.menu_ask(&ctx, viewport(&panel), shut, view.sets(), ground),
+        None,
+        "a press on the list's own ground put a menu down"
+    );
+
+    // And a `history` row, which is a version and not a Set: `View::sets` is
+    // empty under that scope, so there is nothing for an item to name.
+    assert!(view.select_scope(Scope::History));
+    let at = bay.row(0).center();
+    assert_eq!(
+        bay.menu_ask(
+            &ctx,
+            viewport(&panel),
+            view.menued(),
+            view.sets(),
+            Point::new(at.x, at.y)
+        ),
+        None,
+        "a menu came down on a row that is a version rather than a Set"
+    );
+}
+
+/// **The card carries one load per deck the mixer is drawing, and the send
+/// whatever it is drawing.**
+///
+/// The first half is `View::select`'s own refusal read a third time — the
+/// pulldown's list is cut to the same count — and the second is where this
+/// card parts company with that one: `Save as a kbset` names no deck, so a
+/// console with no strip at all still has something to pick and something to
+/// leave by. That is why `View::open_menu` does not refuse where
+/// `View::open_target` does, and both directions are asserted.
+#[test]
+fn the_row_menu_offers_the_drawn_decks_and_always_the_send() {
+    let (mut view, panel) = showing_mock();
+    let ctx = drawn_once();
+    let bay = bay(&panel);
+    view.mixer = std::iter::repeat_with(strip).take(3).collect();
+    assert!(view.open_menu(3), "the menu did not come down on row 3");
+
+    let menu = bay
+        .menu(&ctx, viewport(&panel), view.menued())
+        .expect("the menu is down");
+    assert_eq!(
+        menu.loads, 3,
+        "the card carries {} loads against three strips",
+        menu.loads
+    );
+    let row = bay.row(3);
+    assert!(
+        menu.card.min.y >= row.max.y,
+        "the card at {:?} hangs up over the rows above rather than down off the row it was opened \
+         on at {row:?}",
+        menu.card
+    );
+    assert!(
+        viewport(&panel).contains_rect(menu.card),
+        "the card at {:?} is outside the viewport at {:?}",
+        menu.card,
+        viewport(&panel)
+    );
+    for deck in 0..3u8 {
+        assert_eq!(
+            menu.picked(near_centre(menu.load(usize::from(deck)))),
+            Some(RowItem::Load(deck)),
+            "the {deck}th item is not that deck's load"
+        );
+    }
+    assert_eq!(
+        menu.picked(near_centre(menu.save)),
+        Some(RowItem::Save),
+        "the last item is not the send"
+    );
+    // The separator is nothing: it names no item, and a press on it is the
+    // dismissal rather than a pick.
+    assert_eq!(
+        menu.picked(near_centre(menu.rule)),
+        None,
+        "the separator answered a press"
+    );
+
+    // **A console the mixer is drawing nothing for**, which is where this card
+    // and the pulldown's differ: the send is still there to pick.
+    let mut bare = View::new(Room::Day);
+    bare.library = mock();
+    bare.scopes = Scope::ALL.to_vec();
+    assert!(
+        bare.open_menu(0),
+        "a menu was refused on a console with no strip, where the send needs none"
+    );
+    let menu = bay
+        .menu(&ctx, viewport(&panel), bare.menued())
+        .expect("the menu is down");
+    assert_eq!(menu.loads, 0, "a card with no strip offered a load");
+    assert_eq!(menu.picked(near_centre(menu.save)), Some(RowItem::Save));
+}
+
+/// **A pick names the item's deck and the menu's own row, and moves no mark.**
+///
+/// The three marks are pulled apart before the press — the keys on deck C, the
+/// load aimed at deck B, the cursor on the first row and the menu on the
+/// fourth — because a console where they agree cannot tell the readings apart.
+/// That is `a_press_on_load_asks_for_the_deck_the_pulldown_names`' technique
+/// with one more mark in it, and it is what makes this the one route that
+/// reads neither of them.
+#[test]
+fn a_row_menu_pick_names_its_deck_and_its_own_row_and_moves_no_mark() {
+    let (mut view, panel) = showing_mock();
+    let ctx = drawn_once();
+    let bay = bay(&panel);
+    view.mixer = std::iter::repeat_with(strip).take(4).collect();
+    assert!(view.select(2), "the keys were not addressed to deck C");
+    assert!(view.aim_at(1), "the load was not aimed at deck B");
+    assert!(view.open_menu(3), "the menu did not come down on row 3");
+
+    let menu = bay
+        .menu(&ctx, viewport(&panel), view.menued())
+        .expect("the menu is down");
+    // **Deck C's item and not deck A's**, which is what makes this a reading
+    // of the item rather than of a default: a card that named the first deck
+    // whatever was pressed would answer deck A and pass a test written on it.
+    let want = Operation::LoadSet {
+        deck: 2,
+        set: "night01".to_owned(),
+    };
+    assert_eq!(
+        bay.menu_ask(
+            &ctx,
+            viewport(&panel),
+            view.menued(),
+            view.sets(),
+            near_centre(menu.load(2))
+        ),
+        Some(Picked::Load(want)),
+        "`Load to Slot C` did not ask for the fourth Set onto deck C"
+    );
+
+    // And performing it moves nothing else at all.
+    assert!(view.shut_menu(), "there was no menu down to take away");
+    assert_eq!(view.selection(), 2, "a pick moved the deck selection");
+    assert_eq!(view.target_deck(), 1, "a pick moved the load's target");
+    assert_eq!(view.cursor_row(), 0, "a pick moved the library cursor");
+    assert!(!view.menu_open(), "the card stayed down after a pick");
+}
+
+/// **The item under the separator asks for the send of the row the menu was
+/// opened on.**
+///
+/// `Operation::TransferSet { transfer: SetTransfer::Send { id } }`, and **no
+/// destination**: that is ADR-0260's shape, still standing, and what this
+/// console owes is the id and nothing else. Where the answer goes is the
+/// host's, which is why this test can be sure there is no path anywhere in
+/// what it asserts.
+#[test]
+fn the_row_menus_send_names_the_row_it_was_opened_on() {
+    let (mut view, panel) = showing_mock();
+    let ctx = drawn_once();
+    let bay = bay(&panel);
+    view.mixer = std::iter::repeat_with(strip).take(4).collect();
+    assert!(view.open_menu(2), "the menu did not come down on row 2");
+
+    let menu = bay
+        .menu(&ctx, viewport(&panel), view.menued())
+        .expect("the menu is down");
+    assert_eq!(
+        bay.menu_ask(
+            &ctx,
+            viewport(&panel),
+            view.menued(),
+            view.sets(),
+            near_centre(menu.save)
+        ),
+        Some(Picked::Send(Operation::TransferSet {
+            transfer: SetTransfer::Send {
+                id: "glass_shell".to_owned()
+            }
+        })),
+        "`Save as a kbset` did not ask to send the third Set"
+    );
+}
+
+/// **While a row's menu is down, every press on the console is part of that
+/// gesture.**
+///
+/// `input::claim`'s rule 2, which the three other cards are already under, and
+/// both halves are asserted for the pulldown's reason: a rule that only
+/// claimed the card would leave the first press outside it doing whatever it
+/// does the rest of the time — taking a Set in hand, or moving a fader.
+#[test]
+fn while_a_row_menu_is_down_every_press_is_part_of_that_gesture() {
+    let (mut view, mut panel) = showing_mock();
+    let ctx = drawn_once();
+    let bay = bay(&panel);
+    view.mixer = std::iter::repeat_with(strip).take(4).collect();
+    assert!(view.open_menu(1), "the menu did not come down");
+
+    let at = view.menued();
+    let menu = bay
+        .menu(&ctx, viewport(&panel), at)
+        .expect("the menu is down");
+    // An item, the card's own padding, the separator, and a point far away
+    // from the bay altogether.
+    let elsewhere = bay.row(0).center();
+    assert!(
+        !menu.card.contains(elsewhere),
+        "the point off the card is on it, so this test measures nothing"
+    );
+    for probe in [
+        near_centre(menu.load(2)),
+        Point::new(
+            menu.card.center().x,
+            menu.card.min.y + size::LIB_LIST_PAD * 0.5,
+        ),
+        near_centre(menu.rule),
+        Point::new(elsewhere.x, elsewhere.y),
+    ] {
+        assert_eq!(
+            claim(&mut panel, &ctx, &view, probe),
+            Claim::Panel,
+            "the console gave `egui` a press at {probe:?} with a row menu down"
+        );
+    }
+
+    // And what the three that are not an item ask for is the dismissal.
+    for probe in [
+        Point::new(
+            menu.card.center().x,
+            menu.card.min.y + size::LIB_LIST_PAD * 0.5,
+        ),
+        near_centre(menu.rule),
+        Point::new(elsewhere.x, elsewhere.y),
+    ] {
+        assert_eq!(
+            bay.menu_ask(&ctx, viewport(&panel), at, view.sets(), probe),
+            Some(Picked::Shut),
+            "a press at {probe:?} with the menu down did not take it away"
+        );
+    }
+    assert!(view.shut_menu(), "there was no menu down to take away");
+    assert!(!view.shut_menu(), "shutting nothing said it shut something");
+}
+
+/// A point inside a rectangle, as this crate's own `Point`.
+fn near_centre(at: egui::Rect) -> Point {
+    Point::new(at.center().x, at.center().y)
 }

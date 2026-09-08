@@ -878,6 +878,29 @@ pub mod size {
     /// at the right-hand end of the row and nothing else.
     pub const LIB_FOOT_GAP: f32 = 8.0;
 
+    /// **The air either side of a row menu's separator** — `.rowmenu .rule`'s
+    /// `margin: 4px 6px`, the vertical half of it. The horizontal half is the
+    /// hairline's own inset from the card's edge and is drawn rather than laid
+    /// out, so it is not a constant here.
+    pub const ROW_MENU_RULE_PAD: f32 = 4.0;
+
+    /// **A row menu's separator band**: the air, the hairline and the air
+    /// again. It is a band and not a row, because nothing in it is a control —
+    /// [`LIB_ROW_H`] is what an item is tall and this is what the space
+    /// between the loads and the send is.
+    pub const ROW_MENU_RULE_H: f32 = ROW_MENU_RULE_PAD * 2.0 + HAIRLINE;
+
+    /// **The narrowest a row menu's card is drawn** — `.rowmenu`'s
+    /// `min-width: 124px`. The items are as wide as the words in them and
+    /// `Save as a kbset` is the longest of the six, so this is only ever
+    /// reached by a face narrower than the mock's.
+    pub const ROW_MENU_MIN_W: f32 = 124.0;
+
+    /// **How far in from the row's left edge the card hangs** — `.rowmenu`'s
+    /// `left: 22px`, which puts it clear of the star and under the name the
+    /// press landed on rather than under the mark beside it.
+    pub const ROW_MENU_INSET: f32 = 22.0;
+
     // -- the library's reading ----------------------------------------------
 
     /// **The box a reading stands in**, opened under the row the cursor is on:

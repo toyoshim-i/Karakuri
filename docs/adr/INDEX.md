@@ -294,7 +294,7 @@ number; new records continue from the end.
 | [ADR-0264](0264-a-reading-is-one-question-and-only-the-opening-asks-it.md) | A reading is one question, and only the opening asks it | 2026-09-06 | accepted |
 | [ADR-0265](0265-a-carried-set-names-its-deck-at-the-release-and-the-panel-refuses-no-drop.md) | A carried Set names its deck at the release, and the panel refuses no drop | 2026-09-06 | accepted |
 | [ADR-0266](0266-two-rungs-and-a-fit-because-a-frame-is-an-invariant-part-plus-a-fragment-part.md) | Two rungs and a fit, because a frame is an invariant part plus a fragment part | 2026-09-06 | accepted |
-| [ADR-0267](0267-the-panel-sends-into-the-folder-the-library-bay-is-pointed-at-and-the-destination-is-drawn-before-the-press.md) | The panel sends into the folder the Library bay is pointed at, and the destination is drawn before the press | 2026-09-06 | accepted |
+| [ADR-0267](0267-the-panel-sends-into-the-folder-the-library-bay-is-pointed-at-and-the-destination-is-drawn-before-the-press.md) | The panel sends into the folder the Library bay is pointed at, and the destination is drawn before the press | 2026-09-06 | **superseded by ADR-0311** |
 | [ADR-0268](0268-a-vector-parameter-is-driven-one-component-at-a-time.md) | A vector parameter is driven one component at a time | 2026-09-06 | accepted |
 | [ADR-0269](0269-a-slot-that-is-drawn-is-stepped-and-a-preview-runs-at-the-rooms-tempo.md) | A slot that is drawn is stepped, and a preview runs at the room's tempo | 2026-09-07 | accepted |
 | [ADR-0270](0270-the-reference-workload-is-a-named-set-rather-than-whatever-the-default-pair-is.md) | The reference workload is a named Set rather than whatever the default pair is | 2026-09-07 | accepted |
@@ -336,6 +336,7 @@ number; new records continue from the end.
 | [ADR-0308](0308-the-library-bays-fifth-chip-walks-one-sets-history-and-a-row-lands-that-version-on-a-node.md) | The Library bay's fifth chip walks one Set's history, and a row lands that version on a node | 2026-09-08 | accepted |
 | [ADR-0309](0309-a-slots-files-are-published-where-its-aim-is-sent-and-the-server-reads-them-live.md) | A slot's files are published where its aim is sent, and the server reads them live | 2026-09-08 | accepted |
 | [ADR-0310](0310-a-source-can-say-it-refused-and-the-lane-draws-it.md) | A source can say it refused, and the lane draws it | 2026-09-08 | accepted |
+| [ADR-0311](0311-a-row-menu-loads-a-set-onto-a-named-deck-and-saves-it-through-the-systems-own-dialog.md) | A row menu loads a Set onto a named deck, and saves it through the system's own dialog | 2026-09-09 | accepted |
 
 ## Retired numbers
 

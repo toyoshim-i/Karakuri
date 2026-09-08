@@ -65,11 +65,19 @@
 //!    panel, and that it goes back to being an ordinary boundary the moment
 //!    the card is shut.
 //!
-//!    **Two cards can be down and never at once.** The audio-in pill has one
-//!    too, and this clause is written over both: whichever is open claims the
-//!    press that would have opened the other, and that press shuts it. So the
-//!    second press opens the second card, which is the same one-extra-press
-//!    price a boundary already pays.
+//!    **Cards can be down and never two at once.** The audio-in pill has one,
+//!    the Library bay's load pulldown has one and a row of its list has one,
+//!    and this clause is written over all of them: whichever is open claims
+//!    the press that would have opened another, and that press shuts it. So
+//!    the second press opens the second card, which is the same
+//!    one-extra-press price a boundary already pays.
+//!
+//!    **The row menu is the one a *secondary* press opens**, and that changes
+//!    nothing here: this rule is about a card that is down rather than about
+//!    what put it there, so while it is down a press of either button is the
+//!    card's. Which button opened it is the caller's question and is answered
+//!    in `karakuri/src/main.rs`; this file has never known which button a
+//!    press was, because rules 1 to 4 are all about where the pointer is.
 //! 3. Otherwise, if the pointer is within [`GRAB`] of a boundary, it is the
 //!    panel's and `egui` does not see the event.
 //! 4. **Otherwise, if the pointer is on a control the console draws, it is the
@@ -681,8 +689,18 @@ use crate::view::{
 /// it emits `Operation::SetFavourite` where a row press emits nothing at all —
 /// so it is a row of this table and not a sentence in the one under it.
 ///
-/// **The list's count is one, and it is the one number here that could have
-/// been a count and must not be.** A press lands on one of however many rows
+/// **The list's count is two, and neither of them is how many rows there
+/// are.** One rectangle, two controls: a press takes the Set in hand and a
+/// *secondary* press puts that row's menu down (ADR-0311). They are two
+/// because a pointer genuinely reaches two things there — which is the load
+/// button and the pulldown's argument on one rectangle instead of two — and
+/// not two because the row means two things under two scopes, which is
+/// [`on_row`]'s other pair and is still one control. The card the menu puts
+/// down is not counted at all, exactly as the other three cards are not: rule
+/// 2 claims every press while it is there.
+///
+/// **How many rows there are is the one number here that could have been a
+/// count and must not be.** A press lands on one of however many rows
 /// the bay drew, exactly as it lands on one of however many chips it drew — and
 /// the chips are counted while these are not, because the difference is what
 /// each number is *about*. [`Scope::ALL`] is a closed list this crate owns, so
@@ -812,7 +830,7 @@ pub const PROBES: [Probe; 25] = [
     },
     Probe {
         name: "the Library bay's list",
-        claims: 1,
+        claims: 2,
         ask: on_row,
     },
     Probe {
@@ -1429,6 +1447,19 @@ pub fn claim(panel: &mut Panel, ctx: &egui::Context, view: &View, p: Point) -> C
         // both be down: the press that would open the second one lands while
         // the first is open, so this claims it and it shuts that one.
         || view.target_open()
+        // **And a row's menu, which is a fourth**, hanging off a row of that
+        // same list and down over the rows under it. It is here rather than
+        // among rule 4's controls for the reason the three above it are: a
+        // card is a hand mid-choice, the next press is part of that gesture
+        // whichever way it ends, and the card crosses boundaries the
+        // clearance arithmetic cannot be done for
+        // ([ADR-0311](../../../docs/adr/0311-a-row-menu-loads-a-set-onto-a-named-deck-and-saves-it-through-the-systems-own-dialog.md)).
+        //
+        // **It is the one card a *secondary* press opens**, and that changes
+        // nothing here: this rule is about a card that is down and not about
+        // what put it there, so a press of either button while it is down is
+        // the card's.
+        || view.menu_open()
     {
         return Claim::Panel;
     }
@@ -1477,12 +1508,13 @@ pub fn wheeled(panel: &mut Panel, view: &View, p: Point) -> Option<usize> {
     if panel.dragging() {
         return None;
     }
-    // Rule 2, the same four cards and the same order as [`claim`]: a hand
+    // Rule 2, the same five cards and the same order as [`claim`]: a hand
     // mid-choice is not a hand on a pane.
     if view.arrangement.open()
         || view.audio.as_ref().is_some_and(|audio| audio.open())
         || view.naming_set().is_some()
         || view.target_open()
+        || view.menu_open()
     {
         return None;
     }

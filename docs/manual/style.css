@@ -383,6 +383,26 @@
   .field { border: 1px solid var(--c-line); border-radius: 999px; padding: 0 9px; color: var(--c-faint); flex: 1; min-width: 0; }
   .lib-list { display: flex; flex-direction: column; padding: 3px; }
   .lib-row { display: flex; gap: 7px; padding: 3px 7px; color: var(--c-dim); align-items: center; border-radius: 7px; }
+  /* The row a menu is open on, which is what makes the card below hang off
+     that row rather than off the list: the card is drawn *over* the rows under
+     it rather than pushing them down, which is what tells it apart from the
+     reading a press on `read` opens. */
+  .lib-row.menued { position: relative; }
+  /* The menu a right press on a row's name opens, and it is the deck
+     pulldown's card term for term — the panel's own fill, a hairline and the
+     shadow — because it is the same object one control along and a second
+     treatment would be a second answer to *what does a card hanging off
+     something look like*. It is drawn open here on the cursor's row, which is
+     the only way a page can draw a gesture. */
+  .rowmenu { position: absolute; top: 100%; left: 22px; z-index: 3;
+             padding: 3px; min-width: 124px;
+             background: var(--c-panel); border: 1px solid var(--c-line);
+             border-radius: 8px; box-shadow: var(--c-shadow); }
+  .rowmenu .item { padding: 3px 8px; border-radius: 6px; color: var(--c-dim); white-space: nowrap; }
+  /* The separator is nothing: it names no operation, takes no press and is one
+     hairline with air either side, which is the whole of what it says — the
+     four above it land a Set on a deck and the one below it writes a file. */
+  .rowmenu .rule { height: 1px; margin: 4px 6px; background: var(--c-hair); }
   .lib-row.cursor { background: color-mix(in srgb, var(--c-lav) 13%, transparent); color: var(--c-text); }
   .lib-row .star { color: var(--c-sun); }
   /* Not a favourite. A class rather than an inline colour, because the star
