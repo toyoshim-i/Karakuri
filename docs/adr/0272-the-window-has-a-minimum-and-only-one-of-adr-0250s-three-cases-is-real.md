@@ -11,6 +11,24 @@ tags: [ui, layout]
 
 # The window has a minimum, and only one of ADR-0250's three cases is real
 
+> **Annotated 2026-09-08: the width figure moved, and the item this record left owed is what moved
+> it.** `karakuri_console::MINIMUM_VIEWPORT` is **777 x 658.5** and the centre's declared minimum is
+> **425**, not the 692 and 340 written below —
+> [ADR-0279](0279-the-centre-is-two-parameter-rows-wide-because-a-pane-that-cannot-draw-a-fader-is-not-a-minimum.md).
+> The height is untouched, and so are `left-pane`'s 160 and `right-pane`'s 172: the window's floor
+> grew by exactly what the centre grew, and `tests/mixer.rs`'s pair still holds at the new width
+> because the right pane is 172 at 777 exactly as it was at 692. **The figure this record names for
+> the fix, 775, is one pixel per pane short** — at a pane of exactly 207 the parameter fader's
+> leftover track is exactly zero and `positive` refuses to draw it — so a pane's minimum is 208 and
+> the centre's is 2 x 208 + 9.
+>
+> **This is annotation and not supersession, and neither record's front matter changes.** What was
+> decided here is that the window declares a minimum at all, that the number is the arrangement's
+> **declared** minima summed along each axis, and that the capped minima cannot hold one. ADR-0279
+> uses that derivation rather than answering it differently; it changed one term of one axis, and
+> says so itself — *"ADR-0272 is not edited. Its diagnosis is what this record acts on and its figure
+> is corrected here rather than there"*.
+
 ## Context
 
 [ADR-0250](0250-below-the-minima-the-arrangement-scales-rather-than-being-rewritten.md) says what

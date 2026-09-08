@@ -447,7 +447,7 @@
         <div class="op-name" tabindex="0" data-tip="A step of one lane is on or it is off, and the change is heard the next time the playhead reaches that step. What it waits on is a pattern, which nothing in this program holds: where a pattern is kept is settled and what one is is not. The grid under it is no new clock &mdash; a step is the beat clock subdivided, so correcting the tempo changes the rate from now on without moving a beat that has already happened.">
           <div class="op-head"><h3>Toggle a step</h3></div>
         </div>
-        <span class="op-when">immediate</span>
+        <span class="op-when grid">grid</span>
         <div class="rts">
           <span class="rt plan">panel <b>sequencer lane</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
@@ -612,7 +612,7 @@
     <h2>The library</h2>
     <div class="opgroup">
       <div class="op">
-        <div class="op-name" tabindex="0" data-tip="Writes the material on screen &mdash; the versions running, with their parameters, capacities, salts, layering and fold &mdash; not what any file on disk says. Where it lands is decided by who asked, not by which control carried it: your own act writes the library at &lt;store&gt;/sets/, and a save asked for over MCP writes &lt;store&gt;/sandbox/ instead, stamped, overwriting nothing, and readable by nothing that reads the library. That is the compensating half of not refusing a model the operation at all &mdash; what a model keeps is the edit history of a session, which is what you go looking for afterwards. The tool waits for the disk and reports; the key does not.">
+        <div class="op-name" tabindex="0" data-tip="Writes the material on screen &mdash; the versions running, with their parameters, capacities, salts, layering and fold &mdash; not what any file on disk says. Where it lands is decided by who asked, not by which control carried it: your own act writes the library at &lt;store&gt;/sets/, and a save asked for over MCP writes &lt;store&gt;/sandbox/ instead, stamped, overwriting nothing, and readable by nothing that reads the library. That is the compensating half of not refusing a model the operation at all &mdash; what a model keeps is the edit history of a session, which is what you go looking for afterwards. What it is filed <em>as</em> is decided by which press carried it: the panel&#39;s `keep` capsule and the key type nothing and take a stamp, and the Inspector pane head&#39;s own name takes letters, so a deck filed from there lands under what was typed. The tool waits for the disk and reports; the key does not.">
           <div class="op-head"><h3>Keep what a deck is playing</h3></div>
         </div>
         <span class="op-when">on a worker</span>
@@ -625,7 +625,7 @@
         </div>
       </div>
       <div class="op">
-        <div class="op-name" tabindex="0" data-tip="Most recent first, narrowed by what a node is called or by which layer a Set uses, and it says how many it did not show. It has nowhere to put a directory, and that is the shape rather than a field somebody left out: both of its fields narrow what a store already holds, and which store is being asked at all &mdash; this one, the presets root, or a folder dropped on the panel&#39;s window &mdash; is the scope&#39;s question and never this row&#39;s. The two fields under the scope row are where the panel asks it: each one steps rather than takes letters &mdash; `holds` through the node names this store&#39;s Sets are made of and `layer` through L1, L2, L3, L4 and FIELD, both wrapping back to unset &mdash; because the console has one letter-taking flow and it is bounded to a name. What the fields narrow is `my sets`, which is what this row lists; on another scope the press asks this and the bay says the listing it is drawing is not the store&#39;s.">
+        <div class="op-name" tabindex="0" data-tip="Most recent first, narrowed by what a node is called or by which layer a Set uses, and it says how many it did not show. It has nowhere to put a directory, and that is the shape rather than a field somebody left out: both of its fields narrow what a store already holds, and which store is being asked at all &mdash; this one, the presets root, or a folder dropped on the panel&#39;s window &mdash; is the scope&#39;s question and never this row&#39;s. The two fields under the scope row are where the panel asks it: each one steps rather than takes letters &mdash; `holds` through the node names this store&#39;s Sets are made of and `layer` through L1, L2, L3, L4 and FIELD, both wrapping back to unset. The console has two letter&#8209;taking flows now &mdash; an arrangement&#39;s name, and a Set&#39;s id typed into an Inspector pane head &mdash; and each is bounded to one path component, where a filter is an unbounded fragment; so what these two fields should be is an open question rather than a settled one, and stepping is what they do until somebody answers it. What the fields narrow is `my sets`, which is what this row lists; on another scope the press asks this and the bay says the listing it is drawing is not the store&#39;s.">
           <div class="op-head"><h3>List what the store holds</h3><span class="op-kind">read</span></div>
         </div>
         <span class="op-when">immediate</span>
@@ -667,7 +667,7 @@
         <div class="op-name" tabindex="0" data-tip="Every inlined source must hash to the address its slot names before anything is stored, and an id already taken is refused rather than overwritten. The way in takes both spellings: a .kbset that arrived whole, and a .kset that names its parts by relative path and is refused, out loud, for a part named from outside its own directory. Taking one in is not a second row &mdash; opening a preset is this row &mdash; and what nothing draws is the sending.">
           <div class="op-head"><h3>Send a Set to somebody, and take one in</h3></div>
         </div>
-        <span class="op-when launch">launch</span>
+        <span class="op-when">on a worker</span>
         <div class="rts">
           <span class="rt plan">panel <b>library</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
@@ -677,10 +677,10 @@
         </div>
       </div>
       <div class="op">
-        <div class="op-name" tabindex="0" data-tip="Every compile writes into the store's history and nothing reads it. Undo is a surface over these files, and the surface is a later milestone. When it happens is not settled because nothing performs it.">
+        <div class="op-name" tabindex="0" data-tip="Every version that compiled is kept where a person can find it, and there is a reader for it now: the history lists back, most recent first, each row naming the node it was a version of and the Set the slot was running when it was written &mdash; so the rows a walk would step through are readable today, and so is the narrowing to one Set that makes a walk about something. The gate is <em>compiling</em> and not landing, which is why a version rolled back for costing too much is in there: it was a real attempt and something about it was right, and it is the one the session stream has not got. &#8853; It is not undo, and this row was the last place still calling it that: <em>what versions has this had</em> is a list, landing on one is a load, and neither of those words is undo. Landing is not this row either &mdash; it is <em>put a node&#39;s previous version back</em>, under Procedures. This one is the list. &#8853; What is missing is the surface: no control names a version, which is why all four columns are empty. A walk needs a cursor and a direction, or a count of steps, or a revision to land on, and the answer among the three is a revision to land on, because a row is what an operator picks. It is not written into the operation ahead of the control that would fill it. &#8853; And only the command-line player takes the snapshots today &mdash; the panel program is handed no snapshotter &mdash; so the list is readable and this instrument is not yet writing into it.">
           <div class="op-head"><h3>Walk the edit history</h3></div>
         </div>
-        <span class="op-when">&mdash;</span>
+        <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt plan">panel <b>&mdash;</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
@@ -890,7 +890,7 @@
     <h2>Output and recording</h2>
     <div class="opgroup">
       <div class="op">
-        <div class="op-name" tabindex="0" data-tip="The window is a preview and has no say in what is drawn: the canvas is fixed for the run, and the window fits it with the leftover black.">
+        <div class="op-name" tabindex="0" data-tip="The window is a preview and fits what is drawn into it with the leftover black, and that half has not moved. What has is who decides the size being fitted, and it is decided rather than built. The rule is that a render size belongs to an <em>output</em> and not to the session: every output holds the size it is rendered at, set by you or by the window it goes to, one frame is composited at the largest of the enabled ones and scaled into each so that nothing is ever upscaled, and the session&#39;s canvas degrades to what an output starts at when nothing else says. That is what the Program bay&#39;s size pill reads on the console page. What runs today is still the older rule underneath it: one canvas for the whole run &mdash; a constant in the panel program that no flag reaches, and `--canvas` on the command line, fixed for the run. So resizing this window still moves nothing but the letterbox, and the reason has changed rather than gone: it is that the output which would hold a size of its own is unbuilt, not that a window is refused a say.">
           <div class="op-head"><h3>Size the window</h3></div>
         </div>
         <span class="op-when">immediate</span>

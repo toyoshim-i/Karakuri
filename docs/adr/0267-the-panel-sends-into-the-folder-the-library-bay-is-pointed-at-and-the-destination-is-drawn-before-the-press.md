@@ -11,6 +11,30 @@ tags: [ui, console, operations, surfaces, library, docs]
 
 # The panel sends into the folder the Library bay is pointed at, and the destination is drawn before the press
 
+> **Annotated 2026-09-08: the directory this record waits on is settled, and by neither of the
+> shapes named below.**
+> [ADR-0275](0275-a-folder-is-chosen-by-dropping-one-on-the-window-and-the-drop-is-the-windows-rather-than-a-bays.md)
+> (2026-09-07) decides that **a folder is chosen by dropping one on the window**, window-global
+> rather than aimed at a bay. `Operation::ListSets { holds, layer }` is not missing a field — both
+> are filters over what a store already holds, and a directory is *which store is asked at all*,
+> which is the host's outside the operation entirely. That answers *What this does not decide →
+> When the folder scope gets its directory, or what asks for it*, where this record left
+> `ListSets` growing a field, a new operation and *something else* as the open list: it is the
+> third. (What is owed for it is `crates/karakuri/src/main.rs` reading `dropped_files`, which that
+> file names at its own site.)
+>
+> **This record's decision is untouched, and reason 1 is discharged rather than reversed.** Reason
+> 1 reads *"the folder scope has no directory"* as an **ordering** and not an objection — *not yet*,
+> not *not this* — and the ordering has since run out.
+>
+> **The `view.rs` quotation in reason 1 was that file's wording on 2026-09-06 and was exact then;
+> the file now says the opposite.** `Scope::Folder`'s doc reads *"it waits on a **directory**, and
+> not on an operation"* and cites ADR-0275, where the passage quoted below said *"it waits on an
+> operation … so the chip waits on a row of the page and not on a decision."* The consequence that
+> predicted that sentence *"gains a second thing waiting on the same directory"* is what moved
+> instead: the row of the page it was waiting on turned out not to be the answer, and a drop on the
+> window is.
+
 ## Context
 
 [ADR-0260](0260-sending-a-set-is-a-read-and-a-reads-answer-goes-where-the-surface-that-asked-puts-answers.md)

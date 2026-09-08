@@ -1305,8 +1305,18 @@ pub enum BinOp {
     Sub,
     Mul,
     Div,
-    /// `%`. Follows `mod` semantics on floats (always non-negative), which
-    /// differs from WGSL; ordinary remainder on integers.
+    /// `%`. Follows GLSL `mod` semantics on the float family — the result
+    /// takes the sign of the **divisor**, which is what
+    /// `a - b * floor(a / b)` gives and is what `karakuri-codegen`'s
+    /// `prelude::mod_helper_name` wrapper emits; ordinary remainder on
+    /// integers, which is WGSL's own `%` and takes the sign of the dividend.
+    ///
+    /// **This said *always non-negative* until 2026-09-08**, which was wrong
+    /// rather than imprecise: `(-1.0) % 3.0` is 2.0 under these semantics and
+    /// `1.0 % (-3.0)` is -2.0. `karakuri-codegen`'s `lower.rs` states the rule
+    /// correctly at the one place it is applied — *"always the sign of the
+    /// divisor"* — and the emitted helper carries the same sentence into the
+    /// shader.
     Rem,
     Lt,
     Le,

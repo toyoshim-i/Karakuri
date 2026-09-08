@@ -11,6 +11,29 @@ tags: [ir, engine, renderer, measurement]
 
 # A renderer's floor is bounded from its declared ranges, or refused
 
+> **Annotated 2026-09-08, later the same day: one clause is loosened, and it is the one this record
+> named as open.**
+> [ADR-0293](0293-a-rung-may-sit-under-the-floor-because-what-it-hides-is-bounded-and-paid.md)
+> decides that **a rung may sit under the sub-pixel floor**, because what the flooring can then hide
+> is bounded from the placement alone — `1 - 1/q²`, where `q` is the target's height over the upper
+> rung's — capped at a quarter and divided back out of the answer. That is *What is open is the
+> reading of the floor* below, answered: **less strictly than `estimate` was enforcing it**. A
+> primitive floored at the target too costs the fit nothing, and the strict reading could not tell
+> it apart from one that would. `Unfit::RungBelowFloor` is gone and `Unfit::FlooringHidesTooMuch`
+> replaces it; `estimate` no longer returns `Unfit::FloorUnknown`, because an unbounded rate is the
+> worst case the placement bound already covers and is therefore placed rather than refused.
+>
+> **This record stands whole and is not superseded** — ADR-0293's `supersedes` is empty on purpose.
+> The bound, the direction every rule rounds in, the declarations travelling with the floor on
+> `Estimate::floor_from`, and the refusal of a floor invented out of nothing are all kept, and are
+> what ADR-0293 is built on. What moved is one clause: that a rung under the floor is a wall rather
+> than a quantity. The finding below — *none of the eight leaves room for two rungs under a 720-row
+> target*, twelve of fifteen refused — survives as a fact and stops being the difference between a
+> number and no number: all fifteen are answered now, three of them with both rungs clear of the
+> floor. The test written that morning to mechanise the refusal,
+> `no_shipped_per_element_floor_leaves_room_under_the_reference_target`, is replaced by
+> `every_shipped_floor_is_placed_and_none_hides_more_than_the_allowance` over the same four floors.
+
 ## Context
 
 [ADR-0245](0245-the-sub-pixel-compensation-is-paid-in-the-colour-because-alpha-is-coverage.md)
@@ -112,6 +135,25 @@ same failure `Probe::run` demoting for life exists to prevent, one level up: a n
 moved after it was taken. **The two are not exclusive** — `Bound::AtLeast::over` names the
 declarations, so a caller holding the values has everything it needs to compute the tighter floor
 and own the staleness — and this record takes the one that is true for the run.
+
+**Corrected 2026-09-08: *silently* is wrong, and the rule it argues against was already settled when
+this was written.**
+[ADR-0282](0282-a-rebuild-inherits-the-values-somebody-moved-and-reads-the-rest-from-the-code.md)
+landed at 11:32 that morning and this record at 13:20. It settles which state a number about a Set is
+taken over — a declared value is the value in the untouched state, and where somebody moved one **the
+held value *is* the value** — and it is also what makes the movement visible: `Set::moved` marks
+every value `Set::set_param` or `Set::set_param_at` wrote, per node, and those two are the only
+places a number in `Set::params` ever changes. So a fader moved after a held-value bound was taken is
+not moved *with nothing anywhere saying so*; the Set says which of its values somebody stated, and
+`Set::rate_bound_contradicted` above is a second thing that says so where the value also leaves its
+declaration. Under ADR-0282's reading the staleness is the design rather than a hazard against it — a
+write invalidates the estimate standing on it and the estimate is taken again — which is
+[ADR-0293](0293-a-rung-may-sit-under-the-floor-because-what-it-hides-is-bounded-and-paid.md) §8, where
+this alternative is re-read and `karakuri_ir::rate::point_rate_bound_at` is the bound taken that way.
+**The decision is untouched by the correction**: `Set::rate_bounds` is still computed once over the
+declared ranges, nothing in the engine calls the held-value form, and what the tighter reading is
+worth is measured in ADR-0293 — four procedures' worth of exactness and one bound at all — rather
+than assumed here.
 
 **Evaluate the expression on the GPU and read the minimum back.** It is the exact answer rather than
 a bound, and it costs a pass, a readback and a synchronisation per estimate, and it is a measurement

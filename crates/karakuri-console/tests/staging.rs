@@ -430,8 +430,9 @@ fn each_candidate_adds_shapes_and_the_fourth_adds_none() {
 /// build calls itself, and the verdict.**
 ///
 /// The deck is what tells two rows apart in the program this panel is drawn
-/// by: it plays one pair of files in both its slots, so one save produces two
-/// builds whose names are the same string.
+/// by: it plays one pair of files in **four** slots, each from its own copy, so
+/// one save produces four builds whose names are the same string. (This said
+/// *both its slots* until 2026-09-08, from a two-slot deck that is long gone.)
 ///
 /// **Counted rather than read**, because a galley's text is not something a
 /// shape carries: every row is four shapes wholly inside its own rectangle —

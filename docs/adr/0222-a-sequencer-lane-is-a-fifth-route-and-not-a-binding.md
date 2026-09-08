@@ -11,6 +11,25 @@ tags: [architecture, signal, ui]
 
 # A sequencer lane is a fifth route and not a binding
 
+> **Annotated 2026-09-08: the consequence *`TakeParamBack` is the lane mute, already* does not
+> hold, and the refutation is written where the vocabulary is.**
+> `Operation::SetLaneMute`'s doc in `crates/karakuri-operation/src/lib.rs` carries it: *"It is not
+> [`Operation::TakeParamBack`], and ADR-0222's consequence saying that it already is does not
+> hold."* `TakeParamBack` names a `deck` and a `ParamAt` — a parameter **inside that deck's Set** —
+> where three of the four lanes the console draws are deck faders, which are no Set's. **It is this
+> record's own argument turned on its own consequence**: *"there is no binding on a deck fader
+> anywhere in the engine"* is what killed the binding reading in the body above, and it reaches
+> `TakeParamBack` for the same reason, so that operation covers one lane in four. `SetLaneMute` is
+> the row, addressed the way a lane is addressed, with the payload `Undecided` for the same reason
+> `SetStep`'s is; `TakeParamBack`'s own doc says the same thing from the other side.
+>
+> **Everything else here stands**, including the sentence the mute bullet was drawn from — the
+> mock's muted lane still says *the pattern is kept and drives nothing*, and what that needs is an
+> operation rather than a shape nobody had connected to it. The bullet's closing count, *"the third
+> time in this milestone"*, loses this instance with it.
+>
+> The refutation is the vocabulary's own doc and no ADR carries it.
+
 ## Context
 
 The Sequencer bay is the last of the console's nine regions with nothing drawn, and
