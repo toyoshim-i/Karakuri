@@ -867,6 +867,19 @@
   .op-when.grid { color: var(--lav); background: color-mix(in srgb, var(--lav) 14%, transparent); }
   .op-when.launch { color: var(--sun); background: color-mix(in srgb, var(--sun) 18%, transparent); }
 
+  /* A row that only asks. Rule 01 compels every way in for an operation that
+     changes something and leaves a read to each way in's own design, so an
+     empty column on a marked row is a decision and not a debt. It sits in the
+     head beside the title rather than in a column, because it is a property of
+     the operation and not of any one surface's cell — and because the six
+     files that read this page find a row by its `op-head` div and its bare
+     `h3`, both of which are untouched by it. */
+  .op-kind {
+    font-family: var(--f-code); font-size: 0.62rem; text-transform: uppercase;
+    letter-spacing: 0.1em; padding: 0.05rem 0.45rem; border-radius: 999px;
+    color: var(--dim); background: var(--ground); white-space: nowrap;
+  }
+
   /* The four when words, and the three badge colours, as the legend draws
      them. */
   .whens { display: flex; flex-wrap: wrap; gap: 1.2rem; font-size: 0.86rem; color: var(--dim); margin-top: 0.9rem; }

@@ -44,11 +44,12 @@
     <p class="eyebrow">Karakuri &middot; the manual</p>
     <h1>Every operation, and every way in</h1>
     <p class="lede">
-      The first rule says every operation is reachable from the panel, from the
-      keyboard alone, from a mapped MIDI control, and from a model over MCP.
-      Every operation is a row, every surface is a column, and the badge says
-      whether that surface reaches it. Hover or focus an operation's name for
-      what it does.
+      The first rule says every operation that <em>changes</em> something is
+      reachable from the panel, from the keyboard alone, from a mapped MIDI
+      control, and from a model over MCP &mdash; and leaves an operation that
+      only <em>asks</em> to each way in's own design. Every operation is a row,
+      every surface is a column, and the badge says whether that surface
+      reaches it. Hover or focus an operation's name for what it does.
     </p>
   </header>
 
@@ -64,6 +65,9 @@
       <span><b class="op-when grid">grid</b> it is scheduled and lands on a musical instant</span>
       <span><b class="op-when launch">launch</b> the only way in is a flag, before the run</span>
       <span><b class="op-when">on a worker</b> it is built off the render thread and lands when it is ready</span>
+    </div>
+    <div class="whens">
+      <span><b class="op-kind">read</b> it only asks, so a column left empty here is that way in's own design and not something owed</span>
     </div>
   </section>
 
@@ -622,7 +626,7 @@
       </div>
       <div class="op">
         <div class="op-name" tabindex="0" data-tip="Most recent first, narrowed by what a node is called or by which layer a Set uses, and it says how many it did not show. It has nowhere to put a directory, and that is the shape rather than a field somebody left out: both of its fields narrow what a store already holds, and which store is being asked at all &mdash; this one, the presets root, or a folder dropped on the panel&#39;s window &mdash; is the scope&#39;s question and never this row&#39;s. The two fields under the scope row are where the panel asks it: each one steps rather than takes letters &mdash; `holds` through the node names this store&#39;s Sets are made of and `layer` through L1, L2, L3, L4 and FIELD, both wrapping back to unset &mdash; because the console has one letter-taking flow and it is bounded to a name. What the fields narrow is `my sets`, which is what this row lists; on another scope the press asks this and the bay says the listing it is drawing is not the store&#39;s.">
-          <div class="op-head"><h3>List what the store holds</h3></div>
+          <div class="op-head"><h3>List what the store holds</h3><span class="op-kind">read</span></div>
         </div>
         <span class="op-when">immediate</span>
         <div class="rts">
@@ -648,7 +652,7 @@
       </div>
       <div class="op">
         <div class="op-name" tabindex="0" data-tip="Every knob with its range and default, the element count, the attributes emitted &mdash; each read off the artifact's own card, so those three fetch no source and compile nothing. What a node's element storage comes to is the figure that is not a card's: it needs every source in the Set fetched and checked before anything can be sized, and it pays for that. The panel draws the three that cost nothing; a model asking over MCP is offered the fourth as well.">
-          <div class="op-head"><h3>Read what one Set holds and declares</h3></div>
+          <div class="op-head"><h3>Read what one Set holds and declares</h3><span class="op-kind">read</span></div>
         </div>
         <span class="op-when">immediate</span>
         <div class="rts">
@@ -693,7 +697,7 @@
     <div class="opgroup">
       <div class="op">
         <div class="op-name" tabindex="0" data-tip="Addressed by deck, layer and index. Read before writing: the edit is usually small, and what is there is the best guide to the language.">
-          <div class="op-head"><h3>Read one node's source</h3></div>
+          <div class="op-head"><h3>Read one node's source</h3><span class="op-kind">read</span></div>
         </div>
         <span class="op-when">immediate</span>
         <div class="rts">
@@ -732,7 +736,7 @@
       </div>
       <div class="op">
         <div class="op-name" tabindex="0" data-tip="Landed, rolled back for costing too much, or failed to build. A write returning cleanly means it compiled, not that it is on screen.">
-          <div class="op-head"><h3>Find out what a write did</h3></div>
+          <div class="op-head"><h3>Find out what a write did</h3><span class="op-kind">read</span></div>
         </div>
         <span class="op-when">immediate</span>
         <div class="rts">
