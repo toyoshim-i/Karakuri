@@ -84,7 +84,7 @@ fn chips(
     index: usize,
     pane: &Pane,
 ) -> (InspectorPane, DeckHead) {
-    let at = inspector(panel.layout(), index, pane).expect("a pane with room in it");
+    let at = inspector(panel.layout(), index, pane, 0.0).expect("a pane with room in it");
     let head = deck_head(ctx, &at, pane).expect("a deck head with room for its chips");
     (at, head)
 }
@@ -447,7 +447,7 @@ fn a_control_that_has_not_been_drawn_is_not_there() {
 
     let fresh = egui::Context::default();
     assert_eq!(fresh.cumulative_pass_nr(), 0);
-    let pane_at = inspector(panel.layout(), 0, &pane).expect("a pane with room in it");
+    let pane_at = inspector(panel.layout(), 0, &pane, 0.0).expect("a pane with room in it");
     assert_eq!(deck_head(&fresh, &pane_at, &pane), None);
 
     let ctx = drawn_once();
@@ -735,7 +735,7 @@ fn a_press_reaches_both_operations_the_way_the_window_loop_reaches_them() {
             "`claim` gives a press at {probe:?} to `egui`, so no route into the operation \
              exists however the control is drawn"
         );
-        let again = inspector(panel.layout(), 0, &pane)
+        let again = inspector(panel.layout(), 0, &pane, 0.0)
             .and_then(|at| deck_head(&ctx, &at, &pane))
             .expect("the same head `claim` hit-tested");
         let asked = again

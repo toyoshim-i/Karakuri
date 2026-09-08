@@ -1061,6 +1061,22 @@ pub mod size {
     /// [`FADER_KNOB_H`], both shorter than the type either side.
     pub const PARAM_H: f32 = PARAM_PAD_Y * 2.0 + BASE * LINE;
 
+    /// **How far one notch of the wheel scrolls an Inspector pane** — three
+    /// parameter rows, **67.5**.
+    ///
+    /// It is written as a multiple of [`PARAM_H`] rather than as a number
+    /// because that is what the page says it is (`docs/manual/console.html`,
+    /// *The pane scrolls, and it says how much it is not showing*: *"three
+    /// parameter rows a notch"*), and a figure here that stopped being a
+    /// multiple of the row would be a second answer to how far a notch goes.
+    ///
+    /// **Only a notch is measured in these**, which is the whole of why this
+    /// is not the console's idea of a scroll speed: a trackpad hands over a
+    /// distance in pixels already and is passed through untouched, so this
+    /// converts a *count of detents* and nothing else
+    /// ([ADR-0307](../../../docs/adr/0307-the-inspectors-pane-scrolls-and-the-position-is-the-panes-own.md)).
+    pub const WHEEL_STEP: f32 = PARAM_H * 3.0;
+
     /// `.rend-row`'s `padding: 3px 10px 6px 12px` — the renderer chips stand
     /// on the same 12 and 10 a parameter row does, with more room under them
     /// than over — and its `gap: 5px`, between two chips.

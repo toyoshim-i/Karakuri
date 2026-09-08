@@ -207,6 +207,7 @@
                 <div class="insp-half">
                   <div class="half-head"><span>showing</span><span class="what">deck A &middot; drift_night</span><span>&#9662;</span>
                     <span class="sep"></span>
+                    <span class="shown" data-tip="How many of this deck&#39;s node groups this pane is showing whole, out of how many the deck has &mdash; the Library foot&#39;s `5 of 27` counted on the groups a pane stacks rather than on the rows a listing holds, because a group is what this bay&#39;s items are. Five of five here, so nothing is out of sight and the pane is not scrolled. Turn the wheel over the pane and its body scrolls under the two heads, which stay where they are: three parameter rows a notch, and the first number falls as a group leaves the top or the bottom. The group at the cut is drawn as far as the pane goes rather than dropped, so this number and what you can see agree &mdash; it counts what is whole, and a group half on screen is one it does not count. There is no bar down the side and this is the mark instead: every scrollbar is either a control, which would owe a row on the operations page and a key and a map line beside it, or a shape that looks like one and refuses the hand. The position is this pane&#39;s own, like the cursor in the library list: two panes pointed at one deck keep two of them, no operation names it, and it is not part of the arrangement, so saving one does not carry it and restoring one does not move it. Drag the pane taller or shorter and it is not rewritten &mdash; the pane draws as much of it as it can hold, and what it could not is still there when the pane comes back. The keyboard&#39;s way in is the arrows walking this bay&#39;s items, which the operations page has not named a key for, so it is the wheel until it does. A readout, and there is nothing here to press. &#8853; MIDI: unassigned &mdash; a readout is not an operation, so there is no target for a map line to name.">5 of 5</span>
                     <span class="pill on" data-tip="Keep deck A as a Set, exactly as it is on screen &mdash; the versions running, with their parameters, capacities, salts, layering and fold. It goes into the library under the moment you kept it, to the millisecond: this capsule is the press that types nothing, so what it files under is a stamp. The name is the pane head&#39;s own, three items along the same row &mdash; press `deck A &middot; drift_night` and the head takes letters and files the deck under what was typed. One operation and two presses, differing in whether an id is named: an operator&#39;s own act gets the name it asked for, and a press that cannot type one goes looking for a live save by when they made it, which is what the stamp is for. &#8853; It keeps the deck this pane is <em>showing</em> rather than the deck the selection is on, and that is the one thing it does that <code>k</code> cannot: a key press cannot say which pane. &#8853; The wash says the deck this pane is showing is <em>on air</em>, in the same pink a tally on air is drawn in &mdash; not that this keep is the chosen one of the two. It is the one moment a keep is worth a mark: what you are about to file is what the room is watching. Point this pane at a deck that is not live and the wash goes; the press does not change. The selection is drawn in lavender everywhere else on this panel and is not what this is.">keep</span>
                   </div>
 
@@ -307,7 +308,7 @@
 
                 <div class="insp-half">
                   <div class="half-head"><span>showing</span><span class="what">deck B &middot; lattice_veil</span><span>&#9662;</span>
-                    <span class="sep"></span><span class="pill">keep</span>
+                    <span class="sep"></span><span class="shown" data-tip="Three of three, and this pane is not scrolled either. It is deck B&#39;s count and deck A&#39;s next door is its own: the position each pane is scrolled to belongs to the pane and not to the deck it is showing, so pointing both panes at one deck gives you two of them. The capsule beside it is described in the other pane&#39;s head. A readout, and there is nothing here to press. &#8853; MIDI: unassigned.">3 of 3</span><span class="pill">keep</span>
                   </div>
 
                   <div class="deck-head">
@@ -693,6 +694,79 @@
           published control with no address, it moves every node that declares
           its key, and a Set that declares no interface at all publishes
           <em>nothing else</em>.
+        </p>
+      </div>
+
+      <div class="note">
+        <h3>The pane scrolls, and it says how much it is not showing</h3>
+        <p>
+          A deck's node groups come to more than a pane holds &mdash; one
+          geometry publishing nineteen knobs is a single group 454&nbsp;pixels
+          tall, against an Inspector bay that is allowed down to 151.5 &mdash;
+          so <strong>the pane's <em>body</em> scrolls under its two
+          heads</strong>. The
+          <code>showing</code> row and the deck head stay: which deck you are
+          looking at and what its clock is doing are the two things that must
+          never leave the screen, because everything under them is only
+          legible once you know whose they are.
+        </p>
+        <p>
+          <strong>The wheel over the pane is the way in</strong>, three
+          parameter rows a notch, and the pointer decides which pane &mdash;
+          two panes are two positions and the wheel turns the one it is over.
+          <strong>The keyboard's way in is not bound here.</strong> A bay's
+          items are walked with the arrows, this bay's items are its panes and
+          a pane's are its node groups, and the operations page names no key
+          for that walk yet; a key invented on this side would be the panel
+          deciding what the page reserved. So there is one route today and it
+          is the pointer's, which is a gap and not a decision.
+        </p>
+        <p>
+          <strong>A pane showing part of itself says so, in the count at the
+          right of its head</strong> &mdash; <code>5 of 5</code> above, which
+          is the Library foot's <code>5 of 27</code> read on the groups a pane
+          stacks rather than on the rows a listing holds. It counts what is
+          <em>whole</em>: a group cut by the top or the bottom edge is drawn as
+          far as the pane goes and is not counted, so the number and the
+          picture cannot disagree. That is rule 04 met by the one part of it
+          that is hard &mdash; <em>says how much</em> &mdash; and it is why the
+          count is groups and not pixels: a bay's items are what an operator
+          counts, and a percentage is a number about a rectangle.
+        </p>
+        <p>
+          <strong>There is no bar down the side, and the count is the mark
+          instead.</strong> This console draws no scrollbar anywhere, and the
+          reason is not restraint: a bar you can drag is a control, which owes
+          a row on the operations page and a key and a map line beside it, and
+          a bar you cannot drag is a shape that looks like a control and
+          refuses the hand &mdash; which is rule 03 broken by a thing that says
+          nothing about what a click will do because a click does nothing. A
+          group drawn to the pane's edge is the second half of the mark, and it
+          is the half that says <em>which way</em> there is more.
+        </p>
+        <p>
+          <strong>The position is the pane's own, and a resize does not rewrite
+          it.</strong> It is the cursor in the library list one bay over: no
+          operation names it, nothing outside the console could be the record
+          of what it is, and it is not part of the arrangement &mdash; so
+          saving an arrangement does not carry it and restoring one does not
+          move it. Drag the pane taller and it draws more of what it holds;
+          drag it shorter and it draws less, and <strong>what you scrolled to
+          is still there when the pane comes back</strong>, exactly and not
+          nearly. A pane that clamped its own position while being drawn would
+          lose an operator's place every time a window got smaller, which is
+          the same slow leak the arrangement refuses one level out.
+        </p>
+        <p>
+          <strong>What this replaces is a pane that drew a group whole or not
+          at all.</strong> That rule was honest while there was nowhere to
+          scroll to &mdash; a node head with two of its five parameters under
+          it reads as a node with two parameters &mdash; but its price was that
+          a short pane drew no knob at all, and a bay whose whole purpose is
+          the knobs cannot answer a small window with an empty pane. With a
+          position to scroll, a part-drawn group is no longer a lie about what
+          the node has: the count says how many are whole, and the rest of the
+          group is one notch away.
         </p>
       </div>
 

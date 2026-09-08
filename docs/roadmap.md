@@ -776,15 +776,25 @@ each records.
 
 **Three more this bay owes, and none of them is a row.** They were recorded, verified and left in
 prose, which is how a bay's exit — a grep over one column — could be met while its pane drew
-nothing an operator could reach. **One of the three is now done** — the centre's declared minimum,
-below — so what is owed here is two.
+nothing an operator could reach. **Two of the three are now done** — the centre's declared minimum
+and the pane's scroll, both below — so what is owed here is one, and it is an engine item.
 
-- **A pane draws a node group whole or not at all, and there is no scroll position anywhere in the
-  crate.** With the pair a bare run opens on, the first group is the L1's at 26.5 + 19 x 22.5 =
-  454px against a bay minimum of 151.5, so below roughly 534px of Inspector bay **not one parameter
-  row is drawn**. `view.rs` says outright that this is the first region of the console that
-  genuinely wants a scroll. The decision in front of it — scroll, or a group that can be part-drawn
-  — is this bay's rather than the arrangement's.
+- **A pane drew a node group whole or not at all, and there was no scroll position anywhere in the
+  crate — done on 2026-09-08.** With the pair a bare run opens on, the first group is the L1's at
+  26.5 + 19 x 22.5 = 454px against a bay minimum of 151.5, so below roughly 534px of Inspector bay
+  **not one parameter row was drawn**, in the bay whose whole content is parameter rows. The
+  decision in front of it — scroll, or a group that can be part-drawn — was this bay's rather than
+  the arrangement's, and the maintainer took it: **the pane scrolls**
+  ([ADR-0307](adr/0307-the-inspectors-pane-scrolls-and-the-position-is-the-panes-own.md)). The
+  body moves under the two heads, the wheel over a pane turns it, the head reads `n of m` for the
+  groups it is showing whole, and the position is the pane's own state — clamped at the draw and
+  never written back, so a resize does not lose an operator's place (P-0082, ADR-0250). **It
+  answers the *reachable* half and not the whole of the item**: what is left over is the keyboard,
+  which is ADR-0259's arrows walking this bay's items and is M5.13's, and until it exists the
+  scroll has one route and that route is the pointer's. That is a gap on this bay's list and not a
+  `plan` badge, because no row on the operations page names a scroll — it is pointer-state, like
+  the Library's cursor, which ADR-0264 and ADR-0265 refuse a row for and for the reason the record
+  gives: nothing outside the console could be the model of record for it.
 - **`centre`'s declared minimum was the mock's CSS track and not a reading of its content, and is
   now the second — done.** 340 where the `.param` grid wants 207 in a pane before its fader has any
   width, and a divider drag reaches a 340 centre at *any* window width, so no window minimum could
@@ -826,11 +836,15 @@ watcher states its aim's values on the build that aim causes and on no other. **
 control owes a writer into the Set and nothing else** — the writer into the watcher this entry used
 to ask for is what was removed.
 
-**And there may be no row on screen to press.** A pane draws a node group whole or not at all and
-there is no scroll position anywhere in the crate, so with the pair a bare run opens on the first
-group is the L1's at 26.5 + 19 x 22.5 = 454px against a bay minimum of 151.5. Below roughly 534px of
-Inspector bay, not one parameter row is drawn. Whether that is a blocker or the first thing this
-bay's own work has to fix is a decision about scrolling that no record here takes.
+**There used to be no row on screen to press, and that was the first thing this bay's own work had
+to fix.** A pane drew a node group whole or not at all and there was no scroll position anywhere in
+the crate, so with the pair a bare run opens on the first group is the L1's at 26.5 + 19 x 22.5 =
+454px against a bay minimum of 151.5, and below roughly 534px of Inspector bay not one parameter row
+was drawn. **The pane scrolls since 2026-09-08**
+([ADR-0307](adr/0307-the-inspectors-pane-scrolls-and-the-position-is-the-panes-own.md)), so a short
+bay draws part of a group rather than none of it and every row is one notch of the wheel away. What
+is still owed is the keyboard's route to it, which is ADR-0259's grammar and is M5.13's rather than
+this bay's — see the entry above.
 
 **Also here.** Three of the seven *Adds* items land in this bay. The **node
 editor**, whose source half is

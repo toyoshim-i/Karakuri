@@ -166,8 +166,17 @@ pub enum Change<'a> {
     /// The pointer moved, or a button went down or up, with `claim` saying who
     /// got the event ([`crate::input`]).
     Pointer(Claim),
-    /// A wheel turned, with `claim` saying who got it.
-    Wheeled(Claim),
+    /// **A wheel turned**, with `claim` saying who got it and `moved` saying
+    /// whether the console scrolled anything for it.
+    ///
+    /// **`moved` for [`Change::Pointed`]'s reason**, one event along: a wheel
+    /// over an Inspector pane already at the top of its list reaches the
+    /// console and changes nothing, and an arm that answered *draw* regardless
+    /// would pay a frame for every notch of a wheel somebody is spinning
+    /// against a stop. It is also `false` for the wheel [`crate::input`]'s
+    /// rule 1 withholds from `egui` in the middle of a drag, which moves
+    /// nothing by construction.
+    Wheeled(Claim, bool),
     /// An operation ran — a fold, a solo, a reset, a report — and this is what
     /// it did.
     Operated(&'a Outcome),
@@ -379,13 +388,22 @@ impl Change<'_> {
 
             // `egui` has the event, and `EventResponse::repaint` is its
             // answer; asking again here would be a second one.
-            Change::Pointer(Claim::Egui) | Change::Wheeled(Claim::Egui) => Repaint::Never,
+            Change::Pointer(Claim::Egui) | Change::Wheeled(Claim::Egui, _) => Repaint::Never,
 
-            // The panel does nothing whatever with a wheel. `input::claim`
-            // routes one to it only so that a wheel in the middle of a drag
-            // cannot reach `egui` — which is a claim withheld, not an action
-            // taken, and nothing on screen moves for it.
-            Change::Wheeled(Claim::Panel) => Repaint::Never,
+            // **A wheel that scrolled a pane earns a frame**, and it is the
+            // operator's own action rather than anything on the budget — the
+            // `Change::Pointer(Claim::Panel)` arm above, one event along.
+            //
+            // **And one that scrolled nothing earns none.** `input::claim`
+            // routes a wheel to the panel while a drag is in hand so that it
+            // cannot reach `egui` mid-gesture — a claim withheld rather than
+            // an action taken — and `input::wheeled` answers `None` for it, so
+            // nothing on screen moved. A pane already at the top of its list
+            // is the same nothing from the other side.
+            Change::Wheeled(Claim::Panel, moved) => match moved {
+                true => Repaint::Now,
+                false => Repaint::Never,
+            },
 
             Change::Operated(outcome) => match outcome {
                 // A fold moves every region in the split it happened in, and

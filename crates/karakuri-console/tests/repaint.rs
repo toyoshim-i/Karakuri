@@ -137,10 +137,18 @@ fn a_still_panel_asks_for_no_repaint() {
 
     // The pointer, where `egui` is the one answering for it.
     assert_eq!(Change::Pointer(Claim::Egui).repaint(), Repaint::Never);
-    assert_eq!(Change::Wheeled(Claim::Egui).repaint(), Repaint::Never);
-    // A wheel the panel claimed — which happens only mid-drag, so that it
-    // cannot reach `egui` — is a claim withheld and not an action taken.
-    assert_eq!(Change::Wheeled(Claim::Panel).repaint(), Repaint::Never);
+    assert_eq!(
+        Change::Wheeled(Claim::Egui, false).repaint(),
+        Repaint::Never
+    );
+    // A wheel the panel claimed and scrolled nothing with — one withheld
+    // mid-drag so that it cannot reach `egui`, or one spun against the top of
+    // an Inspector pane's list. A claim withheld is not an action taken, and
+    // a pane already at the top of what it holds draws what it drew.
+    assert_eq!(
+        Change::Wheeled(Claim::Panel, false).repaint(),
+        Repaint::Never
+    );
 
     // A key that asked a console pointer to move and found it already at the
     // end of what it can point at — the library cursor on the last row it was
@@ -156,7 +164,7 @@ fn a_still_panel_asks_for_no_repaint() {
     // is still nothing at all.
     let together = [
         Change::Pointer(Claim::Egui).repaint(),
-        Change::Wheeled(Claim::Panel).repaint(),
+        Change::Wheeled(Claim::Panel, false).repaint(),
         Change::Rearranged { moved: false }.repaint(),
         Change::Pointed(false).repaint(),
         Repaint::asked(Duration::MAX),
@@ -296,6 +304,16 @@ fn everything_that_changes_the_console_asks_for_a_frame() {
     );
 
     assert_eq!(Change::Room.repaint(), Repaint::Now, "the room toggled");
+
+    // **A wheel that scrolled an Inspector pane.** Nothing in the arrangement
+    // moved and no operation was emitted — it is the console's own eighth
+    // pointer, exactly as the library cursor is — so nothing else on this list
+    // would have answered for it (ADR-0307).
+    assert_eq!(
+        Change::Wheeled(Claim::Panel, true).repaint(),
+        Repaint::Now,
+        "a pane scrolled under the pointer and no frame was owed"
+    );
 
     // A resize, and a scale change, which re-solve the arrangement into a
     // different viewport.

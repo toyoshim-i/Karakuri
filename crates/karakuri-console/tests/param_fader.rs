@@ -146,7 +146,7 @@ fn console(viewport: Rect) -> karakuri_console::panel::Panel {
 
 /// The laid-out pane, which is what every test here starts from.
 fn pane_at(panel: &karakuri_console::panel::Panel, index: usize, pane: &Pane) -> InspectorPane {
-    inspector(panel.layout(), index, pane).expect("a pane with room in it")
+    inspector(panel.layout(), index, pane, 0.0).expect("a pane with room in it")
 }
 
 /// A `karakuri_layout` point, from `egui`'s. Named for the press rather than
@@ -538,38 +538,59 @@ fn the_knob_moves_with_the_value() {
 // What is not drawn is not reachable
 // ---------------------------------------------------------------------------
 
-/// **A group the pane had no room for is not reachable by a press either.**
+/// **A row the pane's body does not reach is not reachable by a press
+/// either.**
 ///
-/// `InspectorPane::shown` is how many groups fit **whole**, and a press
-/// resolved past it would be a hand reaching a control that is not on screen.
-/// The pane is narrowed down the column until only the first group is drawn,
-/// and the second group's rows are asked for where they would have been.
+/// **What says so is the body and no longer `shown`.** A pane used to draw a
+/// group whole or not at all, so *how many are drawn* was one number and a
+/// press walked it; a pane scrolls now, so what is on screen is the body
+/// rectangle — which is what `InspectorPane::drawn` walks, what
+/// `InspectorPane::grip` refuses a press outside, and what `inspector_into`
+/// clips the paint to (ADR-0307). The body is cut off above the second group
+/// here, and that group's rows are asked for where they would have been.
 #[test]
-fn a_group_the_pane_had_no_room_for_is_not_reachable() {
+fn a_row_the_body_does_not_reach_is_not_reachable() {
     let pane = mock();
     let panel = console(PLAUSIBLE);
     let whole = pane_at(&panel, 0, &pane);
     assert_eq!(whole.shown, 2);
     let second = whole.group(&pane.nodes, 1);
-    let clipped = InspectorPane { shown: 1, ..whole };
+    let first_row = knob(&whole, &pane, 1, 0).center();
+    let second_row = knob(&whole, &pane, 1, 1).center();
 
-    for index in 0..pane.nodes[1].params.len() {
-        let p = at_point(knob(&whole, &pane, 1, index).center());
-        // The guard on the assertion under it, so a `None` there is about
-        // `shown` rather than about the arithmetic that found the knob.
-        assert!(
-            second.contains(egui::pos2(p.x, p.y)),
-            "row {index} of the second group is inside it"
-        );
-        assert!(
-            whole.grip(&pane, p).is_some(),
-            "row {index} is reachable on the pane that drew it"
-        );
-        assert!(
-            clipped.grip(&pane, p).is_none(),
-            "row {index} of a group the pane did not draw was reached by a press"
-        );
-    }
+    // The body cut **through** the second group, between its two rows: the
+    // group is still drawn, so `InspectorPane::drawn` has nothing to say about
+    // either point and what refuses the lower one is the body itself.
+    let clipped = InspectorPane {
+        body: egui::Rect::from_min_max(
+            whole.body.min,
+            egui::pos2(whole.body.max.x, row_rect(&whole, &pane, 1, 1).min.y),
+        ),
+        ..whole
+    };
+    assert!(
+        clipped.drawn(&pane.nodes).contains(&1),
+        "the guard on the two assertions below: the second group is still drawn, so a refusal \
+         is the body rectangle and not the walk"
+    );
+    assert!(
+        second.contains(first_row) && second.contains(second_row),
+        "both knobs are inside the group they belong to"
+    );
+
+    assert!(
+        clipped.grip(&pane, at_point(first_row)).is_some(),
+        "the row inside the shortened body was refused, so this test cannot tell a clip from a \
+         miss"
+    );
+    assert!(
+        clipped.grip(&pane, at_point(second_row)).is_none(),
+        "a row below the pane's body was reached by a press, where the paint is clipped away"
+    );
+    assert!(
+        whole.grip(&pane, at_point(second_row)).is_some(),
+        "that same row is reachable on the pane that drew the whole of it"
+    );
 }
 
 /// **A pane too narrow for a fader claims no press at all.**

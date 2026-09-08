@@ -316,7 +316,7 @@ use std::time::{Duration, Instant};
 use karakuri_console::{egui, egui_wgpu, egui_winit};
 
 use karakuri_console::budget::PANEL_PASS;
-use karakuri_console::input::{claim, Claim, CONTROLS};
+use karakuri_console::input::{claim, wheeled, Claim, CONTROLS};
 use karakuri_console::panel::{Dragged, InHand, Knob, Op, Outcome, Panel, Pressed, Released};
 use karakuri_console::repaint::{Change, Repaint};
 use karakuri_console::room::Room;
@@ -360,7 +360,7 @@ use karakuri_operation_record::{written, Current, Written};
 use karakuri_store::record::Record;
 use karakuri_store::store::Store;
 use winit::application::ApplicationHandler;
-use winit::event::{ElementState, MouseButton, StartCause, WindowEvent};
+use winit::event::{ElementState, MouseButton, MouseScrollDelta, StartCause, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{Key, NamedKey};
 use winit::window::{Window, WindowId};
@@ -2046,7 +2046,10 @@ impl Readout {
         // hand, so a claim asked after it would see no drag, route the release
         // to `egui`, and hand `egui` a button-up it never saw the button-down
         // for.
-        let claim = claim(&mut self.panel, ctx, &self.view, at);
+        // **`mut` for the wheel arm alone.** Every other event's answer is
+        // this call's; a wheel asks a second question of `input::wheeled`,
+        // whose `Some` widens the claim to the panel — see that arm.
+        let mut claim = claim(&mut self.panel, ctx, &self.view, at);
         let mut did = Acted::Nothing;
         match (event, claim) {
             // The panel learns where the pointer is either way — every
@@ -2282,7 +2285,12 @@ impl Readout {
                     .iter()
                     .enumerate()
                     .find_map(|(index, pane)| {
-                        let at_pane = inspector_pane(self.panel.layout(), index, pane)?;
+                        let at_pane = inspector_pane(
+                            self.panel.layout(),
+                            index,
+                            pane,
+                            self.view.scroll_in(index),
+                        )?;
                         let head = deck_head_row(ctx, &at_pane, pane)?;
                         head.sync(at)
                             .or_else(|| head.reanchor(at))
@@ -2303,7 +2311,12 @@ impl Readout {
                     .iter()
                     .enumerate()
                     .find_map(|(index, pane)| {
-                        let at_pane = inspector_pane(self.panel.layout(), index, pane)?;
+                        let at_pane = inspector_pane(
+                            self.panel.layout(),
+                            index,
+                            pane,
+                            self.view.scroll_in(index),
+                        )?;
                         let named = deck_name(ctx, &at_pane, pane, self.view.naming_set_in(index))?;
                         named.hit(at).then_some(index)
                     });
@@ -2329,7 +2342,12 @@ impl Readout {
                     .iter()
                     .enumerate()
                     .find_map(|(index, pane)| {
-                        let at_pane = inspector_pane(self.panel.layout(), index, pane)?;
+                        let at_pane = inspector_pane(
+                            self.panel.layout(),
+                            index,
+                            pane,
+                            self.view.scroll_in(index),
+                        )?;
                         let pill = keep_pill(ctx, &at_pane, pane)?;
                         pill.keep(at)
                     });
@@ -2348,7 +2366,12 @@ impl Readout {
                     .iter()
                     .enumerate()
                     .find_map(|(index, pane)| {
-                        let at_pane = inspector_pane(self.panel.layout(), index, pane)?;
+                        let at_pane = inspector_pane(
+                            self.panel.layout(),
+                            index,
+                            pane,
+                            self.view.scroll_in(index),
+                        )?;
                         at_pane.select_renderer(ctx, pane, at)
                     });
                 if let Some(operation) = chosen {
@@ -2598,7 +2621,12 @@ impl Readout {
                             .iter()
                             .enumerate()
                             .find_map(|(index, pane)| {
-                                let at_pane = inspector_pane(self.panel.layout(), index, pane)?;
+                                let at_pane = inspector_pane(
+                                    self.panel.layout(),
+                                    index,
+                                    pane,
+                                    self.view.scroll_in(index),
+                                )?;
                                 at_pane.grab(pane, at)
                             })
                     });
@@ -2696,7 +2724,28 @@ impl Readout {
                 };
                 did = self.released(onto);
             }
-            (Pointer::Down | Pointer::Up | Pointer::Wheel, _) => {}
+            // **A wheel is routed by region rather than by control**, which
+            // is `input::wheeled` and not `input::claim` — see that function
+            // for why the two are separate questions. The claim it hands back
+            // is a *second* answer to who the event belongs to and it can only
+            // widen the first: `claim` gives a wheel to the panel while a drag
+            // is in hand, `wheeled` gives it to the panel while the pointer is
+            // over a pane, and neither takes one away.
+            //
+            // **`Acted::Pointed` and not `Acted::Nothing`**, for the reason
+            // that variant exists: a console pointer moved and no operation
+            // was named. It is what tells `window_event` a frame is owed —
+            // a wheel spun against the top of a list is `Nothing` and earns
+            // none.
+            (Pointer::Wheel(by), _) => {
+                if let Some(pane) = wheeled(&mut self.panel, &self.view, at) {
+                    if self.view.scroll_by(pane, by) {
+                        did = Acted::Pointed;
+                    }
+                    claim = Claim::Panel;
+                }
+            }
+            (Pointer::Down | Pointer::Up, _) => {}
         }
         (claim, did)
     }
@@ -3968,14 +4017,25 @@ const KEYS: &[(&str, &str)] = &[
 ];
 
 /// A pointer event, stripped to what the rule needs. A button is left or it
-/// is not routed at all, and which wheel axis it was does not change who gets
-/// it.
+/// is not routed at all.
+///
+/// **The wheel carries a distance now, and only one axis of it.** It used to
+/// carry nothing, because nothing on this panel did anything with one — *which
+/// wheel axis it was does not change who gets it* is what this said, and it
+/// was true while the answer was always `egui`'s. An Inspector pane scrolls
+/// down its list ([ADR-0307](../../docs/adr/0307-the-inspectors-pane-scrolls-and-the-position-is-the-panes-own.md)),
+/// so the vertical distance is now the whole of what the event says; a
+/// horizontal one reaches nothing here and is dropped where the two are pulled
+/// apart, in `window_event`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Pointer {
     Moved(Point),
     Down,
     Up,
-    Wheel,
+    /// **How far to scroll, in logical pixels, positive down the list** — a
+    /// notch of a mouse wheel converted to `karakuri_console::room::size::WHEEL_STEP` and a
+    /// trackpad's own pixels passed straight through.
+    Wheel(f32),
 }
 
 /// **What routing a pointer event did**, beyond deciding whose it was.
@@ -12430,17 +12490,41 @@ impl ApplicationHandler for App {
                 .soonest(took);
                 App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
             }
-            WindowEvent::MouseWheel { .. } => {
+            WindowEvent::MouseWheel { delta, .. } => {
+                // **The two shapes a wheel arrives in, and only the vertical
+                // half of either.** `LineDelta` is a count of detents and is
+                // what a mouse sends, so it is multiplied by the console's own
+                // `WHEEL_STEP` — three parameter rows, which is what
+                // `docs/manual/console.html` says a notch is worth.
+                // `PixelDelta` is a trackpad and is already a distance: it is
+                // in physical pixels like every other position this handler
+                // reads, so it is divided by the scale and passed through.
+                //
+                // **Negated, because the axes point opposite ways.** `winit`'s
+                // positive `y` is a wheel pushed away from the hand, which
+                // moves a list *up* — and a scroll position is how far down the
+                // content the pane has come.
+                let by = match delta {
+                    MouseScrollDelta::LineDelta(_, y) => {
+                        -y * karakuri_console::room::size::WHEEL_STEP
+                    }
+                    MouseScrollDelta::PixelDelta(at) => -(at.y / self.scale) as f32,
+                };
                 let ctx = gfx.egui.egui_ctx().clone();
-                let (claim, _acted) = self.readout.pointer(&ctx, Pointer::Wheel);
+                let (claim, acted) = self.readout.pointer(&ctx, Pointer::Wheel(by));
                 if claim == Claim::Egui {
                     App::to_egui(gfx, &mut self.costs, &event);
                 }
+                // **The frame is owed for what the wheel moved and not for the
+                // claim**, which is the `CursorMoved` arm's own rule one event
+                // along: a wheel spun against the top of a pane's list is the
+                // panel's and changes nothing, and a frame per notch of that
+                // would be a repaint for a gesture with no picture in it.
                 App::wants(
                     gfx,
                     &mut self.egui_due,
                     &mut self.costs,
-                    Change::Wheeled(claim).repaint(),
+                    Change::Wheeled(claim, acted == Acted::Pointed).repaint(),
                 );
             }
 
@@ -17651,8 +17735,20 @@ mod tests {
                 Claim::Panel,
                 "the drag lost its claim at x = {x}"
             );
-            // A wheel in the middle of a drag is the panel's too.
-            assert_eq!(readout.pointer(&ctx, Pointer::Wheel).0, Claim::Panel);
+            // A wheel in the middle of a drag is the panel's too, and it
+            // scrolls nothing: rule 1 withholds it from `egui` and
+            // `input::wheeled` refuses it, so no pane moves under a hand that
+            // is holding a boundary.
+            let wheeled = readout.pointer(
+                &ctx,
+                Pointer::Wheel(karakuri_console::room::size::WHEEL_STEP),
+            );
+            assert_eq!(wheeled.0, Claim::Panel);
+            assert_eq!(
+                wheeled.1,
+                Acted::Nothing,
+                "a wheel in the middle of a boundary drag moved something"
+            );
         }
         readout.panel.solve();
         let wide = pane_width(&readout);
@@ -17737,6 +17833,138 @@ mod tests {
 
         // And afterwards the pointer, where it is standing, is egui's again.
         assert_eq!(readout.pointer(&ctx, Pointer::Moved(far)).0, Claim::Egui);
+    }
+
+    /// **A wheel over an Inspector pane scrolls that pane, and no other.**
+    ///
+    /// # Why it is here and can be nowhere else
+    ///
+    /// `karakuri-console` holds the position and the derivation, and
+    /// `input::wheeled` answers *which pane* — but nothing in that crate joins
+    /// the two, because joining them is routing a window event and there is no
+    /// window there. `Readout::pointer` is the join, and it is a method rather
+    /// than four arms of `window_event` for exactly this reason: `winit` hands
+    /// out no `ActiveEventLoop` outside its own loop, so the handler is not
+    /// something a test can call and the part worth testing is this
+    /// ([ADR-0307](../../docs/adr/0307-the-inspectors-pane-scrolls-and-the-position-is-the-panes-own.md)).
+    ///
+    /// Four things, and the third is the one a single-pane inspector would
+    /// have hidden: the wheel is aimed with the pointer, so two panes are two
+    /// positions and turning one must leave the other where it was.
+    #[test]
+    fn a_wheel_over_an_inspector_pane_scrolls_that_pane() {
+        let ctx = drawn_once();
+        let mut readout = Readout::new(1440.0, 900.0);
+        readout.view.inspector = (0..view::PANES).map(deep_pane).collect();
+        readout.panel.solve();
+
+        let step = karakuri_console::room::size::WHEEL_STEP;
+        let middle = |readout: &Readout, name: &str| {
+            let layout = readout.panel.layout();
+            let rect = layout.rect(layout.find(name).expect("a pane"));
+            Point::new(rect.x + rect.w * 0.5, rect.y + rect.h * 0.75)
+        };
+        let first = middle(&readout, view::PANE_NAMES[0]);
+        let second = middle(&readout, view::PANE_NAMES[1]);
+
+        // 1. The wheel over the first pane is the panel's, and it moves that
+        //    pane's position by exactly one notch.
+        assert_eq!(readout.pointer(&ctx, Pointer::Moved(first)).0, Claim::Egui);
+        let turned = readout.pointer(&ctx, Pointer::Wheel(step));
+        assert_eq!(
+            turned,
+            (Claim::Panel, Acted::Pointed),
+            "the wheel over a pane did not reach the panel, or reached it and moved nothing"
+        );
+        assert_eq!(readout.view.scroll_in(0), step);
+        assert_eq!(
+            readout.view.scroll_in(1),
+            0.0,
+            "the wheel over one pane moved the other"
+        );
+
+        // 2. And the other pane is its own.
+        assert_eq!(readout.pointer(&ctx, Pointer::Moved(second)).0, Claim::Egui);
+        assert_eq!(
+            readout.pointer(&ctx, Pointer::Wheel(step * 2.0)),
+            (Claim::Panel, Acted::Pointed)
+        );
+        assert_eq!(readout.view.scroll_in(1), step * 2.0);
+        assert_eq!(
+            readout.view.scroll_in(0),
+            step,
+            "the second pane's wheel moved the first"
+        );
+
+        // 3. A wheel anywhere else on the console is `egui`'s and moves
+        //    nothing — the Library bay's list is a whole column away and is
+        //    the bay whose own note says it does not scroll.
+        let elsewhere = middle(&readout, "library");
+        assert_eq!(
+            readout.pointer(&ctx, Pointer::Moved(elsewhere)).0,
+            Claim::Egui
+        );
+        assert_eq!(
+            readout.pointer(&ctx, Pointer::Wheel(step)),
+            (Claim::Egui, Acted::Nothing),
+            "a wheel over a bay that does not scroll was taken by the panel"
+        );
+        assert_eq!(readout.view.scroll_in(0), step);
+        assert_eq!(readout.view.scroll_in(1), step * 2.0);
+
+        // 4. A wheel against the top of a pane's list is the panel's and is
+        //    owed no frame — which is what `Acted::Nothing` says here and what
+        //    `Change::Wheeled`'s second field carries.
+        assert_eq!(readout.pointer(&ctx, Pointer::Moved(first)).0, Claim::Egui);
+        assert_eq!(
+            readout.pointer(&ctx, Pointer::Wheel(-step * 10.0)),
+            (Claim::Panel, Acted::Pointed),
+            "the first spin back should have moved it to the top"
+        );
+        assert_eq!(readout.view.scroll_in(0), 0.0);
+        assert_eq!(
+            readout.pointer(&ctx, Pointer::Wheel(-step)),
+            (Claim::Panel, Acted::Nothing),
+            "a wheel spun against the top of the list asked for a frame"
+        );
+    }
+
+    /// **A pane with more in it than any pane on this panel can hold** — four
+    /// node groups of six rows each, which is 4 x (26.5 + 6 x 22.5) = 646 and
+    /// is taller than the Inspector bay at the window this test opens.
+    fn deep_pane(deck: usize) -> view::Pane {
+        view::Pane {
+            deck,
+            material: format!("deep_{deck}"),
+            sync: karakuri_operation::Sync::Free,
+            allows: [true; view::SYNCS.len()],
+            anchor_bpm: 128.0,
+            scrub_beats: 0.0,
+            composite: false,
+            nodes: (0..4)
+                .map(|node| view::Node {
+                    addr: format!("L1:{node}"),
+                    name: format!("node_{node}"),
+                    authority: Some(karakuri_operation::Authority::Manual),
+                    renderers: Vec::new(),
+                    params: (0..6)
+                        .map(|at| view::Param {
+                            ord: at + 1,
+                            name: format!("n{node}p{at}"),
+                            value: 0.5,
+                            range: [0.0, 1.0],
+                            param: karakuri_operation::ParamAt {
+                                node: Some(karakuri_operation::NodeAt {
+                                    layer: karakuri_operation::Layer::L1,
+                                    index: node as u32,
+                                }),
+                                key: format!("n{node}p{at}"),
+                            },
+                        })
+                        .collect(),
+                })
+                .collect(),
+        }
     }
 
     /// The left pane's width, solved. A helper because the test asks three
