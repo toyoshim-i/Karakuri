@@ -74,7 +74,19 @@ const DOOR: &str = "Gpu::headless";
 /// Binaries whose own source reaches [`DOOR`], paired with the crate source
 /// that has to keep being true of them. A test that spawns one of these is a
 /// GPU test however little it looks like one.
-const GPU_BINARIES: &[(&str, &str)] = &[("karakuri-cli", "crates/karakuri-cli/src")];
+const GPU_BINARIES: &[(&str, &str)] = &[
+    ("karakuri-cli", "crates/karakuri-cli/src"),
+    // **The panel**, spawned by `karakuri/tests/starts.rs`. That binary opens a
+    // window, makes a surface and requests an adapter before it prints the
+    // legend that test waits for, so starting it is a reach however little the
+    // test file says about `wgpu`. The door it is *checked* against below is
+    // the one in its own `mod gpu`; the shipped path reaches a device through
+    // `Gpu::from_instance` with a surface, which no static check here can see —
+    // so the claim `gpu_binaries_still_take_a_device` verifies is weaker than
+    // the reason this entry exists, and that is stated rather than left to be
+    // discovered.
+    ("karakuri", "crates/karakuri/src"),
+];
 
 /// A module named exactly this is the marker. Not a prefix or a suffix match:
 /// `gpu_budget` is a fine name for a module of CPU tests, and `--skip gpu::`
