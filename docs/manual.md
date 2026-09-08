@@ -761,7 +761,7 @@ something was.
 Every version that **compiles** is kept, whoever wrote it:
 
 ```
-.karakuri/history/2026/08/16/143052-271_slot0_L4_beat_strokes.kir
+.karakuri/history/2026/08/16/143052-271_slot0_L4_beat_strokes@night01.kir
 ```
 
 Including the version the run started with, whether or not it compiles — that one
@@ -774,6 +774,30 @@ because it only records what reached the screen.
 
 A procedure that did not change is not written again, so a day's directory is
 the edits and not the rebuilds.
+
+**A row is its name and nothing else**, which is why the name carries the whole
+address: the day is the directory, then the time to the millisecond, the slot,
+the layer — with the node's index after it when it is not the first of its
+layer — the name the procedure gives itself, and after `@` the **Set the slot
+was running** when that version was written. A name with no `@` is a version
+written where there was no Set at all: nothing had been loaded, and a pair of
+paths you typed is not one. `--load-set` names the material and the `.kir`
+paths are refused beside it, so slot 0 is the only slot here whose versions
+carry an id.
+
+**It takes a watcher to keep them.** `--watch` is what picks a write up, and
+the watcher is what files the version it compiled — so a run without it keeps
+only what it started with, and a run that cannot be edited at all (neither
+`--watch` nor `--mcp`) keeps nothing. The console (`cargo run -p karakuri`)
+watches every one of its decks, so it keeps a history without being asked for
+one, and loading a Set into a deck there files that deck's versions under the
+loaded id from the load onwards.
+
+**A save does not move that id.** `k` and `--save-set` copy what is playing
+into your library and leave the slot running what it was already running, so
+the versions either side of a save are filed under whatever the slot already
+had — and a Set you have just saved has no versions under its own id until
+somebody loads it.
 
 **There is no retention policy and no cleanup command, on purpose.** A directory
 per day means `rm -rf .karakuri/history/2026/07` is the cleanup. The date is
