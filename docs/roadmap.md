@@ -376,9 +376,13 @@ which neither is. ADR-0262's decision stands as the first cut until somebody ans
   are a third pill in the bay's foot beside `read` and `load → A`, reading its destination the way
   `load → A` reads its deck; or a drag from a row onto the `.path` row. **The other half of the row
   is built**: a press on a `presets` or `folder` row takes that Set in.
-- ***Walk the edit history* waits on a history to read.** The lister is `history::list`; only
-  `karakuri-cli` constructs a `Snapshots`, so a panel run has nothing to walk. The writing is
-  M5.10's, and this is the sentence that says the row depends on it.
+- ***Walk the edit history* has a history to read, and waits on the control.** The lister is
+  `history::list`, and a panel run writes into `<store>/history/` now: one `Snapshots` for the run,
+  seeded before the window from the files each deck is about to play and handed to every slot's
+  watcher, with the Set a version is filed under carried on the aim a library load sends
+  ([ADR-0304](adr/0304-the-set-a-version-is-filed-under-rides-the-aim-that-re-points-the-slot.md)).
+  The writing was M5.10's and it has landed; what is left is the manual naming the control and this
+  bay drawing it.
 
 **And one question about a control that is built.** `load → A` is a **readout** — the cursor says
 which Set, the deck selection says which deck, and the pill says where a press will land before it
@@ -477,8 +481,11 @@ nobody specified (`view::LibraryBay`).
    design.** Every route that edits is addressed by slot — `mcp::write_procedure` resolves
    `Slots::path(slot, layer, index)` and refuses a node the slot does not hold, and an operator's
    own editor is pointed at that slot's scratch copy — so at the moment of a write the program knows
-   which Set the slot is running. **It is already kept**: `Gfx::material` is one name per slot,
-   rewritten in `played` on the load, and its doc says why a name per deck was not enough. What is
+   which Set the slot is running. **It is kept where a re-point moves it**: this program carries the
+   id per slot on that slot's `watch::Aim`, sent by the load and restated by every rewiring, and
+   `Gfx::material` is the mixer strip's readout beside it rather than the id
+   ([ADR-0304](adr/0304-the-set-a-version-is-filed-under-rides-the-aim-that-re-points-the-slot.md)).
+   What is
    left open is only what to write where there is no Set: a run launched with a pair on the command
    line has no id, and `k` writes a new one mid-chain. **Both are answered and the writer is
    built** ([ADR-0276](adr/0276-a-versions-set-id-goes-in-the-snapshots-name-and-a-run-without-one-writes-none.md)):
@@ -504,9 +511,11 @@ nobody specified (`view::LibraryBay`).
    operator picked. The manual names the control first (`docs/contributing.md` §5 step 3), and until
    it does this row's panel cell reads `—`.
 
-**What is *not* here, and it moved rather than being dropped.** Nothing records a history in this
-program at all — only `karakuri-cli` builds a `Snapshots`, so a panel run keeps none and an MCP
-write keeps none. That is M5.10's, under *Every write that compiles is a version*.
+**What was *not* here has landed, and it landed where it moved to.** This program records a history:
+one `Snapshots` for the run, seeded from what each deck is about to play and handed to every
+watcher, so a hand at an editor and a model writing over MCP both leave the version they replaced
+behind them. That was M5.10's, under *Every write that compiles is a version*, and what is left for
+this bay is the control that walks them.
 
 **Also here.** The Set browser's live previews and the thumbnail beside them.
 The bay lists what the store holds already; the previews are what waits, and what a thumbnail is
@@ -900,17 +909,16 @@ this list never named at all.
 
 1. **A store the build path can write — built.** This said `watched()` *"calls neither
    `Watch::storing_to` nor `Watch::snapshotting_to`, which its own documentation says outright"*.
-   It calls `storing_to`, and the documentation says the **opposite** in as many words: *"`Watch::storing_to`
-   is given now and `Watch::snapshotting_to` is not."* Only the snapshot half is unbuilt, and that
-   half is item 6.
+   It called `storing_to` and said the **opposite** in as many words, and it calls both now — the
+   snapshot half is item 6 and has landed with it.
 2. **A `Built` receiver on the render thread — built.** This said `crates/karakuri` *"creates no
    such channel, so the per-node hashes have no reader"*. The channel is made, every watcher is
    handed the sender, and the receiver is drained every frame, parked, matched to its swap and
    turned into node addresses.
-3. **A baseline — answered, for what this bay needs.** `Playing::at_launch` seeds every slot with a
-   hash per node from the engine's placed sources before the first frame, so nothing reads as *every
-   node changed*. What remains under this heading is the **snapshot** baseline — `history::seed`,
-   which this program calls nowhere — and that belongs with item 6.
+3. **A baseline — answered, both halves.** `Playing::at_launch` seeds every slot with a hash per
+   node from the engine's placed sources before the first frame, so nothing reads as *every node
+   changed*. The **snapshot** baseline is `history::seed`, which this program calls in `main` before
+   the window opens, so the first edit has a version to be walked back to and not only the second.
 4. **An undecided answer: what the lane draws when one build changes two nodes.** A rebuild
    restates the whole stack, so a save touching two files is one `Built` with two changed hashes
    and one `swap::Event`. One row cannot name two nodes, and two rows means the lane's row model
@@ -923,11 +931,11 @@ this list never named at all.
    *what versions has this had*, most recent first, and ADR-0276 puts the Set a version belongs to
    in its name. The row it serves is *Walk the edit history*, which left *Rows the manual has not
    given a home* because it is a listing and a load rather than undo.
-6. **A history to read at all — and it is M5.10's, not this bay's.** `storing_to` puts a build's
-   sources under a content address; `snapshotting_to` keeps every version that compiled, and only
-   `karakuri-cli` constructs a `Snapshots`. This file says twice elsewhere that the writing belongs
-   to M5.10 — *"it belongs here rather than in the bay that would read them"* — and this list
-   counted it as something this bay waits on.
+6. **A history to read at all — it was M5.10's, not this bay's, and it is written.** `storing_to`
+   puts a build's sources under a content address; `snapshotting_to` keeps every version that
+   compiled, and both programs hand a watcher one now. This file says twice elsewhere that the
+   writing belonged to M5.10 — *"it belongs here rather than in the bay that would read them"* —
+   and this list counted it as something this bay waits on. It no longer waits on it.
 7. **Nothing can press a candidate row, and no item said so.** `StagingBay::row` exists and the
    painter and the tests use it, but `input::PROBES` has no staging entry and `press_handler::ASKED`
    has none either. *"Nothing in the list is a drawing — the row is already painted"* was true about
@@ -1086,26 +1094,29 @@ whether a press covers a class or one operation of it, whether an opening outliv
 whether an open class shuts itself are open ([the console page](manual/console.html), *What a model
 is refused, and where a class opens*).
 
-**Every write that compiles is a version, and none of them is kept.** `mcp::write_procedure` runs
-`compile::check` and writes the file, and touches nothing else;
-`crates/karakuri/src/main.rs` never constructs `history::Snapshots` and never calls `record`. Only
-`karakuri-cli` does, so a `--watch` run accumulates versions under `<store>/history/` and a panel run
-— which is where MCP is served from — accumulates none. **It belongs here rather than in the bay that
-would read them**: what makes a version worth keeping is that something other than the operator's
-own hands wrote it, and this is where that something is. M5.3's *Walk the edit history* reads what
-this keeps, and has a lister to build either way. **The Set id goes in with the record** — the
-slot names it, so recording without it would file a version under a node and lose which Set it
-belonged to, which is the one thing the bay reading it needs. **The writer takes it now**
+**Every write that compiles is a version, and this program keeps them now.**
+`mcp::write_procedure` runs `compile::check` and writes the file, and touches nothing else; what
+keeps the version it replaced is the watcher, at the compile-success point a hand at an editor and a
+model's write both pass through. `crates/karakuri/src/main.rs` builds one `history::Snapshots` for
+the run, seeds every slot's launch files into it before the window opens, and hands it to every
+watcher — so a panel run, which is where MCP is served from, accumulates versions under
+`<store>/history/` on the same terms a `--watch` run does, and what `write_procedure` already tells a
+client about the version it replaced is true on this surface as well. **It belongs here rather than
+in the bay that would read them**: what makes a version worth keeping is that something other than
+the operator's own hands wrote it, and this is where that something is. M5.3's *Walk the edit
+history* reads what this keeps. **The Set id goes in with the record** — the slot names it, so
+recording without it would file a version under a node and lose which Set it belonged to, which is
+the one thing the bay reading it needs
 ([ADR-0276](adr/0276-a-versions-set-id-goes-in-the-snapshots-name-and-a-run-without-one-writes-none.md)):
 `Snapshots::record` takes the Set the slot is running and writes it into the name, and
-`watch::Watch::snapshotting_to` carries it per slot. **What this program owes it is the answer, and
-`Gfx::material` is not it**: that field is a *readout* — one name per slot, and at launch it is the
-pair `"coil_vortex + star_flares"` rather than any id — so a slot that has never been loaded onto
-has no Set and writes `None`, and only `played`'s `LoadSet` arm turns it into a real id. So this
-program owes a per-slot `Option<String>` beside the deck, written where `played` writes the readout,
-handed to `snapshotting_to` at construction, and **moved with every `watch::Aim` a library load
-sends** — `Aim` carries no id today, and without one every version after a load is filed under the
-Set before it.
+`watch::Watch::snapshotting_to` carries it per slot. **And in this program a load moves it**
+([ADR-0304](adr/0304-the-set-a-version-is-filed-under-rides-the-aim-that-re-points-the-slot.md)):
+every slot launches on the pair the command line settled, which is no Set at all, and a library load
+sends the id on the `watch::Aim` that re-points the slot, so the versions written after a load are
+filed under the Set that was loaded and a rewiring restates it. `Gfx::material` is not that answer
+and was never a candidate for it — that field is a *readout*, one name per slot, and at launch it is
+the pair rather than any id. **What is left here is the reading**, which is M5.3's task 2 and not
+this sub-milestone's.
 
 **Blocked on.** The bays above, for the rest. A row whose operation the engine cannot yet perform has
 nothing for MCP to route to. MCP is a mouth rather than the control stick, so it follows the bays
@@ -1232,12 +1243,13 @@ the Inspector, and until something publishes, every control that bay will ever d
 *undo* and *a later milestone*, and undo is nobody's bay. It is not undo. A Set's history is a list
 of the versions it has had, walking it is a listing, and landing on one is a load — all three of
 which the Library bay already does — so the row is M5.3's. **What it needed was a lister, and that is
-built**: `karakuri_environment::history::list`. What it needs now is a **history to read**, and a
-panel run has none — only `karakuri-cli` constructs a `Snapshots`, so the walk would be empty every
-time. The writing is M5.10's, and neither M5.3's task 2 nor this paragraph said the walk depends on
-it. **A blocker that names a milestone rather than a mechanism is a blocker nobody can check**,
-and this one survived two readings of this file before the question *what actually stops it* was
-asked of it.
+built**: `karakuri_environment::history::list`. **What it needed next was a history to read, and a
+panel run writes one now** — one `Snapshots` for the run, seeded before the window and handed to
+every slot's watcher, with the Set a version is filed under moved by a library load. That was
+M5.10's, and neither M5.3's task 2 nor this paragraph said the walk depended on it. **A blocker that
+names a milestone rather than a mechanism is a blocker nobody can check**: this one survived two
+readings of this file before the question *what actually stops it* was asked of it, and naming the
+mechanism is what got it built. What is left is the page naming the control.
 
 #### The console's own shape
 

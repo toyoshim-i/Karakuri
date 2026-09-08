@@ -572,9 +572,9 @@ fn known_layer(word: &str) -> Option<&'static str> {
 /// store that has been damaged since it was opened and an empty `Vec` would
 /// answer a question that could not be read. Nothing creates `history/`:
 /// [`Snapshots::record`] makes it on the first snapshot, so a store that has
-/// never been edited has none — and a store the **panel** filled has none
-/// either, because only `karakuri-cli` constructs a [`Snapshots`] today. *No
-/// versions* is the true answer to all three, and the same holds for a day
+/// never been edited has none — and neither has one whose only runs were
+/// offscreen, since a `--render` is handed no store to write into. *No
+/// versions* is the true answer to both, and the same holds for a day
 /// directory that vanishes mid-walk, since `rm -rf history/2026/07` is this
 /// module's retention policy and an operator running it is not an error.
 ///
