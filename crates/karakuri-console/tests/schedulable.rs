@@ -150,6 +150,11 @@ fn running() -> Transport {
         frame_ms: 12.4,
         budget_ms: Some(16.6),
         health: Some(karakuri_console::view::Stage::Landed),
+        // **A recording running**, because this is the worst case: the `rec`
+        // pill is the one thing in this row a console can be told about that
+        // adds shapes to it, and a worst case measured without it would be a
+        // worst case for a panel nobody is recording on.
+        rec: Some(karakuri_console::view::Rec::Running),
     }
 }
 

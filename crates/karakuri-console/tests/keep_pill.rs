@@ -17,6 +17,9 @@
 //! 5. That a head with no room for the capsule draws none rather than half of
 //!    one — `deck_head`'s rule, on a control that is one capsule.
 //! 6. That a press off the capsule asks for nothing at all.
+//! 7. **That the wash says the deck this pane is showing is on air**, which
+//!    is what `docs/manual/console.html` now says the mock's lit capsule is
+//!    reading, and is asserted off the paint pass rather than off a flag.
 //!
 //! None of it needs a window, a device or a disk. It does need `egui`'s fonts,
 //! because a capsule is as wide as the word in it — see `common::drawn_once`.
@@ -31,13 +34,19 @@ mod common;
 use common::{drawn_once, near, rect_of, PLAUSIBLE, SMALLEST};
 use karakuri_console::panel::{Panel, GRAB};
 use karakuri_console::room::size;
-use karakuri_console::view::{inspector, keep_pill, InspectorPane, Pane, PANES, PANE_NAMES, SYNCS};
+
+/// The word in the capsule, which `view::KEEP_LABEL` is not public as.
+const KEEP_WORD: &str = "keep";
+use karakuri_console::room::Room;
+use karakuri_console::view::{
+    inspector, keep_pill, InspectorPane, Mask, Pane, Strip, Tally, View, PANES, PANE_NAMES, SYNCS,
+};
 use karakuri_layout::{Point, Rect};
-use karakuri_operation::{Operation, Sync};
+use karakuri_operation::{BlendMode, Operation, Sync};
 
 /// **The mock's own deck A**, which is the pane the mock draws this capsule
-/// lit in — and it is drawn plain here, because nothing on either page says
-/// what the lit one is reading (ADR-0287).
+/// lit in. What the wash reads is on the page now — the deck this pane is
+/// showing is on air — and the last test in this file is where that is held.
 fn mock() -> Pane {
     Pane {
         deck: 0,
@@ -315,5 +324,121 @@ fn a_press_off_the_capsule_asks_for_nothing() {
             "the capsule claims {probe:?}, which is not on it"
         );
         assert_eq!(pill.keep(at(probe)), None);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The wash
+// ---------------------------------------------------------------------------
+
+/// Every shape the console paints **wholly inside** `rect`, on one frame.
+///
+/// `transport.rs`'s helper, written again here for the reason that one gives:
+/// `egui` tessellates on the CPU and the device only ever sees the result, so
+/// a whole frame through `Context::run_ui` is all a treatment takes to read.
+/// Containment rather than intersection, so the card behind the pane is not
+/// counted as a thing drawn in the capsule.
+fn shapes_inside(view: &mut View, panel: &mut Panel, rect: egui::Rect) -> Vec<egui::Shape> {
+    let ctx = drawn_once();
+    let mut out = ctx.run_ui(egui::RawInput::default(), |ui| view.draw(ui, panel));
+    out.textures_delta.clear();
+    out.shapes
+        .into_iter()
+        .filter(|clipped| {
+            let bounds = clipped.shape.visual_bounding_rect();
+            bounds.is_finite() && rect.contains_rect(bounds)
+        })
+        .map(|clipped| clipped.shape)
+        .collect()
+}
+
+/// A strip whose tally is `residency`, which is the Mixer bay's reading of a
+/// deck and the one this capsule's wash is taken from.
+fn strip(residency: Tally) -> Strip {
+    Strip {
+        name: "drift_night".to_owned(),
+        tally: residency,
+        requested: residency,
+        gain: 0.44,
+        gain_to: None,
+        opacity: 0.30,
+        opacity_to: None,
+        blend: BlendMode::Over,
+        mask: Mask::Linear,
+        mask_angle: 0.0,
+        level: None,
+    }
+}
+
+/// A console showing two panes over a deck whose two slots have the tallies
+/// given, and nothing else running.
+fn showing_two(tallies: [Tally; 2]) -> View {
+    let mut view = View::new(Room::Day);
+    view.mixer = tallies.iter().map(|t| strip(*t)).collect();
+    view.inspector = vec![showing(0), showing(1)];
+    view
+}
+
+/// **The wash is the deck's residency and not the pane's position**, which is
+/// what `docs/manual/console.html` says it reads: *the deck this pane is
+/// showing is on air, in the same pink a tally on air is drawn in*.
+///
+/// Asserted by painting, because the treatment is the whole of the claim: a
+/// `.pill.on` is `--c-pink` over a pink wash with a halo, and a plain `.pill`
+/// has neither. Counted as *is any shape in the capsule filled `--c-pink`* —
+/// the word's galley is pink in one treatment and `--c-dim` in the other, and
+/// the wash behind it is a pink mix in one and nothing in the other.
+///
+/// **Both directions**, and the second is the one that would catch a console
+/// lighting the first pane because it is first: deck 1 live and deck 0 parked
+/// puts the wash on the *second* capsule.
+#[test]
+fn the_wash_follows_the_deck_on_air_and_not_the_pane() {
+    let pal = Room::Day.palette();
+    for (tallies, want) in [
+        ([Tally::Live, Tally::Allocated], [true, false]),
+        ([Tally::Allocated, Tally::Live], [false, true]),
+        ([Tally::Live, Tally::Live], [true, true]),
+        ([Tally::Allocated, Tally::Allocated], [false, false]),
+    ] {
+        for (index, want) in want.iter().enumerate() {
+            let mut panel = Panel::new(PLAUSIBLE.w, PLAUSIBLE.h);
+            panel.solve();
+            let ctx = drawn_once();
+            let pane = showing(index);
+            let at = inspector(panel.layout(), index, &pane)
+                .unwrap_or_else(|| panic!("pane {index} is drawn at a plausible window"));
+            let pill = keep_pill(&ctx, &at, &pane)
+                .unwrap_or_else(|| panic!("pane {index} draws its capsule"))
+                .pill;
+            let mut view = showing_two(tallies);
+            let mut panel = Panel::new(PLAUSIBLE.w, PLAUSIBLE.h);
+            panel.solve();
+            let lit = shapes_inside(&mut view, &mut panel, pill)
+                .iter()
+                .any(|shape| match shape {
+                    // **The word, and not the wash.** `on_pill_at`'s halo is
+                    // blurred wider than the capsule and would be filtered out
+                    // by `contains_rect`, and its ground is a `--c-pink` mix
+                    // rather than the colour itself. The word is `--c-pink` in
+                    // one treatment and `--c-dim` in the other, it is inside
+                    // the capsule by construction, and it is the one thing a
+                    // reader actually sees change.
+                    egui::Shape::Text(text) => {
+                        text.galley.job.text == KEEP_WORD && text.fallback_color == pal.pink
+                    }
+                    _ => false,
+                });
+            assert_eq!(
+                lit,
+                *want,
+                "with tallies {tallies:?}, pane {index}'s keep capsule is drawn {} and the page \
+                 says the wash is the deck's residency",
+                match lit {
+                    true => "lit",
+                    false => "plain",
+                }
+            );
+        }
     }
 }

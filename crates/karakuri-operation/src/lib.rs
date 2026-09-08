@@ -669,23 +669,39 @@ pub enum SetTransfer {
 pub enum Recording {
     /// Begin one, under this id or under a stamp.
     ///
-    /// **Before the first frame, and a mechanism rather than a habit says so.**
-    /// A replay reconstructs a session from its head, and the head is a Set
-    /// file written from the material the run began on — which is only the
-    /// deck's state at the instant the run begins. `karakuri_store::project`'s
-    /// `key_for` says the rest: the projection that would fold a session down
-    /// to the deck state it ends at does not exist, and nothing needs one,
-    /// because a session is replayed from the top rather than resumed from its
-    /// end. So a recording begun mid-performance replays the launch deck
-    /// against a late performance's records — not a partial session but a
-    /// wrong one, which
+    /// **A press can start one, and this doc said the opposite until
+    /// 2026-09-08.** It argued that only the instant a run begins can produce
+    /// a head, so a recording begun mid-performance would replay the launch
+    /// deck against a late performance's records. The premise was wrong:
+    /// `Recorder::open` takes a Set file's lines, and a Set file written from
+    /// the live deck is what a keep already produces at any frame.
+    /// `karakuri-cli` builds its head from the launch arguments because that
+    /// is all it holds at that instant, not because a later head cannot be
+    /// made.
+    ///
+    /// **What survives is narrower, and it is about the replay rather than a
+    /// refusal.** A Set file says what is playing and at what values and holds
+    /// no *running* state, so material that accumulates begins again from the
+    /// top: a replay from a mid-performance head is a true session of the
+    /// material as it stood, and not the picture that was on screen.
+    /// `karakuri_store::project`'s `key_for` still holds — the projection that
+    /// would fold a session down to the deck state it ends at does not exist —
+    /// and it is why a head is gathered from the deck rather than from the
+    /// stream.
+    ///
+    /// **Each start is a fresh id**, which is what keeps
     /// [P-0092](../../../docs/principles/0092-the-same-inputs-produce-the-same-frame.md)
-    /// refuses. `Recorder::open`'s position is that consequence.
+    /// met: `Store::append_session` appends and `session::split` sets
+    /// `started` at the first tick and never clears it, so a second head under
+    /// one id would be read back as edits.
     Start { id: Option<String> },
-    /// End the one running. **Nothing does this today** — `--record-session`
-    /// is a launch flag and the run stops when the program does. Unlike
-    /// [`Recording::Start`] nothing refuses it: the mock draws the `rec` pill
-    /// already on and names one gesture on it, *click to stop*.
+    /// End the one running. Nothing refuses it, and `crates/karakuri`'s `rec`
+    /// pill is the other end of the same press that starts one (ADR-0289).
+    ///
+    /// **Neither end happens on the frame.** `Recorder::finish` blocks on its
+    /// writer, and so does dropping one, so a stop hands the recorder to a
+    /// thread and the outcome is said when it lands —
+    /// [P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md).
     Stop,
 }
 

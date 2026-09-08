@@ -409,5 +409,6 @@ pub fn mock_transport() -> karakuri_console::view::Transport {
         // **The `landed` capsule at the end of the row**, which the mock
         // draws `armed`: the last procedure written is on screen.
         health: Some(karakuri_console::view::Stage::Landed),
+        rec: None,
     }
 }

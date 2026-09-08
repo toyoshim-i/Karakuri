@@ -98,7 +98,8 @@
 //!    transport row's audio-in pill
 //!    ([`crate::view::audio_in`]) and its arrangement pill
 //!    ([`crate::view::arrangement`]), at the end of that row the tone map's
-//!    capsule and the exposure track ([`crate::view::look`]), in an
+//!    capsule and the exposure track ([`crate::view::look`]) and the `rec`
+//!    pill past them ([`crate::view::TransportRow::record`]), in an
 //!    inspector pane's deck head the sync chip, the anchor and the scrub's two
 //!    arrows ([`crate::view::deck_head`]), the Master bay's out
 //!    ([`crate::view::MasterRow::grab`]), the Program bay head's `solo`
@@ -508,14 +509,15 @@ use karakuri_operation::gate::Class;
 
 use crate::panel::{Panel, GRAB};
 use crate::view::{
-    arrangement, audio_in, deck_head, inspector, keep_pill, library, look, master, mcp_pill, mixer,
-    outputs, program_bay, program_head, tracker_group, transition, Field, Scope, View, DECKS,
-    DECK_LETTERS,
+    arrangement, audio_in, deck_head, deck_name, inspector, keep_pill, library, look, master,
+    mcp_pill, mixer, outputs, program_bay, program_head, tracker_group, transition, transport,
+    Field, Scope, View, DECKS, DECK_LETTERS,
 };
 
 /// **What each of rule 4's derivations answers for**, one row per probe and in
 /// the order [`claim`] asks them: the Outputs sink, the audio-in pill, the
-/// tracker group's three, the arrangement pill, the look group's two, a
+/// tracker group's three, the arrangement pill, the look group's two, the
+/// transport row's `rec` pill, a
 /// strip's five, the transition row's four, the Master bay's one, the
 /// Inspector pane heads' `keep`, a deck head's four, the renderer chips, a
 /// parameter row's fader, the
@@ -605,7 +607,7 @@ use crate::view::{
 /// answering a different question. So the **list** is the control and which row
 /// is inside [`crate::view::LibraryBay::take`], which is the `read` chip's
 /// row read the other way round.
-pub const PROBES: [Probe; 19] = [
+pub const PROBES: [Probe; 22] = [
     Probe {
         name: "the Outputs row's sink",
         claims: 1,
@@ -632,6 +634,16 @@ pub const PROBES: [Probe; 19] = [
         ask: on_look,
     },
     Probe {
+        name: "the transport row's rec pill",
+        claims: 1,
+        ask: on_rec,
+    },
+    Probe {
+        name: "the transport row's tempo figure",
+        claims: 1,
+        ask: on_tempo,
+    },
+    Probe {
         name: "a mixer strip's five",
         claims: 5,
         ask: on_strip,
@@ -645,6 +657,11 @@ pub const PROBES: [Probe; 19] = [
         name: "the Master bay's out",
         claims: 1,
         ask: on_master,
+    },
+    Probe {
+        name: "the Inspector pane heads' name",
+        claims: 1,
+        ask: on_deck_name,
     },
     Probe {
         name: "the Inspector pane heads' keep",
@@ -883,6 +900,36 @@ fn on_look(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
     .is_some_and(|row| row.owns(p))
 }
 
+/// **The `rec` pill at the very end of the transport row**, and it is
+/// the row itself that answers: the pill takes the row's right
+/// padding and the health capsule and the frame readout are laid out
+/// backwards from it, so where it is *is* [`transport`]'s answer and
+/// a second derivation beside the row would be a second one.
+///
+/// The cheapest probe here after the sink: one laid-out row, which
+/// is what [`on_audio`] and [`on_tracker`] each derive before they
+/// derive anything else. A console nobody has told about recording
+/// draws no pill and this answers `false` without a rectangle.
+fn on_rec(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    transport(ctx, panel.layout(), view.transport).is_some_and(|row| row.on_rec(p))
+}
+
+/// **The tempo figure at the head of the transport row**, and the row
+/// answers for it exactly as it answers for the `rec` pill one item
+/// along: the figure is the row's first item and the control *is* the
+/// reading, so where it is and how wide it is are [`transport`]'s
+/// answer.
+///
+/// **The band is inside `on_tempo` and not here**, which is
+/// [`on_tracker`]'s arrangement for the octave's inert half: a press on
+/// the guard either side of the number asks for a tempo a hand is not
+/// trusted to have meant, so it is not this control's and falls through
+/// to `egui`
+/// ([ADR-0291](../../../docs/adr/0291-the-tempo-figure-is-the-track-and-the-band-is-a-guard-on-the-hand.md)).
+fn on_tempo(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    transport(ctx, panel.layout(), view.transport).is_some_and(|row| row.on_tempo(p))
+}
+
 /// **The Master bay's one control**, and the bay is derived for it
 /// exactly as the mixer's is for its five — one question about one
 /// laid-out row here, because there is one thing in this bay a hand
@@ -890,6 +937,21 @@ fn on_look(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
 /// and pays nothing.
 fn on_master(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
     master(ctx, panel.layout(), view.master_out).is_some_and(|row| row.owns(p))
+}
+
+/// **The name in each Inspector pane's head**, and it is [`on_keep`]'s
+/// arrangement at the other end of the same row: the pane is derived per
+/// index and the run from the pane. What it takes besides the pane is what
+/// that head is *asking* for, because a field being typed into is a
+/// different run of text and a different width —
+/// [`crate::view::View::naming_set_in`] is that answer, and it is the same
+/// one [`crate::view::View::draw`] paints from.
+fn on_deck_name(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    view.inspector.iter().enumerate().any(|(index, pane)| {
+        inspector(panel.layout(), index, pane)
+            .and_then(|at| deck_name(ctx, &at, pane, view.naming_set_in(index)))
+            .is_some_and(|named| named.hit(p))
+    })
 }
 
 /// **The `keep` capsule in each Inspector pane's head**, one derivation
@@ -1135,7 +1197,14 @@ pub fn claim(panel: &mut Panel, ctx: &egui::Context, view: &View, p: Point) -> C
     // there, and the next press is part of that gesture either way. They can
     // never both be down — the press that would open the second one lands
     // while the first is open, so this claims it and it shuts that one.
-    if view.arrangement.open() || view.audio.as_ref().is_some_and(|audio| audio.open()) {
+    if view.arrangement.open()
+        || view.audio.as_ref().is_some_and(|audio| audio.open())
+        // **A field taking the keyboard is a hand mid-gesture**, exactly as a
+        // card that is down is: every letter goes into it, so every key that
+        // is an operation the rest of the time is not one while it is open,
+        // and the next press is part of that gesture (ADR-0292).
+        || view.naming_set().is_some()
+    {
         return Claim::Panel;
     }
     // Rule 3 before rule 4: the boundary's first refusal is what the ordering

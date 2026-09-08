@@ -55,6 +55,22 @@
 //! is a frame with nobody touching the window, which is the whole of the
 //! clause being implemented, and no arm here produces one.
 //!
+//! # What changes on this panel and asks for nothing
+//!
+//! One thing, and it is a decision rather than a hole in the list below: the
+//! mixer's **level meter**. [`crate::view::Strip::level`] is a measurement of
+//! a frame the engine has already rendered, and it moves inside the caller's
+//! `Deck::begin_frame` — once per composed frame, which is once per frame this
+//! panel is drawn on. So the reading on screen is the newest one taken at
+//! every moment there is, and an arm for it could only ask for **another**
+//! frame, which would produce the next reading, which would ask again: the
+//! spin [`Repaint::asked`] refuses to let `egui`'s own delays become. What
+//! holds it is the caller's frame clock rather than anything here, which is
+//! why it is written down rather than left to be noticed
+//! ([ADR-0290](../../../docs/adr/0290-the-level-meter-moves-only-when-a-frame-is-drawn-so-it-declares-nothing.md);
+//! the mixer bay's own declaration is where the same argument is made for why
+//! it earns no *deadline* either, under [`crate::view::View::declares`]).
+//!
 //! # Who else asks for frames
 //!
 //! Two more, and neither is a [`Change`]:

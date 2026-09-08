@@ -143,9 +143,9 @@
         <div class="op-name" tabindex="0" data-tip="What the grid runs at with nothing driving it.">
           <div class="op-head"><h3>Set the free-run tempo</h3></div>
         </div>
-        <span class="op-when launch">launch</span>
+        <span class="op-when">immediate</span>
         <div class="rts">
-          <span class="rt plan">panel <b>transport</b></span>
+          <span class="rt has">panel <b>transport</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt plan">MCP <b>&mdash;</b></span>
@@ -916,12 +916,12 @@
         </div>
       </div>
       <div class="op">
-        <div class="op-name" tabindex="0" data-tip="The timeline as it happens, replayable frame for frame. There is no way to start or stop one while running.">
+        <div class="op-name" tabindex="0" data-tip="The timeline as it happens, replayable frame for frame. The panel&#39;s pill is one control with two ends &mdash; a press starts a recording and a press stops the one running &mdash; and each start is filed under the time it began, because a second head written into a stream that already exists is read back as edits. Its head is the Set deck A is playing as it stands, so a recording can begin mid&#8209;performance; what a Set file cannot carry is running state, so a replay begins accumulating material again from the top rather than continuing the picture that was on screen. Both ends are gathered on the press and written off the render thread &mdash; a start writes a Set file and opens a stream, a stop waits for the writer &mdash; and the outcome is said when it lands.">
           <div class="op-head"><h3>Record the session</h3></div>
         </div>
-        <span class="op-when launch">launch</span>
+        <span class="op-when">on a worker</span>
         <div class="rts">
-          <span class="rt plan">panel <b>rec</b></span>
+          <span class="rt has">panel <b>rec</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt plan">MCP <b>&mdash;</b></span>

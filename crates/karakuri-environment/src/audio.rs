@@ -331,6 +331,52 @@ impl Audio {
         Some(record)
     }
 
+    /// **The operator naming the grid's tempo outright** —
+    /// `Operation::SetFreeRunTempo`, which is *what the grid runs at with
+    /// nothing driving it*.
+    ///
+    /// # It takes no signals, because it moves nothing
+    ///
+    /// [`Audio::octave`] and [`Audio::tap`] both write the correction they
+    /// computed straight into the session, because the *lock* is what decided
+    /// the number — a factor and a phase, or four tap instants. Here the number
+    /// came from the operator, `karakuri_operation_record` turns the operation
+    /// into a `Record::Tempo`, and [`apply_tempo`] is what applies it: the one
+    /// road into the oscillator, live and on replay, taken by the live run for
+    /// the same reason the audio frame is read back through its own record.
+    /// A second application here would be the second route
+    /// `docs/principles/0090-every-control-ends-in-the-same-record.md`
+    /// exists to refuse — and it would be the route taken only when a device
+    /// happens to be open, which is the worst kind.
+    ///
+    /// So what is left is the session state the record does not carry, and it
+    /// is exactly two things:
+    ///
+    /// - **The lock's run of evidence**, which is [`BeatLock::retarget`] and is
+    ///   argued there.
+    /// - **The tracker's window**, told at once rather than left to the next
+    ///   frame — [`Audio::octave`]'s own sentence, and for the reason it gives:
+    ///   an estimate published in between would be folded into a window centred
+    ///   on the tempo the operator has just left.
+    ///
+    /// **`bpm` is where the grid is going and is not read back off the
+    /// oscillator**, so this may be called on either side of the record without
+    /// changing what it does. A session whose oscillator clamped the number —
+    /// `karakuri_signal`'s `BPM_RANGE` is a guard against a frozen phase — has
+    /// a window a hair off the grid for one frame, which the next
+    /// [`Audio::frame`] corrects from the oscillator itself.
+    ///
+    /// **Nothing is refused here**, and the ±15% a hand is held to is nowhere
+    /// near this file: it is a guard against a mis-click and lives where the
+    /// press becomes an operation
+    /// ([ADR-0291](../../../docs/adr/0291-the-tempo-figure-is-the-track-and-the-band-is-a-guard-on-the-hand.md)).
+    pub fn set_tempo(&mut self, bpm: f32) {
+        self.lock.retarget(bpm);
+        self.input.set_centre_bpm(bpm);
+        self.last.locked = self.lock.locked();
+        self.last.error = self.lock.error();
+    }
+
     /// A performer tapping the beat. Authoritative, and it goes through the
     /// same record as everything else.
     pub fn tap(&mut self, signals: &mut Signals, at: Instant, since_start: Instant) -> Record {

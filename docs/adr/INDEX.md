@@ -316,6 +316,11 @@ number; new records continue from the end.
 | [ADR-0286](0286-a-parameter-row-writes-the-control-it-draws-and-carries-the-range-rather-than-the-position.md) | A parameter row writes the control it draws, and carries the range rather than the position | 2026-09-08 | accepted |
 | [ADR-0287](0287-the-keep-pill-files-under-a-stamp-because-the-consoles-one-letter-taking-flow-is-an-arrangements-name.md) | The keep pill files under a stamp, because the console's one letter-taking flow is an arrangement's name | 2026-09-08 | accepted |
 | [ADR-0288](0288-a-read-rows-built-badge-is-met-by-an-emission-or-by-a-drawing-this-file-can-find.md) | A read row's built badge is met by an emission or by a drawing this file can find | 2026-09-08 | accepted |
+| [ADR-0289](0289-the-rec-pill-is-a-record-stop-toggle-and-each-start-takes-a-fresh-stamp.md) | The rec pill is a record/stop toggle, and each start takes a fresh stamp | 2026-09-08 | accepted |
+| [ADR-0290](0290-the-level-meter-moves-only-when-a-frame-is-drawn-so-it-declares-nothing.md) | The level meter moves only when a frame is drawn, so it declares nothing | 2026-09-08 | accepted |
+| [ADR-0291](0291-the-tempo-figure-is-the-track-and-the-band-is-a-guard-on-the-hand.md) | The tempo figure is the track, and the band is a guard on the hand | 2026-09-08 | accepted |
+| [ADR-0292](0292-the-pane-heads-name-takes-letters-and-the-keep-capsule-stays-a-stamp.md) | The pane head's name takes letters, and the keep capsule stays a stamp | 2026-09-08 | accepted |
+| [ADR-0293](0293-a-rung-may-sit-under-the-floor-because-what-it-hides-is-bounded-and-paid.md) | A rung may sit under the floor, because what it hides is bounded and paid | 2026-09-08 | accepted |
 
 ## Retired numbers
 

@@ -1,5 +1,5 @@
-//! **The transport row: five readouts, no controls, and nothing at all where
-//! there is no engine.**
+//! **The transport row: its readouts, and nothing at all where there is no
+//! engine.**
 //!
 //! Five things, and the first two are why this file exists rather than a few
 //! more assertions in `view.rs`:
@@ -16,11 +16,13 @@
 //!    ([ADR-0212](../../../docs/adr/0212-the-beat-is-a-light-that-travels-and-it-declares-for-itself.md)).
 //! 3. Where everything in the row is, derived from the row's own geometry and
 //!    the mock's boxes.
-//! 4. **That the five readouts are not controls**, which is the answer stated
+//! 4. **That the readouts are not controls**, which is the answer stated
 //!    rather than inferred from the absence of a hit test: `claim` gives every
 //!    point of this row to `egui` unless a boundary has it — or unless it is
-//!    on the arrangement pill, which is the one control this row has and is
-//!    `tests/arrangement_pill.rs`'s whole subject.
+//!    on one of the row's controls, which have files of their own:
+//!    `tests/arrangement_pill.rs` for the pill, and `tests/tempo_figure.rs`
+//!    for the tempo, which was in the list here until the figure became the
+//!    track a press names a tempo along.
 //! 5. That the values are the harness's and the console keeps no copy.
 //!
 //! None of it needs a window or a device. It does need `egui`'s fonts, because
@@ -1144,17 +1146,22 @@ fn the_capsule_is_washed_only_where_the_build_is_on_screen() {
 /// menu, a boundary within `GRAB`, and a control the console draws (ADR-0176).
 ///
 /// **This test said *nothing in this row is a control* until the arrangement
-/// pill landed, and the sentence is narrowed rather than deleted.** It was
-/// never an argument that a control could not go here — it was the statement
-/// that none had, made where a future control added without a decision about
-/// the pointer would fail it. That is exactly what happened, and it failed:
-/// the pill is a control in this row, it has a decision about the pointer,
-/// and `tests/arrangement_pill.rs` is that decision written down — the
-/// clearance it keeps, the boundary band it does not sit in, and the rule an
-/// open menu changes. What is left here is the five readouts, and they are
-/// still readouts: a tempo, a beat, a bar and a frame time are things a press
-/// does not act on, and every *other* control the mock draws in this row is
-/// one of the six things `view::transport` names and does not draw.
+/// pill landed, and the sentence has been narrowed twice rather than
+/// deleted.** It was never an argument that a control could not go here — it
+/// was the statement that none had, made where a future control added without
+/// a decision about the pointer would fail it. That is exactly what happened,
+/// and it failed: the pill is a control in this row, it has a decision about
+/// the pointer, and `tests/arrangement_pill.rs` is that decision written down
+/// — the clearance it keeps, the boundary band it does not sit in, and the
+/// rule an open menu changes.
+///
+/// **The tempo left the list on 2026-09-08 for the same reason**, and the
+/// decision behind it is `tests/tempo_figure.rs`: the figure is the track, a
+/// press along it names a tempo outright, and the band around what the grid is
+/// running at is what a press has to land in. What is left here is a beat, a
+/// bar, a frame time and what the last write did — four things a press does
+/// not act on — and every *other* control the mock draws in this row is one of
+/// the things `view::transport` names and does not draw.
 ///
 /// The pill is asked for from the same view, so this is not the old assertion
 /// passing because the pill has gone missing: a console with an engine and an
@@ -1185,7 +1192,11 @@ fn the_readouts_in_the_transport_row_are_not_controls() {
     );
 
     let probes = [
-        (row.bpm.center(), "the tempo"),
+        // **The tempo is not in this list and left it on 2026-09-08**, which
+        // is the same narrowing the pill made and the reason the sentence
+        // above is written the way it is: the figure is a control now, a press
+        // on it names a tempo, and what it claims is
+        // `tests/tempo_figure.rs`'s whole subject.
         (row.label.center(), "the BPM label"),
         (row.grid.center(), "the beat grid"),
         (row.dot(0).center(), "the dot the light is on"),
@@ -1263,6 +1274,7 @@ fn the_values_are_the_harnesss_and_are_stored_nowhere() {
         frame_ms: 4.0,
         budget_ms: None,
         health: None,
+        rec: None,
     };
 
     let first = transport(&ctx, panel.layout(), Some(one)).expect("a row");
