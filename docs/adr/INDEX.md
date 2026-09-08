@@ -321,6 +321,8 @@ number; new records continue from the end.
 | [ADR-0291](0291-the-tempo-figure-is-the-track-and-the-band-is-a-guard-on-the-hand.md) | The tempo figure is the track, and the band is a guard on the hand | 2026-09-08 | accepted |
 | [ADR-0292](0292-the-pane-heads-name-takes-letters-and-the-keep-capsule-stays-a-stamp.md) | The pane head's name takes letters, and the keep capsule stays a stamp | 2026-09-08 | accepted |
 | [ADR-0293](0293-a-rung-may-sit-under-the-floor-because-what-it-hides-is-bounded-and-paid.md) | A rung may sit under the floor, because what it hides is bounded and paid | 2026-09-08 | accepted |
+| [ADR-0295](0295-the-grip-is-the-fold-and-a-panes-outer-edge-is-the-other-one.md) | The grip is the fold, and a pane's outer edge is the other one | 2026-09-08 | accepted |
+| [ADR-0296](0296-the-governor-budgets-on-the-estimate-where-it-answers-and-on-the-measurement-where-it-does-not.md) | The governor budgets on the estimate where it answers, and on the measurement where it does not | 2026-09-08 | accepted |
 
 ## Retired numbers
 

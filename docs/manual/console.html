@@ -169,7 +169,7 @@
                 <div class="previews">
                   <div class="cell">
                     <div class="preview a" data-tip="Deck A's own material, running. A cell is its slot's monitor and never the mix: it is what that deck is making, before the channel fader and with nothing else composited over it, through the transfer curve the audience gets. Nothing is routed here &mdash; the cell is welded to the letter under it. A is on air as it happens, and that is not why this cell is drawn. It takes a drop as well as showing material: a Set carried out of the library and let go on this cell names deck A, the same command the strip names, because nothing routes a cell and the letter is welded to it. It is the near destination of the two &mdash; the list the Set comes out of is one column to the left, and the mixer is a window away. No ring is on it here, because the pointer is over deck A&#39;s strip."></div>
-                    <div class="caption" data-tip="Deck A's caption: which cell this is, what it is showing, and what it costs. The letter is outside the image because a letter laid over the material is unreadable exactly when the deck is live and the material is bright, which is the one moment an operator is reading the row fastest. It is welded to the cell &mdash; nothing routes a preview, so A is A whatever is loaded. material is the state: there is a slot behind this cell and it has something to draw. The dot is what this slot is estimated to cost, in bands, and the bands are read as how many of these, at what rate &mdash; four slots share one frame, so 16.7 ms at 60 Hz is about 4 ms each. Green, up to 4 ms: four of these at 60 Hz. Blue, over 4 ms: not four at 60, and two at 60 is fine &mdash; two on air and two being prepared is the ordinary way of working, so blue is the ordinary state of good material and not a caution. Yellow, about 8 ms: the boundary for two at 60 Hz, and four at 30 Hz. Red, about 12 ms: one at 60 Hz, two at 30 Hz. Purple, over 16 ms: one slot eats a whole frame, and the cell stops drawing &mdash; a slot over budget is stopped rather than shown harder, and nothing lowers the frame rate to make room for it. A value on a boundary rounds to the worse band. The estimate does not exist yet, so the console draws the letter and the state and no dot at all. &#8853; MIDI: unassigned &mdash; a caption is a readout and there is nothing here to press."><b>A</b><span>material</span><i class="risk green"></i></div>
+                    <div class="caption" data-tip="Deck A's caption: which cell this is, what it is showing, and what it costs. The letter is outside the image because a letter laid over the material is unreadable exactly when the deck is live and the material is bright, which is the one moment an operator is reading the row fastest. It is welded to the cell &mdash; nothing routes a preview, so A is A whatever is loaded. material is the state: there is a slot behind this cell and it has something to draw. The dot is what this slot is estimated to cost, in bands, and the bands are read as how many of these, at what rate &mdash; four slots share one frame, so 16.7 ms at 60 Hz is about 4 ms each. Green, up to 4 ms: four of these at 60 Hz. Blue, over 4 ms: not four at 60, and two at 60 is fine &mdash; two on air and two being prepared is the ordinary way of working, so blue is the ordinary state of good material and not a caution. Yellow, about 8 ms: the boundary for two at 60 Hz, and four at 30 Hz. Red, about 12 ms: one at 60 Hz, two at 30 Hz. Purple, over 16 ms: one slot eats a whole frame, and the cell stops drawing &mdash; a slot over budget is stopped rather than shown harder, and nothing lowers the frame rate to make room for it. A value on a boundary rounds to the worse band. The estimate is taken now and the dot is not drawn yet, so the console draws the letter and the state and no dot at all &mdash; what is missing is this cell&#39;s own drawing rather than a number behind it. &#8853; MIDI: unassigned &mdash; a caption is a readout and there is nothing here to press."><b>A</b><span>material</span><i class="risk green"></i></div>
                   </div>
                   <div class="cell">
                     <div class="preview b" data-tip="Deck B's own material, running. B is priming rather than on air, and the cell is drawn all the same &mdash; the deck that is off air is the one worth looking at, because it is the candidate. Priming means it is stepping, and this cell is what it is drawn for. The fader beside it in the Mixer is at 0.30 and this cell does not show that: the fader is the step after the decision."></div>
@@ -431,12 +431,12 @@
                   <span class="val">1.00</span>
                 </div>
                 <div class="chain">
-                  <div class="fx"><i class="dot"></i>feedback<span class="amt">0.34</span></div>
-                  <div class="fx sel"><i class="dot"></i>bloom<span class="amt">0.60</span></div>
-                  <div class="fx off"><i class="dot"></i>rgb shift<span class="amt">&mdash;</span></div>
-                  <div class="fx off" style="justify-content:center">+ add</div>
+                  <div class="fx" data-tip="Feedback, at 0.34: the previous frame read back into this one, and the first of the three effects between the out fader above and the tone mapper's exposure at the far end. The chain is fixed &mdash; presets, all of them loaded, in the order drawn here &mdash; so what a control on this row moves is this effect's parameters and never the chain itself: nothing here switches an effect off, reorders the three, or adds one somebody wrote. This row waits on a second thing the other two do not, and it is not a control that is missing: which cut of the previous frame it reads. A Set's output, the raw frame the mix wrote, and the frame as it stands after an effect further along this chain are three different pictures, and nothing in the vocabulary can name one of them &mdash; a cut that is read has to be held, so answering it recomposes the pipeline rather than setting a value on it. &#8853; MIDI: unassigned &mdash; the operation names the effect and not a parameter of it, so a map line has no number to land on until the chain exists."><i class="dot"></i>feedback<span class="amt">0.34</span></div>
+                  <div class="fx sel" data-tip="Bloom, at 0.60: the frame's bright parts spreading into what is beside them, the second of the three and on the feedback row's terms &mdash; a preset, always present, and what this row moves is its parameters. It runs in linear HDR, before the one tone map, which is why it is on this side of the transport's tone map capsule and not the other: what it blooms from is unbounded light, where the same effect after the transfer would bloom from a displayable approximation of it. And it reads what it is handed, so the level it blooms from is the out fader's above rather than the exposure's at the far end &mdash; the two levels seen from between them, which is the position that makes them two numbers instead of one. The ring is a selection and says nothing about the effect: every preset is loaded always, so no row here is more on than another, and what a selected row is then for is undecided along with everything else about editing this chain. &#8853; MIDI: unassigned &mdash; the operation names the effect and not a parameter of it, so a map line has no number to land on until the chain exists."><i class="dot"></i>bloom<span class="amt">0.60</span></div>
+                  <div class="fx off" data-tip="RGB shift: the three channels sampled apart, so an edge fringes. The last of the three, which makes it the one the other two are seen through, and on the feedback row's terms again. Its figure is a dash because it is an effect nobody has given a value &mdash; not a fourth state, and not an off: the chain is every preset always, so there is no per&#8209;effect switch here for a dash to be the off position of. The dim this row is drawn in is the missing value and not a missing effect: it runs with the two above it, as every preset in this chain always does. &#8853; MIDI: unassigned &mdash; the operation names the effect and not a parameter of it, so a map line has no number to land on until the chain exists."><i class="dot"></i>rgb shift<span class="amt">&mdash;</span></div>
+                  <div class="fx off" style="justify-content:center" data-tip="A fourth effect in this chain, and the one control in the bay that argues the chain is not fixed. The three rows above are built&#8209;in presets; adding one an operator wrote makes the master chain a written procedure instead, and which of those two the chain is has not been decided &mdash; it is what this whole bay waits on. Nothing lands here until it is taken: there is no operation for adding an effect and no row for one on the operations page, and the panel cannot grow a bay's body while it is running, because the arena the regions live in has no insert and no remove. That is one gap drawn in five places &mdash; here, the Outputs row's + add output, the sequencer's + lane, the library's + on the scope list and the inspector's 2 up &mdash; so the dim on this row is a thing not built rather than a thing switched off, and no press fixes it. &#8853; MIDI: unassigned &mdash; this names no operation and carries no row, so there is nothing for a map line to name.">+ add</div>
                 </div>
-                <div style="color:var(--c-faint);font-size:10px">runs in linear HDR, before the one tonemap &mdash; out is this chain's entry, the tonemap's exposure its far end</div>
+                <div style="color:var(--c-faint);font-size:10px" data-tip="Where this chain sits in the pipeline, and a line of prose rather than a control: there is nothing here to press. Linear HDR, before the one tone map &mdash; the pipeline carries unbounded light the whole way and the transfer to something displayable happens once, at the end, so an effect placed after it would be working on a displayable approximation of the picture instead of on the picture. It names both ends because the ends are two levels and not one: out, on the row above, is what the composited frame enters the chain at, and the tone mapper's exposure, drawn a bay away in the transport, is the level going into the transfer. With nothing between them the two multiply one after the other and no frame this program can draw tells 0.5 on one from 0.5 on the other &mdash; which is why the sentence is written before the chain exists, since the day the first effect lands between them is the day the difference is the picture. &#8853; MIDI: unassigned &mdash; a caption is not an operation, so there is no target for a map line to name.">runs in linear HDR, before the one tonemap &mdash; out is this chain's entry, the tonemap's exposure its far end</div>
               </div>
             </div>
 
@@ -499,7 +499,7 @@
             <span class="sink" data-tip="Syphon, publishing as `karakuri`. Off. Click to enable &mdash; a slow sink has its frame dropped and never delays the window."><i class="dot"></i>Syphon</span>
             <span class="sink absent tip-right" data-tip="NDI. No plugin is loaded, so there is nothing to enable. Install the plugin and it appears here as a sink."><i class="dot"></i>NDI &middot; no plugin</span>
             <span class="sep"></span>
-            <span class="pill lav">+ add output</span>
+            <span class="pill lav tip-right" data-tip="A fifth place for a frame to go, and the one control in this row that is not a switch over something already there. It adds a region while the panel is running, which the arena the regions live in cannot do &mdash; it has no insert and no remove &mdash; and that is one gap drawn in five places: here, the Master bay's + add, the sequencer's + lane, the library's + on the scope list and the inspector's 2 up. It arrives with the operations that add and remove a region rather than with this row, so not one of the sinks beside it is waiting on it. What it would offer is open as well: what names an output, and what tells a sink this repository owns from one a plugin brings, is the question the four chips beside it are drawn against. &#8853; MIDI: unassigned &mdash; this names no operation and carries no row on the operations page, so there is nothing for a map line to name.">+ add output</span>
           </div>
         </div>
 
@@ -1390,8 +1390,11 @@
           every other control on this panel, so the level a hand asks for and
           the level a stream would replay are one value. What it still has no
           route from is a key, a map and a model: no letter is bound to it, no
-          map target names it, and the operations page carries all three as
-          gaps rather than as designs waiting on a control.
+          map target names it, and no call reaches it. The operations page does
+          not carry the three the same way, and the difference is worth
+          reading &mdash; the key and the map are gaps, nothing meant to reach
+          this level at all, and the model is a design that has not landed,
+          which is the badge every row of this bay wears in that column.
         </p>
         <p>
           <strong>The two levels are told apart on this page by how each is
@@ -2590,12 +2593,19 @@
           band.
         </p>
         <p>
-          <strong>The estimate does not exist yet, so the panel draws no
-          dot.</strong> There is no cost estimate for a slot anywhere in this
-          workspace, and a badge drawn hollow or drawn green by default would
-          assert a reading nobody took. The letter and the state have values
-          behind them and are drawn; the badge does not and is omitted, which
-          is what a first pass does with the parts of the mock it cannot fill.
+          <strong>The estimate exists now, and the dot is what is left.</strong>
+          This paragraph said there was no cost estimate for a slot anywhere in
+          this workspace, and a badge drawn hollow or drawn green by default
+          would assert a reading nobody took. That was true when it was written
+          and stopped being true in two steps: a renderer&#39;s floor is bounded
+          from what its parameters declare, so an estimate answers for material
+          it used to refuse, and the governor now budgets on that number where
+          it has one and on the measurement where it does not. So the reading a
+          band would assert is taken, by something, every frame &mdash; and what
+          is missing is the drawing, the table that turns a number into one of
+          the five bands, and a path from the deck to this caption. The letter
+          and the state are drawn; the badge is the last part of this cell the
+          panel cannot fill, and it is no longer the estimate that is missing.
         </p>
         <p>
           <strong>The cells are not outputs.</strong> The picture beside them is

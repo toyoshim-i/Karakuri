@@ -75,6 +75,58 @@
 //! this module decides whether a request was **granted** rather than whether a
 //! simulation runs.
 //!
+//! ## Two numbers, and which one is budgeted on
+//!
+//! **A slot can arrive here with two costs, and they are not the same
+//! quantity.**
+//!
+//! - [`SlotState::cost`] is [`crate::swap::measure`]'s: **one** draw, at
+//!   [`PROBE_RESOLUTION`](crate::swap::PROBE_RESOLUTION), taken when the Set
+//!   was built. It says what this Set costs at 1280x720 whatever the deck is
+//!   drawing into, and comparing two of them is the admission decision this
+//!   module was built on.
+//! - [`SlotState::estimate`] is [`crate::estimate`]'s: a fit of `a + b·area`
+//!   through **two** draws, evaluated at the **output's** size. It is the same
+//!   material read at the size the frame is actually paying for.
+//!
+//! **Where the estimate answers, it is the number.** The reason is the one
+//! ADR-0246 gives for making the render size the output's: a deck drawing into
+//! a 640x360 window budgeted against 720p figures is refusing priming on
+//! fragment work nobody is doing, and a deck on a 4K output is admitting
+//! against a number several times too small. The measurement cannot tell those
+//! apart, because one draw gives `a + b·area` and no way to divide it — which
+//! is the whole of [`crate::estimate`]'s first line.
+//!
+//! **Where it refuses, nothing changes.** A refusal is not a licence and not a
+//! zero: the slot falls back to its measurement and is decided exactly as it
+//! was before any of this existed, and a slot with neither number is
+//! [`Reason::Unmeasured`] — parked if it asked to prime, and
+//! [`Reason::CommittedUnknown`] for the whole deck if it is on air. That is the
+//! same rule as "Why an unmeasured Set is not a free one" below, reached from a
+//! second direction: **an instrument that declined to answer has not said the
+//! answer is small.**
+//!
+//! **And it says what it did.** [`Decision::basis`] is which of the two the
+//! arithmetic used, [`Decision::budgeted_ms`] is the number itself, and
+//! [`Decision::estimate`] carries the estimate's own record — the target it
+//! was for, the instrument, the floor, **where that floor came from**
+//! ([`Estimated::floor_from`]) and **how strictly it was read**
+//! ([`Estimated::floored`]). `P-0095` is why both of the last two travel: an
+//! estimate taken with every primitive at least a pixel across at both rungs
+//! and one taken with some of them rounded up are not the same statement, and
+//! a consumer that cannot see which it has cannot check the number. What this
+//! module *does* with them is: nothing arithmetic — [`Fit::ms`](crate::estimate::Fit::ms)
+//! already carries [`Floored::correction`], so applying it again would inflate
+//! a number that is already sound — and everything reportorial: the counts are
+//! on [`Report`] and the [`Display`](std::fmt::Display) line says them.
+//!
+//! **It does not re-derive a floor and it does not refuse one.** A
+//! [`FloorRead::Stated`] floor is a caller's assertion nothing checked and a
+//! [`FloorRead::Contradicted`] one is a bound a held value falsified; ADR-0285
+//! makes the first a record rather than a refusal, and ADR-0293 §6 makes the
+//! second *the greatest floor there is* — placed and paid for, not refused. So
+//! both are numbers this module spends, and both are numbers it names.
+//!
 //! ## What it does not touch
 //!
 //! **Live slots. Ever.** An operator who puts four heavy Sets on air has made a
@@ -166,6 +218,7 @@
 //! inside the determinism invariant rather than beside it.
 
 use crate::deck::Residency;
+use crate::estimate::{Estimate, Floor, Floored, Unfit};
 use crate::probe::{Measurement, MeasurementMethod};
 
 /// A default compute budget, in milliseconds of measured per-Set cost.
@@ -181,6 +234,133 @@ use crate::probe::{Measurement, MeasurementMethod};
 /// added on top the way `DEFAULT_BUDGET_MS` adds it, because there is no vsync
 /// quantisation to clear here — a sum of measurements is not a frame interval.
 pub const DEFAULT_COMPUTE_BUDGET_MS: f32 = 16.7;
+
+/// **Where an estimate's floor came from**, as much of
+/// [`Floor`](crate::estimate::Floor) as survives being `Copy`.
+///
+/// The floor is what both rungs were placed against, so `P-0095` makes it part
+/// of the number rather than a detail behind it — a consumer that cannot see
+/// how it was arrived at cannot check the rungs either. The full record,
+/// including one `RateBound` per renderer and the declarations each rests on,
+/// stays on the [`Estimate`] the slot is holding
+/// ([`HotSwap::estimated_cost`](crate::swap::HotSwap::estimated_cost)); this is
+/// the discriminant, so a status line can say which of the three it has without
+/// going and fetching it.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum FloorRead {
+    /// The caller stated the floor and nothing checked it — ADR-0285's
+    /// `Floor::Stated`. A record, not a refusal: getting it wrong low is the
+    /// failure ADR-0245 describes, and this says nothing stood between the
+    /// caller and it.
+    Stated,
+    /// Read off the Set's own `point_rate` expressions, with no held value
+    /// contradicting a bound.
+    Analysed,
+    /// Read off the Set's own expressions, and **a held value falsified one of
+    /// them** — somebody wrote a param outside the declaration a bound was
+    /// taken over. ADR-0293 §6 makes that an *unknown* floor rather than a
+    /// refusal, so [`Estimated::floor`] is `None` and the rungs were placed
+    /// against the greatest floor there is.
+    Contradicted,
+}
+
+/// **What an estimate says, as this module reads it** — every field of
+/// [`Estimate`] a budget decision or a status line needs, and nothing that
+/// would make it allocate.
+///
+/// [`Estimate`] itself carries a `Vec` of topologies and a `Vec` of rate
+/// bounds, and a governor pass is a `Copy` of small things by construction.
+/// So the record is summarised here and **not thrown away**: the whole of it is
+/// still on the slot, and this names which of it was read.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub struct Estimated {
+    /// **The number, or why there is none** — [`Estimate::ms`] and
+    /// [`Estimate::fit`]'s refusal, with the fit's other three terms left
+    /// behind because a budget spends the answer and not the line.
+    ///
+    /// An `Err` here is what makes this slot fall back to its measurement.
+    pub fit: Result<f32, Unfit>,
+    /// The size the estimate answered for — the output's, not a probe's. Kept
+    /// so a report can say what the number is *of*: an estimate for a target
+    /// the deck is no longer drawing is a right number about the wrong frame,
+    /// which is why [`HotSwap::resize`](crate::swap::HotSwap::resize) drops
+    /// one.
+    pub target: (u32, u32),
+    /// Which clock took the two rungs, or [`None`] where nothing was drawn.
+    /// [`MeasurementMethod::HostWallClock`] biases the answer high, and
+    /// [`Report::host_clock`] is where that reaches a caller.
+    pub method: Option<MeasurementMethod>,
+    /// The sub-pixel floor the rungs were placed against, in rows, or [`None`]
+    /// where it was not knowable at all — which ADR-0293 places rather than
+    /// refuses.
+    pub floor: Option<u32>,
+    /// **Where that floor came from.** See [`FloorRead`].
+    pub floor_from: FloorRead,
+    /// **How strictly that floor was read.** [`None`] means both rungs cleared
+    /// it, nothing was rounded up and the fit is exact. [`Some`] carries the
+    /// share ADR-0245's flooring can hide and the factor
+    /// [`Fit::ms`](crate::estimate::Fit::ms) was **already** multiplied by to
+    /// cover it — so this module spends the number as it stands and never
+    /// applies the correction a second time.
+    pub floored: Option<Floored>,
+}
+
+impl Estimated {
+    /// The number, where there is one.
+    pub fn ms(&self) -> Option<f32> {
+        self.fit.ok()
+    }
+
+    /// Whether [`Fit::ms`](crate::estimate::Fit::ms) carries a correction for a
+    /// rung that sat under the floor. A corrected number is sound and is
+    /// higher than the line it was fitted from — at most `1/(1 - 1/4)` of it,
+    /// which is one band of the badge it feeds.
+    pub fn corrected(&self) -> bool {
+        self.floored.is_some()
+    }
+}
+
+impl From<&Estimate> for Estimated {
+    fn from(e: &Estimate) -> Estimated {
+        Estimated {
+            fit: e.fit.as_ref().map(|f| f.ms).map_err(|u| *u),
+            target: e.target,
+            method: e.method(),
+            floor: e.floor,
+            floor_from: match &e.floor_from {
+                Floor::Stated => FloorRead::Stated,
+                Floor::Analysed {
+                    contradicted: Some(_),
+                    ..
+                } => FloorRead::Contradicted,
+                Floor::Analysed { .. } => FloorRead::Analysed,
+            },
+            floored: e.floored,
+        }
+    }
+}
+
+/// **Which of a slot's two numbers the arithmetic was done on.**
+///
+/// Not decoration: the two are measurements of different things — one draw at
+/// [`PROBE_RESOLUTION`](crate::swap::PROBE_RESOLUTION) against a fit at the
+/// output's size — so a caller comparing a `budgeted_ms` against anything has
+/// to know which it is holding. See "Two numbers, and which one is budgeted
+/// on" in the module doc.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Basis {
+    /// **Neither number.** Nothing measured this Set and nothing estimated it,
+    /// or an estimate was taken and refused with no measurement behind it.
+    /// [`Decision::budgeted_ms`] is `None` and the slot is unbudgetable — which
+    /// is not the same as free.
+    Unbudgetable,
+    /// The single-draw measurement at the reference resolution, because
+    /// nothing estimated this slot or the estimate refused.
+    /// [`Decision::estimate`] says which, and why.
+    Measured,
+    /// The two-draw fit, at the size on [`Estimated::target`].
+    Estimated,
+}
 
 /// Why a slot ended up where it did.
 ///
@@ -209,13 +389,19 @@ pub enum Reason {
     /// withholds the grant, not the simulation, and an operator sees it on the
     /// strip rather than in the cell.
     NoHeadroom,
-    /// Parked: nothing measured this Set, so it cannot be budgeted for. Not a
-    /// claim that it is expensive — a claim that its cost is unknown, which is
-    /// not the same as zero.
+    /// Parked: **no number**, so it cannot be budgeted for. Not a claim that
+    /// it is expensive — a claim that its cost is unknown, which is not the
+    /// same as zero.
+    ///
+    /// Two ways to arrive: nothing measured this Set and nothing estimated it,
+    /// or an estimate was taken and **refused** with no measurement behind it
+    /// to fall back to. [`Decision::estimate`] tells them apart and carries the
+    /// [`Unfit`] where there is one — an instrument declining to answer has
+    /// not said the answer is small.
     Unmeasured,
-    /// Parked: a **Live** slot on this deck is unmeasured, so what the deck is
-    /// already spending is unknown and there is no headroom figure to admit
-    /// against.
+    /// Parked: a **Live** slot on this deck has no number — neither a
+    /// measurement nor an estimate that answered — so what the deck is already
+    /// spending is unknown and there is no headroom figure to admit against.
     ///
     /// Deliberately distinct from [`Reason::NoHeadroom`]: that one says there
     /// is no room, this one says the governor cannot tell whether there is.
@@ -242,9 +428,32 @@ pub struct Decision {
     /// What the engine should be doing with this slot until the next pass.
     pub effective: Residency,
     pub reason: Reason,
-    /// What this slot was measured at, if anything measured it. Carried so a
-    /// status line can show what the arithmetic was done on.
+    /// What this slot was **measured** at — one draw at
+    /// [`PROBE_RESOLUTION`](crate::swap::PROBE_RESOLUTION) — if anything
+    /// measured it.
+    ///
+    /// **No longer necessarily the number the arithmetic was done on**, which
+    /// is [`Decision::budgeted_ms`]. It is kept unchanged and beside it because
+    /// the two are different quantities and a status line showing an estimate
+    /// where it means a measurement would be overstating what was taken.
     pub cost_ms: Option<f32>,
+    /// **The number this slot was budgeted at**, and the one the headroom
+    /// arithmetic above spent. [`None`] where there was neither.
+    ///
+    /// Equal to [`Decision::cost_ms`] under [`Basis::Measured`] and to
+    /// [`Estimated::ms`] under [`Basis::Estimated`].
+    pub budgeted_ms: Option<f32>,
+    /// **Which of the two it is.** See [`Basis`].
+    pub basis: Basis,
+    /// **The estimate this slot arrived with**, answering or refusing, or
+    /// [`None`] where nothing estimated it.
+    ///
+    /// Present under [`Basis::Measured`] too, and that is the point: an
+    /// estimate that refused is why the measurement is being used, and
+    /// [`Estimated::fit`]'s `Err` names what would have to change. Dropping it
+    /// there would leave a slot that fell back looking like one nothing had
+    /// ever asked.
+    pub estimate: Option<Estimated>,
 }
 
 impl Decision {
@@ -261,27 +470,48 @@ impl Decision {
 
 /// One pass of the governor over one deck.
 ///
-/// **Every millisecond in here is a measurement of a *cold* Set at a fixed
-/// reference resolution, taken once, when it was built.** Nothing re-measures.
-/// A Set whose population grows, whose points get bigger, or whose overdraw
-/// rises as it spreads costs more than this the longer it runs, and a deck on a
-/// 4K output costs several times it — see "What it cannot see" in
-/// [`crate::swap`] for the whole list. The numbers are comparable *between*
-/// slots, which is what an admission decision needs; they are not a prediction
-/// of this machine's frame time, and a status line that presents them as one is
-/// overstating them. [`Report::host_clock`] is a second caveat of the same kind
-/// and is the only one the [`Display`](std::fmt::Display) line carries, because
-/// it is the only one that can change from run to run.
+/// **Every millisecond in here was taken once, off a *cold* Set, and nothing
+/// re-measures.** A Set whose population grows, whose points get bigger, or
+/// whose overdraw rises as it spreads costs more than this the longer it runs
+/// — see "What it cannot see" in [`crate::swap`] for the whole list. The
+/// numbers are comparable *between* slots, which is what an admission decision
+/// needs; they are not a prediction of this machine's frame time, and a status
+/// line that presents them as one is overstating them.
+///
+/// **Two of that list's four are answered for an estimated slot and two are
+/// not.** Resolution is: [`Basis::Estimated`] means the figure is a fit
+/// evaluated at the output's own size rather than a draw at 1280x720, so a deck
+/// on a 4K output is no longer being budgeted several times too small. So is
+/// the host-side bias, in the sense that it is *named* —
+/// [`Estimated::method`], and [`Report::host_clock`] either way. The deck's own
+/// per-frame cost and the future are untouched: an estimate is still one
+/// reading of one cold Set, and nothing takes a second.
+///
+/// [`Report::host_clock`] is the caveat the [`Display`](std::fmt::Display) line
+/// carries because it is the one that can change from run to run;
+/// [`Report::estimated`], [`Report::corrected`] and [`Report::floor_unknown`]
+/// are on it for `P-0095`'s reason — which of two quantities a number is, and
+/// how strictly the floor under it was read, are facts about the number and not
+/// about the deck.
 #[derive(Clone, Debug)]
 pub struct Report {
     /// Every slot, in index order.
     pub decisions: Vec<Decision>,
     /// The budget these decisions were made against.
     pub budget_ms: f32,
-    /// What the Live slots are already measured to cost, summed. **Understates
-    /// by `unmeasured_live` Sets' worth** — see that field.
+    /// What the Live slots are already budgeted at, summed — each at
+    /// [`Decision::budgeted_ms`], so an estimated slot contributes its estimate
+    /// at the output's size and a merely measured one contributes its
+    /// reference-resolution draw. **Understates by `unmeasured_live` Sets'
+    /// worth** — see that field.
+    ///
+    /// **A sum of two kinds of number where a deck is part-estimated**, and
+    /// that is the honest reading rather than a defect: each term is this
+    /// crate's best statement about that slot, and [`Report::estimated`] says
+    /// how many of them are the better kind. Refusing to mix them would mean
+    /// discarding the estimate on a deck where one slot happens to lack one.
     pub committed_ms: f32,
-    /// What the slots left Priming add on top, summed at their whole measured
+    /// What the slots left Priming add on top, summed at their whole budgeted
     /// cost — there is no rate to amortise over any more (ADR-0269).
     ///
     /// **It is not what the deck spends off air**, and the difference grew
@@ -291,7 +521,8 @@ pub struct Report {
     /// air, and what priming was granted — and what the deck spends in total
     /// is the per-slot [`Decision::cost_ms`] summed by whoever wants it.
     pub priming_ms: f32,
-    /// Live slots with no measurement. `committed_ms` cannot include them, so
+    /// Live slots with **no number at all** — neither a measurement nor an
+    /// estimate that answered. `committed_ms` cannot include them, so
     /// a non-zero value here means the deck's committed cost is **unknown**
     /// rather than merely approximate: [`Report::headroom_ms`] is `None`, and
     /// every slot asking to prime is parked with
@@ -306,10 +537,16 @@ pub struct Report {
     /// only add to what is committed, so measured-alone-over-budget is still
     /// over budget.
     pub over_budget: bool,
-    /// Whether any measurement in the sum came from a host clock rather than
-    /// from GPU timestamps. Every number in the report reads coarser and biased
-    /// high when this is true, and on this crate's development machine it
-    /// always is.
+    /// Whether any number this report saw came from a host clock rather than
+    /// from GPU timestamps — a slot's measurement, or the two rungs an
+    /// estimate was fitted through. Every number in the report reads coarser
+    /// and biased high when this is true, and on this crate's development
+    /// machine it always is.
+    ///
+    /// **Both sources, because an estimate inherits the bias whole**: a host
+    /// measurement brackets a submit-and-wait the GPU never spent, which does
+    /// not move with the target, so it lands in the fit's invariant term and is
+    /// added to the answer once. See [`Estimate::biased_high`].
     pub host_clock: bool,
 }
 
@@ -341,6 +578,63 @@ impl Report {
     pub fn parked(&self) -> impl Iterator<Item = &Decision> {
         self.decisions.iter().filter(|d| d.is_parked())
     }
+
+    /// **How many slots were budgeted on an estimate** rather than on a
+    /// reference-resolution measurement. Zero on a deck nothing has estimated,
+    /// which is every deck until
+    /// [`Deck::estimate_slots`](crate::deck::Deck::estimate_slots) runs.
+    pub fn estimated(&self) -> usize {
+        self.decisions
+            .iter()
+            .filter(|d| d.basis == Basis::Estimated)
+            .count()
+    }
+
+    /// **How many of those numbers carry a correction for a rung that sat
+    /// under ADR-0245's sub-pixel floor.** `P-0095`, reported rather than
+    /// silently spent: a corrected number is sound and is up to a third above
+    /// the line it was fitted from, which is one band of the badge it feeds.
+    pub fn corrected(&self) -> usize {
+        self.decisions
+            .iter()
+            .filter(|d| d.basis == Basis::Estimated && d.estimate.is_some_and(|e| e.corrected()))
+            .count()
+    }
+
+    /// **How many were placed against a floor nothing could establish.**
+    /// ADR-0293 §6 reads an unknown floor as the greatest floor there is, so
+    /// these are answers and not refusals — but they are answers taken at the
+    /// widest placement, and a reader is owed the distinction.
+    pub fn floor_unknown(&self) -> usize {
+        self.decisions
+            .iter()
+            .filter(|d| {
+                d.basis == Basis::Estimated && d.estimate.is_some_and(|e| e.floor.is_none())
+            })
+            .count()
+    }
+
+    /// **Slots that were estimated and whose estimate refused**, with the
+    /// refusal. Each fell back to its measurement, or to
+    /// [`Reason::Unmeasured`] where there was none — the estimate declining is
+    /// never what admits a slot.
+    pub fn refused_estimates(&self) -> impl Iterator<Item = (usize, Unfit)> + '_ {
+        self.decisions
+            .iter()
+            .filter_map(|d| d.estimate.and_then(|e| e.fit.err()).map(|u| (d.slot, u)))
+    }
+
+    /// The size every estimate in this report answered for, or [`None`] where
+    /// none did. `Some` is the ordinary case — one deck, one output — and two
+    /// different targets in one report would mean a slot kept an estimate
+    /// across a resize, which [`HotSwap::resize`](crate::swap::HotSwap::resize)
+    /// is what prevents.
+    pub fn estimated_target(&self) -> Option<(u32, u32)> {
+        self.decisions
+            .iter()
+            .filter(|d| d.basis == Basis::Estimated)
+            .find_map(|d| d.estimate.map(|e| e.target))
+    }
 }
 
 impl std::fmt::Display for Report {
@@ -368,6 +662,40 @@ impl std::fmt::Display for Report {
                 "gpu timestamps"
             }
         )?;
+        // **What the numbers are, said where the numbers are.** A sum that is
+        // partly estimates at the output's size and partly measurements at
+        // 1280x720 is two quantities added together, and a status line that
+        // did not say so would be presenting one. The corrected and
+        // unknown-floor counts are `P-0095`'s half of it: an estimate taken
+        // under a floored rung is not the same statement as one taken clear of
+        // it, and this is where the difference reaches a reader who is not
+        // going to go and read `Estimate::floored` themselves.
+        let mut said = false;
+        if let Some((w, h)) = self.estimated_target() {
+            write!(f, " — {} estimated at {w}x{h}", self.estimated())?;
+            said = true;
+            let corrected = self.corrected();
+            if corrected > 0 {
+                write!(f, ", {corrected} corrected for a floored rung")?;
+            }
+            let unknown = self.floor_unknown();
+            if unknown > 0 {
+                write!(f, ", {unknown} on an unknown floor")?;
+            }
+        }
+        // **A refusal is said out loud too**, and on a deck where every
+        // estimate refused it is the only thing there is to say: the numbers
+        // above are then measurements at the reference resolution, and a
+        // reader who was told an estimate had been taken would otherwise have
+        // no way to tell.
+        let refused = self.refused_estimates().count();
+        if refused > 0 {
+            write!(
+                f,
+                "{}{refused} refused, budgeted on the measurement",
+                if said { ", " } else { " — " }
+            )?;
+        }
         if self.over_budget {
             write!(
                 f,
@@ -398,10 +726,37 @@ pub struct SlotState {
     /// recover by itself. Handing the effective residency in here instead would
     /// feed a demotion back into the next pass's input and make it permanent.
     pub requested: Residency,
-    /// What the Set in this slot was measured at, if anything measured it.
+    /// What the Set in this slot was measured at, if anything measured it —
+    /// one draw at [`PROBE_RESOLUTION`](crate::swap::PROBE_RESOLUTION).
     pub cost: Option<Measurement>,
+    /// **What two draws say it would cost at the output's size**, if anything
+    /// estimated it. Preferred over [`SlotState::cost`] where it answers; a
+    /// refusal falls back to it. See "Two numbers, and which one is budgeted
+    /// on" in the module doc.
+    ///
+    /// [`Estimated::from`] builds one from the [`Estimate`] a slot holds.
+    pub estimate: Option<Estimated>,
     /// Whether the Set can be jumped to any `t` — see the module doc.
     pub closed_form: bool,
+}
+
+impl SlotState {
+    /// **The number to budget this slot at, and where it came from.**
+    ///
+    /// One rule, used by the committed sum and by the admission test alike,
+    /// so the two cannot disagree about which number a slot is being judged
+    /// on. The estimate wins where it answers; a refusal, or no estimate at
+    /// all, falls back to the measurement; neither is
+    /// [`Basis::Unbudgetable`] — **not zero**.
+    pub fn budgeted(&self) -> (Basis, Option<f32>) {
+        if let Some(ms) = self.estimate.and_then(|e| e.ms()) {
+            return (Basis::Estimated, Some(ms));
+        }
+        match self.cost {
+            Some(cost) => (Basis::Measured, Some(cost.ms)),
+            None => (Basis::Unbudgetable, None),
+        }
+    }
 }
 
 /// The budget, and the decision procedure over it.
@@ -460,9 +815,19 @@ impl Governor {
                     host_clock = true;
                 }
             }
+            // The rungs an estimate was fitted through carry the same bias and
+            // are read whether or not this slot ends up budgeted on them: a
+            // refused estimate was still taken, and what took it is still the
+            // instrument this deck has.
+            if slot.estimate.and_then(|e| e.method) == Some(MeasurementMethod::HostWallClock) {
+                host_clock = true;
+            }
             if slot.requested == Residency::Live {
-                match slot.cost {
-                    Some(cost) => committed_ms += cost.ms,
+                // **The budgeted number, not the measurement**, and the same
+                // `budgeted` that `admit` uses — so a Live slot and a priming
+                // one are never judged on different readings of the same Set.
+                match slot.budgeted().1 {
+                    Some(ms) => committed_ms += ms,
                     None => unmeasured_live += 1,
                 }
             }
@@ -487,6 +852,7 @@ impl Governor {
             .enumerate()
             .map(|(i, slot)| {
                 let cost_ms = slot.cost.map(|c| c.ms);
+                let (basis, budgeted_ms) = slot.budgeted();
                 // The request decides which question is asked; the answer is
                 // the effective residency and is never written back over it.
                 let (effective, reason) = match slot.requested {
@@ -495,7 +861,7 @@ impl Governor {
                     Residency::Priming => {
                         let (r, why) = self.admit(slot, &mut headroom, committed_known);
                         if r == Residency::Priming {
-                            priming_ms += cost_ms.unwrap_or(0.0);
+                            priming_ms += budgeted_ms.unwrap_or(0.0);
                         }
                         (r, why)
                     }
@@ -506,6 +872,9 @@ impl Governor {
                     effective,
                     reason,
                     cost_ms,
+                    budgeted_ms,
+                    basis,
+                    estimate: slot.estimate,
                 }
             })
             .collect();
@@ -531,6 +900,10 @@ impl Governor {
     /// every frame and every slot is drawn, so the question is whether the
     /// budget has room for what this slot already costs, and the answer is yes
     /// or not yet.
+    ///
+    /// *What* it costs is [`SlotState::budgeted`]: the estimate at the
+    /// output's size where there is one that answers, and the
+    /// reference-resolution measurement otherwise.
     fn admit(
         &self,
         slot: &SlotState,
@@ -545,7 +918,13 @@ impl Governor {
         if slot.closed_form {
             return (Residency::Allocated, Reason::NoPrimingNeeded);
         }
-        let Some(cost) = slot.cost else {
+        // **The estimate where it answers, the measurement where it does not**,
+        // through the one rule on [`SlotState::budgeted`]. An estimate that
+        // refused leaves this exactly where it was before estimates existed:
+        // the slot is admitted or parked on its measurement, and a slot with
+        // neither number is unbudgetable rather than free.
+        let (_, budgeted) = slot.budgeted();
+        let Some(ms) = budgeted else {
             return (Residency::Allocated, Reason::Unmeasured);
         };
         // After this slot's own measurement and before the arithmetic, because
@@ -568,10 +947,10 @@ impl Governor {
         // measurement that is not a number is not a small one, and the `<=`
         // below would answer `false` for it and land it here anyway — but
         // silently, and by accident.
-        if cost.ms.is_nan() || cost.ms > *headroom {
+        if ms.is_nan() || ms > *headroom {
             return (Residency::Allocated, Reason::NoHeadroom);
         }
-        *headroom -= cost.ms;
+        *headroom -= ms;
         (Residency::Priming, Reason::Fits)
     }
 }

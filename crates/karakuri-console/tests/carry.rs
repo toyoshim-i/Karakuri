@@ -97,8 +97,14 @@ fn console() -> (View, Panel, egui::Context) {
 }
 
 fn bay(panel: &Panel, view: &View) -> LibraryBay {
-    library(panel.layout(), &view.scopes, &view.library, view.opened())
-        .expect("the library bay lists its rows")
+    library(
+        panel.layout(),
+        &view.scopes,
+        &view.library,
+        view.opened(),
+        None,
+    )
+    .expect("the library bay lists its rows")
 }
 
 fn strips_bay<'a>(panel: &Panel, ctx: &egui::Context, view: &'a View) -> Mixer<'a> {
@@ -179,7 +185,8 @@ fn a_press_on_a_row_takes_that_rows_set_in_hand() {
     // press there must reach neither. This is the half the listing's own
     // length cannot answer, because there *is* a Set at that index.
     let long: Vec<String> = (0..80).map(|n| format!("set{n:02}")).collect();
-    let tall = library(panel.layout(), &view.scopes, &long, None).expect("a bay with rows in it");
+    let tall =
+        library(panel.layout(), &view.scopes, &long, None, None).expect("a bay with rows in it");
     assert!(
         tall.rows < long.len(),
         "the bay drew all {} rows, so there is no undrawn row to ask about",

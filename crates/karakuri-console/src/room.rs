@@ -724,6 +724,30 @@ pub mod size {
     /// chips that fit in one row of it.
     pub const SCOPES_H: f32 = SCOPES_PAD_Y * 2.0 + SCOPE_H + HAIRLINE;
 
+    // -- the library's path row ---------------------------------------------
+
+    /// `.path`'s `padding: 4px 10px`, around the directory this library is
+    /// pointed at. The row between the scope row and the filters, and the one
+    /// row of this bay's furniture that is drawn only sometimes — until a
+    /// folder has been dropped on the window there is no path and no row
+    /// (ADR-0275).
+    pub const PATH_PAD_X: f32 = 10.0;
+    pub const PATH_PAD_Y: f32 = 4.0;
+
+    /// `.path`'s `font-size: 10px`: the directory, and the only type in the
+    /// row. [`LIB_FOOT_SIZE`]'s number at the other end of the bay and for the
+    /// mock's own reason — the small type is what this bay draws everything a
+    /// row is not named by in.
+    pub const PATH_SIZE: f32 = 10.0;
+
+    /// The path row's box: [`PATH_SIZE`] at [`LINE`] inside [`PATH_PAD_Y`],
+    /// plus the one pixel of the rule under it — [`HAIRLINE`], which is
+    /// `.path`'s own border-bottom and the same pixel every other rule in the
+    /// mock is drawn at. **24**, which is shorter than the two rows either
+    /// side of it because the type in it is the foot's 10 rather than the
+    /// console's [`BASE`].
+    pub const PATH_H: f32 = PATH_PAD_Y * 2.0 + PATH_SIZE * LINE + HAIRLINE;
+
     // -- the library's two filter fields ------------------------------------
 
     /// `.lib-filters`'s `padding: 6px 9px` and its `gap: 5px`: the row of two
