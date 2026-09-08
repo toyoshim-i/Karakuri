@@ -620,10 +620,14 @@ retired. Their prose stays this bay's, in the tooltip item below, because the co
 drawn here.
 
 **Exit.** No `plan` badge in the panel column of this bay's rows on
-[every operation](manual/operations.html).
+[every operation](manual/operations.html). **One row will not meet it by being built**, which is
+below and is [ADR-0284](adr/0284-a-readout-is-drawn-and-the-panel-badge-does-not-move-because-the-meter-counts-a-gesture.md):
+*Find out what a write did* is a readout, its capsule is drawn, and its badge stays `plan` because
+the meter counts an emission and a readout emits nothing.
 
-**Three of the six are built, on 2026-09-08** — *Tap the beat*, *Halve or double the grid* and
-*Nudge the latency offset* — and they are one group and one control row: `view::tracker_group`
+**Four of the six are drawn, on 2026-09-08** — *Tap the beat*, *Halve or double the grid*,
+*Nudge the latency offset* and *Find out what a write did*. The first three are one group and one
+control row: `view::tracker_group`
 finishes the four things `.tracker` puts round the audio-in pill, one row of `input::PROBES` and one
 entry of `press_handler::ASKED`. Two records came out of it. The offset is drawn as a **track and
 not the capsule the mock had**, because a press has to name a value and a capsule can only ask for
@@ -633,41 +637,92 @@ mock and both manual pages moved first. And the tap and the octave **leave `App:
 ([ADR-0278](adr/0278-an-operation-no-record-can-be-written-for-leaves-the-window-before-it-is-written.md));
 `b`, `,` and `.` emit now instead of performing the operation themselves.
 
+**And the fourth is the health capsule, which is a readout and not a control.**
+`view::Transport::health` is the mock's `landed` at the end of the row, taken off the one drain
+that writes the Staging lane —
+`crates/karakuri`'s `staging` — so the capsule says *what the last write did* and the lane says
+*what is still outstanding*, which is why the mock draws both. It is the row's fifth readout: it
+takes the right padding, the frame readout is laid out backwards from it, and `.pill.armed` is spent
+on `landed` alone because a rollback drawn in the mint that means *this is working* would say the
+opposite of what it means. **Nothing was declared for it** — it changes when somebody saves a file,
+which is not a rate, and the region it is in is already drawn at `BEAT_STALENESS`
+([ADR-0283](adr/0283-a-region-declares-when-its-picture-next-changes-not-that-something-is-pending.md)).
+
 **Blocked on.** *"Nothing"* was true of three of the six and is not true of the other three. This
 said *"the cheapest bay on the page: every table row is a control beside a readout the row already
 draws"*, and the three that are built were exactly that. Each of the remaining three wants a decision
-before it wants code, and none of the three decisions is this bay's to take alone.
+before it wants code, and none of the three decisions is this bay's to take alone — **and one of
+them is now the only thing left on a row whose drawing is finished**, which is the second of the
+three below.
 
-- ***Set the free-run tempo* has no shape and no meaning while a tracker is running.** The row's
-  panel home is `transport`, and the only thing the mock draws there for it is the `128.0` figure —
-  which `view::transport` states is one of four **readouts** and `karakuri-console/tests/transport.rs`
-  asserts is not a control. So the shape is undecided in the same way the offset's was, and unlike
-  the offset the manual has not already argued it. Worse, the *meaning* is undecided: with an input
-  open `BeatLock::update` returns a `Trim` on every frame and `apply_tempo` pulls the oscillator
-  toward the estimate, so a tempo set from the panel is trimmed away within a second — and
-  `--bpm` does a second job the panel would have to decide about, seeding the tracker's octave window
-  (`Audio::open(selector, …, session_bpm)`). **The plumbing is not the problem**: `Signals::correct`
-  and `karakuri_environment::audio::apply_tempo` are both public and both reachable from
-  `crates/karakuri`, and `written(SetFreeRunTempo)` already answers a `Record::Tempo` — what is
-  missing is an arm for it in that file's `apply`, which is one match arm. **And this program has no
-  launch route either**: `crates/karakuri` has no `--bpm` flag at all and runs at
-  `Signals::default()`'s 120.0, so the row's `CLI has` badge is `karakuri-cli`'s alone.
-- ***Find out what a write did* is a readout, and whether a readout may carry a `has` panel badge is
-  not settled.** The panel already holds every verdict, on every run and not only under `--mcp`:
-  `Deck::events` is drained once a frame in `staging`, and `view::Stage` already spells the mock's
-  own three words — `landed`, `rolled back`, `refused`. What is missing is the pill in the transport
-  row, and behind it a rule: `karakuri-console/tests/panel_column.rs` requires that a control
-  **emit** the operation before the page may mark the panel column `has`, and a readout emits
-  nothing. ADR-0264 settled which *gesture* of a reading emits; it did not settle a reading with no
-  gesture. That rule governs six rows and not one, so it is a decision above this bay.
-- ***Record the session* is machinery and not a rectangle.** `crates/karakuri` constructs no
-  `session::Recorder`, has no `--record-session` flag and writes no record stream at all — the three
-  greps return nothing. And `Recorder` cannot be started or stopped on a press as it stands:
-  `Recorder::open` creates a file and spawns a writer thread, which `karakuri-cli` says out loud is
-  done *"before the first frame and never on one"*, and `finish` consumes the recorder.
-  `Recording::Stop`'s own documentation says the same from the vocabulary's side — *"Nothing does
-  this today"*. A `rec` pill is that whole lifecycle, and it moves the row's `when` from **launch**
-  to **immediate**.
+- ***Set the free-run tempo* is what an operator with no beat in the room has, and this program does
+  not give it to them.** The meaning is decided and written, in six words on the row itself: *"What
+  the grid runs at with nothing driving it."* What is undecided is only what a press means when
+  something **is** driving, and there the beat lock has three states rather than two. Below
+  `GATE_CONFIDENCE` it returns nothing and touches nothing, so **a panel-set tempo stands
+  indefinitely in a room with no beat in it**; inside `AGREE_BPM_RATIO` it trims, over
+  `TRIM_TAU_TEMPO`'s twelve seconds; outside it, eight revisions of disagreement snap the grid back.
+  The rule for that last case is already written three times — in `BeatLock::octave`, in
+  `crates/karakuri/src/main.rs` and in the mock's own `×2` tooltip — as **a control that undoes
+  itself two seconds later is worse than one that says no**, and two seconds is `RELOCK_EVIDENCE`'s
+  number rather than an estimate.
+
+  **The state the operation is for is unreachable in this program.** With no audio device,
+  `crates/karakuri` runs at `Signals::default()`'s 120.0 and nothing can change it: `tapped` refuses
+  — *"a tap sets the grid this room is being tracked against, and there is no room"* — `scaled`
+  refuses in parallel, and nothing else in the file reaches `apply_tempo` or `Signals::correct`. The
+  legend calls that state *"a state and not a fault"*.
+
+  **What is genuinely open is the track's ends and its step, and nothing in the repository names
+  either.** `karakuri_audio::tempo::BPM_RANGE` says outright it is not the range of answers — *"a
+  grid at 240 bpm is a perfectly good grid"* — and `karakuri_signal`'s is a clamp against a frozen
+  phase. ADR-0277's construction for the offset derived one pixel from one key press; this row's key
+  column is `gap`, so there is no press to derive from. **The plumbing is not the problem**:
+  `Signals::correct` and `audio::apply_tempo` are public and reachable, `written` already answers a
+  `Record::Tempo`, and what is missing in `apply` is one arm. **And the launch route is not owed
+  here**: this program's `USAGE` declines `karakuri-cli`'s audio flags by name, and a press is a
+  different operation from the flag in any case — `immediate` rather than `launch`, with none of
+  `--bpm`'s octave-seeding job, which `,` and `.` already do.
+- ***Find out what a write did* is drawn and its badge is still `plan`, which is the one thing left
+  on this row and is not drawing.** The pill landed on 2026-09-08; what has not moved is the rule
+  behind the badge. `karakuri-console/tests/panel_column.rs` requires that a control **emit** the
+  operation before the page may mark the panel column `has`, and a readout emits nothing — flipping
+  the badge fails that test naming this row. ADR-0264 settled which *gesture* of a reading emits and
+  did not settle a reading with no gesture;
+  [ADR-0281](adr/0281-every-route-reaches-every-write-and-a-read-is-the-routes-own-interface-design.md)
+  freed an empty cell on a read row and said nothing about a full one.
+  [ADR-0284](adr/0284-a-readout-is-drawn-and-the-panel-badge-does-not-move-because-the-meter-counts-a-gesture.md)
+  is where that was taken as far as it goes: the badge stays, nothing is widened to fit it, and the
+  correction it names — relax the check for rows the page marks `read`, and hold the drawing
+  somewhere that can see it — governs six rows and not one, so it is still a decision above this
+  bay. **What holds the capsule honest meanwhile is two tests in two crates**:
+  `karakuri-console/tests/transport.rs` for the drawing and `crates/karakuri`'s
+  `the_swap_report_says_what_the_lane_says` for the seam, which takes a device because a
+  `swap::Event` cannot be made without one.
+- ***Record the session* is one row and two questions, and they have opposite answers.**
+  `crates/karakuri` constructs no `session::Recorder`, has no `--record-session` flag and writes no
+  record stream at all.
+
+  **Starting one on a press is refused by a mechanism, not merely unbuilt.** A replay reconstructs a
+  session from its head alone, and the head is a **Set file** written before the first frame from
+  the material the run started with — which is the only instant at which *the material this run
+  began on* and *the state this deck is in* are the same statement. `karakuri_store::project`'s
+  `key_for` says why nothing can produce a later one: **the projection that would fold a session
+  down to the deck state it ends at does not exist, and nothing needs it, because a session is
+  replayed from the top rather than resumed from its end.** So a recording begun mid-performance
+  would replay the launch deck against a late performance's records — not a partial session but a
+  wrong one, quietly, which is what P-0092 forbids. `Recorder::open`'s position before the first
+  frame is that consequence rather than an obstacle.
+
+  **Stopping one is refused by nothing**, and it is the only gesture the mock names: the pill is
+  drawn `on`, and its tip reads *"Click to stop."* `Recording::Stop` exists as a variant with a doc
+  waiting for a caller. What it owes is one P-0094 answer for a bounded flush on a frame — `finish`
+  consumes the recorder and blocks on its writer, which `karakuri-cli` does in `exiting` where a
+  stall is free and a press is not.
+
+  **And a second `Start` under one id is a live hazard as the pair is spelled.**
+  `Store::append_session` appends and `session::split` sets `started` at the first tick and never
+  clears it, so a second head lands in the middle of an existing stream and is read back as edits.
 
 **A `Closed` class does not refuse a hand.** Worth writing down beside the last of those, because it
 reads the other way at first: `gate::audit` is called in exactly one place in the workspace,
@@ -1144,6 +1199,28 @@ Four rows have a panel home that is not a bay: *Fold a bay away* at the bay head
 at the pane edge, *Size the window* at a drag, and *Quit* at the `close` control. They are the
 panel's own chrome, so no M5.x above owns them, and ADR-0226 does not close without them.
 
+**Three of the four sit inside a question ADR-0281 names and does not take**, and it decides how much
+of this section is work. That record loosened rule 01 to *every route reaches every write* and named
+a second, larger loosening it declined: *a write is what a replay has to reconstruct*. Under it the
+twelve operations `karakuri-operation-record` files as `Silent::Surface` — *a surface's own state*,
+which is the folds, the solo, the three arrangement rows, `SelectDeck`, `SelectScope`,
+`SetTransition`, `SizeWindow` and `KeepCandidate` — stop being writes, and **eighteen `plan` badges
+stop being debt**, twelve of them MCP's.
+
+**Three things decide it, and none of them is in this file.** P-0082 names *a divider dragged, a pane
+folded* as its examples of an explicit operation that **changes stored state**, so the proposed
+sentence contradicts a principle by name — and by ADR-0249's gate it is a principle deciding a
+question it does mention. The sentence also cuts wider than the list: read literally it takes
+`Silent::NoRecord`'s twelve as well, and blesses the hole `karakuri-environment`'s MCP tests pin
+rather than bless. And **rule 07 holds the panel and the keyboard regardless** — *"every divider
+drags, the program view can take the whole panel"* — so nothing here becomes unreachable by hand
+whatever rule 01 says; what would be freed is MIDI, which cannot address any of it and is already
+`gap` on all twelve, and MCP, which offers none of them today.
+
+*Move a boundary* is a thirteenth row waiting on the same answer: the record crate says a divider
+position is as plainly a surface's own state as the folds beside it, and files it elsewhere only
+because its payload is `Undecided`.
+
 Two are the console's and two are the host's. **The folds want a hit test.** The bay head is painted
 and never hit-tested, so the only route is still a key, and they reach the console as
 `karakuri_console::panel::Op::Fold` rather than through the operation vocabulary — which is why
@@ -1233,10 +1310,27 @@ operation, which is exactly why no column could hold it.
 nothing at all — which is why it was taken first.
 
 **What ADR-0226 says, and what it does not.** M5 closes when M5.1 to M5.9 close and the two sections
-at the end of this list close with them. **M5.14 is not in that list**, and neither are M5.10 to
-M5.13 — the four columns and this are cross-cutting where M5.1 to M5.9 are bays. So M5 can close
-with the badge undrawn exactly as M5.1 did, and whether it should is ADR-0226's question rather than
-this section's.
+*Rows the manual has not given a home* and *The console's own shape* close with them. **M5.14 is not
+in that list.** Neither are M5.10 to M5.13, and the reason is not the same one: those are **other
+columns of the same page**, which ADR-0226's condition — a `grep` over the panel column — simply
+does not read. This sub-milestone has no column and no row, and its precedent is M5.11, which
+*"closes no badge and its exit condition is not a grep"*. **A readout can never be made countable by
+giving it a row**: ADR-0205 holds that an operation whose reply cannot be said in the vocabulary's
+terms cannot be given one, however plainly the program performs it.
+
+**So M5 can close with the badge undrawn exactly as M5.1 did, and the moment that becomes a real
+question is item 1 above.** While `estimate` refuses every `Points` and `Lines` Set, M5.1's
+reasoning holds — there is nothing to draw a band from — and the page agrees, saying the estimate
+*"does not exist **yet**"*, which is a dated marker rather than a retirement. When item 1 closes,
+that reasoning stops holding, and whether the badge is owed becomes a question with an answer rather
+than a forecast. **Nothing fires at that moment.** The only mechanised statement about this badge is
+a test asserting it is *absent*, which fails when somebody draws it and never when the estimate
+gains a caller — and M5.1's own hook pointed at *Performance discipline*, which closes nothing.
+Making that moment observable is item 4's, and it is the repair this sub-milestone exists to name.
+
+**Moving the badge into or out of M5's condition is not this file's to take.** ADR-0226 says
+*"nothing here moves an item between milestones; that is the maintainer's"*, and `docs/contributing.md`
+§4 rules out amending the record — a changed argument is a new record, beside it or superseding it.
 
 ---
 
