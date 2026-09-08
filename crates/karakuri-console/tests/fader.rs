@@ -453,7 +453,7 @@ fn a_drag_in_hand_keeps_its_claim_while_the_pointer_leaves_the_strip() {
             claim(&mut panel, &ctx, &showing(&strips), away),
             Claim::Egui
         );
-        // The knob is the panel's, by rule 3.
+        // The knob is the panel's, by rule 4.
         assert_eq!(
             claim(&mut panel, &ctx, &showing(&strips), point(held)),
             Claim::Panel,
