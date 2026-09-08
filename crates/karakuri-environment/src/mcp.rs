@@ -326,10 +326,108 @@ impl Reporter {
 /// **Paths never cross the protocol.** A client may be on another machine
 /// through an `ssh -L`, where a path means nothing — and a tool that took one
 /// would be inviting a model to write anywhere on the render machine's disk.
-#[derive(Clone)]
-pub struct Slots(pub Vec<(std::path::PathBuf, Vec<std::path::PathBuf>)>);
+///
+/// **It is a handle and not a list, for [`crate::Opening`]'s reason.** This
+/// used to be the launch working copies, copied into [`serve`] before the
+/// window opened and never written again — and a surface that loads a Set into
+/// a running slot re-points that slot at *new* scratch files. So after one
+/// library load every address this resolved was the pre-load layout: a
+/// `read_procedure` handed back the source of a procedure the deck had stopped
+/// running, a `write_procedure` wrote a file no watcher was looking at and
+/// reported that it was being built, and a node the loaded Set does hold was
+/// refused for not existing. Each of those is a **plausible wrong answer** on
+/// the one surface whose reader is a program in a loop
+/// ([P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)),
+/// and none of them fails loudly. `Opening` had the same shape of problem — an
+/// operator opens a class *while* the run is going — and its answer is this
+/// one: a shared handle the host writes and the server reads on every call.
+///
+/// **What a slot is running is [`crate::watch::Aim`], and this publishes it.**
+/// [`Slots::re_point`] takes the aim itself rather than two paths, so the walk
+/// from *where a watcher is pointed* to *the files behind a slot* is written
+/// once, in the crate that owns both types
+/// ([P-0087](../../../docs/principles/0087-name-the-property-never-the-shape.md)).
+/// A host publishes where it sends an aim and nowhere else, which is one write
+/// per re-point: a load writes several files and then sends one aim, so a call
+/// arriving mid-load sees the layout before it or the layout after it and
+/// never half of either.
+#[derive(Clone, Default)]
+pub struct Slots(std::sync::Arc<std::sync::RwLock<Vec<Pointed>>>);
+
+/// **Where one slot is pointed**: the head of its chain, and the rest in file
+/// order.
+///
+/// It is [`crate::watch::Aim`]'s own `head` and `rest` less the names, which is
+/// what [`Slots::re_point`] derives a published one from, and it is `--set`'s
+/// shape on the command line.
+pub type Pointed = (std::path::PathBuf, Vec<std::path::PathBuf>);
 
 impl Slots {
+    /// **The deck as it stands**, one pair per slot in slot order.
+    ///
+    /// What a run seeds this with is where its watchers are pointed when it is
+    /// made, and a run whose slots never move — `karakuri-cli`, which loads
+    /// nothing mid-run — keeps that value for the whole run and calls nothing
+    /// else here.
+    pub fn of(pairs: Vec<Pointed>) -> Slots {
+        Slots(std::sync::Arc::new(std::sync::RwLock::new(pairs)))
+    }
+
+    /// **A deck nothing is published to**, for a harness that builds an engine
+    /// and serves nothing.
+    ///
+    /// It holds no row, so [`Slots::re_point`] writes nothing into it and every
+    /// address it could be asked about is refused with what it holds — which is
+    /// zero slots. **It cannot reach a client**: [`serve`] refuses a handle with
+    /// no slots in it before it binds, which is the same refusal a run given no
+    /// procedure files gets.
+    pub fn unpointed() -> Slots {
+        Slots::of(Vec::new())
+    }
+
+    /// **One slot is pointed somewhere else**, said by whoever moved it.
+    ///
+    /// Called where an aim is *sent* — a library load, and a rewiring that
+    /// restates one — so that the published layout cannot be a step behind the
+    /// watcher's. The pair is derived from the aim here rather than by the
+    /// caller, because a caller deriving it would be the second derivation of
+    /// *what is this slot running* that [`Slots`]' own head is about.
+    ///
+    /// **A slot this handle does not hold is not written**, and nothing is
+    /// grown to make room: the row count is the deck's, settled when the run
+    /// made the handle, and a handle with no row for this slot is one no server
+    /// and no landing is reading — a harness that built an engine and served
+    /// nothing.
+    ///
+    /// **A poisoned lock is recovered rather than dropped**, which is where
+    /// this parts company with [`crate::Opening::set`]. What is behind that
+    /// lock is a whole pair per slot written in one assignment, so a panic
+    /// elsewhere cannot have left half of one; and the safe answer there — a
+    /// closed class — has no counterpart here, because *the layout before the
+    /// load* is exactly the wrong answer this type exists to stop giving.
+    pub fn re_point(&self, slot: usize, at: &crate::watch::Aim) {
+        let mut held = self.0.write().unwrap_or_else(|held| held.into_inner());
+        if let Some(pair) = held.get_mut(slot) {
+            *pair = (
+                at.head.path.clone(),
+                at.rest.iter().map(|node| node.path.clone()).collect(),
+            );
+        }
+    }
+
+    /// How many slots this deck holds, which is what every refusal about a slot
+    /// number is measured against ([`crate::no_such_slot`]).
+    pub fn count(&self) -> usize {
+        self.held().len()
+    }
+
+    /// What is published now. Read on every call and never held across one, for
+    /// [`crate::Opening::read`]'s reason said about a layout: a slot the
+    /// operator loaded a Set onto between two calls has moved for the second.
+    fn held(&self) -> std::sync::RwLockReadGuard<'_, Vec<Pointed>> {
+        self.0.read().unwrap_or_else(|held| held.into_inner())
+    }
+
     /// A slot's files, each under the layer and the index the rest of this
     /// program addresses it by.
     ///
@@ -360,9 +458,12 @@ impl Slots {
     /// Read on every call rather than worked out once at startup. The files are
     /// a handful and nothing here is on a frame path, and a layout cached
     /// beside a directory `--watch` is editing is a layout that can be wrong.
-    fn nodes(&self, slot: usize) -> Result<Vec<(Kind, usize, &std::path::PathBuf)>, String> {
-        let pair = self
-            .0
+    ///
+    /// **The paths come back owned**, because what they are read out of is a
+    /// lock this must not hold past the call — see [`Slots::held`].
+    fn nodes(&self, slot: usize) -> Result<Vec<(Kind, usize, std::path::PathBuf)>, String> {
+        let held = self.held();
+        let pair = held
             .get(slot)
             // **The one sentence, from [`crate::no_such_slot`].** This used to
             // be its own spelling — `this deck holds 0-3` against the keys'
@@ -374,7 +475,7 @@ impl Slots {
             // the panic unwinding out of the listener thread so that a process
             // which had announced a port was silently no longer on it. `serve`
             // refuses an empty deck now; this stays correct anyway.
-            .ok_or_else(|| crate::no_such_slot(slot, self.0.len()))?;
+            .ok_or_else(|| crate::no_such_slot(slot, held.len()))?;
         // **The head's own `kind` line, and `L1` only where it has none.**
         // That fallback is `history::seed`'s, exactly: the first path of a
         // chain with no `kind` in it falls back to L1 and every later one to
@@ -385,7 +486,7 @@ impl Slots {
             .and_then(|source| crate::history::declared_kind(&source))
             .and_then(layer_named)
             .unwrap_or(Kind::L1);
-        let mut nodes = vec![(head, 0, &pair.0)];
+        let mut nodes = vec![(head, 0, pair.0.clone())];
         // The next free index per layer, which the head has already taken one
         // of: a `--set` chain naming a second `kind L1` is a second source, and
         // it is L1 number 1 rather than the beginning of a fresh count.
@@ -407,7 +508,7 @@ impl Slots {
                     0
                 }
             };
-            nodes.push((layer, index, path));
+            nodes.push((layer, index, path.clone()));
         }
         Ok(nodes)
     }
@@ -420,12 +521,13 @@ impl Slots {
     /// `kind` line. `save_set` wants nothing but the range and was calling
     /// `nodes` for it — **under the state mutex**, which is the one lock in this
     /// server a slow disk can be held across, and it is held across every other
-    /// connection's request as well. The number was `self.0.len()` all along.
+    /// connection's request as well. The number was [`Slots::count`] all along.
     fn holds(&self, slot: usize) -> Result<(), String> {
-        if slot < self.0.len() {
+        let count = self.count();
+        if slot < count {
             Ok(())
         } else {
-            Err(crate::no_such_slot(slot, self.0.len()))
+            Err(crate::no_such_slot(slot, count))
         }
     }
 
@@ -440,8 +542,9 @@ impl Slots {
     /// this type's own walk over a slot's `kind` lines, and a second one beside
     /// it would be two answers to *which file is `L4:0` of this slot* — the
     /// mistake [`Slots::nodes`]' own head records under a different name. The
-    /// caller builds a `Slots` out of what its watchers are pointed at, which
-    /// is what makes the answer follow a library load.
+    /// answer follows a library load because this handle does — see
+    /// [`Slots::re_point`], which is the same reason the server's own address
+    /// resolution follows one.
     ///
     /// A layer word this crate does not write is an `Err` naming it, on the
     /// same terms an address the slot does not hold is.
@@ -450,7 +553,7 @@ impl Slots {
         slot: usize,
         layer: &str,
         index: usize,
-    ) -> Result<&std::path::PathBuf, String> {
+    ) -> Result<std::path::PathBuf, String> {
         let Some(kind) = layer_named(layer) else {
             return Err(format!(
                 "`{layer}` is not a layer: {}",
@@ -465,10 +568,10 @@ impl Slots {
     }
 
     /// The file one `(slot, layer, index)` address names.
-    fn path(&self, slot: usize, layer: Kind, index: usize) -> Result<&std::path::PathBuf, String> {
+    fn path(&self, slot: usize, layer: Kind, index: usize) -> Result<std::path::PathBuf, String> {
         let nodes = self.nodes(slot)?;
         if let Some((_, _, path)) = nodes.iter().find(|(l, i, _)| *l == layer && *i == index) {
-            return Ok(*path);
+            return Ok(path.clone());
         }
         // **What the slot holds, rather than "no such node".** An index past
         // the end and a layer this slot does not use are different mistakes,
@@ -706,6 +809,12 @@ const WIRE_REPLY: std::time::Duration = std::time::Duration::from_secs(5);
 /// and would hold one answer to "where is the store" against a directory the
 /// operator is free to move; opening per call is four `create_dir_all`s off a
 /// frame path, on a surface where the expensive thing is already a compile.
+///
+/// **`slots` is a live handle and is *shared* rather than moved**, exactly as
+/// `opening` beside it is: the host goes on writing it every time it re-points
+/// a slot, and this server resolves through it on every call. A run that hands
+/// this a layout taken at launch and then loads a Set onto a deck answers a
+/// model about the material it stopped running — see [`Slots`].
 pub fn serve(
     port: u16,
     slots: Slots,
@@ -713,7 +822,7 @@ pub fn serve(
     watching: bool,
     opening: crate::Opening,
 ) -> Result<Reporter, String> {
-    if slots.0.is_empty() {
+    if slots.count() == 0 {
         return Err("this run has no procedure files to serve — see `--load-set`".into());
     }
     let listener = std::net::TcpListener::bind(("127.0.0.1", port))
@@ -780,6 +889,10 @@ pub fn serve(
 }
 
 struct State {
+    /// **Where each slot's procedures are *now***, read through on every call
+    /// and never copied out — see [`Slots`], whose head is the whole of why
+    /// this is a handle. A layout this server held would be the launch one
+    /// forever, and a library load re-points a slot at new scratch files.
     slots: Slots,
     /// **Where the library lives** — `--store DIR`, the same root every other
     /// half of this run reads and writes. A root rather than an open [`Store`];
@@ -1583,7 +1696,7 @@ enum Asked {
 /// one it was told about before.
 fn deck_named(slot: usize, slots: &Slots) -> Result<u8, String> {
     slots.holds(slot)?;
-    u8::try_from(slot).map_err(|_| crate::no_such_slot(slot, slots.0.len()))
+    u8::try_from(slot).map_err(|_| crate::no_such_slot(slot, slots.count()))
 }
 
 /// `read_procedure`'s arguments as the deck and node they name.
@@ -1962,7 +2075,7 @@ fn read_procedure(deck: u8, node: NodeAt, state: &State) -> Result<String, Strin
     let path = state
         .slots
         .path(usize::from(deck), kind_of(node.layer), node.index as usize)?;
-    std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))
+    std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))
 }
 
 /// **[`Operation::WriteProcedure`], done**: check a procedure and, if it
@@ -1977,7 +2090,7 @@ fn write_procedure(deck: u8, node: NodeAt, source: &str, state: &State) -> Resul
     let slot = usize::from(deck);
     let layer = kind_of(node.layer);
     let index = node.index as usize;
-    let path = state.slots.path(slot, layer, index)?.clone();
+    let path = state.slots.path(slot, layer, index)?;
     let name = layer_name(layer);
 
     // **Checked before it is written, and the diagnostics are handed back.**
@@ -2018,13 +2131,13 @@ fn write_procedure(deck: u8, node: NodeAt, source: &str, state: &State) -> Resul
     // walked an L1 and a list of renderers, which is the shape a slot had
     // before it could hold a deformation chain — so one `swirl_warp.kir` given
     // to two slots was a write that silently changed both and named one.
-    let also: Vec<String> = (0..state.slots.0.len())
+    let also: Vec<String> = (0..state.slots.count())
         .filter(|other| *other != slot)
         .filter(|other| {
             state
                 .slots
                 .nodes(*other)
-                .is_ok_and(|nodes| nodes.iter().any(|(_, _, held)| **held == path))
+                .is_ok_and(|nodes| nodes.iter().any(|(_, _, held)| *held == path))
         })
         .map(|other| other.to_string())
         .collect();
@@ -3430,7 +3543,7 @@ proc probe_knobs {
         ];
         let reporter = serve(
             0,
-            Slots(vec![(head, rest)]),
+            Slots::of(vec![(head, rest)]),
             store_root(&dir),
             true,
             closed(),
@@ -3459,7 +3572,7 @@ proc probe_knobs {
         // which is also the fix for `--mcp 0` naming a port that is not the port.
         let reporter = serve(
             0,
-            Slots(vec![(l1, vec![l4])]),
+            Slots::of(vec![(l1, vec![l4])]),
             store_root(&dir),
             watching,
             closed(),
@@ -3607,6 +3720,164 @@ proc probe_knobs {
         assert!(
             on_disk.contains("Edited over the wire."),
             "the write did not reach the file"
+        );
+    }
+
+    /// **A re-point moves what the server resolves, on the very next call.**
+    ///
+    /// This is the whole of why [`Slots`] is a handle. The server was handed
+    /// the launch working copies and kept them for the run, so after the panel
+    /// loaded a Set onto a deck — which writes new scratch files and points
+    /// that slot's watcher at them — every address this surface resolved was
+    /// the layout the deck had stopped running. A `read_procedure` handed back
+    /// the material the operator had just replaced and a `write_procedure`
+    /// wrote a file no watcher was polling, **both of them answering
+    /// successfully**: the wrong answer arrives as a sentence saying it worked
+    /// (`docs/principles/0094-…`).
+    ///
+    /// So the assertion is over the wire, on both tools, before and after one
+    /// re-point — and the write is read back off the **new** file, because a
+    /// write that went to the old one would still have said *compiled and
+    /// written*.
+    ///
+    /// Watched to fail against the launch copy: a `Slots` that answers out of
+    /// what it was constructed with reads back `probe_l4` after the re-point
+    /// and leaves `after.kir` untouched on disk.
+    #[test]
+    fn a_re_point_moves_what_an_address_resolves_to() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let write = |name: &str, source: &str| {
+            let path = dir.path().join(name);
+            std::fs::write(&path, source).expect("fixture");
+            path
+        };
+        let launch_l1 = write("l1.kir", PROBE_L1);
+        let launch_l4 = write("l4.kir", PROBE_L4);
+        let slots = Slots::of(vec![(launch_l1, vec![launch_l4])]);
+        let reporter = serve(0, slots.clone(), store_root(&dir), true, closed()).expect("serve");
+        let port = reporter.port();
+        stand_in(reporter, no_loop);
+
+        let (failed, source) = call(port, "read_procedure", json!({"slot":0,"layer":"L4"}));
+        assert!(!failed, "{source}");
+        assert!(
+            source.contains("proc probe_l4"),
+            "the launch layout is not what the server started on"
+        );
+
+        // Where a load leaves a slot: new files, and one aim naming them. The
+        // handle is written from the aim rather than from these paths, because
+        // that walk is `Slots::re_point`'s and there is one of it.
+        let after_l1 = write("after_l1.kir", PROBE_L1_B);
+        let after_l4 = write("after.kir", PROBE_L4_B);
+        slots.re_point(
+            0,
+            &crate::watch::Aim {
+                head: crate::compile::Named::bare(&after_l1),
+                rest: vec![crate::compile::Named::bare(&after_l4)],
+                layering: karakuri_engine::set::Layering::Overdraw,
+                live: None,
+                capacity: None,
+                seed_salt: 0,
+                salts: Vec::new(),
+                camera: karakuri_engine::camera::Orbit::default(),
+                overrides: Vec::new(),
+                published: Vec::new(),
+                bindings: Vec::new(),
+                edges: Vec::new(),
+                authorities: Vec::new(),
+                set: Some("night02".to_owned()),
+            },
+        );
+
+        let (failed, source) = call(port, "read_procedure", json!({"slot":0,"layer":"L4"}));
+        assert!(!failed, "{source}");
+        assert!(
+            source.contains("proc probe_l4_b"),
+            "the read resolved against the layout the deck stopped running, which said: {}",
+            source.lines().find(|l| l.starts_with("proc")).unwrap_or("")
+        );
+
+        let edited = format!("// Edited after the load.\n{source}");
+        let (failed, said) = call(
+            port,
+            "write_procedure",
+            json!({"slot":0,"layer":"L4","source":edited}),
+        );
+        assert!(!failed, "{said}");
+        assert!(
+            std::fs::read_to_string(dir.path().join("after.kir"))
+                .expect("read back")
+                .contains("Edited after the load."),
+            "the write said it landed and went to the file the slot no longer runs"
+        );
+    }
+
+    /// **A node the slot stopped holding is refused naming what it holds
+    /// now.**
+    ///
+    /// The other half of the same defect, and the one that is refused rather
+    /// than answered — which makes it the *milder* half and still a wrong
+    /// sentence: a model told `slot 0 holds 2 L4 nodes, so index is 0-1` after
+    /// a load that left the slot one renderer will keep addressing a node that
+    /// is not there. The refusal is derived from the current nodes because
+    /// [`Slots::path`] walks them on every call
+    /// (`docs/principles/0083-…`).
+    ///
+    /// Watched to fail against the launch copy: `L4:1` resolves and the write
+    /// lands on a file the deck is not running.
+    #[test]
+    fn a_node_a_load_took_away_is_refused_naming_what_the_slot_holds_now() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let write = |name: &str, source: &str| {
+            let path = dir.path().join(name);
+            std::fs::write(&path, source).expect("fixture");
+            path
+        };
+        let slots = Slots::of(vec![(
+            write("l1.kir", PROBE_L1),
+            vec![
+                write("sprites.kir", PROBE_L4),
+                write("strokes.kir", PROBE_L4_B),
+            ],
+        )]);
+        // Two renderers at launch, so `L4:1` is a real address before the load
+        // and the assertion below is a change rather than a constant.
+        assert_eq!(
+            slots.file(0, "L4", 1).expect("two renderers at launch"),
+            dir.path().join("strokes.kir")
+        );
+
+        slots.re_point(
+            0,
+            &crate::watch::Aim {
+                head: crate::compile::Named::bare(dir.path().join("l1.kir")),
+                rest: vec![crate::compile::Named::bare(dir.path().join("sprites.kir"))],
+                layering: karakuri_engine::set::Layering::Overdraw,
+                live: None,
+                capacity: None,
+                seed_salt: 0,
+                salts: Vec::new(),
+                camera: karakuri_engine::camera::Orbit::default(),
+                overrides: Vec::new(),
+                published: Vec::new(),
+                bindings: Vec::new(),
+                edges: Vec::new(),
+                authorities: Vec::new(),
+                set: Some("night02".to_owned()),
+            },
+        );
+
+        let refused = slots
+            .file(0, "L4", 1)
+            .expect_err("the loaded Set holds one renderer");
+        assert_eq!(refused, "slot 0 holds one L4 and `index` is 1");
+        let refused = slots
+            .file(0, "L2", 0)
+            .expect_err("the loaded Set holds no deformation");
+        assert!(
+            refused.starts_with("slot 0 holds no L2:"),
+            "the refusal is not about what the slot holds now: {refused}"
         );
     }
 
@@ -3941,7 +4212,7 @@ proc probe_knobs {
         let l4 = dir.path().join("l4.kir");
         std::fs::write(&l1, PROBE_L1).expect("l1");
         std::fs::write(&l4, PROBE_L4).expect("l4");
-        let shared = Slots(vec![(l1.clone(), vec![l4.clone()]), (l1, vec![l4])]);
+        let shared = Slots::of(vec![(l1.clone(), vec![l4.clone()]), (l1, vec![l4])]);
         let reporter = serve(0, shared, store_root(&dir), true, closed()).expect("serve");
         let port = reporter.port();
         std::mem::forget(reporter);
@@ -3986,7 +4257,7 @@ proc probe_knobs {
         let l1 = write("l1.kir", PROBE_L1);
         let warp = write("warp.kir", PROBE_L2);
         let l4 = write("l4.kir", PROBE_L4);
-        let shared = Slots(vec![
+        let shared = Slots::of(vec![
             (l1.clone(), vec![warp.clone(), l4.clone()]),
             (l1, vec![warp, l4]),
         ]);
@@ -4078,7 +4349,7 @@ proc probe_knobs {
         let pair = (l1, vec![l4]);
         let reporter = serve(
             0,
-            Slots(vec![pair.clone(), pair]),
+            Slots::of(vec![pair.clone(), pair]),
             store_root(&dir),
             true,
             closed(),
@@ -5019,7 +5290,7 @@ proc probe_knobs {
         let second = write("l4_b.kir", PROBE_L4);
         let reporter = serve(
             0,
-            Slots(vec![(head, vec![first.clone(), second.clone()])]),
+            Slots::of(vec![(head, vec![first.clone(), second.clone()])]),
             store_root(&dir),
             true,
             closed(),
@@ -5065,7 +5336,7 @@ proc probe_knobs {
         let l1 = write("l1.kir", PROBE_L1);
         let l4 = write("l4.kir", PROBE_L4);
         (
-            Slots(vec![(camera.clone(), vec![l1.clone(), l4.clone()])]),
+            Slots::of(vec![(camera.clone(), vec![l1.clone(), l4.clone()])]),
             vec![camera, l1, l4],
         )
     }
@@ -5083,7 +5354,7 @@ proc probe_knobs {
     fn a_head_is_addressed_under_the_kind_it_declares() {
         let dir = tempfile::tempdir().expect("tempdir");
         let (slots, paths) = headed_by_a_camera(&dir);
-        let (camera, l1, l4) = (&paths[0], &paths[1], &paths[2]);
+        let (camera, l1, l4) = (paths[0].clone(), paths[1].clone(), paths[2].clone());
 
         assert_eq!(
             slots.path(0, Kind::L3, 0).expect("the head is the camera"),
@@ -5122,17 +5393,17 @@ proc probe_knobs {
         std::fs::write(&silent, "proc nothing_declared {\n}\n").expect("fixture");
         let mute = dir.path().join("mute.kir");
         std::fs::write(&mute, "proc also_nothing {\n}\n").expect("fixture");
-        let slots = Slots(vec![(silent.clone(), vec![mute.clone()])]);
+        let slots = Slots::of(vec![(silent.clone(), vec![mute.clone()])]);
 
         assert_eq!(
             slots.path(0, Kind::L1, 0).expect("the head is the L1"),
-            &silent
+            silent
         );
         assert_eq!(
             slots
                 .path(0, Kind::L4, 0)
                 .expect("a later one is a renderer"),
-            &mute
+            mute
         );
     }
 
@@ -5202,7 +5473,7 @@ proc probe_knobs {
         let l4 = write("l4.kir", PROBE_L4);
         let reporter = serve(
             0,
-            Slots(vec![(l1, vec![warp, l4])]),
+            Slots::of(vec![(l1, vec![warp, l4])]),
             store_root(&dir),
             true,
             closed(),
@@ -5313,7 +5584,7 @@ proc probe_knobs {
         ];
         let reporter = serve(
             0,
-            Slots(vec![(head, rest)]),
+            Slots::of(vec![(head, rest)]),
             store_root(&dir),
             watching,
             closed(),
@@ -5661,7 +5932,7 @@ mod tests {
     /// [`an_unreadable_file_is_counted_as_a_renderer`] and relied on here, so
     /// these two slots are the L1-and-one-renderer pair they read as.
     fn slots() -> Slots {
-        Slots(vec![
+        Slots::of(vec![
             ("a/l1.kir".into(), vec!["a/l4.kir".into()]),
             ("b/l1.kir".into(), vec!["b/l4.kir".into()]),
         ])
@@ -5808,11 +6079,11 @@ mod tests {
         let slots = slots();
         assert_eq!(
             slots.path(1, Kind::L4, 0).expect("slot 1 L4"),
-            &std::path::PathBuf::from("b/l4.kir")
+            std::path::PathBuf::from("b/l4.kir")
         );
         assert_eq!(
             slots.path(0, Kind::L1, 0).expect("slot 0 L1"),
-            &std::path::PathBuf::from("a/l1.kir")
+            std::path::PathBuf::from("a/l1.kir")
         );
 
         let past_the_end = slots
@@ -5859,7 +6130,7 @@ mod tests {
         let source_b = declaring(at, "source_b.kir", "L1");
         let camera = declaring(at, "camera.kir", "L3");
         let blob = declaring(at, "blob.kir", "Field");
-        let slots = Slots(vec![(
+        let slots = Slots::of(vec![(
             head.clone(),
             vec![
                 warp_a.clone(),
@@ -5873,16 +6144,16 @@ mod tests {
         )]);
 
         for (layer, index, expected) in [
-            (Kind::L1, 0, &head),
-            (Kind::L2, 0, &warp_a),
-            (Kind::L4, 0, &sprites),
-            (Kind::L2, 1, &warp_b),
-            (Kind::L4, 1, &strokes),
+            (Kind::L1, 0, head.clone()),
+            (Kind::L2, 0, warp_a.clone()),
+            (Kind::L4, 0, sprites.clone()),
+            (Kind::L2, 1, warp_b.clone()),
+            (Kind::L4, 1, strokes.clone()),
             // **The head keeps L1 0**, so a second source is 1 — a chain that
             // names another geometry is another source, not a fresh count.
-            (Kind::L1, 1, &source_b),
-            (Kind::L3, 0, &camera),
-            (Kind::Field, 0, &blob),
+            (Kind::L1, 1, source_b.clone()),
+            (Kind::L3, 0, camera.clone()),
+            (Kind::Field, 0, blob.clone()),
         ] {
             let name = layer_name(layer);
             assert_eq!(
@@ -5913,13 +6184,13 @@ mod tests {
     /// unaddressable the moment one file in it went missing.
     #[test]
     fn an_unreadable_file_is_counted_as_a_renderer() {
-        let missing = Slots(vec![(
+        let missing = Slots::of(vec![(
             "nowhere/l1.kir".into(),
             vec!["nowhere/gone.kir".into()],
         )]);
         assert_eq!(
             missing.path(0, Kind::L4, 0).expect("counted as a renderer"),
-            &std::path::PathBuf::from("nowhere/gone.kir")
+            std::path::PathBuf::from("nowhere/gone.kir")
         );
     }
 
@@ -5957,20 +6228,20 @@ mod tests {
     /// terminal nobody is watching.
     #[test]
     fn a_renderer_is_addressed_by_index_and_a_bad_one_names_the_range() {
-        let stacked = Slots(vec![(
+        let stacked = Slots::of(vec![(
             "a/l1.kir".into(),
             vec!["a/sprites.kir".into(), "a/strokes.kir".into()],
         )]);
 
         assert_eq!(
             stacked.path(0, Kind::L4, 1).expect("the second renderer"),
-            &std::path::PathBuf::from("a/strokes.kir")
+            std::path::PathBuf::from("a/strokes.kir")
         );
         // Omitting it is 0, which is what every call written before stacks
         // existed means and what a slot with one renderer always means.
         assert_eq!(
             stacked.path(0, Kind::L4, 0).expect("the first renderer"),
-            &std::path::PathBuf::from("a/sprites.kir")
+            std::path::PathBuf::from("a/sprites.kir")
         );
 
         let past = stacked

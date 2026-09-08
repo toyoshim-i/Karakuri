@@ -5099,7 +5099,15 @@ impl ApplicationHandler for App {
         // exactly like one whose client is connected and idle.
         let mcp = match self.args.mcp {
             Some(port) => {
-                let slots = mcp::Slots(
+                // **Built once and never written again, and that is this
+                // program rather than a shortcut.** `mcp::Slots` is a live
+                // handle because the panel re-points a slot when the operator
+                // loads a Set onto a running deck; nothing here does — the only
+                // Set this run names is `--load-set`'s, settled before the deck
+                // is built, and `Aiming::re_aim` restates the files it is
+                // already pointed at. So the launch pairs are what this deck is
+                // running for the whole run.
+                let slots = mcp::Slots::of(
                     self.args
                         .sets
                         .iter()
@@ -11810,7 +11818,7 @@ mod wire_tests {
         std::fs::write(&l1, "proc probe { kind L1 }").expect("fixture");
         let reporter = mcp::serve(
             0,
-            mcp::Slots(vec![(l1, Vec::new())]),
+            mcp::Slots::of(vec![(l1, Vec::new())]),
             dir.path().join("store"),
             true,
             karakuri_environment::Opening::closed(),
