@@ -1421,20 +1421,41 @@ under a closed milestone is never picked up.
    on the maintainer's ruling that an estimate refusing everything is refusing on behalf of *this*
    machine — [ADR-0110](adr/0110-this-machine-is-not-the-reference.md)'s argument reaching a second
    place. Twelve refusals became none.
-2. **An instrument that measures a frame rather than a pass.** Nothing has ever timed the frame's
-   passes together — the panel's three medians are CPU time by construction and the wait beside them
-   is excluded on a reading that holds only while the GPU is not the bottleneck. P-0095 asks what a
-   number carries about how it was taken, and *the whole frame* has no answer yet.
+2. **An instrument that measures a frame rather than a pass — done on 2026-09-08**
+   ([ADR-0303](adr/0303-a-frames-cost-is-the-period-and-a-measurement-names-which-resolution-it-is-about.md)).
+   Nothing had ever timed the frame's passes together: the three medians are CPU time by
+   construction and the wait beside them was excluded on a reading that holds only while the GPU is
+   not the bottleneck. **The reading was wrong by a factor of three.** Measured on the pair this
+   program opens on, at 1280x720: CPU 1.30 ms, GPU to a drained queue 3.20 ms, frame period 4.50 ms
+   — **a reading that stops at the submission reports 29% of what the frame cost**, on material
+   nobody would call GPU-heavy. `Cost::period` is the frame, `Cost::drained` is what the GPU still
+   owed, and `Cost::elsewhere` measures the residue `Cost::whole`'s doc used to assert away.
+   P-0095 is met by every number naming which of this instrument's **two** resolutions it is about
+   — and by `PROBE_RESOLUTION` being gone, which was a third: a size nothing renders at, so a
+   measurement taken there was a number about a frame nobody draws. Cold startup for four slots
+   went from 235 ms to 84 ms with it, and **a 25x smaller area bought only a third**, which is the
+   invariant term appearing in a measurement rather than in an argument.
 3. **A deck total beside `committed_ms`.** Both it and `headroom_ms` sum only Live slots, so since
    ADR-0269 they understate the deck by three slots of step **and** draw. The measured case is in
    this file: a four-slot frame is 21 ms warm and was 209 ms cold, and **it registers as no violation
    at all**. Making `committed_ms` the deck's total would leave `over_budget` permanently on for any
    four-slot deck of heavy material, so what `over_budget` should then say is part of the item.
-4. **`estimate` wired to `Deck::govern`.** Built on 2026-09-06 and exported from `lib.rs` to no
-   caller. It is also the other half of the ceilings' sentence — *they are a backstop, not a budget,
-   and the governor is what enforces* — so nothing is owed on the four ceilings themselves beyond
-   this.
-5. **The badge drawn**, which is what the four above are for.
+4. **`estimate` wired to `Deck::govern` — done on 2026-09-08**
+   ([ADR-0296](adr/0296-the-governor-budgets-on-the-estimate-where-it-answers-and-on-the-measurement-where-it-does-not.md)).
+   It was built on 2026-09-06 and exported to no caller. The governor spends the estimate where it
+   answers and the measurement where it does not, through one rule both the committed sum and the
+   admission test call — and it changes admissions rather than only reports. It is also the other
+   half of the ceilings' sentence — *they are a backstop, not a budget, and the governor is what
+   enforces* — so nothing is owed on the four ceilings themselves beyond this.
+5. **The badge drawn — done on 2026-09-08**
+   ([ADR-0298](adr/0298-the-badge-is-the-band-of-the-number-the-governor-spent-and-how-it-was-taken-crosses-the-seam-undrawn.md)),
+   which is what the four above were for. The five bands are cited to the two passages of the mock
+   that state them and a test reads **both**, so a boundary moved in one and not the other fails.
+   The dot is the band of the number the governor *spent*; whether that number was estimated or
+   measured crosses the seam on `Decision::basis` and is **drawn nowhere**, because the mock does
+   not distinguish them and the page moves first. P-0095 rules out *handing an inferred number out
+   as a measured one*, so what is open is not whether the console may hide it — it is what mark the
+   page gains, and that is the maintainer's.
 6. **A region declares that it is moving, and not merely that something is pending.** **Done on
    2026-09-08** ([ADR-0283](adr/0283-a-region-declares-when-its-picture-next-changes-not-that-something-is-pending.md)),
    and taken ahead of the five above because every control that lands writes the same unconditional
@@ -1455,10 +1476,19 @@ under a closed milestone is never picked up.
    function of the clock and would have to declare. So what is left of item 6 is **caching a bay to
    a texture**, which this is the precondition for and item 2 above is the measurement for.
 
-**Exit.** Not a badge grep, and that is the point: **the panel draws a dot whose band a test can
-predict from a measurement.** Every other sub-milestone's exit is a column of
+**Exit. Met on 2026-09-08.** Not a badge grep, and that is the point: **the panel draws a dot whose
+band a test can predict from a measurement.** Every other sub-milestone's exit is a column of
 [every operation](manual/operations.html); this one's consumer is a readout rather than an
-operation, which is exactly why no column could hold it.
+operation, which is exactly why no column could hold it. Two tests hold it from the two sides — the
+engine's, which predicts each slot's band from the governed number and **fails when the number stops
+arriving**, and the console's, which predicts a band from a number. The first is the complement of
+the assertion M5.1 left behind, which failed when somebody drew a badge and never when the estimate
+gained an answer.
+
+**What is left here is item 3**, and it carries a decision inside it that has grown since it was
+written: `committed_ms` can now be a sum of two kinds of number, an estimate for one slot and a
+measurement for another, and what `over_budget` should say once it is the deck's total has to be
+answered against that as well as against four slots of heavy material.
 
 **Blocked on. Nothing.** Item 1 blocked item 4 and is closed; nothing here waits on another bay, and
 item 6 waited on nothing at all, which is why it was taken first. Items 2, 3, 4 and 5 are in the
