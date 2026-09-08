@@ -109,7 +109,8 @@
 //!    ([`crate::view::LibraryBay::filter`]), the `read` chip in that bay's
 //!    foot ([`crate::view::LibraryBay::read`]), the **star** at the left of
 //!    each of its rows ([`crate::view::LibraryBay::starred`]) and the **list**
-//!    those stars are in ([`crate::view::LibraryBay::take`]). The rule did not change to hold any
+//!    those stars are in ([`crate::view::LibraryBay::take`], and
+//!    [`crate::view::LibraryBay::land`] where the rows are versions). The rule did not change to hold any
 //!    of the ones that came after the first, which is what it was written for
 //!    — and each is asked exactly the way the first is: the derivation that
 //!    draws it, asked whether the point is on it, with nothing stored.
@@ -250,9 +251,11 @@
 //!
 //!    **The chip at the end of the row is the one that overruns**, and it is
 //!    the plainest case of what rule 3 costs anywhere on this console: the row
-//!    clips, four words laid end to end are wider than the mock's 218-wide
-//!    pane, and `folder` therefore starts inside the bay and finishes outside
-//!    it. What is *drawn* of it stops at the bay's edge, and the last six
+//!    clips, the five words laid end to end are wider than the mock's 218-wide
+//!    pane, and one of them therefore starts inside the bay and finishes
+//!    outside it — **which one depends on the width**, so
+//!    `tests/library.rs` looks for the chip that straddles the row's right edge
+//!    rather than naming it. What is *drawn* of it stops at the bay's edge, and the last six
 //!    pixels of that are the pane divider's under rule 3 — so a press there
 //!    drags the boundary, exactly as it does on the `solo` capsule and a
 //!    preview cell. **What brings the whole chip in is widening the pane**,
@@ -443,15 +446,22 @@
 //! **And so are the Library bay's scope chips**, which are the four preview
 //! cells' arrangement one column over: the bay is derived once and walked once
 //! for every chip in it, because a chip is as wide as the word in it and where
-//! the fourth one is depends on the first three.
+//! the last one is depends on the ones before it.
 //! [`crate::view::LibraryBay::chip`] answers *is this a control* and *what
 //! does a press on it ask for* — [`crate::view::Chosen`], which is the chip
-//! the pointer landed on **and** `Operation::SelectScope` beside it. It is the
+//! the pointer landed on **and** the operation beside it. It is the
 //! one answer on this panel that carries a value the operation could not, and
-//! that is `SelectScope`'s payload being `Undecided` on purpose rather than a
+//! that is `Operation::SelectScope`'s payload being `Undecided` on purpose
+//! rather than a
 //! gap: a press is the first thing in this workspace that knows which member
 //! of a growable list it means, and whether that settles the payload is a
 //! decision about the vocabulary rather than about this rule.
+//!
+//! **The fifth chip asks a different row**, and it is the same division read
+//! once more: `history` is not a library of Sets, so a press on it names
+//! `Operation::WalkHistory` where the four beside it name `SelectScope`
+//! ([`crate::view::Chosen`], ADR-0308). One rectangle, one press, and the row
+//! it names is the row that describes what was asked for.
 //!
 //! **The chip does not cycle where the key does.** `e` steps to the next scope
 //! and wraps, because a bare press cannot say *which*; a pointer press can, so
@@ -482,7 +492,14 @@
 //! [`crate::view::LibraryBay::take`] answers *is this a control* here and
 //! *which Set is now in hand* to the caller — a `Taken`, off the same laid-out
 //! bay this rule hit-tests. It is the one offer on this console whose press
-//! names no operation, and that is the gesture rather than a gap: a load names
+//! names no operation — **under the four scopes whose rows are Sets**, which
+//! is the qualification ADR-0308 added: under `history` a row is a version and
+//! a press on it is [`crate::view::LibraryBay::land`], which names
+//! `Operation::RestoreProcedure` outright. The two are one row of [`PROBES`]
+//! and are told apart by which listing goes in with the point —
+//! `View::sets` is empty under that scope and `View::versions` is empty under
+//! every other — so exactly one of them can answer.
+//! That a carry names nothing is the gesture rather than a gap: a load names
 //! a Set **and** a deck, the row is the first of the two, and the second is
 //! whatever strip the pointer is over when the button comes up
 //! ([`crate::view::Mixer::dropped`], asked at the release). The two halves are
@@ -1203,7 +1220,7 @@ fn on_read(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
         bay.read(
             ctx,
             view.target(),
-            view.library.get(view.cursor_row()).map(String::as_str),
+            view.sets().get(view.cursor_row()).map(String::as_str),
             p,
         )
         .is_some()
@@ -1267,7 +1284,7 @@ fn on_star(panel: &Panel, _ctx: &egui::Context, view: &View, p: Point) -> bool {
         view.opened(),
         view.pointed(),
     )
-    .is_some_and(|bay| bay.starred(&view.library, &view.starred, p).is_some())
+    .is_some_and(|bay| bay.starred(view.sets(), &view.starred, p).is_some())
 }
 
 /// **The rows of the Library bay's list**, and they are the first
@@ -1285,6 +1302,16 @@ fn on_star(panel: &Panel, _ctx: &egui::Context, view: &View, p: Point) -> bool {
 /// with no Set behind it is not a target. A press on the list's own
 /// ground below the last row is nobody's, which is rule 4's *a
 /// control claims what it acts on and no more*.
+///
+/// **One rectangle and two things a press on it can mean**, which is
+/// why two calls are one row of [`PROBES`]: under
+/// [`crate::view::Scope::History`] a row is a version rather than a
+/// Set, and a press on it lands that version on a node
+/// (`LibraryBay::land`) instead of taking a Set in hand. The two are
+/// told apart by which listing is handed in — `View::sets` is empty
+/// under that scope and `View::versions` is empty under every other
+/// — so at most one of them can answer and neither is told what the
+/// scope is.
 fn on_row(panel: &Panel, _ctx: &egui::Context, view: &View, p: Point) -> bool {
     library(
         panel.layout(),
@@ -1293,7 +1320,9 @@ fn on_row(panel: &Panel, _ctx: &egui::Context, view: &View, p: Point) -> bool {
         view.opened(),
         view.pointed(),
     )
-    .is_some_and(|bay| bay.take(&view.library, p).is_some())
+    .is_some_and(|bay| {
+        bay.take(view.sets(), p).is_some() || bay.land(view.versions(), view.target(), p).is_some()
+    })
 }
 
 /// **The four class pills, one derivation asked four times**, which

@@ -429,6 +429,41 @@ impl Slots {
         }
     }
 
+    /// **The file one `(slot, layer, index)` address names, where the layer is
+    /// spelled the way a snapshot's name spells it** — one of
+    /// [`crate::history::LAYERS`], which is the same list
+    /// [`crate::history::declared_kind`] answers with and the same list
+    /// [`Slots::nodes`] files a node under.
+    ///
+    /// **It exists for the panel's landing on a row of the edit history**, and
+    /// it delegates rather than repeating: turning an address into a file is
+    /// this type's own walk over a slot's `kind` lines, and a second one beside
+    /// it would be two answers to *which file is `L4:0` of this slot* — the
+    /// mistake [`Slots::nodes`]' own head records under a different name. The
+    /// caller builds a `Slots` out of what its watchers are pointed at, which
+    /// is what makes the answer follow a library load.
+    ///
+    /// A layer word this crate does not write is an `Err` naming it, on the
+    /// same terms an address the slot does not hold is.
+    pub fn file(
+        &self,
+        slot: usize,
+        layer: &str,
+        index: usize,
+    ) -> Result<&std::path::PathBuf, String> {
+        let Some(kind) = layer_named(layer) else {
+            return Err(format!(
+                "`{layer}` is not a layer: {}",
+                LAYERS
+                    .iter()
+                    .map(|kind| layer_name(*kind))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        };
+        self.path(slot, kind, index)
+    }
+
     /// The file one `(slot, layer, index)` address names.
     fn path(&self, slot: usize, layer: Kind, index: usize) -> Result<&std::path::PathBuf, String> {
         let nodes = self.nodes(slot)?;

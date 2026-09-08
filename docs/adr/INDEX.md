@@ -333,6 +333,7 @@ number; new records continue from the end.
 | [ADR-0305](0305-the-library-bays-load-is-a-button-and-a-pulldown-and-the-deck-it-names-is-not-the-selection.md) | The Library bay's load is a button and a pulldown, and the deck it names is not the selection | 2026-09-08 | accepted |
 | [ADR-0306](0306-the-grid-head-is-one-pill-because-the-bar-is-one-bar-and-the-count-follows-the-mode.md) | The grid head is one pill because the bar is one bar and the count follows the mode | 2026-09-08 | accepted |
 | [ADR-0307](0307-the-inspectors-pane-scrolls-and-the-position-is-the-panes-own.md) | The Inspector's pane scrolls, and the position is the pane's own | 2026-09-08 | accepted |
+| [ADR-0308](0308-the-library-bays-fifth-chip-walks-one-sets-history-and-a-row-lands-that-version-on-a-node.md) | The Library bay's fifth chip walks one Set's history, and a row lands that version on a node | 2026-09-08 | accepted |
 
 ## Retired numbers
 

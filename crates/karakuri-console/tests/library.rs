@@ -1132,12 +1132,23 @@ fn a_press_names_the_chip_it_landed_on_and_never_the_next_one() {
             scope.name(),
             chosen.scope.name()
         );
+        // **Four chips ask one row and the fifth asks another**, which is
+        // `view::Chosen`'s own section: `history` is not a library of Sets and
+        // *Walk the edit history* is the row that describes what a press on it
+        // asked for. A `SelectScope` there would be indistinguishable from a
+        // press on `all`, because that payload cannot say which.
         assert_eq!(
             chosen.operation,
-            karakuri_operation::Operation::SelectScope {
-                scope: karakuri_operation::Undecided
+            match scope {
+                Scope::History => karakuri_operation::Operation::WalkHistory {
+                    step: karakuri_operation::Undecided
+                },
+                _ => karakuri_operation::Operation::SelectScope {
+                    scope: karakuri_operation::Undecided
+                },
             },
-            "the chip asked for something other than `Choose which scope the library shows`"
+            "a press on `{}` asked for the wrong row of the page",
+            scope.name()
         );
     }
 
@@ -1181,7 +1192,14 @@ fn a_press_names_the_chip_it_landed_on_and_never_the_next_one() {
 /// asks the same question of a pane that has been dragged in.
 ///
 /// The overrun is asserted rather than assumed, because a pane wide enough to
-/// hold all four would make the rest of this test measure nothing.
+/// hold every chip would make the rest of this test measure nothing.
+///
+/// **The clipped chip is looked for rather than assumed to be the last one**,
+/// which is ADR-0308's fifth chip arriving: `history` starts past the row's
+/// own right edge at this width and is not drawn at all, so the capsule this
+/// test is about — the one that starts inside and finishes outside — is
+/// `folder`. Asking for the straddling chip is the property; asking for the
+/// last one was an arithmetic that happened to name it.
 #[test]
 fn a_chip_is_pressed_only_where_it_is_drawn() {
     let mut layout = solved(PLAUSIBLE);
@@ -1196,21 +1214,11 @@ fn a_chip_is_pressed_only_where_it_is_drawn() {
 
     let (scope, last) = bay
         .chips(&ctx, SCOPES)
-        .last()
-        .expect("the row has chips in it");
-    assert!(
-        last.max.x > row.max.x,
-        "`{}` ends at {} and the row ends at {} — the pane is wide enough to hold every chip, \
-         so there is no clipped capsule to ask about",
-        scope.name(),
-        last.max.x,
-        row.max.x
-    );
-    assert!(
-        last.min.x < row.max.x,
-        "`{}` starts outside the row entirely, so it is not the half-drawn chip this is about",
-        scope.name()
-    );
+        .find(|(_, chip)| chip.min.x < row.max.x && chip.max.x > row.max.x)
+        .expect(
+            "no chip straddles the row's right edge — the pane is wide enough to hold every \
+             one of them, so there is no clipped capsule to ask about",
+        );
 
     let over = egui::pos2((last.max.x + row.max.x) * 0.5, last.center().y);
     assert!(
@@ -1476,7 +1484,8 @@ fn marked(view: &mut View, panel: &mut Panel, bay: &LibraryBay) -> Option<String
 }
 
 /// **The scope row draws the chips it was handed, in the order it was handed
-/// them** — which is the bay's own row: `all`, `my sets`, `presets`, `folder`.
+/// them** — which is the bay's own row: `all`, `my sets`, `presets`, `folder`,
+/// `history`.
 ///
 /// **It is the mock's row with its first chip renamed and moved**, which is
 /// [ADR-0299](../../../docs/adr/0299-my-sets-is-the-starred-subset-and-the-star-is-kept-beside-the-sets.md):
@@ -1484,17 +1493,22 @@ fn marked(view: &mut View, panel: &mut Panel, bay: &LibraryBay) -> Option<String
 /// store holds is `all` and it comes first, because it is the listing the
 /// other three are questions about.
 ///
+/// **`history` is last and is not a library of Sets** (ADR-0308): its rows are
+/// the versions of the Set the load pulldown's deck is running, which is why it
+/// sits after the four rather than among them.
+///
 /// The `+` the mock draws after them is not one of them, and that is asserted
-/// rather than left to a reader counting four: it is the arena's own gap drawn
-/// a fifth time, and a chip for it would be a control over adding a region.
+/// rather than left to a reader counting the chips: it is the arena's own gap
+/// drawn a fifth time, and a chip for it would be a control over adding a
+/// region.
 #[test]
 fn the_scope_row_draws_the_chips_it_was_handed_in_the_order_it_was_handed_them() {
     let (mut view, mut panel) = showing_mock();
     let bay = bay(&panel);
     assert_eq!(
         chips(&mut view, &mut panel, &bay),
-        vec!["all", "my sets", "presets", "folder"],
-        "the scope row is not this bay's four chips in this bay's order"
+        vec!["all", "my sets", "presets", "folder", "history"],
+        "the scope row is not this bay's five chips in this bay's order"
     );
 }
 
@@ -1521,7 +1535,13 @@ fn the_marked_chip_is_the_scope_the_pointer_is_on() {
         Some("my sets")
     );
 
-    for scope in [Scope::Presets, Scope::Folder, Scope::AllSets, Scope::MySets] {
+    for scope in [
+        Scope::Presets,
+        Scope::Folder,
+        Scope::History,
+        Scope::AllSets,
+        Scope::MySets,
+    ] {
         assert!(view.step_scope(), "the scope did not step");
         assert_eq!(view.scope(), Some(scope));
         assert_eq!(
@@ -1562,7 +1582,8 @@ fn stepping_the_scope_wraps_and_takes_the_cursor_back_to_the_top() {
 
     assert!(view.step_scope());
     assert!(view.step_scope());
-    assert_eq!(view.scope(), Some(Scope::Folder), "the last chip");
+    assert!(view.step_scope());
+    assert_eq!(view.scope(), Some(Scope::History), "the last chip");
     assert!(view.step_scope());
     assert_eq!(
         view.scope(),
@@ -2996,3 +3017,240 @@ fn the_read_chip_says_read_and_never_lights() {
 /// constant this crate exports: it is asserted here because a chip reading
 /// something else is a control the note does not describe.
 const READ_WORD: &str = "read";
+
+// ---------------------------------------------------------------------------
+// The `history` scope: the fifth chip, its rows, and the landing
+// ---------------------------------------------------------------------------
+
+/// **Three versions as the host would hand them in**, newest first, in
+/// [`version_row`]'s spelling — `crates/karakuri`'s, which is
+/// `history::Version`'s own fields joined with the separators
+/// `Snapshots::record` writes.
+///
+/// They are literals here rather than built from anything, for the reason the
+/// mock's names are: this crate reads no store and what crosses the seam is a
+/// row of words (ADR-0156). What matters about them here is the **order**,
+/// which is the listing's and not this bay's (ADR-0263 read on a history).
+fn versions() -> Vec<String> {
+    [
+        "20260908-143052-271_slot0_L4_beat_strokes",
+        "20260908-142930-004_slot0_L1_drift_shell",
+        "20260907-235959-999_slot2_L41_soft_points",
+    ]
+    .iter()
+    .map(|s| (*s).to_owned())
+    .collect()
+}
+
+/// **The fifth chip is `history`, and a press on it asks for the walk rather
+/// than for a scope.**
+///
+/// Three claims, and the third is the one ADR-0308 took. The chip is **last**
+/// in `Scope::ALL`, which is the order the row is drawn in and the order a step
+/// goes round. A press **marks** it, exactly as a press on any of the four
+/// beside it does. And what a press **asks for** is
+/// `Operation::WalkHistory` — because `SelectScope`'s payload cannot say
+/// which chip, so a `SelectScope` emitted here would be indistinguishable from
+/// a press on `all`: a record saying a library was chosen for a press that
+/// asked for an edit history.
+#[test]
+fn the_history_chip_is_the_fifth_and_a_press_on_it_asks_for_the_walk() {
+    assert_eq!(
+        Scope::ALL.last().copied(),
+        Some(Scope::History),
+        "`history` is not the last chip the bay draws"
+    );
+    assert_eq!(Scope::History.name(), "history");
+    assert!(
+        !Scope::History.lists_sets(),
+        "a row of `history` is a version and not a Set"
+    );
+
+    let (mut view, mut panel) = showing_mock();
+    let ctx = drawn_once();
+    let bay = bay(&panel);
+    assert_eq!(
+        chips(&mut view, &mut panel, &bay)
+            .last()
+            .map(String::as_str),
+        Some("history"),
+        "the row's last word is not the fifth chip's"
+    );
+
+    let (scope, chip) = bay
+        .chips(&ctx, SCOPES)
+        .last()
+        .expect("the row has chips in it");
+    assert_eq!(scope, Scope::History);
+    let probe = egui::pos2(chip.min.x + 2.0, chip.center().y);
+    let chosen = bay
+        .chip(&ctx, SCOPES, Point::new(probe.x, probe.y))
+        .expect("no chip answered a press on `history`");
+    assert_eq!(chosen.scope, Scope::History);
+    assert_eq!(
+        chosen.operation,
+        Operation::WalkHistory {
+            step: karakuri_operation::Undecided
+        },
+        "the `history` chip asked for something other than `Walk the edit history`"
+    );
+
+    assert!(view.select_scope(Scope::History), "the mark did not move");
+    assert_eq!(
+        marked(&mut view, &mut panel, &bay).as_deref(),
+        Some("history"),
+        "the chip was chosen and the wash stayed where it was"
+    );
+}
+
+/// **A `history` listing is the rows the host handed in, in the order it handed
+/// them, and the foot says how many were not drawn.**
+///
+/// The order is **the operation's and not this surface's**, which is ADR-0263's
+/// argument met on a second listing: `history::list` answers most recent first,
+/// and a bay that sorted what it was given would be a second answer to the
+/// question that listing already answers. So this asserts that the words the
+/// list paints are the words that went in, in that sequence — and never that
+/// they are sorted, because sorting them here is exactly the defect.
+///
+/// **The foot is the same `n of m` a library's is**, counted on versions: a
+/// history taller than the bay says so in the one place the mock puts it, and
+/// this bay does not scroll.
+#[test]
+fn a_history_listing_is_the_rows_the_host_handed_in_and_the_foot_counts_them() {
+    let mut view = View::new(Room::Day);
+    view.scopes = Scope::ALL.to_vec();
+    view.library = versions();
+    assert!(view.select_scope(Scope::History));
+    let mut panel = console(PLAUSIBLE);
+    let bay = library(panel.layout(), SCOPES, &view.library, None, None)
+        .expect("the library bay lists its rows");
+    assert_eq!(bay.rows, versions().len(), "the bay drew a different count");
+    assert_eq!(bay.count(), "3 of 3");
+
+    let mut down: Vec<(f32, String)> = shapes_inside(&mut view, &mut panel, bay.list)
+        .iter()
+        .filter_map(|shape| match shape {
+            egui::Shape::Text(at) => Some((at.pos.y, at.galley.text().to_owned())),
+            _ => None,
+        })
+        .collect();
+    down.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let painted: Vec<String> = down.into_iter().map(|(_, text)| text).collect();
+    assert_eq!(
+        painted,
+        versions(),
+        "the rows were drawn in an order this bay invented"
+    );
+
+    // **A history taller than the bay**, which is the foot's second number
+    // doing the only thing it is for: the rows are what fit and the total is
+    // what the host handed over.
+    let many: Vec<String> = (0..60)
+        .map(|at| format!("20260908-1430{at:02}-000_slot0_L4_beat_strokes"))
+        .collect();
+    let tall = library(panel.layout(), SCOPES, &many, None, None).expect("the bay draws its foot");
+    assert!(
+        tall.rows < many.len(),
+        "sixty versions fit in the bay, so the foot has nothing to report"
+    );
+    assert_eq!(tall.count(), format!("{} of {}", tall.rows, many.len()));
+}
+
+/// **A press on a `history` row lands that version on the pulldown's deck.**
+///
+/// The operation is `Operation::RestoreProcedure` carrying the row's own word
+/// and the deck the load pulldown names — which is ADR-0308's whole seam, and
+/// the two marks are pulled apart before the press for
+/// [`a_press_on_load_asks_for_the_deck_the_pulldown_names`]'s reason: a console
+/// where the keys and the load agree cannot tell the two readings apart.
+///
+/// **And the carry on the same rectangle answers nothing**, which is the other
+/// half: one press means two things and which of them it is decided by which
+/// listing goes in with the point. `View::sets` is empty under this scope, so
+/// `take` cannot pick a Set up; `View::versions` is empty under every other, so
+/// `land` cannot put one back off a library row.
+#[test]
+fn a_press_on_a_history_row_lands_that_version_on_the_pulldowns_deck() {
+    let mut view = View::new(Room::Day);
+    view.scopes = Scope::ALL.to_vec();
+    view.library = versions();
+    assert!(view.select_scope(Scope::History));
+    view.mixer = std::iter::repeat_with(strip).take(4).collect();
+    assert!(view.select(2), "the keys did not go to deck C");
+    assert!(view.aim_at(1), "the load was not aimed at deck B");
+
+    let panel = console(PLAUSIBLE);
+    let bay = library(panel.layout(), SCOPES, &view.library, None, None)
+        .expect("the library bay lists its rows");
+    let row = bay.row(1);
+    let probe = Point::new(row.center().x, row.center().y);
+
+    assert_eq!(
+        bay.land(view.versions(), view.target(), probe),
+        Some(Operation::RestoreProcedure {
+            deck: 1,
+            revision: karakuri_operation::Revision::Picked(versions()[1].clone()),
+        }),
+        "the press did not land the row's own version on the pulldown's deck"
+    );
+    assert_eq!(
+        view.selection(),
+        2,
+        "landing a version moved the deck selection"
+    );
+    assert_eq!(
+        bay.take(view.sets(), probe),
+        None,
+        "a row of `history` was taken in hand as though it were a Set"
+    );
+
+    // **And the other way round**: back on a library scope the rows are Sets,
+    // so the carry answers and the landing does not.
+    assert!(view.select_scope(Scope::AllSets));
+    view.library = mock();
+    assert!(
+        bay.take(view.sets(), probe).is_some(),
+        "a row of `all` was not taken in hand"
+    );
+    assert_eq!(
+        bay.land(view.versions(), view.target(), probe),
+        None,
+        "a row of `all` was landed as though it were a version"
+    );
+}
+
+/// **A deck running no Set draws no rows, and nothing in the list answers a
+/// press.**
+///
+/// The host hands in an empty listing, because a version written where there
+/// was no Set is filed under *none* and a narrowing to a Set matches no such
+/// row — ADR-0276's own consequence, and the one thing this scope had to get
+/// right. What the bay does with it is what it does with any scope that lists
+/// nothing: it draws the chips, no rows, and `0 of 0`.
+///
+/// **The words are the host's**, which is why this asserts an empty list rather
+/// than a sentence: `why_nothing` is where the sentence is, and it is checked
+/// in `crates/karakuri`.
+#[test]
+fn a_deck_running_no_set_draws_no_history_rows() {
+    let mut view = View::new(Room::Day);
+    view.scopes = Scope::ALL.to_vec();
+    assert!(view.select_scope(Scope::History));
+    assert!(view.library.is_empty());
+
+    let panel = console(PLAUSIBLE);
+    let bay = library(panel.layout(), SCOPES, &view.library, None, None)
+        .expect("the bay draws its scopes and its foot");
+    assert_eq!(bay.rows, 0, "a scope with nothing in it drew rows");
+    assert_eq!(bay.count(), "0 of 0");
+    assert_eq!(
+        bay.land(
+            view.versions(),
+            view.target(),
+            Point::new(bay.list.center().x, bay.list.min.y + 1.0)
+        ),
+        None,
+        "a press on the empty list landed a version nobody can see"
+    );
+}
