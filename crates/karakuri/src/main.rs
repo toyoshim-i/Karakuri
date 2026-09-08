@@ -123,8 +123,12 @@
 //! `karakuri-operation-record` turns it into a `Record`, and [`apply`] is what
 //! moves the deck with it, because
 //! [P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)
-//! puts every control at the same record. No record reaches a disk,
-//! and no record stream drives time.
+//! puts every control at the same record. **Records reach a disk while a
+//! recording runs** — the `rec` capsule opens a
+//! `karakuri_environment::session::Recorder` and every record this file applies
+//! goes into `sessions/<id>.ndjson` behind it ([`Sessions`]) — and **no record
+//! stream drives time**, which is the half that is still true: nothing here
+//! reads a session back.
 //!
 //! # What is not wired, and what each would be for
 //!
@@ -133,6 +137,12 @@
 //! which is a note that cannot be told from a decision. It was duly read as a
 //! charter twice. Each line below says what the thing would be *for*, so that
 //! whoever reaches one knows what they are reaching for.
+//!
+//! **Three of the five have since been wired, and the entries stay** — audio,
+//! MCP and the session recorder — because what each is *for* is the thing this
+//! section is worth reading for, and because a list that only ever names
+//! absences is the note that was read as a charter. **Two are still absent:
+//! MIDI and replay.**
 //!
 //! - **Audio, and this one is wired now.** The window opens the host's
 //!   default input at startup and the transport row's `audio-in` pill says
@@ -156,28 +166,48 @@
 //!   `karakuri-midi` and `examples/surface.map` exist and `--midi-in`
 //!   `--midi-map` drive them. **No operation names attaching one**, so this is
 //!   a hole in the vocabulary before it is a hole here.
-//! - **MCP.** The model's door — the whole reason the instrument is
-//!   AI-native — and `karakuri_environment::mcp` is the server. Same shape as
-//!   MIDI: **no operation names opening it**, and a panel that opened one
-//!   silently would be the opposite of
-//!   [P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md).
+//! - **MCP, and this one is wired now.** The model's door — the whole reason
+//!   the instrument is AI-native — and `karakuri_environment::mcp` is the
+//!   server. `--mcp PORT` binds it before the window opens and hands it the
+//!   very [`Readout::opening`] the four `mcp` pills write, so what a hand
+//!   opens on the panel is what the server reads on its next call. **What is
+//!   still true of the entry it replaces is the vocabulary half**: no
+//!   operation names opening the door, so the pills are a setting rather than
+//!   an operation (ADR-0236), and a run without the flag writes that setting
+//!   for nobody. A panel that opened a class silently would still be the
+//!   opposite of
+//!   [P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md),
+//!   which is why every pill is shut at startup.
 //! - **Replay.** Rendering a recorded session back. This is offline work and
 //!   an instrument is not where it belongs; `karakuri-cli --replay` is the
-//!   right home for it and no row asks the panel for it.
-//! - **Session.** Recording the timeline as it happens, which is *Record the
-//!   session* — a `plan` badge with `rec` as its home, so the panel is meant
-//!   to reach this one and the transport already draws the button's place.
+//!   right home for it and no row asks the panel for it. **This is one of the
+//!   two entries here that is still an absence.**
+//! - **Session, and this one is wired now.** Recording the timeline as it
+//!   happens, which is *Record the session*. The `rec` capsule at the end of
+//!   the transport row is the control — one control with two ends — and a
+//!   press opens a `session::Recorder` on a thread, writes the head Set and
+//!   `sessions/<id>.ndjson`, and a second press flushes and closes it
+//!   ([`Sessions`]). What it produces is what `--replay` above will be typed
+//!   with; nothing in this program reads one back.
 //!
-//! **What is missing is named rather than left to be noticed.** Audio, MIDI,
-//! MCP and replay are all `karakuri-environment`'s and all reachable from
-//! here; none of them is wired up, because a slice that added them would be
+//! **What is missing is named rather than left to be noticed**, and what is
+//! no longer missing is named in the same place rather than left to be
+//! discovered by running it. Audio, MIDI, MCP and replay are all
+//! `karakuri-environment`'s and all reachable from here; **MIDI and replay are
+//! the two that are not wired up**, because a slice that added them would be
 //! unreviewable. The watcher was in that list until the Staging lane needed a
 //! producer, and what it took was one function — which is the measure of how
 //! far the rest of them are, rather than an argument for doing them all now.
-//! What this program's watchers still decline is the store either side of
-//! them: nothing is put under a content address and no version is kept, which
-//! is what the lane's two operations wait on ([`watched`]). `karakuri-cli` is
-//! still what you play a set with.
+//! Audio, MCP and the recorder have each since gone the same way, one function
+//! and one control at a time. **The store either side of a watcher is no
+//! longer declined, and this paragraph said it was**: `Watch::storing_to` puts
+//! every build's sources under a content address and `Watch::snapshotting_to`
+//! keeps every version that compiled under `<store>/history/`, filed under the
+//! Set the slot was running — both wired here, from one `history::Snapshots`
+//! seeded before the window opens ([`watched`], [`seeded`]). What the Staging
+//! lane's two operations wait on now is the lane itself: nothing can press a
+//! candidate row, and what a row says when one build changes two nodes is
+//! undecided. `karakuri-cli` is still what you play a set with.
 //!
 //! **There is a governor, and it is the one thing here that is not the
 //! shortest path.** It runs once, at startup, and it is [`Engine::ask_to_prime`]:
@@ -3246,12 +3276,21 @@ impl Readout {
     /// that described the search instead of printing its answer is exactly the
     /// defect this function was repaired of, one paragraph along. See the
     /// paragraph below for what that repair cost to find.
+    ///
+    /// `mcp_port` is the port `karakuri_environment::mcp::serve` actually bound
+    /// — `Reporter::port` and not `--mcp`'s argument, so `--mcp 0` prints the
+    /// ephemeral port it got — and `None` is a run that was not asked to serve.
+    /// It is passed in for the same reason `presets` and `store` are: the
+    /// sentence about the `mcp` pills was written unconditionally, said *nothing
+    /// in this process serves MCP yet*, and went on saying it to every run that
+    /// had just printed the address its server was listening on.
     fn print_legend(
         &mut self,
         budget_ms: Option<f32>,
         governed: &Report,
         presets: Option<&karakuri_environment::places::Presets>,
         store: &std::path::Path,
+        mcp_port: Option<u16>,
     ) {
         self.panel.solve();
         let layout = self.panel.layout();
@@ -3396,14 +3435,24 @@ impl Readout {
                 ),
             }
         );
+        // **Two, and the list is not kept here.** `view::transport`'s *What is
+        // in the mock's row and is deliberately not here* is the list, item by
+        // item with what is missing behind each; this names the count and the
+        // two survivors and points at it, because the crate that draws the row
+        // is the thing that holds whether an item is drawn. Written out here it
+        // was a second copy and it drifted exactly as one does: it said four
+        // and named `landed` and `rec`, both of which left that list on
+        // 2026-09-08 and both of which this panel draws.
         println!(
-            "four things the mock draws in that row are NOT drawn, and each is a control \
-             over machinery that is in neither this crate nor this program: learn, map, \
-             landed and rec. `view::transport` names them one by one with what is missing \
-             behind each. the list was six: `audio-in` left it when this program opened an \
-             input, and `tap` and the octave left it with the offset track beside them — \
-             they are drawn, they are pressed, and each emits the operation its key already \
-             emitted."
+            "two things the mock draws in that row are NOT drawn, and each is a control \
+             over machinery that is in neither this crate nor this program: learn and map. \
+             `view::transport` is where that list is kept and says what is missing behind \
+             each. it has only ever got shorter: `audio-in` left it when this program \
+             opened an input, `tap`, the octave and the offset track left it when the \
+             tracker group landed, and `rec` and `landed` left it when this program grew a \
+             session recorder and a watcher on every slot — all of them are drawn, they are \
+             pressed, and each emits the operation its key already emitted or reports a \
+             stream this program really has."
         );
         // **What the pill is actually reading, off the view rather than off a
         // sentence.** The legend was found lying five ways on 2026-08-30 by
@@ -3606,11 +3655,12 @@ impl Readout {
                     // Four readouts, and then the controls that landed in
                     // this row after them: the audio-in pill, the arrangement
                     // pill and, at the far end, the tone map and the exposure.
-                    // The five the mock draws here and this panel does not are
-                    // still five things that do not exist behind it, and
-                    // `view::transport` names each of them. What a press in
-                    // this row reaches is not counted here — see the pointer's
-                    // paragraph below.
+                    // What the mock draws here and this panel does not is
+                    // `view::transport`'s list, and it is not counted here —
+                    // this comment said five while that list was down to two,
+                    // which is what a total kept beside a list it does not own
+                    // is worth. What a press in this row reaches is not
+                    // counted here either — see the pointer's paragraph below.
                     Kind::Transport => "row, no heading: bpm, beat, bar, frame".to_owned(),
                     // The console's first control, and for a while its only
                     // one. How many there are now is
@@ -3727,6 +3777,13 @@ impl Readout {
              comes out and this file applies it."
         );
         println!();
+        // **Whether anything reads these four is read off the server**, not
+        // written here. The unconditional sentence this replaces said *nothing
+        // in this process serves MCP yet* and printed it on every run,
+        // including one whose server `main` had already bound and whose
+        // address it had already printed — the same defect as a device named
+        // in prose instead of asked of the host, which is why this reads like
+        // the `audio-in` line above.
         println!(
             "four of the regions above carry an `mcp` pill, and each says beside its own line \n\
              which state its class is in. each opens one class of operations to a model; every \n\
@@ -3736,8 +3793,23 @@ impl Readout {
              operation on the ARRANGEMENT nor one on the MIX: it is a setting of the map every \n\
              surface reaches the vocabulary through, and a setting deciding whether a surface \n\
              may reach a class of operations cannot be a member of that class (ADR-0236). \n\
-             nothing in this process serves MCP yet, so what these four write is read here, by \n\
-             this file's tests, and by nothing else."
+             {}",
+            match mcp_port {
+                Some(port) => format!(
+                    "this process IS serving MCP, on 127.0.0.1:{port}, and \
+                     `karakuri_environment::mcp::serve` holds the very handle these four pills \
+                     write — not a copy of it — so a pill opened here is read by the server on \
+                     the next call it answers, and one shut here refuses the next call in the \
+                     class's own words. what they open is live for the length of this run."
+                ),
+                None => String::from(
+                    "no `--mcp` port was given, so nothing in this process serves MCP on this \
+                     run and what these four write is read here, by this file's tests, and by \
+                     nothing else. the pills still write it, which is the state a run is in \
+                     rather than a control that does nothing: `--mcp PORT` is what gives it a \
+                     second reader."
+                ),
+            }
         );
         println!();
         println!(
@@ -11932,8 +12004,18 @@ impl ApplicationHandler for App {
             audio.as_ref(),
             engine.deck.signals().oscillator().bpm(),
         ));
-        self.readout
-            .print_legend(budget, &governed, self.presets.as_ref(), &self.store);
+        // **The port the server bound, asked of the server.** `--mcp 0` takes
+        // an ephemeral port, so the flag's argument and the address a client
+        // dials are two different numbers on that run; `Reporter::port` is the
+        // one `main` already printed and is the only one worth a legend.
+        let mcp_port = self.keeping.mcp.as_ref().map(mcp::Reporter::port);
+        self.readout.print_legend(
+            budget,
+            &governed,
+            self.presets.as_ref(),
+            &self.store,
+            mcp_port,
+        );
 
         // The first frame is owed to the window appearing, not drawn on a
         // still panel.
@@ -16010,7 +16092,7 @@ mod tests {
 
         // **A star put on it puts the row there**, which is the whole of what
         // the subset is: the same store, the same listing, one file beside it.
-        assert_eq!(
+        assert!(
             favourite(
                 &root,
                 Asked::Operator,
@@ -16020,7 +16102,6 @@ mod tests {
                 },
             )
             .is_some(),
-            true,
             "`favourite` answered nothing for a `SetFavourite`"
         );
         let said = listing(&mut view, &root, Some(&presets), None);

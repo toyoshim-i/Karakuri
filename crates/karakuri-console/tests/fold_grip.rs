@@ -192,9 +192,18 @@ fn exactly_the_marked_heads_have_a_target() {
          and the count have come apart, and the count is what says how many controls a pointer \
          reaches"
     );
+    // **The guard is on what the walk found rather than on the constant it was
+    // just matched against.** The two are one number by the assertion above, so
+    // nothing is given up by asking the walk — and asserting the `const` was
+    // asserting a literal: `BAY_GRIPS >= 2` is decided where it is written and
+    // says nothing about this run, which is what clippy's
+    // `assertions_on_constants` is for. `gripped` is read off `REGIONS` and
+    // `head_of` every time, so this is the premise the loop below actually
+    // needs: that there are marked heads to walk at all.
     assert!(
-        BAY_GRIPS >= 2,
-        "only {BAY_GRIPS} bay heads carry a grip, so this file is measuring almost nothing"
+        gripped.len() >= 2,
+        "the walk found a grip in {gripped:?} and `BAY_GRIPS` counts {BAY_GRIPS} — with fewer \
+         than two marked heads this file is measuring almost nothing"
     );
     for region in REGIONS {
         let has = bay_grip(panel.layout(), region.name).is_some();

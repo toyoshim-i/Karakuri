@@ -3149,7 +3149,7 @@ impl TransportRow {
     /// says what happened.
     pub fn record(&self, p: karakuri_layout::Point) -> Option<Operation> {
         let rec = self.values.rec?;
-        self.on_rec(p).then(|| Operation::RecordSession {
+        self.on_rec(p).then_some(Operation::RecordSession {
             recording: match rec {
                 Rec::Idle => Recording::Start { id: None },
                 Rec::Running => Recording::Stop,
@@ -3304,6 +3304,17 @@ pub fn beat_at(at: f32, index: u32, dots: u32) -> f32 {
 /// second sink, in the one case where the mock's `flex-wrap: wrap` has
 /// something to wrap: a row too narrow draws nothing rather than a second line
 /// of transport in a bay 48 tall that has no room for one.
+// Eight, where clippy's line is seven. Six of them are one measured width
+// apiece — the tempo figure, its label, the bar, the frame readout, the health
+// capsule and the `rec` pill — and measuring is the one thing this function
+// exists not to do: [`transport`] holds the `egui::Context`, asks the fonts for
+// each width, and hands them here so that the arithmetic can be read, and
+// tested, without one. The other two are the rectangle it lays out inside and
+// the values it lays out for. A struct to carry the six would be `TransportRow`
+// again with a width where each `Rect` is, built one field at a time by the
+// caller and consumed once here — which is these arguments with a name on them
+// and a second type to keep in step with the first.
+#[allow(clippy::too_many_arguments)]
 fn transport_row(
     row: Rect,
     t: &Transport,
