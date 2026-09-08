@@ -51,6 +51,14 @@ fn arrangement() -> Panel {
 }
 
 /// A strip where it was asked to be, with nothing armed on either fader.
+///
+/// **With a reading in its meter**, which is what every strip in
+/// `crates/karakuri/src/main.rs` has — `Deck::enable_meters` is called for the
+/// whole deck at startup — so the counts below are a *metered* panel's counts.
+/// The meter moves on the frames this panel is drawn on and on no others, so
+/// it is in neither of the two numbers a deadline here is made of
+/// ([ADR-0290](../../../docs/adr/0290-the-level-meter-moves-only-when-a-frame-is-drawn-so-it-declares-nothing.md),
+/// `tests/metered.rs`).
 fn settled() -> Strip {
     Strip {
         name: "glass_shell".to_owned(),
@@ -93,6 +101,11 @@ fn running() -> Transport {
         frame_ms: 12.4,
         budget_ms: Some(16.6),
         health: Some(karakuri_console::view::Stage::Landed),
+        // **Nobody has said whether a recording is running**, so no `rec`
+        // pill is drawn — the console's own answer for a program that never
+        // told it, and what every test in this crate that does not say
+        // otherwise draws.
+        rec: None,
     }
 }
 

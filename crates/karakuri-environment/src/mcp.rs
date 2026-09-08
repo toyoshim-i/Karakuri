@@ -2840,7 +2840,12 @@ fn layer_spelled(layer: Layer) -> &'static str {
 /// today and no `cfg` for one here; this sentence is the record that the case is
 /// known, so that whoever ports this finds it written down rather than finds it
 /// on a projector.
-fn checked_id(id: &str) -> Result<String, String> {
+///
+/// **Public since 2026-09-08**, because it stopped being the model's wall
+/// alone: the Inspector pane head's name is an operator typing an id, which
+/// `crate::filed_as` passes straight through for `Asked::Operator` (ADR-0292).
+/// One wall, so a `/` cannot become a path on either route.
+pub fn checked_id(id: &str) -> Result<String, String> {
     if id.is_empty() {
         return Err(
             "`id` is empty: a set is filed under a name, or under none at all if \

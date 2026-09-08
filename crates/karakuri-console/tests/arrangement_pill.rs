@@ -242,8 +242,17 @@ fn the_pill_clears_every_boundarys_grab() {
     }
 }
 
-/// **The pill is the one thing in the row a press acts on**, and the four
-/// readouts are still readouts.
+/// **The three readouts beside the pill are still readouts**, and this test is
+/// what says so as the row gains controls.
+///
+/// It named four until 2026-09-08. The tempo figure left the list when it
+/// became the free-run tempo's control
+/// ([ADR-0291](../../../docs/adr/0291-the-tempo-figure-is-the-track-and-the-band-is-a-guard-on-the-hand.md)),
+/// and the point pressed for it here is now on the **guard** either side of the
+/// band rather than at the figure's centre — a press a hand is not trusted to
+/// have meant, which the row declines and `egui` gets. That is the one point in
+/// this file where a readout and a control share a rectangle, and pressing the
+/// centre would assert the opposite of what the row now does.
 #[test]
 fn only_the_pill_is_claimed_out_of_the_transport_row() {
     let (mut panel, ctx) = console(PLAUSIBLE);
@@ -257,7 +266,10 @@ fn only_the_pill_is_claimed_out_of_the_transport_row() {
         Claim::Panel
     );
     for (probe, what) in [
-        (row.bpm.center(), "the tempo"),
+        (
+            egui::pos2(row.bpm.min.x + 1.0, row.bpm.center().y),
+            "the guard at the low end of the tempo figure",
+        ),
         (row.grid.center(), "the beat grid"),
         (row.bar.center(), "the bar"),
         (row.frame.center(), "the frame readout"),

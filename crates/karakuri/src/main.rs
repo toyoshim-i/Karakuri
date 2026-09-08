@@ -285,11 +285,12 @@ use karakuri_console::repaint::{Change, Repaint};
 use karakuri_console::room::Room;
 use karakuri_console::view::{
     self, arrangement as arrangement_pill, audio_in as audio_in_pill, class_at,
-    deck_head as deck_head_row, inspector as inspector_pane, keep_pill, library as library_bay,
-    look as look_row, master as master_row, mcp_pill, mixer as mixer_bay, outputs, picture_rect,
-    preview_rects, program_bay, program_head, tracker_group, transition as transition_row, Ask,
-    AudioAsk, AudioIn, Chosen, Go, Kind, McpPill, Picture, Read, Reading, Scope, Taken, Tracker,
-    TransitionSettings, View, DECKS, DECK_LETTERS,
+    deck_head as deck_head_row, deck_name, inspector as inspector_pane, keep_pill,
+    library as library_bay, look as look_row, master as master_row, mcp_pill, mixer as mixer_bay,
+    outputs, picture_rect, preview_rects, program_bay, program_head, tracker_group,
+    transition as transition_row, transport as transport_row, Ask, AudioAsk, AudioIn, Chosen, Go,
+    Kind, McpPill, Picture, Read, Reading, Scope, Taken, Tracker, TransitionSettings, View, DECKS,
+    DECK_LETTERS,
 };
 // **How many slots a deck can hold**, which is how many this one has — see
 // [`SLOTS`]. Not re-exported at the crate root, and asked of the module that
@@ -306,7 +307,7 @@ use karakuri_engine::{
     compose, Blend, Committed, Control, Deck, Event, Gpu, HotSwap, Look, Mask, MaskKind, Present,
     Residency, Set, Sink, Skip, TonemapOp, DEFAULT_BUDGET_MS,
 };
-use karakuri_environment::{audio, mcp, mix, setfile, watch, Asked, Opening};
+use karakuri_environment::{audio, mcp, mix, session, setfile, watch, Asked, Opening};
 use karakuri_ir::Kind as Layer;
 use karakuri_layout::{Axis, Hit, Layout, NodeId, Point};
 use karakuri_operation::gate::{Class, Open};
@@ -1723,6 +1724,36 @@ impl Readout {
                 if let Some(operation) = tone.or(exposure) {
                     return (claim, Acted::Emitted(Some(operation)));
                 }
+                // **The `rec` pill at the end of that row**, and the row is
+                // the whole derivation: the pill takes the row's right padding
+                // and the health capsule and the frame readout are laid out
+                // backwards from it, so where it is is `transport`'s answer
+                // rather than a second one. Nothing else in the row overlaps
+                // it — the look group ends one `.transport` gap before the
+                // frame readout, which ends one before the capsule before
+                // this.
+                //
+                // **What the press asks for is the pill's own state**, which
+                // is why nothing here decides which end of the toggle it is:
+                // `TransportRow::record` reads the value the pill was drawn
+                // from, so the capsule an operator is looking at and the
+                // operation the press names cannot come apart.
+                let row = transport_row(ctx, self.panel.layout(), self.view.transport);
+                let recording = row.as_ref().and_then(|row| row.record(at));
+                if let Some(operation) = recording {
+                    return (claim, Acted::Emitted(Some(operation)));
+                }
+                // **The tempo figure at the head of the same row**, asked
+                // through the one derivation for the reason the pill is: the
+                // figure is the row's first item and the control is the
+                // reading itself. A press names a tempo outright — where along
+                // the number it landed is the value — and a press on the guard
+                // either side of the band asks for nothing and falls through
+                // (ADR-0291).
+                let tempo = row.as_ref().and_then(|row| row.tempo(at));
+                if let Some(operation) = tempo {
+                    return (claim, Acted::Emitted(Some(operation)));
+                }
                 // **The deck head's three, one pane at a time.** Each pane is
                 // derived once and asked for all three, exactly as the mixer
                 // bay is asked for its four: the anchor's place is measured
@@ -1750,6 +1781,30 @@ impl Readout {
                     });
                 if let Some(operation) = deck_head {
                     return (claim, Acted::Emitted(Some(operation)));
+                }
+                // **The Inspector pane heads' name, one pane at a time**, and
+                // it is the capsule's arrangement at the other end of the same
+                // row: a press puts that head into a naming state and the
+                // letters go into it until return or escape (ADR-0292).
+                // **Nothing is emitted here** — the operation is the commit's,
+                // and the commit is a key.
+                let naming = self
+                    .view
+                    .inspector
+                    .iter()
+                    .enumerate()
+                    .find_map(|(index, pane)| {
+                        let at_pane = inspector_pane(self.panel.layout(), index, pane)?;
+                        let named = deck_name(ctx, &at_pane, pane, self.view.naming_set_in(index))?;
+                        named.hit(at).then_some(index)
+                    });
+                if let Some(index) = naming {
+                    println!(
+                        "inspector: type a name and press return — letters, digits, `-` and \
+                         `_`, and escape keeps nothing"
+                    );
+                    self.view.name_set(index);
+                    return (claim, Acted::Nothing);
                 }
                 // **The Inspector pane heads' `keep`, one pane at a time.**
                 // It keeps the deck the pane is *showing* rather than the deck
@@ -4790,6 +4845,402 @@ fn refused(reply: Option<mcp::Reply>, said: String) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Recording the session
+// ---------------------------------------------------------------------------
+
+/// **Which deck slot's material a session's head describes.**
+///
+/// `karakuri-cli`'s `session_head` says why there is a number here at all: *"a
+/// session stream cannot say what a deck held"*, so a head describes one Set
+/// and the slots beside it will not replay. That program takes slot 0 and says
+/// so out loud, and this takes the same one for the same reason — a replay
+/// drives slot 0, and a head written from whichever deck happened to be
+/// selected would make *which slot replays* depend on where a hand was.
+const HEAD_SLOT: usize = 0;
+
+/// **One open recording**: the writer, and the id it is filing under.
+///
+/// The id is kept because it is what every sentence about this recording names
+/// and what `--replay` will be typed with, and because [`Sessions`] hands the
+/// recorder away to a thread when it stops — after which the id is the only
+/// thing left to say the sentence with.
+struct Stream {
+    id: String,
+    recorder: session::Recorder,
+}
+
+/// **What a thread that opened or closed a recording came back with.**
+///
+/// One channel for both because they are the same kind of answer: a press
+/// asked for something slow, the frame did not wait, and this is what happened.
+/// It is [`Saved`]'s shape one control along.
+enum Ended {
+    /// A recorder that opened, with the id it is filing under and how many
+    /// records of material are at its head.
+    Began {
+        id: String,
+        head: usize,
+        recorder: session::Recorder,
+    },
+    /// A start that never opened, in the words it failed with. **Nothing is
+    /// half-started**: the pill goes back to reading `rec` because nothing is
+    /// being recorded, which is the truth.
+    Failed(String),
+    /// A recording flushed and closed, and what the writer made of it.
+    Finished {
+        id: String,
+        written: Result<session::Written, String>,
+    },
+}
+
+/// **The session recorder this window holds, and the two presses that move
+/// it.**
+///
+/// # A press starts one and a press stops one
+///
+/// `docs/manual/console.html` draws one capsule at the end of the transport
+/// row and the operations page gives it one row, so it is one control with two
+/// ends — [`karakuri_console::view::TransportRow::record`], which reads the
+/// pill's own state to say which end a press is. Nothing here decides that a
+/// second time.
+///
+/// # Neither end happens on the frame, and that is the whole of this type
+///
+/// **A start creates two files and spawns a thread.** The head a replay
+/// reconstructs a session from is a Set file, so beginning one writes that
+/// file, reads it back, opens `sessions/<id>.ndjson` and starts a writer —
+/// which is `karakuri-cli`'s own sentence about the same call, *"opened before
+/// the first frame and never on one"*.
+///
+/// **A stop blocks on that writer.** [`session::Recorder::finish`] hands the
+/// last batch over and joins the thread, and so does `Drop` — so a recorder
+/// let go of on the frame path stalls the frame just as surely as one that was
+/// finished there. `karakuri-cli` finishes in `exiting`, where a stall is free;
+/// a press is not that place
+/// ([P-0094](../../../docs/principles/0094-a-panel-that-lies-is-worse-than-a-panel-that-is-plain.md)).
+///
+/// So both ends go to a thread of their own and the outcome comes back over
+/// [`Sessions::done`], said at the frame it arrives — which is
+/// [`Keeping::save_set`]'s arrangement exactly, and for the same reason: this
+/// is the second thing in this program a press asks for that a disk answers.
+///
+/// # What the pill reads while a thread is out
+///
+/// **Nothing is being recorded until the recorder exists**, and the pill says
+/// so: [`Sessions::rec`] is `Running` only while [`Sessions::open`] holds a
+/// writer. A start that is still opening reads `rec`, and a stop that is still
+/// flushing reads `rec` too — the stream stopped taking records the instant
+/// the recorder left, and the tail is being written by a thread nobody is
+/// waiting for. A third state on the pill would be this panel drawing a
+/// promise instead of a fact.
+///
+/// **A second press while a thread is out is refused and says so**, rather
+/// than opening a second recorder or joining a queue: two recorders would be
+/// two writers over one deck, and a queued press is a gesture whose effect
+/// arrives after the operator has stopped looking at it.
+struct Sessions {
+    /// The recorder, and `None` whenever nothing is being recorded — which
+    /// includes both sides of a start that is still opening.
+    open: Option<Stream>,
+    /// **Whether a thread is out**, which is what makes a second press a
+    /// refusal. One flag for both ends because there is at most one thread and
+    /// what it is doing does not change the answer.
+    working: bool,
+    /// Where a thread's outcome comes back, and the sending half it is given a
+    /// clone of.
+    done: std::sync::mpsc::Receiver<Ended>,
+    tx: std::sync::mpsc::Sender<Ended>,
+}
+
+impl Sessions {
+    fn new() -> Sessions {
+        let (tx, done) = std::sync::mpsc::channel();
+        Sessions {
+            open: None,
+            working: false,
+            done,
+            tx,
+        }
+    }
+
+    /// **What the `rec` pill reads this frame.**
+    ///
+    /// Always a value and never `None` on this side: this program holds a
+    /// store, so *whether a recording is running* is a question it can always
+    /// answer. `None` is the console's word for *nobody said*, and it is what
+    /// a console with no program behind it draws — see
+    /// `karakuri_console::view::Transport::rec`.
+    fn rec(&self) -> view::Rec {
+        match self.open {
+            Some(_) => view::Rec::Running,
+            None => view::Rec::Idle,
+        }
+    }
+
+    /// **The open recorder, for the frame path to push into.**
+    ///
+    /// `None` for the whole of a run nobody pressed the pill on, which is most
+    /// runs and costs one branch.
+    fn recorder(&mut self) -> Option<&mut session::Recorder> {
+        self.open.as_mut().map(|stream| &mut stream.recorder)
+    }
+
+    /// **A press on the `rec` pill, performed.**
+    ///
+    /// The reading of the deck happens here and every byte of I/O happens on a
+    /// thread, which is [`Keeping::save_set`]'s division and its reason: what
+    /// is above the spawn is values already in memory.
+    fn asked(
+        &mut self,
+        keeping: &Keeping,
+        engine: &Engine,
+        root: &std::path::Path,
+        recording: &karakuri_operation::Recording,
+    ) {
+        if self.working {
+            return println!(
+                "  rec: a recording is still being opened or closed — the press is refused \
+                 rather than queued, because a gesture whose effect lands after you have \
+                 stopped looking at it is worse than one that says no"
+            );
+        }
+        match recording {
+            karakuri_operation::Recording::Start { id } => self.begin(keeping, engine, root, id),
+            karakuri_operation::Recording::Stop => self.end(),
+        }
+    }
+
+    /// **Begin one**, under a stamp.
+    ///
+    /// # The id is a stamp and each start takes a fresh one
+    ///
+    /// `karakuri_environment::history::stamped_id` is this repository's
+    /// convention for something an operator looks for by *when they made it*,
+    /// and it is what a keep with no typed name already files under. A capsule
+    /// types no name, so a press passes `None` and this is what `None` means.
+    ///
+    /// **It is also what keeps a second recording from destroying the first.**
+    /// `Store::append_session` appends and `session::split` sets `started` at
+    /// the first tick and never clears it, so a second head written under an id
+    /// that already has a stream lands in the middle of it and is read back as
+    /// edits. A fresh id per start is what makes that unreachable rather than
+    /// merely unlikely — ADR-0289.
+    ///
+    /// # The head is written from the live deck, and a replay starts from the
+    /// top
+    ///
+    /// A Set file names the material and the values it is holding, which is
+    /// exactly what [`playing_values`] reads off the running Set — so a head
+    /// at an arbitrary frame is producible, and this produces one.
+    ///
+    /// **What it is not is a resume.** A Set file carries no running state: an
+    /// accumulating renderer's picture is what it has accumulated, and
+    /// `docs/manual/console.html` says of one shipped deck that its material
+    /// *accumulates*. So a replay of a recording begun mid-performance
+    /// restarts that material from the top rather than continuing the picture
+    /// that was on screen when the press happened. **It is said out loud at
+    /// the start** rather than left for whoever plays the file back to
+    /// discover, which is the whole of P-0094 applied to a sentence instead of
+    /// to a pixel.
+    fn begin(
+        &mut self,
+        keeping: &Keeping,
+        engine: &Engine,
+        root: &std::path::Path,
+        id: &Option<String>,
+    ) {
+        // **A capsule types no name and this is the only route there is**, so
+        // a payload naming one would be a press this program cannot make. It
+        // is matched rather than ignored: the day a route that can name one
+        // arrives, this is the line that has to say what it means.
+        if let Some(named) = id {
+            return println!(
+                "  rec: `{named}` — nothing here can name a recording, and the id is a stamp \
+                 so that a second start cannot land in a stream that already exists"
+            );
+        }
+        let id = karakuri_environment::history::stamped_id();
+        let material = match keeping.head_material(engine, root, &id) {
+            Ok(material) => material,
+            Err(why) => return println!("  rec: {why}"),
+        };
+        println!(
+            "  rec: opening `{id}` — its head is deck {}'s material as it stands, so \
+             `--replay {id}` will need nothing else. A replay starts that material from the \
+             top: a Set file says what is playing and at what values and carries no running \
+             state, so material that accumulates begins again rather than continuing the picture \
+             on screen now",
+            deck_letter(HEAD_SLOT as u8)
+        );
+        let root = root.to_path_buf();
+        let tx = self.tx.clone();
+        self.working = true;
+        // **A thread, and detached**: no frame waits for it. Everything below
+        // this line is a store being opened, two files being written and one
+        // being read back.
+        std::thread::spawn(move || {
+            let _ = tx.send(began(root, id, material));
+        });
+    }
+
+    /// **End the one running**, and hand the flush to a thread.
+    ///
+    /// The recorder is **moved** rather than borrowed, which is the point: it
+    /// blocks on its writer in `Drop` as well as in
+    /// [`session::Recorder::finish`], so a recorder still owned by this frame
+    /// is a frame that can still be stalled by a disk.
+    fn end(&mut self) {
+        let Some(Stream { id, recorder }) = self.open.take() else {
+            return println!("  rec: nothing is being recorded");
+        };
+        println!("  rec: `{id}` stopped — the last records are being flushed");
+        let tx = self.tx.clone();
+        self.working = true;
+        std::thread::spawn(move || {
+            let written = recorder.finish();
+            let _ = tx.send(Ended::Finished { id, written });
+        });
+    }
+
+    /// **Every start and stop that has landed since the last frame, said.**
+    ///
+    /// Drained and never waited on, which is [`Keeping::finished_saves`]'
+    /// rule: a frame owes the display a picture and owes a disk nothing.
+    fn finished(&mut self) {
+        while let Ok(ended) = self.done.try_recv() {
+            self.took(ended);
+        }
+    }
+
+    /// One thread's outcome, said. The frame's drain and the quit's wait are
+    /// two ways of *getting* one and this is the one place either acts on it.
+    fn took(&mut self, ended: Ended) {
+        self.working = false;
+        {
+            match ended {
+                Ended::Began { id, head, recorder } => {
+                    println!(
+                        "  rec: `{id}` open — {head} record{} of material at its head",
+                        match head {
+                            1 => "",
+                            _ => "s",
+                        }
+                    );
+                    self.open = Some(Stream { id, recorder });
+                }
+                // **Said and nothing claims otherwise**, which is the shape a
+                // save's failure already takes here: a program saying a
+                // recording started when the disk refused is the lie this
+                // codebase is arranged against.
+                Ended::Failed(why) => println!("  rec: {why}"),
+                Ended::Finished { id, written } => match written {
+                    Ok(w) => {
+                        println!("  rec: `{id}` written — {} records", w.records);
+                        // **Named apart, which is `karakuri-cli`'s own
+                        // reading**: a lost batch is a second of everything
+                        // and a lost audio frame is one frame's measurement,
+                        // and an operator deciding what to do about a stream
+                        // needs to know which they have.
+                        if w.dropped_batches > 0 {
+                            println!(
+                                "    {} batch{} lost because the disk could not keep up — the \
+                                 stream has gaps",
+                                w.dropped_batches,
+                                match w.dropped_batches {
+                                    1 => "",
+                                    _ => "es",
+                                }
+                            );
+                        }
+                        if w.dropped_audio > 0 {
+                            println!(
+                                "    {} frame{} of audio not recorded — those frames replay at \
+                                 what the bus invents rather than at what the room heard",
+                                w.dropped_audio,
+                                match w.dropped_audio {
+                                    1 => "",
+                                    _ => "s",
+                                }
+                            );
+                        }
+                    }
+                    Err(why) => println!("  rec: `{id}` — {why}"),
+                },
+            }
+        }
+    }
+
+    /// **The recording still open when the window closes, flushed here.**
+    ///
+    /// [`Keeping::awaited_saves`]' moment and its argument: a frame owes a
+    /// disk nothing, and the end of the run is the one place where that is the
+    /// wrong trade — a session left to `Drop` would still be flushed, because
+    /// the recorder ends its writer either way, but nothing would say what was
+    /// written or what was lost. **This is where a stall is free**, which is
+    /// `karakuri-cli`'s `exiting` said on this side.
+    ///
+    /// A stop already in flight is waited for by the same call, because the
+    /// thread it is on is what holds the recorder.
+    fn awaited(&mut self) {
+        self.finished();
+        if self.open.is_some() {
+            self.end();
+        }
+        // Blocking, unlike [`Sessions::finished`]: this is the end of the run.
+        // Every sender being gone is the other way out, and it means the
+        // thread died without answering — which is nothing left to wait for.
+        while self.working {
+            let Ok(ended) = self.done.recv() else {
+                return;
+            };
+            self.took(ended);
+        }
+    }
+}
+
+/// **A recording, opened**: the material written, read back, and a writer
+/// started over it.
+///
+/// A free function because every line of it is on the thread
+/// [`Sessions::begin`] spawned, and none of it may be reachable from a frame.
+fn began(root: std::path::PathBuf, id: String, material: Save) -> Ended {
+    let name = material.id.clone();
+    if let Err(why) = material.run() {
+        return Ended::Failed(format!(
+            "`{id}` was not opened — writing its material: {why}"
+        ));
+    }
+    let store = match Store::open(&root) {
+        Ok(store) => store,
+        Err(e) => {
+            return Ended::Failed(format!(
+                "`{id}` was not opened — store `{}`: {e}",
+                root.display()
+            ))
+        }
+    };
+    // **Read back rather than kept**, which is `karakuri-cli`'s own route to a
+    // head: the writer is what decides the lines a Set file is, so a head
+    // assembled here would be a second spelling of that format.
+    let head = match store.read_set(&name) {
+        Ok(head) => head,
+        Err(e) => {
+            return Ended::Failed(format!(
+                "`{id}` was not opened — reading back its material `{name}`: {e}"
+            ))
+        }
+    };
+    match session::Recorder::open(&store, &id, &head) {
+        Ok(recorder) => Ended::Began {
+            id,
+            head: head.len(),
+            recorder,
+        },
+        Err(why) => Ended::Failed(format!("`{id}` was not opened — {why}")),
+    }
+}
+
 /// **Every edge a client asked for on one frame, applied to the run's wiring and
 /// answered.**
 ///
@@ -5558,6 +6009,13 @@ fn transport(
     // `staging` makes, so it is remembered in `Readout::health` and handed
     // over rather than asked for.
     health: Option<view::Stage>,
+    // **Whether a session is being recorded**, which is the second thing in
+    // this row that is not read off the deck: the recorder is this window's
+    // and lives on [`App::recording`], so it is handed over rather than asked
+    // for. It is always a value on this side — a program that holds a store
+    // can always answer *am I recording* — and the console's `None` is for a
+    // console nobody told.
+    rec: view::Rec,
 ) -> Option<view::Transport> {
     let last = costs.last?;
     let grid = deck.signals().oscillator();
@@ -5572,6 +6030,7 @@ fn transport(
         frame_ms: ms(last.whole()) as f32,
         budget_ms,
         health,
+        rec: Some(rec),
     })
 }
 
@@ -8290,6 +8749,47 @@ fn apply(record: &Record, deck: &mut Deck, look: &mut Look) -> Option<String> {
                 deck.selections_on(slot).count()
             ))
         }
+        // **The session's grid, and the one record here that names no slot and
+        // touches no deck control at all.** `Record::Tempo` is a correction —
+        // a tempo, a phase shift and how much the estimate behind it was
+        // believed — and `karakuri_environment::audio::apply_tempo` is *"the
+        // only way a correction reaches the oscillator, live or on replay"*.
+        // So this arm is the live half of that sentence, and it is one call
+        // rather than a `signals.correct` beside it for exactly the reason
+        // that function says so of itself.
+        //
+        // **The signals are copied out of the deck and back in**, which is
+        // what `Deck::signals` and `set_signals` are for and is
+        // [`measure_audio`]'s own line: the bus is a `Copy` value and the deck
+        // is the model of record for it.
+        //
+        // **What reaches here today is `Operation::SetFreeRunTempo` and
+        // nothing else**, which is *what the grid runs at with nothing driving
+        // it* — the one control on this panel that works in the state this
+        // program actually runs in, where there is no device and `tapped` and
+        // `scaled` both refuse because there is no room. A tap and an octave
+        // end in this same record and do **not** come through here: theirs is
+        // the beat lock's answer and `written` cannot build it (ADR-0278), so
+        // they are applied where they are computed.
+        //
+        // **The confidence is not printed and the shift is.** A hand-named
+        // tempo carries `shift: 0.0` and `confidence: 0.0` — `Record::Tempo`'s
+        // own words for a free-running tempo being stated — and a `0.0`
+        // confidence beside a tempo an operator just chose would read as *this
+        // is not believed*, which is the opposite of what it means. The shift
+        // is printed because a beat that did not move is the claim this arm
+        // makes.
+        Record::Tempo { bpm, shift, .. } => {
+            let mut signals = *deck.signals();
+            karakuri_environment::audio::apply_tempo(&mut signals, record);
+            deck.set_signals(signals);
+            Some(format!(
+                "  tempo: -> Record::Tempo {{ bpm: {bpm:.1}, shift: {shift:+.3} }} -> \
+                 deck.signals().oscillator().bpm() = {:.1}, from now on and without moving a \
+                 beat that has already happened",
+                deck.signals().oscillator().bpm()
+            ))
+        }
         _ => None,
     }
 }
@@ -8823,6 +9323,15 @@ struct App {
     /// **Everything a save and a rewiring need that is not the deck** — see
     /// [`Keeping`].
     keeping: Keeping,
+    /// **The session recorder, and the two presses that move it** — see
+    /// [`Sessions`].
+    ///
+    /// It is beside [`App::keeping`] rather than inside it because the two
+    /// hold different things for different moments: that one is what a *save*
+    /// and a rewiring need, and this is a writer thread the frame path pushes
+    /// into. What they share is the arrangement — a press gathers, a thread
+    /// works, and the outcome is said at the frame it arrives.
+    recording: Sessions,
 }
 
 /// **What this run holds so that a deck can be kept, and rewired.**
@@ -9026,6 +9535,21 @@ impl Keeping {
         // where the whole of `accepted_save`'s doc lives: `playing_values` below
         // is the one read here that needs one, and the accept has to be on the
         // side of it a test can reach.
+        // **An id an operator typed is checked here**, which is
+        // `checked_name`'s wall for an arrangement's name one bay along: the
+        // panel owns the affordance and never the authority (P-0090).
+        // `filed_as` takes an `Asked::Operator` id verbatim, and until the
+        // pane head's name (ADR-0292) nothing on an operator's side of this
+        // call could carry one — `k` and the `keep` capsule both pass `None`.
+        // The first thing that can is the first thing that could put a `/` in
+        // a file name.
+        if let Some(said) = id
+            .as_deref()
+            .and_then(|id| karakuri_environment::mcp::checked_id(id).err())
+        {
+            println!("keep: {said}");
+            return refused(reply, said);
+        }
         let id =
             karakuri_environment::accepted_save(slot, asked, id, &sources, root, reply.as_ref());
         let values = playing_values(engine.deck.slot(slot).set(), &self.edges);
@@ -9056,6 +9580,56 @@ impl Keeping {
                 reply,
             });
         });
+    }
+
+    /// **What a session's head is written from**, gathered off the live deck
+    /// and written by whoever is handed it.
+    ///
+    /// It is [`Keeping::save_set`]'s first half with the answering taken out:
+    /// the same two readings — what slot [`HEAD_SLOT`] is playing, and what
+    /// that Set is holding — put into the same [`Save`], which is what keeps a
+    /// head and a keep one description of a deck rather than two. **The whole
+    /// of the difference is the id**: a keep files under what the caller
+    /// wanted it called, and this files under the session's id with
+    /// `-material` after it, which is `karakuri-cli`'s own spelling for the
+    /// same file.
+    ///
+    /// **`Asked::Operator`, so it lands in the library**: this is the material
+    /// of a run somebody started, kept where they will look for it — and it is
+    /// what `--replay` resolves the stream's nodes through.
+    ///
+    /// **Read off the live Set and not off anything this program was told**,
+    /// which is [`playing_values`]' whole argument: every number a Set file
+    /// carries can have moved since this run started, so a head written from
+    /// the launch arguments would describe a deck nobody is looking at. That
+    /// is also what makes a recording begun mid-performance possible at all.
+    fn head_material(
+        &self,
+        engine: &Engine,
+        root: &std::path::Path,
+        session: &str,
+    ) -> Result<Save, String> {
+        let count = engine.deck.slot_count();
+        if !slot_in_range(HEAD_SLOT, count) {
+            return Err(karakuri_environment::no_such_slot(HEAD_SLOT, count));
+        }
+        let Some(nodes) = self.playing.at(HEAD_SLOT) else {
+            return Err(karakuri_environment::nothing_to_save(
+                HEAD_SLOT, None, false,
+            ));
+        };
+        let sources = setfile::Sources(nodes.iter().map(copied).collect());
+        if sources.is_empty() {
+            return Err(karakuri_environment::nothing_to_save(HEAD_SLOT, None, true));
+        }
+        Ok(Save {
+            slot: HEAD_SLOT,
+            asked: Asked::Operator,
+            id: format!("{session}-material"),
+            root: root.to_path_buf(),
+            sources,
+            values: playing_values(engine.deck.slot(HEAD_SLOT).set(), &self.edges),
+        })
     }
 
     /// **Every save that has landed since the last frame, said and answered.**
@@ -9298,6 +9872,7 @@ impl App {
                 save_tx,
                 in_flight: 0,
             },
+            recording: Sessions::new(),
         }
     }
 
@@ -9349,6 +9924,16 @@ impl App {
         gfx: &mut Gfx,
         started: Instant,
         readout: &mut Readout,
+        // **The session stream, where one is open**, and it is here rather
+        // than reached for because this is the one place a record is applied:
+        // a session is *the same fader moves at the same instants*, so the
+        // records this function hands to [`apply`] are exactly the records a
+        // replay has to see. A push that happened anywhere else would be a
+        // second list of what a control did.
+        //
+        // `None` for the whole of a run nobody pressed `rec` on, which is most
+        // runs and costs one branch per press.
+        recorder: Option<&mut session::Recorder>,
         acted: &Acted,
         otherwise: Repaint,
     ) -> Repaint {
@@ -9445,6 +10030,20 @@ impl App {
                     if let Some(line) = nudged(&mut gfx.audio, operation) {
                         println!("{line}");
                     }
+                    // **The third that reaches that device, and the only one
+                    // of the three that does not end there.**
+                    // `Operation::SetFreeRunTempo` writes a `Record::Tempo`,
+                    // so what moves the grid is [`apply`] a few lines down —
+                    // the one road into the oscillator, live and on replay
+                    // (P-0090). What this hands the session is the state the
+                    // record does not carry: the beat lock's run of evidence
+                    // and the tracker's window. It does not return early for
+                    // that reason, and with no device open it does nothing at
+                    // all — which is the state this operation is *for*. See
+                    // [`retargeted`].
+                    if let Some(line) = retargeted(&mut gfx.audio, operation) {
+                        println!("{line}");
+                    }
                     if let Some(line) = pointed(&mut readout.view, operation) {
                         println!("{line}");
                     }
@@ -9494,6 +10093,28 @@ impl App {
                     // `Crossfade` is four and `Wipe` is up to six — one
                     // control is not one record (P-0090, ADR-0194).
                     if let Written::Records(records) = &written {
+                        // **Into the session before the deck moves**, where
+                        // one is being recorded: the stream is the timeline
+                        // and the deck is what the timeline does, so a record
+                        // that reached the deck and not the file would be a
+                        // replay that does not reach where this run did. It is
+                        // pushed whether or not `apply` finds somewhere to put
+                        // it — a record the deck refused is still what the
+                        // operator asked for, and a replay refuses it the same
+                        // way.
+                        //
+                        // **Cloned, and it is the one place this program
+                        // clones a record.** `push` takes ownership and the
+                        // list is borrowed by the loop that applies it; every
+                        // record here is scalars and a short string, and a
+                        // press is not the frame path — `push_audio` exists
+                        // precisely because the *one* record that carries a
+                        // buffer must not be copied, and none of these is it.
+                        if let Some(recorder) = recorder {
+                            for record in records {
+                                recorder.push(record.clone());
+                            }
+                        }
                         for record in records {
                             if let Some(line) =
                                 apply(record, &mut gfx.engine.deck, &mut gfx.engine.look)
@@ -9880,6 +10501,18 @@ impl ApplicationHandler for App {
         match event {
             WindowEvent::CloseRequested => {
                 self.keeping.awaited_saves();
+                // **The one place a stall is welcome**, which is
+                // `karakuri-cli`'s own words for the same call in `exiting`:
+                // every frame has been drawn and the run is over. A recording
+                // still open is stopped and waited for here, so what was
+                // written and what was lost are said rather than left to a
+                // `Drop` that flushes and reports nothing.
+                //
+                // **After the saves**, for their reason read the other way: a
+                // save that landed in the last second is answered before the
+                // window goes, and a session is what an operator will look for
+                // afterwards.
+                self.recording.awaited();
                 event_loop.exit()
             }
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
@@ -9943,6 +10576,7 @@ impl ApplicationHandler for App {
                     gfx,
                     self.started,
                     &mut self.readout,
+                    self.recording.recorder(),
                     &acted,
                     Change::Pointer(claim).repaint(),
                 );
@@ -10013,6 +10647,18 @@ impl ApplicationHandler for App {
                         None,
                     );
                 }
+                // **And a press on the `rec` pill is a recording started or
+                // stopped**, here for the reason the three above it are: the
+                // engine and the store are the window's, and neither end of
+                // this is a thing to do on a frame (P-0091) — a start writes
+                // the Set file a replay reconstructs the session from, and a
+                // stop blocks on the writer thread. The reading is taken here
+                // and every byte of I/O is on a thread of its own; see
+                // [`Sessions`].
+                if let Acted::Emitted(Some(Operation::RecordSession { ref recording })) = acted {
+                    self.recording
+                        .asked(&self.keeping, &gfx.engine, &self.store, recording);
+                }
                 // **And a press that moved the library cursor owes that same
                 // read**, because the rule is the cursor's and not the
                 // keyboard's: *"the reading follows the cursor: a move with
@@ -10063,6 +10709,7 @@ impl ApplicationHandler for App {
                                     gfx,
                                     self.started,
                                     &mut self.readout,
+                                    self.recording.recorder(),
                                     &Acted::Emitted(Some(take)),
                                     Repaint::Never,
                                 );
@@ -10095,6 +10742,7 @@ impl ApplicationHandler for App {
                     gfx,
                     self.started,
                     &mut self.readout,
+                    self.recording.recorder(),
                     &acted,
                     Change::Pointer(claim).repaint(),
                 )
@@ -10184,10 +10832,64 @@ impl ApplicationHandler for App {
                         gfx,
                         self.started,
                         &mut self.readout,
+                        self.recording.recorder(),
                         &acted,
                         Change::Naming(moved).repaint(),
                     );
                     App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
+                    return;
+                }
+                // **The second letter-taking flow takes the keyboard on the
+                // same terms as the first** (ADR-0292). The two can never both
+                // be open — `input::claim`'s rule 2 claims every press while
+                // either is — so this is a second store for one gesture rather
+                // than an order between two.
+                if self.readout.view.naming_set().is_some() {
+                    let (acted, moved) = match key.logical_key.as_ref() {
+                        Key::Named(NamedKey::Escape) => {
+                            println!("inspector: nothing was kept");
+                            self.readout.view.stop_naming_set();
+                            (Acted::Nothing, true)
+                        }
+                        Key::Named(NamedKey::Enter) => {
+                            (Acted::Emitted(self.readout.view.named_set()), true)
+                        }
+                        Key::Named(NamedKey::Backspace) => {
+                            (Acted::Nothing, self.readout.view.rub_out_of_name())
+                        }
+                        Key::Character(text) => {
+                            let mut moved = false;
+                            for c in text.chars() {
+                                moved |= self.readout.view.type_into_name(c);
+                            }
+                            (Acted::Nothing, moved)
+                        }
+                        Key::Named(NamedKey::Space) => {
+                            (Acted::Nothing, self.readout.view.type_into_name(' '))
+                        }
+                        _ => (Acted::Nothing, false),
+                    };
+                    let repaint = App::performed(
+                        gfx,
+                        self.started,
+                        &mut self.readout,
+                        self.recording.recorder(),
+                        &acted,
+                        Change::Naming(moved).repaint(),
+                    );
+                    App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
+                    // **And the save is the window's, exactly as the capsule's
+                    // is**: a disk write is not a thing to do on a frame.
+                    if let Acted::Emitted(Some(Operation::SaveSet { deck, ref id })) = acted {
+                        self.keeping.save_set(
+                            &gfx.engine,
+                            &self.store,
+                            Asked::Operator,
+                            usize::from(deck),
+                            id.clone(),
+                            None,
+                        );
+                    }
                     return;
                 }
                 let op = match key.logical_key.as_ref() {
@@ -10243,6 +10945,7 @@ impl ApplicationHandler for App {
                             gfx,
                             self.started,
                             &mut self.readout,
+                            self.recording.recorder(),
                             &acted,
                             Repaint::Never,
                         );
@@ -10358,6 +11061,7 @@ impl ApplicationHandler for App {
                             gfx,
                             self.started,
                             &mut self.readout,
+                            self.recording.recorder(),
                             &acted,
                             Repaint::Never,
                         );
@@ -10402,6 +11106,7 @@ impl ApplicationHandler for App {
                             gfx,
                             self.started,
                             &mut self.readout,
+                            self.recording.recorder(),
                             &acted,
                             Repaint::Never,
                         );
@@ -10477,6 +11182,7 @@ impl ApplicationHandler for App {
                                             gfx,
                                             self.started,
                                             &mut self.readout,
+                                            self.recording.recorder(),
                                             &Acted::Emitted(Some(take)),
                                             Repaint::Never,
                                         );
@@ -10543,6 +11249,7 @@ impl ApplicationHandler for App {
                             gfx,
                             self.started,
                             &mut self.readout,
+                            self.recording.recorder(),
                             &acted,
                             Repaint::Never,
                         )
@@ -10596,6 +11303,7 @@ impl ApplicationHandler for App {
                             gfx,
                             self.started,
                             &mut self.readout,
+                            self.recording.recorder(),
                             &acted,
                             Repaint::Never,
                         );
@@ -10625,6 +11333,7 @@ impl ApplicationHandler for App {
                             gfx,
                             self.started,
                             &mut self.readout,
+                            self.recording.recorder(),
                             &acted,
                             Repaint::Never,
                         );
@@ -10655,6 +11364,7 @@ impl ApplicationHandler for App {
                             gfx,
                             self.started,
                             &mut self.readout,
+                            self.recording.recorder(),
                             &acted,
                             Repaint::Never,
                         );
@@ -10682,6 +11392,7 @@ impl ApplicationHandler for App {
                             gfx,
                             self.started,
                             &mut self.readout,
+                            self.recording.recorder(),
                             &acted,
                             Repaint::Never,
                         );
@@ -10704,6 +11415,7 @@ impl ApplicationHandler for App {
                             gfx,
                             self.started,
                             &mut self.readout,
+                            self.recording.recorder(),
                             &acted,
                             Repaint::Never,
                         );
@@ -10756,6 +11468,7 @@ impl ApplicationHandler for App {
                             gfx,
                             self.started,
                             &mut self.readout,
+                            self.recording.recorder(),
                             &acted,
                             Repaint::Never,
                         );
@@ -10811,6 +11524,12 @@ impl ApplicationHandler for App {
                         listing(&mut self.readout.view, &self.store, self.presets.as_ref())
                     );
                 }
+                // **And what a recording's start or stop came back with**, on
+                // the same terms and above the same line: a thread that opened
+                // a session or flushed one answers on a channel, and the
+                // answer is said at the frame it arrives. It moves the `rec`
+                // pill, which is read below beside the rest of this row.
+                self.recording.finished();
                 let waited = Instant::now();
                 let acquired = gfx.surface.get_current_texture();
                 let waited = waited.elapsed();
@@ -10917,7 +11636,12 @@ impl ApplicationHandler for App {
                 // which is the one thing this row cannot be: it is what an
                 // operator watches to tell a lock from a coincidence. See
                 // `measure_audio`.
-                measure_audio(&mut gfx.audio, &mut gfx.engine.deck, self.costs.rate_now());
+                measure_audio(
+                    &mut gfx.audio,
+                    &mut gfx.engine.deck,
+                    self.costs.rate_now(),
+                    self.recording.recorder(),
+                );
                 // **The verdict it carries is the one `staging` left behind
                 // below**, which is one frame back: the drain runs after this
                 // line and the events it drains were emitted by the previous
@@ -10932,6 +11656,12 @@ impl ApplicationHandler for App {
                     gfx.budget_ms,
                     live,
                     self.readout.health,
+                    // **Read here rather than remembered**, which is the rule
+                    // every other value in this row follows: the recorder is
+                    // opened and closed by threads that answer on a channel,
+                    // so the only reading that cannot be stale is the one
+                    // taken beside the frame that draws it.
+                    self.recording.rec(),
                 );
                 // **And what the two look controls at the end of that row
                 // read**, beside the frame they are about. It is the look this
@@ -11233,6 +11963,30 @@ impl ApplicationHandler for App {
                 }
 
                 gfx.gpu.queue.present(frame);
+
+                // **The `tick` that closes this frame, where one is being
+                // recorded**, and it is last for `karakuri-cli`'s reason: *"a
+                // tick is a terminator rather than a header — `session::split`
+                // files each record into the frame of the next tick, so a
+                // record written after this frame's tick belongs to the next
+                // frame."* Everything this frame decided is above this line:
+                // the audio it heard, the tempo correction it made, and every
+                // record a press between the last two frames applied.
+                //
+                // **[`STEPS_A_FRAME`] and not a measured interval.** That
+                // constant says this program advances one step per frame drawn
+                // and reads no clock, which is what P-0092 asks of a program
+                // with no record behind it — and a stream of `tick { steps: 1
+                // }` is that statement written down, so a replay steps exactly
+                // where this run stepped. It is deliberately not
+                // `karakuri-cli`'s measured count: this window is not timing a
+                // performance against a wall clock, and a tick that claimed it
+                // was would be a number nothing here measured.
+                if let Some(recorder) = self.recording.recorder() {
+                    recorder.push(Record::Tick {
+                        steps: STEPS_A_FRAME,
+                    });
+                }
 
                 self.costs.push(cost);
                 App::wants(gfx, &mut self.egui_due, &mut self.costs, asked);
@@ -11607,6 +12361,46 @@ fn nudged(open: &mut Option<audio::Audio>, operation: &Operation) -> Option<Stri
     Some(offset_said(ms, now))
 }
 
+/// **The grid's tempo, named by hand and handed to the room's tracker** — and
+/// `None` for every operation that is not [`Operation::SetFreeRunTempo`].
+///
+/// # It does not move the grid, and that is what separates it from [`nudged`]
+///
+/// The offset above is `Silent(NoRecord)`: nothing in a session stream carries
+/// a delay between two outputs, so the session this program opened is the only
+/// thing that holds it. A free-run tempo is the opposite — `written` answers a
+/// `Record::Tempo` for it, and [`apply`] is what applies it, through the same
+/// `audio::apply_tempo` a replay goes through. Moving the oscillator here as
+/// well would be a second route into the engine, taken only when a device
+/// happens to be open (P-0090).
+///
+/// So what this hands over is the state the record does not carry: the beat
+/// lock's run of evidence, and the window the tracker searches. Both are
+/// `Audio::set_tempo`, and the argument for each is there and in
+/// `karakuri_audio`'s `BeatLock::retarget`.
+///
+/// # With nothing open it says nothing, and that is the state it is for
+///
+/// [`nudged`] refuses out loud with no session — an offset belongs to one, and
+/// an operation that arrives and does nothing at all is what P-0094 is about.
+/// This is the other way round: *what the grid runs at with nothing driving
+/// it* is exactly the case with no device, [`apply`] moves the oscillator and
+/// prints the line, and a refusal here would be this file talking about a
+/// tracker that is not part of the operation. What it says when there **is**
+/// one is that the set was accepted and the room is still being tracked, which
+/// is the one thing an operator cannot see from the tempo alone.
+fn retargeted(open: &mut Option<audio::Audio>, operation: &Operation) -> Option<String> {
+    let Operation::SetFreeRunTempo { bpm } = *operation else {
+        return None;
+    };
+    let open = open.as_mut()?;
+    open.set_tempo(bpm);
+    Some(format!(
+        "  tempo: the room is still being tracked — the window moved to {bpm:.1} with the grid, \
+         and the next estimate is made around it rather than about where the grid was"
+    ))
+}
+
 /// **One frame's worth of audio**: read the room, and hand the session what it
 /// said.
 ///
@@ -11628,7 +12422,12 @@ fn nudged(open: &mut Option<audio::Audio>, operation: &Operation) -> Option<Stri
 /// not drawn a stretch yet, and `Audio::frame` ignores an interval outside
 /// `(0, 1)`: the smoothed value simply holds, which is the right answer for a
 /// frame nobody can time.
-fn measure_audio(open: &mut Option<audio::Audio>, deck: &mut Deck, interval: Option<f64>) {
+fn measure_audio(
+    open: &mut Option<audio::Audio>,
+    deck: &mut Deck,
+    interval: Option<f64>,
+    recorder: Option<&mut session::Recorder>,
+) {
     let Some(open) = open.as_mut() else {
         return;
     };
@@ -11641,16 +12440,43 @@ fn measure_audio(open: &mut Option<audio::Audio>, deck: &mut Deck, interval: Opt
     );
     deck.set_signals(signals);
 
+    // **Into the session, where one is being recorded**, and this is the half
+    // this program did not have when the paragraph above was written.
+    //
+    // **Swapped, not cloned**, which is `karakuri-cli`'s own line: the record
+    // carries a `Vec` of bands and this is the frame path, so `push_audio`
+    // takes this one and leaves an empty shell behind. Nothing allocates. A
+    // frame with no shell free is counted rather than dropped silently — see
+    // `session::Recorder::push_audio`.
+    //
+    // **The measurement and the correction are both pushed, in that order**,
+    // because that is the order they happened in: a replay reading the stream
+    // applies the tempo the frame decided after the audio the frame heard.
+    //
+    // **After the sentence below rather than before it**, which costs nothing
+    // and keeps that reading the way it was written: the report matches on the
+    // record and this consumes it.
+    let recorder = match recorder {
+        Some(recorder) => {
+            recorder.push_audio(open.record_mut());
+            Some(recorder)
+        }
+        None => None,
+    };
+
     // **A correction worth saying out loud is one that is a decision rather
     // than a trim** — acquiring, re-acquiring, a tap, an octave — which is
     // `karakuri-cli`'s rule and is here for P-0094's reason: an operator who
     // cannot see the grid decide cannot tell a lock from a coincidence. A trim
     // happens on every frame once locked and says nothing.
     let reason = open.reason();
-    if let (Some(Record::Tempo { bpm, .. }), Some(reason)) = (tempo, reason) {
+    if let (Some(Record::Tempo { bpm, .. }), Some(reason)) = (&tempo, reason) {
         if !matches!(reason, karakuri_environment::audio::Reason::Trim) {
             println!("beat: {reason:?} at {bpm:.1} bpm");
         }
+    }
+    if let (Some(recorder), Some(record)) = (recorder, tempo) {
+        recorder.push(record);
     }
 }
 
@@ -12310,6 +13136,10 @@ mod tests {
             // The mock's `landed`, so the group is measured against the row
             // the mock draws rather than a shorter one.
             health: Some(view::Stage::Landed),
+            // **And the mock's `rec`**, for the same reason: the pill takes
+            // the row's right padding, so a row measured without one puts
+            // everything after the bar somewhere the running window does not.
+            rec: Some(view::Rec::Idle),
         });
         let mut told = AudioIn::NONE;
         told.device = Some("Scarlett 2i2".to_owned());
@@ -17988,6 +18818,28 @@ mod press_handler {
             "look_row(",
             &["row.tonemap(", "row.exposure("],
         ),
+        // **The `rec` pill at the end of that row**, and the derivation is the
+        // *row* rather than a pill of its own: the capsule takes the row's
+        // right padding and the health capsule and the frame readout are laid
+        // out backwards from it, so there is one derivation of that end and
+        // this entry names it. One call, because what a press means is the
+        // pill's own state and `record` reads it — a toggle is one control and
+        // not two.
+        (
+            "the transport row's rec pill",
+            "transport_row(",
+            &["row.record("],
+        ),
+        // **The tempo figure at the head of that row**, and it is the `rec`
+        // pill's entry one item along: the same derivation, because the figure
+        // is the row's first readout and the control is that reading. One call
+        // — where along the number the press landed *is* the tempo, and
+        // `tempo` is where the band that refuses a mis-click sits.
+        (
+            "the transport row's tempo figure",
+            "transport_row(",
+            &["row.tempo("],
+        ),
         // **The Mixer bay's five, derived once and asked five times on a
         // press**, plus the drop at the release. `select` is asked last and is
         // the strip itself — what none of the other four claimed.
@@ -18024,6 +18876,16 @@ mod press_handler {
         // and `deck_head_row` answers the control. The fourth control the row
         // counts is the scrub's second arrow, which `scrub` answers for both
         // of.
+        // **The Inspector pane heads' name**, and it is the capsule's
+        // arrangement at the other end of the same row: the pane is derived
+        // per index and the run from the pane, so the derivation named here is
+        // the inner one. The press emits nothing — it opens the field, and the
+        // operation is the commit's, at Return.
+        (
+            "the Inspector pane heads' name",
+            "deck_name(",
+            &["named.hit("],
+        ),
         // **The Inspector pane heads' `keep`**, and it is the deck head's
         // arrangement one row up: the pane is derived per index and the
         // capsule from the pane, so the derivation named here is the inner
@@ -21313,6 +22175,7 @@ mod gpu {
             frame_ms: 12.4,
             budget_ms: Some(16.6),
             health: Some(view::Stage::Landed),
+            rec: Some(view::Rec::Idle),
         });
         view.look = Some(look(&engine.look));
         assert_eq!(

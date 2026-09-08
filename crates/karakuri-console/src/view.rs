@@ -261,8 +261,8 @@ use egui::{Color32, CornerRadius, FontFamily, FontId, Pos2, Rect, Stroke, Stroke
 use karakuri_layout::{Axis, Hit, NodeId};
 use karakuri_operation::gate::{Class, Open};
 use karakuri_operation::{
-    Authority, BeatSource, BlendMode, GridScale, Layer, Operation, Residency, Sync, Tonemap,
-    TransitionSetting, Undecided, WipeKind,
+    Authority, BeatSource, BlendMode, GridScale, Layer, Operation, Recording, Residency, Sync,
+    Tonemap, TransitionSetting, Undecided, WipeKind,
 };
 
 use crate::budget::{Declared, PANEL_PASS};
@@ -2323,6 +2323,55 @@ pub struct Transport {
     /// write that already happened — `crates/karakuri/src/main.rs`'s
     /// `staging`, which is where the one drain feeds both readings.
     pub health: Option<Stage>,
+    /// **Whether a session is being recorded** — the mock's `● rec` pill at
+    /// the very end of this row, after [`Transport::health`] — and `None` for
+    /// a console nobody has told anything about recording, which draws no
+    /// pill at all.
+    ///
+    /// # `None` is *nobody said*, and it is not *not recording*
+    ///
+    /// [`View::audio`]'s distinction one row along, and for its reason: a
+    /// recording is a file being written by a program that has a store, and
+    /// `src/` has neither (ADR-0156). `Some(Rec::Idle)` is a program that
+    /// holds a store and is not recording into it, and it draws the pill in
+    /// the plain treatment because a press on it would start one; `None` is a
+    /// console that was never told, and a pill drawn for it would be this
+    /// crate answering a question about a disk on its own authority. Every
+    /// test in this crate that does not say otherwise leaves it `None`.
+    ///
+    /// # It is on [`Transport`] rather than beside it, which [`View::look`] is
+    /// not
+    ///
+    /// [`Transport::health`]'s reason, and this is the second field here that
+    /// is not a clock: what this type is is *what the transport row reads this
+    /// frame*, and the two capsules at the end of the row are read by it. The
+    /// difference from the look — which is two fields away on [`View`] because
+    /// the row draws it and the master chain owns it — is that neither of
+    /// these two capsules is drawn anywhere else and neither belongs to
+    /// another bay.
+    pub rec: Option<Rec>,
+}
+
+/// **What the `● rec` pill says this frame**, and the whole of its state.
+///
+/// Two values because the control is a toggle and a toggle has two ends: a
+/// press on it starts a recording or stops the one running, and which of those
+/// a press means is exactly this. There is no third value for *starting* —
+/// opening a recorder writes a Set file and creates another, so it happens off
+/// the frame path (`crates/karakuri/src/main.rs`), and until the recorder is
+/// open nothing is being recorded and the pill says so.
+///
+/// **A two-valued enum rather than a `bool`**, which is
+/// [P-0087](../../../docs/principles/0087-name-the-property-never-the-shape.md):
+/// `Some(true)` at a call site says nothing, and this is read at four of them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Rec {
+    /// Nothing is being recorded. The mock's plain `.pill`, and a press starts
+    /// one.
+    Idle,
+    /// A session is being written to the store as it happens. The mock's
+    /// `.pill.on`, and a press stops it.
+    Running,
 }
 
 impl Transport {
@@ -2401,28 +2450,34 @@ impl Transport {
 /// arithmetic something `tests/transport.rs` can ask about without a device,
 /// which is the whole of how this crate is checked.
 ///
-/// # None of these five is a control, and that is the answer rather than an
-/// omission
+/// # Five of the six are readouts, and the sixth is this row's one control
 ///
 /// A point in this row that is not inside a boundary's [`GRAB`] and not on one
-/// of this row's controls is `egui`'s. What is left beside them — a tempo, a
-/// beat, a bar, a frame time and what the last write did — is five readouts,
-/// and a readout is not something a press acts on. **The last of them is drawn
-/// as a capsule and is still one**: the shape is the mock's, and what makes a
-/// thing a control here is that a press on it asks for something.
-/// `tests/transport.rs` asserts it over the row rather than leaving it to be
-/// inferred from the absence of a hit test, and it asks with the pill drawn so
-/// that the assertion cannot pass on the control having gone.
+/// of this row's controls is `egui`'s. A tempo, a beat, a bar, a frame time
+/// and what the last write did are five readouts, and a readout is not
+/// something a press acts on. **The fifth is drawn as a capsule and is still
+/// one**: the shape is the mock's, and what makes a thing a control here is
+/// that a press on it asks for something. `tests/transport.rs` asserts it over
+/// the row rather than leaving it to be inferred from the absence of a hit
+/// test, and it asks with the pill drawn so that the assertion cannot pass on
+/// the control having gone.
 ///
-/// **This paragraph said *nothing here is a control* and the change is
-/// deliberate.** [`arrangement`] is laid out from [`TransportRow::bar`] and
-/// held clear of [`TransportRow::frame`], so the pill's place is this
-/// derivation's answer rather than a second one; and it is a separate function
-/// because the *row* is its readouts and a tempo, where the pill is neither.
+/// **The sixth is [`TransportRow::rec`], and it is drawn *inside* this
+/// derivation where [`arrangement`] is drawn beside it.** The difference is
+/// where each one sits: the arrangement pill is laid out from
+/// [`TransportRow::bar`] and held clear of [`TransportRow::frame`], so a row
+/// that never heard of it is laid out exactly as it is now; the `rec` pill
+/// takes the row's right padding, and the health capsule and the frame readout
+/// are laid out backwards from it. A pill drawn beside the row could not move
+/// them, and two derivations of one right-hand end are two answers.
+///
+/// **This paragraph said *nothing here is a control*, then *none of these five
+/// is*, and both changes are deliberate.** What a press on the capsule asks
+/// for is [`TransportRow::record`].
 ///
 /// # What is in the mock's row and is deliberately not here
 ///
-/// **Four of the mock's items in this row are still not drawn**, and each is a
+/// **Two of the mock's items in this row are still not drawn**, and each is a
 /// control over machinery that is in neither this crate nor the program.
 /// Drawing one is the scaffolding this module's documentation refuses — a pill
 /// that looks like a control and does nothing does not get replaced:
@@ -2437,9 +2492,15 @@ impl Transport {
 ///   shape over a file that does exist, which is the manual's own argument for
 ///   putting the arrangement family in this row — and [`audio_in`] is the same
 ///   shape a third time, over a device.
-/// - `● rec` is recording the session to the store as it happens. There is no
-///   session recorder behind this panel and no record stream is written from
-///   it.
+///
+/// **`● rec` left this list on 2026-09-08**, and what was written against it
+/// was that *"there is no session recorder behind this panel and no record
+/// stream is written from it"*. There is one now: `crates/karakuri` opens a
+/// `karakuri_environment::session::Recorder` on a press and closes it on the
+/// next, and this pill is the toggle — [`TransportRow::record`], drawn in the
+/// mock's `.pill.on` while a recording runs. The mock's tip named one gesture
+/// on it, *click to stop*, and the control is both: what a press means is what
+/// [`Transport::rec`] says it will be, before it is made.
 ///
 /// **This paragraph carried a total of the row and it no longer does**, which
 /// is a deletion rather than an oversight. It said *"the mock draws ten things
@@ -2517,8 +2578,25 @@ pub fn transport(
     let health = values
         .health
         .map(|stage| size::PILL_PAD_X * 2.0 + width(span(stage.word(), Color32::PLACEHOLDER)));
-    transport_row(row, &values, bpm, label, bar, frame, health)
+    // **The `rec` pill, measured only where somebody has said whether a
+    // recording is running**, and the same width either way it is: the mark
+    // and the word do not change between the two states — only the treatment
+    // does — so this is one number rather than the wider of two, and the pill
+    // does not move under a press that lands on it.
+    let rec = values.rec.map(|_| {
+        size::PILL_PAD_X * 2.0
+            + size::SINK_DOT
+            + size::SINK_GAP
+            + width(span(REC_LABEL, Color32::PLACEHOLDER))
+    });
+    transport_row(row, &values, bpm, label, bar, frame, health, rec)
 }
+
+/// **The word in the `rec` pill**, and the mock's `&#9679; rec` without its
+/// mark: the mark is drawn rather than typed, which is [`Mask`]'s rule for the
+/// same reason — *"whether `◯` and `◑` are in `egui`'s default face is a
+/// question with no good answer, and a circle is the same mark either way"*.
+const REC_LABEL: &str = "rec";
 
 /// **The faint word beside the number**, and the mock's own capitalisation
 /// this time: `.transport`'s `BPM` is upper-case in the markup rather than in
@@ -2554,11 +2632,24 @@ pub struct TransportRow {
     /// **The health capsule**, and `None` where [`Transport::health`] is —
     /// which is every run until somebody rewrites a procedure.
     ///
-    /// **It is the last thing in the row, so it takes the right padding and
-    /// the frame readout is laid out backwards from it.** The mock puts
-    /// `● rec` after it and that pill is not drawn (see [`transport`]); a gap
-    /// left for it would be a space kept for a control that does not exist.
+    /// **The `rec` pill is what follows it**, so the right padding is
+    /// [`TransportRow::rec`]'s where there is one and this capsule's where
+    /// there is not — and everything before it is laid out backwards from
+    /// whichever ends the row. No gap is left for a pill that is not drawn.
     pub health: Option<Rect>,
+    /// **The `● rec` pill**, and `None` where [`Transport::rec`] is — which is
+    /// a console nobody has told anything about recording.
+    ///
+    /// **It is the last thing in the row and takes the right padding**, which
+    /// is where the mock puts it: after `landed`, hard against the end of
+    /// `.transport`. It is the one thing in this row that is a control — a
+    /// press on it starts a recording or stops the one running — and it is
+    /// carried here rather than derived beside the row for
+    /// [`TransportRow::health`]'s reason one item along: where each readout
+    /// ends is where the next one starts, so the pill's place and the
+    /// readouts' places are one derivation and not two that agree until they
+    /// do not.
+    pub rec: Option<Rect>,
     /// **The values these rectangles were measured from.**
     ///
     /// Carried rather than passed to the painter beside this, for
@@ -2571,6 +2662,75 @@ pub struct TransportRow {
     /// not.
     pub values: Transport,
 }
+
+/// **How far a press may move the tempo**: **±15%** of what the grid is
+/// running at when it lands.
+///
+/// # It is a guard against a mis-click, and not a bound on what a tempo may be
+///
+/// Nothing in this workspace says a tempo may not be 240 —
+/// `karakuri_audio::tempo::BPM_RANGE` says outright that it is *not* the range
+/// of answers, and *"a grid at 240 bpm is a perfectly good grid"* — and this
+/// band does not say it either: it bounds **one press**, against the tempo of
+/// the moment, so a hand walks the grid anywhere it likes — **240 is five
+/// presses up from the tempo the mock draws**, and the figure names it
+/// outright on the last of them.
+///
+/// **The `½ ×2` beside the figure is not the shortcut it looks like**, and at
+/// this row's own tempo it is not available at all: [`Tracker::double`] is
+/// `karakuri_audio`'s `BPM_RANGE` against twice the grid, 256 is outside it,
+/// and the mock draws that half inert. So the figure is the whole of the way
+/// up from 128, and `docs/manual/console.html`'s *"get there in two presses"*
+/// is not arithmetic that works from there — reported rather than quietly
+/// satisfied by a wider band than the one that was decided.
+///
+/// # A press outside it is ignored, and *ignored* is the decision
+///
+/// Not clamped, which is the one thing a track this crate has drawn before
+/// does do — [`unit_of_offset`] draws a value past either end *at* that end,
+/// because the offset's ends are the range of the value. These are not ends of
+/// anything: they are how far a hand is trusted to have meant it. Clamping
+/// would turn a press the operator did not mean into a 15% move of the grid,
+/// which is the loudest thing this row can do; ignoring it leaves the tempo
+/// where it was, and a tempo that did not move is a press the operator can see
+/// did not land ([ADR-0291](../../../docs/adr/0291-the-tempo-figure-is-the-track-and-the-band-is-a-guard-on-the-hand.md)).
+///
+/// # It is here and nowhere else
+///
+/// **It is not in `karakuri-audio`, and must not be.** The tracker folds every
+/// candidate into a window centred on the grid and the beat lock re-acquires
+/// on evidence; a ±15% bound anywhere in that path is a grid that cannot
+/// follow a song, which is a far worse failure than a hand that can ask for
+/// anything. So the band lives at the one point a *press* becomes an
+/// operation, which is this type — the same seam
+/// [`TrackerGroup::half`] draws an inert octave chip at, one group along.
+pub const TEMPO_BAND: f32 = 0.15;
+
+/// **What the whole figure spans**, as the same fraction of the same tempo:
+/// **two bands either way**, so [`TEMPO_BAND`] is the middle half of the
+/// number and the outer half is the guard.
+///
+/// **The figure has to reach past the band or the band could not be missed**,
+/// and a guard nothing can land in is not a guard — it is an assertion that
+/// the surface already satisfies, and `tests/tempo_figure.rs` could only pass
+/// it by construction. So the question is not whether the number reaches further
+/// than a press may go, but by how much, and the answer is *one more band*:
+/// a press that misses by up to as much again as it is allowed to move is
+/// refused, and a press that misses by more than that is off the figure and
+/// was never this control's.
+///
+/// **Linear, and that is the offset track's arithmetic rather than the
+/// exposure's.** [`offset_at`] is linear because a latency offset is a
+/// *difference*, and [`exposure_at`] is logarithmic because an exposure is a
+/// *ratio* — a tempo is the second kind of quantity, which is why the control
+/// beside this one is an octave and why this band is a percentage. But the
+/// band is stated as ±15% **of the tempo at the press**, and at the instant of
+/// a press that is a fixed number of beats a minute: the whole geometry is
+/// settled by the one number the row was measured with, and equal distances
+/// along the figure are equal numbers of beats a minute. Over a span this
+/// narrow the two curves are within a percent of each other in any case, and
+/// the linear one is the one whose middle is exactly the tempo drawn there.
+pub const TEMPO_SPAN: f32 = TEMPO_BAND * 2.0;
 
 impl TransportRow {
     /// One dot of the beat grid, from the left. **The gaps are between the
@@ -2597,6 +2757,162 @@ impl TransportRow {
     pub fn lit(&self, index: u32) -> f32 {
         assert!(index < self.dots, "dot {index} of a grid of {}", self.dots);
         beat_at(self.at, index, self.dots)
+    }
+
+    /// **How far along the figure `p` is**, on `[0, 1]` across
+    /// [`TransportRow::bpm`] and outside it either side.
+    ///
+    /// Not clamped, unlike [`unit_of_offset`]'s: what is off the number is not
+    /// at its end, it is not this control's, and every caller here has asked
+    /// [`Rect::contains`] first.
+    fn along(&self, p: karakuri_layout::Point) -> f32 {
+        (p.x - self.bpm.min.x) / self.bpm.width()
+    }
+
+    /// **What a press `unit` of the way along the figure names**, in beats a
+    /// minute — [`offset_at`]'s job on the one control whose track is the
+    /// reading itself.
+    ///
+    /// **The middle of the number is the number**: at `0.5` this is
+    /// [`Transport::bpm`] exactly, which is what `docs/manual/console.html`
+    /// means by *"the number under your finger is the one you get"* — the
+    /// figure is drawn at the tempo it names, so pressing where it is drawn
+    /// asks for what is already there. The ends are [`TEMPO_SPAN`] either way,
+    /// and the half of the figure between the quarters is [`TEMPO_BAND`].
+    ///
+    /// **It is a function of the tempo the row was measured at**, so the whole
+    /// control moves with the grid: at 128 a press at the right-hand end asks
+    /// for 166.4, and at 256 the same pixel asks for 332.8. There is no track
+    /// with ends in it anywhere here, which is why there is no constant naming
+    /// them — the offset's [`LATENCY_OFFSET_MIN_MS`] is a restatement of a
+    /// range something else holds, and nothing holds one for this.
+    pub fn tempo_at(&self, unit: f32) -> f32 {
+        self.values.bpm * (1.0 + (unit - 0.5) * 2.0 * TEMPO_SPAN)
+    }
+
+    /// **Whether a tempo is one a press may ask for**: within [`TEMPO_BAND`]
+    /// of what the grid is running at, measured against the tempo this row was
+    /// derived with.
+    ///
+    /// **Which is the tempo at the press**, and not one from an earlier frame:
+    /// `karakuri/src/main.rs` derives this row again on the pointer event, off
+    /// the same [`View::transport`] the frame before it was painted from — the
+    /// honest cost [`tracker_group`] states for the group beside this one, paid
+    /// here for the same reason.
+    pub fn in_band(&self, bpm: f32) -> bool {
+        // **A number that is not a tempo is not one a press may ask for**, and
+        // the case it guards is a band of nothing: a row drawn at `0.0` has a
+        // band `0.0` wide, and every point on the figure would name exactly
+        // zero and pass a comparison written with `<=`. Nothing in this
+        // workspace runs a grid at zero — `karakuri_signal`'s own clamp floors
+        // it at 1.0 — but this row is drawn from whatever the harness hands
+        // in, and a control that emits an operation naming a tempo no
+        // oscillator will take is a press that does nothing (P-0094).
+        bpm.is_finite()
+            && bpm > 0.0
+            && (bpm - self.values.bpm).abs() <= self.values.bpm.abs() * TEMPO_BAND
+    }
+
+    /// **Whether `p` is on the tempo figure asking for something it may
+    /// have** — on the number, and inside [`TransportRow::in_band`].
+    ///
+    /// **The band is part of the hit test and not only of the answer**, which
+    /// is [`TrackerGroup::half`]'s rule word for word: *inert is not claimed*,
+    /// and this crate's own *a control claims what it acts on and no more*. So
+    /// a press on the guard is `egui`'s — it falls through exactly as a press
+    /// on the refused half of the octave does, rather than being swallowed by
+    /// a control that then does nothing, which is the one outcome an operator
+    /// cannot tell from a panel that has stopped
+    /// ([P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)).
+    ///
+    /// **The number's own box is the target and nothing is grown**, unlike
+    /// [`OffsetTrack::grip`]: `.bpm` is 20px type at `line-height: 1.5`, so
+    /// this is 30 tall against that track's 5, and it leaves 9 of the row's 48
+    /// above and below — clear of the [`GRAB`] of the boundary under the row,
+    /// which is 6.
+    pub fn on_tempo(&self, p: karakuri_layout::Point) -> bool {
+        self.bpm.contains(Pos2::new(p.x, p.y)) && self.in_band(self.tempo_at(self.along(p)))
+    }
+
+    /// **What a press at `p` asks the grid to run at**, or `None` off the
+    /// figure and on the guard around it.
+    ///
+    /// # The press names the tempo outright, and that is the decision
+    ///
+    /// [`Operation::SetFreeRunTempo`] carries the number, and the number is
+    /// where along the figure the press landed. `docs/manual/console.html`:
+    /// *"A press names a value outright rather than stepping, so the figure is
+    /// the track and the number under your finger is the one you get."* It is
+    /// [`OffsetTrack`]'s sentence one control to the left
+    /// ([ADR-0277](../../../docs/adr/0277-the-latency-offset-is-a-track-because-a-capsule-cannot-name-a-value.md)),
+    /// and it arrives here without that record's derivation: **this row has no
+    /// key**, so there is no press to make a pixel out of, and what decides the
+    /// figure's scale is the figure's own width and [`TEMPO_BAND`].
+    ///
+    /// # It is emitted with a room being tracked, and that is not this crate's
+    /// call
+    ///
+    /// The operation is *what the grid runs at with nothing driving it*, and
+    /// the state it is for is a program with no audio device — which is the
+    /// state `crates/karakuri` runs in, where `tap` and the octave both refuse
+    /// out loud because there is no room. With a room open it is **accepted**
+    /// rather than refused: the tracker searches a window centred on the grid,
+    /// so moving the grid moves the window and the estimate is made again
+    /// around the new target — `karakuri_audio`'s `BeatLock::retarget`, which
+    /// is where that is written down and is the reason this is not a control
+    /// that undoes itself two seconds later. Nothing here can see whether a
+    /// room is being tracked in any case: this crate takes no device
+    /// (ADR-0156), and [`Tracker`] carries what the panel *draws* rather than
+    /// what a press is allowed to be.
+    pub fn tempo(&self, p: karakuri_layout::Point) -> Option<Operation> {
+        self.on_tempo(p).then(|| Operation::SetFreeRunTempo {
+            bpm: self.tempo_at(self.along(p)),
+        })
+    }
+
+    /// **Whether `p` is on the `rec` pill**, which is the whole of what this
+    /// row owns as a control: the five things beside it are readouts, and a
+    /// readout is not something a press acts on.
+    ///
+    /// `false` where the pill is not drawn — a console nobody has told
+    /// anything about recording claims nothing.
+    pub fn on_rec(&self, p: karakuri_layout::Point) -> bool {
+        self.rec
+            .is_some_and(|pill| pill.contains(Pos2::new(p.x, p.y)))
+    }
+
+    /// **What a press at `p` on the `rec` pill asks for**, or `None` off it.
+    ///
+    /// **It is a toggle and the two ends are two payloads**, which is what
+    /// [`karakuri_operation::Recording`] is: a press with nothing running asks
+    /// to begin one, a press with something running asks to end it, and the
+    /// pill's own treatment is what says which the next press will be before
+    /// it is made. So one capsule is one control and not two, and the state it
+    /// reads is the state the press acts on — one reading, so the pill that is
+    /// drawn and the press that is performed cannot come apart.
+    ///
+    /// **`id` is `None`, and the payload saying so is what makes each start a
+    /// fresh recording.** A capsule types no name — this console's one
+    /// letter-taking flow is bounded to naming an arrangement — so whoever
+    /// performs it files under a stamp, exactly as the `keep` capsule's save
+    /// does. That is not only a convention here: a second head under one id
+    /// would land in the middle of an existing stream and be read back as
+    /// edits, so a start that could name the id a stop just closed would be a
+    /// press that corrupts a session (ADR-0289).
+    ///
+    /// **It refuses nothing.** Whether there is a deck to write a head from
+    /// and whether the store will take the file are the instrument's answers
+    /// rather than this surface's — this crate reaches no disk at all
+    /// (ADR-0156) — so the press names the operation and whoever performs it
+    /// says what happened.
+    pub fn record(&self, p: karakuri_layout::Point) -> Option<Operation> {
+        let rec = self.values.rec?;
+        self.on_rec(p).then(|| Operation::RecordSession {
+            recording: match rec {
+                Rec::Idle => Recording::Start { id: None },
+                Rec::Running => Recording::Stop,
+            },
+        })
     }
 }
 
@@ -2754,6 +3070,7 @@ fn transport_row(
     bar_w: f32,
     frame_w: f32,
     health_w: Option<f32>,
+    rec_w: Option<f32>,
 ) -> Option<TransportRow> {
     let mid = row.center().y;
     // An inline span at the console's own type: `font-size: 11px` at
@@ -2781,21 +3098,36 @@ fn transport_row(
         egui::vec2(bar_w, span_h),
     );
     // The `.sep`: everything after it is against the right padding. **The
-    // last of those is the health capsule where there is one**, so the right
-    // padding is claimed by whichever of the two ends the row, and the frame
-    // readout is laid out backwards from there — which is the same "from the
-    // right edge backwards" the readout has always been laid out by, asked of
-    // the thing beside it rather than of the row.
+    // last of those is the `rec` pill where there is one and the health
+    // capsule where there is not**, so the right padding is claimed by
+    // whichever of the three ends the row, and everything before it is laid
+    // out backwards from there — which is the same "from the right edge
+    // backwards" the frame readout has always been laid out by, asked of the
+    // thing beside it rather than of the row.
+    //
+    // **The pill is last because the mock puts it last**, after `landed`; and
+    // nothing is reserved for one that is not drawn, which is the rule this
+    // end of the row has always followed.
     let right = row.max.x - size::TRANSPORT_PAD_X;
-    let health = health_w.map(|w| {
+    let rec = rec_w.map(|w| {
         Rect::from_min_size(
             Pos2::new(right - w, mid - size::PILL_H * 0.5),
             egui::vec2(w, size::PILL_H),
         )
     });
-    let frame_end = match health {
+    let health_end = match rec {
         Some(pill) => pill.min.x - size::TRANSPORT_GAP,
         None => right,
+    };
+    let health = health_w.map(|w| {
+        Rect::from_min_size(
+            Pos2::new(health_end - w, mid - size::PILL_H * 0.5),
+            egui::vec2(w, size::PILL_H),
+        )
+    });
+    let frame_end = match health {
+        Some(pill) => pill.min.x - size::TRANSPORT_GAP,
+        None => health_end,
     };
     let frame = Rect::from_min_size(
         Pos2::new(frame_end - frame_w, mid - span_h * 0.5),
@@ -2813,6 +3145,7 @@ fn transport_row(
     match row.contains_rect(bpm)
         && row.contains_rect(frame)
         && health.is_none_or(|pill| row.contains_rect(pill))
+        && rec.is_none_or(|pill| row.contains_rect(pill))
         && frame.min.x >= bar.max.x + size::TRANSPORT_GAP
     {
         true => Some(TransportRow {
@@ -2824,6 +3157,7 @@ fn transport_row(
             bar,
             frame,
             health,
+            rec,
             values: *t,
         }),
         false => None,
@@ -3020,6 +3354,83 @@ fn transport_into(ui: &Ui, pal: &Palette, row: &TransportRow) {
     if let (Some(rect), Some(stage)) = (row.health, t.health) {
         pill_into(ui, pal, rect, stage.word(), stage == Stage::Landed);
     }
+
+    // **The `rec` pill**, in the mock's own two treatments and in no third
+    // one: `.pill` while nothing is being recorded, and `.pill.on` while
+    // something is. The pink is the mock's choice and it is the right one —
+    // `.pill.on` is *this is the press that does it* and the pink is the pink
+    // a tally on air is, which is what a recording running is. `armed` would
+    // have said *this setting is chosen*, which is not what a running writer
+    // is.
+    if let (Some(rect), Some(rec)) = (row.rec, t.rec) {
+        rec_into(ui, pal, rect, rec);
+    }
+}
+
+/// **The `● rec` pill**: a capsule, a round mark, and the word after it.
+///
+/// It is not [`pill_into`] because it is not a capsule with a word in it: the
+/// mock writes `&#9679; rec`, and the mark is **drawn** rather than set as a
+/// glyph for [`Mask`]'s reason — a font this crate does not choose is not
+/// something a control's width should depend on.
+///
+/// **The mark's diameter and the gap after it are the Outputs row's sink's**
+/// ([`size::SINK_DOT`] and [`size::SINK_GAP`]), because that is this console's
+/// other round mark before a word inside a capsule. Two numbers invented here
+/// would be a second answer to a question `style.css` has already been read
+/// for once.
+///
+/// **The mark takes the pill's own colour**, both ways: `.pill.on` is a pink
+/// word over a pink wash and `.pill` is a dim word inside a hairline, and a
+/// mark in some third ink would be a state this capsule does not have.
+fn rec_into(ui: &Ui, pal: &Palette, rect: Rect, rec: Rec) {
+    let painter = ui.painter();
+    let radius = CornerRadius::same((rect.height() * 0.5) as u8);
+    let ink = match rec {
+        // `.pill.on`: no border, a `--c-pink` word over a wash of the same,
+        // and the `box-shadow: 0 0 10px var(--c-glowp)` that goes with it —
+        // `on_pill_at`'s three lines, drawn here because the word inside is
+        // not the whole of what this capsule holds.
+        Rec::Running => {
+            painter.add(
+                egui::epaint::Shadow {
+                    offset: [0, 0],
+                    blur: ON_GLOW,
+                    spread: 0,
+                    color: pal.glow_pink,
+                }
+                .as_shape(rect, radius),
+            );
+            painter.rect_filled(rect, radius, tint(pal.pink, ON_WASH));
+            pal.pink
+        }
+        // The plain `.pill`: a hairline round nothing, and the dim.
+        Rec::Idle => {
+            painter.rect_stroke(rect, radius, Stroke::new(1.0, pal.line), StrokeKind::Inside);
+            pal.dim
+        }
+    };
+    let dot = Rect::from_min_size(
+        Pos2::new(
+            rect.min.x + size::PILL_PAD_X,
+            rect.center().y - size::SINK_DOT * 0.5,
+        ),
+        egui::vec2(size::SINK_DOT, size::SINK_DOT),
+    );
+    painter.circle_filled(dot.center(), size::SINK_DOT * 0.5, ink);
+    let galley = painter.layout_no_wrap(
+        REC_LABEL.to_owned(),
+        FontId::new(size::BASE, FontFamily::Proportional),
+        ink,
+    );
+    painter.galley(
+        Pos2::new(
+            dot.max.x + size::SINK_GAP,
+            rect.center().y - galley.size().y * 0.5,
+        ),
+        galley,
+        ink,
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -6236,8 +6647,14 @@ pub struct Level {
 /// registers a texture and writes [`View::picture`].
 ///
 /// **No repaint arm for the values arriving**, which is [`Transport`]'s
-/// reason: these move when the engine draws a frame, and a caller drawing
-/// engine frames is already asking for frames for the picture two bays along.
+/// reason and **not the picture's**: these move when the engine draws a
+/// frame, and the engine draws a frame on the frames this panel is drawn on —
+/// so a value that has arrived is a value already on screen, whether or not
+/// there is a picture two bays along asking for frames of its own. The one
+/// that has to be said out loud is [`Strip::level`], because it moves on
+/// every one of those frames and declares nothing: see
+/// [`View::mixer_declares`], where that is decided, and
+/// [ADR-0290](../../../docs/adr/0290-the-level-meter-moves-only-when-a-frame-is-drawn-so-it-declares-nothing.md).
 ///
 /// **A drag on one of the two faders is a different thing and does have an
 /// arm** — [`crate::repaint::Change::Emitted`]. That is not the value
@@ -6500,6 +6917,10 @@ pub struct Strip {
     /// held reading would be about a different image. So `None` here draws the
     /// meter's well and nothing in it, which is the mock's own `alloc` strip:
     /// a `.vmeter` with no `b` and no `u` inside it.
+    ///
+    /// **The one value on a strip that moves without a hand on anything, and
+    /// it declares nothing** — decided rather than missed, in
+    /// [`View::mixer_declares`].
     pub level: Option<Level>,
 }
 
@@ -12826,13 +13247,23 @@ pub fn deck_head(ctx: &egui::Context, at: &InspectorPane, pane: &Pane) -> Option
 /// # What it files it under
 ///
 /// [`Operation::SaveSet`] with **no id**, which is the same call the key makes
-/// and is a decision rather than an omission: naming a Set from here would be
-/// a second letter-taking flow, and this console has one, bounded to an
-/// arrangement's name
+/// and is a decision rather than an omission
 /// ([ADR-0287](../../../docs/adr/0287-the-keep-pill-files-under-a-stamp-because-the-consoles-one-letter-taking-flow-is-an-arrangements-name.md)).
 /// What the store does with a `None` is `karakuri_environment::accepted_save`'s
 /// convention — a stamp, because *"an operator looks for the time they saved
 /// it"*.
+///
+/// **The reason has changed and the decision has not.** ADR-0287 argued the
+/// `None` from there being one letter-taking flow on this console and it being
+/// an arrangement's; there are two now, and the second is the name in the head
+/// beside this capsule
+/// ([ADR-0292](../../../docs/adr/0292-the-pane-heads-name-takes-letters-and-the-keep-capsule-stays-a-stamp.md)).
+/// What holds the capsule at `None` from here on is
+/// [ADR-0128](../../../docs/adr/0128-a-set-saved-under-a-name-the-caller-chose-overwrites.md)
+/// rather than the absence of a field: *"an operator's own act gets the name it
+/// asked for; a key press cannot type one and takes a stamp"*. This is the
+/// press that types nothing, so this is the one that takes the stamp — see
+/// [`DeckName`] for the one that does not.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct KeepPill {
     /// **The capsule**, which is what a press has to land in. The mock gives
@@ -12931,17 +13362,337 @@ pub fn keep_pill(ctx: &egui::Context, at: &InspectorPane, pane: &Pane) -> Option
 /// in the panel column of [every operation](../../../docs/manual/operations.html).
 const KEEP_LABEL: &str = "keep";
 
+/// **The letter of the deck a pane is pointed at**, or `?` for a pane pointed
+/// past the end of [`DECK_LETTERS`] — which is a caller's error and not a
+/// state, and is drawn rather than panicked for [`showing_text`]'s reason: a
+/// head is a readout and a readout does not stop a frame.
+fn deck_letter(pane: &Pane) -> &'static str {
+    DECK_LETTERS.get(pane.deck).copied().unwrap_or("?")
+}
+
 /// **What the pane head reads**: the mock's `deck A · drift_night`.
 fn showing_text(pane: &Pane) -> String {
-    format!(
-        "deck {} · {}",
-        DECK_LETTERS.get(pane.deck).copied().unwrap_or("?"),
-        pane.material
-    )
+    format!("deck {} · {}", deck_letter(pane), pane.material)
+}
+
+/// **What that same run reads while the head is taking letters** — `deck A ·
+/// glass_sh▏`, with [`CARET`] after it as the arrangement's field has.
+///
+/// **The deck stays and the material goes.** What is being typed is the name
+/// this deck's material will be filed under, so the run says which deck is
+/// being filed for the whole of the gesture — and the half of it that is
+/// replaced is exactly the half a name is. A field that had cleared the run
+/// would take the one word that says *whose* name this is off the screen at
+/// the moment an operator is looking hardest at it.
+fn naming_text_in_head(pane: &Pane, typed: &str) -> String {
+    format!("deck {} · {typed}{CARET}", deck_letter(pane))
 }
 
 /// The word the mock puts in front of it.
 const SHOWING_LABEL: &str = "showing";
+
+/// **The word in front of the run while the head is taking letters**, where
+/// [`SHOWING_LABEL`] is the word in front of it the rest of the time.
+///
+/// The row stops being a readout the moment letters are going into it, and the
+/// label is the only thing that can say what they are *for*: they name the Set
+/// the capsule at the other end of the same row files. It is [`KEEP_LABEL`]'s
+/// own word rather than a new one, which is [`SAVE_ITEM_ASKING`]'s arrangement
+/// three bays along — the thing that asks for something says so in the verb it
+/// is about to perform.
+const NAMING_LABEL: &str = "keep as";
+
+/// **The word this head has in front of its run**, which is the one thing
+/// about the row that says whether it is reading or asking.
+fn head_label(naming: Option<&str>) -> &'static str {
+    match naming {
+        Some(_) => NAMING_LABEL,
+        None => SHOWING_LABEL,
+    }
+}
+
+/// **The name in a pane head, laid out** — the mock's `.what`, and this
+/// console's **second** letter-taking flow
+/// ([ADR-0292](../../../docs/adr/0292-the-pane-heads-name-takes-letters-and-the-keep-capsule-stays-a-stamp.md)).
+///
+/// # A press on it names the Set, and the capsule beside it goes on stamping
+///
+/// [ADR-0128](../../../docs/adr/0128-a-set-saved-under-a-name-the-caller-chose-overwrites.md)
+/// is what puts two routes on one row: *"an operator's own act gets the name it
+/// asked for; a key press cannot type one and takes a stamp"*. The `keep`
+/// capsule is the second of those and is unchanged — [`KeepPill::keep`] emits
+/// `id: None` exactly as ADR-0287 decided — and this is the first: a press
+/// here puts the head into [`Naming`], and the commit is
+/// [`View::named_set`]'s `id: Some(typed)`.
+///
+/// # What it does **not** claim, and that is the whole of its right-hand edge
+///
+/// The mock's head is `showing`, the name, `▾`, `.sep`, `keep`. **The `▾` is
+/// the chooser** — *point this pane at another deck* — which is
+/// [`Pane::deck`]'s per-pane pointer and is still not a control this console
+/// has (ADR-0200). It is not drawn, and this derivation reserves
+/// [`DeckName::chevron`] for it anyway: the target is the run's own ink and
+/// stops there, so the day the chooser lands it takes the rectangle beside the
+/// name rather than taking it *back*. A name target that had run to the
+/// capsule would have swallowed the chooser's place before anybody drew it,
+/// and a press meant for the caret would be a press that re-points the pane.
+///
+/// # The run is one target and is deliberately not two
+///
+/// `deck A · drift_night` is one `.what` in the mock and one galley here.
+/// Claiming the material and leaving `deck A ·` a readout would be a boundary
+/// inside a run of text with nothing on screen drawing it, which is the
+/// opposite of *a control claims what it acts on and no more*: what this acts
+/// on is the name display, and the name display is the whole run.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DeckName {
+    /// **The run as it is painted**, clipped to what the head has room for —
+    /// see [`deck_name`]. A press has to land in this and nowhere else.
+    pub name: Rect,
+    /// **Where the mock's `▾` goes**, one `.half-head` gap after the run.
+    /// Drawn by nobody and claimed by nobody: it is the chooser's place, held
+    /// so that this control's edge is a measured thing rather than a comment.
+    pub chevron: Rect,
+    /// Which deck this head names, as [`Pane::deck`] — carried for
+    /// [`KeepPill::deck`]'s reason one capsule along.
+    pub deck: usize,
+}
+
+impl DeckName {
+    /// Whether `p` is on the run, which is the whole of what this control
+    /// owns: the label to its left is a readout, and the rectangle to its
+    /// right is the chooser's.
+    pub fn hit(&self, p: karakuri_layout::Point) -> bool {
+        self.name.contains(Pos2::new(p.x, p.y))
+    }
+}
+
+/// **The pane head's name, derived** — [`inspector`] answers where the head is
+/// and this answers where the run in it is, which is [`keep_pill`]'s division
+/// along the same row.
+///
+/// `naming` is what the head is taking letters into, or `None` for a head that
+/// is reading — and it is a parameter rather than a field of [`Pane`] because
+/// a pane is rewritten whenever a Set lands ([`View::inspector`]) and a buffer
+/// kept there would be a name that vanished mid-word. It lives in
+/// [`View::naming_set`], which is [`Arrangement::menu`]'s argument on a second
+/// control: what a *control* is doing is this crate's, and it is not part of
+/// anything a host hands in.
+///
+/// # What it costs to ask
+///
+/// **Three galley lookups per pane** — the label, the run, and [`keep_pill`]'s
+/// word, because where the run may be painted to is where the capsule starts.
+/// The capsule is derived here rather than passed in for [`crate::input`]'s
+/// own reason one bay along, where [`on_pill`](crate::input) derives the
+/// tracker group as well: one derivation asked twice cannot come apart, and
+/// two arguments that a caller could fill from two frames can.
+///
+/// # `None` is a head with no ink to press
+///
+/// [`keep_pill`]'s rule read on a readout instead of on a capsule. The run is
+/// clipped where the words are clipped — one `.half-head` gap short of the
+/// capsule — so a head narrow enough that the label alone fills it leaves no
+/// name on screen, and a target over ink nobody can see is a press that lands
+/// on nothing an operator could have aimed at.
+pub fn deck_name(
+    ctx: &egui::Context,
+    at: &InspectorPane,
+    pane: &Pane,
+    naming: Option<&str>,
+) -> Option<DeckName> {
+    // Fonts are not valid until `egui` has run a pass, exactly as in
+    // [`keep_pill`] — and on the frame before the first one there is nothing
+    // drawn here to press.
+    if ctx.cumulative_pass_nr() == 0 {
+        return None;
+    }
+    let head = at.head;
+    if !positive(head) {
+        return None;
+    }
+    let run = |text: &str| {
+        ctx.fonts_mut(|f| {
+            f.layout_no_wrap(
+                text.to_owned(),
+                FontId::new(size::BASE, FontFamily::Proportional),
+                Color32::PLACEHOLDER,
+            )
+            .size()
+            .x
+        })
+    };
+    // **The same clip [`inspector_into`] paints the words inside**, written
+    // once here and read there: everything up to the capsule, one `.half-head`
+    // gap short of it, and the whole head where there is no capsule.
+    let limit = match keep_pill(ctx, at, pane) {
+        Some(pill) => pill.pill.min.x - size::HALF_HEAD_GAP,
+        None => head.max.x,
+    };
+    let left = head.min.x + size::HALF_HEAD_PAD_X + run(head_label(naming)) + size::HALF_HEAD_GAP;
+    let text = match naming {
+        Some(typed) => naming_text_in_head(pane, typed),
+        None => showing_text(pane),
+    };
+    let right = (left + run(&text)).min(limit);
+    if right <= left {
+        return None;
+    }
+    let top = head.min.y + size::HALF_HEAD_PAD_Y;
+    let name = Rect::from_min_max(Pos2::new(left, top), Pos2::new(right, top + size::PILL_H));
+    Some(DeckName {
+        // **The chooser's place and not a control**: one gap after the run, at
+        // the glyph's own measure — [`CHEVRON_W`], which is the arrangement
+        // pill's `▾` three bays along. It is where the mark *would* go, so a
+        // head with no room left for it holds a rectangle outside its own
+        // clip; nothing paints it and nothing hit-tests it, and what it is for
+        // is that [`DeckName::name`] stops before it.
+        chevron: Rect::from_min_size(
+            Pos2::new(
+                name.max.x + size::HALF_HEAD_GAP,
+                name.center().y - CHEVRON_H * 0.5,
+            ),
+            egui::vec2(CHEVRON_W, CHEVRON_H),
+        ),
+        name,
+        deck: pane.deck,
+    })
+}
+
+/// **A pane head taking letters**, and the whole of the console's second
+/// letter-taking flow's state.
+///
+/// # One at a time, and it carries which head it is in
+///
+/// [`Menu::Naming`] is the first flow and it is one because a menu is one; this
+/// is one because **the keyboard is one**. Whoever holds the keys takes them
+/// whole while a name is being asked for — `s` is an `s` in a name and not a
+/// solo — so two open fields would be two places one keystroke could go, with
+/// nothing on the panel saying which. So this is an `Option` on the console and
+/// not a field per pane, and it names the pane the field is drawn in.
+///
+/// # The buffer is a `String` this crate owns and does not check
+///
+/// [`Menu::Naming`]'s rule, unchanged and for its reason: a name that is not
+/// one path component is refused where the file is written, in one sentence, by
+/// whoever writes it — the surface owns the affordance and never the authority
+/// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
+/// A head that quietly dropped the characters it did not like would be a rule
+/// an operator could only find by experiment.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Naming {
+    /// **Which pane head the field is in**, as an index into
+    /// [`View::inspector`] and so into [`PANE_NAMES`].
+    pub pane: usize,
+    typed: String,
+}
+
+impl Naming {
+    /// **What has been typed so far.** The caret is drawn after it and there
+    /// is no selection: this is a name, not a document —
+    /// [`Arrangement::naming`]'s own sentence.
+    pub fn typed(&self) -> &str {
+        &self.typed
+    }
+}
+
+impl View {
+    /// **Which pane head is taking letters, and what is in it** — or `None`
+    /// for a console where nothing is being named, which is every test in this
+    /// crate that does not say otherwise.
+    pub fn naming_set(&self) -> Option<&Naming> {
+        self.naming.as_ref()
+    }
+
+    /// **What pane `index`'s head is taking letters into**, or `None` where it
+    /// is reading. This is what [`deck_name`] and [`inspector_into`] each ask,
+    /// so that one head is asking and the other is not.
+    pub fn naming_set_in(&self, index: usize) -> Option<&str> {
+        self.naming
+            .as_ref()
+            .filter(|naming| naming.pane == index)
+            .map(Naming::typed)
+    }
+
+    /// **Ask for a name in pane `index`'s head**, starting from empty.
+    ///
+    /// **Starting from empty rather than from the material's name.** The run
+    /// under the caret read `drift_night` a moment ago and the field does not
+    /// keep it: a buffer seeded with what was there is a name an operator
+    /// commits by pressing return once, which is the shape of an overwrite
+    /// nobody typed. What ADR-0128 makes an instruction is a name that was
+    /// *typed*.
+    pub fn name_set(&mut self, index: usize) {
+        self.naming = Some(Naming {
+            pane: index,
+            typed: String::new(),
+        });
+    }
+
+    /// **Take the field away, typed name and all**, which is what escape
+    /// asks and what a press somewhere else asks. [`Arrangement::shut`]'s
+    /// sentence: a name abandoned half-typed is not kept for the next time,
+    /// because the buffer is the gesture and the gesture ended.
+    pub fn stop_naming_set(&mut self) {
+        self.naming = None;
+    }
+
+    /// **One character into the name being typed**, and `false` where no head
+    /// was asking for one. [`Arrangement::typed`]'s rule and its refusal:
+    /// control characters are not a name and never reach the buffer, because a
+    /// newline is Return arriving as text and that is the commit.
+    pub fn type_into_name(&mut self, c: char) -> bool {
+        match (&mut self.naming, c.is_control()) {
+            (Some(naming), false) => {
+                naming.typed.push(c);
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// **The last character back out again**, and `false` where there was
+    /// nothing to take — no head asking, or an empty name.
+    pub fn rub_out_of_name(&mut self) -> bool {
+        match &mut self.naming {
+            Some(naming) => naming.typed.pop().is_some(),
+            None => false,
+        }
+    }
+
+    /// **The name is finished, and this is what it asks for**: the deck that
+    /// head is showing, filed under what was typed.
+    ///
+    /// # The deck is read at the commit and not at the press
+    ///
+    /// [`KeepPill`] carries the deck it was measured for because its press is
+    /// one instant; this gesture spans frames, and what is filed has to be the
+    /// deck the head says it is filing *now*. So the pane is looked up again
+    /// and `None` is a pane that has gone — a console handed a shorter
+    /// [`View::inspector`] while somebody was typing — where the field is
+    /// taken away and nothing is emitted, rather than a keep landing on a deck
+    /// whose head is no longer on screen.
+    ///
+    /// # It refuses nothing else
+    ///
+    /// An empty name arrives here as an empty name and leaves as one, which is
+    /// [`Arrangement`]'s rule at the same seam: `id` is one path component and
+    /// the wall is where the bytes are written. **A name typed twice
+    /// overwrites**, which is ADR-0128 and is not this control's to soften.
+    ///
+    /// **The field is taken away whether or not the name is any good**, for
+    /// `Readout::named`'s reason one bay along: a refusal is said out loud by
+    /// whoever refuses it, and a field left standing over the refusal would be
+    /// the panel asking the question again without saying the answer.
+    pub fn named_set(&mut self) -> Option<Operation> {
+        let naming = self.naming.take()?;
+        let deck = self.inspector.get(naming.pane)?.deck as u8;
+        Some(Operation::SaveSet {
+            deck,
+            id: Some(naming.typed),
+        })
+    }
+}
 
 /// **The word on the fold chip**, which is the mock's own and is drawn whether
 /// or not it changes anything: *"A deck publishing a single renderer draws the
@@ -12975,7 +13726,31 @@ const COMPOSITE_LABEL: &str = "composite";
 /// safe: a group that fits and a name that does not are the same clip, and it
 /// is the same `with_clip_rect` the picture, a preview cell and the library's
 /// list are each drawn inside.
-fn inspector_into(ui: &Ui, pal: &Palette, at: &InspectorPane, pane: &Pane) {
+/// **Whether the deck a pane is showing is on air**, off the Mixer bay's own
+/// reading of it.
+///
+/// [`Strip::tally`] through [`residency`], which is the one place a tally
+/// becomes a residency on this console — a second reading of it here would be
+/// two statements about one fact, and the mock draws the pane's `keep` and the
+/// strip's tally in one pink for exactly the reason that they are one fact.
+///
+/// **A deck with no strip is not on air**, which is a state rather than a
+/// fallback: [`View::mixer`] is as long as the deck has slots, so a pane
+/// pointed past the end is pointed at nothing, and nothing is not live.
+fn on_air(strips: &[Strip], deck: usize) -> bool {
+    strips
+        .get(deck)
+        .is_some_and(|strip| residency(strip.tally) == Residency::Live)
+}
+
+fn inspector_into(
+    ui: &Ui,
+    pal: &Palette,
+    at: &InspectorPane,
+    pane: &Pane,
+    on_air: bool,
+    naming: Option<&str>,
+) {
     // **Derived here and hit-tested by `claim` off the same call**, and asked
     // before the words are painted rather than after: `.half-head` is a flex
     // row with `.sep` between them, so the readout is what gives way when the
@@ -12994,21 +13769,45 @@ fn inspector_into(ui: &Ui, pal: &Palette, at: &InspectorPane, pane: &Pane) {
         None => at.head,
     };
     let painter = ui.painter().with_clip_rect(words);
-    let mut x = at.head.min.x + size::HALF_HEAD_PAD_X;
-    let label = painter.layout_job(span_at(SHOWING_LABEL, size::BASE, pal.faint));
+    let label = painter.layout_job(span_at(head_label(naming), size::BASE, pal.faint));
     let y = at.head.center().y - label.size().y * 0.5;
-    x += label.size().x + size::HALF_HEAD_GAP;
     painter.galley(
         Pos2::new(at.head.min.x + size::HALF_HEAD_PAD_X, y),
         label,
         pal.faint,
     );
-    let what = painter.layout_job(span_at(&showing_text(pane), size::BASE, pal.text));
-    painter.galley(
-        Pos2::new(x, at.head.center().y - what.size().y * 0.5),
-        what,
-        pal.text,
-    );
+    // **The run, from the same derivation `claim` hit-tests** — the mock's
+    // `.what`, and the console's second letter-taking flow while a name is
+    // going into it. `None` is a head with no room to paint any of it, which
+    // is [`deck_name`]'s own refusal and leaves the label alone in the row.
+    if let Some(named) = deck_name(ui.ctx(), at, pane, naming) {
+        // **A ground under the field while it is asking, and none while it is
+        // reading.** A caret says letters are going *somewhere*; the tint says
+        // where, which is the one thing a run of text in a row of readouts
+        // cannot say for itself. It is `.node-head`'s own `--c-tint`, so the
+        // console spends no new colour on it — and the pink a capsule is lit
+        // in is deliberately not reached for here, because that pink means
+        // *on air* two controls away.
+        if naming.is_some() {
+            painter.rect_filled(named.name, CornerRadius::same(3), pal.tint);
+        }
+        let what = painter.layout_job(span_at(
+            &match naming {
+                Some(typed) => naming_text_in_head(pane, typed),
+                None => showing_text(pane),
+            },
+            size::BASE,
+            pal.text,
+        ));
+        painter.galley(
+            Pos2::new(
+                named.name.min.x,
+                named.name.center().y - what.size().y * 0.5,
+            ),
+            what,
+            pal.text,
+        );
+    }
     // `.half-head`'s own `border-bottom`, the bottom pixel of the row — drawn
     // through the whole head rather than through the words' clip, which stops
     // one gap short of the pill.
@@ -13021,17 +13820,25 @@ fn inspector_into(ui: &Ui, pal: &Palette, at: &InspectorPane, pane: &Pane) {
         ],
         Stroke::new(size::HAIRLINE, pal.hair),
     );
-    // `.pill` in its one treatment. **The mock draws the first pane's `keep`
-    // as `.pill.on` and the second pane's as a plain `.pill`**, and neither
-    // the mock nor `docs/manual/console.html` says what the lit one is
-    // reading: deck A is on air *and* holds the selection *and* is the first
-    // pane, and a console that picked one of those would be drawing a state
-    // off a guess. So one treatment, which is
-    // [ADR-0200](../../../docs/adr/0200-a-bays-first-pass-draws-the-values-that-exist-and-omits-the-rest.md)'s
-    // rule met by a capsule rather than by an omission: a keep is a press and
-    // not a setting, and there is nothing here for a wash to be *on*.
+    // **The mock draws the first pane's `keep` as `.pill.on` and the second
+    // pane's as a plain `.pill`**, and what the lit one reads is now on the
+    // page: the deck this pane is *showing* is on air. Deck A in the mock is
+    // on air *and* holds the selection *and* is the first pane, and the wash
+    // is the first of the three for two reasons the console already holds —
+    // `.pill.on`'s pink *is* the pink a tally on air is drawn in
+    // ([`on_pill_at`]), and the selection is drawn in lavender everywhere
+    // else on this panel, so a pink wash meaning *selected* would be the one
+    // colour on the console saying two things.
+    //
+    // **It is handed in rather than asked here**, which is `mixer_into`'s
+    // `marked` and `selection` one bay over: residency is the *mixer's*
+    // reading of a deck — [`Strip::tally`] — and a second derivation of it in
+    // this bay would be two statements about one fact.
     if let Some(pill) = keep {
-        pill_at(ui, pal, pill.pill, KEEP_LABEL);
+        match on_air {
+            true => on_pill_at(ui, pal, pill.pill, KEEP_LABEL),
+            false => pill_at(ui, pal, pill.pill, KEEP_LABEL),
+        }
     }
 
     // **Derived here and hit-tested by `claim` off the same call**, which is
@@ -13886,6 +14693,24 @@ pub struct View {
     /// this pointer, where the `holds` candidates are a reading of a store that
     /// can.
     layer: Option<Layer>,
+    /// **Which pane head is taking letters, and what has been typed into it**
+    /// — or `None` for a console where nothing is being named, which is where
+    /// every run starts.
+    ///
+    /// **The console's own state and not a reading**, which is
+    /// [`Arrangement::menu`]'s argument on a second control: what a *control*
+    /// is doing is this crate's, nothing about a half-typed name is saved,
+    /// restored or reset, and a host that kept a copy would be keeping the
+    /// console's gesture on its behalf.
+    ///
+    /// **It cannot live in [`View::inspector`]**, which is the reason it is a
+    /// field here at all: a pane is rewritten whenever a Set lands, so a
+    /// buffer kept in one would be a name that vanished mid-word.
+    ///
+    /// **Private, with [`View::name_set`] and the four methods beside it the
+    /// only ways in** — [`View::selection`]'s rule, and see [`Naming`] for why
+    /// there is one of these and not one per pane.
+    naming: Option<Naming>,
     /// **What the next fade, crossfade or wipe means** — the wipe's front
     /// shape and angle, the grid it starts on and how long it lasts — and the
     /// fourth of this console's pointers.
@@ -13964,6 +14789,10 @@ impl View {
             // that does not say otherwise.
             holds_at: None,
             layer: None,
+            // **No head asking for a name**, which is where a run starts and
+            // is every test in this crate that does not say otherwise: the two
+            // pane heads are readouts until a hand lands on one of them.
+            naming: None,
             // Nothing outstanding on any slot, which is a console with no
             // engine behind it and is also every ordinary frame of one that
             // has. Room for as many rows as a deck can ever have slots, so
@@ -14542,6 +15371,39 @@ impl View {
     /// slot is a live region for as long as it is parked, and a schedule
     /// admitted on the 40% of the period that moves would be a schedule that
     /// could not afford the thing it admitted.
+    ///
+    /// # The level meter is in this bay and is not in this declaration
+    ///
+    /// [`Strip::level`] is the one thing on a strip that is a *measurement*
+    /// rather than a setting, and it moves on every frame the engine renders
+    /// — so *nothing in this bay changes while the roll rests* is a sentence
+    /// about the roll and not about the bay. It declares nothing anyway, and
+    /// the reason is **where the reading comes from**: `Deck::level` moves
+    /// inside `Deck::begin_frame`, which is the only caller of
+    /// `Meters::collect`, and a caller calls it once per composed frame. The
+    /// meter's picture is therefore a function of **the frames this panel is
+    /// drawn on** rather than of wall time, and there is no moment between two
+    /// frames at which what is on screen is not the newest reading taken —
+    /// because no reading is taken between two frames.
+    ///
+    /// That is what separates it from [`roll_at`], which is different at
+    /// 400 ms from what it was at 399 whether or not anybody drew anything and
+    /// can therefore say when it next moves. It is also what separates it from
+    /// the beat, which moves per composed frame as well and declares anyway on
+    /// P-0094's forced clause: *something is moving continuously while the
+    /// console is live*. There is no such clause for a meter, and a deadline
+    /// for one would be asking for the frames that produce the readings it
+    /// would then draw — measured in
+    /// [ADR-0290](../../../docs/adr/0290-the-level-meter-moves-only-when-a-frame-is-drawn-so-it-declares-nothing.md),
+    /// which is where the alternatives are, and held in `tests/metered.rs`.
+    ///
+    /// **What would change it is ballistics.** A peak that is held and decays,
+    /// or a fill that falls at a rate rather than following the reading, is a
+    /// function of the clock exactly as the roll is: it would move between two
+    /// frames, and it would then have to declare. `tests/metered.rs` asserts
+    /// that premise — the meter's geometry is a function of the reading and of
+    /// nothing else — so the day a meter grows a fall time is a test failure
+    /// rather than a readout that freezes with nothing saying so.
     fn mixer_declares(&self, layout: &karakuri_layout::Layout) -> Option<Declared> {
         let bay = layout.find("mixer").is_some_and(|id| layout.visible(id));
         let moving = bay
@@ -14715,6 +15577,10 @@ impl View {
         let load = DECK_LETTERS[usize::from(selection)];
         let waiting = self.staging.as_slice();
         let panes = self.inspector.as_slice();
+        // **The seventh pointer, read once for the frame** beside the panes it
+        // points into — `draw` takes `&mut self`, and a head asked inside the
+        // loop below would be a second borrow of the same struct.
+        let naming = self.naming.as_ref();
         let phase = self.phase;
         // **The opening, read once for the pass.** Every head that opens a
         // class lays its pills out against this one value, so no two capsules
@@ -14956,7 +15822,16 @@ impl View {
             // painted, and nothing else on the panel overlaps them.
             for (index, pane) in panes.iter().enumerate().take(PANES) {
                 if let Some(at) = inspector(panel.layout(), index, pane) {
-                    inspector_into(ui, &pal, &at, pane);
+                    inspector_into(
+                        ui,
+                        &pal,
+                        &at,
+                        pane,
+                        on_air(strips, pane.deck),
+                        naming
+                            .filter(|naming| naming.pane == index)
+                            .map(Naming::typed),
+                    );
                 }
             }
 
@@ -15529,10 +16404,14 @@ fn armed_pill_at(ui: &Ui, pal: &Palette, rect: Rect, text: &str) {
 /// and `box-shadow: 0 0 10px var(--c-glowp)`.
 ///
 /// **The console's second treatment for a lit capsule, and the two say
-/// different things.** `.pill.armed` is *this setting is chosen*;
-/// `.pill.on` is *this is the press that does it*, which is why the mock
-/// reserves it for `go` and why the pink it is drawn in is the same pink a
-/// tally on air is. The one caller is [`transition_into`].
+/// different things.** `.pill.armed` is *this setting is chosen*; `.pill.on`
+/// is drawn in the same pink a tally on air is, and what it says is *this is
+/// live*: the press that runs the transition on the `go` it was written for,
+/// the recording that is running on the `rec` capsule, and the deck a pane is
+/// showing being on air on the Inspector's `keep`. **The mock does not reserve
+/// it for `go`**, which this said until 2026-09-08 and which the mock has
+/// contradicted in two rows since before it was written. Callers:
+/// [`transition_into`] and [`inspector_into`].
 fn on_pill_at(ui: &Ui, pal: &Palette, rect: Rect, text: &str) {
     let painter = ui.painter();
     // Half the box's own height, for [`armed_pill_at`]'s reason: this capsule

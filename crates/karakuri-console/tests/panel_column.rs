@@ -399,6 +399,26 @@ fn sample(variant: &str) -> Operation {
         // files under a stamp exactly as the `k` key's does (ADR-0287). What
         // the badge claims is that an operator reaches the row.
         "SaveSet" => Operation::SaveSet { deck: 0, id: None },
+        // **The tempo figure at the head of the transport row**, and it is
+        // not this row's work — the arm is here because `sample` is one list
+        // and an operation with no value in it stops every assertion in this
+        // file, not only the one about its own row. The value is any tempo,
+        // because what the badge claims is that an operator reaches the row.
+        "SetFreeRunTempo" => Operation::SetFreeRunTempo { bpm: 128.0 },
+        // **The `rec` pill at the end of the transport row**, and the one
+        // emission in this list whose payload is what the *control* is showing
+        // rather than an arbitrary value: the pill is a toggle, so a press
+        // asks to start where nothing is running and to stop where something
+        // is. Either payload names the row, and the badge claims an operator
+        // reaches it — so this is a `Stop`, which is the gesture the mock's
+        // tip already named.
+        //
+        // **`Start` carries `None`**, and it would if this were the arm: each
+        // start files under a fresh stamp, because a second head under one id
+        // is read back as edits (ADR-0289).
+        "RecordSession" => Operation::RecordSession {
+            recording: karakuri_operation::Recording::Stop,
+        },
         // **The renderer chips in the Inspector's node groups**, and one
         // operation is one row however many chips name it — the same
         // arrangement `SetSync` and `SetTransition` are in. A press on a deck

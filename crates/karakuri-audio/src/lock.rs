@@ -383,6 +383,89 @@ impl BeatLock {
         })
     }
 
+    /// A performer naming the grid's tempo outright, rather than by a factor
+    /// or by tapping it — `Operation::SetFreeRunTempo`, which is *what the grid
+    /// runs at with nothing driving it*.
+    ///
+    /// # It moves nothing, which is why it hands back no [`Correction`]
+    ///
+    /// [`BeatLock::octave`] beside it computes a tempo and returns one, because
+    /// the factor is all the operator gave it. Here the operator gave the
+    /// number, and that number reaches the oscillator as a `tempo` record
+    /// through `audio::apply_tempo` — the one road, live and on replay. What is
+    /// left for this lock is the state the *record* does not carry, and this is
+    /// it.
+    ///
+    /// # The run of evidence goes, for [`BeatLock::octave`]'s own reason
+    ///
+    /// `agreement` and `disagreement` count consecutive
+    /// estimates saying one thing about the grid that was there. The grid has
+    /// moved, and the tracker goes on publishing from the window it had for up
+    /// to one `ESTIMATE_INTERVAL` afterwards — so a [`RELOCK_EVIDENCE`] run
+    /// part-served by opinions formed before the press would take the grid back
+    /// in less than the two seconds that number is built on, and the operator
+    /// would watch the control undo itself. Cleared, a room that really is at
+    /// another tempo pays a whole fresh run for it: the tracker deciding,
+    /// rather than a count left over from before anybody pressed anything.
+    ///
+    /// `candidate_bpm` becomes what was named, so the first
+    /// estimate after the press starts a run of its own rather than continuing
+    /// one about a tempo nobody is asking for.
+    ///
+    /// # The state is left exactly as it is, and that is the one place this
+    /// parts company with a tap and an octave
+    ///
+    /// Both of those set `State::Locked`, and both are a performer saying
+    /// what the grid is locked *to*: a tap is the room's beat, and an octave is
+    /// a tracked grid being corrected. This says what the grid **runs at**, and
+    /// says nothing about whether anything is driving it — so the lock goes on
+    /// answering that question from what it has measured:
+    ///
+    /// - **Not `Locked`.** [`BeatLock::locked`] is a readout — it is drawn on
+    ///   the panel every frame and printed — and *locked* about a room with no
+    ///   beat in it is the confident wrong judgement
+    ///   `docs/principles/0084-a-confident-wrong-automatic-judgement-is-worse-than-not-judging.md`
+    ///   refuses. It would also cost the operator the thing they set the tempo
+    ///   *for*: a beat arriving afterwards would need [`RELOCK_EVIDENCE`]'s
+    ///   eight revisions to take a grid that [`ACQUIRE_EVIDENCE`]'s three would
+    ///   have taken from a free-running one, so naming a rough tempo before the
+    ///   music started would make the music slower to lock than saying nothing.
+    /// - **Not `Free` either.** A room that *is* being tracked stays tracked:
+    ///   dropping to `Free` would let the next three agreeing estimates
+    ///   **jump** the grid — acquisition is allowed to jump, because nothing
+    ///   was locked — where a locked grid trims towards them over
+    ///   [`TRIM_TAU_TEMPO`].
+    ///
+    /// # No band and no range, and that is not an omission
+    ///
+    /// What a tempo may be is not this lock's to say — [`BPM_RANGE`] says of
+    /// itself that it is not the range of answers, and a grid at 240 is a
+    /// perfectly good grid. The ±15% a *hand* is held to is a guard against a
+    /// mis-click and lives where the press becomes an operation, which is the
+    /// console; a band written here would sit in the path every estimate
+    /// travels, and a grid that cannot follow the music is a worse failure than
+    /// a hand that can ask for anything
+    /// ([ADR-0291](../../../docs/adr/0291-the-tempo-figure-is-the-track-and-the-band-is-a-guard-on-the-hand.md)).
+    ///
+    /// What is refused is a number that is not a tempo at all: `candidate_bpm`
+    /// is compared against on every estimate and a NaN compares false with
+    /// everything, so a run could never be counted again.
+    pub fn retarget(&mut self, bpm: f32) {
+        if !bpm.is_finite() || bpm <= 0.0 {
+            return;
+        }
+        self.agreement = 0;
+        self.disagreement = 0;
+        self.candidate_bpm = bpm;
+        // The phase does not move — [`BeatLock::octave`]'s sentence, and the
+        // reason is the same one line along: `Oscillator::correct` takes a
+        // shift of zero for this record, so the beat the performer can see
+        // stays where it is. What is zeroed is the *reading*: the error on the
+        // panel was measured against a tempo that is gone, and in a room below
+        // `GATE_CONFIDENCE` nothing would ever overwrite it.
+        self.error = 0.0;
+    }
+
     /// The tempo the taps imply, if there are enough of them and they agree.
     fn tapped_tempo(&self) -> Option<f32> {
         if self.tap_count < 3 {
@@ -872,6 +955,125 @@ mod tests {
 
         let slow = Oscillator::new(90.0);
         assert!(lock.octave(0.5, &slow).is_none(), "45 bpm was taken");
+    }
+
+    // -- a tempo named by hand ----------------------------------------------
+
+    /// **A hand naming the tempo clears the run of evidence and leaves the
+    /// state exactly as it found it**, which is the whole of what
+    /// [`BeatLock::retarget`] does and the one place it parts company with
+    /// [`BeatLock::octave`].
+    ///
+    /// Both directions, because the two failures are opposite: a set that
+    /// locked a free-running grid would draw *locked* about a room with no
+    /// beat in it and make the beat that arrives afterwards slower to take the
+    /// grid than it would have been; a set that unlocked a tracked one would
+    /// let the next three agreeing estimates jump it.
+    #[test]
+    fn a_tempo_named_by_hand_clears_the_run_and_says_nothing_about_the_lock() {
+        // A tracked grid three revisions short of being dragged back.
+        let mut tracked = BeatLock::new();
+        tracked.state = State::Locked;
+        tracked.disagreement = RELOCK_EVIDENCE - 3;
+        tracked.candidate_bpm = 160.0;
+        tracked.error = 0.2;
+        tracked.retarget(145.0);
+        assert_eq!(
+            tracked.disagreement, 0,
+            "the run behind the old target survived a set"
+        );
+        assert_eq!(tracked.agreement, 0);
+        assert_eq!(
+            tracked.candidate_bpm, 145.0,
+            "the next estimate would be counted against a tempo nobody asked for"
+        );
+        assert_eq!(
+            tracked.error, 0.0,
+            "a phase error measured against a tempo that is gone is still on the panel"
+        );
+        assert!(
+            tracked.locked(),
+            "a set unlocked a grid that is being tracked"
+        );
+
+        // A free-running grid one revision short of acquiring.
+        let mut free = BeatLock::new();
+        free.agreement = ACQUIRE_EVIDENCE - 1;
+        free.candidate_bpm = 128.0;
+        free.retarget(145.0);
+        assert_eq!(
+            free.agreement, 0,
+            "the run behind the old target survived a set"
+        );
+        assert!(
+            !free.locked(),
+            "a set said the grid was locked to something"
+        );
+
+        // A number that is not a tempo leaves everything alone rather than
+        // poisoning the comparison every run is counted by.
+        let mut poisoned = BeatLock::new();
+        poisoned.candidate_bpm = 128.0;
+        for bad in [f32::NAN, f32::INFINITY, 0.0, -128.0] {
+            poisoned.retarget(bad);
+            assert_eq!(poisoned.candidate_bpm, 128.0, "{bad} was taken as a tempo");
+        }
+    }
+
+    /// **The room takes a hand-set grid back only after a whole fresh run of
+    /// disagreement**, and the same session without the clearing is taken back
+    /// in three — which is what says this test measures the run rather than the
+    /// tempo.
+    ///
+    /// The press lands while the room has already been disagreeing for five
+    /// revisions, because that is the case the clearing is *for*: a lock that
+    /// is trimming has no run to speak of, and one that is being argued with
+    /// has most of one.
+    #[test]
+    fn a_tempo_named_by_hand_costs_the_room_a_whole_run_to_take_the_grid_back() {
+        // Estimates until the grid moves again, from a session locked to one
+        // tempo and then argued with by another.
+        let revisions_until_the_room_wins = |clear: bool| {
+            let mut session = Session::new(120.0);
+            session.run(12.0, Some((128.0, 0.9)), true);
+            assert!(session.lock.locked(), "the grid never locked to the room");
+
+            // The room is at another tempo now, and has said so five times.
+            while session.lock.disagreement < 5 {
+                session.frame(Some((160.0, 0.9)), true);
+            }
+
+            // The press: the operator names a tempo, and the grid moves
+            // because of the record rather than because of this call.
+            if clear {
+                session.lock.retarget(145.0);
+            }
+            session.oscillator.correct(145.0, 0.0);
+
+            let mut revisions = 0;
+            let mut seen = session.lock.seen;
+            while (session.oscillator.bpm() - 145.0).abs() < 0.001 {
+                session.frame(Some((160.0, 0.9)), true);
+                if session.lock.seen != seen {
+                    seen = session.lock.seen;
+                    revisions += 1;
+                }
+                assert!(revisions < 40, "the room never took the grid back");
+            }
+            revisions
+        };
+
+        assert_eq!(
+            revisions_until_the_room_wins(true),
+            RELOCK_EVIDENCE,
+            "a hand-set tempo was dragged back in less than a full run of disagreement"
+        );
+        assert_eq!(
+            revisions_until_the_room_wins(false),
+            RELOCK_EVIDENCE - 5,
+            "the run left over from before the press is no longer what carries the grid back, \
+             so this test is no longer measuring the clearing"
+        );
     }
 
     // -- the wrap -----------------------------------------------------------
