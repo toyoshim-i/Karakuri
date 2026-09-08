@@ -310,6 +310,25 @@ proc wide_points {
                 .expect("poll");
         }
 
+        /// **Turn a knob on the Set that is playing**, which is what
+        /// `Deck::write_param` does for a surface: `begin_frame` is the public
+        /// road to a live `&mut Set` and the write is a uniform value, on screen
+        /// at the next frame with no build
+        /// (`docs/adr/0280-a-parameter-written-to-a-live-set-is-a-session-record.md`).
+        ///
+        /// It opens a frame it does not render, which is what a caller must not
+        /// do in a loop and is exactly right here: the swap it might install is
+        /// the thing under test in every caller below, and each of them has
+        /// already waited for the one it was expecting.
+        fn ride(&mut self, key: &str, value: f32) {
+            let device = &self.gpu.device;
+            let live = self.swap.begin_frame(device);
+            let landed = live
+                .write_param(&karakuri_engine::ParamWrite::everywhere(key, value))
+                .expect("nothing here grants a node away, so no write crosses an authority");
+            assert!(landed > 0, "nothing in the live Set declares `{key}`");
+        }
+
         /// Render frames until `wanted` matches an event, and return how many
         /// frames that took. Every event seen along the way is collected, so a
         /// caller can check that nothing else happened either.
@@ -435,11 +454,15 @@ proc wide_points {
 
     /// A swapped-in Set carries the bindings the request stated.
     ///
-    /// A binding is Set state and a swap builds a whole new Set, so this is the
-    /// same "carried by being restated" the params already are — and losing it is
-    /// silent: `--watch` would keep working, the picture would keep updating, and
-    /// the only symptom would be a parameter that quietly stopped moving after the
-    /// first save.
+    /// A binding is Set state and a swap builds a whole new Set, so it is carried
+    /// by being restated — and losing it is silent: `--watch` would keep working,
+    /// the picture would keep updating, and the only symptom would be a parameter
+    /// that quietly stopped moving after the first save.
+    ///
+    /// **The params were the example this pointed at and are no longer.** A
+    /// parameter value is the one thing the outgoing Set can hand over itself,
+    /// and a rebuild inherits the ones somebody moved rather than restating them
+    /// — see the tests at the bottom of this file.
     #[test]
     fn a_swapped_in_set_carries_the_bindings_the_request_stated() {
         let (mut h, tx) = Harness::channel_driven(GENEROUS_MS);
@@ -567,8 +590,8 @@ proc wide_points {
     /// **A swapped-in Set is aimed where the request says**, and not at
     /// `Orbit::default()`.
     ///
-    /// The camera is Set state the way the params and the bindings are, and it was
-    /// the one piece of it a request did not carry. `Set::build_many` starts every
+    /// The camera is Set state the way the bindings are, and it was the one piece
+    /// of it a request did not carry. `Set::build_many` starts every
     /// Set it builds from the default orbit, so a swap silently re-aimed the slot —
     /// and it stayed silent, because the picture still moved and nothing was
     /// refused. Downstream of that, a caller that *records* `Set::camera` — which
@@ -860,9 +883,9 @@ proc wide_points {
     /// **A rebuild can change how many renderers a Set has**, not only which ones.
     ///
     /// A `Request` restates the whole stack rather than naming the node that
-    /// changed, for the same reason it restates the params and the bindings: a
-    /// request that depended on what happens to be live would not be reproducible
-    /// from a record stream. So going from one renderer to two is an ordinary
+    /// changed, for the same reason it restates the bindings: a request that
+    /// depended on what happens to be live would not be reproducible from a
+    /// record stream. So going from one renderer to two is an ordinary
     /// rebuild and needs nothing the swap path did not already have.
     ///
     /// Both renderers declare `exposure`, at different defaults. That pair is
@@ -1295,6 +1318,207 @@ proc fountain {
             (driven - expected).abs() < 1e-3,
             "the macro resolved to {driven}, where the control at {} maps to {expected}",
             set.published_value("level").unwrap()
+        );
+    }
+
+    // ---------------------------------------------------------------------------
+    // What a rebuild does with the values: the declared ones come from the code,
+    // the moved ones come from the Set that is playing.
+    // ---------------------------------------------------------------------------
+
+    /// `L1` with its `radius` default edited, which is the whole of what an
+    /// author does between two saves. Everything else about the procedure is the
+    /// same text, so the only thing a rebuild can be answering with is the
+    /// declaration.
+    const L1_EDITED_DEFAULT: &str = r#"
+proc static_shell {
+  kind     L1
+  topology points
+  capacity [1024, 262144] = 4096
+
+  param radius : float [0.1, 8.0] = 5.0
+
+  emit position, age
+
+  element {
+    let u = hash1(seed);
+    let v = hash1(seed + 1000u);
+    position = sphere_point(u, v) * radius;
+    age      = age + dt;
+  }
+}
+"#;
+
+    /// A renderer that declares no `exposure` — the name a rebuild **dropped**.
+    const L4_NO_EXPOSURE: &str = r#"
+proc plain_points {
+  kind  L4
+  blend additive
+
+  consumes position
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    point_rate = 0.015625;
+  }
+
+  fragment {
+    let d = length(point_coord * 2.0 - 1.0);
+    color = vec4(1.0, 1.0, 1.0, max(0.0, 1.0 - d));
+  }
+}
+"#;
+
+    /// A request over an L1 the caller chooses, so that an edited declaration is
+    /// something a test can send.
+    fn request_from(l1_src: &str, l4_srcs: &[&str], label: &str) -> Request {
+        let mut r = request_many(l4_srcs, FIRST, label);
+        r.l1s = vec![(compile(l1_src), FIRST)];
+        r
+    }
+
+    fn value_at(set: &Set, layer: karakuri_ir::Kind, index: u32, key: &str) -> Option<f32> {
+        set.params()
+            .find(|(l, i, k, _)| *l == layer && *i == index && *k == key)
+            .map(|(_, _, _, v)| v)
+    }
+
+    /// **An author edits a declared default and saves; the picture moves.** That
+    /// is the one thing `--watch` exists to do, and it is the half of the rule
+    /// that a rebuild inheriting *every* value by name would break — a Set holds
+    /// one number per key, so carrying them all would carry the outgoing
+    /// declaration forward and an edit would show nothing, forever
+    /// (`docs/adr/0280-…`, §6, which is why that section said the information was
+    /// not there).
+    ///
+    /// Nobody has touched `radius` here, so nothing about it was ever stated: the
+    /// value comes from the code because the code is the only thing that has
+    /// spoken.
+    #[test]
+    fn an_edited_declaration_lands_on_a_value_nobody_moved() {
+        let (mut h, tx) = Harness::channel_driven(GENEROUS_MS);
+        for _ in 0..5 {
+            h.frame();
+        }
+        assert_eq!(
+            value_at(h.swap.set(), karakuri_ir::Kind::L1, 0, "radius"),
+            Some(2.5),
+            "the Set did not start at the declaration"
+        );
+
+        tx.send(request_from(L1_EDITED_DEFAULT, &[L4], "edited"))
+            .expect("worker alive");
+        h.frames_until(is_swapped, "the rebuild to land");
+
+        assert_eq!(
+            value_at(h.swap.set(), karakuri_ir::Kind::L1, 0, "radius"),
+            Some(5.0),
+            "the author edited `radius` to 5.0 and saved, and the rebuild came back \
+             holding the value the outgoing Set was built with — an edit to a default \
+             that changes nothing is `--watch` doing the one thing it is for"
+        );
+    }
+
+    /// **A knob is ridden and then a `.kir` is saved; the knob stays where the
+    /// operator left it.** The other half, and the one that was broken: the
+    /// rebuild used to restate what the slot was *loaded* with, so a ride was
+    /// walked back on the next save of any file in the slot, silently.
+    ///
+    /// The same save also carries an edited declaration for the parameter nobody
+    /// touched, so one assertion pair covers both directions of the rule at once
+    /// — which is the point of it being one rule.
+    #[test]
+    fn a_ridden_value_crosses_a_rebuild_and_a_declared_one_does_not() {
+        let (mut h, tx) = Harness::channel_driven(GENEROUS_MS);
+        for _ in 0..5 {
+            h.frame();
+        }
+        h.ride("exposure", 3.25);
+        h.frame();
+
+        tx.send(request_from(L1_EDITED_DEFAULT, &[L4], "saved"))
+            .expect("worker alive");
+        h.frames_until(is_swapped, "the rebuild to land");
+
+        let set = h.swap.set();
+        assert_eq!(
+            value_at(set, karakuri_ir::Kind::L4, 0, "exposure"),
+            Some(3.25),
+            "the operator's hand was on `exposure` and the rebuild put it back to \
+             what the file declares"
+        );
+        assert_eq!(
+            value_at(set, karakuri_ir::Kind::L1, 0, "radius"),
+            Some(5.0),
+            "`radius` was never moved, so the rebuild owed it the new declaration"
+        );
+    }
+
+    /// **A value this build states beats a value the outgoing Set was holding**,
+    /// which is what separates *loading a Set* from *rebuilding one*. A slot
+    /// pointed at a Set file states every declaration of every node, because that
+    /// is what a live save writes; an operator who loads a preset over a slot
+    /// they have been riding asked for the preset.
+    #[test]
+    fn a_value_the_request_states_beats_the_one_the_operator_moved() {
+        let (mut h, tx) = Harness::channel_driven(GENEROUS_MS);
+        for _ in 0..5 {
+            h.frame();
+        }
+        h.ride("exposure", 3.25);
+        h.frame();
+
+        let mut next = request(L4, FIRST, "loaded");
+        next.params.push(karakuri_engine::ParamWrite::at(
+            karakuri_ir::Kind::L4,
+            0,
+            "exposure",
+            0.125,
+        ));
+        tx.send(next).expect("worker alive");
+        h.frames_until(is_swapped, "the load to land");
+
+        assert_eq!(
+            value_at(h.swap.set(), karakuri_ir::Kind::L4, 0, "exposure"),
+            Some(0.125),
+            "the request said what `exposure` is and the ride was carried over it"
+        );
+    }
+
+    /// **A name the rebuild dropped lands nowhere, and a node that is new comes
+    /// up at its own declaration.** Two of the five cases the rule has to answer,
+    /// in one save: the renderer that declared `exposure` is replaced by one that
+    /// does not, and a second renderer appears behind it.
+    ///
+    /// The carry is addressed by `(layer, index)` — `ParamWrite::at`'s spelling —
+    /// so the ridden `L4:0 exposure` is offered to `L4:0` and to nothing else. It
+    /// declares no such name, so the value is gone; `L4:1` is a node the outgoing
+    /// Set never had and takes what `wide_points` declares.
+    #[test]
+    fn a_dropped_name_is_gone_and_a_new_node_starts_at_its_declaration() {
+        let (mut h, tx) = Harness::channel_driven(GENEROUS_MS);
+        for _ in 0..5 {
+            h.frame();
+        }
+        h.ride("exposure", 3.25);
+        h.frame();
+
+        tx.send(request_from(L1, &[L4_NO_EXPOSURE, L4_WIDE], "reshaped"))
+            .expect("worker alive");
+        h.frames_until(is_swapped, "the rebuild to land");
+
+        let set = h.swap.set();
+        assert_eq!(
+            value_at(set, karakuri_ir::Kind::L4, 0, "exposure"),
+            None,
+            "`plain_points` declares no `exposure`, so a carried one is a value in a \
+             Set nothing can address"
+        );
+        assert_eq!(
+            value_at(set, karakuri_ir::Kind::L4, 1, "exposure"),
+            Some(0.5),
+            "`wide_points` is a node the outgoing Set never had, so it owes its own \
+             declaration and not the ride from the renderer beside it"
         );
     }
 }

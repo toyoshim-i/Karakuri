@@ -784,13 +784,18 @@ renderer of a deck is live* — `Deck::schedule_selection` is public and reaches
 `written(SelectRenderer)` already answers a `Record::Select` given the transition reading this file
 already takes, and what is missing is that arm in `apply` and a claim on the chips.
 
-**One thing to know before drawing the first control, and it is not a press.** A live parameter
-write is **discarded on the next rebuild**, and a rebuild is any save of any `.kir` in that slot,
-because every slot is watched. `Request::params` is restated rather than read off the outgoing Set,
-and what it is restated from is `Watch::overrides`, which only a re-point writes. That is the
-failure `Watch::camera` and `Watch::live` are documented against. So the first parameter control
-owes a writer into the watcher beside the writer into the Set, or it moves a knob that walks back on
-the next save.
+**One thing to know before drawing the first control, and it is not a press — and it is now done.**
+A live parameter write used to be **discarded on the next rebuild**, and a rebuild is any save of
+any `.kir` in that slot, because every slot is watched. `Request::params` was restated on every
+rebuild from `Watch::overrides`, which only a re-point writes, so a knob walked back on the next
+save and a slot loaded from a Set file — which states every declaration of every node — could not be
+ridden at all.
+[ADR-0282](adr/0282-a-rebuild-inherits-the-values-somebody-moved-and-reads-the-rest-from-the-code.md)
+closed it where the values already were: `Set` remembers which of them somebody stated, a rebuild
+carries those across at the install and reads the rest from the code it just recompiled, and the
+watcher states its aim's values on the build that aim causes and on no other. **So a parameter
+control owes a writer into the Set and nothing else** — the writer into the watcher this entry used
+to ask for is what was removed.
 
 **And there may be no row on screen to press.** A pane draws a node group whole or not at all and
 there is no scroll position anywhere in the crate, so with the pair a bare run opens on the first
@@ -1201,13 +1206,26 @@ under a closed milestone is never picked up.
    and the governor is what enforces* — so nothing is owed on the four ceilings themselves beyond
    this.
 5. **The badge drawn**, which is what the four above are for.
+6. **A region declares that it is moving, and not merely that something is pending.** **Done on
+   2026-09-08** ([ADR-0283](adr/0283-a-region-declares-when-its-picture-next-changes-not-that-something-is-pending.md)),
+   and taken ahead of the five above because every control that lands writes the same unconditional
+   read-back and the sites only multiply. A live region named two numbers — what its update costs
+   and how stale it may get — and **nothing said whether it had changed**, so the mixer bay's roll
+   was serviced at its declared thirty a second through the 600 ms of every second its curve is flat
+   at zero: 31 frames asked for over a period where the motion needs 14. `Declared::moves_in` is the
+   third number, `moves_in >= staleness` is why it can only ever remove a frame, and the beat is
+   untouched because P-0094 forbids a panel that stops moving when nothing has changed.
+   **What is left of it**: the mixer's level meter moves every frame and declares nothing, which is
+   an under-declaration older than that record and named in it; and caching a bay to a texture,
+   which this is the precondition for and item 2 above is the measurement for.
 
 **Exit.** Not a badge grep, and that is the point: **the panel draws a dot whose band a test can
 predict from a measurement.** Every other sub-milestone's exit is a column of
 [every operation](manual/operations.html); this one's consumer is a readout rather than an
 operation, which is exactly why no column could hold it.
 
-**Blocked on.** Item 1 blocks item 4. Nothing else here waits on another bay.
+**Blocked on.** Item 1 blocks item 4. Nothing else here waits on another bay, and item 6 waited on
+nothing at all — which is why it was taken first.
 
 **What ADR-0226 says, and what it does not.** M5 closes when M5.1 to M5.9 close and the two sections
 at the end of this list close with them. **M5.14 is not in that list**, and neither are M5.10 to

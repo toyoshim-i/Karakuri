@@ -45,7 +45,7 @@
 //! two refusals that need both procedures in hand — a consumed attribute the L1
 //! never emitted, and a param name declared on both sides.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use karakuri_codegen::{generate_l1, generate_l2};
 use karakuri_ir::layout::{ElementLayout, Synthetic};
@@ -859,6 +859,38 @@ pub struct Set {
     /// (`docs/adr/0052-a-parameter-is-keyed-by-its-layer-and-a-collision-is-refused.md`),
     /// and the error is gone with it.
     params: Vec<HashMap<String, f32>>,
+    /// **Which of [`Set::params`]'s values somebody stated**, in the same node
+    /// order — the keys, per node, that hold a number the `.kir` did not
+    /// declare.
+    ///
+    /// **The one thing `params` could not say.** That map is seeded from
+    /// [`declared_defaults`] and then written into, so a value a knob moved and
+    /// a value nobody has touched are the same entry: what the author wrote and
+    /// what the operator's hands are on are indistinguishable the moment the
+    /// build is over. This is the distinction, kept where it is made rather than
+    /// derived later — see [`Set::carry_moved_from`], which is its only reader
+    /// and the whole reason it exists.
+    ///
+    /// **A written set rather than a second copy of the declared values.** The
+    /// comparison — remember the defaults, call a value moved where it differs —
+    /// costs exactly the same one collection per node and answers wrong in one
+    /// place: a value stated as the number the declaration already held reads as
+    /// untouched, so `--param exposure=0.5` against a `.kir` declaring `0.5`
+    /// would survive a rebuild or not according to a numeric coincidence, and an
+    /// operator who rides a knob back to where it started has said something the
+    /// comparison cannot hear. A flag is exact, and exactness is what a rebuild
+    /// is deciding with.
+    ///
+    /// **Written by [`Set::set_param`] and [`Set::set_param_at`]**, which are
+    /// the two places a value in `params` ever changes and therefore the two
+    /// places that can say so. Every route in — a `--param`, a `param` record
+    /// from a Set file, a `ride` into a live Set, a rebuild's restatement — goes
+    /// through one of them, so the mark means *something other than the
+    /// declaration put this number here* and never *which surface did*.
+    ///
+    /// A binding does not appear here, and must not: it blends *from* a param's
+    /// value and never writes one — see [`Set::bind`].
+    moved: Vec<HashSet<String>>,
     /// The declared `[min, max]` of every param, in the same node order as
     /// [`Set::params`]. **Kept because an interface needs it**: a published
     /// range is checked as a subset of the declared one, and a Set with no
@@ -2789,6 +2821,13 @@ impl Set {
         // a node's authority cannot end up at a different index from its name.
         // A request states the rest — see `swap::Request::authorities`.
         let authorities = vec![Authority::default(); names.len()];
+        // **Nothing stated yet**, on `authorities`' terms exactly: one entry per
+        // node, from the same `names` walk, so a node's marks cannot end up at a
+        // different index from its values. A Set fresh out of here holds nothing
+        // but what its files declare — every number in `params` above came from
+        // [`declared_defaults`] — and that is the sentence an empty set per node
+        // is. See [`Set::moved`].
+        let moved = vec![HashSet::new(); names.len()];
         let set = Set {
             names,
             authorities,
@@ -2823,6 +2862,7 @@ impl Set {
                 || l4s.iter().any(|n| n.reads_beats),
             sources,
             params,
+            moved,
             ranges,
             camera: Orbit::default(),
             cameras: camera_nodes,
@@ -3431,9 +3471,15 @@ impl Set {
     /// apart; [`Set::write_param`] is the one entry point both come through.
     pub fn set_param(&mut self, name: &str, value: f32) -> usize {
         let mut written = 0;
-        for node in &mut self.params {
+        // **Zipped rather than indexed**, which is what lets one walk write both
+        // lists: `moved` is one entry per node in `params`' own order, and a
+        // second index into it would be a second copy of the arithmetic this
+        // file has already been wrong about twice. See [`Set::moved`] for what
+        // the mark means.
+        for (node, moved) in self.params.iter_mut().zip(self.moved.iter_mut()) {
             if let Some(slot) = node.get_mut(name) {
                 *slot = value;
+                moved.insert(name.to_string());
                 written += 1;
             }
         }
@@ -3463,6 +3509,11 @@ impl Set {
         match self.params.get_mut(slot).and_then(|n| n.get_mut(name)) {
             Some(held) => {
                 *held = value;
+                // **Marked where the value is written and nowhere else.** A node
+                // that does not declare the name holds no value and is not
+                // marked, so the set is a subset of the map's keys by
+                // construction — see [`Set::moved`].
+                self.moved[slot].insert(name.to_string());
                 true
             }
             None => false,
@@ -3572,6 +3623,98 @@ impl Set {
                 write.value,
             ))),
         }
+    }
+
+    /// **Whether somebody stated this node's value for `key`**, rather than the
+    /// `.kir` declaring it. `false` for a node that does not exist and for one
+    /// that does not declare the name, which are both "nobody stated it" from
+    /// here.
+    ///
+    /// Addressed through [`Set::nodes_of`] for [`Set::set_param_at`]'s reason.
+    ///
+    /// **Private, with one caller.** *Has anybody moved this knob* is a question
+    /// a surface may well want — it is the difference between a control showing
+    /// the code's number and the operator's — and no surface has asked it yet,
+    /// so this is the rule's own step rather than a reading offered to anyone.
+    fn moved_at(&self, layer: Kind, index: u32, key: &str) -> bool {
+        self.nodes_of(layer)
+            .nth(index as usize)
+            .is_some_and(|slot| self.moved[slot].contains(key))
+    }
+
+    /// **Take the values somebody moved off the Set going out, and answer how
+    /// many landed.** The declared ones are left where this build put them,
+    /// which is what the files just said they are.
+    ///
+    /// This is the whole of what a rebuild inherits, and it is one rule: *a
+    /// value the code declared comes from the code, and a value anything else
+    /// stated carries*. An author who edits `param radius = 2.0` to `5.0` and
+    /// saves sees `5.0`, because nothing had stated `radius`; an operator riding
+    /// `exposure` keeps their hand on it, because the ride stated it. Those are
+    /// the same sentence read from the two ends, and before `Set::moved`
+    /// existed neither end could be told from the other — `params` held one
+    /// number per key and no memory of where it came from, so inheriting by name
+    /// would have carried the *outgoing* declaration forward and made `--watch`
+    /// unable to change a default at all.
+    ///
+    /// **A key this build already marked is left alone**, and that is the
+    /// difference between a rebuild and a load. A build states its own
+    /// parameters through [`crate::swap::Request::params`] — which is what a
+    /// slot pointed at a Set file states, every declaration of every node — and
+    /// a stated value is this build's answer for that key, not the outgoing
+    /// Set's. Without that clause, loading a preset over a slot whose knobs had
+    /// been ridden would come up wearing the ride, which is the operator asking
+    /// for one thing and getting another.
+    ///
+    /// **Addressed by `(layer, index)`**, which is [`ParamWrite::at`]'s
+    /// spelling and [`crate::swap::Request::authorities`]' — so a bare key can
+    /// never re-land on a different node, and a node this build no longer has is
+    /// passed over on that field's terms. A `--watch` rebuild recompiles a fixed
+    /// list of files and the node order is that list, so the addresses hold
+    /// across one; a build that changes the material is a load, and a load
+    /// states its own values above.
+    ///
+    /// **Nothing is clamped and nothing is refused here.** A carried value whose
+    /// declared range moved under it is out of range exactly as a `--param`
+    /// outside the range is — `Set::ranges` is the console's and the agent's and
+    /// no uniform write is checked against it. A declaration whose *type*
+    /// changed is a change of keys, not of values: a `float glow` that became a
+    /// `vec3` no longer declares `glow` and declares `glow.x`, `glow.y`,
+    /// `glow.z`, so the moved `glow` lands nowhere and the three components come
+    /// up as the new declaration states them
+    /// (`docs/adr/0268-a-vector-parameter-is-driven-one-component-at-a-time.md`).
+    /// A name this build dropped lands nowhere and is *not* said out loud: the
+    /// author deleted the `param` line in the file that caused this rebuild, and
+    /// the count returned is what a caller with something to say would say it
+    /// with.
+    pub fn carry_moved_from(&mut self, outgoing: &Set) -> usize {
+        let mut carried = 0;
+        let moved: Vec<(Kind, u32, &str, f32)> = Kind::ALL
+            .into_iter()
+            .flat_map(|layer| {
+                outgoing
+                    .nodes_of(layer)
+                    .enumerate()
+                    .map(move |(index, slot)| (layer, index as u32, slot))
+            })
+            .flat_map(|(layer, index, slot)| {
+                outgoing.moved[slot]
+                    .iter()
+                    .filter_map(move |key| {
+                        Some((layer, index, key.as_str(), *outgoing.params[slot].get(key)?))
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        for (layer, index, key, value) in moved {
+            if self.moved_at(layer, index, key) {
+                continue;
+            }
+            if self.set_param_at(layer, index, key, value) {
+                carried += 1;
+            }
+        }
+        carried
     }
 
     /// **Add one control to this Set's interface.**

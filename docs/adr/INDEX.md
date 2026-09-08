@@ -309,6 +309,8 @@ number; new records continue from the end.
 | [ADR-0279](0279-the-centre-is-two-parameter-rows-wide-because-a-pane-that-cannot-draw-a-fader-is-not-a-minimum.md) | The centre is two parameter rows wide, because a pane that cannot draw a fader is not a minimum | 2026-09-08 | accepted |
 | [ADR-0280](0280-a-parameter-written-to-a-live-set-is-a-session-record.md) | A parameter written to a live Set is a session record, and the rebuild question is not settled with it | 2026-09-08 | accepted |
 | [ADR-0281](0281-every-route-reaches-every-write-and-a-read-is-the-routes-own-interface-design.md) | Every route reaches every write, and a read is the route's own interface design | 2026-09-08 | accepted |
+| [ADR-0282](0282-a-rebuild-inherits-the-values-somebody-moved-and-reads-the-rest-from-the-code.md) | A rebuild inherits the values somebody moved and reads the rest from the code | 2026-09-08 | accepted |
+| [ADR-0283](0283-a-region-declares-when-its-picture-next-changes-not-that-something-is-pending.md) | A region declares when its picture next changes, not that something is pending | 2026-09-08 | accepted |
 
 ## Retired numbers
 

@@ -278,12 +278,12 @@ pub struct Request {
     pub fields: Vec<Checked>,
     /// The renderers, in draw order — see [`Set::build_many`]. A rebuild names
     /// every one of them rather than the one that changed, for the reason the
-    /// params below are restated: a request that depended on what happens to be
+    /// bindings below are restated: a request that depended on what happens to be
     /// live is not reproducible from a record stream.
     pub l4s: Vec<Checked>,
     /// Whether the renderers overdraw or composite — see
     /// [`crate::set::Layering`]. Restated on every rebuild for the reason the
-    /// params below are: a request that depended on what happens to be live is
+    /// bindings below are: a request that depended on what happens to be live is
     /// not reproducible from a record stream.
     pub layering: crate::set::Layering,
     /// **Which renderer the new Set is folded to**, applied as soon as it is
@@ -307,8 +307,8 @@ pub struct Request {
     /// [`Set::build_many`]. Empty, or an entry that is `None`, is a source
     /// whose salt is derived from `seed_salt` and its ordinal.
     ///
-    /// **Restated on every rebuild**, on exactly the terms the params and the
-    /// bindings are, and with a sharper consequence than either: a rebuild that
+    /// **Restated on every rebuild**, on exactly the terms the bindings and the
+    /// interface are, and with a sharper consequence than either: a rebuild that
     /// let the salts be derived afresh would re-salt a Set that was loaded with
     /// salts of its own, and every colour in it would change on the next save
     /// of a `.kir` that had nothing to do with the geometry.
@@ -337,27 +337,56 @@ pub struct Request {
     /// same Set. A caller that loaded none says so by sending the default,
     /// which is what it is.
     pub camera: crate::camera::Orbit,
-    /// Applied to the new Set once it is built. Parameter values are the one
-    /// piece of Set state that is not structural, so they are the one thing
-    /// worth carrying across a swap — and they are carried by being *restated*
-    /// here rather than read out of the outgoing Set, because a request that
-    /// depends on what happens to be live is not reproducible from a record
-    /// stream.
+    /// Applied to the new Set once it is built, and **what this build says a
+    /// value is** — which is not the same as every value the Set will hold.
+    ///
+    /// **Parameter values are the one field here that is not restated on every
+    /// rebuild**, and the one that could stop being. Everything else on this
+    /// struct is restated because the engine would otherwise re-derive it: a
+    /// salt, a camera, a fold, an edge and an authority all come back at some
+    /// default the moment a request stops naming them. A parameter value does
+    /// not — the outgoing Set is holding it, it knows which of its values
+    /// somebody stated, and [`Set::carry_moved_from`] hands those across at the
+    /// install. So the values an operator has moved travel on the Set, and this
+    /// list is what a *caller* states: the values a slot was aimed with, on the
+    /// build that aim causes. See `karakuri_environment::watch::Watch`'s
+    /// `overrides`, which is that caller.
+    ///
+    /// **A stated value beats an inherited one**, and that clause is what
+    /// separates a load from a rebuild: loading a Set file over a playing slot
+    /// states every declaration of every node, which is what the file records,
+    /// and the operator asked for that file rather than for the knobs they were
+    /// holding. A rebuild of the same files states nothing and inherits
+    /// everything somebody moved.
+    ///
+    /// **This does not make a request depend on what happens to be live.** The
+    /// request is still a complete statement of what to build and what to state;
+    /// what it no longer does is pretend to be a complete statement of what the
+    /// Set will hold, which it never was — a rebuild's restatement writes no
+    /// record either way
+    /// (`docs/adr/0280-a-parameter-written-to-a-live-set-is-a-session-record.md`,
+    /// §7). A replay does not come through here at all: it installs Sets through
+    /// [`HotSwap::install`], which inherits nothing.
     pub params: Vec<crate::binding::ParamWrite>,
-    /// **The interface, restated on every rebuild** for the reason the params
-    /// and the bindings are: a request that depended on what happens to be live
-    /// is not reproducible from a record stream.
+    /// **The interface, restated on every rebuild** for the reason the bindings
+    /// and the edges are: a request that depended on what happens to be live is
+    /// not reproducible from a record stream.
     ///
     /// Left out, this was worse than a lost surface. The bindings *are*
     /// restated, so a `control:` binding survived a swap and the control it
     /// named did not — and a binding whose source is gone leaves its param
     /// where it was, silently, for the rest of the run.
     pub published: Vec<crate::set::Published>,
-    /// Attached to the new Set once its params are set, and **restated** here
-    /// for the same reason they are: a rebuild that read its bindings out of
-    /// whatever happened to be live would not be reproducible from a record
-    /// stream. A binding is Set state, not Set structure — the new Set is a
-    /// new value either way, and a `bind` record travels with it.
+    /// Attached to the new Set once its params are set, and **restated on every
+    /// rebuild**: a rebuild that read its bindings out of whatever happened to
+    /// be live would not be reproducible from a record stream. A binding is Set
+    /// state, not Set structure — the new Set is a new value either way, and a
+    /// `bind` record travels with it.
+    ///
+    /// **This is the field the ones around it point at**, and it used to be the
+    /// params above: a binding is the restated field whose argument is still the
+    /// plain one, where a parameter value has since become the one thing a Set
+    /// can hand across a swap itself.
     pub bindings: Vec<Binding>,
     /// What a swap or rollback message calls this.
     /// What each node of the rebuilt Set is called, in the same per-layer shape
@@ -372,7 +401,7 @@ pub struct Request {
     pub edges: Vec<crate::set::Edge>,
     /// **Who may move each node the operator has spoken for**, applied once the
     /// Set is built, and **restated on every rebuild** on exactly the terms the
-    /// params, the bindings, the names and the edges are: a request that
+    /// bindings, the names and the edges are: a request that
     /// depended on what happened to be live is not reproducible from a record
     /// stream.
     ///
@@ -1041,6 +1070,26 @@ impl HotSwap {
             }),
             Ok(mut candidate) => {
                 candidate.resize(device, self.viewport.0, self.viewport.1);
+                // **What the operator's hands are on comes across; what the code
+                // declares does not** — see [`Set::carry_moved_from`], which is
+                // the whole of the rule and the reason `Set` remembers which of
+                // its values were stated.
+                //
+                // **Here, and not in [`HotSwap::install`].** This is the live
+                // path: a build a worker produced while a Set was playing, and
+                // the only moment both Sets exist in one hand. `install` is the
+                // replay path, where there is no operator and no live write to
+                // inherit — a replay builds from the record stream and the
+                // `ride` records land at the frames they were made at, so
+                // inheriting there would be a second, unrecorded source of the
+                // same value
+                // (`docs/adr/0280-a-parameter-written-to-a-live-set-is-a-session-record.md`).
+                //
+                // **On the render thread and allocation-bounded**: it writes
+                // into a map that already holds the key and inserts a `String`
+                // per key it carries, once per swap rather than once per frame.
+                // A swap is already the frame that resizes render targets.
+                candidate.carry_moved_from(&self.live);
                 let outgoing = std::mem::replace(&mut self.live, candidate);
                 self.previous = Some(outgoing);
                 self.previous_cost = std::mem::replace(&mut self.cost, built.cost);
@@ -1262,12 +1311,18 @@ fn run_worker(
                     // this request states are applied below.** Every node of a
                     // freshly built Set is at `Authority::default`, so the
                     // landing is uniform whatever the request goes on to grant,
-                    // and a rebuild restores the params it was given rather
-                    // than re-asking permission for them. That is deliberate:
-                    // what is restated here is where the operator left the
-                    // controls, which is a fact rather than a new write, and a
-                    // rebuild that dropped it would silently put every one of
-                    // them back to the `.kir` default.
+                    // and a build applies the values it was given rather than
+                    // re-asking permission for them. That is deliberate: what is
+                    // stated here is what a caller said this Set's values are —
+                    // the file a slot was pointed at, or the flags it was
+                    // started with — which is a fact rather than a new write.
+                    //
+                    // **Where the operator left the controls is not here**, and
+                    // has not been since it stopped needing to be: it travels on
+                    // the outgoing Set and lands at the install — see
+                    // `Set::carry_moved_from` and `Request::params`. A key this
+                    // loop writes is marked as stated on the new Set, which is
+                    // exactly what tells that carry to leave it alone.
                     match set.write_param(write) {
                         Ok(0) => eprintln!("  no parameter named `{}`, ignoring", write.key),
                         Ok(_) => {}
