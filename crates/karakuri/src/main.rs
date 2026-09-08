@@ -303,7 +303,13 @@ use karakuri_console::view::{
 // [`SLOTS`]. Not re-exported at the crate root, and asked of the module that
 // declares it rather than transcribed here.
 use karakuri_engine::deck::MAX_SLOTS;
+use karakuri_engine::estimate::Estimate;
 use karakuri_engine::governor::{Basis as Spent, Reason, Report};
+// **How a number was taken, in the engine's own vocabulary rather than a
+// second one.** The frame instrument below labels itself with the same enum
+// the probe stamps every `Measurement` with, so a host-clock frame figure and
+// a host-clock slot figure say the word the same way (ADR-0015).
+use karakuri_engine::probe::MeasurementMethod;
 // The engine's own `Published`, and its node kinds under the word the address
 // uses for them: `Kind` is already the console's *region* kind on this side,
 // and one word cannot be two things in one file.
@@ -596,23 +602,133 @@ struct Cost {
     /// nothing on purpose. Switching to `PresentMode::Immediate`, which this
     /// adapter does offer, moves it and nothing else.
     wait: Duration,
+    /// **What the frame cost the window**: the wall clock from the top of one
+    /// `RedrawRequested` to the top of the next, and the one number here with
+    /// the wait, the present and everything this file times nowhere inside it.
+    ///
+    /// **It is the answer to *what did this frame cost*, and the three fields
+    /// above are not.** They are CPU time by construction and [`Cost::whole`]
+    /// leaves [`Cost::wait`] out of them on purpose, so a frame that spent 240
+    /// ms on the GPU and 5 ms on the CPU reads there as a 5 ms frame — which
+    /// is not a rounding error, it is the difference between a loop that is
+    /// idle and a loop that is at its limit. This is measured between two
+    /// identical points of successive frames, so it tiles the run exactly:
+    /// nothing falls between two periods and nothing is in two.
+    ///
+    /// **Host clock, and it cannot be anything else.** GPU timestamps bracket
+    /// work inside a command buffer; most of this is not in one — the block in
+    /// `get_current_texture`, the `egui` pass, `Queue::present` — so the whole
+    /// frame is a host-clock figure on any adapter, working timestamps or not.
+    /// [`Cost::drained`] is where the GPU's own share is asked for, and
+    /// `Costs::clock` is what this program was able to establish about this
+    /// adapter's timestamps rather than what it advertises (P-0095).
+    ///
+    /// **A period is a cost only while the loop is asking for the next frame
+    /// immediately**, which on this program is whenever something is
+    /// [`live`]. With nothing live the next frame comes off an `egui` deadline
+    /// or an operator, and the interval is then how long the window was left
+    /// alone rather than what a frame cost. The reading says which case it is
+    /// printing.
+    ///
+    /// `None` on the first frame of a run, which has no predecessor to be an
+    /// interval from.
+    period: Option<Duration>,
+    /// **What the GPU still owed when the CPU had finished the frame** —
+    /// `Device::poll` to a drained queue, timed on the host clock, on the
+    /// frames [`Costs::audit`] picks and `None` on every other.
+    ///
+    /// This is the field the three medians cannot have. They stop at the
+    /// submission; a command buffer that takes a quarter of a second to
+    /// execute costs the same in every one of them as one that takes a
+    /// microsecond, and on a `Fifo` surface the difference surfaces one frame
+    /// later as [`Cost::wait`] — where it is indistinguishable from the vsync
+    /// idle that field is named for.
+    ///
+    /// **What it includes, and it is not one pass.** Everything the queue had
+    /// outstanding when the poll started: this frame's whole command buffer —
+    /// four slots stepped and drawn, the composite, the preview presents, the
+    /// picture's present pass and the panel's — plus whatever of the previous
+    /// frame was still in flight, plus the poll's own round trip. It is an
+    /// upper bound on this frame's GPU work and it is biased high, in the same
+    /// direction and for the same reason
+    /// [`karakuri_engine::probe::MeasurementMethod::HostWallClock`] is.
+    ///
+    /// **It is not free and it is not taken every frame.** Blocking here
+    /// stands the CPU still until the GPU catches up, which is the one pattern
+    /// the frame path is not allowed to make a habit of; [`Costs::AUDIT`] is
+    /// how rarely it happens and the reading prints what those frames cost
+    /// against the rest rather than asserting it is negligible.
+    ///
+    /// **It moves the frame after it, by exactly what it took.** Work waited
+    /// for here is work the next frame's [`Cost::wait`] does not have to wait
+    /// for, so an audited frame shortens its successor's wait — which is the
+    /// same milliseconds counted in a different field rather than any of them
+    /// going missing, and it is one frame in the tens the reading samples.
+    drained: Option<Duration>,
     /// Allocations and bytes during `ui`, on this thread.
     allocs: u64,
     bytes: u64,
 }
 
 impl Cost {
-    /// **What the whole frame cost on the CPU**: the three fields the reading
-    /// below adds up under *"the whole frame is a median"*, for one frame
-    /// rather than for the median of each.
+    /// **What three timed stretches of the frame cost on the CPU**: the three
+    /// fields the reading below adds up under *"the whole frame is a median"*,
+    /// for one frame rather than for the median of each.
     ///
-    /// The three tile the frame exactly and do not overlap — `engine` ends
-    /// where `paint` begins, by construction, and `ui` is the `egui` pass
-    /// before either — and [`Cost::wait`] is deliberately not in it: blocking
-    /// in `get_current_texture` is the display's pace and not a price, which
-    /// is the sentence that field carries.
+    /// The three do not overlap — `engine` ends where `paint` begins, by
+    /// construction, and `ui` is the `egui` pass before either — and
+    /// [`Cost::wait`] is deliberately not in it: blocking in
+    /// `get_current_texture` is the display's pace and not a price, which is
+    /// the sentence that field carries.
+    ///
+    /// # This is not what the frame cost, and it used to say it was
+    ///
+    /// **It said the three "tile the frame exactly", and they do not.** They
+    /// are three stretches of one redraw with untimed CPU between them — the
+    /// sinks aimed, the Program bay rearranged, the panel solved, a listing
+    /// re-read on the frame a save lands — and untimed CPU after the last of
+    /// them, `Queue::present` included. [`Cost::elsewhere`] is what is left
+    /// over when they and the wait are taken off [`Cost::period`], and it is
+    /// measured rather than argued: the reading prints it, so the claim is now
+    /// a number that this window either produces or does not.
+    ///
+    /// **And it is CPU time whatever the GPU is doing**, which is the more
+    /// expensive half of the same mistake. Every field it sums stops at a
+    /// submission, so a frame whose command buffer takes a quarter of a second
+    /// to execute costs the same here as one that takes a microsecond. A panel
+    /// running at four frames a second was read off these three as a loop
+    /// *idle 97.6% of the time*, and the loop was not idle — it was waiting
+    /// for a shader, one field along in [`Cost::wait`], where nothing
+    /// distinguishes that from the vsync idle the field is named for.
+    ///
+    /// **It is kept because it answers a different question**: what this
+    /// program's own code costs per frame, which is what a schedule of live
+    /// regions is built from and what `budget::PANEL_PASS` is checked against.
+    /// What a *frame* cost is [`Cost::period`], with [`Cost::drained`] beside
+    /// it for the GPU's share.
     fn whole(&self) -> Duration {
         self.engine + self.ui + self.paint
+    }
+
+    /// **What the frame spent where nothing here is looking**: the period,
+    /// less the wait and less the three stretches [`Cost::whole`] sums.
+    ///
+    /// A residue rather than a measurement, and it is one on purpose — the
+    /// point of it is that a reader can see how much of the frame the timed
+    /// fields did *not* see, without this file having to be trusted about
+    /// where its clocks start and stop. It is the untimed CPU between them and
+    /// after them, plus whatever `winit` does between two redraws.
+    ///
+    /// `None` on the first frame of a run, which has no period. Saturating,
+    /// because the four stretches are read from four separate clocks and a
+    /// residue of a few microseconds either side of zero is those clocks and
+    /// not a negative duration.
+    fn elsewhere(&self) -> Option<Duration> {
+        Some(
+            self.period?
+                .saturating_sub(self.wait)
+                .saturating_sub(self.whole()),
+        )
     }
 }
 
@@ -716,6 +832,28 @@ struct Costs {
     /// ([ADR-0283](../../../docs/adr/0283-a-region-declares-when-its-picture-next-changes-not-that-something-is-pending.md),
     /// `karakuri-console`'s `tests/moving.rs`, which counts both).
     declared: Option<Duration>,
+    /// **The top of the last frame**, which is the one anchor a period is
+    /// measured from — see [`Cost::period`] and [`Costs::tick`].
+    ///
+    /// It is the *same point* of every redraw, so two consecutive values
+    /// bracket a whole frame with no gap and no overlap. `None` before the
+    /// first one.
+    began: Option<Instant>,
+    /// When the last audited frame was taken — see [`Costs::audit`].
+    since_audit: Instant,
+    /// **What this program was able to establish about this adapter's GPU
+    /// timestamps**, as the deck's own probe earned it: `GpuTimestamp` where
+    /// calibration survived and nothing later caught it lying,
+    /// `HostWallClock` where it did not, and `None` where nothing has been
+    /// probed at all.
+    ///
+    /// It is not `Features::TIMESTAMP_QUERY`, and the difference is the whole
+    /// of P-0095: the machine this was written on advertises the feature and
+    /// does not deliver it. The reading prints this beside the frame figures
+    /// so that *why is this a host clock* has an answer taken against a load
+    /// rather than read off a flag — and prints `None` as *nothing asked*
+    /// rather than as a verdict.
+    clock: Option<MeasurementMethod>,
 }
 
 impl Costs {
@@ -731,6 +869,74 @@ impl Costs {
             taken_on: String::from("an adapter nobody asked"),
             live: false,
             declared: None,
+            began: None,
+            // **Now rather than the beginning of time**, so the first frame of
+            // a run is not the audited one: it builds the font atlas and pays
+            // for every pipeline the panel touches, and blocking on the GPU
+            // there would measure a frame nothing else in this reading is
+            // about.
+            since_audit: Instant::now(),
+            clock: None,
+        }
+    }
+
+    /// **How rarely a frame is audited** — the frame that blocks on
+    /// `Device::poll` to find out what the GPU still owed
+    /// ([`Cost::drained`]).
+    ///
+    /// **A stretch of wall clock and not a frame count**, and the reason is
+    /// the case this instrument exists for. Every so many frames sounds
+    /// steadier and is exactly backwards: a loop at four frames a second is
+    /// the loop that most needs the GPU's own number, and one audit in sixty
+    /// frames would take fifteen seconds to produce one — five times the
+    /// [`STILL`] the reading is taken over, so the reading would carry no GPU
+    /// figure precisely where it is the whole answer. Half a second gives six
+    /// samples over a three-second reading whether the window is drawing at
+    /// four frames a second or at sixty.
+    ///
+    /// It costs least where it fires most often, which is the same argument
+    /// from the other side: a frame that is already waiting on the GPU pays
+    /// almost nothing to be told how long, because the wait is one it was
+    /// about to take in `get_current_texture` anyway.
+    ///
+    /// **The cost of it is printed rather than assumed.** The reading prints
+    /// what the audited frames' periods were against the rest, so a machine
+    /// where this is not cheap says so on that machine instead of being
+    /// reassured by a sentence written on another one.
+    const AUDIT: Duration = Duration::from_millis(500);
+
+    /// **The top of a frame**: store the anchor and hand back the interval
+    /// since the previous one, which is [`Cost::period`].
+    ///
+    /// Called from one place, at the same statement of every redraw, because
+    /// that is what makes two consecutive anchors a whole frame. A redraw that
+    /// returns early — a surface to reconfigure, a frame to skip — still ticks
+    /// here, so the frame after one of those carries a period spanning both;
+    /// they are rare, they show up in the tail rather than the median, and the
+    /// alternative is an anchor that moves depending on which branch a frame
+    /// took.
+    fn tick(&mut self, at: Instant) -> Option<Duration> {
+        let period = self.began.map(|began| at - began);
+        self.began = Some(at);
+        period
+    }
+
+    /// **Whether this frame pays for the GPU's answer** — see
+    /// [`Cost::drained`] and [`Costs::AUDIT`].
+    ///
+    /// Reads the clock rather than counting frames, so that the rate the
+    /// answer arrives at does not fall away exactly as the frames get slower.
+    /// It is asked once per frame and it is the ask that resets the stretch,
+    /// so a caller that asks and then declines to measure has thrown a sample
+    /// away rather than deferred one.
+    fn audit(&mut self) -> bool {
+        let now = Instant::now();
+        match now.duration_since(self.since_audit) >= Costs::AUDIT {
+            true => {
+                self.since_audit = now;
+                true
+            }
+            false => false,
         }
     }
 
@@ -829,7 +1035,7 @@ impl Costs {
     /// was taken over is only known at run time — and is every slot's name in
     /// slot order rather than one. See [`Engine::capacity`],
     /// [`Sources::material`] and [`Gfx::material`].
-    fn say(&mut self, capacity: u32, material: &str) {
+    fn say(&mut self, capacity: u32, material: &str, refresh_ms: Option<f32>) {
         if self.said {
             return;
         }
@@ -1080,8 +1286,10 @@ impl Costs {
                 bytes[n - 1] as f64 / 1024.0
             );
             println!(
-                "  the whole frame is a median {:.3} ms, so at {:.1} frames a second the \
-                 loop is spending {:.1}% of a second drawing.",
+                "  the CPU's three stretches are a median {:.3} ms between them, so at \
+                 {:.1} frames a second the loop is spending {:.1}% of a second inside \
+                 them. THAT IS NOT WHAT THE FRAME COST — see the block below, which \
+                 measures the frame itself.",
                 engine[n / 2] + ui[n / 2] + paint[n / 2],
                 rate,
                 (engine[n / 2] + ui[n / 2] + paint[n / 2]) * rate / 10.0
@@ -1205,6 +1413,198 @@ impl Costs {
                  unchanged — and it is this machine's power management rather than a rule: \
                  two Windows machines were asked the same way and got 1.3x and 1.6x WORSE \
                  under load, which is ordinary contention. Compare ratios, not magnitudes."
+            );
+
+            // -- what a whole frame cost -----------------------------
+            // **The block the three medians above cannot be.** Everything
+            // printed so far is CPU time that stops at a submission, and the
+            // one field that is not — `wait` — is reported beside the frame
+            // rather than in it. That reading holds exactly while the GPU is
+            // not the bottleneck, and says nothing at all when it is: a panel
+            // at four frames a second read off those three as a loop idle
+            // 97.6% of the time, and the loop was not idle. See
+            // `Cost::period`, `Cost::drained` and ADR-0303.
+            //
+            // **Filtered series, so they get their own lengths.** A frame has
+            // no period until it has a predecessor and no drain unless it was
+            // audited, so `n` above is not theirs and neither is its median.
+            fn middle(xs: &[f64]) -> Option<f64> {
+                let mut xs = xs.to_vec();
+                xs.sort_by(f64::total_cmp);
+                xs.get(xs.len() / 2).copied()
+            }
+            let mut periods: Vec<f64> = self
+                .frames
+                .iter()
+                .filter_map(|c| c.period)
+                .map(ms)
+                .collect();
+            let elsewhere: Vec<f64> = self
+                .frames
+                .iter()
+                .filter_map(|c| c.elsewhere())
+                .map(ms)
+                .collect();
+            let drained: Vec<f64> = self
+                .frames
+                .iter()
+                .filter_map(|c| c.drained)
+                .map(ms)
+                .collect();
+            // **What an audited frame's period was, against the rest.** This
+            // is the instrument reporting its own price: a blocking poll is
+            // the one thing here that could become the cost it is measuring,
+            // and the two medians beside each other are the only honest way to
+            // say it did not.
+            let audited: Vec<f64> = self
+                .frames
+                .iter()
+                .filter(|c| c.drained.is_some())
+                .filter_map(|c| c.period)
+                .map(ms)
+                .collect();
+            let rest: Vec<f64> = self
+                .frames
+                .iter()
+                .filter(|c| c.drained.is_none())
+                .filter_map(|c| c.period)
+                .map(ms)
+                .collect();
+            periods.sort_by(f64::total_cmp);
+
+            println!();
+            println!(
+                "what a WHOLE frame cost, with the wait inside it rather than beside it \
+                 (ADR-0303):"
+            );
+            match periods.is_empty() {
+                // One frame drawn and no second one, so there is no interval.
+                // Said rather than divided: a period over no frames is not a
+                // small number, it is not a number (P-0095).
+                true => println!(
+                    "  no frame had a predecessor to be an interval from, so this run \
+                     measured no frame period at all."
+                ),
+                false => {
+                    let m = periods.len();
+                    println!(
+                        "  frame period  median {:.3} ms   p95 {:.3} ms   worst {:.3} ms — top of \
+                         one redraw to the top of the next, over {} of the {} sampled",
+                        periods[m / 2],
+                        periods[m * 95 / 100],
+                        periods[m - 1],
+                        m,
+                        n
+                    );
+                    println!(
+                        "    of which the three stretches above are {:.3} ms and the wait is \
+                         {:.3} ms, leaving a median {:.3} ms this file times nowhere — the sinks \
+                         aimed, the bay rearranged, the panel solved, `Queue::present`, and \
+                         whatever `winit` does between two redraws. `Cost::whole` said the three \
+                         *tile the frame exactly*; this is the measurement that says otherwise.",
+                        engine[n / 2] + ui[n / 2] + paint[n / 2],
+                        wait[n / 2],
+                        middle(&elsewhere).unwrap_or(0.0)
+                    );
+                    println!(
+                        "    and 1000/period is {:.1} frames a second against the {:.1} counted \
+                         over the stretch above — two routes to one rate, taken by two clocks, \
+                         which is the only check either of them gets.",
+                        1000.0 / periods[m / 2],
+                        rate
+                    );
+                    match refresh_ms {
+                        // **What tells a vsync wait from a wait on the GPU**,
+                        // and the only thing that can on a host clock: the
+                        // wait itself is one field whichever it was.
+                        Some(refresh) => println!(
+                            "    against this display's {refresh:.1} ms refresh interval that is \
+                             {:.2}x. At about 1x the wait is the display's pace and the loop has \
+                             headroom; well past it the wait is the GPU and the three medians \
+                             above are measuring a loop that is not idle at all.",
+                            periods[m / 2] / f64::from(refresh)
+                        ),
+                        None => println!(
+                            "    and with no refresh interval from `winit` there is nothing to \
+                             hold it against, so this run cannot say whether the wait was the \
+                             display's pace or the GPU."
+                        ),
+                    }
+                }
+            }
+            match middle(&drained) {
+                Some(owed) => println!(
+                    "  the GPU still owed a median {owed:.3} ms when the CPU had finished the \
+                     frame — `Device::poll` to a drained queue, over {} audited frames at one \
+                     every {:.0} ms. Host clock and biased high: the poll's own round trip is in \
+                     it, and so is anything of the previous frame still in flight. It is the \
+                     whole submission — four slots stepped and drawn, the composite, five \
+                     presents and the panel's pass — and not one of them.",
+                    drained.len(),
+                    ms(Costs::AUDIT)
+                ),
+                // Not a zero. A drain nobody measured has no duration, and
+                // 0.0 ms here would read as a GPU with nothing to do.
+                None => println!(
+                    "  and what the GPU owed was not measured on this run: no frame was audited, \
+                     so this reading has no GPU number in it and does not have one to give."
+                ),
+            }
+            match (middle(&audited), middle(&rest)) {
+                (Some(a), Some(b)) => println!(
+                    "  an audited frame ran a median {a:.3} ms against {b:.3} ms for the rest, \
+                     which is what this instrument costs on this machine — measured, because a \
+                     blocking poll is the one thing here that could become the cost it is \
+                     measuring."
+                ),
+                _ => println!(
+                    "  and what the audit costs is not in this run: it takes both audited and \
+                     unaudited frames in the sample to say."
+                ),
+            }
+            println!(
+                "  taken on a host clock, and this is why: {}",
+                match self.clock {
+                    Some(MeasurementMethod::GpuTimestamp) =>
+                        "this adapter's timestamp queries survived the deck probe's calibration, \
+                         so a *pass* can be timed on the GPU here — and a *frame* still cannot. \
+                         Most of one is outside every command buffer: the block in \
+                         `get_current_texture`, the `egui` pass, `Queue::present`. The period is \
+                         a host figure on any adapter",
+                    Some(MeasurementMethod::HostWallClock) =>
+                        "this adapter's timestamp queries did not survive the deck probe's \
+                         calibration — the feature is advertised, and a load that cannot take \
+                         zero time resolved to zero anyway (P-0095, ADR-0169) — so there is no \
+                         GPU clock here to have used. The period would be a host figure \
+                         regardless: most of a frame is outside every command buffer",
+                    // Not read off `Features`. A flag is what the platform
+                    // says rather than what it does, which is the whole of
+                    // P-0095.
+                    None =>
+                        "nothing probed this adapter on this run, so this program has no verdict \
+                         on its timestamps and will not read one off `Features`",
+                }
+            );
+            println!(
+                "  what it cannot see: which pass inside the submission the drain belongs to; a \
+                 wait on the display told apart from a wait on the GPU except by the ratio \
+                 above; and any frame that was not audited, whose GPU cost is in no field here \
+                 and arrives one frame later folded into the wait."
+            );
+            // **Which size each number is about**, which this application can
+            // answer in exactly two ways and no third one: ADR-0247 composites
+            // the mix once at the output's size and resizes that one render
+            // into every rectangle, and a slot is auditioned in a deck cell
+            // sized from the cell. A measurement taken at neither — the
+            // 1280x720 constant ADR-0303 removed — is a number about a frame
+            // nobody draws.
+            println!(
+                "  and the sizes these are about, of which this program has two: the frame is \
+                 this whole window at {:.0}x{:.0} logical, with the mix composited once at \
+                 {}x{} and that one render resized into every rectangle it is drawn in \
+                 (ADR-0247); a slot's own measurement is taken at its preview cell, which is \
+                 sized from the cell (ADR-0303). No figure here is taken at a third size.",
+                WINDOW.0, WINDOW.1, CANVAS.0, CANVAS.1
             );
         }
         println!();
@@ -1998,6 +2398,34 @@ impl Readout {
                 }) {
                     return (claim, self.asked_to_read(ask));
                 }
+                // **The star at the left of a row**, asked before the row it
+                // is in: a star is inside a row, so the order here is what
+                // makes a press on the mark reach the mark — `input::claim`'s
+                // rule 4, *a control claims what it acts on and no more*.
+                //
+                // **The bay is derived a fourth time**, for the reason it is
+                // derived a third: each of these is a question about one
+                // laid-out bay, and a value held across all of them would
+                // outlive the question it answers.
+                //
+                // **The listing and the marks go in with the point**, exactly
+                // as the listing does for the `read` chip: a star names a Set
+                // this program read out of the store, and which rows are
+                // already starred is this side's answer too (ADR-0156). The
+                // write itself is not here — it is a disk write, which is the
+                // window's, on the branch every other press that reaches a
+                // disk takes.
+                if let Some(operation) = library_bay(
+                    self.panel.layout(),
+                    &self.view.scopes,
+                    &self.view.library,
+                    self.view.opened(),
+                    self.view.pointed(),
+                )
+                .and_then(|bay| bay.starred(&self.view.library, &self.view.starred, at))
+                {
+                    return (claim, Acted::Emitted(Some(operation)));
+                }
                 // **A row of the Library bay's list, and this is the one press
                 // on this panel that asks for nothing at all.** What it does
                 // is take a Set in hand: `console.html`'s *How a Set reaches a
@@ -2007,7 +2435,7 @@ impl Readout {
                 // operation is built where the second one is, which is the
                 // release, over whatever strip the pointer is then on.
                 //
-                // **The bay is derived a fourth time**, for the reason it is
+                // **The bay is derived a fifth time**, for the reason it is
                 // derived a third: each of these is a question about one
                 // laid-out bay, and a value held across all of them would
                 // outlive the question it answers.
@@ -2507,10 +2935,11 @@ impl Readout {
     ///
     /// **A filter set while the bay is reading something else is said out
     /// loud**, and it is the one thing about this row that would otherwise be
-    /// silent: the operation is *List what the store holds*, and `presets`,
-    /// `favourites` and `folder` are not the store. The press is still a real
-    /// question — it is answered the moment `my sets` is marked again — and a
-    /// press that appears to do nothing is what this line exists to prevent.
+    /// silent: the operation is *List what the store holds*, which is `all`
+    /// and the `my sets` starred out of it, and `presets` and `folder` are not
+    /// the store. The press is still a real question — it is answered the
+    /// moment one of those two is marked again — and a press that appears to
+    /// do nothing is what this line exists to prevent.
     fn narrowed(&mut self, operation: Operation) -> Acted {
         let Operation::ListSets { holds, layer } = &operation else {
             unreachable!("the filter fields emit `ListSets` and nothing else");
@@ -2522,19 +2951,20 @@ impl Readout {
             at.holds_word(),
             at.layer_word(),
             match (self.view.scope(), moved) {
-                (Some(Scope::MySets), true) =>
+                (Some(Scope::AllSets | Scope::MySets), true) =>
                     "the listing under it is what the store holds, narrowed, and the cursor is \
                      back at the top of it",
                 // **A step that arrived where it already was**, which is the
                 // `holds` field on a store whose Sets name no node: the press
                 // asks for the listing again, and that is `Readout::chose`'s
                 // answer for the chip that is already marked.
-                (Some(Scope::MySets), false) =>
+                (Some(Scope::AllSets | Scope::MySets), false) =>
                     "already what this bay is narrowed to, so this asks the store that same \
                      question again",
                 _ =>
-                    "this narrows `my sets`, which is not the library this bay is reading — \
-                      mark that scope and the rows follow",
+                    "this narrows the store's own listing, which is `all` and the `my sets` \
+                      starred out of it — neither is the library this bay is reading, so mark \
+                      one of them and the rows follow",
             }
         );
         Acted::Emitted(Some(operation))
@@ -2762,7 +3192,7 @@ impl Readout {
                  {} `.kset` file{} in it — the parts beside them are what those files \
                  name rather than rows of their own — and `l` on one takes it into the \
                  store and then loads it, which is why opening a preset leaves a row \
-                 under `my sets`.",
+                 under `all` — and under `my sets` only if you star it.",
                     presets.dir.display(),
                     presets.found.how(),
                     held,
@@ -5926,12 +6356,36 @@ impl Engine {
         // stops being judged against a frame nobody is drawing.
         self.deck.estimate_slots(&gpu.device, &gpu.queue);
         self.deck.set_residency(ASKED_TO_PRIME, Residency::Priming);
+        // **The number the governor will spend for this slot**, which since
+        // ADR-0303 is not the same quantity as its measurement.
+        //
+        // This read the measurement alone and could not any more: the
+        // measurement is taken at the size this file names — the preview cell,
+        // which is what a slot is auditioned in — and the governor spends the
+        // *estimate* at the output's size wherever one answers (ADR-0296). A
+        // budget stated in one of those and spent in the other is not a
+        // comparison, and on this machine it is not a small error either: the
+        // reference workload estimates 45 ms at 1280x720 and measures 12 at a
+        // 252x142 cell, so a budget off the measurement puts a single live
+        // slot permanently over it.
+        //
+        // So the budget is taken on the same precedence the governor decides
+        // on — estimate where it answers, measurement where it refuses. That
+        // is not a new policy; it is ADR-0296's, applied to the budget's own
+        // currency so that both sides of the comparison are about one frame.
+        // **Whether that is the right repair is the maintainer's**, and the
+        // two alternatives are in ADR-0303: extrapolating the measurement, or
+        // stating the budget per size.
+        let budgeted = |slot: &HotSwap| {
+            slot.estimated_cost()
+                .and_then(Estimate::ms)
+                .or_else(|| slot.measured_cost().map(|cost| cost.ms))
+        };
         if let (Some(committed), Some(warming)) = (
-            self.deck.slot(ON_AIR).measured_cost(),
-            self.deck.slot(ASKED_TO_PRIME).measured_cost(),
+            budgeted(self.deck.slot(ON_AIR)),
+            budgeted(self.deck.slot(ASKED_TO_PRIME)),
         ) {
-            self.deck
-                .set_compute_budget_ms(committed.ms + warming.ms / 2.0);
+            self.deck.set_compute_budget_ms(committed + warming / 2.0);
         }
         self.deck.govern()
     }
@@ -6001,6 +6455,33 @@ impl Engine {
             if behind[slot] {
                 *out = pic;
             }
+        }
+        // **What a slot's measurement is a measurement of**, told to the deck
+        // here because this is the statement that knows it.
+        //
+        // This application has two resolutions and no third one: the output
+        // size, which the mix is composited once at and which the picture and
+        // every other sink is a resize of (ADR-0247), and the size of a deck
+        // cell, which is what a slot is auditioned in. A per-slot measurement
+        // used to be taken at a constant 1280x720 — a size nothing renders at
+        // — and ADR-0303 removed it, so the size is named by whoever knows
+        // the layout, which is this file and not the engine.
+        //
+        // **The first aimed cell, and every slot is told the same one.** The
+        // four cells are one row of equal boxes and a probe measures a deck
+        // with one target; a per-slot size would make four slots' numbers
+        // incomparable, which is precisely what a governor summing them must
+        // not have. With no cell aimed at all — the Program bay folded away —
+        // nothing is said and the last size stands, because a bay that is not
+        // laid out is not a statement that a measurement is about nothing.
+        //
+        // **Once a frame, and it is a store rather than a measurement.** The
+        // cell moves when a divider moves or a bay folds, and the build worker
+        // reads this per build, so a size taken once at startup would measure
+        // every candidate of a session against whatever the window opened at.
+        let cell = self.previews.iter().find(|p| p.aimed).map(|p| p.size);
+        if let Some(cell) = cell {
+            self.deck.set_measure_size(cell);
         }
         (picture, previews)
     }
@@ -6223,6 +6704,48 @@ fn library(root: &std::path::Path) -> Vec<setfile::SetSummary> {
             // because the store is.
             println!("library: {} could not be listed: {e}", root.display());
             Vec::new()
+        }
+    }
+}
+
+/// **Which Sets this store has starred**, as their ids — the other half of
+/// what the Library bay lists, and the half `my sets` *is* (ADR-0299).
+///
+/// # It is [`library`]'s shape one file along, and its failures are the same
+///
+/// A store that is not there holds no stars, a store that will not open is
+/// **said out loud** rather than answered with silence, and either way the
+/// answer is a set — because a scope that is empty because a file could not be
+/// read looks exactly like one that is empty. The one difference from
+/// [`library`] is that a missing `favourites.json` is not a failure at all:
+/// `Store::favourites` answers an empty set for it, which is a store nobody
+/// has starred in.
+///
+/// **Nothing is pruned against the listing here.** A mark whose Set a hand
+/// removed from `sets/` stays in the file — that is `Store::favourites`' own
+/// rule and ADR-0299's — and what makes it harmless is that [`listing`] takes
+/// the *intersection* with what the store holds, so an id naming no Set draws
+/// no row and can still have its star taken off.
+///
+/// # Off the frame, on the press that builds a listing
+///
+/// One file read, beside the directory read [`library`] already does
+/// ([P-0091](../../../docs/principles/0091-cost-is-known-before-it-is-paid.md)):
+/// at startup and on every press that re-lists, which is a scope, a filter and
+/// a star. `karakuri-console` reaches no disk at all (ADR-0156), so what
+/// crosses the seam is the set of ids.
+fn favourites(root: &std::path::Path) -> std::collections::BTreeSet<String> {
+    if !root.is_dir() {
+        return std::collections::BTreeSet::new();
+    }
+    match Store::open(root).and_then(|store| store.favourites()) {
+        Ok(starred) => starred,
+        Err(e) => {
+            println!(
+                "library: {} keeps no readable favourites: {e}",
+                root.display()
+            );
+            std::collections::BTreeSet::new()
         }
     }
 }
@@ -6534,14 +7057,22 @@ fn narrowing(holds: Option<&str>, layer: Option<&str>) -> Option<String> {
     }
 }
 
-/// **One row of the `presets` scope**: the word the bay draws and the file
-/// behind it.
+/// **One row of a scope whose rows are files**: the word the bay draws and the
+/// file behind it.
 ///
-/// Two fields because the bay lists **names** and a load needs a **path**:
-/// what crosses into the console is a `String` per row (`view::View::library`),
-/// and what this program has to be able to find again on the press is the file
-/// that row came off.
-struct Preset {
+/// Two fields because the bay lists **names** and a take-in needs a **path**:
+/// what crosses into the console is a `String` per row
+/// (`view::View::library`), and what this program has to be able to find again
+/// on the press is the file that row came off.
+///
+/// **Two scopes have rows of this kind** — `presets`, which is a told
+/// directory (ADR-0230), and `folder`, which is one somebody dropped on this
+/// window (ADR-0275). They are one type because a row of either is a Set file
+/// that is not in this store yet and a press on it is the same two operations
+/// (`docs/manual/operations.html`'s *Send a Set to somebody, and take one
+/// in*): the difference between them is which directory was listed, which is
+/// [`Taking`]'s.
+struct FileRow {
     /// What the row reads, which is the file's own name without its
     /// extension. **Not read out of the file**: a listing that opened
     /// twenty-three files to draw twenty-three rows would be a directory read
@@ -6578,14 +7109,14 @@ struct Preset {
 /// [`why_nothing`]'s. A directory that will not open is said out loud, for
 /// [`library`]'s reason one scope along — a scope empty because a directory
 /// could not be read looks exactly like one that is empty.
-fn presets_listing(presets: Option<&karakuri_environment::places::Presets>) -> Vec<Preset> {
+fn presets_listing(presets: Option<&karakuri_environment::places::Presets>) -> Vec<FileRow> {
     let Some(presets) = presets else {
         return Vec::new();
     };
     match presets.list_sets() {
         Ok(sets) => sets
             .into_iter()
-            .map(|set| Preset {
+            .map(|set| FileRow {
                 id: set.id,
                 path: set.file,
             })
@@ -6623,8 +7154,11 @@ fn presets_listing(presets: Option<&karakuri_environment::places::Presets>) -> V
 /// reading `night`**, and that is deliberate rather than got to by accident:
 /// they are two files, each of which is a Set, and choosing between them here
 /// would be this listing inventing a precedence between the two forms.
-/// Whichever of them a press means is the take-in's question, and nothing
-/// presses a folder row yet.
+/// **Whichever of them a press means is the take-in's question and it is
+/// answered by refusing**: [`Taking::file`] finds the row by the word that was
+/// pressed, two files wear that word, and a press that took one of them would
+/// be picking for the operator between two rows they cannot tell apart on
+/// screen. See there, where the refusal names both files.
 ///
 /// # Ascending, one directory deep, and the name is all that is read
 ///
@@ -6648,6 +7182,19 @@ fn presets_listing(presets: Option<&karakuri_environment::places::Presets>) -> V
 /// written down rather than left to be inferred — `declared`'s own shape one
 /// bay over.
 fn folder_listing(dir: Option<&std::path::Path>) -> Vec<String> {
+    folder_files(dir).into_iter().map(|row| row.id).collect()
+}
+
+/// **The same walk with the file names kept**, which is what a take-in needs:
+/// the bay lists words and the press has to find the file the word came off
+/// again ([`FileRow`]).
+///
+/// **One walk and not two**, which is why [`folder_listing`] is a `map` over
+/// this rather than a second `read_dir`: a listing the bay drew and a listing
+/// the press searched that disagreed would be a press acting on a row nobody
+/// saw. It is [`presets_listing`]'s shape one scope along, and that function
+/// answers `FileRow`s for the same reason.
+fn folder_files(dir: Option<&std::path::Path>) -> Vec<FileRow> {
     let Some(dir) = dir else {
         return Vec::new();
     };
@@ -6682,7 +7229,12 @@ fn folder_listing(dir: Option<&std::path::Path>) -> Vec<String> {
         out.push((id.to_owned(), name));
     }
     out.sort();
-    out.into_iter().map(|(id, _)| id).collect()
+    out.into_iter()
+        .map(|(id, name)| FileRow {
+            id,
+            path: dir.join(name),
+        })
+        .collect()
 }
 
 /// **Why the scope that is marked lists nothing**, in the words that say which
@@ -6694,15 +7246,14 @@ fn folder_listing(dir: Option<&std::path::Path>) -> Vec<String> {
 /// filled rather than something gone wrong."* Fill either and the rows appear
 /// with nothing else changing.
 ///
-/// **The other two are empty as *machinery*, and they are not the same
-/// machinery**, which is why this says which:
+/// **`my sets` is a third kind, and it is neither of those**: the store may
+/// hold plenty and nothing be starred, which is a listing that is empty
+/// because of an answer rather than because of an absence (ADR-0299). What to
+/// do about it is press a star, and the sentence says so.
 ///
-/// - **A favourite is a fact nothing in this workspace keeps.** No field on a
-///   Set listing, no record that carries one, no operation that names one —
-///   `console.html`'s *What keeps a favourite, and where it does not travel*
-///   decides where the value would live and leaves nothing to read. Nothing
-///   here writes one: a store invented for it would be the specification
-///   written backwards, which that page says in as many words.
+/// **The last of them is empty as *machinery*, and it is the one that
+/// changed:**
+///
 /// - **A folder nobody has pointed anywhere is empty for want of a gesture**,
 ///   and that is the one of the four that changed on 2026-09-08. It used to be
 ///   empty for want of machinery — this said *"nothing here reads a folder
@@ -6711,7 +7262,7 @@ fn folder_listing(dir: Option<&std::path::Path>) -> Vec<String> {
 ///   not: both its fields narrow what a store already holds, and which store
 ///   is asked at all is [`listing`]'s own answer. **So this scope has two
 ///   sentences and `pointed` is which**: no folder has been dropped yet, or
-///   one has and holds no Set file. The second is [`Scope::MySets`]' kind of
+///   one has and holds no Set file. The second is [`Scope::AllSets`]' kind of
 ///   nothing — a library nobody has filled — read in somebody else's
 ///   directory.
 ///
@@ -6724,14 +7275,14 @@ fn folder_listing(dir: Option<&std::path::Path>) -> Vec<String> {
 /// window has been dropped on.
 fn why_nothing(scope: Scope, pointed: bool) -> &'static str {
     match scope {
-        Scope::Favourites => {
-            "nothing in this workspace keeps a favourite — no field on a Set listing, no \
-             record, no operation — so this scope is empty because there is nowhere for a \
-             star to be rather than because nothing is starred"
-        }
-        Scope::MySets => {
+        Scope::AllSets => {
             "this store holds no Sets yet, which is a library nobody has filled: `k` keeps \
              what a deck is playing, and loading a preset leaves one here too"
+        }
+        Scope::MySets => {
+            "nothing in this store is starred — `my sets` is the starred subset of `all` \
+             and never the listing of it, so press the star at the left of a row under \
+             `all` and that Set appears here"
         }
         Scope::Presets => {
             "this run found no preset library, or the one it found holds no `.kset` file — \
@@ -6954,13 +7505,13 @@ fn set_file(path: &std::path::Path) -> bool {
 /// states one scope down and the reason this is not called from the frame
 /// handler.
 ///
-/// Three of the four answer with rows and one answers with nothing —
-/// [`why_nothing`] is where that is argued, and it is one function so that a
-/// scope which stops being empty stops being empty in one place. **`folder`
-/// moved across that line on 2026-09-08** and it is the one of the four whose
-/// answer depends on something that happened during the run: `folder` is
-/// `None` until somebody drops a directory on this window ([`folder_dropped`]),
-/// and a bay pointed nowhere lists nothing and says which nothing it is.
+/// All four answer with rows now, and each of the four can still answer with
+/// none — [`why_nothing`] is where the four sentences are, and it is one
+/// function so that a scope which stops being empty stops being empty in one
+/// place. **Two of them depend on something that happened during the run**:
+/// `folder` is `None` until somebody drops a directory on this window
+/// ([`folder_dropped`]), and `my sets` is empty until somebody presses a star
+/// ([`favourite`]).
 fn listing(
     view: &mut View,
     store: &std::path::Path,
@@ -6972,19 +7523,31 @@ fn listing(
             "  library: this console was handed no scopes, so there is no library to list",
         );
     };
-    // **`my sets` is the one scope the filter row narrows**, and that is
+    // **The store's own listing is what the filter row narrows**, and that is
     // `Operation::ListSets`'s own scope rather than a shortcut here: the row is
-    // *List what the **store** holds*, and the other three listings are not the
-    // store — `presets` is a told directory of files, and the last two answer
-    // nothing at all. So the candidates are emptied for them, which is what
-    // makes `View::filters` read both fields as unset there rather than the bay
+    // *List what the **store** holds*, which is `all` — and `my sets` is that
+    // same listing starred (ADR-0299), so both are narrowed by the same retain
+    // and neither is a second reading. The other two listings are not the
+    // store: `presets` is a told directory of files and `folder` is somebody
+    // else's. So the candidates are emptied for them, which is what makes
+    // `View::filters` read both fields as unset there rather than the bay
     // hiding rows under a filter it is not applying. The filter comes back with
     // the scope, because the position it is kept as is still there.
     let held = match scope {
-        Scope::MySets => library(store),
+        Scope::AllSets | Scope::MySets => library(store),
         _ => Vec::new(),
     };
     view.holds = holds_choices(&held);
+    // **The marks, beside the listing they are a subset of.** They are read on
+    // every one of these presses rather than once for the run, because a star
+    // is a press that changes them and this is the one place the bay is told
+    // what the store says — see [`favourites`], and `view::View::starred`.
+    //
+    // **Read whichever scope is marked**, because the star is drawn on every
+    // row of every listing: a `presets` row is a file this store does not hold
+    // and its star is hollow, which is what `Store::set_favourite` refusing an
+    // id `sets/` does not hold says at the other end.
+    view.starred = favourites(store);
     // **Copied out rather than borrowed across the write below**: `filters`
     // borrows `View::holds`, and the listing is written into the same `View`.
     let (holds, layer, spelled) = {
@@ -6996,8 +7559,20 @@ fn listing(
         )
     };
     view.library = match scope {
+        Scope::AllSets => held
+            .iter()
+            .filter(|set| narrows(set, holds.as_deref(), layer))
+            .map(|set| set.id.clone())
+            .collect(),
+        // **The starred subset, and it is an intersection rather than a
+        // second listing** (ADR-0299): the rows are the store's own, in the
+        // store's own order, keeping only the ids the marks name. A mark whose
+        // Set is gone draws no row, which is what makes a stale mark a line in
+        // a file rather than a hazard — and it can still have its star taken
+        // off, because `Store::set_favourite` refuses only the starring.
         Scope::MySets => held
             .iter()
+            .filter(|set| view.starred.contains(&set.id))
             .filter(|set| narrows(set, holds.as_deref(), layer))
             .map(|set| set.id.clone())
             .collect(),
@@ -7011,17 +7586,13 @@ fn listing(
         // disk (ADR-0156). Pointed nowhere it lists nothing and the sentence
         // about it is [`why_nothing`]'s.
         Scope::Folder => folder_listing(folder),
-        // **Drawn and answered with nothing**, and it is not the same nothing
-        // the folder above answers with — see [`why_nothing`], which is where
-        // each of them says which it is.
-        Scope::Favourites => Vec::new(),
     };
     // **Only where the filter was applied.** `layer` survives a scope change —
     // it is the console's own value and not a position in a listing — so a bay
     // reading `presets` under a set `layer` field would otherwise report a
     // narrowing that narrowed nothing. What says so out loud is the press:
     // `Readout::narrowed`.
-    let narrowed = matches!(scope, Scope::MySets)
+    let narrowed = matches!(scope, Scope::AllSets | Scope::MySets)
         .then(|| narrowing(holds.as_deref(), spelled.as_deref()))
         .flatten();
     match (view.library.len(), narrowed) {
@@ -7084,7 +7655,107 @@ struct TakenIn {
     said: String,
 }
 
-/// **A preset row, taken into this store**, and the id it landed under.
+/// **Which listing a take-in's row came off**, and it is the whole of the
+/// difference between the two scopes that have rows of files.
+///
+/// # Two scopes, one row, one press
+///
+/// `docs/manual/operations.html`'s *Send a Set to somebody, and take one in*:
+/// *"Taking one in is not a second row — opening a preset is this row"*, and a
+/// folder row is the same row again. `console.html` says the folder side in as
+/// many words — *"a folder row is a **take**"*, *"A row here is taken into the
+/// store and then loaded, which is one press because taking it in is what
+/// gives it a name"* — so the two differ in **which directory was listed** and
+/// in nothing else. That is what this type is, and it is why [`taking_in`]
+/// takes one rather than a presets root.
+///
+/// **The `folder` half is what landed on 2026-09-08.** It was refused out
+/// loud until then — *"a folder row is a **take**, taking a Set in from a
+/// folder is not built"* — because the scope had no directory to list, which
+/// ADR-0275 gave it.
+///
+/// # A path is derived here and never spelled by a surface
+///
+/// `Operation::TransferSet`'s `SetTransfer::Take { file }` carries a path, and
+/// the rule that admits it is that **every route that fills it derives it from
+/// something the program itself produced**. Both arms obey it the same way:
+/// the listing is asked *again* on the press and the row is found by the word
+/// that was pressed ([`Taking::file`]), so what a surface handed over is a
+/// word off a listing this program read and never a path.
+enum Taking<'a> {
+    /// The preset library this run resolved (ADR-0230) — a told directory,
+    /// and the same one [`presets_listing`] draws the rows of.
+    Presets(Option<&'a karakuri_environment::places::Presets>),
+    /// The directory somebody dropped on this window (ADR-0275), and `None`
+    /// for a bay that has been pointed nowhere.
+    Folder(Option<&'a std::path::Path>),
+}
+
+impl Taking<'_> {
+    /// The rows this listing holds, **asked again** rather than kept — see
+    /// [`taking_in`], where that rule is argued.
+    fn rows(&self) -> Vec<FileRow> {
+        match self {
+            Taking::Presets(presets) => presets_listing(*presets),
+            Taking::Folder(dir) => folder_files(*dir),
+        }
+    }
+
+    /// What the scope is called, for a refusal to name.
+    fn scope(&self) -> &'static str {
+        match self {
+            Taking::Presets(_) => "the preset library",
+            Taking::Folder(_) => "the folder this bay is pointed at",
+        }
+    }
+
+    /// **The file behind the word that was pressed**, or a sentence saying why
+    /// there is not one.
+    ///
+    /// # Two refusals, and the second is the one a folder brought
+    ///
+    /// **A word this listing no longer holds** is the row having gone between
+    /// the listing and the press — a directory this program neither made nor
+    /// writes, which is a folder's ordinary condition and a preset root's
+    /// unusual one.
+    ///
+    /// **A word two files wear** is `folder_files`' own note arriving: a
+    /// directory holding `night.kbset` and `night.kset` draws two rows reading
+    /// `night`, and neither the listing nor the bay puts a precedence between
+    /// the two forms. **So the press is refused and both file names go back**
+    /// ([P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md)),
+    /// because taking one of them would be this program choosing between two
+    /// rows an operator cannot tell apart on screen. A `presets` root can
+    /// hold only `.kset` files, so this arm is a folder's in practice and is
+    /// asked of both because the rule is the row's rather than the scope's.
+    fn file(&self, row: &str) -> Result<std::path::PathBuf, String> {
+        let mut found: Vec<std::path::PathBuf> = self
+            .rows()
+            .into_iter()
+            .filter(|held| held.id == row)
+            .map(|held| held.path)
+            .collect();
+        match found.len() {
+            0 => Err(format!("{} has no `{row}` in it any more", self.scope())),
+            1 => Ok(found.remove(0)),
+            _ => Err(format!(
+                "{} holds {} files called `{row}` — {} — and this row names a word rather \
+                 than a file, so which of them you meant is not something the listing can \
+                 say. Rename or move one of them and press again",
+                self.scope(),
+                found.len(),
+                found
+                    .iter()
+                    .filter_map(|path| path.file_name().and_then(|name| name.to_str()))
+                    .collect::<Vec<_>>()
+                    .join(" and ")
+            )),
+        }
+    }
+}
+
+/// **A row of `presets` or of a `folder`, taken into this store**, and the id
+/// it landed under.
 ///
 /// # Taking it in is not a second operation, and it is what gives it a name
 ///
@@ -7106,6 +7777,20 @@ struct TakenIn {
 /// nothing inlined would file the Set and leave every artifact cardless. Two
 /// routes into one store that reach two different stores is the disagreement a
 /// second spelling always is.
+///
+/// **Both spellings, and the branch is that function's too.** A `.kbset` has
+/// its sources inside it and is read straight off the disk as lines; a `.kset`
+/// names its parts by relative path and is resolved first. The `presets` scope
+/// lists only the second form, so this branch was not reachable until a folder
+/// row could be pressed — `console.html`: *"A Set file and a bundle are the
+/// same file … so the scope draws one kind of row rather than two"*, and the
+/// difference between them is a property of a file rather than a kind of row.
+///
+/// **The two binaries have no library target between them**, which is why this
+/// is a second spelling of `karakuri-cli`'s eight lines rather than a call to
+/// them, and it is written down here rather than left to be discovered: the
+/// branch is the same branch and the two must not come apart the day a third
+/// form arrives.
 ///
 /// **The wall is `resolve`'s and not this file's**: a part named from outside
 /// the file's own directory is refused, by path, because *"a Set somebody
@@ -7130,26 +7815,25 @@ struct TakenIn {
 /// `my sets` will list. They are the same word in `examples/`, and a preset
 /// whose file says otherwise would otherwise be loaded by a name the store does
 /// not hold.
-fn taking_in(
-    root: &std::path::Path,
-    presets: Option<&karakuri_environment::places::Presets>,
-    row: &str,
-) -> Result<TakenIn, String> {
+fn taking_in(root: &std::path::Path, from: Taking<'_>, row: &str) -> Result<TakenIn, String> {
     // **Asked again rather than kept**, which is [`listing`]'s shape: the rows
     // crossed into the console as words, and the file behind a word is found
     // by asking the library again on the press. A second copy of the listing
     // held on this side is a copy that goes on naming a file that has moved.
-    let found = presets_listing(presets)
-        .into_iter()
-        .find(|preset| preset.id == row)
-        .ok_or_else(|| {
-            format!(
-                "the preset library has no `{row}{}` in it any more",
-                karakuri_environment::setfile::AUTHORING_SUFFIX
-            )
-        })?;
+    let file = from.file(row)?;
     let store = Store::open(root).map_err(|e| format!("store `{}`: {e}", root.display()))?;
-    let lines = karakuri_environment::setfile::bundle_authored(&store, &found.path)?;
+    // **The form is the file's own and the branch is `karakuri-cli`'s** — see
+    // this function's head. A name is what says which, and nothing is opened
+    // to ask: the two suffixes are the two `folder_files` lists.
+    let authored = file
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.ends_with(karakuri_environment::setfile::AUTHORING_SUFFIX));
+    let lines = match authored {
+        true => karakuri_environment::setfile::bundle_authored(&store, &file)?,
+        false => karakuri_store::ndjson::read(&file)
+            .map_err(|e| format!("reading `{}`: {e}", file.display()))?,
+    };
     let id = lines
         .iter()
         .find_map(|line| match line.record() {
@@ -7159,19 +7843,15 @@ fn taking_in(
         .ok_or_else(|| {
             format!(
                 "`{}` carries no `set` record, so it names no id to file itself under",
-                found.path.display()
+                file.display()
             )
         })?;
     let said = karakuri_environment::setfile::unbundle(&store, &lines)?;
-    Ok(TakenIn {
-        file: found.path,
-        id,
-        said,
-    })
+    Ok(TakenIn { file, id, said })
 }
 
-/// **The two rows of the vocabulary one press on a `presets` row performs**,
-/// in the order they happen.
+/// **The two rows of the vocabulary one press on a `presets` or a `folder` row
+/// performs**, in the order they happen.
 ///
 /// # Two operations because they are two rows of the page, and one press
 ///
@@ -7210,7 +7890,7 @@ fn taking_in(
 /// existing route takes"* — and the load names the **id**, which is the file's
 /// own `set` record rather than the row's word. They are the two halves of
 /// [`TakenIn`] and neither is derived from the other here.
-fn preset_press(deck: u8, taken: TakenIn) -> [Operation; 2] {
+fn taken_in_press(deck: u8, taken: TakenIn) -> [Operation; 2] {
     [
         Operation::TransferSet {
             transfer: SetTransfer::Take { file: taken.file },
@@ -7415,6 +8095,119 @@ fn arrangements(root: &std::path::Path) -> Vec<String> {
             Vec::new()
         }
     }
+}
+
+/// **A star put on a Set or taken off it**, and the second route in this
+/// program that both reads an operation and reaches a disk.
+///
+/// # It is [`arrangement`]'s shape and sits beside it for its reason
+///
+/// The panel cannot reach the store (ADR-0156) and the store cannot reach the
+/// panel, so the two halves meet in a third party and this file is it. It
+/// answers `None` for every other operation, which is what lets it sit on the
+/// one path an emitted operation already takes rather than being a second
+/// route into the store.
+///
+/// # What it writes, and what it deliberately does not
+///
+/// `Store::set_favourite` — one stat, one atomic write of
+/// `<store>/favourites.json`, and the whole of the layout question is
+/// ADR-0299's rather than this file's. **Nothing here re-lists**: the marks
+/// the bay draws and the rows `my sets` holds are both [`listing`]'s answer,
+/// and a second derivation here would be a second answer to *what is starred*
+/// with a file write between them. The caller re-lists on the same branch it
+/// re-lists a scope press on.
+///
+/// # Who asked decides where it lands, and for a star there is nowhere else
+///
+/// [P-0096](../../../docs/principles/0096-the-operators-library-is-written-by-an-operators-own-act.md)
+/// is the actor and not the flag, and `my sets` is by construction the list of
+/// Sets **the operator chose** — so a model's star must not reach
+/// `<store>/favourites.json`. That much is
+/// [ADR-0261](../../../docs/adr/0261-a-model-asked-save-lands-in-a-sandbox-because-the-operators-library-is-the-operators-own-act.md)'s
+/// rule applied one control along, and it is why this branches on [`Asked`]
+/// exactly as `karakuri_environment::filed_as` does for a save.
+///
+/// **Where the two part company is the second directory.** A model's save
+/// lands in `<store>/sandbox/` because what lands there is *material* — an
+/// edit-history snapshot an operator goes looking for after a show — so
+/// refusing it would lose an evening of work. A star is one bit whose whole
+/// meaning is *this row appears under `my sets`*, so a sandbox favourites file
+/// would be a list no scope lists, no tool reads and the operator never sees,
+/// while the model was told it had succeeded. **So a model's star is refused
+/// out loud** (ADR-0301), and the refusal names the id and says where the Set
+/// is — which is the same shape the class pills' refusals take, so that a
+/// model can tell the person beside it which mark to press.
+///
+/// **`Standing::Open` stays and `gate.rs` is untouched.** The refusal is the
+/// performer's and not the gate's, exactly as a model's save is not refused at
+/// the gate but filed somewhere else by whoever performs it.
+///
+/// **The model arm is written before the route is**, which is [`arrangement`]'s
+/// own position: no tool publishes `SetFavourite` today, the page's MCP badge
+/// is `plan`, and a control that arrives at this function finds the rule
+/// already here rather than adding it.
+///
+/// # The three things it can say, and each is said out loud
+///
+/// **The state was already the one asked for**, which is `Ok(false)` and is an
+/// ordinary answer rather than a refusal: the operation names a state and not
+/// a toggle, so a second press of *star this* says the same thing again and
+/// the file's own time is not touched. **The Set is not one this store
+/// holds**, which is `StoreError::NoSet` carrying the id back
+/// ([P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md))
+/// — a `presets` or a `folder` row is a file rather than a Set of this
+/// library's, and starring one is refused with the sentence saying so.
+/// **Taking a star off is never refused**, which is the asymmetry that makes a
+/// mark left behind by a file somebody deleted clearable from the row it no
+/// longer draws.
+///
+/// **Never panics**, for [`arrangement`]'s reason: a panic reachable from an
+/// event handler aborts this process rather than unwinding.
+fn favourite(root: &std::path::Path, asked: Asked, operation: &Operation) -> Option<String> {
+    let Operation::SetFavourite { id, favourite } = operation else {
+        return None;
+    };
+    if asked == Asked::Model {
+        return Some(format!(
+            "star: `{id}` was not {} — `my sets` is the list of Sets the operator chose, and a \
+             star is theirs to put on: it is one press on the mark at the left of that row in \
+             the Library bay, under `all`. The Set itself is untouched and is listed there",
+            match favourite {
+                true => "starred",
+                false => "unstarred",
+            }
+        ));
+    }
+    let wrote = Store::open(root).and_then(|store| store.set_favourite(id, *favourite));
+    Some(match wrote {
+        Ok(true) => format!(
+            "star: `{id}` {} — `my sets` is the starred subset of `all`, and this row is {} \
+             it",
+            match favourite {
+                true => "is starred",
+                false => "has its star off",
+            },
+            match favourite {
+                true => "in",
+                false => "out of",
+            }
+        ),
+        Ok(false) => format!(
+            "star: `{id}` was already {}, so nothing was written",
+            match favourite {
+                true => "starred",
+                false => "unstarred",
+            }
+        ),
+        Err(e) => format!(
+            "star: `{id}` was not {}: {e}",
+            match favourite {
+                true => "starred",
+                false => "unstarred",
+            }
+        ),
+    })
 }
 
 /// **Where a named arrangement is kept and put back**, and the one route in
@@ -10160,7 +10953,7 @@ impl Keeping {
         self.in_flight = self.in_flight.saturating_sub(1);
         let (written, said) = match outcome {
             // **Two sentences, and the `written` beside them is two answers
-            // too.** `my sets` lists the operator's library, so a sandbox save
+            // too.** `all` lists the operator's library, so a sandbox save
             // adds no row and re-reading the listing would be a repaint that
             // changes nothing — and telling a model that `l` loads its file
             // back would send it after a row the bay does not draw
@@ -10168,7 +10961,7 @@ impl Keeping {
             Ok(()) => match asked {
                 Asked::Operator => {
                     let said = format!(
-                        "  keep: deck {}: saved as set `{id}` — the Library bay's `my sets` \
+                        "  keep: deck {}: saved as set `{id}` — the Library bay's `all` \
                          lists it, and `l` loads it back",
                         deck_letter(slot as u8)
                     );
@@ -10179,7 +10972,7 @@ impl Keeping {
                     let said = format!(
                         "  keep: deck {}: saved as set `{id}` in the sandbox — \
                          `<store>/{}/{id}{}`. A save asked for over MCP is kept there \
-                         rather than in the operator's library, so `my sets` does not list \
+                         rather than in the operator's library, so `all` does not list \
                          it and `l` does not load it; the operator's own `k` writes the \
                          library",
                         deck_letter(slot as u8),
@@ -10843,15 +11636,27 @@ impl ApplicationHandler for App {
         // yet (`why_nothing`). All four are drawn: a chip is the question, and
         // three of the four questions are ones this program can be asked.
         self.readout.view.scopes = Scope::ALL.to_vec();
-        // **And it opens on `my sets`, where the mock marks `favourites`.**
+        // **And it opens on `all`, which is where `my sets` used to be.**
         // The mark says which question is being asked, so the one to open on
-        // is the one with an answer — and `favourites` is *"this library
-        // filtered"* over a fact nothing keeps, which is the one of the four
-        // that could not answer even in principle today. The console refuses a
+        // is the one whose answer is the library itself: `my sets` is the
+        // starred subset now (ADR-0299), so a fresh store opening there would
+        // draw an empty bay over a library full of Sets. The console refuses a
         // scope it was not handed, so this is asserted rather than assumed.
-        assert!(
-            self.readout.view.select_scope(Scope::MySets),
-            "the console was handed the four scopes and would not mark `my sets`"
+        //
+        // **The state and not the move.** `View::select_scope` answers whether
+        // the mark *moved*, and `all` is the first chip and the console's own
+        // default, so on a fresh run it has not moved and the answer is
+        // `false` — which is the console agreeing rather than refusing.
+        // Asserting the return value aborted the program on every launch
+        // between this line landing and 2026-09-08, with every test in the
+        // workspace green: nothing in the suite opens a window, so nothing ran
+        // this line. What is worth asserting is that the mark is where this
+        // says it is, which is true whether or not it had to move.
+        self.readout.view.select_scope(Scope::AllSets);
+        assert_eq!(
+            self.readout.view.scope(),
+            Some(Scope::AllSets),
+            "the console was handed the four scopes and does not have `all` marked"
         );
         println!(
             "{}",
@@ -10955,7 +11760,11 @@ impl ApplicationHandler for App {
                 // load has moved one of them says so instead of naming the
                 // pair the window opened with.
                 let (capacity, material) = (gfx.engine.capacity, gfx.material.join(" / "));
-                self.costs.say(capacity, &material);
+                // **The refresh interval, because it is what tells the two
+                // waits apart.** A period sitting at the display's interval is
+                // a loop with headroom; one well past it is a loop at its
+                // limit, and a host clock cannot say which without it.
+                self.costs.say(capacity, &material, gfx.budget_ms);
             }
         }
         // **What a model asked for, taken on the wake it asked to be taken
@@ -11139,10 +11948,32 @@ impl ApplicationHandler for App {
                 // of the other half**, so it is the same branch: a scope and a
                 // filter both change what the store is being asked, and the
                 // answer to either is a directory read this side owns.
+                // **And a press on a star is a file beside the Sets to
+                // write**, taken before the re-read below because the listing
+                // it re-reads is the one this write changes: `my sets` is the
+                // starred subset (ADR-0299), so a star taken off under that
+                // chip is a row that leaves. See [`favourite`], which answers
+                // `None` for every other operation and writes nothing else.
+                if let Acted::Emitted(Some(ref operation @ Operation::SetFavourite { .. })) = acted
+                {
+                    // **`Asked::Operator`, because a hand on this panel is the
+                    // operator's own act** — the same word `k` and the `keep`
+                    // capsule pass for a save, and what it decides is
+                    // `favourite`'s own (P-0096, ADR-0301).
+                    if let Some(line) = favourite(&self.store, Asked::Operator, operation) {
+                        println!("{line}");
+                    }
+                }
+                // **A star is on this branch as well as the two above**, and
+                // it is the same question for the same reason: what the bay
+                // draws is a listing and a set of marks, both of them read off
+                // a disk, and the write above changed one of them.
                 if matches!(
                     acted,
                     Acted::Emitted(Some(
-                        Operation::SelectScope { .. } | Operation::ListSets { .. }
+                        Operation::SelectScope { .. }
+                            | Operation::ListSets { .. }
+                            | Operation::SetFavourite { .. }
                     ))
                 ) {
                     println!(
@@ -11228,17 +12059,27 @@ impl ApplicationHandler for App {
                 // the vocabulary one gesture performs. `taking_in` and
                 // `preset_press` are the key's own two helpers, so this is a
                 // second caller and not a second answer.
+                //
+                // **A folder row is the same press**, and it stopped being
+                // refused on 2026-09-08: it is the same two rows of the
+                // vocabulary off a directory somebody dropped rather than one
+                // the program was told (ADR-0275, ADR-0267), so the two arms
+                // are one and [`Taking`] is the difference between them.
                 let mut took = Repaint::Never;
                 let acted = match (&acted, self.readout.view.scope()) {
                     (
                         Acted::Emitted(Some(Operation::LoadSet { deck, set })),
-                        Some(Scope::Presets),
+                        Some(scope @ (Scope::Presets | Scope::Folder)),
                     ) => {
                         let (deck, row) = (*deck, set.clone());
-                        match taking_in(&self.store, self.presets.as_ref(), &row) {
+                        let from = match scope {
+                            Scope::Folder => Taking::Folder(self.folder.as_deref()),
+                            _ => Taking::Presets(self.presets.as_ref()),
+                        };
+                        match taking_in(&self.store, from, &row) {
                             Ok(taken) => {
                                 println!("  take in: {}", taken.said);
-                                let [take, load] = preset_press(deck, taken);
+                                let [take, load] = taken_in_press(deck, taken);
                                 took = App::performed(
                                     gfx,
                                     self.started,
@@ -11261,26 +12102,6 @@ impl ApplicationHandler for App {
                                 Acted::Nothing
                             }
                         }
-                    }
-                    // **And a Set dragged out of a *folder* is refused**, for
-                    // `l`'s reason on the same pair of rows: a folder row is a
-                    // take, taking one in from a folder is not built, and
-                    // falling through would load a Set of this store's that
-                    // happens to share the file's name — a release doing
-                    // something other than what the row in hand says.
-                    (
-                        Acted::Emitted(Some(Operation::LoadSet { deck, set })),
-                        Some(Scope::Folder),
-                    ) => {
-                        println!(
-                            "  load: `{set}` is a row of the folder this bay is pointed at, and \
-                             a folder row is a **take** — taking a Set in from a folder is not \
-                             built, so nothing was loaded and what is on deck {} is still \
-                             running. A `presets` row is taken in and loaded by this drag, and \
-                             a Set this store already holds is listed under `my sets`",
-                            deck_letter(*deck)
-                        );
-                        Acted::Nothing
                     }
                     _ => acted,
                 };
@@ -11692,16 +12513,31 @@ impl ApplicationHandler for App {
                         // be one `Acted`.
                         let mut took = Repaint::Never;
                         let acted = match (self.readout.view.scope(), row) {
-                            // **A preset row is taken in and then loaded**,
-                            // which is one press because taking it in is what
-                            // gives the Set the id the load needs — ADR-0229's
-                            // *one operation, two moments*, performed at the
-                            // second of them. What lands in the store is a
-                            // Set of the operator's, so `my sets` gains a row
-                            // they did not make: `console.html` says that out
-                            // loud so that nobody meets it as a surprise.
-                            (Some(Scope::Presets), Some(row)) => {
-                                match taking_in(&self.store, self.presets.as_ref(), &row) {
+                            // **A preset or a folder row is taken in and then
+                            // loaded**, which is one press because taking it in
+                            // is what gives the Set the id the load needs —
+                            // ADR-0229's *one operation, two moments*,
+                            // performed at the second of them. What lands in
+                            // the store is a Set of the operator's, so `all`
+                            // gains a row they did not make: `console.html`
+                            // says that out loud so that nobody meets it as a
+                            // surprise. It gains no row under `my sets`, which
+                            // is ADR-0299 — a Set the operator did not choose
+                            // is in the library and is not one of their
+                            // favourites.
+                            //
+                            // **The two scopes are one arm**, and the folder
+                            // half is what landed on 2026-09-08: a folder row
+                            // was refused here because the scope had no
+                            // directory to list, and ADR-0275 gave it one. See
+                            // [`Taking`], which is the whole of the difference
+                            // between them.
+                            (Some(scope @ (Scope::Presets | Scope::Folder)), Some(row)) => {
+                                let from = match scope {
+                                    Scope::Folder => Taking::Folder(self.folder.as_deref()),
+                                    _ => Taking::Presets(self.presets.as_ref()),
+                                };
+                                match taking_in(&self.store, from, &row) {
                                     Ok(taken) => {
                                         println!("  take in: {}", taken.said);
                                         // **The take-in is named as well as
@@ -11737,7 +12573,7 @@ impl ApplicationHandler for App {
                                         // it and the emission is the naming;
                                         // the load after it is what re-points
                                         // the slot.
-                                        let [take, load] = preset_press(deck, taken);
+                                        let [take, load] = taken_in_press(deck, taken);
                                         took = App::performed(
                                             gfx,
                                             self.started,
@@ -11761,7 +12597,7 @@ impl ApplicationHandler for App {
                                             "  take in: `{row}` was not taken into the store: \
                                              {e}\n  take in: so nothing was loaded, and what is \
                                              on deck {} is still running — a Set already here is \
-                                             listed under `my sets`, which is where it is loaded \
+                                             listed under `all`, which is where it is loaded \
                                              from",
                                             deck_letter(deck)
                                         );
@@ -11769,39 +12605,9 @@ impl ApplicationHandler for App {
                                     }
                                 }
                             }
-                            // **A folder row is a take and taking one in is
-                            // not built**, so it is refused here rather than
-                            // fallen through to the load below — which is not
-                            // a nicety: a folder holding `night01.kbset` and a
-                            // store holding `night01` are two different Sets
-                            // under one word, and the arm below would load the
-                            // store's off a row that names the file. That is a
-                            // press doing something other than what the row
-                            // under it says, which is worse than a refusal by
-                            // the width of the whole panel.
-                            //
-                            // `console.html`: *"a folder row is a **take**"*,
-                            // and what a take needs is the packaging step
-                            // `taking_in` does for a preset — off the folder's
-                            // own listing rather than the presets root's. That
-                            // is `docs/manual/operations.html`'s *Send a Set
-                            // to somebody, and take one in*, whose panel badge
-                            // is still `plan`, and it is what ADR-0275 left
-                            // for whoever builds the rest of this bay.
-                            (Some(Scope::Folder), Some(row)) => {
-                                println!(
-                                    "  load: `{row}` is a row of the folder this bay is \
-                                     pointed at, and a folder row is a **take** — taking a \
-                                     Set in from a folder is not built, so nothing was \
-                                     loaded and what is on deck {} is still running. A \
-                                     `presets` row is taken in and loaded by this key, and a \
-                                     Set this store already holds is listed under `my sets`",
-                                    deck_letter(deck)
-                                );
-                                Acted::Nothing
-                            }
-                            // A row of `my sets`, which is a Set this store
-                            // already holds and is the route ADR-0228 built.
+                            // A row of `all` or of `my sets`, which is a Set
+                            // this store already holds and is the route
+                            // ADR-0228 built.
                             (_, Some(set)) => {
                                 Acted::Emitted(Some(Operation::LoadSet { deck, set }))
                             }
@@ -12094,6 +12900,14 @@ impl ApplicationHandler for App {
             }
 
             WindowEvent::RedrawRequested => {
+                // **The frame's own clock, and the first statement of the
+                // frame because that is the whole of what makes it one.** Two
+                // consecutive readings of this bracket a whole redraw — the
+                // block on the swapchain, every timed stretch, every untimed
+                // one and `Queue::present` — so [`Cost::period`] is the frame
+                // and not a part of it. Nothing else in this handler can say
+                // that: every other clock here starts after the wait.
+                let period = self.costs.tick(Instant::now());
                 // **What a model asked for, and what a save came back with —
                 // both above everything that touches the window.** A client
                 // asking to keep what is playing should not be waiting on a
@@ -12163,6 +12977,7 @@ impl ApplicationHandler for App {
 
                 let mut cost = Cost {
                     wait: waited,
+                    period,
                     ..Cost::default()
                 };
 
@@ -12618,6 +13433,35 @@ impl ApplicationHandler for App {
                     println!("a sink failed to present: {e}");
                 }
 
+                // **What the GPU still owed, on the frames that pay to find
+                // out.** Everything above stops at a submission, so on every
+                // other frame the answer to *how much of this was the shader*
+                // is not in this file at all — it arrives one frame later,
+                // folded into `wait`, where it is indistinguishable from the
+                // vsync idle that field is named for.
+                //
+                // **Before `present` and after `submit`**, which is the window
+                // that contains this frame's work and not the display's pace:
+                // `Queue::present` queues the image for the compositor, and a
+                // poll on the far side of it would be waiting for a monitor.
+                //
+                // **A poll error is `None` and not a zero.** A drain that did
+                // not happen has no duration, and 0.0 ms here would read as a
+                // GPU with nothing to do — the exact failure P-0095 exists to
+                // refuse.
+                cost.drained = self
+                    .costs
+                    .audit()
+                    .then(|| {
+                        let owed = Instant::now();
+                        gfx.gpu
+                            .device
+                            .poll(wgpu::PollType::wait_indefinitely())
+                            .is_ok()
+                            .then(|| owed.elapsed())
+                    })
+                    .flatten();
+
                 gfx.gpu.queue.present(frame);
 
                 // **The `tick` that closes this frame, where one is being
@@ -12685,6 +13529,15 @@ impl ApplicationHandler for App {
                 // [`live`] is where it is written and where a test can reach
                 // it.
                 self.costs.live = live;
+                // **The verdict this program earned about this adapter's
+                // timestamps**, kept for the reading beside `live` and for the
+                // same reason: one answer per frame, off whoever took it. The
+                // deck's startup probe calibrates against a load whose answer
+                // is already known, so this is what the adapter *did* rather
+                // than what it advertises (P-0095) — and asking the deck costs
+                // a copy of an `Option` rather than a second calibration that
+                // could disagree with the numbers the governor decided on.
+                self.costs.clock = gfx.engine.deck.clock();
                 // **And what the panel asked for on its own account**, which
                 // is the other half of why frames are being drawn on an
                 // untouched window. Asked of the view here for the same reason
@@ -14505,9 +15358,155 @@ mod tests {
         assert!(presets_listing(None).is_empty());
     }
 
-    /// **Loading a preset takes it into the store, so `my sets` gains a row
+    /// **A folder row is taken into the store and then loaded**, which is the
+    /// half of *Send a Set to somebody, and take one in* the folder scope was
+    /// refused for until it had a directory.
+    ///
+    /// **It is the preset press over somebody else's directory** — ADR-0267's
+    /// *"the bay is already a file browser"* reached from the taking-in side,
+    /// and ADR-0275 is what gave the scope a directory to be pointed at. The
+    /// two arms are one arm in the press handler and [`Taking`] is the whole
+    /// of the difference, so this asserts the difference rather than the
+    /// shared half: the same `taking_in`, pointed at a folder.
+    ///
+    /// **Both spellings, because a folder holds both and a presets root holds
+    /// one.** `examples/` is a directory of `.kset` files, which is the
+    /// authored form; the store the first take-in wrote is a directory of
+    /// `.kbset` files, which is the bundle — so pointing a second store's
+    /// folder scope at the first store's `sets/` is a take-in of a form the
+    /// `presets` scope could never have offered. That is the branch this row
+    /// gained and the one `karakuri-cli`'s `--take-in` has always had.
+    ///
+    /// A CPU test: a store, a directory, and no window.
+    #[test]
+    fn a_folder_row_is_taken_in_by_the_same_press_a_preset_row_is() {
+        let root = scratch_dir("folder-take-in");
+        Store::open(&root).expect("a store to take into");
+        let examples = shipped_presets().dir;
+
+        // **The authored form, out of a folder rather than out of `presets`.**
+        // The rows are the same words the bay draws, and the file behind one
+        // is found by asking the directory again on the press.
+        assert!(
+            folder_listing(Some(&examples))
+                .iter()
+                .any(|id| id == "beat_cloud"),
+            "the folder scope does not list `beat_cloud` in `examples/`"
+        );
+        let taken = taking_in(&root, Taking::Folder(Some(&examples)), "beat_cloud")
+            .expect("a folder row is taken in");
+        assert_eq!(taken.id, "beat_cloud");
+        assert_eq!(
+            library(&root)
+                .into_iter()
+                .map(|set| set.id)
+                .collect::<Vec<_>>(),
+            vec!["beat_cloud".to_owned()],
+            "the folder row was taken in and `all` does not list it"
+        );
+        // **And the two operations one press performs**, in the order they
+        // happen: the transfer names the *file* and the load names the id the
+        // file filed itself under.
+        let [take, load] = taken_in_press(1, taken);
+        assert!(
+            matches!(&take, Operation::TransferSet { transfer: SetTransfer::Take { file } }
+                if file.starts_with(&examples)),
+            "the transfer does not name the file the row came off: {take:?}"
+        );
+        assert_eq!(
+            load,
+            Operation::LoadSet {
+                deck: 1,
+                set: "beat_cloud".to_owned()
+            }
+        );
+
+        // **The bundle form, which a `presets` root never offers**, and it is
+        // what a *send* writes: `setfile::bundle` is `--package`'s own reading
+        // — the Set with every source it names inlined — where the `.kbset`
+        // sitting in `<store>/sets/` is a projection whose material is the
+        // artifacts beside it and is **not** self-contained. So this is the
+        // loop ADR-0267 is about, closed with the half that exists: a package
+        // written into a directory the bay can be pointed at, and taken in
+        // from a row of it.
+        let second = scratch_dir("folder-take-in-bundle");
+        Store::open(&second).expect("a second store");
+        let sent = scratch_dir("folder-take-in-sent");
+        std::fs::create_dir_all(&sent).expect("a folder to send into");
+        let package = karakuri_environment::setfile::bundle(
+            &Store::open(&root).expect("the store"),
+            "beat_cloud",
+        )
+        .expect("a package to send");
+        karakuri_store::ndjson::write(
+            &sent.join(format!("beat_cloud{}", Store::SET_FILE_SUFFIX)),
+            &package,
+        )
+        .expect("the package is written where the bay is pointed");
+        assert_eq!(folder_listing(Some(&sent)), vec!["beat_cloud".to_owned()]);
+        let taken = taking_in(&second, Taking::Folder(Some(&sent)), "beat_cloud")
+            .expect("a `.kbset` row is taken in");
+        assert_eq!(taken.id, "beat_cloud");
+        karakuri_environment::setfile::load(
+            &Store::open(&second).expect("the second store"),
+            "beat_cloud",
+        )
+        .expect("the Set that was just taken in cannot be read back");
+
+        // **A folder nobody has pointed anywhere holds no row**, which is the
+        // same refusal a preset root that has gone gives.
+        assert!(taking_in(&second, Taking::Folder(None), "beat_cloud").is_err());
+
+        std::fs::remove_dir_all(&root).expect("clean up");
+        std::fs::remove_dir_all(&second).expect("clean up");
+        std::fs::remove_dir_all(&sent).expect("clean up");
+    }
+
+    /// **A word two files in a folder wear is refused, and both names come
+    /// back.**
+    ///
+    /// `folder_listing` draws one row per *file*, so a directory holding
+    /// `night.kbset` and `night.kset` draws two rows reading `night` — that is
+    /// its own decision and it is deliberate, because choosing between the two
+    /// forms in a listing would be inventing a precedence between them. What
+    /// it left open was which of them a press means, and the answer is that
+    /// nothing here answers it: a row names a word, two files wear the word,
+    /// and taking one would be this program choosing for an operator between
+    /// two rows they cannot tell apart on screen.
+    ///
+    /// **So the refusal carries both file names**
+    /// ([P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md)),
+    /// which is what the next attempt needs: rename or move one of them.
+    ///
+    /// A CPU test: a directory and two empty files.
+    #[test]
+    fn a_folder_row_two_files_wear_is_refused_with_both_names() {
+        let dir = scratch_dir("folder-two-forms");
+        std::fs::create_dir_all(&dir).expect("a folder to point at");
+        std::fs::write(dir.join("night.kbset"), b"").expect("a bundle");
+        std::fs::write(dir.join("night.kset"), b"").expect("an authoring file");
+
+        assert_eq!(
+            folder_listing(Some(&dir)),
+            vec!["night".to_owned(), "night".to_owned()],
+            "a directory of two forms of one Set draws two rows"
+        );
+        let refused = Taking::Folder(Some(&dir))
+            .file("night")
+            .expect_err("a word two files wear was resolved to one of them");
+        assert!(
+            refused.contains("night.kbset") && refused.contains("night.kset"),
+            "the refusal does not name both files: {refused}"
+        );
+
+        std::fs::remove_dir_all(&dir).expect("clean up");
+    }
+
+    /// **Loading a preset takes it into the store, so `all` gains a row
     /// nobody made** — `console.html`'s *"which is why opening a preset leaves
-    /// one of your own behind"*.
+    /// one of your own behind"*. It gains no row under `my sets`, which is
+    /// ADR-0299's answer to the roadmap's symptom: a preset packaged on load
+    /// is a Set of the operator's and is not one they chose to keep.
     ///
     /// The whole of the press is asserted here except the aim, which is
     /// [`loading`]'s and has its own test below: what a preset row adds is the
@@ -14525,9 +15524,9 @@ mod tests {
 
         assert!(
             library(&root).is_empty(),
-            "a fresh store lists something under `my sets`"
+            "a fresh store lists something under `all`"
         );
-        let taken = taking_in(&root, Some(&presets), "beat_cloud")
+        let taken = taking_in(&root, Taking::Presets(Some(&presets)), "beat_cloud")
             .unwrap_or_else(|e| panic!("`beat_cloud` was not taken in: {e}"));
         assert_eq!(
             taken.id, "beat_cloud",
@@ -14544,7 +15543,7 @@ mod tests {
                 .map(|set| set.id)
                 .collect::<Vec<_>>(),
             vec!["beat_cloud".to_owned()],
-            "the preset was taken in and `my sets` does not list it"
+            "the preset was taken in and `all` does not list it"
         );
 
         // **And the parts are in the store**, which is what makes the load
@@ -14574,7 +15573,7 @@ mod tests {
         let presets = shipped_presets();
         Store::open(&root).expect("a store to take a preset into");
 
-        let taken = taking_in(&root, Some(&presets), "beat_cloud")
+        let taken = taking_in(&root, Taking::Presets(Some(&presets)), "beat_cloud")
             .unwrap_or_else(|e| panic!("`beat_cloud` was not taken in: {e}"));
         assert_eq!(
             taken.file.file_name().and_then(|n| n.to_str()),
@@ -14620,10 +15619,10 @@ mod tests {
         let presets = shipped_presets();
         Store::open(&root).expect("a store to take a preset into");
 
-        let taken = taking_in(&root, Some(&presets), "beat_cloud")
+        let taken = taking_in(&root, Taking::Presets(Some(&presets)), "beat_cloud")
             .unwrap_or_else(|e| panic!("`beat_cloud` was not taken in: {e}"));
         let file = taken.file.clone();
-        let [take, load] = preset_press(2, taken);
+        let [take, load] = taken_in_press(2, taken);
 
         assert_eq!(
             take,
@@ -14704,10 +15703,10 @@ mod tests {
         let presets = shipped_presets();
         Store::open(&root).expect("a store to take a preset into");
 
-        taking_in(&root, Some(&presets), "beat_cloud").expect("the first take-in");
+        taking_in(&root, Taking::Presets(Some(&presets)), "beat_cloud").expect("the first take-in");
         let held = library(&root);
 
-        let refused = taking_in(&root, Some(&presets), "beat_cloud")
+        let refused = taking_in(&root, Taking::Presets(Some(&presets)), "beat_cloud")
             .expect_err("the same preset was taken in twice");
         assert!(
             refused.contains("already in this store") && refused.contains("beat_cloud"),
@@ -14723,7 +15722,7 @@ mod tests {
         // saying so, which is the other way a press finds nothing: the listing
         // is asked again on the press, so a file that has moved is met here
         // rather than inside the packaging.
-        let gone = taking_in(&root, Some(&presets), "no_such_preset")
+        let gone = taking_in(&root, Taking::Presets(Some(&presets)), "no_such_preset")
             .expect_err("a preset that is not there was taken in");
         assert!(
             gone.contains("no_such_preset"),
@@ -14738,10 +15737,9 @@ mod tests {
     /// saying which kind of nothing it is.
     ///
     /// The two that answer nothing are the whole point of the test: they are
-    /// empty for two *different* reasons — a favourite is a fact nothing in
-    /// this workspace keeps, and this console has not been pointed at a
-    /// folder — and a program that said the same thing about both would be
-    /// hiding one of them.
+    /// empty for two *different* reasons — nothing in this store is starred,
+    /// and this console has not been pointed at a folder — and a program that
+    /// said the same thing about both would be hiding one of them.
     ///
     /// **`folder` is here because of the console and not because of the
     /// scope**: it answers with rows the moment one is dropped on the window,
@@ -14759,13 +15757,62 @@ mod tests {
 
         let mut view = View::new(Room::Day);
         view.scopes = Scope::ALL.to_vec();
-        assert!(view.select_scope(Scope::MySets));
+        // **`all` is the first chip and is where a row of chips starts**, so
+        // this is asserted rather than marked: `select_scope` answers whether
+        // the mark *moved*, and a console handed this row is already on it.
+        assert_eq!(view.scope(), Some(Scope::AllSets));
 
         let said = listing(&mut view, &root, Some(&presets), None);
         assert_eq!(view.library, vec!["night01".to_owned()]);
-        assert!(said.contains("my sets") && said.contains('1'), "{said}");
+        assert!(said.contains("all") && said.contains('1'), "{said}");
 
-        assert!(view.step_scope(), "the scope did not step");
+        // **And `my sets` is that listing starred, which is nothing yet**
+        // (ADR-0299): the store holds a Set and the operator has not chosen
+        // it, so the subset is empty for an answer rather than for an absence.
+        assert!(view.select_scope(Scope::MySets));
+        let said = listing(&mut view, &root, Some(&presets), None);
+        assert!(
+            view.library.is_empty(),
+            "`my sets` listed {:?} and nothing has been starred",
+            view.library
+        );
+        assert!(said.contains("my sets"), "{said}");
+
+        // **A star put on it puts the row there**, which is the whole of what
+        // the subset is: the same store, the same listing, one file beside it.
+        assert_eq!(
+            favourite(
+                &root,
+                Asked::Operator,
+                &Operation::SetFavourite {
+                    id: "night01".to_owned(),
+                    favourite: true,
+                },
+            )
+            .is_some(),
+            true,
+            "`favourite` answered nothing for a `SetFavourite`"
+        );
+        let said = listing(&mut view, &root, Some(&presets), None);
+        assert_eq!(view.library, vec!["night01".to_owned()], "{said}");
+        assert!(
+            view.starred.contains("night01"),
+            "the bay was not told which rows are starred: {:?}",
+            view.starred
+        );
+        // **And taking it off takes the row away again**, which is the state
+        // this test goes on to assert the empty sentence of.
+        favourite(
+            &root,
+            Asked::Operator,
+            &Operation::SetFavourite {
+                id: "night01".to_owned(),
+                favourite: false,
+            },
+        )
+        .expect("`favourite` answered nothing for a `SetFavourite`");
+
+        assert!(view.select_scope(Scope::Presets));
         assert_eq!(view.scope(), Some(Scope::Presets));
         let said = listing(&mut view, &root, Some(&presets), None);
         assert!(
@@ -14780,12 +15827,12 @@ mod tests {
         // console has been pointed nowhere**, and not because the scope cannot
         // be answered: point it at a directory and it lists what is in it,
         // which is `a_folder_dropped_on_the_window_points_the_bay_at_it`.
-        for scope in [Scope::Favourites, Scope::Folder] {
+        for scope in [Scope::MySets, Scope::Folder] {
             assert!(view.select_scope(scope));
             let said = listing(&mut view, &root, Some(&presets), None);
             assert!(
                 view.library.is_empty(),
-                "`{}` listed {:?}, and nothing in this workspace can produce it",
+                "`{}` listed {:?}, and nothing in this run put a row there",
                 scope.name(),
                 view.library
             );
@@ -14796,15 +15843,24 @@ mod tests {
             );
         }
         assert_ne!(
-            why_nothing(Scope::Favourites, false),
+            why_nothing(Scope::MySets, false),
             why_nothing(Scope::Folder, false),
             "the two scopes that answer nothing are empty for two different reasons and this \
              program gives one sentence for both"
         );
+        // **It says what to press**, which is the difference between a scope
+        // that is empty and a scope that is broken: `my sets` is the starred
+        // subset, so the way to fill it is a star and the sentence names one.
         assert!(
-            why_nothing(Scope::Favourites, false).contains("favourite"),
-            "the `favourites` sentence does not say what is missing: {}",
-            why_nothing(Scope::Favourites, false)
+            why_nothing(Scope::MySets, false).contains("star"),
+            "the `my sets` sentence does not say what fills it: {}",
+            why_nothing(Scope::MySets, false)
+        );
+        assert_ne!(
+            why_nothing(Scope::AllSets, false),
+            why_nothing(Scope::MySets, false),
+            "a store nobody has saved into and a store nobody has starred in are given one \
+             sentence"
         );
         // **It says how a directory is chosen, and it used to say `operation`.**
         // This asserted that word until ADR-0275, on the reading that the chip
@@ -16014,6 +17070,76 @@ mod tests {
         assert_eq!(costs.still, Still::default());
     }
 
+    /// **The defect this instrument was built for, stated as an assertion.**
+    ///
+    /// A frame that spent 200 ms blocked and 3 ms on the CPU is a 203 ms
+    /// frame. [`Cost::whole`] answers 3 ms, and that is not an error in it —
+    /// it is CPU time and says so — but it is what a reader who wants *what
+    /// did this frame cost* used to be handed, and what a loop at four frames
+    /// a second was read off as *idle 97.6% of the time*. The number with the
+    /// wait in it is [`Cost::period`], and the frame's own arithmetic is here
+    /// so that a later widening of `whole` fails rather than passes.
+    #[test]
+    fn a_frames_cost_has_the_wait_in_it_and_the_three_cpu_stretches_do_not() {
+        let frame = Cost {
+            wait: Duration::from_millis(200),
+            engine: Duration::from_millis(1),
+            ui: Duration::from_millis(1),
+            paint: Duration::from_millis(1),
+            period: Some(Duration::from_millis(205)),
+            ..Cost::default()
+        };
+
+        assert_eq!(frame.whole(), Duration::from_millis(3), "the CPU's share");
+        assert_eq!(
+            frame.period,
+            Some(Duration::from_millis(205)),
+            "what the frame cost"
+        );
+        // The residue: the period, less the wait, less the three stretches.
+        // Two milliseconds of this frame are in no field of it, which is the
+        // claim `Cost::whole` used to make in prose — that its three *tile the
+        // frame exactly* — measured instead of asserted.
+        assert_eq!(frame.elsewhere(), Some(Duration::from_millis(2)));
+
+        // **A frame with no predecessor has no period, and no residue
+        // either.** A zero here would read as a frame that spent nothing
+        // anywhere, which is the shape of answer P-0095 refuses.
+        assert_eq!(Cost::default().elsewhere(), None);
+    }
+
+    /// **A period is an interval and needs two frames**, and an audit happens
+    /// at most once per [`Costs::AUDIT`] however many frames go by.
+    ///
+    /// Both are the same rule from two sides: the instrument reads the clock
+    /// rather than counting frames, so nothing about how fast this window
+    /// draws changes what either answers.
+    #[test]
+    fn the_first_frame_has_no_period_and_an_audit_does_not_repeat() {
+        let mut costs = Costs::new();
+        let began = Instant::now();
+
+        assert_eq!(
+            costs.tick(began),
+            None,
+            "there was no frame before the first"
+        );
+        assert_eq!(
+            costs.tick(began + Duration::from_millis(17)),
+            Some(Duration::from_millis(17)),
+            "the interval between two anchors is the frame"
+        );
+
+        // Fresh, the stretch has not elapsed: a run does not audit its first
+        // frame, which is the one that builds the font atlas.
+        assert!(!costs.audit(), "the first frame of a run was audited");
+        // Wound back past the stretch, exactly one frame takes the audit and
+        // the frame after it does not.
+        costs.since_audit = Instant::now() - Costs::AUDIT;
+        assert!(costs.audit(), "a stretch elapsed and nothing was audited");
+        assert!(!costs.audit(), "two frames in a row were audited");
+    }
+
     /// **A whole drag, through the window loop's own routing.**
     ///
     /// `karakuri_console::input`'s tests are about the rule; this is about
@@ -16839,6 +17965,115 @@ mod tests {
         );
     }
 
+    /// **A press on the star at the left of a library row, through the window
+    /// loop's own routing** — the half of the badge ADR-0213 makes a badge
+    /// mean, beside
+    /// [`a_press_on_a_filter_field_asks_the_store_for_a_narrower_listing`].
+    ///
+    /// `karakuri-console`'s `tests/library.rs` says where the mark is and that
+    /// it answers a press; **this says an operator reaches it** — a control
+    /// demonstrated in that crate and never wired here would pass there and be
+    /// a lie the page tells on its own authority.
+    ///
+    /// **What is asserted is that the press names a state and not a step**
+    /// (ADR-0299): the same mark pressed twice asks for two different things,
+    /// because the control reads the row's present mark and asks for the other
+    /// one. That is the failure a toggle hides completely — a press that
+    /// always emitted `true` would pass every assertion about the first press
+    /// and never take a star off.
+    ///
+    /// **And that the star has not swallowed the row it sits in**: a press on
+    /// the row's own ground still takes the Set in hand and names no
+    /// operation, which is rule 4's *a control claims what it acts on and no
+    /// more* asked of the two boxes that overlap.
+    ///
+    /// A CPU test: a `Readout` takes no device.
+    #[test]
+    fn a_press_on_a_star_names_the_state_the_row_is_not_in() {
+        let ctx = drawn_once();
+        let mut readout = Readout::new(1440.0, 900.0);
+        readout.panel.solve();
+        readout.view.scopes = Scope::ALL.to_vec();
+        readout.view.library = vec!["drift_night".to_owned(), "lattice_veil".to_owned()];
+
+        // The mark's box, asked of the derivation that draws it rather than
+        // remembered — the rule the whole of `input` is written to.
+        let star = |readout: &mut Readout, index: usize| {
+            readout.panel.solve();
+            let at = library_bay(
+                readout.panel.layout(),
+                &readout.view.scopes,
+                &readout.view.library,
+                readout.view.opened(),
+                readout.view.pointed(),
+            )
+            .expect("the bay lists its rows")
+            .star(index);
+            Point::new(at.center().x, at.center().y)
+        };
+
+        // **Nothing starred, so the press asks for the star to go on.**
+        let at = star(&mut readout, 1);
+        assert_eq!(readout.pointer(&ctx, Pointer::Moved(at)).0, Claim::Panel);
+        let (claim, did) = readout.pointer(&ctx, Pointer::Down);
+        assert_eq!(claim, Claim::Panel);
+        assert_eq!(
+            did,
+            Acted::Emitted(Some(Operation::SetFavourite {
+                id: "lattice_veil".to_owned(),
+                favourite: true,
+            })),
+            "the press did not reach the star, or it named the wrong row"
+        );
+        assert!(
+            !readout.panel.dragging(),
+            "the press took a boundary in hand"
+        );
+        readout.pointer(&ctx, Pointer::Up);
+
+        // **And with the row starred it asks for the star to come off**, which
+        // is the same control reading the state it is drawn from. The marks
+        // are the host's answer, so this is what `listing` would have written
+        // after the write.
+        readout.view.starred.insert("lattice_veil".to_owned());
+        assert_eq!(readout.pointer(&ctx, Pointer::Moved(at)).0, Claim::Panel);
+        assert_eq!(
+            readout.pointer(&ctx, Pointer::Down).1,
+            Acted::Emitted(Some(Operation::SetFavourite {
+                id: "lattice_veil".to_owned(),
+                favourite: false,
+            })),
+            "a starred row was asked to be starred again"
+        );
+        readout.pointer(&ctx, Pointer::Up);
+
+        // **The row's own ground is still the row's.** A press at the far end
+        // of the same row takes the Set in hand and names no operation, which
+        // is what a carry is (ADR-0265).
+        readout.panel.solve();
+        let row = library_bay(
+            readout.panel.layout(),
+            &readout.view.scopes,
+            &readout.view.library,
+            readout.view.opened(),
+            readout.view.pointed(),
+        )
+        .expect("the bay lists its rows")
+        .row(1);
+        let ground = Point::new(row.max.x - 4.0, row.center().y);
+        assert_eq!(
+            readout.pointer(&ctx, Pointer::Moved(ground)).0,
+            Claim::Panel
+        );
+        let (claim, did) = readout.pointer(&ctx, Pointer::Down);
+        assert_eq!(claim, Claim::Panel);
+        assert!(
+            !matches!(did, Acted::Emitted(Some(Operation::SetFavourite { .. }))),
+            "a press on the row's own ground was answered by the star in it: {did:?}"
+        );
+        readout.pointer(&ctx, Pointer::Up);
+    }
+
     /// **A press on one of the Library bay's two filter fields, through the
     /// window loop's own routing** — the half of the badge ADR-0213 makes a
     /// badge mean, one row under
@@ -17445,13 +18680,18 @@ mod tests {
     /// back afterwards is a narrower one — which is the whole point, and was
     /// impossible while this side asked `Store::list_sets` for names.
     ///
+    /// **What it narrows is the store's own listing**, which is `all` and is
+    /// what *List what the store holds* lists. `my sets` is that listing
+    /// starred (ADR-0299), so the same retain applies to it and the row is not
+    /// a control over one chip.
+    ///
     /// **It is the same retain the MCP tool applies**, over the same
     /// `setfile::summarise`, which is what keeps one operation from being
     /// answered two ways by two surfaces.
     ///
     /// A CPU test: a store, a `View`, and no window.
     #[test]
-    fn the_filter_row_narrows_my_sets_through_the_summary() {
+    fn the_filter_row_narrows_the_stores_listing_through_the_summary() {
         use karakuri_operation::Layer;
         use karakuri_store::hash::Hash;
         use karakuri_store::ndjson::Line;
@@ -17476,7 +18716,7 @@ mod tests {
 
         let mut view = View::new(Room::Day);
         view.scopes = Scope::ALL.to_vec();
-        assert!(view.select_scope(Scope::MySets));
+        assert_eq!(view.scope(), Some(Scope::AllSets));
 
         // Unnarrowed: both Sets, and the candidates are what their nodes are
         // called — sorted, deduplicated, and read off the *unfiltered* listing.
@@ -17514,9 +18754,35 @@ mod tests {
         assert!(view.library.is_empty(), "the bay lists {:?}", view.library);
         assert!(
             said.contains("none of the 2 Sets here")
-                && !said.contains(why_nothing(Scope::MySets, false)),
+                && !said.contains(why_nothing(Scope::AllSets, false)),
             "{said}"
         );
+
+        // **And the same retain applies to `my sets`**, which is this listing
+        // starred: star one Set, mark the subset, and the filter that named
+        // the other one leaves it with nothing — the narrowing is over what
+        // the store holds and not over which chip is marked.
+        assert!(view.narrow(None, None));
+        favourite(
+            &root,
+            Asked::Operator,
+            &Operation::SetFavourite {
+                id: "night01".to_owned(),
+                favourite: true,
+            },
+        )
+        .expect("`favourite` answered nothing for a `SetFavourite`");
+        assert!(view.select_scope(Scope::MySets));
+        let said = listing(&mut view, &root, None, None);
+        assert_eq!(view.library, vec!["night01".to_owned()], "{said}");
+        assert!(view.narrow(None, Some(Layer::L4)));
+        let said = listing(&mut view, &root, None, None);
+        assert!(
+            view.library.is_empty(),
+            "`my sets` lists {:?} under a filter that names the Set that is not starred",
+            view.library
+        );
+        assert!(said.contains("none of the 2 Sets here"), "{said}");
 
         std::fs::remove_dir_all(&root).expect("clean up");
     }
@@ -19939,10 +21205,10 @@ mod press_handler {
             "program_bay(",
             &["cells.dropped("],
         ),
-        // **The Library bay's four**, and the bay is derived once per question
+        // **The Library bay's five**, and the bay is derived once per question
         // rather than held across them, exactly as `input::claim` derives it
-        // four times: a value held across all four would outlive the question
-        // it answers. So one derivation is named by four entries, and each is
+        // five times: a value held across all five would outlive the question
+        // it answers. So one derivation is named by five entries, and each is
         // told apart by the call rather than by it.
         (
             "the Library bay's scope chips",
@@ -19959,6 +21225,10 @@ mod press_handler {
             "library_bay(",
             &["bay.read("],
         ),
+        // **The star at the left of each row**, asked before the row it is in
+        // so that the smaller box wins — the same derivation again, told apart
+        // from the row below it by the call.
+        ("the Library bay's stars", "library_bay(", &["bay.starred("]),
         ("the Library bay's list", "library_bay(", &["bay.take("]),
         // **The four class pills**, one derivation asked four times: they are
         // in four different regions and cannot be one laid-out box, but they

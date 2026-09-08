@@ -937,6 +937,116 @@ fn the_load_pill_takes_no_press_and_a_row_is_where_the_drag_begins() {
     );
 }
 
+/// **The star is inside its row, clear of every boundary, and it names the
+/// state the row is not in.**
+///
+/// Three claims about one control because they are the three a new one owes
+/// (`input.rs`'s rule 4): where it is, that a hand can reach it, and what a
+/// press on it asks for.
+///
+/// **Inside the row**, because a star that overhung the row above or the list's
+/// own padding would be a mark drawn on somebody else's ground. **Clear of the
+/// grab**, because the list's left edge is the bay's and the bay's is a
+/// boundary: `.lib-row` is `padding: 3px 7px` inside a `.lib-list` of `3`,
+/// which is 10 in from the bay against a [`GRAB`] of 6 — the same measurement
+/// the two filter fields clear the same edge by.
+///
+/// **And it names the state the row is not in**, which is ADR-0299's *not a
+/// toggle* met at the control: the operation carries the state, so what reads
+/// the present mark is the surface. A star that always asked for `true` would
+/// pass every assertion about the first press and never take one off, so both
+/// directions are asked of one bay in one state.
+#[test]
+fn a_star_is_inside_its_row_and_names_the_state_the_row_is_not_in() {
+    let (view, mut panel) = showing_mock();
+    let ctx = drawn_once();
+    let bay = bay(&panel);
+    assert!(bay.rows >= 2, "the bay drew {} rows", bay.rows);
+
+    for index in 0..bay.rows {
+        let star = bay.star(index);
+        let row = bay.row(index);
+        assert!(
+            row.contains_rect(star),
+            "the star at {star:?} is not inside row {index} at {row:?}"
+        );
+        assert!(
+            star.min.x - bay.list.min.x >= 0.0,
+            "the star at {star:?} hangs off the left of the list at {:?}",
+            bay.list
+        );
+        // **A boundary would take the press before any control did**, which is
+        // `input::claim`'s rule 3 and is what the two filter fields are
+        // measured against one row up.
+        for p in [
+            egui::pos2(star.min.x, star.center().y),
+            egui::pos2(star.max.x, star.center().y),
+        ] {
+            assert!(
+                !matches!(
+                    panel.layout().hit(Point::new(p.x, p.y), GRAB),
+                    karakuri_layout::Hit::Divider { .. }
+                ),
+                "a boundary grabs {p:?}, which is on row {index}'s star"
+            );
+        }
+        assert_eq!(
+            claim(
+                &mut panel,
+                &ctx,
+                &view,
+                Point::new(star.center().x, star.center().y)
+            ),
+            Claim::Panel,
+            "the console gave `egui` a press on row {index}'s star"
+        );
+    }
+
+    // **Nothing starred: every press asks for the star to go on.**
+    let none = std::collections::BTreeSet::new();
+    let at = bay.star(1).center();
+    assert_eq!(
+        bay.starred(&mock(), &none, Point::new(at.x, at.y)),
+        Some(Operation::SetFavourite {
+            id: "lattice_veil".to_owned(),
+            favourite: true,
+        }),
+        "the star did not name the row it is drawn on"
+    );
+
+    // **And with that row starred it asks for the star to come off**, which is
+    // the same derivation reading the state it is drawn from.
+    let one: std::collections::BTreeSet<String> =
+        std::iter::once("lattice_veil".to_owned()).collect();
+    assert_eq!(
+        bay.starred(&mock(), &one, Point::new(at.x, at.y)),
+        Some(Operation::SetFavourite {
+            id: "lattice_veil".to_owned(),
+            favourite: false,
+        }),
+        "a starred row was asked to be starred again"
+    );
+
+    // **The row's own ground is not the star's**, which is rule 4's *a control
+    // claims what it acts on and no more*: the far end of the same row is
+    // where the carry begins and the mark answers nothing there.
+    let ground = egui::pos2(bay.row(1).max.x - size::LIB_ROW_PAD_X, at.y);
+    assert_eq!(
+        bay.starred(&mock(), &none, Point::new(ground.x, ground.y)),
+        None,
+        "the star answered a press at the far end of its row"
+    );
+
+    // **And a listing shorter than the rows drawn takes nothing**, which is
+    // `take`'s refusal rather than a clamp: a star answered bare would name a
+    // Set nobody can see.
+    assert_eq!(
+        bay.starred(&[], &none, Point::new(at.x, at.y)),
+        None,
+        "the star named a Set in a listing with nothing in it"
+    );
+}
+
 /// **A press names the chip it landed on, and never the next one.**
 ///
 /// This is the whole of what the pointer adds and it is `e`'s opposite:
@@ -1012,11 +1122,18 @@ fn a_press_names_the_chip_it_landed_on_and_never_the_next_one() {
 /// **A chip is pressed only where it is drawn.**
 ///
 /// `.scopes` carries a wrapping flex and this console draws one row of it and
-/// clips, so at the mock's own 218-wide pane the four words are wider than the
-/// bay and the last chip starts inside it and finishes outside. **What is not
-/// drawn is not a target**: the point is held to the row before any chip is
-/// asked about, so the tail hanging over the centre column belongs to whatever
-/// is drawn there and not to a capsule the operator cannot see.
+/// clips, so a pane narrower than the four words leaves the last chip starting
+/// inside the bay and finishing outside. **What is not drawn is not a
+/// target**: the point is held to the row before any chip is asked about, so
+/// the tail hanging over the centre column belongs to whatever is drawn there
+/// and not to a capsule the operator cannot see.
+///
+/// **The pane is narrower than the mock's own 218 now**, and that is ADR-0299
+/// rather than a number tuned to make a test pass: the first chip was
+/// `favourites` and is `all`, which is seven characters shorter, so the four
+/// words fit at the width they used to overrun. The clip is still the
+/// derivation's rule and an operator still reaches it with a divider, so this
+/// asks the same question of a pane that has been dragged in.
 ///
 /// The overrun is asserted rather than assumed, because a pane wide enough to
 /// hold all four would make the rest of this test measure nothing.
@@ -1025,7 +1142,7 @@ fn a_chip_is_pressed_only_where_it_is_drawn() {
     let mut layout = solved(PLAUSIBLE);
     let left = id_of(&layout, "left-pane");
     let split = layout.parent(left).expect("left-pane has a parent split");
-    layout.set_divider(split, 0, 218.0);
+    layout.set_divider(split, 0, 190.0);
     layout.solve();
     let ctx = drawn_once();
     let bay =
@@ -1314,8 +1431,13 @@ fn marked(view: &mut View, panel: &mut Panel, bay: &LibraryBay) -> Option<String
 }
 
 /// **The scope row draws the chips it was handed, in the order it was handed
-/// them** — which is the mock's own row: `favourites`, `my sets`, `presets`,
-/// `folder`.
+/// them** — which is the bay's own row: `all`, `my sets`, `presets`, `folder`.
+///
+/// **It is the mock's row with its first chip renamed and moved**, which is
+/// [ADR-0299](../../../docs/adr/0299-my-sets-is-the-starred-subset-and-the-star-is-kept-beside-the-sets.md):
+/// `my sets` is the starred subset now, so the chip that lists everything the
+/// store holds is `all` and it comes first, because it is the listing the
+/// other three are questions about.
 ///
 /// The `+` the mock draws after them is not one of them, and that is asserted
 /// rather than left to a reader counting four: it is the arena's own gap drawn
@@ -1326,8 +1448,8 @@ fn the_scope_row_draws_the_chips_it_was_handed_in_the_order_it_was_handed_them()
     let bay = bay(&panel);
     assert_eq!(
         chips(&mut view, &mut panel, &bay),
-        vec!["favourites", "my sets", "presets", "folder"],
-        "the scope row is not the mock's four chips in the mock's order"
+        vec!["all", "my sets", "presets", "folder"],
+        "the scope row is not this bay's four chips in this bay's order"
     );
 }
 
@@ -1343,9 +1465,10 @@ fn the_marked_chip_is_the_scope_the_pointer_is_on() {
     let (mut view, mut panel) = showing_mock();
     let bay = bay(&panel);
 
-    // A host that opens on `my sets`, which is what a program with a store
-    // does: the mock marks `favourites` and that is the scope nothing here can
-    // answer.
+    // A host that opens on `my sets` rather than on the first chip, which is
+    // what `View::select_scope` is for — the run itself opens on `all`
+    // (ADR-0299), and what this asserts is that a mark can be moved off the
+    // chip the row starts on.
     assert!(view.select_scope(Scope::MySets));
     assert_eq!(view.scope(), Some(Scope::MySets));
     assert_eq!(
@@ -1353,12 +1476,7 @@ fn the_marked_chip_is_the_scope_the_pointer_is_on() {
         Some("my sets")
     );
 
-    for scope in [
-        Scope::Presets,
-        Scope::Folder,
-        Scope::Favourites,
-        Scope::MySets,
-    ] {
+    for scope in [Scope::Presets, Scope::Folder, Scope::AllSets, Scope::MySets] {
         assert!(view.step_scope(), "the scope did not step");
         assert_eq!(view.scope(), Some(scope));
         assert_eq!(
@@ -1385,7 +1503,7 @@ fn stepping_the_scope_wraps_and_takes_the_cursor_back_to_the_top() {
 
     view.scopes = Scope::ALL.to_vec();
     view.library = mock();
-    assert_eq!(view.scope(), Some(Scope::Favourites), "the first chip");
+    assert_eq!(view.scope(), Some(Scope::AllSets), "the first chip");
 
     assert!(view.walk(2, 5), "the cursor did not move");
     assert_eq!(view.cursor_row(), 2);
@@ -1403,7 +1521,7 @@ fn stepping_the_scope_wraps_and_takes_the_cursor_back_to_the_top() {
     assert!(view.step_scope());
     assert_eq!(
         view.scope(),
-        Some(Scope::Favourites),
+        Some(Scope::AllSets),
         "the step off the last chip did not wrap round to the first"
     );
 

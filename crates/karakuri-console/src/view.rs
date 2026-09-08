@@ -10023,6 +10023,36 @@ const LOAD_PILL: &str = "load";
 /// right-pointing small triangle is about as wide as it is tall.
 const LOAD_ARROW: f32 = size::BASE * 0.5;
 
+// -- the star at the left of every row --------------------------------------
+
+/// **The box the star stands in**, which is the box the glyph it stands in
+/// for would have had: `.lib-row`'s type is the console's [`size::BASE`] and
+/// the mark is square at that size, which is [`arrow_mark`]'s rule for a mark
+/// drawn instead of typed.
+///
+/// Derived rather than transcribed for that reason — the mock sets no width on
+/// `.star` at all, because a glyph has one.
+const STAR_SIZE: f32 = size::BASE;
+
+/// **The gap between the star and the name**, which is `.lib-row`'s
+/// `gap: 7px` — the row is a flex of the star, the name and the time, and this
+/// is the one spacing in it that is not padding.
+///
+/// It happens to be [`size::LIB_ROW_PAD_X`]'s number and is not read off it:
+/// one is the row's padding and the other is the gap between two of its
+/// children, and they move for different reasons.
+const STAR_GAP: f32 = 7.0;
+
+/// **How far in from a star's own box its points reach.** A five-pointed star
+/// is ten rim points at two radii, and this is the inner one as a fraction of
+/// the outer.
+///
+/// The console's own number: a pentagram's exact inner radius is about `0.382`
+/// of its outer and reads as a spike at eleven pixels, so this is the fatter
+/// star a small mark wants. Nothing in the mock says it, because the mock has
+/// a glyph.
+const STAR_WAIST: f32 = 0.46;
+
 // -- what one Set holds and declares, opened under its row ------------------
 
 /// **The word the foot's second capsule reads**, which is the mock's own
@@ -10491,9 +10521,9 @@ pub struct Pointed<'a> {
 /// `docs/manual/operations.html`'s *Choose which scope the library shows* is
 /// the whole of the argument, and `console.html` argues the sharpest part of
 /// it, which is what makes this one type rather than four: **the four chips
-/// are four questions rather than four acts** — *favourites* is *"this library
-/// filtered rather than a fifth place a Set can be"*, so choosing it and
-/// choosing *my sets* differ in the question asked and not in what is asked.
+/// are four questions rather than four acts** — [`Scope::MySets`] is the
+/// starred subset of [`Scope::AllSets`], so choosing one and choosing the
+/// other differ in the question asked and not in what is asked.
 ///
 /// # Four here, and [`Operation::SelectScope`] still carries `Undecided`
 ///
@@ -10507,34 +10537,44 @@ pub struct Pointed<'a> {
 /// exactly that reason — the bay draws the scopes it is given, so a fifth is a
 /// value crossing the seam and not a signature.
 ///
-/// # Two of the four are drawn and answer nothing, for two different reasons
+/// # All four answer now, and the last of them answered on 2026-09-08
 ///
-/// - [`Scope::Favourites`] — **a favourite is a fact nothing in this workspace
-///   keeps.** `console.html`'s *What keeps a favourite, and where it does not
-///   travel* settles where the value would live and gives this nothing to read:
-///   *"Nothing in the vocabulary names a favourite, so there is nothing yet for
-///   a key, a map or a model to reach."* Nothing here writes one, and a store
-///   invented for it would be the specification written backwards.
-/// - [`Scope::Folder`] — **it waits on a directory, and not on an operation.**
-///   `Operation::ListSets { holds, layer }` is not missing a field: both are
-///   filters over what a store already holds, and a directory is *which store
-///   is asked at all*, which is the host's outside the operation entirely.
-///   What the chip waits on is a mechanism for choosing one, and ADR-0275 is
-///   it — a folder dragged off the desktop onto the window, window-global
-///   rather than aimed at this bay. `console.html`'s *How a folder is chosen,
-///   and why the drop is the window's* is the specification.
+/// - [`Scope::Folder`] waited on a **directory** rather than on an operation,
+///   and ADR-0275 is the mechanism: a folder dragged off the desktop onto the
+///   window, window-global rather than aimed at this bay.
+///   `Operation::ListSets { holds, layer }` is still not missing a field —
+///   both are filters over what a store already holds, and a directory is
+///   *which store is asked at all*, which is the host's outside the operation
+///   entirely.
+/// - [`Scope::MySets`] waited on somewhere for a star to be, and
+///   [ADR-0299](../../../docs/adr/0299-my-sets-is-the-starred-subset-and-the-star-is-kept-beside-the-sets.md)
+///   is that: `<store>/favourites.json`, beside the Sets. The chip that lists
+///   everything the store holds is [`Scope::AllSets`], which is what that
+///   record's *"what lists everything the store holds still needs a chip"*
+///   asked for.
 ///
-/// Both are **drawn** all the same, which is not the placeholder ADR-0200
-/// refuses: a chip is the question, the question is real, and what is missing
-/// is the answer. What must not happen is either of them going quiet — the
-/// host is what says so out loud, in the words at its own key.
+/// **A folder nobody has pointed anywhere is still a scope with nothing in
+/// it**, and so is a store nobody has starred in. That is a question that has
+/// been asked and answered rather than a chip that is quiet, and the host is
+/// what says which — in the words at its own key.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Scope {
-    /// `my sets`, starred. A filter over the listing below and never a
-    /// collection of its own.
-    Favourites,
-    /// What this store holds, which is `karakuri_store::Store::list_sets` and
-    /// is the one of the four that has always been drawn.
+    /// `all`: everything this store holds, which is
+    /// `karakuri_store::Store::list_sets` and is the listing every other row
+    /// of this bay is a question about.
+    ///
+    /// **It is the chip [`Scope::MySets`] stopped being.** ADR-0299 made
+    /// *my sets* the starred subset, and *"what lists everything the store
+    /// holds still needs a chip"* — this is it. The word is the maintainer's
+    /// pending one: one string, here and in the page.
+    AllSets,
+    /// `my sets`: the **starred** subset of [`Scope::AllSets`], and never the
+    /// listing of what `<store>/sets/` holds (ADR-0299).
+    ///
+    /// A preset packaged on load and a recording's head both land in the
+    /// library and neither appears here until somebody presses the star on its
+    /// row — which is what the roadmap's *"a `my sets` filling up with things
+    /// the operator did not make"* was the symptom of.
     MySets,
     /// What ships with the program: the `.kset` files in the presets root,
     /// which is a directory the program is **told** (ADR-0230) rather than one
@@ -10546,24 +10586,21 @@ pub enum Scope {
 }
 
 impl Scope {
-    /// **The four the mock draws, in its own order**, which is the order a
-    /// step through them goes in.
+    /// **The four the mock draws**, and the order is the bay's rather than the
+    /// mock's: `all` comes first because it is the listing the other three are
+    /// questions about, where the mock drew `favourites` there and `my sets`
+    /// second. It is the order a step through them goes in.
     ///
     /// A `+` is drawn after them there and is not here: it is the arena's own
     /// gap drawn a fifth time, which [`outputs`] already names, and adding a
     /// scope is what [`Scope::Folder`] is waiting on anyway.
-    pub const ALL: [Scope; 4] = [
-        Scope::Favourites,
-        Scope::MySets,
-        Scope::Presets,
-        Scope::Folder,
-    ];
+    pub const ALL: [Scope; 4] = [Scope::AllSets, Scope::MySets, Scope::Presets, Scope::Folder];
 
     /// The chip's word, `style.css`'s own — lower case, because `.scope` sets
     /// no `text-transform` where a bay head does.
     pub fn name(self) -> &'static str {
         match self {
-            Scope::Favourites => "favourites",
+            Scope::AllSets => "all",
             Scope::MySets => "my sets",
             Scope::Presets => "presets",
             Scope::Folder => "folder",
@@ -10594,7 +10631,7 @@ impl Scope {
 /// before. **Whether that settles the payload is a decision about the
 /// vocabulary and it is not taken here**: settling it means saying what a
 /// scope is named *by* — a folder scope has a path, `presets` has a root the
-/// program was told, and `favourites` and `my sets` have neither — and that
+/// program was told, and `all` and `my sets` have neither — and that
 /// sentence belongs on `docs/manual/operations.html` and in
 /// `karakuri-operation`, not in the first control that happened to want it.
 /// So the press works with the payload as it stands, and the proposal is
@@ -10637,28 +10674,23 @@ fn chip_width(ctx: &egui::Context, name: &str) -> f32 {
 /// # What the bay is standing on: a scope, and the listing that scope answers
 ///
 /// The manual: *"A scope and a walk, not one flat list: favourites, my sets,
-/// app presets, a folder."* **The scopes are drawn now, and three of the four
-/// are answered** — `my sets`, which is
+/// app presets, a folder."* **The scopes are drawn, and all four are answered
+/// now** — `all`, which is
 /// [`karakuri_store::Store::list_sets`](../../../crates/karakuri-store/src/store.rs)
-/// and is a directory of Set files; `presets`, which is the `.kset` files in
-/// the root the program was told about (ADR-0230); and `folder`, which is the
-/// Set files in a directory somebody dropped on this window during the run
-/// (ADR-0275) and which answered nothing until 2026-09-08. `favourites` is the
-/// one that is drawn and answers nothing, for the reason written out at
-/// [`Scope`] — and it is not the placeholder ADR-0200 refuses, because a chip
-/// **is** the question and the question is real.
+/// and is a directory of Set files; `my sets`, which is the starred subset of
+/// it and is `<store>/favourites.json` intersected with that listing
+/// (ADR-0299); `presets`, which is the `.kset` files in the root the program
+/// was told about (ADR-0230); and `folder`, which is the Set files in a
+/// directory somebody dropped on this window during the run (ADR-0275).
 ///
-/// **The chips answer a press now**, which is `console.html`'s own affordance
-/// on each of them — *"Click to show it; click another scope to leave it"* —
-/// and it is the row `docs/manual/operations.html` names as this operation's
-/// home. What a press asks for is [`LibraryBay::chip`], and it is asked of
-/// the same derivation that paints the capsule. **One of the four still
-/// answers nothing when it is chosen**, and that is the host's to say out
-/// loud: choosing *favourites* is a question asked, and what is missing is the
-/// answer rather than the asking. **So is a *folder* nobody has pointed
-/// anywhere yet** — which is a different nothing again, because what it is
-/// short of is a gesture rather than a mechanism, and the host says that one
-/// out loud too.
+/// **The chips answer a press**, which is `console.html`'s own affordance on
+/// each of them — *"Click to show it; click another scope to leave it"* — and
+/// it is the row `docs/manual/operations.html` names as this operation's home.
+/// What a press asks for is [`LibraryBay::chip`], and it is asked of the same
+/// derivation that paints the capsule. **A scope can still answer with
+/// nothing**, and that is a question asked and answered rather than a chip
+/// gone quiet: a store nobody has starred in, and a folder nobody has pointed
+/// anywhere. The host says which of them it is, in the words at its own key.
 ///
 /// **Both halves are handed in.** The scopes are a slice and the rows are a
 /// slice, and which rows go with which scope is the host's answer rather than
@@ -10703,18 +10735,6 @@ fn chip_width(ctx: &egui::Context, name: &str) -> f32 {
 ///   own gap drawn a fifth time, which [`outputs`] already names, and what it
 ///   would add is a folder — which is the chip already drawn, and what that
 ///   chip waits on is a directory rather than a fifth chip ([`Scope`]).
-/// - **`.lib-row`'s `.star`.** A favourite is a fact about a Set that nothing
-///   in this workspace keeps — there is no such field on a `SetEntry`, no
-///   record that carries one, and no metadata card that mentions one. Drawing
-///   a hollow star on every row would assert that nothing is a favourite,
-///   which is a reading nobody took. **`console.html`'s *What keeps a
-///   favourite, and where it does not travel* decided where the value lives
-///   without giving this anything to read**: beside the Sets, in the library
-///   itself, so that a star does not travel with a Set file and the file stays
-///   byte for byte what it was. That page says the rest itself — *"Nothing in
-///   the vocabulary names a favourite, so there is nothing yet for a key, a
-///   map or a model to reach — and a row invented from this drawing would be
-///   the specification written backwards."*
 /// - **`.lib-row .dim`, the time beside each name.** This one is different
 ///   from the others and is worth the sentence: the *value* exists —
 ///   `SetEntry::written` is the Set file's own mtime — and what does not exist
@@ -10727,6 +10747,32 @@ fn chip_width(ctx: &egui::Context, name: &str) -> f32 {
 ///   and hands it in, the way every other derived value in this module
 ///   arrives. Writing a second spelling here would be the kind of second
 ///   answer this repository deletes rather than adds.
+/// # `.lib-row`'s `.star` is here, and it is the row's first control
+///
+/// A hollow star at the left of every row, filled on the rows the store has
+/// starred — the mock's `.star` and `.star.off`, `--c-sun` against
+/// `--c-faint`. It was the last of the six things this bay drew nothing for,
+/// and what it was short of was somewhere for the value to be: ADR-0299 put it
+/// in `<store>/favourites.json`, beside the Sets, so a star does not travel
+/// with a Set file and the file stays byte for byte what it was.
+///
+/// **The mark is drawn rather than typed**, for [`LOAD_ARROW`]'s reason one
+/// row down: whether `☆` is in `egui`'s default face is a question with no
+/// good answer, and a control whose one job is saying *starred or not* must
+/// not do it through a tofu. See [`star_mark`], and [`STAR_SIZE`] for the box
+/// it stands in — which is the box the glyph would have had, so the name
+/// beside it starts where `.lib-row`'s `gap: 7px` puts it either way.
+///
+/// **A press names the state and does not flip one**
+/// ([`LibraryBay::starred`]): `Operation::SetFavourite { id, favourite }` is
+/// what leaves, carrying the state the row is being put *in*, because a map
+/// with a button per direction and a model that says which one it wants both
+/// have to be able to say *star this* and mean it.
+///
+/// **Which rows are starred is handed in**, like the listing above it and for
+/// the same reason: the marks are a file beside the Sets and this crate reads
+/// no store (ADR-0156). See [`View::starred`].
+///
 /// # The `.lib-filters` fields are here, and the passage that said they could
 /// not be was wrong rather than stale
 ///
@@ -10786,17 +10832,18 @@ fn chip_width(ctx: &egui::Context, name: &str) -> f32 {
 /// names for this row, a press on a row and a release over a strip are what
 /// made this one true, and the capsule in the foot is a readout either way.
 ///
-/// # Nothing here writes a Set out, and what is missing is a destination
+/// # Nothing here writes a Set out, and what is missing is a gesture
 ///
 /// `docs/manual/operations.html`'s *Send a Set to somebody, and take one in*
 /// names two directions and this bay is the home of both — its panel badge
 /// names `library` and not a control. **One of them is reached from here today
 /// and the other is not a drawing.** The taking-in half is *"Taking one in is
-/// not a second row — opening a preset is this row"*, which is the load route
-/// above: a press on a `presets` row packages the `.kset` into the store and
-/// then loads it. The sending half — writing one out to hand somebody — is
-/// *"what nothing draws"*, and this is the note that says why rather than
-/// leaving a gap indistinguishable from a decision.
+/// not a second row — opening a preset is this row"*, and a row of a `folder`
+/// the bay has been pointed at is that same row again: a press packages the
+/// file into the store and then loads it, which the host performs and this
+/// bay's list is the picker for. The sending half — writing one out to hand
+/// somebody — is *"what nothing draws"*, and this is the note that says why
+/// rather than leaving a gap indistinguishable from a decision.
 ///
 /// **It is not that a panel has no file dialog.** The taking-in half needs one
 /// and does not have one either: what names the file there is **this listing**,
@@ -10804,33 +10851,34 @@ fn chip_width(ctx: &egui::Context, name: &str) -> f32 {
 /// names a file that exists and sending names one that does not yet — and no
 /// listing can point at a file nobody has written.
 ///
-/// **So the missing half is a destination, and the vocabulary has nowhere to
-/// put one.** `Operation::TransferSet`'s send arm is
-/// `SetTransfer::Send { id }`: a Set the store already holds, and no path at
-/// all. `karakuri-cli` answers the question outside the operation, with the
-/// shell — `--package night01 > night01.kbset` — and its own `packaged_set`
-/// says why the answer is not simply *the store*: *"a store directory would
-/// need a naming rule of its own for it, and a second copy of a Set sitting
-/// beside the Set is a second answer to which of them is the file."* A panel
-/// has no redirection to stand in for that.
+/// **The destination is settled and it is the `.path` row.** ADR-0260 refused
+/// the premise that the operation owes one — sending is a *read*, and a read's
+/// answer goes where the surface that asked puts answers, so
+/// `SetTransfer::Send { id }` gains no field — and
+/// [ADR-0267](../../../docs/adr/0267-the-panel-sends-into-the-folder-the-library-bay-is-pointed-at-and-the-destination-is-drawn-before-the-press.md)
+/// says what *this* surface asks with: **the bay is already a file browser, so
+/// the directory it is pointed at is the destination**, and a send writes
+/// `<id>.kbset` there. That is the asymmetry above closed rather than argued
+/// around — the file lands where the listing is looking, and the row it makes
+/// is the taking-in half's own operand. The directory it waited on arrived
+/// with ADR-0275, and the row that draws it is [`Pointed`].
 ///
-/// **And the one control here that asks for letters cannot spell a path.**
-/// [`Menu::Naming`] is it, and what it takes is a **name** — ADR-0221's *one
-/// path component of letters, digits, `-` and `_`*. ADR-0229 says in as many
-/// words why that rule does not stretch: *"an include is a relative path and
-/// has separators in it by construction, so the rule cannot be copied."* A
-/// second letter-taking flow that admitted separators would be this bay
-/// inventing a wall, which is the half of that record that says walls are not
-/// added afterwards.
+/// **So what is missing is a gesture, and it is the page's.** No capsule in
+/// this bay's foot asks for a send, nothing on a row does, and
+/// `console.html`'s *A folder scope reads Sets, and a bundle is not a third
+/// thing* still says a folder is a way **in** — the one-directional sentence
+/// ADR-0267 names as the page edit that has to land first
+/// (`docs/contributing.md` §5 step 3). Until it does, drawing one here would
+/// be this bay inventing a control, which is the order this repository does
+/// not invert.
 ///
-/// **What it would be for, when somebody settles it**: a row of *my sets*,
-/// packaged and written out, so that a Set which has never left this store can
-/// be handed to somebody who has never held its material. What it waits on is
-/// one sentence nobody has written — *where does a package go when no shell
-/// redirected it* — and that sentence belongs on
-/// `docs/manual/operations.html` and in `karakuri-operation`, for [`Chosen`]'s
-/// reason one control along: it is a decision about the vocabulary, and the
-/// first control that happened to want it is not where it is taken.
+/// **And the one control here that asks for letters could not spell a path
+/// anyway.** [`Menu::Naming`] is it, and what it takes is a **name** —
+/// ADR-0221's *one path component of letters, digits, `-` and `_`*. ADR-0229
+/// says in as many words why that rule does not stretch: *"an include is a
+/// relative path and has separators in it by construction, so the rule cannot
+/// be copied."* Under ADR-0267 nothing needs it to: the destination is a
+/// directory a drop chose and a line of type already reads.
 ///
 /// **The pill's letter is [`View::selection`]**, which this console now keeps
 /// — ADR-0219 recorded it as living *"in the specification and not in
@@ -10901,7 +10949,7 @@ pub struct LibraryBay {
     ///
     /// **Zero is a state now, and it is the one the scope row bought.** A
     /// scope that holds nothing is a question that has been asked and
-    /// answered — *favourites* with nothing starred, a presets root nobody
+    /// answered — *my sets* with nothing starred, a presets root nobody
     /// filled — so the chips are drawn, the list is empty and the foot reads
     /// `0 of 0`. That is not the row of zeroes ADR-0177 is about: that one is
     /// a reading nobody took, and this is the answer to a question the chip
@@ -10986,6 +11034,80 @@ impl LibraryBay {
             }
             _ => 0.0,
         }
+    }
+
+    /// **The `index`th row's star**, at the left of the row inside
+    /// `.lib-row`'s own padding — [`STAR_SIZE`] square, centred across the
+    /// row's height.
+    ///
+    /// Derived rather than stored for [`LibraryBay::row`]'s reason, and off
+    /// that method rather than off the list, so a star follows the row a
+    /// reading pushed down exactly as the name beside it does.
+    ///
+    /// **One derivation for the paint and the press**, which is
+    /// [`LibraryBay::load`]'s rule two capsules along: `library_into` paints
+    /// from this and [`LibraryBay::starred`] hit-tests it, so the mark a press
+    /// lands on is the mark that is drawn.
+    pub fn star(&self, index: usize) -> Rect {
+        let row = self.row(index);
+        Rect::from_min_size(
+            Pos2::new(
+                row.min.x + size::LIB_ROW_PAD_X,
+                row.center().y - STAR_SIZE * 0.5,
+            ),
+            egui::vec2(STAR_SIZE, STAR_SIZE),
+        )
+    }
+
+    /// **Where the name in the `index`th row starts**, which is one star and
+    /// one [`STAR_GAP`] in from where it used to.
+    ///
+    /// It is derived here rather than at the paint so that the mark and the
+    /// word are placed by one arithmetic — `.lib-row` is a flex row, and a
+    /// name laid out from the row's padding while the star was laid out from
+    /// the same padding would draw the two on top of each other.
+    fn named(&self, index: usize) -> f32 {
+        self.star(index).max.x + STAR_GAP
+    }
+
+    /// **What a press at `p` on a row's star asks for**, or `None` where there
+    /// is no star under it.
+    ///
+    /// # It names the state, and the state is the one the row is not in
+    ///
+    /// `Operation::SetFavourite { id, favourite }` is not a toggle
+    /// (ADR-0299) — *"a map with a button per direction, a model that says
+    /// which one it wants and a key all have to be able to say star this and
+    /// mean it"* — so the **control** is what reads the row's present state
+    /// and asks for the other one. That is [`TransitionRow::shape`]'s division
+    /// three bays along: the press names where it arrived, and the arithmetic
+    /// that got it there is the surface's ([P-0090]).
+    ///
+    /// [P-0090]: ../../../docs/principles/0090-a-surface-offers-it-never-decides.md
+    ///
+    /// # The listing and the marks both go in with the point
+    ///
+    /// [`LibraryBay::take`]'s arrangement one control along and for its
+    /// reason: the operand is a name this crate reads no store for (ADR-0156),
+    /// so the rows the host handed in are what a row index means, and which of
+    /// them are starred is the host's answer too — see [`View::starred`].
+    ///
+    /// **A listing shorter than the rows drawn asks nothing**, which is
+    /// `take`'s refusal rather than a clamp: a star answered bare would name a
+    /// Set nobody can see.
+    pub fn starred(
+        &self,
+        sets: &[String],
+        marks: &std::collections::BTreeSet<String>,
+        p: karakuri_layout::Point,
+    ) -> Option<Operation> {
+        let p = Pos2::new(p.x, p.y);
+        let row = (0..self.rows).find(|index| self.star(*index).contains(p))?;
+        let id = sets.get(row)?;
+        Some(Operation::SetFavourite {
+            id: id.clone(),
+            favourite: !marks.contains(id),
+        })
     }
 
     /// What the foot reads: `n of m`, the mock's own `5 of 27`.
@@ -11594,9 +11716,15 @@ fn library_box(
 ///
 /// Term for term from `style.css`:
 ///
-/// - `.lib-row` — `color: var(--c-dim)`, a name at [`size::BASE`], one
-///   [`size::LIB_ROW_PAD_X`] in from the left of the list and centred across
-///   the row's own height.
+/// - `.lib-row` — `color: var(--c-dim)`, a star and then a name at
+///   [`size::BASE`], one [`size::LIB_ROW_PAD_X`] in from the left of the list
+///   and centred across the row's own height, with `.lib-row`'s own
+///   [`STAR_GAP`] between the two.
+/// - `.lib-row .star` — `color: var(--c-sun)` where the store has starred that
+///   Set, and `.star.off`'s `var(--c-faint)` where it has not. Drawn rather
+///   than typed ([`star_mark`]), so the two states are a filled mark and an
+///   outline of the same mark rather than two characters that may or may not
+///   be in the face.
 /// - `.lib-foot` — `color: var(--c-faint)` at [`size::LIB_FOOT_SIZE`], one
 ///   [`size::LIB_FOOT_PAD_X`] in and centred, over a
 ///   `border-top: 1px solid var(--c-hair)`.
@@ -11610,11 +11738,12 @@ fn library_into(
     ui: &Ui,
     pal: &Palette,
     bay: &LibraryBay,
-    sets: &[String],
+    listed: Listed<'_>,
     cursor: usize,
     letter: &str,
     open: Option<Opened<'_>>,
 ) {
+    let Listed { sets, starred } = listed;
     let painter = ui.painter().with_clip_rect(bay.list);
     for (index, name) in sets.iter().take(bay.rows).enumerate() {
         let row = bay.row(index);
@@ -11635,12 +11764,25 @@ fn library_into(
             }
             false => pal.dim,
         };
+        // **The star before the name**, and its ink is the store's answer
+        // rather than the cursor's: `.lib-row .star` is `--c-sun` whatever
+        // else the row is wearing, and `.star.off` is `--c-faint` — the one
+        // mark in this bay that a row's own state colours and the wash above
+        // does not.
+        let on = starred.contains(name);
+        star_mark(
+            &painter,
+            bay.star(index).center(),
+            STAR_SIZE,
+            match on {
+                true => pal.sun,
+                false => pal.faint,
+            },
+            on,
+        );
         let galley = painter.layout_job(span_at(name, size::BASE, ink));
         painter.galley(
-            Pos2::new(
-                row.min.x + size::LIB_ROW_PAD_X,
-                row.center().y - galley.size().y * 0.5,
-            ),
+            Pos2::new(bay.named(index), row.center().y - galley.size().y * 0.5),
             galley,
             ink,
         );
@@ -11712,6 +11854,74 @@ fn library_into(
     word(at.text, LOAD_PILL);
     arrow_mark(&painter, at.arrow.center(), LOAD_ARROW, pal.lav, false);
     word(at.letter, letter);
+}
+
+/// **What the list is drawing this frame**: the rows, and which of them the
+/// store has starred.
+///
+/// One argument because they are one reading — the host's `listing` writes the
+/// two halves together, and a row and its mark drawn from two answers could
+/// disagree about a Set that arrived between them. It is [`Filters`]' shape
+/// one row down, borrowed for the same reason: nothing is cloned to draw a
+/// frame.
+#[derive(Debug, Clone, Copy)]
+struct Listed<'a> {
+    /// The names the bay lists, in the order the host listed them —
+    /// [`View::library`].
+    sets: &'a [String],
+    /// The ids the store has starred — [`View::starred`].
+    starred: &'a std::collections::BTreeSet<String>,
+}
+
+/// **A star's mark, drawn rather than typed** — [`arrow_mark`]'s reason one
+/// bay along, and the case is sharper here: this mark's whole job is saying
+/// *starred* or *not starred*, and a face with no `★` would answer it with a
+/// tofu in both states.
+///
+/// `across` wide and the same tall, which is [`arrow_mark`]'s rule for a mark
+/// that stands in for a glyph: the box is the size the glyph would have been,
+/// so the name beside it starts in the same place whichever way this is drawn.
+///
+/// **Ten rim points at two radii**, the outer at the top and the rest every
+/// 36° round — [`STAR_WAIST`] is the inner one. `filled` is `.star` and the
+/// outline is `.star.off`, which is the mock's own pair.
+///
+/// **A fan from the centre and not a polygon**, because a five-pointed star is
+/// not convex: `egui::Shape::convex_polygon` fans from the first vertex, which
+/// for this outline puts triangles outside the ink. A star *is* star-shaped
+/// about its own centre, so a fan anchored there is exact — which is
+/// [`mask_mark`]'s answer to `epaint` having no arc, one shape along.
+fn star_mark(painter: &egui::Painter, centre: Pos2, across: f32, colour: Color32, filled: bool) {
+    let outer = across * 0.5;
+    let rim: Vec<Pos2> = (0..10)
+        .map(|step| {
+            // **From straight up, and clockwise**, which is where a star's
+            // point is drawn: `egui`'s y runs down the screen, so the turn is
+            // taken as a positive angle off `-y`.
+            let angle = std::f32::consts::PI * 0.2 * step as f32;
+            let r = match step % 2 {
+                0 => outer,
+                _ => outer * STAR_WAIST,
+            };
+            Pos2::new(centre.x + r * angle.sin(), centre.y - r * angle.cos())
+        })
+        .collect();
+    if !filled {
+        painter.add(egui::Shape::closed_line(
+            rim,
+            Stroke::new(size::HAIRLINE, colour),
+        ));
+        return;
+    }
+    let mut mesh = egui::Mesh::default();
+    mesh.colored_vertex(centre, colour);
+    for point in &rim {
+        mesh.colored_vertex(*point, colour);
+    }
+    for step in 0..10u32 {
+        mesh.add_triangle(0, step + 1, (step + 1) % 10 + 1);
+    }
+    painter.add(egui::Shape::mesh(mesh));
 }
 
 /// **A reading, painted**: the well, and a row of it per line.
@@ -14926,6 +15136,28 @@ pub struct View {
     /// directory read the host does on the press that changed the scope. See
     /// [`View::scopes`] and [`Scope`].
     pub library: Vec<String>,
+    /// **Which Sets this store has starred**, as their ids — and **empty** for
+    /// a console with no store behind it, which is every test in this crate
+    /// that does not say otherwise and is a listing whose every row draws a
+    /// hollow star.
+    ///
+    /// **The same seam as [`View::library`]**, in the same rows: the marks are
+    /// `<store>/favourites.json` beside the Sets (ADR-0299), and this crate
+    /// reads no store (ADR-0156). So the host reads them on the same press the
+    /// listing is built on and hands over the set of ids.
+    ///
+    /// **A `BTreeSet` and not a `Vec<bool>` beside the listing.** The question
+    /// a row asks is *is this one starred*, once per row, and two vectors of
+    /// the same length are two vectors that can disagree about it — where a
+    /// set of ids answers the same question about a listing that was rewritten
+    /// under it without being wrong, and is what
+    /// `karakuri_store::Store::favourites` already hands back.
+    ///
+    /// **Ids the listing does not hold are not an error here.** `my sets` is
+    /// the intersection of these with what the store holds and the host is
+    /// what takes it; a mark left behind by a file somebody deleted draws no
+    /// row and is not this field's to prune.
+    pub starred: std::collections::BTreeSet<String>,
     /// **Which libraries this console has to offer**, in the order the chips
     /// are drawn — and **empty** for a console nobody has told, which is every
     /// test in this crate that does not say otherwise and what the bay then
@@ -15177,9 +15409,10 @@ pub struct View {
     /// chip at all.
     ///
     /// Zero until somebody says otherwise, which is the first chip of whatever
-    /// row arrives. The mock marks *favourites* and this console starts
-    /// wherever the host puts it: see [`View::select_scope`], which is how a
-    /// program that opens on `my sets` says so.
+    /// row arrives. That is `all` in the row this console draws, and it is
+    /// what a run opens on — a bay that opened on the starred subset would be
+    /// empty on a store nobody has starred in. See [`View::select_scope`],
+    /// which is how a host that wants another chip says so.
     scope: usize,
     /// **Which of [`View::holds`] the `holds` field is set to**, or `None` for
     /// a field nobody has set — the fifth of this console's pointers.
@@ -15283,6 +15516,10 @@ impl View {
             // is not a number this crate has, and the list is written once
             // rather than per frame.
             library: Vec::new(),
+            // **Nothing starred**, which is a console with no store behind it
+            // and is every test in this crate that does not say otherwise —
+            // `View::library`'s rule one field down.
+            starred: std::collections::BTreeSet::new(),
             // And nothing said about what libraries there are, which is the
             // same console from the other side: no chips, and so no scope
             // row. Room for the four the mock draws, so a host that says so
@@ -15549,8 +15786,9 @@ impl View {
     /// scope next to it.
     ///
     /// The one caller is a host that opens on a scope other than the first
-    /// chip, which every host with a store does: the mock marks *favourites*
-    /// and the answerable library is *my sets*.
+    /// chip, and the program in this workspace no longer is one: `all` is the
+    /// first chip and is where a run opens (ADR-0299). What is left for this
+    /// is a press on a chip, which names one outright.
     ///
     /// The `bool` is [`View::select`]'s: a caller repaints on a move and not
     /// on a press.
@@ -16094,6 +16332,10 @@ impl View {
         let out = self.master_out;
         let strips = self.mixer.as_slice();
         let sets = self.library.as_slice();
+        // **Which of them are starred, read once for the frame beside the
+        // listing it points into** — `draw` takes `&mut self`, and the arm
+        // below borrows both.
+        let starred = &self.starred;
         let scopes = self.scopes.as_slice();
         // **The fifth pointer, read once for the frame** beside the two slices
         // it borrows from — `draw` takes `&mut self`, and a filter read inside
@@ -16300,7 +16542,15 @@ impl View {
                             // being read answers, where everything under it is
                             // what came back.
                             filters_into(ui, &pal, &bay, narrowed);
-                            library_into(ui, &pal, &bay, sets, cursor_row, load, opened);
+                            library_into(
+                                ui,
+                                &pal,
+                                &bay,
+                                Listed { sets, starred },
+                                cursor_row,
+                                load,
+                                opened,
+                            );
                         }
                     }
                     // **The fourth bay with something in its body**, and it is

@@ -134,15 +134,31 @@
 //! **What the measurement is of**, exactly: one frame of this Set at
 //! [`PROBE_STEPS`] simulation steps, at its real capacity and with its real
 //! parameters and bindings already applied, rendered into an offscreen target
-//! of [`PROBE_RESOLUTION`] — its L1 compute passes and its L4 draw, the
+//! **at a size the caller names** — its L1 compute passes and its L4 draw, the
 //! commands `VideoSource::render` records and nothing else.
+//!
+//! **The size used to be a constant here and is not any more**, which is
+//! [ADR-0303](../../../docs/adr/0303-a-frames-cost-is-the-period-and-a-measurement-names-which-resolution-it-is-about.md).
+//! `PROBE_RESOLUTION` was 1280x720, chosen because every other host-clock
+//! figure in this repository is quoted there and argued as *comparable matters
+//! more than absolute*. **This application has two resolutions and that was a
+//! third**: the final output size, which the mix is composited once at and
+//! which every output — the picture included — is a resize of (ADR-0247), and
+//! the slot preview size, which each deck cell's own render is sized from. A
+//! number taken at a size nothing draws is a number about a frame nobody sees,
+//! and it only looked harmless while `karakuri`'s `CANVAS` happened to be the
+//! same constant. So the size is named by whoever knows the layout —
+//! [`HotSwap::set_measure_size`], seeded from the slot's own viewport by
+//! [`crate::deck::Deck::new`] — and it travels out on
+//! [`Measurement::resolution`] exactly as it always did.
 //!
 //! **What it cannot see**, and every one of these matters to whatever reads it:
 //!
-//! - **Resolution.** It is taken at a fixed reference size, not at the deck's.
-//!   L4 cost is fill-rate bound, so a slot on a 4K output costs several times
-//!   this. The number is comparable *between slots* — which is what a budget
-//!   needs — and is not a prediction of this machine's frame time.
+//! - **Resolution.** It is taken at the size it was told, which is not the
+//!   deck's unless the caller said so. L4 cost is fill-rate bound, so a slot on
+//!   a 4K output costs several times a preview-scale figure. The number is
+//!   comparable *between slots measured at the same size* — which is what a
+//!   budget needs — and is not a prediction of this machine's frame time.
 //!   **This one now has an answer beside it**, and it is the only one of the
 //!   four that does: [`crate::estimate`] fits `a + b·area` through two draws
 //!   and evaluates it at the output's size, [`HotSwap::estimate_live`] is where
@@ -165,7 +181,7 @@
 //! whole-capacity upload on the worker thread, next to the one that was already
 //! there.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
@@ -211,19 +227,6 @@ const JUDGE_FRAMES: usize = 30;
 /// live, and picking a second, worse answer here would be one to remove
 /// later.
 pub const DEFAULT_BUDGET_MS: f32 = 20.0;
-
-/// The offscreen size every per-Set measurement is taken at.
-///
-/// Fixed rather than the deck's, and that is a trade rather than an oversight.
-/// The deck's size is render-thread state; the worker would have to be told it,
-/// and a measurement taken at whatever the window happened to be would not be
-/// comparable with one taken a drag-resize earlier. A governor adds
-/// measurements together and compares them, so **comparable matters more than
-/// absolute** — and an absolute number would be a lie the moment the window
-/// moved anyway. 1280x720 because it is the size every other figure in this
-/// repository was taken at — the reference workload is 262144 elements at
-/// 1280x720, and `docs/contributing.md` §1 says why everything is quoted there.
-pub const PROBE_RESOLUTION: (u32, u32) = (1280, 720);
 
 /// Simulation steps per measured frame. One, because that is what a `tick`
 /// carries in normal play; a Set that falls behind and substeps costs a
@@ -620,10 +623,14 @@ pub struct HotSwap {
     /// [`Deck::estimate_slots`](crate::deck::Deck::estimate_slots) deck-wide.
     ///
     /// A second measurement rather than a refinement of the first: `cost` is
-    /// one draw at [`PROBE_RESOLUTION`] and this is a fit through two, so it
-    /// answers for the size the deck is actually drawing. The governor prefers
-    /// it where it answers — see "Two numbers, and which one is budgeted on"
-    /// in [`crate::governor`].
+    /// one draw at whatever size [`HotSwap::set_measure_size`] last named and
+    /// this is a fit through two, so it answers for the size the deck is
+    /// actually drawing. The governor prefers it where it answers — see "Two
+    /// numbers, and which one is budgeted on" in [`crate::governor`].
+    ///
+    /// **Since ADR-0303 the two can be at different scales**, and a budget that
+    /// sums one of each is summing an audition and a frame. Which way that
+    /// goes is not settled here; see that record.
     ///
     /// **Dropped whenever it would stop being about this Set at this size**: a
     /// build landing (`install_if_ready`), a replay's `install`, and a
@@ -655,6 +662,19 @@ pub struct HotSwap {
     /// them. Dropping a Set releases its buffers, bind groups and pipelines,
     /// and a deallocation on the render thread is the same invariant as an
     /// allocation on it.
+    /// **The size the next measurement is taken at**, shared with the worker
+    /// because the worker measures what it builds and the render thread is
+    /// what knows the layout. Packed as `(width << 32) | height`, written by
+    /// [`HotSwap::set_measure_size`] and by nothing else.
+    ///
+    /// **A resize does not write it.** The output size moving is not the same
+    /// event as the size a measurement is *about* moving — a preview cell is
+    /// sized from its cell and not from the output — so whoever named the
+    /// measurement size names it again. [`crate::deck::Deck::new`] seeds it
+    /// with the deck's own size, so a caller that never names one measures at
+    /// the output size, which is one of this application's two real
+    /// resolutions rather than a third (ADR-0303).
+    measure_at: Arc<AtomicU64>,
     graveyard: Arc<Mutex<Vec<Set>>>,
     /// Retired but not yet handed over, because the worker held the graveyard
     /// lock this frame. Retried next frame rather than dropped here.
@@ -682,6 +702,12 @@ impl HotSwap {
         let (built_tx, built_rx) = mpsc::channel();
         let graveyard = Arc::new(Mutex::new(Vec::with_capacity(GRAVEYARD_CAPACITY)));
         let stop = Arc::new(AtomicBool::new(false));
+        // **The viewport, until somebody names a size.** `Set::build` leaves a
+        // Set at 1x1 and `Deck::new` resizes every slot before anything can
+        // measure, so the deck's own size is what a run that never calls
+        // `set_measure_size` measures at — one of this application's two
+        // resolutions, and never a third (ADR-0303).
+        let measure_at = Arc::new(AtomicU64::new(packed(live.viewport())));
 
         let worker = {
             // Both are `Arc`s inside, so this is a refcount bump rather than a
@@ -692,9 +718,12 @@ impl HotSwap {
             let queue = queue.clone();
             let graveyard = Arc::clone(&graveyard);
             let stop = Arc::clone(&stop);
+            let measure_at = Arc::clone(&measure_at);
             std::thread::Builder::new()
                 .name("karakuri-build".into())
-                .spawn(move || run_worker(device, queue, source, built_tx, graveyard, stop))
+                .spawn(move || {
+                    run_worker(device, queue, source, built_tx, graveyard, stop, measure_at)
+                })
                 .expect("spawn build worker")
         };
 
@@ -713,6 +742,7 @@ impl HotSwap {
             frames: 0,
             events: Vec::with_capacity(EVENT_CAPACITY),
             built: built_rx,
+            measure_at,
             graveyard,
             retired: Vec::with_capacity(GRAVEYARD_CAPACITY),
             stop,
@@ -759,6 +789,7 @@ impl HotSwap {
         // `Disconnected` forever, which `install_if_ready` treats exactly like
         // "nothing waiting".
         let (_, built_rx) = mpsc::channel();
+        let live_viewport = live.viewport();
         HotSwap {
             live,
             cost: None,
@@ -774,6 +805,7 @@ impl HotSwap {
             frames: 0,
             events: Vec::with_capacity(EVENT_CAPACITY),
             built: built_rx,
+            measure_at: Arc::new(AtomicU64::new(packed(live_viewport))),
             graveyard: Arc::new(Mutex::new(Vec::new())),
             retired: Vec::new(),
             stop: Arc::new(AtomicBool::new(false)),
@@ -946,7 +978,8 @@ impl HotSwap {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
     ) -> Measurement {
-        let cost = measure(probe, device, queue, &mut self.live);
+        let at = self.measure_size();
+        let cost = measure(probe, device, queue, &mut self.live, at);
         self.cost = Some(cost);
         cost
     }
@@ -1070,6 +1103,39 @@ impl HotSwap {
         // the fallback the whole wiring is built around.
         self.estimate = None;
         self.previous_estimate = None;
+    }
+
+    /// **Name the size the next measurement is taken at.**
+    ///
+    /// The caller is whoever knows the layout, because nothing in this crate
+    /// does: this application has an output size and a preview size and no
+    /// third one (ADR-0247, ADR-0303), and which of the two a number is about
+    /// is a fact about the number. It reaches the build worker as well as the
+    /// render thread, so a candidate built mid-session is measured at the same
+    /// size as the Set it is a candidate for.
+    ///
+    /// **It is not written by [`HotSwap::resize`]**, and that is the rule
+    /// rather than an omission: the output size moving is a different event
+    /// from the size a measurement is about moving, and a preview cell is
+    /// sized from its cell. A caller that narrows this to a preview says so
+    /// again after a resize — `karakuri`'s window does it once a frame, where
+    /// it aims the cells.
+    ///
+    /// A degenerate size is refused rather than stored: a zero-area target
+    /// measures nothing and `wgpu` will not allocate one. The previous size
+    /// stands, which is the conservative direction — the alternative is a
+    /// measurement of a texture one pixel across.
+    pub fn set_measure_size(&mut self, at: (u32, u32)) {
+        if at.0 == 0 || at.1 == 0 {
+            return;
+        }
+        self.measure_at.store(packed(at), Ordering::Relaxed);
+    }
+
+    /// The size [`HotSwap::set_measure_size`] last named, or the viewport this
+    /// was constructed at.
+    pub fn measure_size(&self) -> (u32, u32) {
+        unpacked(self.measure_at.load(Ordering::Relaxed))
     }
 
     /// Feed the watchdog one frame interval, and act on it if the window is
@@ -1282,7 +1348,13 @@ const EVENT_CAPACITY: usize = 4;
 /// that are not comparable — which is precisely what a governor summing them
 /// would then be doing.
 ///
-/// The Set is resized to [`PROBE_RESOLUTION`] for the run and **resized back**
+/// `at` is the offscreen size the run is taken at, and it is the caller's because
+/// nothing here can know it: this application has one output size and one
+/// preview size and no third one, and which of those a measurement is about is
+/// a fact about the number rather than about the probe (ADR-0303). It comes
+/// back on [`Measurement::resolution`].
+///
+/// The Set is resized to `at` for the run and **resized back**
 /// before this returns. That is not decoration: the viewport is what the
 /// camera's aspect ratio is derived from in [`Set::prepare`], it is the one
 /// piece of a Set's state a probe run touches that [`Set::rewind`] has no
@@ -1291,16 +1363,37 @@ const EVENT_CAPACITY: usize = 4;
 /// its first frame in a deck of any other shape. `HotSwap::install_if_ready`
 /// happens to resize an arriving candidate anyway, which is what kept this
 /// invisible; a caller measuring its own [`HotSwap::fixed`] Set has no such
-/// second chance.
+/// second chance. (*"a Set left at 720p"* is the shape of the failure rather
+/// than the number now; it is left at whatever `at` was.)
+/// `(width, height)` in one `u64`, so the render thread can hand the worker a
+/// size with a single store and the worker can read it with a single load.
+/// Two `AtomicU32`s would let a worker read a width from one frame and a
+/// height from the next, which is a size nothing ever drew.
+fn packed((width, height): (u32, u32)) -> u64 {
+    (u64::from(width) << 32) | u64::from(height)
+}
+
+/// The other half of [`packed`].
+fn unpacked(at: u64) -> (u32, u32) {
+    ((at >> 32) as u32, at as u32)
+}
+
 pub fn measure(
     probe: &mut Probe,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     set: &mut Set,
+    at: (u32, u32),
 ) -> Measurement {
     let capacity = set.capacity();
     let viewport = set.viewport();
-    set.resize(device, PROBE_RESOLUTION.0, PROBE_RESOLUTION.1);
+    // **The probe follows the size rather than the size following the
+    // probe.** `Probe::resize` keeps the calibration verdict and replaces only
+    // the attachment, which is the whole reason a small draw is affordable —
+    // and a second `Probe` here could land on a different clock and make two
+    // slots' numbers incomparable.
+    probe.resize(device, at);
+    set.resize(device, at.0, at.1);
     // The uniforms have never been written otherwise — `build` allocates them
     // and leaves them at whatever the driver's fresh buffer holds — so the
     // measured frame has to be preceded by a real `prepare`, exactly as an
@@ -1329,13 +1422,18 @@ fn run_worker(
     out: Sender<Built>,
     graveyard: Arc<Mutex<Vec<Set>>>,
     stop: Arc<AtomicBool>,
+    // **Read per build and never cached.** The render thread narrows it to a
+    // preview cell and a drag moves that cell, so a size read once at spawn
+    // would measure every candidate of a session at whatever the window
+    // happened to be when it opened.
+    measure_at: Arc<AtomicU64>,
 ) {
     // Constructed once, on first use, and reused for every build this worker
     // ever does. Once because calibration is expensive (ten heavy runs) and
     // once because two probes can disagree with each other about whether this
     // adapter's timestamps work — see `Probe::new`. Lazily because a worker
-    // that is never given anything to build should not allocate a 720p target
-    // and half a second of calibration for nothing.
+    // that is never given anything to build should not allocate an offscreen
+    // target and half a second of calibration for nothing.
     let mut probe: Option<Probe> = None;
 
     while !stop.load(Ordering::Relaxed) {
@@ -1527,16 +1625,17 @@ fn run_worker(
             // measured is still a build — it travels without a measurement and
             // the governor declines to budget for it, which is the conservative
             // reading rather than a failure.
+            let at = unpacked(measure_at.load(Ordering::Relaxed));
             let probe = probe.get_or_insert_with(|| {
                 Probe::new(
                     &device,
                     &queue,
                     device.features().contains(wgpu::Features::TIMESTAMP_QUERY),
-                    PROBE_RESOLUTION,
+                    at,
                 )
             });
             cost = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                measure(probe, &device, &queue, set)
+                measure(probe, &device, &queue, set, at)
             }))
             .ok();
             if cost.is_none() {

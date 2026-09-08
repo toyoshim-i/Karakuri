@@ -418,6 +418,30 @@ impl Probe {
         self.resolution
     }
 
+    /// **Which clock this probe earned**, after calibration and after every
+    /// [`Probe::run`] it has done — the same value every [`Measurement`] it
+    /// produced carries, asked of the probe rather than of one of its answers.
+    ///
+    /// It is what a caller reads when it wants the *verdict* rather than a
+    /// number: whether this adapter's timestamp queries survived
+    /// [`Probe::new`]'s calibration, and whether a later measurement demoted
+    /// them (see [`Probe::run`], which pins a probe caught lying to
+    /// [`MeasurementMethod::HostWallClock`] for the rest of its life). Read it
+    /// after the runs rather than before, because that demotion is the
+    /// interesting half.
+    ///
+    /// **The reason to ask a probe rather than the device** is P-0095: the
+    /// adapter advertises `TIMESTAMP_QUERY` on the machine this crate is
+    /// developed on and does not deliver it, so `Features` is what the
+    /// platform says and this is what was established against a load whose
+    /// answer was already known. A caller with its own clock to label — a
+    /// frame loop, say — gets the verdict here without paying a second
+    /// calibration, which is also the only way its label and the probe's can
+    /// agree.
+    pub fn method(&self) -> MeasurementMethod {
+        self.method
+    }
+
     fn make_gpu_query(device: &wgpu::Device, queue: &wgpu::Queue) -> GpuQuery {
         let query_set = device.create_query_set(&wgpu::QuerySetDescriptor {
             label: Some("probe timestamps"),

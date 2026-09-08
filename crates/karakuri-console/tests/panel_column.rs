@@ -364,6 +364,16 @@ fn sample(variant: &str) -> Operation {
             holds: None,
             layer: None,
         },
+        // **The star at the left of each row of that bay's list**, and the
+        // one emission in this list whose payload is a **state** the control
+        // read off the row it landed on: the operation is not a toggle
+        // (ADR-0299), so the press asks for the state the row is not in, and
+        // either value names the row. The id is any Set the store holds,
+        // because what the badge claims is that an operator reaches the row.
+        "SetFavourite" => Operation::SetFavourite {
+            id: "night01".to_owned(),
+            favourite: true,
+        },
         // **The `read` chip in the Library bay's foot**, and the one emission
         // in this list whose operand is a *pointer of this console's own*: the
         // id is the Set under the cursor, which is where the load pill beside

@@ -431,9 +431,9 @@ use crate::governor::{Estimated, Governor, Report, SlotState};
 use crate::meter::{Level, Meters};
 use crate::mix::{Composite, Input};
 use crate::present::Present;
-use crate::probe::Probe;
+use crate::probe::{MeasurementMethod, Probe};
 use crate::set::{DT, MAX_STEPS};
-use crate::swap::{Event, HotSwap, PROBE_RESOLUTION};
+use crate::swap::{Event, HotSwap};
 use crate::transition::{Control, Selection, Transition};
 use crate::transport::{Advance, Sync, Transport};
 use crate::video_source::VideoSource;
@@ -866,6 +866,12 @@ pub struct Deck {
     selections: Vec<Selection>,
     width: u32,
     height: u32,
+    /// **Which clock this deck's probe earned**, and `None` until one has been
+    /// built — see [`Deck::clock`].
+    clock: Option<MeasurementMethod>,
+    /// **The size every per-slot measurement on this deck is taken at** — see
+    /// [`Deck::set_measure_size`].
+    measure_at: (u32, u32),
 }
 
 impl Deck {
@@ -913,7 +919,7 @@ impl Deck {
             })
             .collect();
 
-        Deck {
+        let mut deck = Deck {
             slots,
             composite,
             out: 1.0,
@@ -929,7 +935,85 @@ impl Deck {
             selections: Vec::with_capacity(MAX_SLOTS),
             width,
             height,
+            // Nothing has been probed yet, and a deck that says it is on a
+            // host clock before anything has asked the adapter would be
+            // reporting a verdict nobody took.
+            clock: None,
+            // **The output size, until somebody names the other one.** This
+            // application has two resolutions — the output the mix is
+            // composited once at (ADR-0247) and the preview cell each slot is
+            // auditioned in — and a deck that has not been told which one a
+            // measurement is about answers with the one it knows. It is never
+            // a third size, which is what ADR-0303 removed.
+            //
+            // **Told to the slots below rather than written here**, because a
+            // `HotSwap` seeds itself from the viewport of the Set it was
+            // handed and `Deck::new` is what resizes that Set — so a slot left
+            // to its own seed would measure at whatever `Set::build` left,
+            // which is 1x1.
+            measure_at: (width, height),
+        };
+        deck.set_measure_size((width, height));
+        deck
+    }
+
+    /// **Name the size every measurement on this deck is taken at**, and tell
+    /// each slot's build worker the same.
+    ///
+    /// The caller is whoever knows the layout. A deck knows the output size it
+    /// composites at and nothing about the cell a slot is auditioned in, and
+    /// the cell is sized from the cell — it moves when a divider moves or a
+    /// bay folds — so this is a per-frame statement from the surface rather
+    /// than deck state derived once.
+    ///
+    /// **It changes what a number means and not only how big it is.** A slot
+    /// measured at its preview cell is an audition, not a frame; a budget that
+    /// sums one of those and one estimate at the output size is summing two
+    /// scales, which is what ADR-0015 exists to prevent. ADR-0303 records the
+    /// consequence and leaves the governor's half to the maintainer.
+    ///
+    /// Takes effect on the next measurement. Nothing already measured is
+    /// rescaled, because a measurement carries the size it was taken at
+    /// ([`Measurement::resolution`](crate::probe::Measurement::resolution))
+    /// and a rescaled one would be an inferred number handed out as a measured
+    /// one.
+    pub fn set_measure_size(&mut self, at: (u32, u32)) {
+        if at.0 == 0 || at.1 == 0 {
+            return;
         }
+        self.measure_at = at;
+        for slot in &mut self.slots {
+            slot.swap.set_measure_size(at);
+        }
+    }
+
+    /// The size [`Deck::set_measure_size`] last named, or this deck's own
+    /// output size.
+    pub fn measure_size(&self) -> (u32, u32) {
+        self.measure_at
+    }
+
+    /// **Which clock this deck's measurements were taken on**, or `None` where
+    /// nothing has been measured or estimated yet.
+    ///
+    /// [`Deck::measure_slots`] and [`Deck::estimate_slots`] each build a
+    /// [`Probe`], which calibrates against a load whose answer is already
+    /// known rather than trusting `Features::TIMESTAMP_QUERY`, and each leaves
+    /// the verdict here. **It is the verdict after the runs**, so a probe that
+    /// passed calibration and was then caught lying reads as
+    /// [`MeasurementMethod::HostWallClock`] — which is the state it is pinned
+    /// to for the rest of its life.
+    ///
+    /// It exists for a caller with a clock of its own to label. A frame loop
+    /// timing whole frames on a host clock has to say why it is on one, and
+    /// *"this adapter's timestamps did not survive calibration"* is a
+    /// different sentence from *"the platform does not advertise them"* — the
+    /// machine this crate is developed on advertises them and does not deliver
+    /// them, which is the whole of P-0095. Asking here costs nothing and
+    /// cannot disagree with the numbers the governor is deciding on, which a
+    /// second calibration could.
+    pub fn clock(&self) -> Option<MeasurementMethod> {
+        self.clock
     }
 
     /// The session's signals — the local oscillator every binding reads, and
@@ -1470,6 +1554,13 @@ impl Deck {
     /// different [`MeasurementMethod`](crate::probe::MeasurementMethod)s and
     /// produce numbers that are not comparable — which is precisely what the
     /// governor summing them would then be doing.
+    ///
+    /// **At the size each slot was told**, which is [`HotSwap::measure_size`]
+    /// and is the deck's own size until somebody narrows it — see
+    /// [`Deck::set_measure_size`]. Every slot on a deck is told the same size,
+    /// so one probe answers for all of them and their numbers are comparable;
+    /// a probe re-pointed per slot would keep its calibration verdict
+    /// ([`Probe::resize`]) but the numbers would be about different frames.
     pub fn measure_slots(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) -> usize {
         // `t == 0` is "has not stepped": `t` is `steps_taken * dt` and advances
         // through `Set::prepare` alone, so a Set at zero is one a rewind cannot
@@ -1486,7 +1577,7 @@ impl Deck {
             device,
             queue,
             device.features().contains(wgpu::Features::TIMESTAMP_QUERY),
-            PROBE_RESOLUTION,
+            self.measure_at,
         );
         let mut measured = 0;
         for slot in &mut self.slots {
@@ -1495,6 +1586,10 @@ impl Deck {
                 measured += 1;
             }
         }
+        // **After the runs and not after calibration**, because `Probe::run`
+        // demotes a probe caught lying and that demotion is the half worth
+        // recording — see [`Deck::clock`].
+        self.clock = Some(probe.method());
         measured
     }
 
@@ -1542,11 +1637,14 @@ impl Deck {
             // a deck with nothing to estimate should not pay for it.
             return 0;
         }
+        // **The rungs the estimate places are the estimate's**, and they are
+        // small by construction (ADR-0266): this only sizes the probe's first
+        // target, and `estimate` re-points it per rung.
         let mut probe = Probe::new(
             device,
             queue,
             device.features().contains(wgpu::Features::TIMESTAMP_QUERY),
-            PROBE_RESOLUTION,
+            self.measure_at,
         );
         let mut estimated = 0;
         for slot in &mut self.slots {
@@ -1555,6 +1653,7 @@ impl Deck {
                 estimated += 1;
             }
         }
+        self.clock = Some(probe.method());
         estimated
     }
 

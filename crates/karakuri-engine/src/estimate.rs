@@ -325,11 +325,13 @@ use crate::Signals;
 /// **The upper rung, for the reference target.**
 ///
 /// [`rungs`] places the rungs at half and a quarter of the target's height, so
-/// for `swap::PROBE_RESOLUTION` — 1280x720, the size every host-clock figure in
-/// this repository is quoted at — the upper one is 640x360. It is **derived
+/// for 1280x720 — the size the workspace's reference workload is quoted at
+/// (`docs/contributing.md` §1) — the upper one is 640x360. It is **derived
 /// rather than chosen**: this constant is what the rule yields there, kept
 /// under a name because it is what the tests and the prose point at, and not a
-/// size anything picks.
+/// size anything picks. It was `swap::AT` that named 1280x720
+/// until ADR-0303 removed it; the number here is the reference workload's and
+/// not the probe's.
 ///
 /// It was a chosen constant until ADR-0266, and what chose it was a knee in a
 /// ladder measured on one machine — which is not a basis for a constant this
@@ -1067,7 +1069,11 @@ pub fn estimate_above_floor(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::swap::PROBE_RESOLUTION;
+
+    /// **A target size to fit against**, and a fixture rather than a
+    /// reference — see [`PREPARATION_RESOLUTION`]. It was
+    /// `swap::AT` until ADR-0303 removed that constant.
+    const AT: (u32, u32) = (1280, 720);
 
     fn measured(ms: f32, resolution: (u32, u32)) -> Measurement {
         Measurement {
@@ -1088,12 +1094,12 @@ mod tests {
     #[test]
     fn two_rungs_recover_the_a_and_b_they_were_built_from() {
         let a = 9.0_f64;
-        let b = 9.2 / area(PROBE_RESOLUTION);
+        let b = 9.2 / area(AT);
         let (low, high) = ((320, 180), (640, 360));
         let e = fit(
             measured((a + b * area(low)) as f32, low),
             measured((a + b * area(high)) as f32, high),
-            PROBE_RESOLUTION,
+            AT,
             180,
             vec![Topology::Points],
         );
@@ -1111,7 +1117,7 @@ mod tests {
         );
         assert!((f.ms - 18.2).abs() < 2e-2, "the answer came out {}", f.ms);
         assert_eq!(e.floor, Some(180));
-        assert_eq!(e.target, PROBE_RESOLUTION);
+        assert_eq!(e.target, AT);
     }
 
     /// **The rungs may arrive in either order**, and the [`Estimate`] records
@@ -1122,7 +1128,7 @@ mod tests {
         let e = fit(
             measured(4.0, high),
             measured(2.0, low),
-            PROBE_RESOLUTION,
+            AT,
             180,
             vec![Topology::Fullscreen],
         );
@@ -1147,7 +1153,7 @@ mod tests {
         let e = fit(
             measured(8.980, (320, 180)),
             measured(8.996, (640, 360)),
-            PROBE_RESOLUTION,
+            AT,
             180,
             vec![Topology::Points],
         );
@@ -1178,7 +1184,7 @@ mod tests {
         let e = fit(
             measured(10.17, (320, 180)),
             measured(9.08, (452, 254)),
-            PROBE_RESOLUTION,
+            AT,
             180,
             vec![Topology::Points],
         );
@@ -1202,7 +1208,7 @@ mod tests {
         let e = fit(
             measured(1.0, (320, 180)),
             measured(8.0, (640, 360)),
-            PROBE_RESOLUTION,
+            AT,
             180,
             vec![Topology::Fullscreen],
         );
@@ -1230,7 +1236,7 @@ mod tests {
         let e = fit(
             measured(4.0, (320, 180)),
             measured(6.0, (640, 360)),
-            PROBE_RESOLUTION,
+            AT,
             // `speed_lines` at the shipped width: one pixel at 720 rows.
             720,
             vec![Topology::Lines],
@@ -1262,10 +1268,10 @@ mod tests {
     fn a_floor_at_the_target_moves_the_upper_rung_rather_than_refusing() {
         let floor = sub_pixel_floor_rows(0.001_39).expect("a positive rate has a floor");
         assert_eq!(floor, 720);
-        let [low, high] = rungs(PROBE_RESOLUTION, floor).expect("the upper rung moves");
+        let [low, high] = rungs(AT, floor).expect("the upper rung moves");
         assert_eq!(low, (320, 180));
         assert_eq!(high, (1109, 624));
-        let share = floored_share(low, high, PROBE_RESOLUTION, floor);
+        let share = floored_share(low, high, AT, floor);
         assert!(
             share <= FLOORED_SHARE_ALLOWED,
             "{share} is over the allowance the rung was placed to meet"
@@ -1286,10 +1292,9 @@ mod tests {
     #[test]
     fn every_shipped_floor_is_placed_and_none_hides_more_than_the_allowance() {
         for floor in [715, 720, 1450, 4141, u32::MAX] {
-            let [low, high] =
-                rungs(PROBE_RESOLUTION, floor).unwrap_or_else(|e| panic!("{floor} rows: {e:?}"));
+            let [low, high] = rungs(AT, floor).unwrap_or_else(|e| panic!("{floor} rows: {e:?}"));
             assert_eq!((low, high), ((320, 180), (1109, 624)), "a floor of {floor}");
-            let share = floored_share(low, high, PROBE_RESOLUTION, floor);
+            let share = floored_share(low, high, AT, floor);
             assert!(
                 (0.249_1..=FLOORED_SHARE_ALLOWED).contains(&share),
                 "a floor of {floor} rows hides {share}"
@@ -1297,9 +1302,9 @@ mod tests {
         }
         // And the cheap pair is still what a floor under the quarter-height
         // rung gets, with nothing hidden at all.
-        let [low, high] = rungs(PROBE_RESOLUTION, 180).expect("180 is the quarter-height rung");
+        let [low, high] = rungs(AT, 180).expect("180 is the quarter-height rung");
         assert_eq!((low, high), ((320, 180), PREPARATION_RESOLUTION));
-        assert_eq!(floored_share(low, high, PROBE_RESOLUTION, 180), 0.0);
+        assert_eq!(floored_share(low, high, AT, 180), 0.0);
     }
 
     /// **The upper rung is where the allowance puts it, and no higher.**
@@ -1327,14 +1332,14 @@ mod tests {
     #[test]
     fn a_floor_the_frame_cannot_reach_hides_less_than_the_peak() {
         let (low, high) = ((320, 180), (1109, 624));
-        let peak = floored_share(low, high, PROBE_RESOLUTION, u32::MAX);
-        let near = floored_share(low, high, PROBE_RESOLUTION, 400);
+        let peak = floored_share(low, high, AT, u32::MAX);
+        let near = floored_share(low, high, AT, 400);
         assert!(
             near < peak / 2.0,
             "a 400-row floor hides {near} against a worst case of {peak}"
         );
         // And a floor the cheap pair clears hides nothing whatever the rungs.
-        assert_eq!(floored_share(low, high, PROBE_RESOLUTION, 180), 0.0);
+        assert_eq!(floored_share(low, high, AT, 180), 0.0);
     }
 
     /// **The correction covers what the flooring hides, on a frame built to
@@ -1361,7 +1366,7 @@ mod tests {
         const PER_PIXEL: f64 = 2.0e-5;
         const INVARIANT: f64 = 0.5;
 
-        let target = PROBE_RESOLUTION;
+        let target = AT;
         let floor = u32::MAX;
         let [low, high] = rungs(target, floor).expect("the accurate pair");
         let rows = f64::from(target.1);
@@ -1427,7 +1432,7 @@ mod tests {
     /// [`floored_share`] bounds both.
     #[test]
     fn a_stroke_hides_less_than_a_sprite_and_both_are_inside_the_bound() {
-        let target = PROBE_RESOLUTION;
+        let target = AT;
         let [low, high] = rungs(target, u32::MAX).expect("the accurate pair");
         let rows = f64::from(target.1);
         let (p, q) = (rows / f64::from(low.1), rows / f64::from(high.1));
@@ -1489,7 +1494,7 @@ mod tests {
         const PER_PIXEL: f64 = 2.0e-7;
         const INVARIANT: f64 = 3.0;
 
-        let target = PROBE_RESOLUTION;
+        let target = AT;
         let floor = 4141;
         let [low, high] = rungs(target, floor).expect("the accurate pair");
         // 0.17 pixels across at the target, which is one pixel everywhere.
@@ -1516,11 +1521,11 @@ mod tests {
     /// rather than chosen.
     #[test]
     fn the_rungs_are_half_and_a_quarter_of_the_targets_height() {
-        let [low, high] = rungs(PROBE_RESOLUTION, 1).expect("a fullscreen Set has no floor");
+        let [low, high] = rungs(AT, 1).expect("a fullscreen Set has no floor");
         assert_eq!(high, PREPARATION_RESOLUTION);
         assert_eq!(low, (320, 180));
         assert!(
-            (area(high) / area(PROBE_RESOLUTION) - 0.25).abs() < 1e-9,
+            (area(high) / area(AT) - 0.25).abs() < 1e-9,
             "the upper rung is a quarter of the target's area"
         );
     }
@@ -1530,7 +1535,7 @@ mod tests {
     /// that matters: every primitive is still at least one pixel there.
     #[test]
     fn a_floor_between_the_rungs_raises_the_lower_one_to_it() {
-        let [low, high] = rungs(PROBE_RESOLUTION, 250).expect("250 rows fits under 360");
+        let [low, high] = rungs(AT, 250).expect("250 rows fits under 360");
         assert_eq!(low.1, 250);
         assert_eq!(high, PREPARATION_RESOLUTION);
         // And the aspect ratio is the target's, because the camera derives its
@@ -1625,7 +1630,7 @@ mod tests {
         let e = fit(
             measured(4.0, PREPARATION_RESOLUTION),
             measured(4.2, PREPARATION_RESOLUTION),
-            PROBE_RESOLUTION,
+            AT,
             1,
             vec![Topology::Fullscreen],
         );
@@ -1643,7 +1648,7 @@ mod tests {
         let e = fit(
             measured(4.0, (320, 180)),
             high,
-            PROBE_RESOLUTION,
+            AT,
             1,
             vec![Topology::Fullscreen],
         );
@@ -1658,7 +1663,7 @@ mod tests {
         let e = fit(
             measured(1.0, (320, 180)),
             measured(2.0, (640, 360)),
-            PROBE_RESOLUTION,
+            AT,
             1,
             vec![Topology::Fullscreen],
         );

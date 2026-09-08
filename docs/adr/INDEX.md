@@ -327,6 +327,8 @@ number; new records continue from the end.
 | [ADR-0298](0298-the-badge-is-the-band-of-the-number-the-governor-spent-and-how-it-was-taken-crosses-the-seam-undrawn.md) | The badge is the band of the number the governor spent, and how it was taken crosses the seam undrawn | 2026-09-08 | accepted |
 | [ADR-0299](0299-my-sets-is-the-starred-subset-and-the-star-is-kept-beside-the-sets.md) | `my sets` is the starred subset, and the star is kept beside the Sets | 2026-09-08 | accepted |
 | [ADR-0300](0300-a-pane-folds-by-dragging-its-boundary-out-and-comes-back-by-dragging-it-in.md) | A pane folds by dragging its boundary out, and comes back by dragging it in | 2026-09-08 | accepted |
+| [ADR-0301](0301-a-models-star-is-refused-because-a-favourite-has-no-sandbox-to-land-in.md) | A model's star is refused, because a favourite has no sandbox to land in | 2026-09-08 | accepted |
+| [ADR-0303](0303-a-frames-cost-is-the-period-and-a-measurement-names-which-resolution-it-is-about.md) | A frame's cost is the period, and a measurement names which resolution it is about | 2026-09-08 | accepted |
 
 ## Retired numbers
 

@@ -81,13 +81,30 @@
 //! quantity.**
 //!
 //! - [`SlotState::cost`] is [`crate::swap::measure`]'s: **one** draw, at
-//!   [`PROBE_RESOLUTION`](crate::swap::PROBE_RESOLUTION), taken when the Set
-//!   was built. It says what this Set costs at 1280x720 whatever the deck is
-//!   drawing into, and comparing two of them is the admission decision this
-//!   module was built on.
+//!   whatever size the caller named through
+//!   [`Deck::set_measure_size`](crate::deck::Deck::set_measure_size), taken
+//!   when the Set was built. Comparing two of them is the admission decision
+//!   this module was built on, and they are comparable because every slot on a
+//!   deck is told the same size.
 //! - [`SlotState::estimate`] is [`crate::estimate`]'s: a fit of `a + b·area`
 //!   through **two** draws, evaluated at the **output's** size. It is the same
 //!   material read at the size the frame is actually paying for.
+//!
+//! **Since ADR-0303 those two can be about different frames, and this module
+//! sums them.** The size the measurement is taken at was a constant 1280x720
+//! until then and is now the caller's — `karakuri`'s window names its deck
+//! preview cell, which is 252x142 there. A deck where one slot has an estimate
+//! and another has fallen back to its measurement adds an output-size figure to
+//! an audition-size one and holds the total against one budget, which is
+//! exactly what ADR-0015 exists to prevent. **It is not fixed here**, because
+//! which way it should go is a decision rather than a defect with one repair:
+//! the measurement could be extrapolated (which ADR-0266 measured and refused
+//! as a rule), or stop being a budget input where an estimate is possible, or
+//! the budget could be stated per size. ADR-0303 records the finding and leaves
+//! the ruling to the maintainer. [`Decision::budgeted_ms`] carries the number
+//! and [`Decision::basis`] says which of the two it was, so a consumer can
+//! already tell them apart — what it cannot yet tell is that a sum contained
+//! both.
 //!
 //! **Where the estimate answers, it is the number.** The reason is the one
 //! ADR-0246 gives for making the render size the output's: a deck drawing into
@@ -343,9 +360,11 @@ impl From<&Estimate> for Estimated {
 /// **Which of a slot's two numbers the arithmetic was done on.**
 ///
 /// Not decoration: the two are measurements of different things — one draw at
-/// [`PROBE_RESOLUTION`](crate::swap::PROBE_RESOLUTION) against a fit at the
-/// output's size — so a caller comparing a `budgeted_ms` against anything has
-/// to know which it is holding. See "Two numbers, and which one is budgeted
+/// whatever size the caller named
+/// ([`Deck::set_measure_size`](crate::deck::Deck::set_measure_size)) against a
+/// fit at the output's size — so a caller comparing a `budgeted_ms` against
+/// anything has to know which it is holding, and since ADR-0303 the sizes can
+/// differ by more than an order of magnitude. See "Two numbers, and which one is budgeted
 /// on" in the module doc.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Basis {
@@ -428,9 +447,10 @@ pub struct Decision {
     /// What the engine should be doing with this slot until the next pass.
     pub effective: Residency,
     pub reason: Reason,
-    /// What this slot was **measured** at — one draw at
-    /// [`PROBE_RESOLUTION`](crate::swap::PROBE_RESOLUTION) — if anything
-    /// measured it.
+    /// What this slot was **measured** at — one draw at the size the deck was
+    /// told to measure at, which travels on
+    /// [`Measurement::resolution`](crate::probe::Measurement::resolution) — if
+    /// anything measured it.
     ///
     /// **No longer necessarily the number the arithmetic was done on**, which
     /// is [`Decision::budgeted_ms`]. It is kept unchanged and beside it because
@@ -727,7 +747,8 @@ pub struct SlotState {
     /// feed a demotion back into the next pass's input and make it permanent.
     pub requested: Residency,
     /// What the Set in this slot was measured at, if anything measured it —
-    /// one draw at [`PROBE_RESOLUTION`](crate::swap::PROBE_RESOLUTION).
+    /// one draw at the size the deck was told to measure at, which is on
+    /// [`Measurement::resolution`](crate::probe::Measurement::resolution).
     pub cost: Option<Measurement>,
     /// **What two draws say it would cost at the output's size**, if anything
     /// estimated it. Preferred over [`SlotState::cost`] where it answers; a

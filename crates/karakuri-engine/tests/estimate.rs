@@ -31,11 +31,19 @@ mod gpu {
         FLOORED_SHARE_ALLOWED, PREPARATION_RESOLUTION,
     };
     use karakuri_engine::set::{Edge, Layering, Wiring};
-    use karakuri_engine::swap::PROBE_RESOLUTION;
     use karakuri_engine::{Gpu, Probe, Set};
     use karakuri_ir::rate::Bound;
     use karakuri_ir::typed::Checked;
     use karakuri_ir::Topology;
+
+    /// **A size to measure at**, and a fixture rather than a reference.
+    ///
+    /// It was `swap::PROBE_RESOLUTION` until ADR-0303, which removed that
+    /// constant: this application has an output size and a preview size and no
+    /// third one, so the size a measurement is taken at is named by whoever
+    /// knows the layout. Nothing here has a layout, so these tests name one
+    /// and it is 1280x720 because that is what they were written against.
+    const AT: (u32, u32) = (1280, 720);
 
     const CAPACITY: u32 = 4_096;
     const SEED: u32 = 19_274;
@@ -264,19 +272,12 @@ proc scaled_dots {
     #[test]
     fn two_small_draws_are_fitted_and_carry_what_took_them() {
         let gpu = gpu();
-        let mut probe = Probe::new(&gpu.device, &gpu.queue, gpu.timestamps, PROBE_RESOLUTION);
+        let mut probe = Probe::new(&gpu.device, &gpu.queue, gpu.timestamps, AT);
         let mut set = points_set(&gpu);
 
-        let e = estimate_above_floor(
-            &mut probe,
-            &gpu.device,
-            &gpu.queue,
-            &mut set,
-            PROBE_RESOLUTION,
-            floor(),
-        );
+        let e = estimate_above_floor(&mut probe, &gpu.device, &gpu.queue, &mut set, AT, floor());
 
-        let placed = rungs(PROBE_RESOLUTION, floor()).expect("two rungs fit under 720 rows");
+        let placed = rungs(AT, floor()).expect("two rungs fit under 720 rows");
         let taken = e.rungs.expect("both draws recorded");
         assert_eq!(
             [taken[0].resolution, taken[1].resolution],
@@ -289,7 +290,7 @@ proc scaled_dots {
             taken[0].method, taken[1].method,
             "one probe, one instrument"
         );
-        assert_eq!(e.target, PROBE_RESOLUTION);
+        assert_eq!(e.target, AT);
         assert_eq!(e.topologies, vec![Topology::Points]);
         assert_eq!(e.floor, Some(floor()));
 
@@ -338,17 +339,10 @@ proc scaled_dots {
     #[test]
     fn the_set_is_left_at_its_own_size_and_cold() {
         let gpu = gpu();
-        let mut probe = Probe::new(&gpu.device, &gpu.queue, gpu.timestamps, PROBE_RESOLUTION);
+        let mut probe = Probe::new(&gpu.device, &gpu.queue, gpu.timestamps, AT);
         let mut set = points_set(&gpu);
 
-        estimate_above_floor(
-            &mut probe,
-            &gpu.device,
-            &gpu.queue,
-            &mut set,
-            PROBE_RESOLUTION,
-            floor(),
-        );
+        estimate_above_floor(&mut probe, &gpu.device, &gpu.queue, &mut set, AT, floor());
 
         assert_eq!(
             set.viewport(),
@@ -367,33 +361,21 @@ proc scaled_dots {
     #[test]
     fn the_probe_is_moved_to_the_upper_rung_and_left_there() {
         let gpu = gpu();
-        let mut probe = Probe::new(&gpu.device, &gpu.queue, gpu.timestamps, PROBE_RESOLUTION);
-        assert_eq!(probe.resolution(), PROBE_RESOLUTION);
+        let mut probe = Probe::new(&gpu.device, &gpu.queue, gpu.timestamps, AT);
+        assert_eq!(probe.resolution(), AT);
         let mut set = points_set(&gpu);
 
-        let first = estimate_above_floor(
-            &mut probe,
-            &gpu.device,
-            &gpu.queue,
-            &mut set,
-            PROBE_RESOLUTION,
-            floor(),
-        );
-        let [_, upper] = rungs(PROBE_RESOLUTION, floor()).expect("two rungs fit");
+        let first =
+            estimate_above_floor(&mut probe, &gpu.device, &gpu.queue, &mut set, AT, floor());
+        let [_, upper] = rungs(AT, floor()).expect("two rungs fit");
         assert_eq!(upper, PREPARATION_RESOLUTION);
         assert_eq!(probe.resolution(), upper);
 
         // And a second call finds it already there and still answers the same
         // way, which is the property that makes the resize an optimisation
         // rather than a state a caller has to track.
-        let second = estimate_above_floor(
-            &mut probe,
-            &gpu.device,
-            &gpu.queue,
-            &mut set,
-            PROBE_RESOLUTION,
-            floor(),
-        );
+        let second =
+            estimate_above_floor(&mut probe, &gpu.device, &gpu.queue, &mut set, AT, floor());
         assert_eq!(
             second.rungs.expect("drawn")[1].resolution,
             first.rungs.expect("drawn")[1].resolution
@@ -412,23 +394,17 @@ proc scaled_dots {
     #[test]
     fn a_per_element_set_states_its_own_floor_and_is_drawn() {
         let gpu = gpu();
-        let mut probe = Probe::new(&gpu.device, &gpu.queue, gpu.timestamps, PROBE_RESOLUTION);
+        let mut probe = Probe::new(&gpu.device, &gpu.queue, gpu.timestamps, AT);
         let mut set = points_set(&gpu);
 
-        let e = estimate(
-            &mut probe,
-            &gpu.device,
-            &gpu.queue,
-            &mut set,
-            PROBE_RESOLUTION,
-        );
+        let e = estimate(&mut probe, &gpu.device, &gpu.queue, &mut set, AT);
 
         assert_eq!(e.floor, Some(floor()), "the floor is the procedure's own");
         assert_eq!(e.topologies, vec![Topology::Points]);
         let taken = e.rungs.expect("both rungs drawn");
         assert_eq!(
             [taken[0].resolution, taken[1].resolution],
-            rungs(PROBE_RESOLUTION, floor()).expect("two rungs fit"),
+            rungs(AT, floor()).expect("two rungs fit"),
         );
 
         // **And it says where the floor came from**, which is what makes the
@@ -465,16 +441,10 @@ proc scaled_dots {
     #[test]
     fn a_rate_nothing_can_bound_is_drawn_under_the_loosened_floor() {
         let gpu = gpu();
-        let mut probe = Probe::new(&gpu.device, &gpu.queue, gpu.timestamps, PROBE_RESOLUTION);
+        let mut probe = Probe::new(&gpu.device, &gpu.queue, gpu.timestamps, AT);
         let mut set = unbounded_set(&gpu);
 
-        let e = estimate(
-            &mut probe,
-            &gpu.device,
-            &gpu.queue,
-            &mut set,
-            PROBE_RESOLUTION,
-        );
+        let e = estimate(&mut probe, &gpu.device, &gpu.queue, &mut set, AT);
 
         assert_eq!(e.floor, None, "nothing bounded the rate, and it says so");
         assert_eq!(e.topologies, vec![Topology::Points]);
@@ -483,7 +453,7 @@ proc scaled_dots {
             .expect("an unknown floor is drawn under, not refused");
         assert_eq!(
             [taken[0].resolution, taken[1].resolution],
-            rungs(PROBE_RESOLUTION, u32::MAX).expect("the accurate pair"),
+            rungs(AT, u32::MAX).expect("the accurate pair"),
             "an unknown floor is passed on as the greatest floor there is"
         );
         let floored = e.floored.expect("the lower rung is under an unknown floor");
@@ -533,7 +503,7 @@ proc scaled_dots {
     #[test]
     fn a_param_written_below_its_declaration_makes_the_floor_unknown() {
         let gpu = gpu();
-        let mut probe = Probe::new(&gpu.device, &gpu.queue, gpu.timestamps, PROBE_RESOLUTION);
+        let mut probe = Probe::new(&gpu.device, &gpu.queue, gpu.timestamps, AT);
         let mut set = scaled_set(&gpu);
 
         // In range first: the same Set, answered. **The floor is the declared
@@ -541,24 +511,12 @@ proc scaled_dots {
         // and 201 because the nearest `f32` to 0.005 is a shade under it and
         // the floor rounds up.
         assert!(set.set_param("point_scale", 0.01) > 0);
-        let ok = estimate(
-            &mut probe,
-            &gpu.device,
-            &gpu.queue,
-            &mut set,
-            PROBE_RESOLUTION,
-        );
+        let ok = estimate(&mut probe, &gpu.device, &gpu.queue, &mut set, AT);
         assert_eq!(ok.floor, Some(201));
 
         // A tenth of the declared minimum, which no fader could reach.
         assert!(set.set_param("point_scale", 0.0005) > 0);
-        let e = estimate(
-            &mut probe,
-            &gpu.device,
-            &gpu.queue,
-            &mut set,
-            PROBE_RESOLUTION,
-        );
+        let e = estimate(&mut probe, &gpu.device, &gpu.queue, &mut set, AT);
         assert_eq!(
             e.floor, None,
             "the bound was falsified, so there is no floor"
@@ -593,16 +551,10 @@ proc scaled_dots {
     #[test]
     fn a_fullscreen_set_has_no_floor_so_both_rungs_are_drawn() {
         let gpu = gpu();
-        let mut probe = Probe::new(&gpu.device, &gpu.queue, gpu.timestamps, PROBE_RESOLUTION);
+        let mut probe = Probe::new(&gpu.device, &gpu.queue, gpu.timestamps, AT);
         let mut set = fullscreen_set(&gpu);
 
-        let e = estimate(
-            &mut probe,
-            &gpu.device,
-            &gpu.queue,
-            &mut set,
-            PROBE_RESOLUTION,
-        );
+        let e = estimate(&mut probe, &gpu.device, &gpu.queue, &mut set, AT);
 
         assert_eq!(e.topologies, vec![Topology::Fullscreen]);
         assert_eq!(e.floor, Some(1));
@@ -644,10 +596,18 @@ mod corpus {
     use karakuri_engine::estimate::{
         floored_share, rungs, sub_pixel_floor_rows, FLOORED_SHARE_ALLOWED,
     };
-    use karakuri_engine::swap::PROBE_RESOLUTION;
     use karakuri_ir::rate::{point_rate_bound, point_rate_bound_at, Bound};
     use karakuri_ir::typed::Checked;
     use karakuri_ir::Kind;
+
+    /// **A size to measure at**, and a fixture rather than a reference.
+    ///
+    /// It was `swap::PROBE_RESOLUTION` until ADR-0303, which removed that
+    /// constant: this application has an output size and a preview size and no
+    /// third one, so the size a measurement is taken at is named by whoever
+    /// knows the layout. Nothing here has a layout, so these tests name one
+    /// and it is 1280x720 because that is what they were written against.
+    const AT: (u32, u32) = (1280, 720);
 
     /// What [`rungs`] and [`floored_share`] between them answer for a floor.
     #[derive(Debug, PartialEq)]
@@ -679,10 +639,10 @@ mod corpus {
     }
 
     fn placed(floor: u32) -> Placed {
-        match rungs(PROBE_RESOLUTION, floor) {
+        match rungs(AT, floor) {
             Err(_) => Placed::Refused,
             Ok([low, high]) => {
-                let share = floored_share(low, high, PROBE_RESOLUTION, floor);
+                let share = floored_share(low, high, AT, floor);
                 if share == 0.0 {
                     Placed::Clear
                 } else {
