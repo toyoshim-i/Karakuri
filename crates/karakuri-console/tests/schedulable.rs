@@ -68,7 +68,8 @@ use karakuri_console::budget::{Declared, BUDGET, FRAME_INTERVAL, PANEL_PASS, SMA
 use karakuri_console::panel::{Op, Panel};
 use karakuri_console::room::Room;
 use karakuri_console::view::{
-    Level, Mask, Strip, Tally, Transport, View, BEAT_STALENESS, DECKS, REGIONS, ROLL_STALENESS,
+    Level, Mask, Phase, Strip, Tally, Transport, View, BEAT_STALENESS, DECKS, REGIONS, ROLL_PERIOD,
+    ROLL_STALENESS,
 };
 use karakuri_layout::NodeId;
 use karakuri_operation::BlendMode;
@@ -409,6 +410,10 @@ fn the_beat_declares_while_the_console_is_live_and_nothing_is_pending() {
             region: "transport",
             cost: PANEL_PASS,
             staleness: BEAT_STALENESS,
+            // The beat's two numbers are one number: the light travels on
+            // every frame the session advances, so it is never at rest and
+            // never asks for anything but its own rate (ADR-0283).
+            moves_in: BEAT_STALENESS,
         }],
         "a live console with nothing pending declared {declared:?}, so nothing on this \
          panel is moving and a stopped panel looks exactly like this one"
@@ -583,6 +588,7 @@ fn a_declaration_names_a_region_of_this_arrangement() {
             region: "transport",
             cost: PANEL_PASS,
             staleness: BEAT_STALENESS,
+            moves_in: BEAT_STALENESS,
         }
     );
     assert_eq!(
@@ -591,6 +597,67 @@ fn a_declaration_names_a_region_of_this_arrangement() {
             region: "mixer",
             cost: PANEL_PASS,
             staleness: ROLL_STALENESS,
+            // `Phase::ZERO`, which is where every view in this file is: the
+            // roll is at the foot of its travel, so it is moving and the two
+            // numbers agree. `tests/moving.rs` is where they part company.
+            moves_in: ROLL_STALENESS,
         }
     );
+}
+
+// ---------------------------------------------------------------------------
+// The frame moves one of the three numbers, and only in one direction
+// ---------------------------------------------------------------------------
+
+/// **No declaration ever asks for a frame sooner than the staleness it
+/// declared, at any phase of the panel's one clock.**
+///
+/// [ADR-0283](../../../docs/adr/0283-a-region-declares-when-its-picture-next-changes-not-that-something-is-pending.md)
+/// gives a region a third number — `moves_in`, *when this region's picture is
+/// next different from the one on screen* — and lets the window wait on that
+/// rather than on the staleness. **The whole safety argument for it is the
+/// direction**, and this is that direction asserted: change detection may take
+/// a frame away and may never bring one forward, so a region cannot use it to
+/// reach a rate the two conditions above never admitted.
+///
+/// It is [`karakuri_console::repaint::Repaint::soonest`]'s own argument one
+/// level up — *this can only bring a frame forward, never push one back, so
+/// combining the two cannot lose either* — read on the other side of the seam,
+/// where the risk runs the other way.
+///
+/// **And the two sums do not move with the phase**, which is the other half of
+/// keeping them assertable at all: a `Σ (cost / staleness)` that fell while
+/// the roll rested would be an arithmetic about the moment somebody sampled it
+/// (ADR-0212 refused the same thing for the tempo). The worst case is summed
+/// over the constants, and the constants are constant.
+#[test]
+fn a_declaration_never_asks_for_a_frame_sooner_than_the_staleness_it_declared() {
+    let panel = arrangement();
+    let mut view = worst_case();
+
+    let at_rest = declared(&view, &panel);
+    let (load_at_rest, peak_at_rest) = (load(&at_rest), peak(&at_rest));
+
+    // A whole period, one millisecond at a time: the travel, the rest, and the
+    // wrap between them.
+    for millis in 0..ROLL_PERIOD.as_millis() as u64 {
+        view.phase = Phase::since(Duration::from_millis(millis));
+        let declared = declared(&view, &panel);
+        for live in &declared {
+            assert!(
+                live.moves_in >= live.staleness,
+                "`{}` asked for a frame in {:?} at {millis} ms, against the {:?} it \
+                 declared — a region may only ever wait longer than it declared",
+                live.region,
+                live.moves_in,
+                live.staleness
+            );
+        }
+        assert_eq!(
+            (load(&declared), peak(&declared)),
+            (load_at_rest, peak_at_rest),
+            "the two sums moved at {millis} ms, so the schedulability arithmetic is a \
+             function of when it was asked rather than of what this console declares"
+        );
+    }
 }

@@ -227,6 +227,14 @@ names one pair where the rule is about the relation.
 it halves the cost. Rejected here, above: a presentation that declares two numbers is two live
 regions, and the arbitration is the scheduler's.
 
+> **Reversed on 2026-09-08** by
+> [ADR-0283](0283-a-region-declares-when-its-picture-next-changes-not-that-something-is-pending.md),
+> which takes the *"deliberate over-declaration that a scheduler can refine downwards"* above at its
+> word and refines it without one. Two of the three premises had gone: `View::animating` has chosen
+> between regions frame by frame since ADR-0193, and the coarse number turns out to be no second
+> constant at all — it is `ROLL_PERIOD` and `ROLL_TRAVEL` read for where this record's own curve
+> leaves zero. The staleness declared here is unchanged and is still the only one summed.
+
 **Reducing the reach to zero at rest by leaving the second word out of the paint.** Not an
 alternative — it is what is done. The destination galley is laid out only while something is
 pending, so a settled strip costs exactly the galley it always cost.

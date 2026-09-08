@@ -658,8 +658,16 @@ struct Costs {
     /// answer.
     live: bool,
     /// **What the panel declared it needed**, as `View::animating` answered it
-    /// on the last frame: the soonest staleness out of the regions that are
+    /// on the last frame: the soonest *move* out of the regions that are
     /// declaring, and `None` only when none of them is.
+    ///
+    /// **A deadline and not a rate**, which is ADR-0283: a region declares its
+    /// staleness for the motion it has, so a pending region that is at rest
+    /// answers the rest it has left rather than a rate it is not using. The
+    /// beat is the exception and it is the interesting one — the light travels
+    /// on every frame the session advances, so its deadline is its declared
+    /// staleness on every frame there is, and `24.671ms` here is the beat and
+    /// nothing else.
     ///
     /// It is here for one sentence, and the sentence was wrong without it.
     /// With nothing in the Program bay making texels the reading used to blame
@@ -680,6 +688,15 @@ struct Costs {
     /// [P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)).
     /// So this window's `None` now needs the transport row folded away as
     /// well, which is a **fourth** fold and is the arm below saying so.
+    ///
+    /// **And the roll's 30 Hz is no longer 30 Hz**, which is what would make
+    /// the 28.0-to-28.3 reading above unreproducible if it were taken again:
+    /// with the transport row folded and a slot parked, the mixer asks for
+    /// fourteen frames a second rather than thirty-one, because the seventeen
+    /// that fell inside the roll's rest drew the chip in the position it was
+    /// already in
+    /// ([ADR-0283](../../../docs/adr/0283-a-region-declares-when-its-picture-next-changes-not-that-something-is-pending.md),
+    /// `karakuri-console`'s `tests/moving.rs`, which counts both).
     declared: Option<Duration>,
 }
 
@@ -853,15 +870,28 @@ impl Costs {
                 // is the arm above. It read 28.7 to 29.0 a second at 260
                 // allocations before that change, which is the defect that
                 // record closes.
-                Some(staleness) => println!(
+                //
+                // **What is printed is a deadline and no longer a rate**, and
+                // ADR-0283 is why: a region declares its staleness for the
+                // motion it has, so the mixer's answer is 33.3 ms through the
+                // 400 ms its roll travels and the remainder of the rest
+                // through the 600 ms it does not. The reciprocal of one of
+                // those is not the rate anything runs at, and printing it as
+                // one is how a reading names the wrong cause. The rate the
+                // window actually drew at is the line above this one, which is
+                // the number that was measured rather than derived.
+                Some(deadline) => println!(
                     "  so ADR-0164's still-panel clause does NOT hold here, and the \
                      reason is a declaration rather than a fault: {}, and the soonest \
-                     staleness declared is {:.1} ms — about {:.0} frames a second. Folding the \
+                     a declaring region will next move is {:.1} ms away. Folding the \
                      region that draws it ends its term: a region that is not laid out \
                      declares nothing (ADR-0193).",
-                    match staleness == view::BEAT_STALENESS {
+                    match deadline == view::BEAT_STALENESS {
                         // The one that runs whether or not anything is
-                        // happening, which is the whole of why it is here.
+                        // happening, which is the whole of why it is here —
+                        // and the one region whose deadline is its declared
+                        // staleness on every frame, because the light never
+                        // rests (ADR-0283).
                         true =>
                             "the beat grid is a light travelling the transport row, \
                                  and it moves for as long as the console is live rather \
@@ -870,8 +900,7 @@ impl Costs {
                             "something on this panel is parked and the mixer's tally \
                                   is rolling toward a residency nobody granted (ADR-0190)",
                     },
-                    staleness.as_secs_f64() * 1000.0,
-                    1.0 / staleness.as_secs_f64()
+                    deadline.as_secs_f64() * 1000.0,
                 ),
                 // Nothing live, nothing declared, and frames drawn anyway.
                 None => println!(

@@ -8,6 +8,14 @@
 //! is that pair with the region's own name on it, and
 //! [`crate::view::View::declares`] is what answers with them.
 //!
+//! **And a third number that is not P-0091's**, because the principle has no
+//! word for it: [`Declared::moves_in`], *when this region's picture is next
+//! different from the one on screen*. The two above are constants of the
+//! presentation and are what the arithmetic below is taken over; that one is a
+//! function of the frame and is what a window sleeps until. A region declares
+//! a rate for the motion it has, not for the fact that it is pending
+//! ([ADR-0283](../../../docs/adr/0283-a-region-declares-when-its-picture-next-changes-not-that-something-is-pending.md)).
+//!
 //! # Nothing here schedules, and nothing here is read on a frame
 //!
 //! ADR-0164's arithmetic is two inequalities over the declarations:
@@ -82,7 +90,39 @@ pub struct Declared {
     /// what the instrument is doing**, in wall time and never in frames — a
     /// tolerance stated in frames doubles when the rate halves, which is to
     /// say it becomes most permissive exactly when the machine is most loaded.
+    ///
+    /// **It is a constant of the presentation and the frame does not move
+    /// it**, which is what lets `tests/schedulable.rs` sum it: a staleness
+    /// that fell with the tempo would make `Σ (cost / staleness)` a function
+    /// of how fast the music is
+    /// ([ADR-0212](../../../docs/adr/0212-the-beat-is-a-light-that-travels-and-it-declares-for-itself.md)).
+    /// What the frame moves is [`Declared::moves_in`] beside it.
     pub staleness: Duration,
+    /// **How long until this region's picture is different from the one now
+    /// on screen** — the deadline a window sleeps until, where
+    /// [`Declared::staleness`] is the rate the region needs *while it is
+    /// moving*.
+    ///
+    /// # Two numbers, and they answer two different questions
+    ///
+    /// [`Declared::staleness`] answers *how finely must this be drawn while it
+    /// moves*, and it is what the schedulability arithmetic sums, because
+    /// admission is decided on the worst case. This one answers *when does it
+    /// next move*, and it is what the window waits on, because servicing is
+    /// decided on the frame. A region that is moving now answers the same
+    /// number twice; a region that is pending and at rest answers the rest it
+    /// has left
+    /// ([ADR-0283](../../../docs/adr/0283-a-region-declares-when-its-picture-next-changes-not-that-something-is-pending.md)).
+    ///
+    /// # The invariant, and the whole of the safety argument
+    ///
+    /// **`moves_in >= staleness`, always.** Change detection may only take a
+    /// frame away, never bring one forward: the sooner deadline is the one the
+    /// region already declared and the arithmetic already admitted, so nothing
+    /// here can ask for capacity that was never granted. It is the direction
+    /// [`crate::repaint::Repaint::soonest`] argues in the other sense, and
+    /// `tests/schedulable.rs` asserts it across a whole period.
+    pub moves_in: Duration,
 }
 
 /// **What one update of a region on this console costs: a whole panel pass.**
