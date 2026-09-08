@@ -3779,8 +3779,8 @@ impl Aiming {
 /// **No `..` on either side of this**, which is `Watch::repointed`'s own rule
 /// met from the sending end: it destructures with no `..` so that a field
 /// added to `Aim` cannot be left behind, and a *sender* that filled the new
-/// field with a default would defeat that from here. The compiler names all
-/// thirteen, so the day a fourteenth arrives this stops compiling rather than
+/// field with a default would defeat that from here. The compiler names every
+/// one of them, so the day another arrives this stops compiling rather than
 /// quietly re-aiming a slot at it.
 fn restated(aim: &watch::Aim) -> watch::Aim {
     let watch::Aim {
@@ -3797,6 +3797,7 @@ fn restated(aim: &watch::Aim) -> watch::Aim {
         bindings,
         edges,
         authorities,
+        set,
     } = aim;
     watch::Aim {
         head: head.clone(),
@@ -3812,6 +3813,11 @@ fn restated(aim: &watch::Aim) -> watch::Aim {
         bindings: bindings.clone(),
         edges: edges.clone(),
         authorities: authorities.clone(),
+        // **The Set the slot is running, said again like everything else.** A
+        // re-aim changes the wiring and nothing about what is playing, so a
+        // rewiring that dropped this would move every version written after it
+        // into a chain under no Set at all.
+        set: set.clone(),
     }
 }
 
@@ -4130,11 +4136,23 @@ fn build_deck(
                     // entry in it and re-aims this watcher with the result.
                     edges: args.edges.clone(),
                     authorities: Vec::new(),
+                    // **The Set this slot is about to run**, which is the same
+                    // answer the launch-time seed was given and for its
+                    // reason: `--load-set` fills slot 0 and is refused
+                    // alongside `--set`, so it is the only slot that can have
+                    // one and every other is running a pair somebody typed.
+                    // Nothing on this surface loads a Set into a running slot,
+                    // so this is where the id is stated and `restated` is the
+                    // only thing that moves it.
+                    set: match slot {
+                        0 => args.load_set.clone(),
+                        _ => None,
+                    },
                 };
                 // **Opened for every watched slot rather than only under
                 // `--mcp`**, because the sender is what pairs a slot with its
                 // own watcher and pairing it later would mean holding the
-                // thirteen values above somewhere else to do it. A run nobody
+                // values above somewhere else to do it. A run nobody
                 // rewires never sends on it and it costs a `Sender`.
                 let (aim, aimed) = std::sync::mpsc::channel();
                 // One worker and one watcher per slot, over that slot's own
@@ -4176,13 +4194,15 @@ fn build_deck(
                         // the only one that can have an id, because
                         // `--load-set` fills it and is refused alongside
                         // `--set`.
-                        Some(shared) => watcher.snapshotting_to(
-                            shared.clone(),
-                            match slot {
-                                0 => args.load_set.clone(),
-                                _ => None,
-                            },
-                        ),
+                        //
+                        // **Read off the aim rather than worked out again
+                        // here.** The aim is what a re-point restates and what
+                        // moves this id from now on, so a second `match slot`
+                        // at this line would be a second answer to *what is
+                        // this slot running* the day anything on this surface
+                        // loads a Set into a running slot
+                        // (`docs/principles/0087-name-the-property-never-the-shape.md`).
+                        Some(shared) => watcher.snapshotting_to(shared.clone(), at.set.clone()),
                         None => watcher,
                     };
                     // **Whenever the run is editable**, which is where the
@@ -11429,6 +11449,7 @@ mod wire_tests {
             bindings: Vec::new(),
             edges,
             authorities: Vec::new(),
+            set: None,
         }
     }
 

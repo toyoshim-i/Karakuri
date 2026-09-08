@@ -321,7 +321,7 @@ use karakuri_engine::{
     Residency, Set, Sink, Skip, TonemapOp, DEFAULT_BUDGET_MS,
 };
 use karakuri_environment::clock::Clock;
-use karakuri_environment::{audio, mcp, mix, session, setfile, watch, Asked, Opening};
+use karakuri_environment::{audio, history, mcp, mix, session, setfile, watch, Asked, Opening};
 use karakuri_ir::Kind as Layer;
 use karakuri_layout::{Axis, Hit, Layout, NodeId, Point};
 use karakuri_operation::gate::{Class, Open};
@@ -4281,6 +4281,49 @@ fn running_from(dir: &std::path::Path, copies: &[Sources]) -> String {
     said
 }
 
+/// **The run's edit history, with the version every deck starts on already in
+/// it** — one [`karakuri_environment::history::Snapshots`] for the whole run,
+/// handed to every watcher [`Engine::new`] makes.
+///
+/// # Why the seed and the watchers share one
+///
+/// They share the dedup. Seeded separately, the first rebuild would write the
+/// untouched procedure a second time and the chain an operator walks back
+/// through would begin with a duplicate. It is [`karakuri_environment::history`]'s
+/// own requirement and is why this is made once, here, rather than per window.
+///
+/// # Why there is a seed at all
+///
+/// A first edit whose predecessor was never written down is the one edit that
+/// cannot be walked back, so the version a run *starts* on is filed before
+/// anything can edit it (ADR-0089). It is filed from the **working copies**,
+/// which are what the watchers poll and what an editor is pointed at.
+///
+/// # Under no Set, which is the answer and not a placeholder
+///
+/// Every slot of this program launches on the pair the command line settled,
+/// and a pair somebody typed is not a Set. The nearest thing to a name is
+/// [`Sources::material`] — a readout for the mixer strip — and filing versions
+/// under it would put rows in the history under a Set no listing can ever
+/// match (ADR-0276). A library load is what gives a slot an id, and it carries
+/// it on the aim ([`loading`], ADR-0304).
+///
+/// A free function over the copies so it can be asserted without a window, the
+/// way [`running_from`] is; see `the_launch_versions_are_filed_before_a_window`.
+/// Failures are reported inside `history::seed` and are never fatal: a history
+/// that could not be written must not stop a run from starting.
+fn seeded(store: &std::path::Path, copies: &[Sources]) -> history::Shared {
+    let shared = history::Snapshots::shared(store);
+    history::seed(
+        &shared,
+        copies
+            .iter()
+            .enumerate()
+            .map(|(slot, pair)| (slot, None, vec![pair.l1.as_path(), pair.l4.as_path()])),
+    );
+    shared
+}
+
 /// **How this program is called**, printed for `--help` and for anything it
 /// cannot read as a pair.
 ///
@@ -5008,9 +5051,18 @@ struct Engine {
 /// every field of the slot's identity and *anything left out comes back as the
 /// outgoing slot's* — a fold silently un-selected, a camera back at
 /// `Orbit::default()`, salts that repaint every element. A rewiring changes one
-/// field of thirteen, so the other twelve have to be restated from somewhere,
-/// and this is that somewhere: what the watcher was constructed with until the
+/// field of an aim, so all the others have to be restated from somewhere, and
+/// this is that somewhere: what the watcher was constructed with until the
 /// first aim, and the last aim after that.
+///
+/// **It is also where the Set a slot is running lives**, which is the roadmap's
+/// *per-slot `Option<String>` beside the deck* answered where a per-slot value
+/// that must survive a re-aim already lives: [`watch::Aim::set`] is moved by
+/// every load and restated by every rewiring, and a second copy on [`Gfx`]
+/// would be a second answer to *what is this slot running*
+/// (`docs/principles/0087-name-the-property-never-the-shape.md`).
+/// [`Gfx::material`] is not that answer and never was — it is the mixer
+/// strip's readout, and at launch it is the pair the run was started with.
 ///
 /// **This program had the sender and not the aim**, which was harmless for as
 /// long as the only thing that sent one was [`loading`] — a load states every
@@ -5058,8 +5110,8 @@ impl Aiming {
 /// **No `..` on either side of this**, which is `Watch::repointed`'s own rule
 /// met from the sending end: it destructures with no `..` so that a field added
 /// to `Aim` cannot be left behind, and a *sender* that filled the new field
-/// with a default would defeat that from here. The compiler names all thirteen,
-/// so the day a fourteenth arrives this stops compiling rather than quietly
+/// with a default would defeat that from here. The compiler names every one of
+/// them, so the day another arrives this stops compiling rather than quietly
 /// re-aiming a slot at it.
 fn restated(aim: &watch::Aim) -> watch::Aim {
     let watch::Aim {
@@ -5076,6 +5128,7 @@ fn restated(aim: &watch::Aim) -> watch::Aim {
         bindings,
         edges,
         authorities,
+        set,
     } = aim;
     watch::Aim {
         head: head.clone(),
@@ -5091,6 +5144,12 @@ fn restated(aim: &watch::Aim) -> watch::Aim {
         bindings: bindings.clone(),
         edges: edges.clone(),
         authorities: authorities.clone(),
+        // **What this slot is running, carried through a rewiring untouched.**
+        // A rewiring changes an edge and not the material, so the versions
+        // written after it belong to the same Set as the ones before it —
+        // dropped here, a slot would go back to filing under no Set at all on
+        // the first `wire_input` after a load.
+        set: set.clone(),
     }
 }
 
@@ -5941,19 +6000,27 @@ fn rewired(
 ///   authorities** — this program has no flag for any of the five and grants
 ///   nothing (ADR-0216), so each is the empty list the startup build used.
 ///
-/// # The store, and the one thing that is still not done
+/// # The store, and the two things a watcher is given
 ///
-/// `Watch::storing_to` **is** given now and `Watch::snapshotting_to` is not.
-/// The first puts every build's sources in the store and reports them as
-/// [`watch::Built`], which is where a rebuilt node's address comes from — and
-/// nothing could derive one until something needed one, which is *Keep what a
-/// deck is playing*: a Set file references its sources by hash, so a slot whose
-/// builds were never stored is a slot that cannot be written down. See
+/// `Watch::storing_to` puts every build's sources in the store and reports them
+/// as [`watch::Built`], which is where a rebuilt node's address comes from —
+/// and nothing could derive one until something needed one, which is *Keep what
+/// a deck is playing*: a Set file references its sources by hash, so a slot
+/// whose builds were never stored is a slot that cannot be written down. See
 /// [`Playing`], which is the other end of that channel.
 ///
-/// The second keeps every version that compiled so an edit can be walked back,
-/// which is what *put a node's previous version back* would read. That control
-/// is still waiting on it, and this is still not the pass that adds it.
+/// `Watch::snapshotting_to` keeps every version that compiled under
+/// `<store>/history/`, so an edit can be walked back — a hand at an editor and
+/// a model writing over MCP both reach a file through the same path, and this
+/// is where the version they replaced is kept (P-0096, ADR-0089). **The whole
+/// run shares one `history::Snapshots`** with the launch-time seed, or the
+/// first rebuild files the untouched procedure a second time.
+///
+/// **Every slot launches under no Set**, which is the truth rather than a
+/// placeholder: this program opens on a pair, and a pair somebody typed is not
+/// a Set (ADR-0276). What turns that into an id is a library load — [`loading`]
+/// sends the id on the aim, and the watcher moves it — so the versions written
+/// after a load are filed under the Set that was loaded.
 ///
 /// # What it costs the frame path, which is nothing
 ///
@@ -5972,6 +6039,13 @@ fn watched(
     // Where this watcher puts what it builds, and where it says so — or `None`
     // for a harness with no store to write into. See [`Engine::new`].
     stored: Option<(std::sync::Arc<Store>, std::sync::mpsc::Sender<watch::Built>)>,
+    // **The run's one history**, seeded in [`main`] from the same files this
+    // slot watches, and `None` for a harness with no store — the same
+    // condition `stored` above is `None` under, and a separate argument
+    // because the two keep different things: that one is what reached the
+    // *screen* and this is what reached the *compiler*. A version rolled back
+    // for costing too much is in this and in nothing else.
+    snapshots: Option<history::Shared>,
 ) -> (HotSwap, Aiming) {
     // **The other end of `Watch::aimed_by`**, kept by [`Engine`] so that a
     // load can say *look at these files instead*. It is made here rather than
@@ -5999,6 +6073,13 @@ fn watched(
         bindings: Vec::new(),
         edges: Vec::new(),
         authorities: Vec::new(),
+        // **No Set, because a slot launches on the pair this program was
+        // started with and a pair somebody typed is not a Set.** The nearest
+        // thing to a name is [`Sources::material`], which is a readout for the
+        // mixer strip — filing versions under it would put rows in the history
+        // under a Set no listing can ever match (ADR-0276). [`loading`] is what
+        // turns this into an id.
+        set: None,
     };
     let watching = watch::Watch::new(
         slot,
@@ -6026,6 +6107,13 @@ fn watched(
     // the put is on the worker thread that compiled it.
     let watching = match stored {
         Some((store, tx)) => watching.storing_to(store, tx),
+        None => watching,
+    };
+    // **Where every version that compiles is kept**, under the Set this slot is
+    // running — which at launch is none, and is `at.set` for the same reason
+    // the CLI reads its own aim there: one answer, and the aim is what moves it.
+    let watching = match snapshots {
+        Some(shared) => watching.snapshotting_to(shared, at.set.clone()),
         None => watching,
     };
     let swap = HotSwap::new(
@@ -6063,6 +6151,16 @@ impl Engine {
         // store to draw four cells would be the side effect
         // `karakuri_environment::scratch` refuses for a `--render`.
         stored: Option<(std::sync::Arc<Store>, std::sync::mpsc::Sender<watch::Built>)>,
+        // **The run's one edit history**, made and seeded in [`main`] and
+        // handed to every watcher this makes — see [`watched`]. `None` is a
+        // harness with no store, which is every test under `mod gpu` below, on
+        // `stored`'s terms exactly.
+        //
+        // **One `Shared` for the run and not one per window.** A window remade
+        // makes these watchers again, and a second `Snapshots` would have an
+        // empty dedup memory: the first rebuild after a remake would file every
+        // untouched procedure as a new version.
+        snapshots: Option<history::Shared>,
     ) -> Engine {
         assert!(
             slots.len() == SLOTS,
@@ -6169,6 +6267,7 @@ impl Engine {
                 stored
                     .as_ref()
                     .map(|(store, tx)| (std::sync::Arc::clone(store), tx.clone())),
+                snapshots.clone(),
             );
             swaps.push(swap);
             aimed.push(aim);
@@ -8051,6 +8150,13 @@ fn loading(
         bindings: loaded.bindings,
         edges: loaded.edges,
         authorities: Vec::new(),
+        // **What this slot is now running, and what every version it writes
+        // from here on is filed under.** It is the id the operator picked out
+        // of the library, carried on the aim because that is what a re-point
+        // moves: left off, the loaded Set's whole chain would go on being filed
+        // under the material the slot was running before the press, in names
+        // nothing reads back (ADR-0276).
+        set: Some(id.to_string()),
     })
     .map_err(|()| {
         format!(
@@ -10576,6 +10682,21 @@ struct App {
     /// an arrangement are handed: those open per call, which is what keeps a
     /// listing from creating a directory it only wanted to read.
     held: std::sync::Arc<Store>,
+    /// **Every version that compiles in this run**, seeded in [`main`] from the
+    /// files the decks were about to play and handed to every watcher
+    /// [`Engine::new`] makes.
+    ///
+    /// **One for the run**, which is [`karakuri_environment::history`]'s own
+    /// requirement rather than a convenience: the seed and the watchers share
+    /// the dedup, and seeded separately the first rebuild would write the
+    /// untouched procedure a second time. That is also why it is here rather
+    /// than on [`Gfx`] — a window remade rebuilds the deck and would rebuild
+    /// the history with it.
+    ///
+    /// **What each version is filed under is not here.** That is the Set the
+    /// slot is running, and it lives on the aim, one per slot, moved by a load
+    /// — see [`Aiming`] and [`watch::Aim::set`].
+    snapshots: history::Shared,
     /// **Everything a save and a rewiring need that is not the deck** — see
     /// [`Keeping`].
     keeping: Keeping,
@@ -11104,6 +11225,7 @@ impl App {
         launch: Launch,
         running: Vec<Sources>,
         held: std::sync::Arc<Store>,
+        snapshots: history::Shared,
         mcp: Option<mcp::Reporter>,
         opening: Opening,
     ) -> App {
@@ -11138,6 +11260,7 @@ impl App {
             started: Instant::now(),
             built_tx,
             held,
+            snapshots,
             keeping: Keeping {
                 mcp,
                 edges: Vec::new(),
@@ -11591,6 +11714,7 @@ impl ApplicationHandler for App {
             self.readout.panel.layout(),
             self.scale as f32,
             Some((std::sync::Arc::clone(&self.held), self.built_tx.clone())),
+            Some(self.snapshots.clone()),
         );
         // **What every deck is playing, seeded from the compile that just
         // built them**, before a frame has run — see [`Playing::at_launch`].
@@ -14212,6 +14336,10 @@ fn main() {
             std::process::exit(1)
         }
     };
+    // **Every version this run compiles, kept where a person can find it**, and
+    // the version every deck starts on filed before the window opens — see
+    // [`seeded`], which carries the whole of why.
+    let snapshots = seeded(&launch.store, &running);
     // **What every surface in this run reads and no surface decides**, made
     // here so that there is one of it: the four bay-head pills write it and
     // the MCP server reads it on every call, and a second handle would be a
@@ -14279,7 +14407,9 @@ fn main() {
     // window between here and the first `about_to_wait` is not a spin either.
     event_loop.set_control_flow(ControlFlow::Wait);
     event_loop
-        .run_app(&mut App::new(launch, running, held, mcp, opening))
+        .run_app(&mut App::new(
+            launch, running, held, snapshots, mcp, opening,
+        ))
         .expect("run");
 }
 
@@ -16241,6 +16371,9 @@ mod tests {
                 bindings: Vec::new(),
                 edges: Vec::new(),
                 authorities: Vec::new(),
+                // **Running material no Set names**, which is where every slot
+                // of this program starts and what the launch seed files under.
+                set: None,
             },
         };
         let line = loading(
@@ -16292,6 +16425,16 @@ mod tests {
             aim.authorities.is_empty(),
             "a Set file carries no grant, so a load must hand none over"
         );
+        // **The id the versions after this load are filed under.** The slot was
+        // running material no Set names, and it is running `night01` now; an
+        // aim that left this at `None` would go on writing this Set's edits
+        // into the history under no Set at all, which is a chain that answers
+        // *what versions has `night01` had* with nothing (ADR-0276).
+        assert_eq!(
+            aim.set.as_deref(),
+            Some("night01"),
+            "the load did not tell the watcher which Set the slot is running"
+        );
 
         // **And the load kept where it pointed the watcher**, which is what a
         // later rewiring restates the other twelve fields from: an `Aiming` that
@@ -16303,6 +16446,11 @@ mod tests {
             "the load sent an aim and did not keep it"
         );
         assert_eq!(aiming.at.live, Some(0), "the kept aim is not the sent one");
+        assert_eq!(
+            aiming.at.set.as_deref(),
+            Some("night01"),
+            "the kept aim does not carry the Set, so the next rewiring would restate none"
+        );
 
         // And a Set that is not there is a sentence with nothing sent: the
         // deck goes on playing what it was.
@@ -16338,6 +16486,67 @@ mod tests {
     /// edit made through deck B's L1 moves deck B and **no other deck**; and
     /// the file the operator named is not written to at all.
     ///
+    /// **The version every deck starts on is in the history before the window
+    /// opens, and it is filed under no Set.**
+    ///
+    /// Two claims, and the second is the one that is a decision. That there is
+    /// a seed at all is ADR-0089's — a first edit whose predecessor was never
+    /// written down cannot be walked back — and this program had **no history
+    /// at all** until it was given one, so a run's whole night of edits was
+    /// kept nowhere. That every row reads `None` is ADR-0276's: the material is
+    /// a pair somebody typed, and filing it under `Sources::material` would put
+    /// rows under a Set no listing can ever match.
+    ///
+    /// **Every node of every slot**, and the count is derived from the copies
+    /// rather than written here — a slot is an L1 and a renderer, and each deck
+    /// runs from its own pair, so a seed that filed one deck or one node would
+    /// leave the others' first edits with nothing behind them.
+    ///
+    /// A CPU test: a store and a scratch are directories, and nothing here
+    /// takes a device.
+    #[test]
+    fn the_launch_versions_are_filed_before_a_window() {
+        let root = scratch_dir("seeded");
+        let named = shipped();
+        let (_, running) =
+            working_copies(&root, &named, SLOTS).unwrap_or_else(|e| panic!("no copies: {e}"));
+
+        let _shared = seeded(&root, &running);
+
+        let listing = karakuri_environment::history::list(&root, 64).expect("the history lists");
+        let nodes: usize = running.len() * 2;
+        assert_eq!(
+            listing.versions.len(),
+            nodes,
+            "a deck's starting version is missing, so its first edit has nothing to be \
+             walked back to: {:?}",
+            listing.versions
+        );
+        assert!(
+            listing.versions.iter().all(|v| v.set.is_none()),
+            "a slot launched on a typed pair filed its version under a Set: {:?}",
+            listing.versions
+        );
+        for slot in 0..running.len() {
+            let of_slot: Vec<&karakuri_environment::history::Version> =
+                listing.versions.iter().filter(|v| v.slot == slot).collect();
+            assert_eq!(
+                of_slot.len(),
+                2,
+                "deck {} filed {} of its two nodes",
+                deck_letter(slot as u8),
+                of_slot.len()
+            );
+            assert!(
+                of_slot.iter().any(|v| v.layer == "L1") && of_slot.iter().any(|v| v.layer == "L4"),
+                "deck {}'s two versions are not its geometry and its renderer: {of_slot:?}",
+                deck_letter(slot as u8)
+            );
+        }
+
+        std::fs::remove_dir_all(&root).expect("clean up");
+    }
+
     /// A CPU test: a scratch is a directory and nothing here takes a device.
     #[test]
     fn every_deck_runs_from_its_own_copy_and_an_edit_moves_one_deck() {
@@ -19607,11 +19816,13 @@ mod tests {
     /// re-aimed with the run's whole wiring, and a slot this deck has not got is
     /// refused in the one sentence every surface refuses one in.
     ///
-    /// **The twelve other fields are the point of the second assertion.** An
-    /// `Aim` is every field of a slot's identity, and a rewiring that restated
-    /// only the edges would come back with the outgoing slot's camera, fold and
-    /// salts — a defect that shows on the *next* build rather than on the
-    /// rewiring, which is why it is asserted here rather than left to be seen.
+    /// **The other fields are the point of the second assertion.** An `Aim` is
+    /// every field of a slot's identity, and a rewiring that restated only the
+    /// edges would come back with the outgoing slot's camera, fold and salts —
+    /// a defect that shows on the *next* build rather than on the rewiring,
+    /// which is why it is asserted here rather than left to be seen. **The Set
+    /// the slot is running is among them**, and it is the one whose symptom is
+    /// not a picture at all: versions filed under the wrong Set, or under none.
     #[test]
     fn a_wire_request_reaches_the_slots_watcher_with_the_rest_of_its_aim_restated() {
         let edge = |node: &str, slot: &str, to: &str| karakuri_engine::set::Edge {
@@ -19639,6 +19850,9 @@ mod tests {
                 bindings: Vec::new(),
                 edges: Vec::new(),
                 authorities: Vec::new(),
+                // **A slot running a Set**, which is what makes the assertion
+                // below about `restated` rather than about a default.
+                set: Some("night01".to_owned()),
             },
         }];
         let mut edges = Vec::new();
@@ -19657,8 +19871,14 @@ mod tests {
         );
         let aim = rx.try_recv().expect("the watcher was not re-aimed at all");
         assert_eq!(aim.edges, vec![edge("warp", "shape", "field")]);
-        // **The twelve fields that are not the edges.**
+        // **The fields that are not the edges.**
         assert_eq!(aim.head.name.as_deref(), Some("grid"));
+        assert_eq!(
+            aim.set.as_deref(),
+            Some("night01"),
+            "the rewiring dropped the Set the slot is running, so every version \
+             written after it would be filed under none"
+        );
         assert_eq!(aim.live, Some(0), "the fold was silently un-selected");
         assert_eq!(aim.capacity, Some(2048), "the capacity came back as none");
         assert_eq!(aim.salts, vec![9], "the salts would repaint every element");
@@ -21815,6 +22035,7 @@ mod gpu {
             panel.layout(),
             1.0,
             None,
+            None,
         );
 
         let root = scratch_dir("kept");
@@ -21899,6 +22120,7 @@ mod gpu {
             panel.layout(),
             1.0,
             Some((std::sync::Arc::clone(&store), built_tx)),
+            None,
         );
 
         let reporter = mcp::serve(
@@ -22034,6 +22256,7 @@ mod gpu {
             panel.layout(),
             1.0,
             None,
+            None,
         );
         // One name per slot, which is what `Gfx::material` is: every slot
         // opens on the same pair, and a load is what makes them differ.
@@ -22163,6 +22386,7 @@ mod gpu {
             &shipped_slots(),
             panel.layout(),
             1.0,
+            None,
             None,
         );
         // **Built at what the file declares**, which is the other half of
@@ -22499,6 +22723,7 @@ mod gpu {
             panel.layout(),
             1.0,
             None,
+            None,
         );
 
         // The picture's, in both axes, and **neither of them is the window's**
@@ -22597,6 +22822,7 @@ mod gpu {
             &shipped_slots(),
             panel.layout(),
             1.0,
+            None,
             None,
         );
         let first = engine.picture.id;
@@ -22729,6 +22955,7 @@ mod gpu {
             &shipped_slots(),
             panel.layout(),
             1.0,
+            None,
             None,
         );
 
@@ -23028,6 +23255,7 @@ mod gpu {
             panel.layout(),
             1.0,
             None,
+            None,
         );
 
         // **The cell's, in both axes** — not the row's, not the picture's and
@@ -23196,6 +23424,7 @@ mod gpu {
             panel.layout(),
             1.0,
             None,
+            None,
         );
 
         // The strips, written the way the frame writes them.
@@ -23321,6 +23550,7 @@ mod gpu {
             &shipped_slots(),
             panel.layout(),
             1.0,
+            None,
             None,
         );
         let material = vec![shipped().material(); engine.deck.slot_count()];
@@ -23562,6 +23792,7 @@ mod gpu {
             panel.layout(),
             1.0,
             None,
+            None,
         );
 
         assert_eq!(
@@ -23635,7 +23866,7 @@ mod gpu {
         // assertion below would be reading a different refusal.
         let reference = reference();
         let slots: Vec<Sources> = std::iter::repeat_n(reference.clone(), SLOTS).collect();
-        let mut engine = Engine::new(&gpu, &mut renderer, &slots, panel.layout(), 1.0, None);
+        let mut engine = Engine::new(&gpu, &mut renderer, &slots, panel.layout(), 1.0, None, None);
         let material = vec![reference.material(); engine.deck.slot_count()];
 
         // **Before the pass, and this is the deck this program opens with.**
@@ -23865,6 +24096,7 @@ mod gpu {
             panel.layout(),
             1.0,
             None,
+            None,
         );
         let material = vec![shipped().material(); engine.deck.slot_count()];
         let over = (UNDER + 1) % engine.deck.slot_count();
@@ -24089,6 +24321,7 @@ mod gpu {
             panel.layout(),
             1.0,
             None,
+            None,
         );
         let material = vec![shipped().material(); engine.deck.slot_count()];
 
@@ -24274,6 +24507,7 @@ mod gpu {
             panel.layout(),
             1.0,
             None,
+            None,
         );
         let material = vec![shipped().material(); engine.deck.slot_count()];
 
@@ -24451,6 +24685,7 @@ mod gpu {
             &shipped_slots(),
             panel.layout(),
             1.0,
+            None,
             None,
         );
         engine.look = STARTS_AT;
@@ -24662,6 +24897,7 @@ mod gpu {
             &shipped_slots(),
             panel.layout(),
             1.0,
+            None,
             None,
         );
 

@@ -98,10 +98,13 @@ pub struct Built {
 ///
 /// # It is every field of the slot's identity, and that is the point
 ///
-/// It is [`Watch::new`]'s argument list less the slot, and each field carries
-/// its argument's reason — read them there, because they are the same fields
-/// and a second copy of thirteen arguments would be thirteen places to get one
-/// of them wrong. **Anything left out comes back as the outgoing slot's**, and
+/// It is [`Watch::new`]'s argument list less the slot, plus the Set the slot
+/// is running — which arrives at construction through
+/// [`Watch::snapshotting_to`] rather than through `new`, because it is the
+/// history's and only the history's. Every other field carries its argument's
+/// reason and is read there, because they are the same fields and a second
+/// copy of them would be as many places to get one of them wrong.
+/// **Anything left out comes back as the outgoing slot's**, and
 /// the symptoms are the ones those fields are documented against: a fold that
 /// silently un-selects, a camera that reverts to `Orbit::default()`, salts
 /// that repaint every element. Worse, none of them shows on the *load* — the
@@ -137,6 +140,24 @@ pub struct Aim {
     pub bindings: Vec<Binding>,
     pub edges: Vec<karakuri_engine::set::Edge>,
     pub authorities: Vec<karakuri_engine::swap::AuthorityAt>,
+    /// **The Set this slot is now running**, which is what every version it
+    /// writes from here on is filed under — or `None` where it is running
+    /// material no Set names, which is a pair somebody typed.
+    ///
+    /// **It is here because a library load is the thing that moves it.** A
+    /// load re-points a watcher at the files of a different Set, and the id is
+    /// as much a part of *what this slot is now* as the files are: a re-point
+    /// that left it behind would file every later version under the Set before
+    /// the load, silently and in a name nothing reads back
+    /// ([`crate::history::Snapshots::record`] carries that argument, and
+    /// `ADR-0276` is the record). It is one field of this rather than a value
+    /// a surface keeps beside its deck, so that the answer to *what is this
+    /// slot running* moves with the re-point that changes it and is restated
+    /// by every re-aim, like every field above it.
+    ///
+    /// A watcher keeping no history has nothing to file, so this is dropped on
+    /// arrival there — see [`Watch::snapshots`], which is its only holder.
+    pub set: Option<String>,
 }
 
 pub struct Watch {
@@ -377,14 +398,13 @@ pub struct Watch {
     /// [`crate::history::Snapshots::record`] argues is a state rather than a
     /// missing answer.
     ///
-    /// **It is what the slot was running when the watcher was built, and
-    /// nothing moves it, which holds only while nothing here loads a Set into a
-    /// running slot.** True as of 2026-09-08: `karakuri-cli` is the only caller
-    /// and its only Set id is `--load-set`'s, settled before the deck is built
-    /// and refused alongside `--set`; [`Watch::aimed_by`]'s channel carries a
-    /// re-wiring and not a library load, and MCP publishes no load. A surface
-    /// that loads a Set into a running slot has to move this with the re-point,
-    /// or every version after the load is filed under the Set before it.
+    /// **It is what the slot was running when the watcher was built, until a
+    /// re-point says otherwise**, and [`Watch::repointed`] is where it moves:
+    /// [`Aim::set`] is a field of an aim like the files are, so a library load
+    /// carries the Set it is loading and the versions written after it are
+    /// filed under that Set rather than under the one before it. There is one
+    /// holder of the answer here and the destructuring that moves it has no
+    /// `..`, so a re-point cannot leave it behind.
     snapshots: Option<(crate::history::Shared, Option<String>)>,
 }
 
@@ -478,10 +498,12 @@ impl Watch {
     /// Keep every version that compiles under `store_root`, so an edit can be
     /// walked back. See [`crate::history`].
     ///
-    /// `set` is the Set this slot is running, or `None` where it is running
-    /// material no Set names. It is taken here rather than in
-    /// [`Watch::new`] because it is the history's and only the history's —
-    /// see [`Watch::snapshots`].
+    /// `set` is the Set this slot is running **when the watcher is built**, or
+    /// `None` where it is running material no Set names. It is taken here
+    /// rather than in [`Watch::new`] because it is the history's and only the
+    /// history's — see [`Watch::snapshots`]. **A later library load moves it**,
+    /// on the aim that re-points this watcher ([`Aim::set`]), so this is the
+    /// first answer rather than the only one.
     pub fn snapshotting_to(
         mut self,
         snapshots: crate::history::Shared,
@@ -597,9 +619,11 @@ impl Watch {
             bindings,
             edges,
             authorities,
+            set,
         } = aim;
-        // **Every field `Watch::new` takes, and the compiler is what says so:
-        // the destructuring above has no `..`.** A re-point that left one of
+        // **Every field `Watch::new` takes, plus the Set the slot is running,
+        // and the compiler is what says so: the destructuring above has no
+        // `..`.** A re-point that left one of
         // them behind is the failure each of those fields is documented
         // against — a slot that comes back at the wrong capacity, in the wrong
         // fold, under a camera the file never named — and it would show up on
@@ -625,6 +649,19 @@ impl Watch {
         self.bindings = bindings;
         self.edges = edges;
         self.authorities = authorities;
+        // **What every version written from here on is filed under.** A
+        // re-point is how a Set reaches a running deck, so the id is as much
+        // part of *what this slot is now* as the files are — left behind, the
+        // loaded Set's whole chain would be filed under the Set before it, in
+        // names nothing reads back and with nothing to say it happened.
+        //
+        // **Dropped where there is no history**, which is every offscreen path
+        // and every harness with no store: there is nothing to file under, and
+        // keeping the answer somewhere a rebuild never reads is the second
+        // holder `Watch::snapshots` argues against.
+        if let Some((_, running)) = &mut self.snapshots {
+            *running = set;
+        }
         // Seeded from the new files, exactly as `Watch::new` seeds from the
         // ones it was constructed with: the build below is this material's
         // first, so the next poll must not see it as a second one.
@@ -1117,6 +1154,7 @@ mod tests {
             bindings: Vec::new(),
             edges: Vec::new(),
             authorities: Vec::new(),
+            set: None,
         })
         .expect("the watcher is alive");
         let request = rebuild(&mut watch).expect("the aim's own build");
@@ -1650,6 +1688,7 @@ mod tests {
             bindings: Vec::new(),
             edges: Vec::new(),
             authorities: Vec::new(),
+            set: None,
         })
         .expect("the watcher is still here");
 
@@ -1677,6 +1716,89 @@ mod tests {
         assert!(
             watch.poll().is_none(),
             "the files it was aimed at were then seen as an edit, so the load built twice"
+        );
+    }
+
+    /// **A library load moves which Set the versions after it are filed
+    /// under**, which is the half of `ADR-0276` a re-point owes.
+    ///
+    /// The failure this is written against is silent and is only readable
+    /// afterwards: a watcher that took the aim's files and left its Set id
+    /// behind goes on filing every later version under the Set the slot was
+    /// running *before* the load — a name, and nothing in the layout to say it
+    /// is wrong, so *what versions has this Set had* answers with somebody
+    /// else's edits.
+    ///
+    /// **The aim points at the files already being watched**, on purpose: the
+    /// bytes do not change, so the only thing that can make this version a new
+    /// one is the id in the dedup key. It is the `record` clause that says a
+    /// chain is a node *of a Set*, asserted from the watcher's side.
+    #[test]
+    fn a_re_point_files_the_versions_after_it_under_the_set_it_loaded() {
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let dir = tmp.path().join("scratch");
+        std::fs::create_dir_all(&dir).expect("a directory to watch");
+        let store = tmp.path().join("store");
+
+        let (watch, paths) = watch_over(&dir, &["drift_shell.kir", "soft_points.kir"]);
+        let shared = crate::history::Snapshots::shared(&store);
+        let (aim, aimed) = std::sync::mpsc::channel();
+        // **Launched on material no Set names**, which is what every slot of
+        // `crates/karakuri` launches on and what `record` writes `None` for.
+        let mut watch = watch.snapshotting_to(shared.clone(), None).aimed_by(aimed);
+
+        rebuild(&mut watch).expect("the files appearing is an edit like any other");
+        let before = crate::history::list(&store, 32).expect("the history lists back");
+        assert!(
+            before.versions.iter().all(|v| v.set.is_none()),
+            "a run that has loaded nothing filed a version under a Set: {:?}",
+            before.versions
+        );
+        assert!(
+            !before.versions.is_empty(),
+            "nothing was snapshotted at all, so what follows would pass against a \
+             watcher that never records"
+        );
+
+        aim.send(Aim {
+            head: crate::compile::Named::bare(paths[0].clone()),
+            rest: vec![crate::compile::Named::bare(paths[1].clone())],
+            layering: karakuri_engine::set::Layering::Overdraw,
+            live: None,
+            capacity: Some(4096),
+            seed_salt: 1,
+            salts: vec![1],
+            camera: karakuri_engine::camera::Orbit::default(),
+            overrides: Vec::new(),
+            published: Vec::new(),
+            bindings: Vec::new(),
+            edges: Vec::new(),
+            authorities: Vec::new(),
+            set: Some("star_vortex".to_string()),
+        })
+        .expect("the watcher is still here");
+        watch
+            .poll()
+            .expect("the aim is built on the poll it arrives");
+
+        let after = crate::history::list(&store, 32).expect("the history lists back");
+        let of_set: Vec<&crate::history::Version> = after
+            .versions
+            .iter()
+            .filter(|v| v.set.as_deref() == Some("star_vortex"))
+            .collect();
+        assert!(
+            !of_set.is_empty(),
+            "the slot was loaded with `star_vortex` and its first version was filed \
+             under the material the run started on: {:?}",
+            after.versions
+        );
+        assert!(
+            of_set
+                .iter()
+                .all(|v| v.file.to_string_lossy().contains("@star_vortex")),
+            "the id is read back off the name, and the name does not carry it: {:?}",
+            of_set
         );
     }
 

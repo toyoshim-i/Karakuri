@@ -139,6 +139,14 @@ ever been a version *of* a Set that was just saved — it **is** a version, and 
   mid-run: the re-point channel carries a re-wiring, and MCP publishes no load. A surface that
   loads a Set into a running slot has to move the id with the re-point, or every version after the
   load is filed under the Set before it.
+
+  > **Annotated 2026-09-08, later the same day.** That clause has a second caller now:
+  > `crates/karakuri` seeds one `Snapshots` for the run and hands it to every slot's watcher, and it
+  > **is** the surface this consequence describes — a library load re-points a running slot. The
+  > move it asks for is
+  > [ADR-0304](0304-the-set-a-version-is-filed-under-rides-the-aim-that-re-points-the-slot.md):
+  > `watch::Aim` carries the Set the slot is running, so the id travels with the files it belongs
+  > to.
 - `Operation::WalkHistory`'s doc gave *"the store has no reader"* as half its reason for
   `Undecided`; that half was already false and is corrected. The payload is unchanged — the missing
   half is the control.
