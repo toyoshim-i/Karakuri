@@ -56,13 +56,16 @@
 //!   reported as [`Unfit::FragmentTermNegative`] or
 //!   [`Unfit::InvariantTermNegative`] rather than clamped. Clamping would hand
 //!   a caller a number produced by arithmetic it has no way to distrust.
-//! - Both rungs sit above ADR-0245's sub-pixel floor. Below `1 / rate` rows a
-//!   primitive is drawn at one pixel and dimmed rather than dropped, so its
-//!   coverage stops being `(rate × height)²` and becomes 1 — **a different
-//!   picture, not a smaller one**. A rung there reads *high* against the model,
-//!   which drives `b` down and makes the estimate **undershoot**: the one
-//!   direction *round the estimate toward refusing* forbids. Hence
-//!   [`Unfit::RungBelowFloor`] and [`Unfit::NoRoomBelowTheTarget`].
+//! - ADR-0245's sub-pixel floor is **bounded and paid**, not merely avoided.
+//!   Below `1 / rate` rows a primitive is drawn at one pixel and dimmed rather
+//!   than dropped, so its coverage stops being `(rate × height)²` and becomes
+//!   1 — **a different picture, not a smaller one**. A rung there reads *high*
+//!   against the model, which drives `b` down and makes the estimate
+//!   **undershoot**: the one direction *round the estimate toward refusing*
+//!   forbids. What is forced is that the undershoot cannot exceed a share this
+//!   module can state and divide back out — see *How strictly the floor is
+//!   read*, [`FLOORED_SHARE_ALLOWED`] and ADR-0293. Where it would,
+//!   [`Unfit::FlooringHidesTooMuch`] and [`Unfit::NoRoomBelowTheTarget`].
 //! - The two rungs are the target scaled by one factor in both dimensions. A
 //!   Set's camera derives its aspect ratio from its viewport, so a rung at a
 //!   different aspect ratio draws a different picture — the same failure as
@@ -84,6 +87,21 @@
 //!   sit under it, rather than the pair being refused outright. A rung *at* the
 //!   floor is above it in the sense that matters: every primitive is still at
 //!   least one pixel there.
+//! - **When the floor clears the half-height rung too, the pair moves rather
+//!   than the estimate refusing.** The upper rung goes to
+//!   [`upper_rung_rows`] — the lowest height at which the flooring can hide no
+//!   more than [`FLOORED_SHARE_ALLOWED`] of the target's fragment cost — and
+//!   the lower one stays at a quarter, which is cheap and keeps the two rungs
+//!   far enough apart to subtract. At the reference target that is 624 rows
+//!   against 180, so the probe pays 0.81 of a full draw's fragment work rather
+//!   than 0.31, and the answer amplifies noise 1.7-fold rather than 9-fold.
+//!   **What that costs is not what it looks like for the material that needs
+//!   it.** Measured, `drift_shell + soft_points` cost 8.87 ms at 1280x720 and
+//!   9.00 ms at 640x360 — a fragment term of nothing — so 0.81 of a full
+//!   draw's fragments is 0.81 of nothing, and what is paid twice either way is
+//!   the invariant term. It is not a rule: the floor is the *greatest* of the
+//!   renderers' floors, so one hairline renderer beside a fullscreen one puts
+//!   the whole Set down this branch.
 //!
 //! ## Where the floor comes from
 //!
@@ -96,50 +114,132 @@
 //! under a rung, and [`floor_rows`] takes the greatest over the Set's
 //! renderers.
 //!
-//! **The declared range and not the held value**, so that the floor does not
-//! go stale when somebody turns a knob: the estimate is taken once while a slot
-//! primes and read for as long as the slot is on air. Nothing in the engine
-//! clamps a write to a declared range, so a Set holding a value outside one is
-//! outside what the bound covers, and [`Floor::Analysed`]'s `contradicted` is
-//! that case — refused, not estimated.
+//! **Over the declared range, and that is not the reading the rule asks for.**
+//! ADR-0282 settled which state a number about a Set is taken over: a declared
+//! value is the value in the untouched state, and where somebody moved one the
+//! held value *is* the value. `karakuri_ir::rate::point_rate_bound_at` takes a
+//! bound that way and `Set` holds every number it needs, but `Set::rate_bounds`
+//! is computed once at build over the whole declared range and there is no
+//! second reading beside it. What that costs, measured, is in the table below;
+//! ADR-0293 says what closing it needs and why the loosened reading makes the
+//! difference matter much less than it did.
 //!
-//! **Where it cannot bound, it still refuses.** A rate that reaches zero has no
-//! floor at all, and one nothing bounds below has none either;
-//! [`Unfit::FloorUnknown`] is both, with the working on
-//! [`Estimate::floor_from`]. The record is
-//! `docs/adr/0285-a-renderers-floor-is-bounded-from-its-declared-ranges-or-refused.md`.
+//! Going stale when a fader moves is **what the narrower reading is for**, not
+//! a hazard: a write invalidates the estimate standing on it and the estimate
+//! is taken again. `Set::rate_bound_contradicted` is the detection, and
+//! [`Floor::Analysed`]'s `contradicted` carries it — under this module's
+//! reading it makes the floor *unknown* rather than making the estimate
+//! refused, because an unknown floor is a placement and no longer a refusal.
+//!
+//! **Where it cannot bound, the floor is unknown and not zero.** A rate that
+//! reaches zero has no floor at all, and one nothing bounds below has none
+//! either; [`floor_rows`] answers [`Unfit::FloorUnknown`] for both, with the
+//! working on [`Estimate::floor_from`], and [`estimate`] reads that as *the
+//! greatest floor there is* rather than as a refusal — which is sound, because
+//! the bound below holds whatever rates the material emits. The record is
+//! `docs/adr/0285-a-renderers-floor-is-bounded-from-its-declared-ranges-or-refused.md`,
+//! and ADR-0293 for what is now done with the number.
+//!
+//! ## How strictly the floor is read
+//!
+//! **The condition is not that no primitive is floored. It is that what the
+//! flooring can hide is a share this module can state and divide back out.**
+//! ADR-0285 enforced the first and refused the whole shipped per-element
+//! corpus for it; ADR-0293 is why the second is the right reading and this is
+//! the arithmetic behind it.
+//!
+//! Take one primitive that is `x` pixels across at the target, rungs at
+//! `H/p` and `H/q` rows, and `λ = (A − A_lo) / (A_hi − A_lo)`, which is the
+//! factor [`fit`] extrapolates by. Its coverage is `max((x·h/H)², 1)` at every
+//! height, so the coverage the fit predicts for it at the target, less the
+//! coverage it really has there, is
+//!
+//! ```text
+//! u(x) = 0        for x ≤ 1        floored at both rungs and at the target too
+//! u(x) = x² − 1   for 1 ≤ x ≤ q    floored at both rungs, not at the target
+//! u(x) = (λ−1)·(1 − x²/p²)  for q ≤ x ≤ p     floored at the lower rung only
+//! u(x) = 0        for x ≥ p        floored nowhere
+//! ```
+//!
+//! Two things fall out of it, and they are the whole of the change.
+//!
+//! **A primitive floored at the target as well costs the fit nothing.** It is
+//! one pixel at both rungs *and* at the target, so it is a constant, and a fit
+//! that puts a constant in `a` predicts it exactly. That is the case ADR-0285's
+//! reading was refusing over: the primitive holding `soft_points` down to a
+//! 4141-row floor is 0.17 pixels across at a 720-row target and is in this
+//! class.
+//!
+//! **What it can cost is bounded without knowing a thing about the rates.**
+//! `u(x)/max(x², 1)` peaks at `x = q`, where it is `1 − 1/q²`. So the share of
+//! the target's fragment cost the flooring can hide is at most `1 − 1/q²` —
+//! and `q` is the ratio of the target's height to the **upper rung's**, and
+//! nothing else enters: not the lower rung, not the distribution of rates, not
+//! the capacity. Where the floor is known it is tighter still, because no
+//! primitive is smaller than `H / floor` pixels at the target and the peak may
+//! be out of reach; [`floored_share`] is both cases.
+//!
+//! **The same number twice.** `1 − 1/q²` is also the share of a full-size
+//! draw's fragment work the upper rung declines to measure, `q` being a
+//! height ratio and the coverage going as its square. **The error a fit can
+//! hide is the work it did not do** — so this is not a tolerance to be picked
+//! but a price, and [`upper_rung_rows`] is where it is paid.
+//!
+//! **And the answer is divided by what is left.** The truth is at most
+//! `1 / (1 − share)` times the fit, so [`Fit::ms`] carries that factor and the
+//! estimate still rounds toward refusing. [`Estimate::floored`] is `Some` when
+//! it was applied, because an estimate taken under a floored rung is not the
+//! same statement as one taken clear of it.
 //!
 //! ## What this can and cannot answer for
 //!
-//! **A floor that is knowable is not a rung that fits, and that is where the
-//! shipped corpus stands.** Over the fifteen L4 procedures in `examples/`,
-//! three draw no primitive and are answered as they always were; eight of the
-//! remaining twelve state a floor; four cannot be bounded. **None of the eight
-//! leaves room for two rungs under a 720-row target**, because the rungs are
-//! half and a quarter of the target's height and every one of those floors is
-//! above 360 rows:
+//! **Fifteen L4 procedures ship in `examples/`, and after ADR-0293 the floor
+//! refuses none of them at the reference target.** Under ADR-0285's reading it
+//! refused twelve: three draw no primitive and were answered as they always
+//! were, eight stated a floor and every one of those floors was above the
+//! half-height rung, and four could not be bounded at all. The bounds are
+//! written out in `crates/karakuri-ir/tests/rate.rs`; what the floor does with
+//! them is here, and `estimate_over_the_shipped_corpus` in
+//! `tests/estimate.rs` is the same table mechanised.
 //!
-//! | renderer | bounded rate | floor, in rows | what holds it |
-//! |---|---|---|---|
-//! | `plain_points` | 0.0014 | 715 | `point_scale`'s declared minimum, which is the rate |
-//! | `star_flares` | 0.0014 | 715 | the same, times `max(size, 1.0)` |
-//! | `sheet_shade` | 0.00139 | 720 | the constant low end of its own `clamp` |
-//! | `speed_lines` | 0.00069 | 1450 | `width`'s declared minimum, which is the rate |
-//! | `soft_points`, `second_eye`, `glass_shell` | 0.000241 | 4141 | `point_scale`'s minimum, times the 0.35 an element at rest gets |
-//! | `drift_streaks` | 0.000241 | 4141 | the same shape on `width` |
+//! Two readings sit side by side, because `Set::rate_bounds` takes the wider
+//! one and ADR-0282 asks for the narrower: **declared** is over the whole
+//! declared range of every param, **as it stands** is over the value each param
+//! is holding, which for an untouched Set is its declared default.
 //!
-//! So this closes the *floor* and leaves [`Unfit::NoRoomBelowTheTarget`] where
-//! [`Unfit::FloorUnknown`] used to be — which is a different refusal carrying a
-//! number, and it says what would have to change: **the rungs, or the reading
-//! of the floor**. The floor as this module enforces it is *no primitive
-//! anywhere in the frame may be rounded up*, and for `soft_points` the
-//! primitive holding it down is a single element at rest. Whether that is the
-//! condition a fit needs, or whether what it needs is that the floored
-//! primitives' share of the coverage is negligible, is not a question this
-//! module has ever asked and is not one the bound decides.
+//! | renderer | floor, declared | placed | floor, as it stands | placed |
+//! |---|---|---|---|---|
+//! | `field_lens`, `field_march`, `glow_march` | no primitive | clear | no primitive | clear |
+//! | `plain_points` | 715 | 0.2492 | 240 | **clear** |
+//! | `star_flares` | 715 | 0.2492 | 132 | **clear** |
+//! | `sheet_shade` | 720 | 0.2492 | 720 | 0.2492 |
+//! | `speed_lines` | 1450 | 0.2492 | 720 | 0.2492 |
+//! | `soft_points`, `second_eye` | 4141 | 0.2492 | 514 | **0.1618** |
+//! | `glass_shell` | 4141 | 0.2492 | 343 | **clear** |
+//! | `drift_streaks` | 4141 | 0.2492 | 1711 | 0.2492 |
+//! | `strand_strokes` | not known | 0.2492 | 164 | **clear** |
+//! | `hard_dots`, `beat_strokes`, `beat_bloom` | not known | 0.2492 | not known | 0.2492 |
 //!
-//! The four that cannot be bounded are worth naming, because none of them is a
-//! failure of the analysis:
+//! *Clear* means both rungs sit above the floor, so no primitive is rounded up
+//! at either and the fit is exact in ADR-0245's terms — [`Estimate::floored`]
+//! is [`None`]. A share means the lower rung is under the floor, the upper rung
+//! has moved to [`upper_rung_rows`], and [`Fit::ms`] carries the matching
+//! correction: 1.3319 at 0.2492, and 1.1930 at 0.1618.
+//!
+//! **The tally.** Over the declared range, 3 of the 15 are clear and 12 are
+//! floored; over the state as it stands, 7 are clear and 8 are floored, two of
+//! those at the smaller share. **Nothing is refused either way**, where
+//! ADR-0285 refused twelve. So the narrower reading is worth four procedures'
+//! worth of exactness — and one procedure's worth of a bound at all
+//! (`strand_strokes`, whose `width_var` is declared up to 1.0 and held at 0.45)
+//! — and it is **no longer worth an answer**, which is the whole difference
+//! this module's loosening makes to ADR-0285's *three of the eight would place
+//! rungs at 720 rows instead of none*.
+//!
+//! The four the analysis cannot bound are worth naming, because none of them
+//! is a failure of the analysis — and none of them is a refusal any more
+//! either, an unknown floor being the greatest floor there is rather than a
+//! missing one:
 //!
 //! - `hard_dots` — `dot_scale * size`, and `size` is an attribute whatever the
 //!   simulation put in it. There is no declaration to read.
@@ -147,32 +247,32 @@
 //! - `beat_bloom` — `width * max(spill, age * glitch_glow)`, where `spill` is a
 //!   `pow` that genuinely reaches zero and `glitch_glow` may be zero too. The
 //!   rate really does reach zero, and a rate of zero has no floor.
-//! - `strand_strokes` — `point_scale * (1.0 - width_var + width_var * hash1(..)
-//!   * 2.0)`, and `width_var` is declared up to 1.0, where the first term is
-//!   zero and `hash1` may be zero with it. The same: it reaches zero.
+//! - `strand_strokes` — `point_scale * (1.0 - width_var + width_var *
+//!   hash1(..) * 2.0)`, and `width_var` is declared up to 1.0, where the first
+//!   term is zero and `hash1` may be zero with it. The same over the
+//!   declaration; over the held 0.45 it bounds at 0.0061.
 //!
-//! Two of the four say something about the material rather than about the
-//! analysis: a Set whose primitives can be zero across draws nothing for those
-//! elements, and no height makes them a pixel.
+//! A Set whose primitives can be zero across draws nothing for those elements,
+//! and no height makes them a pixel — which under the reading in *How strictly
+//! the floor is read* costs the fit nothing at all: `u(0) = 0`.
 //!
-//! **The rates the material actually emits**, measured, are what say the room
-//! is not there under the bound's conservatism either. These are per element
-//! rather than per procedure — the same Set emits several — and the floor is
-//! [`sub_pixel_floor_rows`] of the rate beside it, recomputed here because
-//! three of the five as this table first carried them were not:
+//! **The rates the material actually emits**, measured, are what the floor is
+//! conservative against. These are per element rather than per procedure — the
+//! same Set emits several — and the floor is [`sub_pixel_floor_rows`] of the
+//! rate beside it:
 //!
-//! | material and setting | emitted rate | floor, in rows | fits under 360? |
+//! | material and setting | emitted rate | floor, in rows | pixels at a 720-row target |
 //! |---|---|---|---|
-//! | `soft_points`, fastest elements | 0.00556 | 180 | yes |
-//! | `soft_points`, slowest elements | 0.00195 | 513 | no |
-//! | `drift_streaks`, fastest | 0.00167 | 599 | no |
-//! | `speed_lines` | 0.00139 | 720 | no |
-//! | `drift_streaks`, slowest | 0.00058 | 1725 | no |
+//! | `soft_points`, fastest elements | 0.00556 | 180 | 4.0 |
+//! | `soft_points`, slowest elements | 0.00195 | 513 | 1.4 |
+//! | `drift_streaks`, fastest | 0.00167 | 599 | 1.2 |
+//! | `speed_lines` | 0.00139 | 720 | 1.0 |
+//! | `drift_streaks`, slowest | 0.00058 | 1725 | 0.42 |
 //!
-//! So the bound is not what puts the corpus out of reach. One row of five is
-//! under the upper rung, and it is one *setting* of one material rather than a
-//! Set: `soft_points` emits the 514-row rate for any element at rest, in the
-//! same frame.
+//! The last column is `x` in *How strictly the floor is read*, and it is what
+//! says the shipped material sits in the band the correction is sized for: one
+//! row is under a pixel at the target and costs the fit nothing, and the rest
+//! are between one and four.
 //!
 //! ## The instrument travels with the number
 //!
@@ -263,6 +363,106 @@ pub fn sub_pixel_floor_rows(rate: f32) -> Option<u32> {
     Some((rows as u32).max(1))
 }
 
+/// **The share of a target's fragment cost a fit is allowed to hide.**
+///
+/// ADR-0245's flooring lets a two-rung fit under-state, and *How strictly the
+/// floor is read* in the module doc bounds by how much: at most `1 − 1/q²` of
+/// the target's fragment cost, `q` being the target's height over the upper
+/// rung's. [`fit`] divides the answer by `1 − share`, so the estimate still
+/// rounds toward refusing; what remains to be fixed is how large a share is
+/// worth paying for.
+///
+/// **A quarter, and it is derived from the bands the number feeds.** The
+/// console reads an estimate into five bands whose boundaries are 4, 8, 12 and
+/// 16 ms — four slots to a 16.7 ms frame — and a value on a boundary rounds to
+/// the worse band (`docs/manual/console.html`). So a correction of
+/// `1/(1 − 1/4) = 4/3` moves a slot by at most one band anywhere on that scale,
+/// and the binding case is the last boundary: 12 ms corrected is 16 ms, exactly
+/// the boundary of the band that stops a slot. A fifth more would put a slot
+/// the truth leaves in red into purple on the correction alone, and the number
+/// would be doing the badge's deciding for it.
+///
+/// **It is not a tolerance, it is a price**, and [`upper_rung_rows`] is where
+/// it is paid: `1 − 1/q²` is equally the share of a full draw's fragment work
+/// the upper rung declines to measure. Buying a smaller correction means
+/// drawing nearer to full size.
+pub const FLOORED_SHARE_ALLOWED: f64 = 0.25;
+
+/// **Where the upper rung goes when the floor is under it**, in rows.
+///
+/// The lowest height at which the flooring can hide no more than
+/// [`FLOORED_SHARE_ALLOWED`] — `ceil(rows · √(1 − allowed))`, rounded **up**
+/// because rounding down would put the share over the allowance. At the
+/// reference target's 720 rows that is 624, which hides 0.2492.
+///
+/// Pure arithmetic, and the only thing it is a function of is the target: the
+/// bound in *How strictly the floor is read* does not depend on the floor, on
+/// the lower rung, or on anything about the material.
+pub fn upper_rung_rows(rows: u32) -> u32 {
+    let rows = rows.max(1);
+    let wanted = f64::from(rows) * (1.0 - FLOORED_SHARE_ALLOWED).sqrt();
+    (wanted.ceil() as u32).clamp(1, rows)
+}
+
+/// **How much of the target's fragment cost ADR-0245's flooring can hide from
+/// a fit through these two rungs**, as a share between 0 and 1.
+///
+/// The derivation is *How strictly the floor is read* in the module doc, and
+/// this is the three cases it ends in. `x` is the smallest primitive in the
+/// frame measured in pixels across **at the target** — `target rows / floor` —
+/// so a large floor is a small `x`, and `p` and `q` are the target's height
+/// over the lower and the upper rung's.
+///
+/// - `x ≥ p`: nothing is floored at either rung and the fit is exact. **Zero.**
+/// - `x ≤ q`: the worst primitive is at or below the peak of `u(x)/x²`, so the
+///   bound is the peak itself, `1 − 1/q²`.
+/// - between: the peak is out of reach, and the bound falls away as
+///   `(λ−1)·(1 − x²/p²)/x²` — where `λ` is [`fit`]'s own extrapolation factor,
+///   so the two cannot disagree about the line.
+///
+/// **The rungs' heights and not their areas**, because the flooring is about a
+/// primitive's size across; `λ` is taken from the areas because that is what
+/// the fit is solved in. For a pair at the target's aspect ratio — which is
+/// what [`rungs`] places, and what the module doc's *forced* list requires —
+/// the two agree.
+pub fn floored_share(low: (u32, u32), high: (u32, u32), target: (u32, u32), floor: u32) -> f64 {
+    let rows = f64::from(target.1.max(1));
+    let p = rows / f64::from(low.1.max(1));
+    let q = rows / f64::from(high.1.max(1));
+    // An upper rung at the target extrapolates nothing, so there is nothing
+    // for the flooring to hide behind.
+    if q <= 1.0 {
+        return 0.0;
+    }
+    let x = rows / f64::from(floor.max(1));
+    if x >= p {
+        return 0.0;
+    }
+    let spread = area(high) - area(low);
+    let lambda = if spread > 0.0 {
+        (area(target) - area(low)) / spread
+    } else {
+        f64::NAN
+    };
+    if !lambda.is_finite() || lambda <= 1.0 {
+        // No extrapolation, or none this function can read. The peak of the
+        // rising branch is the only claim left that does not rest on `λ`.
+        return (1.0 - 1.0 / (q * q)).clamp(0.0, 1.0);
+    }
+    let falling = |x: f64| (lambda - 1.0) * (1.0 - x * x / (p * p)) / (x * x);
+    if x > q {
+        return falling(x).clamp(0.0, 1.0);
+    }
+    // **The greater of the two branches at their meeting point**, rather than
+    // the rising branch's `1 - 1/q²` alone. The two are equal for rungs whose
+    // areas are exactly the target's times the square of their height ratio,
+    // and `at_rows` truncates a width to an integer — so a rung can be a hair
+    // smaller in area than its height implies, which lifts `λ` and with it the
+    // falling branch. Taking the greater is what keeps this an upper bound
+    // rather than a nearly-right one.
+    (1.0 - 1.0 / (q * q)).max(falling(q)).clamp(0.0, 1.0)
+}
+
 /// **The floor under a Set whose renderers bound their rates like this**, in
 /// rows, or [`Unfit::FloorUnknown`] when one of them could not.
 ///
@@ -327,23 +527,85 @@ pub enum Floor {
     },
 }
 
+/// **That the lower rung sat under the floor, and what was done about it.**
+///
+/// [`Floor`] says where the floor came from; this says how strictly it was
+/// read, which is the other half of what `P-0095` asks of the number. An
+/// estimate taken with every primitive at least a pixel across at both rungs
+/// and one taken with some of them rounded up are **not the same statement**,
+/// and [`Estimate::floored`] is `None` for the first.
+///
+/// The arithmetic is *How strictly the floor is read* in the module doc and
+/// [`floored_share`]; ADR-0293 is the record.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Floored {
+    /// **The share of the target's fragment cost the flooring can hide**. A
+    /// bound and not a measurement: what it actually hid may be nothing at all.
+    ///
+    /// At most [`FLOORED_SHARE_ALLOWED`] wherever there is a fit, because a
+    /// pair that would hide more is [`Unfit::FlooringHidesTooMuch`] — which
+    /// carries this same number, and on whose [`Estimate`] this field is what
+    /// the rungs *would* have hidden.
+    pub share: f64,
+    /// **What [`Fit::ms`] was multiplied by**, which is `1 / (1 - share)`. The
+    /// truth is at most this times the raw fit, so applying it is what keeps
+    /// the estimate rounding toward refusing.
+    pub correction: f64,
+}
+
 /// **Where the two draws are taken**, for a target and a floor. Low area first.
 ///
-/// Half and a quarter of the target's height, both scaled by one factor so the
-/// aspect ratio is the target's; the lower one raised to `floor` where the
-/// quarter-height rung would sit under it. See *What the language forces, and
-/// what is chosen* in the module doc.
+/// **The cheap pair, where the floor allows it.** Half and a quarter of the
+/// target's height, both scaled by one factor so the aspect ratio is the
+/// target's, the lower one raised to `floor` where the quarter-height rung
+/// would sit under it. Nothing is floored at either rung, so the fit is exact
+/// in ADR-0245's terms and [`floored_share`] of the pair is zero.
 ///
-/// **Pure arithmetic** — no device, no queue.
+/// **The accurate pair, where it does not.** A floor above the half-height
+/// rung used to be [`Unfit::NoRoomBelowTheTarget`] and is the whole of the
+/// shipped per-element corpus (ADR-0285). Here the upper rung moves to
+/// [`upper_rung_rows`] instead — far enough up that the flooring can hide no
+/// more than [`FLOORED_SHARE_ALLOWED`], which [`fit`] then divides back out —
+/// and the lower one stays at a quarter of the target's height, where it is
+/// cheap and far enough from the upper rung to subtract against.
+///
+/// **`floor` is only asked which of the two.** The bound the accurate pair
+/// rests on holds for any rate whatever, so `u32::MAX` — [`estimate`]'s
+/// spelling of *the floor is not known* — is a placement and not a refusal.
+///
+/// What is left to refuse is a target too short to hold two distinct rungs
+/// under it at all. That is only reachable down the second branch, where the
+/// upper rung rounds up onto the target itself: at [`FLOORED_SHARE_ALLOWED`],
+/// a target under eight rows whose floor clears the half-height rung.
+///
+/// **Pure arithmetic** — no device, no queue. See *What the language forces,
+/// and what is chosen* in the module doc, and ADR-0293.
 pub fn rungs(target: (u32, u32), floor: u32) -> Result<[(u32, u32); 2], Unfit> {
     let rows = target.1.max(1);
     let floor = floor.max(1);
     let high = (rows / 2).max(1);
     let low = (rows / 4).max(1).max(floor);
-    if high < floor || low >= high {
-        return Err(Unfit::NoRoomBelowTheTarget { floor, target });
+    if high >= floor && low < high {
+        return Ok([at_rows(target, low), at_rows(target, high)]);
     }
-    Ok([at_rows(target, low), at_rows(target, high)])
+    let low = (rows / 4).max(1);
+    let placed = at_rows(target, low);
+    // **`upper_rung_rows` answers in heights and the allowance is a fact about
+    // the pair as placed**, which is integers: `at_rows` truncates a width, so
+    // a rung can be a hair under the area its height implies and hide a hair
+    // more than the allowance. One row up is enough at every size in the
+    // corpus and the search is what makes the guarantee hold rather than very
+    // nearly hold.
+    for high in upper_rung_rows(rows)..rows {
+        if high <= low {
+            continue;
+        }
+        let up = at_rows(target, high);
+        if floored_share(placed, up, target, u32::MAX) <= FLOORED_SHARE_ALLOWED {
+            return Ok([placed, up]);
+        }
+    }
+    Err(Unfit::NoRoomBelowTheTarget { floor, target })
 }
 
 /// `target` scaled to `rows` rows, keeping its aspect ratio and never reaching
@@ -385,6 +647,13 @@ pub struct Estimate {
     /// **Where that floor came from**, whether or not there was one. See
     /// [`Floor`]: the whole of what makes the number above checkable.
     pub floor_from: Floor,
+    /// **How strictly that floor was read**, which is the other half of the
+    /// same question. [`None`] means both rungs cleared the floor and no
+    /// primitive was rounded up at either — ADR-0285's reading, and the one
+    /// under which the fit is exact. [`Some`] means the lower rung sat under
+    /// it, and carries the share the flooring can hide and the factor
+    /// [`Fit::ms`] was multiplied by to cover it.
+    pub floored: Option<Floored>,
     /// The two draws, **low area first**, each with its own instrument,
     /// capacity and size on it. [`None`] when the rungs could not be placed, in
     /// which case nothing was drawn and nothing was spent.
@@ -431,7 +700,14 @@ impl Estimate {
 /// and a fit that says otherwise measured something other than what it thinks.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Fit {
-    /// `a + b·area`, at [`Estimate::target`], in milliseconds.
+    /// `a + b·area` at [`Estimate::target`], in milliseconds, **times
+    /// [`Floored::correction`] where there was one**.
+    ///
+    /// So this is [`Fit::invariant_ms`] plus [`Fit::fragment_ms`] where
+    /// [`Estimate::floored`] is [`None`], and strictly more than their sum
+    /// where it is not: the other three fields are the line that was fitted
+    /// and this is the answer that line supports, which under a floored rung
+    /// is the higher of the two.
     pub ms: f32,
     /// **`a`**: the part that does not move with the target — the simulation
     /// over `capacity`, the vertex stage per primitive, and on a host clock the
@@ -467,27 +743,44 @@ pub enum Unfit {
     /// A caller that knows the smallest rate its material emits — from a
     /// measurement, or from a narrower reading than the declared ranges — has
     /// [`estimate_above_floor`].
+    ///
+    /// **[`floor_rows`]'s answer and no longer [`estimate`]'s.** ADR-0293 made
+    /// an unknown floor a rung placement rather than a refusal: the share the
+    /// flooring can hide is bounded whatever the rates are, so *not known* is
+    /// read as the greatest floor there is and paid for like any other.
     FloorUnknown,
-    /// **Two rungs above the floor and below the target do not both fit.**
-    /// **This is what every per-element Set in `examples/` answers at the
-    /// reference size**, and it is where ADR-0285 left them: the rungs are half
-    /// and a quarter of the target's height, and the lowest floor any of them
-    /// states is 715 rows against an upper rung of 360. `speed_lines` is the
-    /// starkest — its `width` is one pixel at 720 rows and the target is 720 —
-    /// but it is not the exception. Nothing was drawn.
+    /// **Two distinct rungs do not fit under the target at all.**
+    ///
+    /// It used to be what every per-element Set in `examples/` answered at the
+    /// reference size — ADR-0285's floors run from 715 rows to 4141 against an
+    /// upper rung of 360 — and ADR-0293 moved the upper rung instead. What
+    /// reaches this now is a target too short to hold a pair down the accurate
+    /// branch, where the upper rung rounds up onto the target itself: under
+    /// eight rows at [`FLOORED_SHARE_ALLOWED`]. Nothing was drawn.
     NoRoomBelowTheTarget {
         /// The floor that left no room, in rows.
         floor: u32,
         /// The target the rungs were being placed under.
         target: (u32, u32),
     },
-    /// A rung was handed to [`fit`] below the floor it was measured against.
-    /// [`rungs`] never produces one; a caller supplying its own can.
-    RungBelowFloor {
-        /// The offending rung.
-        rung: (u32, u32),
-        /// The floor it sits under, in rows.
-        floor: u32,
+    /// **The rungs would let ADR-0245's flooring hide more of the target's
+    /// fragment cost than [`FLOORED_SHARE_ALLOWED`].**
+    ///
+    /// The correction that would make such a fit sound is bigger than a whole
+    /// band of the badge it feeds, so what came back would be a refusal
+    /// wearing a number's clothes. [`rungs`] never produces such a pair — it
+    /// moves the upper rung until the share is inside the allowance — so this
+    /// is for a caller placing its own, which is what [`estimate_above_floor`]
+    /// and [`fit`] are for.
+    ///
+    /// It replaces the flat *a rung below the floor is refused*: a rung under
+    /// the floor is now a question of how much, and the module doc's *How
+    /// strictly the floor is read* is the arithmetic.
+    FlooringHidesTooMuch {
+        /// What [`floored_share`] answered for the pair.
+        share: f64,
+        /// [`FLOORED_SHARE_ALLOWED`], so a reader has both halves.
+        allowed: f64,
     },
     /// The two rungs have the same area, so `b` is `0/0`. Two draws at one size
     /// are one measurement taken twice.
@@ -547,6 +840,17 @@ pub fn fit(
     } else {
         [second, first]
     };
+    // **How much of the answer the sub-pixel floor can hide**, from where the
+    // rungs sit rather than from what the material is — see *How strictly the
+    // floor is read*. Zero where both rungs clear the floor, which is the
+    // exact case and the one [`rungs`] reaches first. Computed before anything
+    // else because it is a fact about the placement, and a refusal is owed it
+    // as much as a fit is.
+    let share = floored_share(low.resolution, high.resolution, target, floor);
+    let floored = (share > 0.0).then(|| Floored {
+        share,
+        correction: 1.0 / (1.0 - share),
+    });
     let refuse = |why: Unfit| Estimate {
         target,
         topologies: topologies.clone(),
@@ -554,6 +858,7 @@ pub fn fit(
         // The floor arrived as a number and this function has no way back to
         // what produced it. [`estimate`] replaces this on the way out.
         floor_from: Floor::Stated,
+        floored,
         rungs: Some([low, high]),
         fit: Err(why),
     };
@@ -561,10 +866,11 @@ pub fn fit(
     if low.method != high.method {
         return refuse(Unfit::InstrumentsDiffer);
     }
-    for rung in [low.resolution, high.resolution] {
-        if rung.1 < floor {
-            return refuse(Unfit::RungBelowFloor { rung, floor });
-        }
+    if share > FLOORED_SHARE_ALLOWED {
+        return refuse(Unfit::FlooringHidesTooMuch {
+            share,
+            allowed: FLOORED_SHARE_ALLOWED,
+        });
     }
     let (a_low, a_high) = (area(low.resolution), area(high.resolution));
     if a_low == a_high {
@@ -588,7 +894,11 @@ pub fn fit(
         });
     }
     let fragment = b * area(target);
-    let ms = a + fragment;
+    // **The correction is the whole of what a floored rung costs**, and it is
+    // applied to the answer rather than to either term: the undershoot is in
+    // the fragment work, but the fit misattributes part of it to `a`, so the
+    // sound statement is about the sum. `a >= 0` is what makes it sound.
+    let ms = (a + fragment) / (1.0 - share);
     if !ms.is_finite() {
         return refuse(Unfit::NotFinite);
     }
@@ -597,6 +907,7 @@ pub fn fit(
         topologies,
         floor: Some(floor),
         floor_from: Floor::Stated,
+        floored,
         rungs: Some([low, high]),
         fit: Ok(Fit {
             ms: ms as f32,
@@ -616,17 +927,23 @@ pub fn fit(
 /// **The floor is [`floor_rows`] over `Set::rate_bounds`**, which is
 /// `karakuri_ir::rate`'s static bound on each renderer's `point_rate` against
 /// its params' declared ranges. A renderer whose rate that analysis cannot hold
-/// above zero is answered [`Unfit::FloorUnknown`] **without anything being
-/// drawn**, and so is a Set holding a value outside a declaration one of the
-/// bounds was taken over — see [`Floor`] for both, and
-/// `docs/adr/0285-a-renderers-floor-is-bounded-from-its-declared-ranges-or-refused.md`
-/// for why a refusal is the answer rather than a guess.
+/// above zero, and a Set holding a value outside a declaration one of the
+/// bounds was taken over, both leave the floor **unknown** — see [`Floor`] for
+/// the working, which travels on [`Estimate::floor_from`] either way.
 ///
-/// **A floor that is knowable is not the same as a rung that fits.** The floors
-/// the shipped corpus states are mostly above half the reference target's
-/// height, and a floor above the upper rung is [`Unfit::NoRoomBelowTheTarget`]
-/// — a different refusal, arrived at with the floor in hand and with the number
-/// on it. See *What this can and cannot answer for* in the module doc.
+/// **An unknown floor is not a refusal.** It is passed to [`rungs`] as the
+/// greatest floor there is, which places the accurate pair, and the answer
+/// carries the correction that placement earns. That is ADR-0293 replacing
+/// ADR-0285's `Unfit::FloorUnknown`, and it is sound because the share the
+/// flooring can hide does not depend on the rates at all — see *How strictly
+/// the floor is read* in the module doc.
+///
+/// **What the floor still decides is the placement and the statement.** Where
+/// it clears the quarter-height rung the cheap pair is drawn, nothing is
+/// rounded up at either rung, the fit is exact and [`Estimate::floored`] is
+/// [`None`]. Where it does not, the upper rung moves, the probe costs about
+/// two and a half times as much fragment work, and the answer is corrected.
+/// [`Estimate::floor`] is [`None`] when the floor was not knowable at all.
 ///
 /// Everything else is [`estimate_above_floor`]'s, including the restoration of
 /// the Set and the handling of the probe.
@@ -637,7 +954,6 @@ pub fn estimate(
     set: &mut Set,
     target: (u32, u32),
 ) -> Estimate {
-    let topologies = set.drawn_topologies();
     let from = Floor::Analysed {
         bounds: set.rate_bounds().to_vec(),
         contradicted: set.rate_bound_contradicted(),
@@ -650,33 +966,26 @@ pub fn estimate(
         unreachable!("just built as Analysed")
     };
     // **A held value outside a declaration falsifies the bound taken over it**,
-    // and a bound that is not true of the run is not a floor. Refused before
-    // the arithmetic rather than after, because there is nothing wrong with the
-    // arithmetic.
-    let placed = if contradicted.is_some() {
-        Err(Unfit::FloorUnknown)
+    // and a bound that is not true of the run is not a floor. It is not a
+    // refusal either: an unknown floor is *the greatest floor there is*, which
+    // is a placement.
+    let known = if contradicted.is_some() {
+        None
     } else {
-        floor_rows(bounds)
+        floor_rows(bounds).ok()
     };
-    match placed {
-        Ok(floor) => {
-            let mut e = estimate_above_floor(probe, device, queue, set, target, floor);
-            // **The floor came from the Set and the record has to say so.**
-            // `estimate_above_floor` is the caller-stated path and marks every
-            // answer it builds [`Floor::Stated`]; this is the one call site that
-            // knows better.
-            e.floor_from = from;
-            e
-        }
-        Err(why) => Estimate {
-            target,
-            topologies,
-            floor: None,
-            floor_from: from,
-            rungs: None,
-            fit: Err(why),
-        },
-    }
+    // **`u32::MAX` is how *not known* is spelled to [`rungs`]**, and it is the
+    // sound reading rather than a sentinel: a floor of `u32::MAX` rows says
+    // every primitive is under a pixel at any size anybody will draw, which is
+    // the worst case the bound in *How strictly the floor is read* covers.
+    let mut e = estimate_above_floor(probe, device, queue, set, target, known.unwrap_or(u32::MAX));
+    // **The floor came from the Set and the record has to say so.**
+    // `estimate_above_floor` is the caller-stated path and marks every answer
+    // it builds [`Floor::Stated`]; this is the one call site that knows better,
+    // and the one that can say the floor was not knowable at all.
+    e.floor = known;
+    e.floor_from = from;
+    e
 }
 
 /// **[`estimate`], for a caller that knows the floor.**
@@ -729,6 +1038,7 @@ pub fn estimate_above_floor(
                 topologies,
                 floor: Some(floor),
                 floor_from: Floor::Stated,
+                floored: None,
                 rungs: None,
                 fit: Err(why),
             }
@@ -904,11 +1214,19 @@ mod tests {
         }
     }
 
-    /// **A rung under ADR-0245's floor is refused rather than fitted.** It
-    /// measures a different picture — every primitive rounded up to one pixel
-    /// and dimmed — so the pair is not two points on one curve.
+    /// **A rung far enough under ADR-0245's floor is still refused.** The
+    /// pair here is the *cheap* one — half and a quarter of the target's
+    /// height — against `speed_lines`' 720-row floor, so the upper rung is at
+    /// half the target and `1 - 1/q²` is 3/4: three quarters of the target's
+    /// fragment cost could be hidden, against an allowance of a quarter.
+    ///
+    /// **This is what [`Unfit::RungBelowFloor`] used to be**, and the
+    /// difference is the whole of ADR-0293: a rung under the floor is a
+    /// question of how much, not a wall. [`rungs`] never produces this pair —
+    /// it moves the upper rung — and a caller placing its own gets the number
+    /// its placement earns.
     #[test]
-    fn a_rung_below_the_sub_pixel_floor_is_refused() {
+    fn a_pair_that_would_hide_too_much_of_the_frame_is_refused() {
         let e = fit(
             measured(4.0, (320, 180)),
             measured(6.0, (640, 360)),
@@ -918,63 +1236,278 @@ mod tests {
             vec![Topology::Lines],
         );
         match e.fit {
-            Err(Unfit::RungBelowFloor { rung, floor }) => {
-                assert_eq!(rung, (320, 180));
-                assert_eq!(floor, 720);
+            Err(Unfit::FlooringHidesTooMuch { share, allowed }) => {
+                assert!(
+                    (share - 0.75).abs() < 1e-9,
+                    "an upper rung at half the target hides 3/4, not {share}"
+                );
+                assert_eq!(allowed, FLOORED_SHARE_ALLOWED);
             }
-            other => panic!("expected a below-floor refusal, got {other:?}"),
+            other => panic!("expected a hidden-share refusal, got {other:?}"),
         }
+        assert_eq!(e.ms(), None, "a refusal hands out no number");
     }
 
-    /// **The shipped `Lines` pairing has nowhere to stand.** `speed_lines`
-    /// ships `width` at 0.00139 — its own comment calls it *one pixel at 720
-    /// rows* — so its floor is 720 rows and so is the reference target. There
-    /// is no rung below the target that is not also below the floor, and
-    /// nothing is drawn.
+    /// **The shipped `Lines` pairing now has somewhere to stand.**
+    /// `speed_lines` ships `width` at 0.00139 — its own comment calls it *one
+    /// pixel at 720 rows* — so its floor is 720 rows and so is the reference
+    /// target. Under ADR-0285 that was [`Unfit::NoRoomBelowTheTarget`]; under
+    /// ADR-0293 the upper rung moves to [`upper_rung_rows`] and the pair is
+    /// placed.
     ///
     /// **720 rather than 719**, which this said until ADR-0285 and which
     /// [`a_rate_becomes_the_height_at_which_it_is_one_pixel`] has always
     /// contradicted: `1 / 0.00139` is 719.4 and the floor rounds up.
     #[test]
-    fn a_floor_at_the_target_leaves_no_room_for_two_rungs() {
+    fn a_floor_at_the_target_moves_the_upper_rung_rather_than_refusing() {
         let floor = sub_pixel_floor_rows(0.001_39).expect("a positive rate has a floor");
         assert_eq!(floor, 720);
-        let why = rungs(PROBE_RESOLUTION, floor).expect_err("720 rows under a 720-row target");
-        assert_eq!(
-            why,
-            Unfit::NoRoomBelowTheTarget {
-                floor: 720,
-                target: PROBE_RESOLUTION
-            }
+        let [low, high] = rungs(PROBE_RESOLUTION, floor).expect("the upper rung moves");
+        assert_eq!(low, (320, 180));
+        assert_eq!(high, (1109, 624));
+        let share = floored_share(low, high, PROBE_RESOLUTION, floor);
+        assert!(
+            share <= FLOORED_SHARE_ALLOWED,
+            "{share} is over the allowance the rung was placed to meet"
         );
     }
 
-    /// **The finest floor the shipped corpus states still leaves no room.** A
-    /// floor being knowable and a pair of rungs fitting under it are two
-    /// conditions, and this is the one that is still open — see *What this can
-    /// and cannot answer for* in the module doc, and ADR-0285.
+    /// **Every floor the shipped corpus states is placed now, and none of them
+    /// hides more than the allowance.** This is
+    /// `no_shipped_per_element_floor_leaves_room_under_the_reference_target`
+    /// turned round: it was written the morning ADR-0285 landed to mechanise
+    /// the finding that the whole per-element corpus refused, and ADR-0293 is
+    /// what changed the finding.
     ///
-    /// 715 rows is `plain_points` and `star_flares` — `point_scale`'s declared
-    /// minimum, the lowest floor any per-element renderer in `examples/` states
-    /// — against a 720-row target whose upper rung is 360. Every other one is
-    /// higher. `crates/karakuri-ir/tests/rate.rs` is where the eight floors are
-    /// written out.
+    /// The floors are the eight in `crates/karakuri-ir/tests/rate.rs` taken
+    /// over the declared ranges, plus `u32::MAX` for the four that cannot be
+    /// bounded at all — which [`estimate`] passes as *not known* and which is
+    /// the worst case rather than a sentinel.
     #[test]
-    fn no_shipped_per_element_floor_leaves_room_under_the_reference_target() {
-        for floor in [715, 720, 1450, 4141] {
-            assert_eq!(
-                rungs(PROBE_RESOLUTION, floor),
-                Err(Unfit::NoRoomBelowTheTarget {
-                    floor,
-                    target: PROBE_RESOLUTION
-                }),
-                "a floor of {floor} rows"
+    fn every_shipped_floor_is_placed_and_none_hides_more_than_the_allowance() {
+        for floor in [715, 720, 1450, 4141, u32::MAX] {
+            let [low, high] =
+                rungs(PROBE_RESOLUTION, floor).unwrap_or_else(|e| panic!("{floor} rows: {e:?}"));
+            assert_eq!((low, high), ((320, 180), (1109, 624)), "a floor of {floor}");
+            let share = floored_share(low, high, PROBE_RESOLUTION, floor);
+            assert!(
+                (0.249_1..=FLOORED_SHARE_ALLOWED).contains(&share),
+                "a floor of {floor} rows hides {share}"
             );
         }
-        // And what it would take: the upper rung is half the target's height,
-        // so the target has to be twice the floor before there is anywhere to
-        // stand.
-        assert!(rungs((2560, 1440), 715).is_ok());
+        // And the cheap pair is still what a floor under the quarter-height
+        // rung gets, with nothing hidden at all.
+        let [low, high] = rungs(PROBE_RESOLUTION, 180).expect("180 is the quarter-height rung");
+        assert_eq!((low, high), ((320, 180), PREPARATION_RESOLUTION));
+        assert_eq!(floored_share(low, high, PROBE_RESOLUTION, 180), 0.0);
+    }
+
+    /// **The upper rung is where the allowance puts it, and no higher.**
+    /// `ceil` rather than `round`, because rounding down would put the share
+    /// over the allowance the rung exists to meet.
+    #[test]
+    fn the_accurate_upper_rung_is_the_lowest_one_inside_the_allowance() {
+        for rows in [8u32, 63, 100, 360, 720, 1080, 2160] {
+            let high = upper_rung_rows(rows);
+            let share = 1.0 - (f64::from(high) / f64::from(rows)).powi(2);
+            assert!(share <= FLOORED_SHARE_ALLOWED, "{rows} rows hides {share}");
+            let under = 1.0 - (f64::from(high - 1) / f64::from(rows)).powi(2);
+            assert!(
+                under > FLOORED_SHARE_ALLOWED,
+                "{rows} rows would still be inside the allowance one row lower"
+            );
+        }
+        assert_eq!(upper_rung_rows(720), 624);
+    }
+
+    /// **A floor between the two rungs hides less than the peak**, because no
+    /// primitive in the frame is small enough to reach it. That is the middle
+    /// branch of [`floored_share`], and it is what makes the bound tight
+    /// rather than merely sound.
+    #[test]
+    fn a_floor_the_frame_cannot_reach_hides_less_than_the_peak() {
+        let (low, high) = ((320, 180), (1109, 624));
+        let peak = floored_share(low, high, PROBE_RESOLUTION, u32::MAX);
+        let near = floored_share(low, high, PROBE_RESOLUTION, 400);
+        assert!(
+            near < peak / 2.0,
+            "a 400-row floor hides {near} against a worst case of {peak}"
+        );
+        // And a floor the cheap pair clears hides nothing whatever the rungs.
+        assert_eq!(floored_share(low, high, PROBE_RESOLUTION, 180), 0.0);
+    }
+
+    /// **The correction covers what the flooring hides, on a frame built to
+    /// hide the most it can.**
+    ///
+    /// The derivation in *How strictly the floor is read* is worth only what
+    /// it is checked against, so this builds the adversary it claims to bound:
+    /// a quarter of a million primitives all at the one size that maximises
+    /// `u(x)/x²`, which is `x = q` — one pixel across at the upper rung, and
+    /// `q` pixels at the target. Their coverage is computed with ADR-0245's
+    /// rounding at each rung, turned into a millisecond figure at a made-up
+    /// cost per covered pixel, fitted, and the answer compared with the truth.
+    ///
+    /// **Synthetic on purpose.** What is under test is the arithmetic of the
+    /// bound; a real draw would be testing the machine.
+    #[test]
+    fn the_correction_covers_the_worst_frame_the_flooring_can_build() {
+        const COUNT: f64 = 262_144.0;
+        // Milliseconds per covered pixel, and the simulation-and-vertex term
+        // that does not move with the target. Neither figure matters to the
+        // bound; they are chosen so the frame is mostly fragment work, which
+        // is what puts the undershoot near the whole of the share rather than
+        // near a fraction of it — the bound is on the *fragment* cost.
+        const PER_PIXEL: f64 = 2.0e-5;
+        const INVARIANT: f64 = 0.5;
+
+        let target = PROBE_RESOLUTION;
+        let floor = u32::MAX;
+        let [low, high] = rungs(target, floor).expect("the accurate pair");
+        let rows = f64::from(target.1);
+        // The worst primitive there is: one pixel across at the upper rung.
+        let x = rows / f64::from(high.1);
+        // ADR-0245: a primitive under a pixel is drawn at one and dimmed, so
+        // its coverage stops falling.
+        let coverage = |h: u32| {
+            let across = x * f64::from(h) / rows;
+            COUNT * across.max(1.0).powi(2)
+        };
+        let cost = |h: u32| INVARIANT + PER_PIXEL * coverage(h);
+
+        let e = fit(
+            measured(cost(low.1) as f32, low),
+            measured(cost(high.1) as f32, high),
+            target,
+            floor,
+            vec![Topology::Points],
+        );
+        let f = e.fit.expect("the accurate pair fits");
+        let truth = cost(target.1);
+        assert!(
+            f64::from(f.ms) >= truth,
+            "the corrected estimate is {:.3} ms against a truth of {truth:.3} ms, which is the \
+             undershoot the correction exists to cover",
+            f.ms
+        );
+        // And the raw fit is what it was rescued from: under-stating by very
+        // nearly the whole share.
+        let raw = f64::from(f.invariant_ms) + f64::from(f.fragment_ms);
+        assert!(
+            raw < truth,
+            "the raw fit came out {raw:.3} ms and the truth is {truth:.3}, so this frame is not \
+             the adversary it is written as"
+        );
+        let hid = 1.0 - raw / truth;
+        let floored = e.floored.expect("a floored rung is on the record");
+        assert!(
+            hid <= floored.share + 1e-9,
+            "the flooring hid {hid} where the bound says at most {}",
+            floored.share
+        );
+        // **And the adversary is a real one**: it hides very nearly the whole
+        // of what the bound allows, so the correction is being exercised at
+        // its limit rather than against a frame that never needed it.
+        assert!(
+            hid > floored.share * 0.9,
+            "this frame hid only {hid} of an allowed {}, so it is not the worst case",
+            floored.share
+        );
+    }
+
+    /// **A stroke floors in one dimension and is milder throughout**, which
+    /// is why one rule answers for both and why the bound is stated for the
+    /// sprite. A stroke's coverage is its length times its width and only the
+    /// width floors, so under a pixel its coverage falls off linearly rather
+    /// than stopping — and at the accurate pair its worst ratio is 0.056
+    /// against a sprite's 0.249.
+    ///
+    /// The two functions here are `u(x)/max(x², 1)` for a sprite and its
+    /// stroke counterpart, swept rather than solved: what is asserted is that
+    /// [`floored_share`] bounds both.
+    #[test]
+    fn a_stroke_hides_less_than_a_sprite_and_both_are_inside_the_bound() {
+        let target = PROBE_RESOLUTION;
+        let [low, high] = rungs(target, u32::MAX).expect("the accurate pair");
+        let rows = f64::from(target.1);
+        let (p, q) = (rows / f64::from(low.1), rows / f64::from(high.1));
+        let lambda = (area(target) - area(low)) / (area(high) - area(low));
+        let bound = floored_share(low, high, target, u32::MAX);
+
+        // A sprite `x` pixels across at the target: coverage `max((x/s)², 1)`
+        // at the target divided by `s`, so the excess over the model is what
+        // ADR-0245's rounding put there.
+        let sprite = |x: f64| {
+            let e = |s: f64| (1.0 - (x / s).powi(2)).max(0.0);
+            e(1.0) + (lambda - 1.0) * e(p) - lambda * e(q)
+        };
+        // A stroke `y` pixels wide at the target, of unit length there: only
+        // the width floors, so the coverage is `(1/s)·max(y/s, 1)`.
+        let stroke = |y: f64| {
+            let e = |s: f64| {
+                let w = y / s;
+                if w < 1.0 {
+                    (1.0 - w) / s
+                } else {
+                    0.0
+                }
+            };
+            e(1.0) + (lambda - 1.0) * e(p) - lambda * e(q)
+        };
+
+        let mut worst_sprite: f64 = 0.0;
+        let mut worst_stroke: f64 = 0.0;
+        for step in 1..=20_000u32 {
+            let x = f64::from(step) / 2_000.0;
+            worst_sprite = worst_sprite.max(sprite(x) / x.powi(2).max(1.0));
+            worst_stroke = worst_stroke.max(stroke(x) / x.max(1.0));
+        }
+        assert!(
+            worst_sprite <= bound + 1e-6,
+            "a sprite hides {worst_sprite} where the bound says {bound}"
+        );
+        assert!(
+            worst_stroke <= bound + 1e-6,
+            "a stroke hides {worst_stroke} where the bound says {bound}"
+        );
+        assert!(
+            worst_stroke < worst_sprite / 4.0,
+            "a stroke floors in one dimension and should be far milder: \
+             {worst_stroke} against {worst_sprite}"
+        );
+    }
+
+    /// **A frame floored at the target as well costs the fit nothing.** `u(x)`
+    /// is zero for `x <= 1`: the primitive is one pixel at both rungs *and* at
+    /// the target, so it is a constant, and a fit that puts a constant in `a`
+    /// predicts it exactly. This is the case ADR-0285's reading refused over —
+    /// the primitive holding `soft_points` to a 4141-row floor is 0.17 pixels
+    /// across at a 720-row target.
+    #[test]
+    fn a_primitive_floored_at_the_target_too_is_predicted_exactly() {
+        const COUNT: f64 = 262_144.0;
+        const PER_PIXEL: f64 = 2.0e-7;
+        const INVARIANT: f64 = 3.0;
+
+        let target = PROBE_RESOLUTION;
+        let floor = 4141;
+        let [low, high] = rungs(target, floor).expect("the accurate pair");
+        // 0.17 pixels across at the target, which is one pixel everywhere.
+        let cost = |_h: u32| INVARIANT + PER_PIXEL * COUNT;
+        let e = fit(
+            measured(cost(low.1) as f32, low),
+            measured(cost(high.1) as f32, high),
+            target,
+            floor,
+            vec![Topology::Points],
+        );
+        let f = e.fit.expect("a flat pair fits");
+        let raw = f64::from(f.invariant_ms) + f64::from(f.fragment_ms);
+        assert!(
+            (raw - cost(target.1)).abs() < 1e-3,
+            "the raw fit came out {raw:.4} ms against a truth of {:.4}",
+            cost(target.1)
+        );
     }
 
     /// The rungs are half and a quarter of the target's height, at the target's
