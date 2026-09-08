@@ -51,7 +51,12 @@ ever been written down — with `view::BEAT_STALENESS` at 24.67 ms and `view::RO
 33.33 ms, both in milliseconds and neither in frames;
 [tests/schedulable.rs](../../crates/karakuri-console/tests/schedulable.rs) asserts both conditions
 rather than a stage discovering them, and `crates/karakuri`'s `WRITTEN_ALLOCS` is what keeps the
-measured half honest. `capacity_for` and `capacities_for` in
+measured half honest. **A third field sits beside those two and is not one of them**:
+`Declared::moves_in` is *when this region's picture next changes*, a function of the frame rather
+than a constant of the presentation, so that a region pending and at rest stops asking for a rate it
+is not using — the two numbers this rule names are still the two it names, and are still the two the
+arithmetic is taken over
+([ADR-0283](../adr/0283-a-region-declares-when-its-picture-next-changes-not-that-something-is-pending.md)). `capacity_for` and `capacities_for` in
 [karakuri-cli](../../crates/karakuri-cli/src/main.rs) are where a flag's default stops outranking a
 declaration. Decided in
 [ADR-0013](../adr/0013-cost-has-three-axes-that-must-not-be-added.md),

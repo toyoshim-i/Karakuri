@@ -65,7 +65,10 @@ what it does *not* enforce beside what it does, `mem::forget` on a frame guard i
 [mix.rs](../../crates/karakuri-engine/src/mix.rs) **skip** a slot that does not contribute rather
 than multiplying it by zero. `view::BEAT_STALENESS` and `repaint::Change::Animating` in
 [karakuri-console](../../crates/karakuri-console/) are the continuous motion, declared whether or not
-anything is pending. **The operator's half** is enforced by a call rather than by a type:
+anything is pending — and the beat is now the one region on that panel whose deadline is its
+declared staleness on every frame, because the others ask for frames only while they are moving
+([ADR-0283](../adr/0283-a-region-declares-when-its-picture-next-changes-not-that-something-is-pending.md));
+`tests/moving.rs` is where the beat is held apart from them. **The operator's half** is enforced by a call rather than by a type:
 `Deck::set_gain`, `Deck::set_opacity` and `Deck::set_mask_position` each call `Deck::cancel`, and
 `Deck::set_mask_shape` deliberately does not, which
 [tests/deck.rs](../../crates/karakuri-engine/tests/deck.rs) asserts in both directions;

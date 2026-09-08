@@ -5942,6 +5942,52 @@ pub fn roll_at(phase: Phase) -> f32 {
     }
 }
 
+/// **How long until anything rolling on this panel next moves**, from
+/// `phase` — [`ROLL_STALENESS`] while the travel is under way, and the rest of
+/// the rest while it is not.
+///
+/// # What it is for
+///
+/// [`roll_at`] is exactly `0.0` for the 600 ms of every [`ROLL_PERIOD`] that
+/// is not [`ROLL_TRAVEL`], so a chip drawn at the start of the rest and a chip
+/// drawn 33 ms later are the same picture, pixel for pixel. Servicing
+/// [`ROLL_STALENESS`] through that stretch buys seventeen frames a second of
+/// the panel being redrawn exactly as it already is — 31 asked for in a period
+/// where 14 draw something, counted in `tests/moving.rs`. This is what the
+/// declaration answers instead, and
+/// [ADR-0283](../../../docs/adr/0283-a-region-declares-when-its-picture-next-changes-not-that-something-is-pending.md)
+/// is the argument.
+///
+/// **It is not a second rate.** ADR-0190 rejected *a fine deadline while the
+/// word moves and a coarse one while it rests* on the grounds that two numbers
+/// is two live regions wearing one name; the rest here is not a second
+/// tolerance somebody chose but the same two constants read for when the curve
+/// leaves zero, so there is nothing that could drift from the rate and nothing
+/// to arbitrate between. [`ROLL_STALENESS`] is still the only staleness this
+/// presentation declares, and it is still what the arithmetic sums.
+///
+/// # It never answers finer than the rate it declared
+///
+/// A rest with less than one step left of it answers one step, which is
+/// [`crate::budget::Declared::moves_in`]'s invariant and costs at most the
+/// first [`ROLL_STALENESS`] of the travel — one step out of twelve, and inside
+/// the tolerance the presentation itself named. The alternative is a deadline
+/// tending to zero as the period wraps, which is the spin
+/// [`crate::repaint`] exists to refuse.
+///
+/// **A pure function of the phase**, for [`roll_at`]'s reason: a test chooses
+/// the phase it asserts at, and nothing here reads a clock.
+pub fn roll_moves_in(phase: Phase) -> Duration {
+    let travel = ROLL_TRAVEL.as_secs_f32() / ROLL_PERIOD.as_secs_f32();
+    let t = phase.cycle(ROLL_PERIOD);
+    match t < travel {
+        true => ROLL_STALENESS,
+        // `cycle` is `[0, 1)`, so this is positive and no longer than the
+        // whole period.
+        false => ROLL_PERIOD.mul_f32(1.0 - t).max(ROLL_STALENESS),
+    }
+}
+
 /// **Where a slot sits between compiled and composited**, which is the mock's
 /// `.tally` and `karakuri_engine`'s `Residency` — three states and no fourth.
 ///
@@ -13648,7 +13694,14 @@ impl View {
     }
 
     /// **Every live region that is declaring this frame**, each with what one
-    /// update of it costs and how stale it may get.
+    /// update of it costs, how stale it may get, and when its picture is next
+    /// different from the one on screen.
+    ///
+    /// The first two are P-0091's and are constants of the presentation; the
+    /// third is [`crate::budget::Declared::moves_in`], it is a function of the
+    /// frame, and it exists because *how often must this be drawn* and *is
+    /// this moving now* are two questions and only one of them was being asked
+    /// ([ADR-0283](../../../docs/adr/0283-a-region-declares-when-its-picture-next-changes-not-that-something-is-pending.md)).
     ///
     /// # This is P-0091's naming, and the unit is a region
     ///
@@ -13770,14 +13823,41 @@ impl View {
             region: "transport",
             cost: PANEL_PASS,
             staleness: BEAT_STALENESS,
+            // **The one region whose two numbers are the same number**, and
+            // that is what an honest *I move at this rate* looks like: the
+            // light is on the grid at [`Transport::beats`], the harness
+            // advances the session by one step on every frame it composes, so
+            // every frame this declaration buys draws the light somewhere it
+            // was not (ADR-0283). There is no rest to find and nothing to
+            // gate — P-0094 is the rule that says there had better not be.
+            moves_in: BEAT_STALENESS,
         })
     }
 
     /// **What the mixer bay declares**: the roll's staleness while anything in
-    /// it is pending *and* the bay is laid out, and nothing otherwise.
+    /// it is pending *and* the bay is laid out, and nothing otherwise — with
+    /// the deadline it asks for taken from where the roll has got to rather
+    /// than from the fact that something is pending.
     ///
     /// Three pending things, one rate — see [`View::declares`], which carries
     /// the whole argument.
+    ///
+    /// # Pending is when it declares; moving is when it asks for a frame
+    ///
+    /// The three presentations in this bay are one curve ([`roll_at`]) off one
+    /// [`Phase`], and that curve is **exactly zero** for the 600 ms of every
+    /// [`ROLL_PERIOD`] that is not [`ROLL_TRAVEL`]. So *is anything pending*
+    /// is the right question for whether this region is live — it is what
+    /// separates a strip that has somewhere to go from one that has arrived —
+    /// and it is the wrong question for whether a frame is owed thirty
+    /// milliseconds from now. [`roll_moves_in`] answers the second one, and
+    /// [ADR-0283](../../../docs/adr/0283-a-region-declares-when-its-picture-next-changes-not-that-something-is-pending.md)
+    /// is where the two are separated.
+    ///
+    /// **The region stays in both sums throughout**, rest included: a parked
+    /// slot is a live region for as long as it is parked, and a schedule
+    /// admitted on the 40% of the period that moves would be a schedule that
+    /// could not afford the thing it admitted.
     fn mixer_declares(&self, layout: &karakuri_layout::Layout) -> Option<Declared> {
         let bay = layout.find("mixer").is_some_and(|id| layout.visible(id));
         let moving = bay
@@ -13790,11 +13870,31 @@ impl View {
             region: "mixer",
             cost: PANEL_PASS,
             staleness: ROLL_STALENESS,
+            moves_in: roll_moves_in(self.phase),
         })
     }
 
-    /// **The soonest staleness any live region on this panel will tolerate**,
-    /// and `None` when nothing on it is moving.
+    /// **The soonest any live region on this panel will next look different
+    /// from what is on screen**, and `None` when nothing on it is moving.
+    ///
+    /// # It is `moves_in` and not `staleness`, and that is the whole of
+    /// ADR-0283
+    ///
+    /// A staleness says how finely a region has to be drawn *while it moves*;
+    /// it does not say whether the region is moving now. The mixer bay's roll
+    /// rests for 600 ms of every second and its curve is exactly zero
+    /// throughout, so a deadline taken from the staleness alone woke this
+    /// window seventeen times a second to draw a chip in the position it was
+    /// already in. [`crate::budget::Declared::moves_in`] is what a region
+    /// answers instead, `staleness` stays the constant `tests/schedulable.rs`
+    /// sums, and the invariant between them — `moves_in >= staleness` — is why
+    /// this can only take a frame away and never bring one forward
+    /// ([ADR-0283](../../../docs/adr/0283-a-region-declares-when-its-picture-next-changes-not-that-something-is-pending.md)).
+    ///
+    /// **Nothing about the beat changes**, and P-0094 is why it must not: the
+    /// light travels the grid on every frame the session advances, so its two
+    /// numbers are one number and this goes on answering [`BEAT_STALENESS`]
+    /// for as long as the row is drawn.
     ///
     /// # The view is what knows the rate, so the harness is told rather than
     /// guessing
@@ -13830,7 +13930,7 @@ impl View {
     /// with something moving on it is a panel with something changing on it,
     /// and the reason it is moving is a declaration rather than an accident.
     pub fn animating(&self, layout: &karakuri_layout::Layout) -> Option<Duration> {
-        self.declares(layout).map(|live| live.staleness).min()
+        self.declares(layout).map(|live| live.moves_in).min()
     }
 
     /// Draw the whole console. The `ui` is the root one

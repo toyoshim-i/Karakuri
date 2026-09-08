@@ -17,8 +17,13 @@
 //! does not exist.** [`crate::view::View::declares`] is the declaration — the
 //! transport row for as long as the beat grid is drawn, and the mixer bay
 //! while a residency request has not landed or a fade has not run — and
-//! [`Change::Animating`] carries the soonest staleness out of them and turns
-//! that into a deadline. The **cost** reaches nothing here and is not meant
+//! [`Change::Animating`] carries the soonest **move** out of them and turns
+//! that into a deadline. A region declares a staleness for the motion it has
+//! rather than for the fact that it is pending, so the mixer's roll asks for
+//! its thirty a second through the 400 ms it travels and for the remainder of
+//! the rest through the 600 ms it does not
+//! ([ADR-0283](../../../docs/adr/0283-a-region-declares-when-its-picture-next-changes-not-that-something-is-pending.md)).
+//! The **cost** reaches nothing here and is not meant
 //! to: both schedulability conditions are arithmetic over the declarations and
 //! `tests/schedulable.rs` asserts them, which is what ADR-0164 asks for in place
 //! of a stage discovering them. What is still absent is arbitration — nothing
@@ -263,8 +268,18 @@ pub enum Change<'a> {
     /// cannot know that it did. It is a frame on a gesture an operator is
     /// making, which ADR-0210 does not budget.
     Emitted(Option<&'a Operation>),
-    /// **Something on the panel is moving**, with the soonest staleness any
-    /// live region on it declares — and `None` for a panel where nothing is.
+    /// **Something on the panel is moving**, with the soonest any live region
+    /// on it will next look different from what is on screen — and `None` for
+    /// a panel where nothing is.
+    ///
+    /// **The soonest *move*, and not the soonest staleness declared.** A
+    /// staleness is how finely a region has to be drawn while it moves; a
+    /// region that is pending and at rest declares one and is not using it,
+    /// and a deadline taken from it draws the panel exactly as it already is
+    /// ([ADR-0283](../../../docs/adr/0283-a-region-declares-when-its-picture-next-changes-not-that-something-is-pending.md)).
+    /// The number that arrives here is never sooner than the staleness behind
+    /// it, so this arm cannot ask for a frame the schedulability arithmetic
+    /// did not admit.
     ///
     /// [`crate::view::View::animating`] is the answer, and it is the whole
     /// content of this arm: **the view is what knows the rate**, so the
@@ -434,12 +449,12 @@ impl Change<'_> {
                 None => Repaint::Never,
             },
 
-            // See the variant. The rate is the view's and arrives with the
+            // See the variant. The deadline is the view's and arrives with the
             // change; `None` is a panel with nothing moving on it, and it is
             // `Never` rather than a long deadline because a panel that is
             // still is not a panel that is slow.
-            Change::Animating(staleness) => match staleness {
-                Some(staleness) => Repaint::After(*staleness),
+            Change::Animating(moves_in) => match moves_in {
+                Some(moves_in) => Repaint::After(*moves_in),
                 None => Repaint::Never,
             },
 
