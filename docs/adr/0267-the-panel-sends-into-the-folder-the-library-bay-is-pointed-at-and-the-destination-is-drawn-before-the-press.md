@@ -1,16 +1,32 @@
 ---
 id: 0267
 title: The panel sends into the folder the Library bay is pointed at, and the destination is drawn before the press
-status: accepted
+status: superseded
 date: 2026-09-06
 supersedes: []
-superseded_by: []
+superseded_by: [0311]
 principles: []
 tags: [ui, console, operations, surfaces, library, docs]
 ---
 
 # The panel sends into the folder the Library bay is pointed at, and the destination is drawn before the press
 
+> **Superseded 2026-09-09 by
+> [ADR-0311](0311-a-row-menu-loads-a-set-onto-a-named-deck-and-saves-it-through-the-systems-own-dialog.md).**
+> The maintainer chose the system's save dialog: a send is asked for from a menu on a Library row
+> and the destination is **the file the operator names in that dialog**, not the folder the bay is
+> pointed at. The decision below — *the panel's control for Send is the `folder` scope, and sending
+> writes `<id>.kbset` into the directory the `.path` row names* — is what that replaces, and it is
+> the whole of this record's decision.
+>
+> **Three things here are not superseded and are still in force.** The `.path` row stays: it is the
+> folder scope's own readout and what `folder` lists, which is ADR-0275's rather than this
+> record's, and it is where the save dialog opens. ADR-0260 stands whole and is only quoted here.
+> And **the page edit this record said was owed is withdrawn rather than done** — the sentence
+> *"a folder is a way **in**"* did not have to turn round after all, because the folder scope is
+> not bidirectional any more. A reader who comes here looking for that edit should find this note
+> rather than a gap.
+>
 > **Annotated 2026-09-08: the directory this record waits on is settled, and by neither of the
 > shapes named below.**
 > [ADR-0275](0275-a-folder-is-chosen-by-dropping-one-on-the-window-and-the-drop-is-the-windows-rather-than-a-bays.md)

@@ -482,6 +482,26 @@ fn sample(variant: &str) -> Operation {
             },
             value: karakuri_operation::ParamValue::Scalar(0.5),
         },
+        // **`Save as a kbset`, the one item of a Library row's menu that is
+        // not a load** — and the one emission in this list that names *no*
+        // destination and never will: sending is a read, and a read's answer
+        // goes where the surface that asked puts answers (ADR-0260), which for
+        // the panel is the file the operator names in the system's own save
+        // dialog (ADR-0311).
+        //
+        // **The `Send` arm and not the `Take` one**, and that is the whole of
+        // why this arm has a choice to make: the row is *Send a Set to
+        // somebody, and take one in*, one row and two directions, and the
+        // taking half has been reached from this bay since a press on a
+        // `presets` row landed — but it is reached from `crates/karakuri`,
+        // which builds the operation on the host side of the seam. What
+        // `crates/karakuri-console/src` constructs is the sending, so that is
+        // what this value is.
+        "TransferSet" => Operation::TransferSet {
+            transfer: karakuri_operation::SetTransfer::Send {
+                id: "night01".to_owned(),
+            },
+        },
         other => panic!(
             "`{SRC}` constructs `Operation::{other}` and this file has no value for it — a \
              control started emitting an operation nobody accounted for. Add an arm here, and \

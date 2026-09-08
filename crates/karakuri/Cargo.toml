@@ -79,8 +79,34 @@ karakuri-store.workspace = true
 wgpu = "30.0.1"
 winit = "0.30.13"
 # How `Gpu`'s async constructor is reached off the event loop, which is not an
-# async context.
+# async context — and, since 2026-09-09, how the save dialog's future is
+# awaited on the worker that writes the file `rfd` came back with.
 pollster = "1.0.1"
+
+# **The system's own save dialog, for one control: `save as a kbset` in a
+# Library row's menu.** A send names a file that does not exist yet, which is
+# the one thing no listing on this panel can point at, so the platform's ask is
+# what names it — ADR-0311, which carries the argument and the measurement.
+#
+# **Here and nowhere else.** `karakuri-console` takes no device and no platform
+# dependency (ADR-0156, ADR-0214), so this is on the surface's side of that seam
+# with `wgpu` and `winit`. The console names the operation; this package is what
+# opens a window over the operator's own file system.
+#
+# **P-0085's bill, paid rather than designed around, and it is small.** On macOS
+# `rfd` wants `objc2`, `objc2-app-kit`, `objc2-foundation`,
+# `objc2-core-foundation` and `block2` — every one of which `winit` 0.30 already
+# resolves at the same major version, so no second copy of any of them enters
+# the tree — plus `dispatch2`, `log` and `raw-window-handle`, of which only
+# `dispatch2` is new. `default-features = false` drops the Linux portal and
+# Wayland stacks, which this program reaches through `winit` if it reaches them
+# at all.
+#
+# **The asynchronous dialog and never the synchronous one**: `save_file` on
+# `AsyncFileDialog` is a sheet begun on the window and the run loop goes on
+# running, where `FileDialog`'s is `runModal` and a panel that stops drawing —
+# which is what P-0094 rules out by name.
+rfd = { version = "0.17.2", default-features = false }
 
 # **The one format this program writes**, and it is here because the wiring for
 # a saved arrangement could be nowhere else. `Store::write_arrangement` takes

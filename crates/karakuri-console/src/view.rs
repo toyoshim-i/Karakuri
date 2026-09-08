@@ -10035,6 +10035,25 @@ const LOAD_PILL: &str = "load";
 /// right-pointing small triangle is about as wide as it is tall.
 const LOAD_ARROW: f32 = size::BASE * 0.5;
 
+/// **What a row menu's four load items are called, without the letter** —
+/// `Load to Slot A`, and it is the maintainer's own spelling
+/// ([ADR-0311](../../../docs/adr/0311-a-row-menu-loads-a-set-onto-a-named-deck-and-saves-it-through-the-systems-own-dialog.md)).
+///
+/// **It says *slot* where the rest of this panel says *deck*, and that is
+/// kept.** The words the operator asked for are the words the menu carries;
+/// what the item asks for is `Operation::LoadSet { deck, .. }` either way, and
+/// the two are the same thing under two names on this panel already — a deck
+/// holds one to four slots and the mixer draws a strip per slot, so the letter
+/// names both.
+const MENU_LOAD: &str = "Load to Slot";
+
+/// **The one item of a row menu that is not a load**, under the separator.
+///
+/// It names the *file* it writes rather than the act, which is the mock's own
+/// wording and is what tells it apart from the four above it: the loads move a
+/// deck and this one leaves a file behind.
+const MENU_SAVE: &str = "Save as a kbset";
+
 // -- the star at the left of every row --------------------------------------
 
 /// **The box the star stands in**, which is the box the glyph it stands in
@@ -10781,8 +10800,12 @@ fn chip_width(ctx: &egui::Context, name: &str) -> f32 {
 /// `~/sets/tour-2026/night-b › opening` in the mock, between the scope row and
 /// the filters, and **it is drawn whichever scope is marked** — because it is
 /// two things at once (`console.html`): the walk inside a folder scope, and
-/// the place a send lands, which has to be on screen before the press
-/// (ADR-0267, [P-0090]).
+/// the place a send's save dialog opens on, so a Set handed to somebody starts
+/// where the listing is
+/// ([ADR-0311](../../../docs/adr/0311-a-row-menu-loads-a-set-onto-a-named-deck-and-saves-it-through-the-systems-own-dialog.md)).
+/// **It said *the place a send lands* until 2026-09-09**, which was ADR-0267
+/// and is superseded: the file is named in the system's own dialog now, and
+/// where it lands is the operator's answer rather than this row's.
 ///
 /// **Until a folder has been dropped the row is not drawn at all**, so the bay
 /// is one line shorter and the scopes sit straight on the filters. That is the
@@ -10906,66 +10929,66 @@ fn chip_width(ctx: &egui::Context, name: &str) -> f32 {
 /// are free to name two different decks, `l` goes on loading onto the ring's,
 /// and a press on the pulldown emits nothing at all.
 ///
-/// **This row's badge names the button as well as the drag now.** A chip is
-/// the control the page names for its row; when the drag landed, a press on a
-/// row and a release over a strip are what made this badge true, and
-/// `operations.html` read `library → deck`. It reads `load button, or library
-/// → deck` since ADR-0305, and the two routes arrive at one
-/// `Operation::LoadSet`.
+/// **This row's badge names three panel routes now.** A chip is the control
+/// the page names for its row; when the drag landed, a press on a row and a
+/// release over a strip are what made this badge true, and `operations.html`
+/// read `library → deck`. It gained the button with ADR-0305 and a row menu's
+/// four load items with ADR-0311, reading
+/// `load button, row menu → load to slot, or library → deck`, and all three
+/// arrive at one `Operation::LoadSet`.
 ///
-/// # Nothing here writes a Set out, and what is missing is a gesture
+/// # A Set is written out from a row's own menu, and the file is named outside
+/// # this program
 ///
 /// `docs/manual/operations.html`'s *Send a Set to somebody, and take one in*
-/// names two directions and this bay is the home of both — its panel badge
-/// names `library` and not a control. **One of them is reached from here today
-/// and the other is not a drawing.** The taking-in half is *"Taking one in is
-/// not a second row — opening a preset is this row"*, and a row of a `folder`
-/// the bay has been pointed at is that same row again: a press packages the
-/// file into the store and then loads it, which the host performs and this
-/// bay's list is the picker for. The sending half — writing one out to hand
-/// somebody — is *"what nothing draws"*, and this is the note that says why
-/// rather than leaving a gap indistinguishable from a decision.
+/// names two directions and this bay is the home of both. **Both are reached
+/// from here now.** The taking-in half is *"Taking one in is not a second row —
+/// opening a preset is this row"*, and a row of a `folder` the bay has been
+/// pointed at is that same row again: a press packages the file into the store
+/// and then loads it, which the host performs and this bay's list is the
+/// picker for. The sending half is [`RowMenu`]'s `Save as a kbset`, under the
+/// separator, and what this bay emits for it is
+/// `Operation::TransferSet { transfer: SetTransfer::Send { id } }` and nothing
+/// else.
 ///
-/// **It is not that a panel has no file dialog.** The taking-in half needs one
-/// and does not have one either: what names the file there is **this listing**,
-/// which is a picker the bay already draws. The asymmetry is that taking in
-/// names a file that exists and sending names one that does not yet — and no
-/// listing can point at a file nobody has written.
+/// **The asymmetry this section was written about is what decided the
+/// control.** Taking in names a file that exists and sending names one that
+/// does not yet — and no listing can point at a file nobody has written. That
+/// is why the destination is the platform's ask rather than a row of anything
+/// drawn here.
 ///
-/// **The destination is settled and it is the `.path` row.** ADR-0260 refused
-/// the premise that the operation owes one — sending is a *read*, and a read's
-/// answer goes where the surface that asked puts answers, so
-/// `SetTransfer::Send { id }` gains no field — and
-/// [ADR-0267](../../../docs/adr/0267-the-panel-sends-into-the-folder-the-library-bay-is-pointed-at-and-the-destination-is-drawn-before-the-press.md)
-/// says what *this* surface asks with: **the bay is already a file browser, so
-/// the directory it is pointed at is the destination**, and a send writes
-/// `<id>.kbset` there. That is the asymmetry above closed rather than argued
-/// around — the file lands where the listing is looking, and the row it makes
-/// is the taking-in half's own operand. The directory it waited on arrived
-/// with ADR-0275, and the row that draws it is [`Pointed`].
+/// **The operation carries no destination and never will.** ADR-0260 refused
+/// the premise that it owes one — sending is a *read*, and a read's answer goes
+/// where the surface that asked puts answers, so `SetTransfer::Send { id }`
+/// gains no field. What *this* surface asks with is the system's own save
+/// dialog, opened by the host on the file the operator names
+/// ([ADR-0311](../../../docs/adr/0311-a-row-menu-loads-a-set-onto-a-named-deck-and-saves-it-through-the-systems-own-dialog.md)),
+/// and **no path crosses this crate at all**: nothing here reads a disk
+/// (ADR-0156) and nothing here spells a place.
 ///
-/// **So what is missing is a gesture, and it is the page's.** No capsule in
-/// this bay's foot asks for a send, nothing on a row does, and
-/// `console.html`'s *A folder scope reads Sets, and a bundle is not a third
-/// thing* still says a folder is a way **in** — the one-directional sentence
-/// ADR-0267 names as the page edit that has to land first
-/// (`docs/contributing.md` §5 step 3). Until it does, drawing one here would
-/// be this bay inventing a control, which is the order this repository does
-/// not invert.
+/// **It was the `.path` row's folder until 2026-09-09**, which is
+/// [ADR-0267](../../../docs/adr/0267-the-panel-sends-into-the-folder-the-library-bay-is-pointed-at-and-the-destination-is-drawn-before-the-press.md),
+/// superseded by ADR-0311. That row is still drawn and is still this library's
+/// readout — [`Pointed`], and ADR-0275's — and what it is for a send now is
+/// where the dialog opens rather than where the file lands.
 ///
 /// **And the one control here that asks for letters could not spell a path
 /// anyway.** [`Menu::Naming`] is it, and what it takes is a **name** —
 /// ADR-0221's *one path component of letters, digits, `-` and `_`*. ADR-0229
 /// says in as many words why that rule does not stretch: *"an include is a
 /// relative path and has separators in it by construction, so the rule cannot
-/// be copied."* Under ADR-0267 nothing needs it to: the destination is a
-/// directory a drop chose and a line of type already reads.
+/// be copied."* Nothing needs it to: the file is named in a window this program
+/// does not own, which takes no rule from ADR-0221 because it is the operator's
+/// own file system asked by the operator's own tool.
 ///
-/// **The pill's letter is [`View::selection`]**, which this console now keeps
-/// — ADR-0219 recorded it as living *"in the specification and not in
+/// **The pulldown's letter is [`View::target`]**, which this console keeps —
+/// ADR-0219 recorded a deck mark as living *"in the specification and not in
 /// `karakuri-console`'s code"*, and that is the sentence this bay's letter
-/// waited on. It is refused past the strips the mixer is drawing, so the
-/// letter never names a deck the press would be turned down on.
+/// waited on. **It read [`View::selection`] until ADR-0305 split the readout**,
+/// and the paragraph above is where the two marks are held apart. Either way it
+/// is refused past the strips the mixer is drawing, so the letter never names a
+/// deck the press would be turned down on — and a row menu's items are cut to
+/// the same count for the same reason.
 ///
 /// **The key is `l`**, chosen by `docs/manual/operations.html` because which
 /// keys exist is that page's to say (ADR-0198, ADR-0220) — this module reads
@@ -11269,6 +11292,153 @@ impl Load {
             .find(|index| self.row(card, *index).contains(at))
             .map(|index| index as u8)
     }
+}
+
+/// **What a row's own menu is open on**, and how many decks it offers.
+///
+/// [`Target`]'s shape one control along, and the difference is where the
+/// *open* went: a pulldown is a capsule that is there whether or not its list
+/// is down, so [`Target`] carries a `bool` beside the deck; a row menu is the
+/// card and nothing else, so *which row* and *whether it is down* are one
+/// field. An open menu with no row under it cannot be spelled.
+///
+/// See [`View::menued`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Menued {
+    /// **Which row of the listing the menu is down on**, or `None` for no menu
+    /// at all — which is every console until a secondary press on a row.
+    ///
+    /// It is a row of the *drawn* list, the way [`LibraryBay::take`]'s answer
+    /// is: a row the bay had no room for is a row nobody pressed.
+    pub row: Option<usize>,
+    /// **How many decks the loads offer**, which is how many strips the mixer
+    /// is drawing — [`Target::decks`]'s own reading, arriving the same way.
+    ///
+    /// `console.html`: *"A deck the mixer is drawing no strip for is not
+    /// offered, which is the count the pulldown's list is cut to rather than a
+    /// second rule"*.
+    pub decks: usize,
+}
+
+/// **One item of a row's menu**, as what a press on it is about.
+///
+/// Deliberately not an `Operation`: which Set the menu is on is the *bay's*
+/// reading and this is the geometry's answer, so the two are put together in
+/// [`LibraryBay::menu_ask`] where both are in hand — the arrangement
+/// [`ArrangementPill::ask`] is in one bay along.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RowItem {
+    /// `Load to Slot A` … `Load to Slot D`, and the deck is the item.
+    Load(u8),
+    /// `Save as a kbset`, under the separator.
+    Save,
+}
+
+/// **What a press on a row's menu asks for.**
+///
+/// [`Aim`]'s shape one control along, and the same division: every arm is
+/// either this console's own state moving or one named operation, and never
+/// an act performed here ([P-0090]).
+///
+/// [P-0090]: ../../../docs/principles/0090-a-surface-offers-it-never-decides.md
+#[derive(Debug, Clone, PartialEq)]
+pub enum Picked {
+    /// **Put the menu down on this row** — a secondary press on a row of the
+    /// listing, with no menu already down.
+    Open(usize),
+    /// **Take it away** — a press on the card's own ground, on the separator,
+    /// or anywhere else on the console while it is down. The press is spent on
+    /// the dismissal, which is [`crate::input::claim`]'s rule 2 said in the
+    /// control.
+    Shut,
+    /// **A load, named** — `Operation::LoadSet { deck, set }`, with the deck
+    /// off the item and the Set off the row the menu was opened on. It is the
+    /// `load` button's own payload reached without either mark.
+    Load(Operation),
+    /// **The send, named** — `Operation::TransferSet` carrying
+    /// `SetTransfer::Send`, with the id off the row the menu was opened on.
+    /// **No destination**, which is that operation's own shape: sending is a
+    /// read, and where the answer goes is the surface's
+    /// ([ADR-0260](../../../docs/adr/0260-sending-a-set-is-a-read-and-a-reads-answer-goes-where-the-surface-that-asked-puts-answers.md)).
+    Send(Operation),
+}
+
+/// **A row's menu, laid out**: the card, its load items, the separator and the
+/// send under it.
+///
+/// [`Load`]'s shape one control along and for the same reason — one
+/// derivation, so that what [`row_menu_into`] paints and what a press lands on
+/// are the same rectangles.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RowMenu {
+    /// The card itself, held inside the viewport.
+    pub card: Rect,
+    /// **How many load items there are**, which is [`Menued::decks`] — never
+    /// more than [`DECKS`], because that is as many letters as there are.
+    ///
+    /// **Zero is a state**: a console the mixer is drawing no strip for still
+    /// has a menu, because the send under the separator does not name a deck.
+    /// That is where this parts company with the deck pulldown, whose card
+    /// would be empty and which refuses to open at all.
+    pub loads: usize,
+    /// **The separator's band** — [`size::ROW_MENU_RULE_H`] of air, hairline
+    /// and air, between the loads and the send. It takes no press: a press
+    /// inside it is the dismissal, which is what *the separator is nothing*
+    /// means as a rectangle.
+    pub rule: Rect,
+    /// The `Save as a kbset` item, under the band.
+    pub save: Rect,
+}
+
+impl RowMenu {
+    /// **Where one load item is**, from the top of the card — the decks in
+    /// [`DECK_LETTERS`] order, stacked with no gap between them, which is
+    /// [`Load::row`]'s own reading.
+    ///
+    /// Panics on an item this menu has not got, which is that method's rule: a
+    /// caller has invented a deck.
+    pub fn load(&self, index: usize) -> Rect {
+        assert!(
+            index < self.loads,
+            "load {index} of a menu of {}",
+            self.loads
+        );
+        Rect::from_min_size(
+            Pos2::new(
+                self.card.min.x + size::LIB_LIST_PAD,
+                self.card.min.y + size::LIB_LIST_PAD + size::LIB_ROW_H * index as f32,
+            ),
+            egui::vec2(
+                self.card.width() - size::LIB_LIST_PAD * 2.0,
+                size::LIB_ROW_H,
+            ),
+        )
+    }
+
+    /// **Which item `p` is on**, or `None` for a point on the card's padding,
+    /// on the separator, or off the card altogether.
+    pub fn picked(&self, p: karakuri_layout::Point) -> Option<RowItem> {
+        let at = Pos2::new(p.x, p.y);
+        if self.save.contains(at) {
+            return Some(RowItem::Save);
+        }
+        (0..self.loads)
+            .find(|index| self.load(*index).contains(at))
+            .map(|index| RowItem::Load(index as u8))
+    }
+}
+
+/// **The word one load item carries** — `Load to Slot A`, and the maintainer's
+/// own spelling.
+///
+/// A function rather than four constants because the letter is
+/// [`DECK_LETTERS`]', which is the one derivation of a deck's name this crate
+/// has: four written-out strings would be a fifth deck's item nobody added.
+///
+/// Panics on a deck there is no letter for, which is [`Target::letter`]'s
+/// rule.
+pub fn load_item(deck: u8) -> String {
+    format!("{MENU_LOAD} {}", DECK_LETTERS[usize::from(deck)])
 }
 
 impl LibraryBay {
@@ -11626,6 +11796,140 @@ impl LibraryBay {
                 set: id.to_owned(),
             }),
             None => Aim::NoSet,
+        })
+    }
+
+    /// **A row's menu, laid out**, or `None` where none is down.
+    ///
+    /// # It hangs down off the row, where the deck pulldown's card hangs up
+    ///
+    /// Both hang into the room there is, which is [`Load::list`]'s own rule
+    /// read from the other end: that card stands on a capsule in the bay's
+    /// **foot** and so has only this bay's list above it, and this one stands
+    /// on a row of that list and has the rest of the list below it. It is
+    /// inset from the row's left edge by [`size::ROW_MENU_INSET`] so that it
+    /// hangs under the name that was pressed rather than under the star beside
+    /// it, and it is held inside the viewport, so a press on the last row of a
+    /// bay at the bottom of the window draws the card over the bay rather than
+    /// off the screen.
+    ///
+    /// **The rows are not counted against the room**, which is [`Load::list`]'s
+    /// clause and the same argument: this card lists at most [`DECKS`] loads
+    /// and one send, and a window too short for five rows of type has no
+    /// transport row in it either.
+    ///
+    /// **Why it takes the context**: the items are as wide as the words in
+    /// them, which is `egui`'s to answer and nobody else's — [`LibraryBay::load`]'s
+    /// reason one control along. `None` before the first pass for that reason
+    /// too.
+    pub fn menu(&self, ctx: &egui::Context, viewport: Rect, at: Menued) -> Option<RowMenu> {
+        if ctx.cumulative_pass_nr() == 0 {
+            return None;
+        }
+        let row = self.row(at.row?);
+        let width = |text: &str| {
+            ctx.fonts_mut(|f| {
+                f.layout_no_wrap(
+                    text.to_owned(),
+                    FontId::new(size::BASE, FontFamily::Proportional),
+                    Color32::PLACEHOLDER,
+                )
+                .size()
+                .x
+            })
+        };
+        let loads = at.decks.min(DECKS);
+        let widest = (0..loads)
+            .map(|deck| width(&load_item(deck as u8)))
+            .chain(std::iter::once(width(MENU_SAVE)))
+            .fold(size::ROW_MENU_MIN_W, f32::max);
+        let height =
+            size::LIB_LIST_PAD * 2.0 + size::LIB_ROW_H * (loads + 1) as f32 + size::ROW_MENU_RULE_H;
+        let card = held_inside(
+            &viewport,
+            row.min.x + size::ROW_MENU_INSET,
+            row.max.y,
+            widest + (size::LIB_ROW_PAD_X + size::LIB_LIST_PAD) * 2.0,
+            height,
+        );
+        let band = card.min.y + size::LIB_LIST_PAD + size::LIB_ROW_H * loads as f32;
+        Some(RowMenu {
+            card,
+            loads,
+            rule: Rect::from_min_size(
+                Pos2::new(card.min.x + size::LIB_LIST_PAD, band),
+                egui::vec2(
+                    card.width() - size::LIB_LIST_PAD * 2.0,
+                    size::ROW_MENU_RULE_H,
+                ),
+            ),
+            save: Rect::from_min_size(
+                Pos2::new(
+                    card.min.x + size::LIB_LIST_PAD,
+                    band + size::ROW_MENU_RULE_H,
+                ),
+                egui::vec2(card.width() - size::LIB_LIST_PAD * 2.0, size::LIB_ROW_H),
+            ),
+        })
+    }
+
+    /// **What a press at `p` asks of a row's menu**, or `None` where the press
+    /// was on nothing this control owns.
+    ///
+    /// # Two questions, and which one it is depends on whether a menu is down
+    ///
+    /// - **With none down** this is *the secondary press*: which row it named,
+    ///   and nothing else. A press on the list's own ground below the last row
+    ///   answers `None`, exactly as [`LibraryBay::take`] does, and so does a
+    ///   press on a row with no Set behind it — a `history` row is a version,
+    ///   and every item this menu carries names a Set.
+    /// - **With one down** every press is the card's, which is
+    ///   [`crate::input::claim`]'s rule 2 and [`ArrangementPill::ask`]'s rule:
+    ///   on an item it picks, on the separator or anywhere else it dismisses.
+    ///   So this never answers `None` while a menu is down.
+    ///
+    /// **Both operands are in hand here**, which is why the arms carry whole
+    /// operations: the deck is the item and the Set is `sets[at.row]`, the row
+    /// the menu was opened on rather than the cursor's — a menu opened on the
+    /// fourth row and picked at `Load to Slot C` loads the fourth Set onto
+    /// deck C whatever the cursor and the pulldown are doing.
+    ///
+    /// **The row is re-checked against the listing rather than trusted**, for
+    /// [`LibraryBay::take`]'s reason: a listing that shrank between the press
+    /// that opened the menu and the press that picked from it would otherwise
+    /// name a Set nobody can see. A menu over a row that has gone dismisses.
+    pub fn menu_ask(
+        &self,
+        ctx: &egui::Context,
+        viewport: Rect,
+        at: Menued,
+        sets: &[String],
+        p: karakuri_layout::Point,
+    ) -> Option<Picked> {
+        if ctx.cumulative_pass_nr() == 0 {
+            return None;
+        }
+        let Some(row) = at.row else {
+            let p = Pos2::new(p.x, p.y);
+            let row = (0..self.rows).find(|index| self.row(*index).contains(p))?;
+            sets.get(row)?;
+            return Some(Picked::Open(row));
+        };
+        let Some(menu) = self.menu(ctx, viewport, at) else {
+            return Some(Picked::Shut);
+        };
+        let Some(id) = sets.get(row) else {
+            return Some(Picked::Shut);
+        };
+        Some(match menu.picked(p) {
+            Some(RowItem::Load(deck)) => Picked::Load(Operation::LoadSet {
+                deck,
+                set: id.to_owned(),
+            }),
+            Some(RowItem::Save) => Picked::Send(Operation::TransferSet {
+                transfer: karakuri_operation::SetTransfer::Send { id: id.to_owned() },
+            }),
+            None => Picked::Shut,
         })
     }
 
@@ -12350,6 +12654,73 @@ fn deck_list_into(ui: &Ui, pal: &Palette, load: &Load, at: Target, card: Rect) {
             ink,
         );
     }
+}
+
+/// **A row's menu, painted** — the card, a row per deck the mixer is drawing a
+/// strip for, the separator, and the send under it.
+///
+/// Where everything goes is [`RowMenu`]'s, so this paints and derives nothing,
+/// which is [`deck_list_into`]'s own sentence one control along. Drawn from
+/// [`View::draw`] **after the bays** for that card's reason: it hangs out of
+/// the row it belongs to and over the rows under it, so a card painted from
+/// inside the Library arm would go on before them and end up underneath.
+///
+/// The card is the deck pulldown's card term for term — the panel's own fill,
+/// a hairline and the shadow — because it is the same object one control along
+/// and a second treatment would be a second answer to *what does a card
+/// hanging off something look like*. `.rowmenu` in `docs/manual/style.css`
+/// says the same thing from the mock's side.
+///
+/// **Every item is drawn in `--c-dim`, and none of them is in `--c-text`.**
+/// The pulldown's card marks the row the target is on, because that list is a
+/// mark being moved; this one is six acts and none of them is a state, so
+/// there is nothing here for an ink to say. `.rowmenu .item` carries
+/// `color: var(--c-dim)` and no second rule.
+///
+/// **The separator is drawn and is not an item**: one hairline in `--c-hair`
+/// across the band, inset from the card's edge, which is the mock's
+/// `.rowmenu .rule` and the same pixel every other rule on this panel is drawn
+/// at.
+fn row_menu_into(ui: &Ui, pal: &Palette, menu: &RowMenu) {
+    let painter = ui.painter();
+    painter.add(pal.shadow.as_shape(menu.card, CornerRadius::same(8)));
+    painter.rect_filled(menu.card, CornerRadius::same(8), pal.panel);
+    painter.rect_stroke(
+        menu.card,
+        CornerRadius::same(8),
+        Stroke::new(size::HAIRLINE, pal.line),
+        StrokeKind::Inside,
+    );
+    let word = |at: Rect, text: String| {
+        let galley = painter.layout_no_wrap(
+            text,
+            FontId::new(size::BASE, FontFamily::Proportional),
+            pal.dim,
+        );
+        painter.galley(
+            Pos2::new(
+                at.min.x + size::LIB_ROW_PAD_X,
+                at.center().y - galley.size().y * 0.5,
+            ),
+            galley,
+            pal.dim,
+        );
+    };
+    // `take` rather than a range, for the deck list's reason: the items are
+    // the letters, and `Menued::decks` past `DECKS` is a deck this crate has
+    // no letter for.
+    for index in 0..menu.loads.min(DECKS) {
+        word(menu.load(index), load_item(index as u8));
+    }
+    let rule = menu.rule.center().y;
+    painter.line_segment(
+        [
+            Pos2::new(menu.rule.min.x + size::LIB_ROW_PAD_X, rule),
+            Pos2::new(menu.rule.max.x - size::LIB_ROW_PAD_X, rule),
+        ],
+        Stroke::new(size::HAIRLINE, pal.hair),
+    );
+    word(menu.save, MENU_SAVE.to_owned());
 }
 
 /// **What the list is drawing this frame**: the rows, and which of them the
@@ -16027,9 +16398,10 @@ pub struct View {
     /// file system what a path is is not a thing to do per frame (P-0091).
     ///
     /// **It is not a scope and it is not `Scope::Folder`.** The row is drawn
-    /// whichever chip is marked, because it is also where a send lands
-    /// (ADR-0267); what the folder scope's *listing* is arrives in
-    /// [`View::library`] like every other scope's.
+    /// whichever chip is marked, because it is also where a send's save dialog
+    /// opens (ADR-0311, superseding ADR-0267's *where a send lands*); what the
+    /// folder scope's *listing* is arrives in [`View::library`] like every
+    /// other scope's.
     ///
     /// It is a `String` rather than a `PathBuf` for the same reason the
     /// listing is: this crate never opens it, so what it needs is the
@@ -16214,6 +16586,25 @@ pub struct View {
     /// and nothing to leave by, and `input::claim`'s rule 2 would give it
     /// every press on the console until a second one shut it.
     target_open: bool,
+    /// **Which row of the Library bay's list has its menu down**, or `None`
+    /// for none — the console's own state, exactly as [`target_open`] beside
+    /// it is, and not a fourth mark: a menu is a card that is there or is not,
+    /// and the row under it draws the same either way.
+    ///
+    /// **One field where the pulldown takes two**, and that is the whole of
+    /// the difference between the two cards: a pulldown is a capsule that is
+    /// drawn whether or not its list is down, so *which deck* outlives *is it
+    /// open*; a row menu is the card and nothing else, so an open menu with no
+    /// row under it cannot be spelled here.
+    ///
+    /// **Private, with [`View::open_menu`] and [`View::shut_menu`] the only
+    /// ways in.** `open_menu` does **not** refuse a console the mixer is
+    /// drawing no strip for, where `open_target` does: this card carries
+    /// `Save as a kbset` under the separator whatever the mixer is doing, so
+    /// there is always something to pick and something to leave by.
+    ///
+    /// [`target_open`]: Self::target_open
+    menu_row: Option<usize>,
     /// **Which Set in the Library bay a load would take**, the mock's
     /// `.lib-row.cursor`, and the second of this console's two pointers.
     ///
@@ -16476,6 +16867,9 @@ impl View {
             // **Shut**, which is not a fourth mark: a list is down or it is
             // not there, and the pulldown draws the same either way.
             target_open: false,
+            // **No menu**, which is not a mark either, for the reason above
+            // it: a card is down on a row or there is no card.
+            menu_row: None,
             cursor_row: 0,
             // **Nothing open**, which is not a fourth mark: a reading is a
             // block of rows or it is not there, and the chip that opens one
@@ -16614,6 +17008,59 @@ impl View {
         let was = self.target_open;
         self.target_open = false;
         was
+    }
+
+    /// **What a row's menu is open on, and how many decks it offers** — the
+    /// one value [`LibraryBay::menu`] lays itself out from.
+    ///
+    /// [`View::target`]'s shape one control along, and for that method's
+    /// reason: read once for the frame and handed to the paint and to the
+    /// press, so the card that is drawn and the card a press lands on are one
+    /// derivation of one reading.
+    pub fn menued(&self) -> Menued {
+        Menued {
+            row: self.menu_row,
+            decks: self.mixer.len().min(DECKS),
+        }
+    }
+
+    /// **Whether a row's menu is down** — see [`View::menu_row`] the field.
+    pub fn menu_open(&self) -> bool {
+        self.menu_row.is_some()
+    }
+
+    /// **Put the menu down on `row`**, and answer whether it went down.
+    ///
+    /// **A row the bay is not drawing is refused**, which is
+    /// [`View::aim_at`]'s rule read on a different list: a card hanging off a
+    /// row nobody can see would be a gesture with nothing under it, and the
+    /// row is where the card is measured from. The count is the *listing*'s
+    /// rather than the bay's, because this crate is not told how many rows the
+    /// bay had room for until it is laid out — [`LibraryBay::menu_ask`] is
+    /// where a press is turned down against the drawn rows, and this is the
+    /// wall behind it.
+    ///
+    /// **It does not refuse a console with no strip**, unlike
+    /// [`View::open_target`]: the send under the separator names no deck, so a
+    /// menu with no loads in it is still a card with something to pick.
+    ///
+    /// The `bool` is [`View::select`]'s: a caller repaints on a move and not
+    /// on a press.
+    pub fn open_menu(&mut self, row: usize) -> bool {
+        if row >= self.library.len() {
+            return false;
+        }
+        let moved = self.menu_row != Some(row);
+        self.menu_row = Some(row);
+        moved
+    }
+
+    /// **Take the menu away**, and answer whether there was one down.
+    ///
+    /// [`View::shut_target`]'s shape: a caller repaints on a move, so a
+    /// dismissal of nothing costs no frame.
+    pub fn shut_menu(&mut self) -> bool {
+        self.menu_row.take().is_some()
     }
 
     /// **Which row of the Library bay the cursor is on** — see
@@ -17453,6 +17900,10 @@ impl View {
         // bay's own mark and the two are free to name two different decks,
         // which is `View::target` the field.
         let load = self.target();
+        // **And the row menu's reading, off the same borrow and for the same
+        // reason** — it counts the strips too, and the arm below borrows the
+        // slices it would be read off.
+        let menued = self.menued();
         let waiting = self.staging.as_slice();
         let panes = self.inspector.as_slice();
         // **The eighth pointer, read once for the frame beside the panes it is
@@ -17617,8 +18068,8 @@ impl View {
                             // own: it says which directory this library is
                             // pointed at, where the chips say which library —
                             // and it is drawn whichever chip is marked,
-                            // because it is also where a send lands
-                            // (ADR-0267).
+                            // because it is also where a send's save dialog
+                            // opens (ADR-0311).
                             if let Some(at) = pointed {
                                 path_into(ui, &pal, &bay, at);
                             }
@@ -17772,6 +18223,19 @@ impl View {
                     let at = bay.load(ui.ctx(), load);
                     if let Some(card) = at.list(to_egui(panel.layout().viewport())) {
                         deck_list_into(ui, &pal, &at, load, card);
+                    }
+                }
+            }
+            // **And a row's menu, last of the four cards** — it hangs out of a
+            // row of that bay's list and down over the rows under it, so a
+            // card painted from inside the arm would go on before them. It can
+            // never be down while any of the other three is, for their reason.
+            if menued.row.is_some() {
+                if let Some(bay) = library(panel.layout(), scopes, sets, opened, pointed) {
+                    if let Some(menu) =
+                        bay.menu(ui.ctx(), to_egui(panel.layout().viewport()), menued)
+                    {
+                        row_menu_into(ui, &pal, &menu);
                     }
                 }
             }

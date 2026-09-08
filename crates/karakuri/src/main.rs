@@ -176,7 +176,7 @@
 //!   an operation (ADR-0236), and a run without the flag writes that setting
 //!   for nobody. A panel that opened a class silently would still be the
 //!   opposite of
-//!   [P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md),
+//!   [P-0094](../../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md),
 //!   which is why every pill is shut at startup.
 //! - **Replay.** Rendering a recorded session back. This is offline work and
 //!   an instrument is not where it belongs; `karakuri-cli --replay` is the
@@ -326,7 +326,7 @@ use karakuri_console::view::{
     library as library_bay, look as look_row, master as master_row, mcp_pill, mixer as mixer_bay,
     outputs, picture_rect, preview_rects, program_bay, program_head, tracker_group,
     transition as transition_row, transport as transport_row, Aim, Ask, AudioAsk, AudioIn, Basis,
-    Budgeted, Chosen, Go, Kind, McpPill, Picture, Read, Reading, Scope, Taken, Tracker,
+    Budgeted, Chosen, Go, Kind, McpPill, Picked, Picture, Read, Reading, Scope, Taken, Tracker,
     TransitionSettings, View, DECKS, DECK_LETTERS, REGIONS,
 };
 // **How many slots a deck can hold**, which is how many this one has — see
@@ -849,7 +849,7 @@ struct Costs {
     /// engine behind it — 24.7 ms, about forty a second, whether or not
     /// anything is pending
     /// ([ADR-0212](../../../docs/adr/0212-the-beat-is-a-light-that-travels-and-it-declares-for-itself.md),
-    /// [P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)).
+    /// [P-0094](../../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)).
     /// So this window's `None` now needs the transport row folded away as
     /// well, which is a **fourth** fold and is the arm below saying so.
     ///
@@ -2088,7 +2088,46 @@ impl Readout {
             // strip, and five derivations would be five answers.
             (Pointer::Down, Claim::Panel) => {
                 self.panel.solve();
-                // **The audio-in pill first**, and it and the arrangement pill
+                // **A row's menu is asked before every other control**, and
+                // that ordering is the rule rather than a convenience: it is
+                // the only card whose *pill* is not a capsule of its own, so
+                // there is no press that both opens it and belongs to
+                // something else, and while it is down `input::claim`'s rule 2
+                // has already given every press on the console to the panel.
+                // Asked after the two pills below, a press on one of *their*
+                // capsules would open that card instead of dismissing this one
+                // — a second card down while the first still was, which is the
+                // one thing rule 2 is written to make impossible (ADR-0311).
+                //
+                // **Only while it is down.** A primary press never opens this
+                // menu — that is the secondary button's, in the arm at the
+                // bottom of this match — so with no card down this block does
+                // not run at all and every control below goes on meaning what
+                // it means, the Library bay's own rows included.
+                if self.view.menu_open() {
+                    let picked = library_bay(
+                        self.panel.layout(),
+                        &self.view.scopes,
+                        &self.view.library,
+                        self.view.opened(),
+                        self.view.pointed(),
+                    )
+                    .and_then(|bay| {
+                        bay.menu_ask(
+                            ctx,
+                            view::to_egui(self.panel.layout().viewport()),
+                            self.view.menued(),
+                            // **The Sets, for the load button's reason two
+                            // controls along**: every item this menu carries
+                            // names a Set, and a `history` row is a version.
+                            self.view.sets(),
+                            at,
+                        )
+                    });
+                    did = self.menued(picked.unwrap_or(Picked::Shut));
+                    return (claim, did);
+                }
+                // **The audio-in pill first of the rest**, and it and the arrangement pill
                 // are the only two whose order matters: each
                 // draws a card *over* the bays, so while one is down a press
                 // inside it belongs to the card and not to whatever it is
@@ -2153,7 +2192,7 @@ impl Readout {
                 // below is `Aim::Shut` — the same shape the two pills above
                 // are in, and for their reason.
                 //
-                // **The three cards can never be down together**: the press
+                // **The four cards can never be down together**: the press
                 // that would open a second one lands while the first is open,
                 // so whichever is open claims it and that press shuts it.
                 //
@@ -2776,7 +2815,48 @@ impl Readout {
                     claim = Claim::Panel;
                 }
             }
-            (Pointer::Down | Pointer::Up, _) => {}
+            // **The secondary button, and the whole of what it reaches on
+            // this panel is a row of the Library bay's list.** A press on one
+            // puts that row's menu down; a press anywhere else asks for
+            // nothing at all and is not an error — `menu_ask` answers `None`
+            // and this arm leaves `did` as `Acted::Nothing`, which is what a
+            // press on a bay's ground already does.
+            //
+            // **One call for both halves of the gesture**, which is
+            // `LibraryBay::menu_ask`'s own shape: with no card down it asks
+            // *which row did this name*, and with one down it asks *which item
+            // did this pick* — so a secondary press while the menu is open
+            // picks or dismisses exactly as a primary one does, and the
+            // gesture does not care which button ends it.
+            //
+            // **The claim is asked the same way and is not this button's
+            // question**: `input::claim` decides whose an event is from where
+            // the pointer is, so a secondary press over a row is the panel's
+            // for the reason a primary one is, and one over a boundary or over
+            // nothing is not.
+            (Pointer::Secondary, Claim::Panel) => {
+                self.panel.solve();
+                let picked = library_bay(
+                    self.panel.layout(),
+                    &self.view.scopes,
+                    &self.view.library,
+                    self.view.opened(),
+                    self.view.pointed(),
+                )
+                .and_then(|bay| {
+                    bay.menu_ask(
+                        ctx,
+                        view::to_egui(self.panel.layout().viewport()),
+                        self.view.menued(),
+                        self.view.sets(),
+                        at,
+                    )
+                });
+                if let Some(ask) = picked {
+                    did = self.menued(ask);
+                }
+            }
+            (Pointer::Down | Pointer::Up | Pointer::Secondary, _) => {}
         }
         (claim, did)
     }
@@ -2941,6 +3021,62 @@ impl Readout {
             Aim::NoSet => {
                 println!("load: nothing under the cursor — this library is listing no Sets");
                 Acted::Nothing
+            }
+        }
+    }
+
+    /// **A press on a row's menu, and what this program does about it.**
+    ///
+    /// [`Readout::aimed`]'s shape one control along, and the same division:
+    /// the two answers that are the *console's* own state are performed here,
+    /// and the two that are operations leave as ones. **Nothing is performed
+    /// here**, and in particular nothing writes a file: a `LoadSet` is
+    /// `played`'s, exactly as it is for the button, the key and the drop, and
+    /// a send is the window's, because a bundle is a disk read and a file
+    /// written.
+    ///
+    /// **The menu is put away before either operation is emitted**, and it is
+    /// put away on both arms rather than on one: a card left standing over a
+    /// load that has already been asked for would claim the next press on the
+    /// console for a gesture the hand has finished. That is `Menu::Naming`'s
+    /// own rule at the arrangement pill, one bay along.
+    ///
+    /// **The load moves no mark.** `View::aim_at` is not called and neither is
+    /// `View::select` or the cursor: the item named the deck and the row named
+    /// the Set, so there is nothing left for this press to have moved — which
+    /// is the whole of why the menu is a route worth having.
+    fn menued(&mut self, ask: Picked) -> Acted {
+        match ask {
+            Picked::Open(row) => {
+                println!(
+                    "menu: `{}` — load it onto a deck, or save it as a kbset",
+                    self.view
+                        .sets()
+                        .get(row)
+                        .map(String::as_str)
+                        .unwrap_or_default()
+                );
+                self.view.open_menu(row);
+                Acted::Nothing
+            }
+            Picked::Shut => {
+                self.view.shut_menu();
+                Acted::Nothing
+            }
+            // **Down the path the button, the key and the drop already take.**
+            // `played` performs `LoadSet` by re-pointing the slot's source, so
+            // all four routes arrive at the same place (ADR-0228).
+            Picked::Load(operation) => {
+                self.view.shut_menu();
+                Acted::Emitted(Some(operation))
+            }
+            // **The send leaves as an operation and the file is written where
+            // every other disk write on this panel is** — the window, on the
+            // branch a star and a keep already take, because a bundle is a
+            // store read and a `.kbset` is a file (P-0091, ADR-0156).
+            Picked::Send(operation) => {
+                self.view.shut_menu();
+                Acted::Emitted(Some(operation))
             }
         }
     }
@@ -4089,8 +4225,30 @@ const KEYS: &[(&str, &str)] = &[
     ),
 ];
 
-/// A pointer event, stripped to what the rule needs. A button is left or it
-/// is not routed at all.
+/// A pointer event, stripped to what the rule needs.
+///
+/// **A button is left, or it is the secondary button, or it is not routed at
+/// all.** This said *a button is left or it is not routed* until 2026-09-09,
+/// and it was exact: `window_event` matched `MouseButton::Left` and every
+/// other button fell through its `_ => {}`, so a right press reached nothing
+/// in this program and `egui` was never told about one either.
+///
+/// **What made it a second variant rather than a field on [`Pointer::Down`]**
+/// is where the answer is wanted. `karakuri_console::input::claim` decides
+/// *whose* an event is from where the pointer is and has never known which
+/// button a press was — rules 1 to 4 are all about position — and nothing
+/// about that changes: a secondary press on a control the console draws is the
+/// console's for the same reason a primary one is. What differs is only what
+/// the press then *asks* for, which is this file's half of the seam. A
+/// `Down { secondary: bool }` would have put the flag through every arm of the
+/// press handler to be read by one of them
+/// ([ADR-0311](../../../docs/adr/0311-a-row-menu-loads-a-set-onto-a-named-deck-and-saves-it-through-the-systems-own-dialog.md)).
+///
+/// **There is no `Secondary` release**, and that is the whole of what this
+/// button does here: a secondary press opens a menu and the gesture ends at
+/// the *next* press, which is [`Pointer::Down`]'s or this one's again. Nothing
+/// is taken in hand on a secondary press, so there is nothing for a release to
+/// let go of.
 ///
 /// **The wheel carries a distance now, and only one axis of it.** It used to
 /// carry nothing, because nothing on this panel did anything with one — *which
@@ -4105,6 +4263,9 @@ enum Pointer {
     Moved(Point),
     Down,
     Up,
+    /// **A press of the secondary button**, which on this panel opens the menu
+    /// on a row of the Library bay's list and does nothing anywhere else.
+    Secondary,
     /// **How far to scroll, in logical pixels, positive down the list** — a
     /// notch of a mouse wheel converted to `karakuri_console::room::size::WHEEL_STEP` and a
     /// trackpad's own pixels passed straight through.
@@ -4305,7 +4466,7 @@ const SEED_SALT: u32 = 7;
 /// budget says what the operator would be spending if they did. **If an
 /// operator puts all four on air the governor will not stop them**: it never
 /// takes a Live slot off air
-/// ([P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)),
+/// ([P-0094](../../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)),
 /// so what happens is `Report::over_budget` and priming suspended — a warning
 /// on the legend's governor line and a decision left with the person who made
 /// it. That is the governor doing its job rather than this file second-guessing
@@ -5794,6 +5955,57 @@ struct Saved {
     reply: Option<mcp::Reply>,
 }
 
+/// **What a send came back with**, at the frame it arrives.
+///
+/// [`Saved`]'s shape one act along, and the fields differ where the two acts
+/// do: a send files under no id in this store, so there is no `Asked` to carry
+/// — the answer to *whose library is this* is *nobody's*, which is the whole
+/// of what sending is — and there is no `mcp::Reply`, because no tool asks for
+/// one.
+struct Sent {
+    /// **The Set that was packaged**, which is the row the menu was opened on.
+    id: String,
+    /// **Where the operator sent it**, or `None` where they dismissed the
+    /// dialog without naming anywhere.
+    ///
+    /// **`None` is an outcome and not a failure**, which is why it is here
+    /// rather than an `Err` in [`outcome`](Self::outcome): nothing went wrong,
+    /// nothing was written, and the sentence a reader needs is the third one
+    /// rather than a refusal (P-0083 is about what a *rejection* carries, and
+    /// this is not one).
+    to: Option<std::path::PathBuf>,
+    /// `Ok` and the bundle is on the disk at [`to`](Self::to). **A failure is
+    /// printed and nothing claims otherwise**, which is [`Saved::outcome`]'s
+    /// own rule.
+    outcome: Result<(), String>,
+}
+
+impl Sent {
+    /// **The one sentence this outcome is said in**, formed here so that the
+    /// words a test reads and the words an operator reads are the same run of
+    /// text — [`Keeping::took_save`]'s *one sentence for both audiences*, with
+    /// one audience.
+    ///
+    /// **Three outcomes and three sentences.** Written; refused, naming what
+    /// the disk or the store said; and *no file was named*, which is not a
+    /// refusal and does not read like one — nothing went wrong, and rule 04 of
+    /// the manual is that a press that did nothing says so rather than going
+    /// quiet.
+    fn said(&self) -> String {
+        let Sent { id, to, outcome } = self;
+        match (to, outcome) {
+            (None, _) => format!(
+                "  send: `{id}` was not written — the save dialog was dismissed, and nothing was \
+                 asked of the disk"
+            ),
+            (Some(to), Ok(())) => format!("  send: `{id}` written to `{}`", to.display()),
+            (Some(to), Err(e)) => {
+                format!("  send: `{id}` was not written to `{}`: {e}", to.display())
+            }
+        }
+    }
+}
+
 /// A save that will not happen, to the terminal and to whoever asked if that was
 /// not a hand.
 ///
@@ -5880,7 +6092,7 @@ enum Ended {
 /// let go of on the frame path stalls the frame just as surely as one that was
 /// finished there. `karakuri-cli` finishes in `exiting`, where a stall is free;
 /// a press is not that place
-/// ([P-0094](../../../docs/principles/0094-a-panel-that-lies-is-worse-than-a-panel-that-is-plain.md)).
+/// ([P-0094](../../../../docs/principles/0094-a-panel-that-lies-is-worse-than-a-panel-that-is-plain.md)).
 ///
 /// So both ends go to a thread of their own and the outcome comes back over
 /// [`Sessions::done`], said at the frame it arrives — which is
@@ -7972,8 +8184,8 @@ fn folder_dropped(
             // while `folder` is already marked moves nothing: the sentence is
             // about where the mark **is**. `false` here is a console handed no
             // `folder` chip, which cannot mark one — the row is still drawn,
-            // since it is where a send lands whichever scope is marked
-            // (ADR-0267), and the listing under it is whatever scope this
+            // since it is where a send's save dialog opens whichever scope is
+            // marked (ADR-0311), and the listing under it is whatever scope this
             // console does have.
             let marked = match view.scope() == Some(Scope::Folder) {
                 true => "the `folder` chip is marked",
@@ -8622,6 +8834,115 @@ fn taken_in_press(deck: u8, taken: TakenIn) -> [Operation; 2] {
     ]
 }
 
+/// **The other direction of that row: a Set out of this store and into a file
+/// the operator names**, asked for and answered without a frame waiting on
+/// either half.
+///
+/// # The dialog is asked for here and awaited nowhere
+///
+/// `rfd::AsyncFileDialog::save_file` is called on this thread — the main one,
+/// which is where a press handler is — and returns a future at once. On macOS
+/// what that call has already done is `beginSheetModalForWindow:`, an
+/// **asynchronous** sheet hung on this window: the run loop is untouched, so
+/// the frame loop goes on drawing behind it and the panel's continuous motion
+/// goes on saying *this is live*. That is the whole of what
+/// [P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)
+/// asks of a mechanism that could run during a performance, and it was
+/// **measured** rather than assumed before this was written —
+/// [ADR-0311](../../../docs/adr/0311-a-row-menu-loads-a-set-onto-a-named-deck-and-saves-it-through-the-systems-own-dialog.md)
+/// carries the reading and the probe. The synchronous `FileDialog::save_file`
+/// is the thing this must not be: it is `runModal`, a nested run loop, and a
+/// panel that stops drawing.
+///
+/// **The future is awaited on a worker and so is everything after it**, which
+/// is [`Keeping::save_set`]'s thread one act along and for its reason: a
+/// bundle is a store read and every source inlined, then a file written, and
+/// none of that is a thing to do on a frame (P-0091). The thread is detached
+/// and no frame waits for it; the outcome comes back down a channel and is
+/// said where a keep's is.
+///
+/// **The store is opened on the worker rather than handed in**, exactly as
+/// [`Save::run`] does it: a `Store` is not what crosses the thread, a root is.
+///
+/// # Where the dialog opens, and what it is called
+///
+/// The name offered is `<id>.kbset` — the store's own naming rule, so nothing
+/// is invented ([P-0096](../../../docs/principles/0096-the-operators-library-is-written-by-an-operators-own-act.md))
+/// — and the directory is the one the Library bay is pointed at where a folder
+/// has been dropped on this window (ADR-0275), and the platform's own default
+/// where none has. **A file already there is the dialog's question and never
+/// this program's**: asking again on this side would be two programs asking
+/// one question, and the operator would have answered the wrong one first.
+fn sending(
+    window: &Arc<Window>,
+    root: &std::path::Path,
+    folder: Option<&std::path::Path>,
+    id: &str,
+    tx: std::sync::mpsc::Sender<Sent>,
+) {
+    let mut dialog = rfd::AsyncFileDialog::new().set_file_name(format!(
+        "{id}{}",
+        karakuri_store::store::Store::SET_FILE_SUFFIX
+    ));
+    if let Some(folder) = folder {
+        dialog = dialog.set_directory(folder);
+    }
+    let asked = dialog.set_parent(&**window).save_file();
+    let (id, root) = (id.to_owned(), root.to_path_buf());
+    std::thread::spawn(move || {
+        let answer = pollster::block_on(asked).map(|handle| handle.path().to_path_buf());
+        let _ = tx.send(sent(&root, id, answer));
+    });
+}
+
+/// **What the dialog's answer comes to**: a file written, or nothing at all.
+///
+/// Split out of [`sending`]'s thread so that the half with no window in it can
+/// be run without one — the dialog is the platform's and the answer is a
+/// `PathBuf` or it is `None`, which is the whole of what this needs to know.
+///
+/// **`None` writes nothing and nothing is opened**: the store is not read, no
+/// bundle is built and no path is touched. That is the property `a_dismissed_dialog_writes_nothing_and_says_so`
+/// is watched to fail against, and it is why the early return is here rather
+/// than inside a `map` over the write.
+fn sent(root: &std::path::Path, id: String, to: Option<std::path::PathBuf>) -> Sent {
+    let Some(to) = to else {
+        return Sent {
+            id,
+            to: None,
+            outcome: Ok(()),
+        };
+    };
+    let outcome = bundled(root, &id).and_then(|text| {
+        std::fs::write(&to, text).map_err(|e| format!("writing `{}`: {e}", to.display()))
+    });
+    Sent {
+        id,
+        to: Some(to),
+        outcome,
+    }
+}
+
+/// **One Set as the bytes of a `.kbset`**, which is `karakuri-cli`'s
+/// `packaged_set` with the authoring half taken out.
+///
+/// This side never packages a `.kset`: the id half is the whole of what a row
+/// of a library listing can name, and the flag's other spelling is *take in
+/// then send in one flag* ([ADR-0260](../../../docs/adr/0260-sending-a-set-is-a-read-and-a-reads-answer-goes-where-the-surface-that-asked-puts-answers.md)),
+/// which is two presses here and already reached.
+///
+/// **`setfile::bundle` is where the inlining and its one refusal live**
+/// (ADR-0231): one missing artifact refuses the whole thing and names the
+/// node, because a bundle short of a procedure looks self-contained and is
+/// not. Nothing here repeats that and nothing here loosens it.
+fn bundled(root: &std::path::Path, id: &str) -> Result<String, String> {
+    let store = Store::open(root).map_err(|e| format!("store `{}`: {e}", root.display()))?;
+    Ok(setfile::bundle(&store, id)?
+        .iter()
+        .map(|line| format!("{}\n", line.as_str()))
+        .collect())
+}
+
 /// **Put a library Set on a running deck**, which is the whole of what
 /// `Operation::LoadSet` needed and is a re-point rather than an install.
 ///
@@ -8847,7 +9168,7 @@ fn arrangements(root: &std::path::Path) -> Vec<String> {
 ///
 /// # Who asked decides where it lands, and for a star there is nowhere else
 ///
-/// [P-0096](../../../docs/principles/0096-the-operators-library-is-written-by-an-operators-own-act.md)
+/// [P-0096](../../../../docs/principles/0096-the-operators-library-is-written-by-an-operators-own-act.md)
 /// is the actor and not the flag, and `my sets` is by construction the list of
 /// Sets **the operator chose** — so a model's star must not reach
 /// `<store>/favourites.json`. That much is
@@ -10120,7 +10441,7 @@ fn look(look: &Look) -> view::Look {
 /// computing the anchor here would have been a window binary taking a decision
 /// about a file format, and the printed line was the right answer until the
 /// conversion existed
-/// ([P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)).
+/// ([P-0094](../../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)).
 /// What changed is the conversion, not this file's authority: the anchor is
 /// still the engine's policy and this window still only reads a tempo.
 ///
@@ -11185,7 +11506,7 @@ fn reading(
     // *on* rather than a wipe *over*, a different picture and a legitimate
     // one, so the mode is left where the operator put it. The condition is the
     // conversion's and what it needs to hold it is this
-    // ([P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)).
+    // ([P-0094](../../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)).
     //
     // **What the deck reports rather than what it was asked for**, which is
     // `Deck::residency`'s answer: the governor may hold a slot below the
@@ -11638,6 +11959,24 @@ struct Keeping {
     /// each save thread is given a clone of.
     saves: std::sync::mpsc::Receiver<Saved>,
     save_tx: std::sync::mpsc::Sender<Saved>,
+    /// **Where a send that has answered the dialog comes back**, and the
+    /// sending half each send thread is given a clone of. [`saves`]' shape one
+    /// act along, and it is a second channel rather than a second arm of the
+    /// first because a send is not a save: it writes outside the store, under
+    /// a name the operator typed into a window this program does not own, and
+    /// nothing is waiting on it over MCP.
+    ///
+    /// **The run does not wait for these**, where it waits for the saves once
+    /// at the end ([`Keeping::awaited_saves`]). A save is bounded by a disk; a
+    /// send is bounded by a hand that has not answered a dialog yet, and a
+    /// quit that blocked on one would be a program refusing to close because
+    /// it had opened a window over itself. So there is no count kept here: a
+    /// send still waiting on its dialog when the run ends wrote nothing, which
+    /// is the same answer a dismissal gives.
+    ///
+    /// [`saves`]: Self::saves
+    sends: std::sync::mpsc::Receiver<Sent>,
+    send_tx: std::sync::mpsc::Sender<Sent>,
     /// How many saves are being written right now. The run waits for these once,
     /// at the end and under a bound — see [`Keeping::awaited_saves`].
     in_flight: usize,
@@ -11908,7 +12247,42 @@ impl Keeping {
         for saved in landed {
             written |= self.took_save(saved);
         }
+        // **Every send that has answered since the last frame, said here.**
+        // The same drain in the same place and for the same reason — a frame
+        // owes the display a picture and owes a disk nothing — and it is on
+        // this call rather than on one of its own so that the two outcomes a
+        // press can be waiting for are reported at one moment.
+        //
+        // **It returns nothing to the caller.** A save adds a row to the
+        // Library bay's listing and a send does not: the file lands wherever
+        // the operator sent it, which is outside this store by construction,
+        // so there is no listing here that could have gone stale.
+        while let Ok(sent) = self.sends.try_recv() {
+            Keeping::took_send(sent);
+        }
         written
+    }
+
+    /// One send's outcome, said.
+    ///
+    /// [`Keeping::took_save`]'s shape one act along, with the answering taken
+    /// out: nothing over MCP is waiting on a send — the tool does not exist
+    /// and would be handed the bytes rather than a path
+    /// ([ADR-0260](../../../docs/adr/0260-sending-a-set-is-a-read-and-a-reads-answer-goes-where-the-surface-that-asked-puts-answers.md))
+    /// — so the terminal is the whole audience and there is no second copy of
+    /// the words to keep in step.
+    ///
+    /// **A dialog that was dismissed is one of the three outcomes and is said
+    /// out loud**, rather than being silence: rule 04 of the manual is that
+    /// nothing is hidden quietly, and a press that opened a window and then
+    /// wrote nothing is exactly the case a reader would otherwise read as a
+    /// fault.
+    ///
+    /// **A failure is printed and nothing claims otherwise** — [`Saved`]'s own
+    /// rule: a program saying a file was written when the disk refused is the
+    /// shape of lie this codebase is arranged against.
+    fn took_send(sent: Sent) {
+        println!("{}", sent.said());
     }
 
     /// One save's outcome, said and answered.
@@ -12093,6 +12467,7 @@ impl App {
         readout.opening = opening;
         let (built_tx, built) = std::sync::mpsc::channel();
         let (save_tx, saves) = std::sync::mpsc::channel();
+        let (send_tx, sends) = std::sync::mpsc::channel();
         App {
             gfx: None,
             sources: launch.sources,
@@ -12132,6 +12507,8 @@ impl App {
                 pending: Vec::new(),
                 saves,
                 save_tx,
+                sends,
+                send_tx,
                 in_flight: 0,
             },
             recording: Sessions::new(),
@@ -13025,6 +13402,31 @@ impl ApplicationHandler for App {
                         None,
                     );
                 }
+                // **And a press that asked to send a Set is a dialog to open
+                // and a file to write**, here for the reason the three above
+                // it are: the store is the window's, a bundle is a store read
+                // and a file written, and neither is a thing to do on a frame
+                // (P-0091, ADR-0156). What this side adds to the operation is
+                // the destination, which the operation deliberately does not
+                // carry (ADR-0260): a read's answer goes where the surface
+                // that asked puts answers, and this surface asks the platform.
+                //
+                // **Both buttons reach this line**, because the item is picked
+                // by whichever press lands on the card while it is down — see
+                // the `Secondary` arm below, which calls the same function.
+                if let Acted::Emitted(Some(Operation::TransferSet {
+                    transfer: SetTransfer::Send { ref id },
+                })) = acted
+                {
+                    println!("  send: naming a file to write `{id}` to");
+                    sending(
+                        &gfx.window,
+                        &self.store,
+                        self.folder.as_deref(),
+                        id,
+                        self.keeping.send_tx.clone(),
+                    );
+                }
                 // **And a press on the `rec` pill is a recording started or
                 // stopped**, here for the reason the three above it are: the
                 // engine and the store are the window's, and neither end of
@@ -13135,6 +13537,56 @@ impl ApplicationHandler for App {
                     Change::Pointer(claim).repaint(),
                 )
                 .soonest(took);
+                App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
+            }
+            // **The secondary button, and only its press.** A release is not
+            // routed at all, which is the whole of what this gesture is: a
+            // secondary press puts a row's menu down and takes nothing in
+            // hand, so there is nothing for a release to let go of and a
+            // `Pointer::Secondary` up would be an event with no arm to run
+            // (ADR-0311).
+            //
+            // **`egui` is not told either way**, which is what this arm
+            // changes least: before it, every button but the left one fell
+            // through this handler's `_ => {}` and reached nothing, and
+            // `egui` owns no widget anywhere on this console, so a secondary
+            // press routed to it would reach nothing there either. The claim
+            // is asked for the same reason it is asked on a left press —
+            // rule 1's drag and rule 2's cards are about the gesture and not
+            // about the button — and the answer is used the same way.
+            WindowEvent::MouseInput {
+                state: ElementState::Pressed,
+                button: MouseButton::Right,
+                ..
+            } => {
+                let ctx = gfx.egui.egui_ctx().clone();
+                let (claim, acted) = self.readout.pointer(&ctx, Pointer::Secondary);
+                // **The same send branch the left press takes**, because the
+                // item is picked by whichever press lands on the card: a menu
+                // opened with the secondary button and picked with it again is
+                // one gesture, and the second press is the one that names the
+                // item.
+                if let Acted::Emitted(Some(Operation::TransferSet {
+                    transfer: SetTransfer::Send { ref id },
+                })) = acted
+                {
+                    println!("  send: naming a file to write `{id}` to");
+                    sending(
+                        &gfx.window,
+                        &self.store,
+                        self.folder.as_deref(),
+                        id,
+                        self.keeping.send_tx.clone(),
+                    );
+                }
+                let repaint = App::performed(
+                    gfx,
+                    self.started,
+                    &mut self.readout,
+                    self.recording.recorder(),
+                    &acted,
+                    Change::Pointer(claim).repaint(),
+                );
                 App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
             }
             WindowEvent::MouseWheel { delta, .. } => {
@@ -14677,7 +15129,7 @@ const DT: f32 = karakuri_engine::set::DT;
 ///    once, and the run continues. Exiting would mean a laptop with its
 ///    microphone switched off cannot open the panel at all.
 /// 2. **A device that was named and is not there.** A different case, and
-///    [P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)
+///    [P-0094](../../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)
 ///    is why: somebody said *that one*, and going quietly on with a different
 ///    one — or with none — is the silently wrong picture. It cannot happen
 ///    *here*, because nothing names an input at launch; it happens at the
@@ -16726,9 +17178,11 @@ mod tests {
         // — the Set with every source it names inlined — where the `.kbset`
         // sitting in `<store>/sets/` is a projection whose material is the
         // artifacts beside it and is **not** self-contained. So this is the
-        // loop ADR-0267 is about, closed with the half that exists: a package
-        // written into a directory the bay can be pointed at, and taken in
-        // from a row of it.
+        // loop the send half closes, driven with the half that exists: a
+        // package written into a directory the bay can be pointed at, and
+        // taken in from a row of it. It is where a send's dialog opens
+        // (ADR-0311), so the pair is the ordinary one rather than a contrived
+        // one.
         let second = scratch_dir("folder-take-in-bundle");
         Store::open(&second).expect("a second store");
         let sent = scratch_dir("folder-take-in-sent");
@@ -19537,6 +19991,264 @@ mod tests {
             !readout.view.reading_open(),
             "the second press did not put the reading away"
         );
+    }
+
+    /// A strip, as far as the Library bay cares: something for a deck to be
+    /// named on. Every reading in it is beside the point here.
+    fn bare_strip() -> view::Strip {
+        view::Strip {
+            name: String::new(),
+            tally: view::Tally::Allocated,
+            requested: view::Tally::Allocated,
+            gain: 0.0,
+            gain_to: None,
+            opacity: 0.0,
+            opacity_to: None,
+            blend: BlendMode::Add,
+            mask: view::Mask::None,
+            mask_angle: 0.0,
+            level: None,
+        }
+    }
+
+    /// **A secondary press on a Library row puts that row's menu down, and a
+    /// primary press on the same row does not.**
+    ///
+    /// **This is the one thing neither crate could assert on its own.**
+    /// `karakuri-console` has never known which button a press was — rules 1
+    /// to 4 of `input::claim` are all about where the pointer is — so the
+    /// distinction lives here, in the arm that turns a `winit` button into a
+    /// [`Pointer`]. Both halves are asserted because a handler that opened the
+    /// menu on either button would pass a test made only of the first, and
+    /// would take the row's ordinary press away: a primary press picks a Set
+    /// up to carry it, which is what the drag onto a strip is.
+    ///
+    /// **And the item is picked with either button**, which is the other half
+    /// of the same seam: once the card is down it is `input::claim`'s rule 2,
+    /// and that rule is about a card being down rather than about what put it
+    /// there. So the pick here is a *primary* press on a card a secondary
+    /// press opened.
+    ///
+    /// A CPU test: a `Readout` takes no device.
+    #[test]
+    fn a_secondary_press_opens_a_rows_menu_and_a_primary_press_does_not() {
+        let ctx = drawn_once();
+        let mut readout = Readout::new(1440.0, 900.0);
+        readout.panel.solve();
+        readout.view.scopes = Scope::ALL.to_vec();
+        readout.view.library = vec!["drift_night".to_owned(), "lattice_veil".to_owned()];
+        readout.view.mixer = std::iter::repeat_with(bare_strip).take(4).collect();
+        assert!(readout.view.select_scope(Scope::MySets));
+
+        // The second row, asked of the derivation that draws it.
+        let row = |readout: &mut Readout| {
+            readout.panel.solve();
+            let at = library_bay(
+                readout.panel.layout(),
+                &readout.view.scopes,
+                &readout.view.library,
+                readout.view.opened(),
+                readout.view.pointed(),
+            )
+            .expect("the bay lists its rows")
+            .row(1);
+            Point::new(at.center().x, at.center().y)
+        };
+
+        // **A primary press takes the Set in hand and opens nothing.**
+        let row_at = row(&mut readout);
+        let at = row_at;
+        assert_eq!(readout.pointer(&ctx, Pointer::Moved(at)).0, Claim::Panel);
+        readout.pointer(&ctx, Pointer::Down);
+        assert!(
+            matches!(readout.panel.in_hand(), Some(InHand::Carrying)),
+            "a primary press on a row did not take the Set in hand"
+        );
+        assert!(
+            !readout.view.menu_open(),
+            "a primary press on a row put that row's menu down, which takes the carry away"
+        );
+        // Let the carry go again, over nothing, so the gesture does not run on
+        // into the presses below.
+        readout.pointer(&ctx, Pointer::Up);
+
+        // **A secondary press on the same row puts the menu down.**
+        assert_eq!(readout.pointer(&ctx, Pointer::Secondary).1, Acted::Nothing);
+        assert!(
+            readout.view.menu_open(),
+            "a secondary press on a row did not put that row's menu down"
+        );
+        assert_eq!(
+            readout.view.menued().row,
+            Some(1),
+            "the menu came down on a row the press was not on"
+        );
+
+        // **A press on another control's capsule dismisses this card rather
+        // than opening that one.** The `load` button is the sharpest case
+        // there is: it is in this bay's own foot, it is a control the pointer
+        // reaches, and a handler that asked it before the card would have
+        // opened the pulldown with a menu still down — two cards down at once,
+        // which is the one thing `input::claim`'s rule 2 exists to make
+        // impossible. This is the assertion that says which was asked first.
+        readout.panel.solve();
+        let button = library_bay(
+            readout.panel.layout(),
+            &readout.view.scopes,
+            &readout.view.library,
+            readout.view.opened(),
+            readout.view.pointed(),
+        )
+        .expect("the bay draws its foot")
+        .load(&ctx, readout.view.target())
+        .button;
+        let at = Point::new(button.center().x, button.center().y);
+        assert_eq!(readout.pointer(&ctx, Pointer::Moved(at)).0, Claim::Panel);
+        assert_eq!(readout.pointer(&ctx, Pointer::Down).1, Acted::Nothing);
+        assert!(
+            !readout.view.menu_open(),
+            "a press on the `load` button with a menu down did not dismiss it"
+        );
+        assert!(
+            !readout.view.target_open(),
+            "a press on the `load` button with a menu down opened the pulldown as well, so two \
+             cards were down at once"
+        );
+
+        // Open it again, on the same row, for the pick below.
+        assert_eq!(
+            readout.pointer(&ctx, Pointer::Moved(row_at)).0,
+            Claim::Panel
+        );
+        assert_eq!(readout.pointer(&ctx, Pointer::Secondary).1, Acted::Nothing);
+        assert_eq!(readout.view.menued().row, Some(1));
+
+        // **And the send is picked with a primary press on the card**, which
+        // is rule 2: the card is down, so the press is the card's whichever
+        // button it was.
+        readout.panel.solve();
+        let bay = library_bay(
+            readout.panel.layout(),
+            &readout.view.scopes,
+            &readout.view.library,
+            readout.view.opened(),
+            readout.view.pointed(),
+        )
+        .expect("the bay lists its rows");
+        let menu = bay
+            .menu(
+                &ctx,
+                view::to_egui(readout.panel.layout().viewport()),
+                readout.view.menued(),
+            )
+            .expect("the menu is down");
+        let save = menu.save.center();
+        let at = Point::new(save.x, save.y);
+        assert_eq!(readout.pointer(&ctx, Pointer::Moved(at)).0, Claim::Panel);
+        let (claim, did) = readout.pointer(&ctx, Pointer::Down);
+        assert_eq!(claim, Claim::Panel);
+        assert_eq!(
+            did,
+            Acted::Emitted(Some(Operation::TransferSet {
+                transfer: SetTransfer::Send {
+                    id: "lattice_veil".to_owned()
+                }
+            })),
+            "`Save as a kbset` did not ask to send the row the menu was opened on"
+        );
+        assert!(
+            !readout.view.menu_open(),
+            "the card stayed down after an item was picked"
+        );
+    }
+
+    /// **A send that reached the disk says where it went, and a dismissed
+    /// dialog writes nothing and says so.**
+    ///
+    /// Three outcomes, one sentence each, and the third is the one worth the
+    /// test: a press that opened a window over the panel and then wrote
+    /// nothing is exactly the case a reader would otherwise read as a fault,
+    /// and rule 04 of the manual is that nothing is hidden quietly.
+    ///
+    /// **The dialog is not driven here and does not need to be.** What a save
+    /// dialog answers is a path or nothing, so [`sent`] takes that answer and
+    /// the platform stays outside the test — the same split
+    /// [`Save::run`] is on one act along, where the thread is the caller's and
+    /// the write is a function.
+    ///
+    /// **`None` is asserted to have written nothing at all**, by counting the
+    /// directory rather than by trusting the sentence: a `sent` that bundled
+    /// first and threw the bytes away would print the same words.
+    ///
+    /// A CPU test: a store read and a file written.
+    #[test]
+    fn a_send_says_where_it_went_and_a_dismissed_dialog_writes_nothing_and_says_so() {
+        let root = scratch_dir("send-set");
+        let store = Store::open(&root).expect("a store");
+        // One Set with one node, so a bundle has a source to inline.
+        let hash = store
+            .put_artifact(b"proc p { }\n")
+            .expect("the source is stored");
+        store
+            .write_set(
+                "night01",
+                &[karakuri_store::ndjson::Line::new(Record::Slot {
+                    layer: karakuri_store::record::Layer::L1,
+                    index: 0,
+                    name: Some("geo".to_owned()),
+                    proc_hash: hash,
+                })],
+            )
+            .expect("the set is written");
+
+        let out = root.join("outbox");
+        std::fs::create_dir_all(&out).expect("an outbox");
+
+        // **Dismissed**: nothing is asked of the disk and the sentence says so.
+        let said = sent(&root, "night01".to_owned(), None);
+        assert_eq!(said.to, None);
+        assert!(
+            said.said().contains("dismissed") && said.said().contains("was not written"),
+            "a dismissed dialog was reported as `{}`",
+            said.said()
+        );
+        assert_eq!(
+            std::fs::read_dir(&out).expect("the outbox").count(),
+            0,
+            "a dismissed dialog left a file behind"
+        );
+
+        // **Written**: the file is where the operator sent it and carries the
+        // source inlined, which is what makes it a bundle rather than a copy.
+        let to = out.join("night01.kbset");
+        let said = sent(&root, "night01".to_owned(), Some(to.clone()));
+        assert_eq!(
+            said.outcome,
+            Ok(()),
+            "the send was refused: {}",
+            said.said()
+        );
+        assert_eq!(
+            said.said(),
+            format!("  send: `night01` written to `{}`", to.display())
+        );
+        let text = std::fs::read_to_string(&to).expect("the bundle is on the disk");
+        assert!(
+            text.contains("proc p"),
+            "the file names the source rather than carrying it: {text}"
+        );
+
+        // **Refused**: a Set this store does not hold, and the words are the
+        // bundler's rather than a second copy of them.
+        let said = sent(&root, "gone01".to_owned(), Some(out.join("gone01.kbset")));
+        assert!(said.outcome.is_err(), "a Set nobody holds was packaged");
+        assert!(
+            said.said().contains("gone01") && said.said().contains("was not written to"),
+            "a refused send was reported as `{}`",
+            said.said()
+        );
+
+        std::fs::remove_dir_all(&root).expect("clean up");
     }
 
     /// **The marks a reading is spelled with are in the face the panel draws
@@ -23045,15 +23757,23 @@ mod press_handler {
         // so that the smaller box wins — the same derivation again, told apart
         // from the row below it by the call.
         ("the Library bay's stars", "library_bay(", &["bay.starred("]),
-        // **The list's row names two calls**, because one rectangle means two
-        // things: a press on a library row takes a Set in hand and a press on
-        // a `history` row lands that version on its node. They are one control
-        // in `input::PROBES` for the reason the load's two capsules are one
-        // there — one derivation, one press — and the handler owes both.
+        // **The list's row names three calls**, because one rectangle means
+        // three things: a press on a library row takes a Set in hand, a press
+        // on a `history` row lands that version on its node, and a *secondary*
+        // press on either puts that row's menu down. The first two are one
+        // control in `input::PROBES` — exactly one of them can answer, told
+        // apart by which listing goes in — and the third is a second control
+        // on the same rectangle, which is why that row claims two. All three
+        // are owed here.
+        //
+        // **`bay.menu_ask(` is one entry for two arms of the handler**, the
+        // secondary press that opens the card and the press of either button
+        // that picks from it, exactly as `bay.aim(` is one entry for the
+        // pulldown's four.
         (
             "the Library bay's list",
             "library_bay(",
-            &["bay.take(", "bay.land("],
+            &["bay.take(", "bay.land(", "bay.menu_ask("],
         ),
         // **The four class pills**, one derivation asked four times: they are
         // in four different regions and cannot be one laid-out box, but they
@@ -23536,6 +24256,7 @@ mod gpu {
     fn keeping() -> Keeping {
         let (_, built) = std::sync::mpsc::channel();
         let (save_tx, saves) = std::sync::mpsc::channel();
+        let (send_tx, sends) = std::sync::mpsc::channel();
         Keeping {
             mcp: None,
             edges: Vec::new(),
@@ -23547,6 +24268,8 @@ mod gpu {
             pending: Vec::new(),
             saves,
             save_tx,
+            sends,
+            send_tx,
             in_flight: 0,
         }
     }
