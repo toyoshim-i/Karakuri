@@ -52,9 +52,9 @@
 //! added to the vocabulary does not compile here until somebody has said what
 //! it writes. The three answers are the three groups the survey found:
 //!
-//! - [`Written::Records`] — it writes these, in this order. Seventeen
+//! - [`Written::Records`] — it writes these, in this order. Eighteen
 //!   operations, eight of which need no reading at all.
-//! - [`Written::Silent`] — it writes none, and that is settled. Thirty-two,
+//! - [`Written::Silent`] — it writes none, and that is settled. Thirty-one,
 //!   for [`Silent`]'s four different reasons.
 //! - [`Written::Owed`] — it writes one and this build cannot make it.
 //!   Fourteen, for [`Owed`]'s three different reasons.
@@ -535,8 +535,17 @@ pub enum Silent {
     /// record format has never had — the latency offset, a beat source, a
     /// published interface, loading a Set into a running deck — and a row
     /// whose record is a **Set file's** and has nowhere to put a deck.
-    /// `Operation::WriteParam` names a deck and [`Record::Param`] has no
+    /// `Operation::AttachSignal` names a deck and [`Record::Bind`] has no
     /// `slot`, because a Set does not know what fader it is under.
+    ///
+    /// **`Operation::WriteParam` was the example this paragraph used and is no
+    /// longer here**, which is worth keeping because it says what this answer
+    /// means. Nothing about a knob turn changed: what changed is that
+    /// [`Record::Ride`] was written, so the session vocabulary now carries the
+    /// act at a deck slot's address while [`Record::Param`] goes on being the
+    /// Set file's. Every row left in this group is one record short in exactly
+    /// that way, and none of them is a decision that the act writes nothing —
+    /// see `docs/adr/0280-a-parameter-written-to-a-live-set-is-a-session-record.md`.
     NoRecord,
 }
 
@@ -750,6 +759,44 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
             layer: store_layer(node.layer),
             index: node.index,
             authority: authority.name().to_string(),
+        }),
+        // **A knob turn, and it needs no reading either.** This was
+        // [`Silent::NoRecord`] and the reason given was not that a knob is
+        // unworthy of a record: `Record::Param` is a *Set file's* and has no
+        // `slot`, so there was nowhere in the vocabulary to put the deck this
+        // operation names.
+        // [`Record::Ride`] is that somewhere, and
+        // [P-0092](../../../docs/principles/0092-the-same-inputs-produce-the-same-frame.md)
+        // is what settled that there had to be one — *"mutating a live Set in
+        // place … opens a hole in the record stream and loses replay, undo, A/B
+        // comparison and session recording together"*. See
+        // `docs/adr/0280-a-parameter-written-to-a-live-set-is-a-session-record.md`.
+        //
+        // **The wildcard crosses as an absence and not as an invented layer.**
+        // `ParamAt::node` is `Option<NodeAt>` and a bare key names no node, so
+        // it names no layer either; `Record::Ride`'s `at` is the same
+        // `Option`, which is the reason that record carries a
+        // `karakuri_store::record::NodeAt` rather than `Record::Param`'s
+        // `layer` beside an `index`. A conversion that had to fill a `layer` in
+        // for a wildcard would be writing down a placeholder, which is what
+        // `Record::Param`'s `layer` was and is still living with.
+        //
+        // **The refusal is not taken here**, and could not be: a bare key over
+        // nodes that are not under one authority is refused by
+        // `karakuri_engine::set::Set::write_param`, which is the one place that
+        // decides it and is unreachable from this crate by charter. So this
+        // writes the record the operator asked for and the write is refused
+        // where it lands — which is `Operation::SelectRenderer`'s shape
+        // already: `written` answers a `Record::Select` for a renderer the Set
+        // may no longer have, and the applier is what says so.
+        Operation::WriteParam { deck, param, value } => one(Record::Ride {
+            slot: *deck,
+            at: param.node.map(|node| karakuri_store::record::NodeAt {
+                layer: store_layer(node.layer),
+                index: node.index,
+            }),
+            key: param.key.clone(),
+            value: store_value(*value),
         }),
         // **A free-running tempo being stated**, which is `Record::Tempo`'s own
         // words for a correction with no shift and no confidence: *"The first
@@ -1230,18 +1277,23 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
 
         // ----- Silent: nothing in the session vocabulary carries it --------
         //
-        // `WriteParam`, `AttachSignal`, `WireInput` and `SetProperty` are the
-        // four that are not simply absent: `Record::Param`, `Record::Bind`,
-        // `Record::Edge`, `Record::Capacity`, `Record::Seed` and
+        // `AttachSignal`, `WireInput` and `SetProperty` are the three that are
+        // not simply absent: `Record::Bind`, `Record::Edge`,
+        // `Record::Capacity`, `Record::Seed` and
         // `Record::Camera` all exist and are a **Set file's**, with no `slot`
         // to carry the deck the operation names. `SetCompositing` is the same
         // shape — `Record::Merge` is what a *Set* says about its layering, and
         // *"nothing in a stream says that the Set in slot 3 composites."*
+        //
+        // **`WriteParam` was the fourth and has left this group**, which is
+        // what the shape of the answer always was: the reason was never that a
+        // knob is unworthy of a record, it was that no record could carry the
+        // deck. `Record::Ride` carries it, and what is still here is what
+        // nobody has written the session's twin of yet.
         Operation::SetLatencyOffset { .. }
         | Operation::AttachBeatSource { .. }
         | Operation::LoadSet { .. }
         | Operation::SetCompositing { .. }
-        | Operation::WriteParam { .. }
         | Operation::AttachSignal { .. }
         | Operation::TakeParamBack { .. }
         | Operation::WireInput { .. }
@@ -1320,6 +1372,31 @@ const MASK: &str = "mask";
 /// that sees `karakuri_operation::Layer` and `karakuri_store::record::Layer` at
 /// once; `karakuri-cli`'s `mcp.rs` translates between the vocabulary's and
 /// `karakuri_ir::Kind`, which is a third spelling and a different pair.
+/// **The vocabulary's parameter value as the store's**, and the second list
+/// this crate translates between rather than carries.
+///
+/// [`store_layer`]'s paragraph word for word, one type along: both are foreign
+/// here so the orphan rule refuses a `From`, and a match rather than a cast so
+/// that a width added to either list stops the build until somebody says what
+/// it is on the other side.
+///
+/// **The two lists are the same three widths and stay that way**, because a
+/// parameter is driven one component at a time and a wide value is what a
+/// person or a model writes on one line
+/// ([ADR-0268](../../../docs/adr/0268-a-vector-parameter-is-driven-one-component-at-a-time.md)).
+/// Nothing is expanded here: a `vec3` becomes one [`Record::Ride`] carrying
+/// three numbers, exactly as it becomes one `param` line in a Set file, and the
+/// reader that has the Set in hand is what turns it into three writes.
+fn store_value(value: karakuri_operation::ParamValue) -> karakuri_store::record::Value {
+    use karakuri_operation::ParamValue as From;
+    use karakuri_store::record::Value as To;
+    match value {
+        From::Scalar(v) => To::Scalar(v),
+        From::Vec2(v) => To::Vec2(v),
+        From::Vec3(v) => To::Vec3(v),
+    }
+}
+
 fn store_layer(layer: karakuri_operation::Layer) -> karakuri_store::record::Layer {
     use karakuri_operation::Layer as From;
     use karakuri_store::record::Layer as To;
@@ -1826,6 +1903,83 @@ mod tests {
                 index: 0,
                 authority: "manual".to_string(),
             }]
+        );
+    }
+
+    /// **A knob turn writes a record, and it needs no reading either.**
+    ///
+    /// This operation answered `Silent(NoRecord)` until
+    /// `docs/adr/0280-a-parameter-written-to-a-live-set-is-a-session-record.md`,
+    /// and the reason given was never that a knob is unworthy of one: it was
+    /// that `Record::Param` is a Set file's and has no `slot`. So what is
+    /// asserted here is the deck arriving in the record — a write on slot 2
+    /// that came back saying nothing about slot 2 would be the whole defect
+    /// back again.
+    #[test]
+    fn a_knob_turn_carries_the_deck_the_set_is_playing_in() {
+        assert_eq!(
+            records(written(
+                &Operation::WriteParam {
+                    deck: 2,
+                    param: karakuri_operation::ParamAt {
+                        node: Some(karakuri_operation::NodeAt {
+                            layer: karakuri_operation::Layer::L4,
+                            index: 1,
+                        }),
+                        key: "glow.x".to_string(),
+                    },
+                    value: karakuri_operation::ParamValue::Scalar(0.4),
+                },
+                &Current::default()
+            )),
+            vec![Record::Ride {
+                slot: 2,
+                at: Some(karakuri_store::record::NodeAt {
+                    layer: karakuri_store::record::Layer::L4,
+                    index: 1,
+                }),
+                key: "glow.x".to_string(),
+                value: karakuri_store::record::Value::Scalar(0.4),
+            }],
+            "a write landed on another node, another deck slot or another value \
+             than the one it named"
+        );
+    }
+
+    /// **A bare key crosses as an absence and never as an invented address.**
+    ///
+    /// `ParamAt::node` is `None` for a wildcard, which means it names no layer
+    /// either — and `Record::Ride`'s `at` is the same `Option`, which is the
+    /// whole reason that record carries a `NodeAt` rather than
+    /// `Record::Param`'s `layer` beside an `index`. A conversion that filled a
+    /// layer in here would be writing a placeholder that a reader then has to
+    /// be told to ignore, which is exactly the wart `Record::Param` is still
+    /// living with.
+    ///
+    /// **And a wide value crosses whole.** A `vec3` is one line a person or a
+    /// model writes and the reader with the Set in hand expands it, on
+    /// `param`'s terms exactly (ADR-0268); nothing here invents `glow.x`.
+    #[test]
+    fn a_wildcard_write_names_no_node_and_therefore_no_layer() {
+        assert_eq!(
+            records(written(
+                &Operation::WriteParam {
+                    deck: 0,
+                    param: karakuri_operation::ParamAt {
+                        node: None,
+                        key: "glow".to_string(),
+                    },
+                    value: karakuri_operation::ParamValue::Vec3([0.4, 0.7, 1.0]),
+                },
+                &Current::default()
+            )),
+            vec![Record::Ride {
+                slot: 0,
+                at: None,
+                key: "glow".to_string(),
+                value: karakuri_store::record::Value::Vec3([0.4, 0.7, 1.0]),
+            }],
+            "a bare key came back addressed, or a wide value came back expanded"
         );
     }
 

@@ -466,7 +466,7 @@ fn layer_from_ordinal(n: u8) -> Layer {
 /// callers that unwrapped it each carried a "this engine builds L1 and L4 only"
 /// message. Those messages were true when they were written and became wrong
 /// silently, which is what a total function here prevents happening again.
-fn kind_of(layer: Layer) -> Kind {
+pub fn kind_of(layer: Layer) -> Kind {
     match layer {
         Layer::L1 => Kind::L1,
         Layer::L2 => Kind::L2,
@@ -1234,6 +1234,14 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
             // that node during a performance, and a Set file obeying one would
             // hand the node over on every load. See `Record::Authority`.
             | Record::Authority { .. }
+            // **A `ride` is a `param` that names a deck slot**, and that is
+            // the whole of why it is here: what an operator turned during a
+            // performance is a session's fact, and a Set file that obeyed one
+            // would restore a knob position wherever it was next loaded, in
+            // whatever slot it landed in. The value an operator ended on
+            // reaches a Set file the way every other value does — through
+            // `save`, off the live Set. See `Record::Ride`.
+            | Record::Ride { .. }
             | Record::Transport { .. }
             | Record::Transition { .. }
             // A `select` names a renderer of a *deck slot* and schedules it at

@@ -294,6 +294,27 @@ pub fn no_such_renderer(slot: usize, at: usize, count: usize) -> String {
     }
 }
 
+/// **A parameter the Set a slot is playing does not declare**, in the words
+/// every surface says it in.
+///
+/// [`no_such_renderer`]'s shape and its reason, one address along: a write is
+/// the second control that addresses *inside* a slot, and a key press, a
+/// mapped knob, an MCP call and a replayed `ride` record all meet the same
+/// answer. `karakuri_engine::deck::Deck::write_param` answers `Ok(0)` for it
+/// rather than an error, because zero declarations reached is a fact the caller
+/// says out loud rather than a refusal — a name a rebuild no longer declares
+/// must not take the show down
+/// ([P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)).
+///
+/// **The key as written, and it is the component key where there is one.**
+/// `glow` is not a parameter and `glow.x` is
+/// ([ADR-0268](../../../docs/adr/0268-a-vector-parameter-is-driven-one-component-at-a-time.md)),
+/// so echoing what was asked for is what tells the two apart
+/// ([P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md)).
+pub fn no_such_param(slot: usize, key: &str) -> String {
+    format!("no parameter `{key}`: the Set in slot {slot} declares none by that name")
+}
+
 /// **Why a slot has nothing to save**, in the words the operator is given.
 ///
 /// **Named, and with the flag that changes the answer.** Every refusal around

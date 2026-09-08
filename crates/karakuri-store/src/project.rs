@@ -174,6 +174,25 @@ fn key_for(record: &Record, ordinal: usize) -> Option<Key> {
         // Set file that carried one would hand that node over wherever it was
         // next loaded. See `Record::Authority`.
         | Record::Authority { .. }
+        // **A parameter value, which is the one thing this projection exists
+        // to fold, and still dropped.** A `ride` names a node and a key and a
+        // value, so `Key::Param` would take it without complaint — and it
+        // would be guessing. A `ride` names a *deck slot*, and nothing in a
+        // stream says which deck slot the Set at the head of it was played in,
+        // so folding one in cannot tell whether it is about the Set being
+        // folded or about one of the three others. That is `select`'s reason
+        // below, arriving at a record that has somewhere to go, and it is why
+        // this is the sharpest of the drops rather than the most obvious one:
+        // what is lost is a real value an operator set, and it is lost because
+        // the address it carries is one this file cannot check.
+        //
+        // **Nothing is lost by the path an operator actually saves through.**
+        // `Live::save_set` reads the live `Set`, which already holds every
+        // ridden value; this function is the session-to-Set-file fold, and it
+        // joins `gain`, `select` and `authority` in what that fold cannot say.
+        // When a session record says which deck slot the head was played in,
+        // this arm becomes a fold onto `Key::Param`.
+        | Record::Ride { .. }
         | Record::Transport { .. }
         | Record::Transition { .. }
         // **An event, like the `transition` above it, and still dropped — but
@@ -400,6 +419,68 @@ mod tests {
                 key: "radius".into(),
                 value: Value::Scalar(2.6)
             }
+        );
+    }
+
+    /// **A `ride` is dropped, and a `param` at the same address is not** —
+    /// which is the whole of why the two records are two records.
+    ///
+    /// This is the sharpest of the drops: a `ride` names a layer, an index, a
+    /// key and a value, so `Key::Param` would take it and fold it and the
+    /// result would look right. What it also names is a **deck slot**, and
+    /// nothing in a stream says which deck slot the Set at the head of it was
+    /// played in — so folding one in is guessing that the write was about the
+    /// Set being written rather than about one of the three others. `select`'s
+    /// reason, arriving at a record that has somewhere to go.
+    ///
+    /// Two rides at two slots, so a projection that folded them would fold them
+    /// onto each other as well as into the wrong file.
+    #[test]
+    fn a_ride_is_dropped_where_a_param_at_the_same_address_is_folded() {
+        let session = vec![
+            line(Record::Param {
+                layer: Layer::L1,
+                index: Some(0),
+                key: "radius".into(),
+                value: Value::Scalar(2.0),
+            }),
+            line(Record::Tick { steps: 1 }),
+            line(Record::Ride {
+                slot: 0,
+                at: Some(crate::record::NodeAt {
+                    layer: Layer::L1,
+                    index: 0,
+                }),
+                key: "radius".into(),
+                value: Value::Scalar(9.0),
+            }),
+            line(Record::Ride {
+                slot: 3,
+                at: Some(crate::record::NodeAt {
+                    layer: Layer::L1,
+                    index: 0,
+                }),
+                key: "radius".into(),
+                value: Value::Scalar(7.0),
+            }),
+            line(Record::Tick { steps: 1 }),
+        ];
+        let set = project(&session);
+        assert_eq!(
+            set.len(),
+            1,
+            "a ride reached the Set file: {:?}",
+            set.iter().map(|l| l.record()).collect::<Vec<_>>()
+        );
+        assert_eq!(
+            set[0].record(),
+            &Record::Param {
+                layer: Layer::L1,
+                index: Some(0),
+                key: "radius".into(),
+                value: Value::Scalar(2.0)
+            },
+            "the param the Set was loaded with is what a fold of this session says"
         );
     }
 

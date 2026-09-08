@@ -178,7 +178,14 @@ use karakuri_store::record::Record;
 /// The engine's own types, not the record's: a `Residency` rather than the
 /// string it was spelled with, a [`Look`] rather than three loose fields. That
 /// is where the decode ends and it is the whole of what the caller applies.
-#[derive(Clone, Copy, PartialEq)]
+///
+/// **Not `Copy`, and it stopped being so when a change first named a parameter.**
+/// Every variant here moves the deck *around* a Set — a fader, a mode, a
+/// residency, a look — and all of those are numbers and small enums.
+/// [`Change::Ride`] reaches inside one, and a parameter is addressed by name:
+/// the `String` it carries is what a `Copy` bound cannot survive. Clone is
+/// kept, and nothing on the frame path needs two of one change.
+#[derive(Clone, PartialEq)]
 #[cfg_attr(test, derive(Debug))]
 pub enum Change {
     Gain {
@@ -228,6 +235,28 @@ pub enum Change {
     Residency {
         slot: usize,
         level: Residency,
+    },
+    /// **A parameter an operator moved on a slot that is playing.** The one
+    /// change here that reaches inside a Set rather than moving the deck around
+    /// it, and the one that takes a `Vec`.
+    ///
+    /// **One record, one or three writes**, because a parameter is driven one
+    /// component at a time and a `vec3` value is one line that names three of
+    /// them
+    /// ([ADR-0268](../../../docs/adr/0268-a-vector-parameter-is-driven-one-component-at-a-time.md)).
+    /// Expanded here rather than by the applier for the reason every other
+    /// variant is decoded here: two appliers would be two answers. Expanded
+    /// **without asking what the Set declares**, which is where this parts
+    /// company with `setfile::from_lines` — that reader has just read the
+    /// `slot` records and has the procedures in hand, and this one is looking
+    /// at a Set that is already on air and holds none of them. A component key
+    /// nothing declares lands as `Ok(0)` from
+    /// `karakuri_engine::deck::Deck::write_param`, which the applier says out
+    /// loud; the width the record wrote is the only thing that could name the
+    /// components, and it does.
+    Ride {
+        slot: usize,
+        writes: Vec<karakuri_engine::ParamWrite>,
     },
     Look(Look),
     /// What a slot's clock does with the session's. Carried as a value rather
@@ -765,6 +794,36 @@ pub fn change(record: &Record, slot_count: usize) -> Result<Option<Change>, Stri
             })?;
             Ok(Some(Change::Residency { slot, level }))
         }
+        // **A knob turn, decoded into the writes it is.** The address crosses
+        // as a unit — `karakuri_store::record::NodeAt` is `Option`al on the
+        // record and `karakuri_engine::ParamWrite::at` is `Option`al here, and
+        // absent means the same wildcard on both sides — so there is nothing to
+        // check and nothing that can be half an address.
+        //
+        // **The width says the component keys and nothing else does.**
+        // `karakuri_ir::component_key` is the one spelling of `glow.x` in this
+        // workspace and this is the second reader of it; a scalar is one write
+        // under the key as written, which is what a knob sends and what a
+        // component key already is.
+        Record::Ride {
+            slot,
+            at,
+            key,
+            value,
+        } => {
+            let slot = in_range(*slot)?;
+            let at = at.map(|node| (crate::setfile::kind_of(node.layer), node.index));
+            let writes = match value {
+                karakuri_store::record::Value::Scalar(v) => vec![karakuri_engine::ParamWrite {
+                    at,
+                    key: key.clone(),
+                    value: *v,
+                }],
+                karakuri_store::record::Value::Vec2(v) => component_writes(at, key, v),
+                karakuri_store::record::Value::Vec3(v) => component_writes(at, key, v),
+            };
+            Ok(Some(Change::Ride { slot, writes }))
+        }
         Record::Transport {
             slot,
             sync,
@@ -835,6 +894,30 @@ pub fn change(record: &Record, slot_count: usize) -> Result<Option<Change>, Stri
         // performance's facts go.
         _ => Ok(None),
     }
+}
+
+/// **A wide value as one write per component**, under the keys ADR-0268 made:
+/// `glow.x`, `glow.y`, `glow.z`.
+///
+/// `karakuri_ir::component_key` and not a `format!` here, because that function
+/// is the one place the spelling lives — `karakuri_ir::Param::keys` publishes
+/// the interface with it, `Set::params` is keyed by it, and a second spelling
+/// would be a key that agrees with the engine's until somebody changes one of
+/// them.
+fn component_writes(
+    at: Option<(karakuri_ir::Kind, u32)>,
+    key: &str,
+    values: &[f32],
+) -> Vec<karakuri_engine::ParamWrite> {
+    values
+        .iter()
+        .enumerate()
+        .map(|(i, value)| karakuri_engine::ParamWrite {
+            at,
+            key: karakuri_ir::component_key(key, i),
+            value: *value,
+        })
+        .collect()
 }
 
 /// How wide a wipe's soft edge is.
@@ -1626,6 +1709,105 @@ mod tests {
                 "through {line}"
             );
         }
+    }
+
+    /// **A knob turn goes operation → record → the writes the deck takes**,
+    /// which is the whole road this module exists to be the middle of.
+    ///
+    /// Through `from_operation` and a real serialisation, on the terms every
+    /// case in this file uses: the claim is that what a surface asked for
+    /// survives the wire and comes back as writes at the same address, not that
+    /// two structs in this crate agree.
+    #[test]
+    fn a_ride_decodes_into_the_write_a_deck_takes() {
+        let record = from_operation(karakuri_operation::Operation::WriteParam {
+            deck: 2,
+            param: karakuri_operation::ParamAt {
+                node: Some(karakuri_operation::NodeAt {
+                    layer: karakuri_operation::Layer::L4,
+                    index: 1,
+                }),
+                key: "heat".to_string(),
+            },
+            value: karakuri_operation::ParamValue::Scalar(2.5),
+        });
+        let line = serde_json::to_string(&record).expect("serialise");
+        let decoded: Record = serde_json::from_str(&line).expect("parse");
+        assert_eq!(
+            change(&decoded, 4).expect("a record this build built"),
+            Some(Change::Ride {
+                slot: 2,
+                writes: vec![karakuri_engine::ParamWrite::at(
+                    karakuri_ir::Kind::L4,
+                    1,
+                    "heat",
+                    2.5
+                )],
+            }),
+            "through {line}"
+        );
+
+        // The wildcard, which has to stay one: a bare key that came back
+        // addressed would move one node where the operator moved every node
+        // declaring the name.
+        let record = from_operation(karakuri_operation::Operation::WriteParam {
+            deck: 0,
+            param: karakuri_operation::ParamAt {
+                node: None,
+                key: "exposure".to_string(),
+            },
+            value: karakuri_operation::ParamValue::Scalar(1.0),
+        });
+        assert_eq!(
+            change(&record, 4).expect("built here"),
+            Some(Change::Ride {
+                slot: 0,
+                writes: vec![karakuri_engine::ParamWrite::everywhere("exposure", 1.0)],
+            })
+        );
+    }
+
+    /// **A wide value is one record and three writes**, under the component
+    /// keys ADR-0268 made — and the expansion is here rather than at the
+    /// applier, so the two binaries cannot come to disagree about what
+    /// `{"value":[…]}` means.
+    ///
+    /// `karakuri_ir::component_key` is asserted through rather than around:
+    /// spelling `"glow.x"` here and in the decoder would be two spellings of
+    /// one address, which is what that function exists to stop.
+    #[test]
+    fn a_wide_ride_becomes_one_write_per_component() {
+        let record = from_operation(karakuri_operation::Operation::WriteParam {
+            deck: 1,
+            param: karakuri_operation::ParamAt {
+                node: None,
+                key: "glow".to_string(),
+            },
+            value: karakuri_operation::ParamValue::Vec3([0.4, 0.7, 1.0]),
+        });
+        let line = serde_json::to_string(&record).expect("serialise");
+        let decoded: Record = serde_json::from_str(&line).expect("parse");
+        assert_eq!(
+            change(&decoded, 4).expect("a record this build built"),
+            Some(Change::Ride {
+                slot: 1,
+                writes: vec![
+                    karakuri_engine::ParamWrite::everywhere(
+                        karakuri_ir::component_key("glow", 0),
+                        0.4
+                    ),
+                    karakuri_engine::ParamWrite::everywhere(
+                        karakuri_ir::component_key("glow", 1),
+                        0.7
+                    ),
+                    karakuri_engine::ParamWrite::everywhere(
+                        karakuri_ir::component_key("glow", 2),
+                        1.0
+                    ),
+                ],
+            }),
+            "through {line}"
+        );
     }
 
     /// **Every residency level round-trips, not just the one a test remembered
