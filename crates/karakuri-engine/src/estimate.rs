@@ -28,9 +28,11 @@
 //! `capacity × rate²`, and a param moves that at any time: the same
 //! `soft_points` sits on either side of any rule keyed on the enum, at
 //! `point_scale` 0.00556 and at 0.0222. The split cannot be inferred from a
-//! Set's shape, so it is measured. The enum is used here for exactly one thing
-//! — whether there is a primitive at all, which decides whether ADR-0245's
-//! sub-pixel floor exists — and [`floor_rows`] is the whole of that.
+//! Set's shape, so it is measured. **The enum is now reported and read by
+//! nothing here**: it decided one thing — whether there is a primitive at all
+//! — and `karakuri_ir::rate` answers that from the same fact the check pass
+//! infers the enum from, a `vertex` block that is not there. It is on
+//! [`Estimate::topologies`] so a number can be read against what was drawn.
 //!
 //! ## What replaced what
 //!
@@ -83,37 +85,94 @@
 //!   floor is above it in the sense that matters: every primitive is still at
 //!   least one pixel there.
 //!
-//! ## What is not derivable here, and is refused rather than guessed
+//! ## Where the floor comes from
 //!
-//! **Nothing on the CPU side knows a Set's emitted `point_rate`.** It is an
-//! expression evaluated per element in the vertex stage, over attributes this
-//! side never reads back, so the floor `1 / rate` is not a number
-//! [`estimate`] can compute. It does not guess one:
+//! **Nothing on the CPU side evaluates a Set's `point_rate`**, and nothing
+//! needs to. It is an expression over params, attributes and ambients, and
+//! `karakuri_ir::rate::point_rate_bound` bounds it from below by interval
+//! arithmetic over its params' **declared** ranges — the file's own statement
+//! of how far a fader may take them — leaving everything else unbounded. The
+//! smallest rate a renderer can emit becomes the greatest floor it can put
+//! under a rung, and [`floor_rows`] takes the greatest over the Set's
+//! renderers.
 //!
-//! - A Set whose renderers are all [`Topology::Fullscreen`] draws no primitive.
-//!   `karakuri_ir::check` infers `Fullscreen` from the *absence* of a `vertex`
-//!   block, and requires `point_rate` unconditionally when there is one, so
-//!   "fullscreen" and "emits no rate" are the same fact. Its floor is one row.
-//! - A Set that draws [`Topology::Points`] or [`Topology::Lines`] has a floor
-//!   this module cannot see, and [`estimate`] answers [`Unfit::FloorUnknown`]
-//!   without drawing anything. A caller that *does* know the smallest rate its
-//!   material emits turns it into rows with [`sub_pixel_floor_rows`] and calls
-//!   [`estimate_above_floor`].
+//! **The declared range and not the held value**, so that the floor does not
+//! go stale when somebody turns a knob: the estimate is taken once while a slot
+//! primes and read for as long as the slot is on air. Nothing in the engine
+//! clamps a write to a declared range, so a Set holding a value outside one is
+//! outside what the bound covers, and [`Floor::Analysed`]'s `contradicted` is
+//! that case — refused, not estimated.
 //!
-//! That is a refusal and not a workaround, and it is the honest reading of the
-//! corpus: `speed_lines` ships `width` at 0.00139, one pixel at 720 rows, so
-//! **its floor is the reference size itself** and there is no smaller draw that
-//! says anything new about it. The area-ratio rule returned a number there
-//! anyway. This one says it cannot.
+//! **Where it cannot bound, it still refuses.** A rate that reaches zero has no
+//! floor at all, and one nothing bounds below has none either;
+//! [`Unfit::FloorUnknown`] is both, with the working on
+//! [`Estimate::floor_from`]. The record is
+//! `docs/adr/0285-a-renderers-floor-is-bounded-from-its-declared-ranges-or-refused.md`.
 //!
-//! | material and setting | emitted rate | floor, in rows |
-//! |---|---|---|
-//! | `soft_points`, fastest elements | 0.00556 | 180 |
-//! | `soft_points`, slowest elements | 0.00195 | 514 |
-//! | `drift_streaks`, fastest | 0.00167 | 599 |
-//! | `speed_lines` | 0.00139 | 719 |
-//! | `drift_streaks`, slowest | 0.00058 | 1711 |
-//! | any of them, at the declared minimum | 0.00069 | 1449 |
+//! ## What this can and cannot answer for
+//!
+//! **A floor that is knowable is not a rung that fits, and that is where the
+//! shipped corpus stands.** Over the fifteen L4 procedures in `examples/`,
+//! three draw no primitive and are answered as they always were; eight of the
+//! remaining twelve state a floor; four cannot be bounded. **None of the eight
+//! leaves room for two rungs under a 720-row target**, because the rungs are
+//! half and a quarter of the target's height and every one of those floors is
+//! above 360 rows:
+//!
+//! | renderer | bounded rate | floor, in rows | what holds it |
+//! |---|---|---|---|
+//! | `plain_points` | 0.0014 | 715 | `point_scale`'s declared minimum, which is the rate |
+//! | `star_flares` | 0.0014 | 715 | the same, times `max(size, 1.0)` |
+//! | `sheet_shade` | 0.00139 | 720 | the constant low end of its own `clamp` |
+//! | `speed_lines` | 0.00069 | 1450 | `width`'s declared minimum, which is the rate |
+//! | `soft_points`, `second_eye`, `glass_shell` | 0.000241 | 4141 | `point_scale`'s minimum, times the 0.35 an element at rest gets |
+//! | `drift_streaks` | 0.000241 | 4141 | the same shape on `width` |
+//!
+//! So this closes the *floor* and leaves [`Unfit::NoRoomBelowTheTarget`] where
+//! [`Unfit::FloorUnknown`] used to be — which is a different refusal carrying a
+//! number, and it says what would have to change: **the rungs, or the reading
+//! of the floor**. The floor as this module enforces it is *no primitive
+//! anywhere in the frame may be rounded up*, and for `soft_points` the
+//! primitive holding it down is a single element at rest. Whether that is the
+//! condition a fit needs, or whether what it needs is that the floored
+//! primitives' share of the coverage is negligible, is not a question this
+//! module has ever asked and is not one the bound decides.
+//!
+//! The four that cannot be bounded are worth naming, because none of them is a
+//! failure of the analysis:
+//!
+//! - `hard_dots` — `dot_scale * size`, and `size` is an attribute whatever the
+//!   simulation put in it. There is no declaration to read.
+//! - `beat_strokes` — `... * (1.0 + age)`, and `age` is an attribute. The same.
+//! - `beat_bloom` — `width * max(spill, age * glitch_glow)`, where `spill` is a
+//!   `pow` that genuinely reaches zero and `glitch_glow` may be zero too. The
+//!   rate really does reach zero, and a rate of zero has no floor.
+//! - `strand_strokes` — `point_scale * (1.0 - width_var + width_var * hash1(..)
+//!   * 2.0)`, and `width_var` is declared up to 1.0, where the first term is
+//!   zero and `hash1` may be zero with it. The same: it reaches zero.
+//!
+//! Two of the four say something about the material rather than about the
+//! analysis: a Set whose primitives can be zero across draws nothing for those
+//! elements, and no height makes them a pixel.
+//!
+//! **The rates the material actually emits**, measured, are what say the room
+//! is not there under the bound's conservatism either. These are per element
+//! rather than per procedure — the same Set emits several — and the floor is
+//! [`sub_pixel_floor_rows`] of the rate beside it, recomputed here because
+//! three of the five as this table first carried them were not:
+//!
+//! | material and setting | emitted rate | floor, in rows | fits under 360? |
+//! |---|---|---|---|
+//! | `soft_points`, fastest elements | 0.00556 | 180 | yes |
+//! | `soft_points`, slowest elements | 0.00195 | 513 | no |
+//! | `drift_streaks`, fastest | 0.00167 | 599 | no |
+//! | `speed_lines` | 0.00139 | 720 | no |
+//! | `drift_streaks`, slowest | 0.00058 | 1725 | no |
+//!
+//! So the bound is not what puts the corpus out of reach. One row of five is
+//! under the upper rung, and it is one *setting* of one material rather than a
+//! Set: `soft_points` emits the 514-row rate for any element at rest, in the
+//! same frame.
 //!
 //! ## The instrument travels with the number
 //!
@@ -155,6 +214,7 @@
 //! nothing, and a `b` of nothing to go with it — while `speed_lines` at the
 //! declared maximum width cost 86.85 ms and 31.65 ms.
 
+use karakuri_ir::rate::{Bound, RateBound};
 use karakuri_ir::Topology;
 
 use crate::probe::{Measurement, MeasurementMethod, Probe};
@@ -203,27 +263,68 @@ pub fn sub_pixel_floor_rows(rate: f32) -> Option<u32> {
     Some((rows as u32).max(1))
 }
 
-/// **The floor under a Set that draws `topologies`**, in rows, or [`None`] when
-/// this side cannot know it.
+/// **The floor under a Set whose renderers bound their rates like this**, in
+/// rows, or [`Unfit::FloorUnknown`] when one of them could not.
 ///
-/// [`Topology::Fullscreen`] is inferred by `karakuri_ir::check` from a
-/// procedure having no `vertex` block, and a `vertex` block must write
-/// `point_rate` on every path — so a fullscreen renderer emits no rate, draws
-/// no primitive, and has nothing that can fall under a pixel. Its floor is one
-/// row.
+/// **The greatest of the per-renderer floors**, because the floor is the height
+/// at which the *smallest* primitive in the frame is still a pixel across and
+/// one renderer drawing finer than another sets it for both. Each renderer's is
+/// [`sub_pixel_floor_rows`] of the least rate
+/// [`karakuri_ir::rate::point_rate_bound`] could prove for it.
 ///
-/// Anything per-element emits a rate this side never sees, and the answer is
-/// [`None`] rather than a guess. See *What is not derivable here* in the module
-/// doc.
+/// [`Bound::NoPrimitive`] contributes one row and not a refusal: a procedure
+/// with no `vertex` block emits no `point_rate`, draws no primitive, and has
+/// nothing that can fall under a pixel. That is the same fact
+/// [`Topology::Fullscreen`] reports — `karakuri_ir::check` infers the topology
+/// from the absence this bound is read from — so a Set of nothing but
+/// fullscreen renderers answers one row here as it always did.
 ///
-/// **This is the only thing [`Topology`] decides in this module**, and it is
-/// not the `a`/`b` split: it is whether a floor exists at all.
-pub fn floor_rows(topologies: &[Topology]) -> Option<u32> {
-    if topologies.iter().all(|t| *t == Topology::Fullscreen) {
-        Some(1)
-    } else {
-        None
+/// **One [`Bound::Unbounded`] refuses the whole Set.** A floor that holds for
+/// three renderers of four is not a floor: the fourth is drawing something
+/// this side cannot certify a rung above.
+pub fn floor_rows(bounds: &[RateBound]) -> Result<u32, Unfit> {
+    let mut floor = 1;
+    for bound in bounds {
+        match bound.bound {
+            Bound::NoPrimitive => {}
+            Bound::AtLeast { rate, .. } => match sub_pixel_floor_rows(rate) {
+                Some(rows) => floor = floor.max(rows),
+                // `Bound::AtLeast` promises a finite positive rate, so this is
+                // unreachable — and it is a refusal rather than an assertion
+                // because what the caller is owed is a floor or a reason, and
+                // an analysis that produced neither has produced a reason.
+                None => return Err(Unfit::FloorUnknown),
+            },
+            Bound::Unbounded { .. } => return Err(Unfit::FloorUnknown),
+        }
     }
+    Ok(floor)
+}
+
+/// **Where [`Estimate::floor`] came from**, which is what `P-0095` asks of it:
+/// a floor is the thing every rung was placed against, so a consumer that
+/// cannot see how it was arrived at cannot check the rungs either.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Floor {
+    /// **The caller stated it** — [`estimate_above_floor`] — and nothing here
+    /// checked it. Getting it wrong in the low direction is the failure
+    /// ADR-0245 describes, and this variant is the record that nothing stood
+    /// between the caller and it.
+    Stated,
+    /// **Read off the Set's own `point_rate` expressions**, one bound per L4
+    /// procedure in `L4:n` order, of which the floor is the greatest.
+    ///
+    /// The bounds are over the params' **declared** ranges rather than the
+    /// values the Set is holding, so the floor holds while an operator moves a
+    /// fader. Nothing clamps a write to a declared range, and `contradicted`
+    /// is the held value that falsified one — the name, the value, and the
+    /// declaration it is outside of. `Some` here means the floor was not used.
+    Analysed {
+        /// One per L4 procedure, in the order `L4:n` addresses them.
+        bounds: Vec<RateBound>,
+        /// A held value outside the declaration a bound was taken over.
+        contradicted: Option<(String, f32, [f32; 2])>,
+    },
 }
 
 /// **Where the two draws are taken**, for a target and a floor. Low area first.
@@ -281,6 +382,9 @@ pub struct Estimate {
     /// The sub-pixel floor both rungs had to clear, in rows, or [`None`] when
     /// it was not knowable and nothing was drawn.
     pub floor: Option<u32>,
+    /// **Where that floor came from**, whether or not there was one. See
+    /// [`Floor`]: the whole of what makes the number above checkable.
+    pub floor_from: Floor,
     /// The two draws, **low area first**, each with its own instrument,
     /// capacity and size on it. [`None`] when the rungs could not be placed, in
     /// which case nothing was drawn and nothing was spent.
@@ -349,16 +453,28 @@ pub struct Fit {
 /// fitted is not a worse estimate, it is a different quantity.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Unfit {
-    /// **The Set draws a per-element primitive and nothing here knows its
-    /// rate.** ADR-0245 puts a floor at `1 / rate` rows and `point_rate` is a
-    /// vertex-stage expression this side never evaluates, so no rung can be
-    /// certified above it. Nothing was drawn. A caller that knows the smallest
-    /// rate its material emits has [`estimate_above_floor`].
+    /// **A renderer's `point_rate` could not be bounded away from zero**, so
+    /// there is no height at which every primitive it draws is a pixel across
+    /// and no rung can be certified above ADR-0245's floor. Nothing was drawn.
+    ///
+    /// **Which renderer, and what was proved of it anyway, is on
+    /// [`Estimate::floor_from`]** rather than here — a
+    /// [`karakuri_ir::rate::Bound::Unbounded`] entry among its bounds, or a
+    /// `contradicted` value outside the declaration a bound was taken over.
+    /// This variant stays a bare word because it is the *answer*, and the
+    /// working is a different question with a longer reply.
+    ///
+    /// A caller that knows the smallest rate its material emits — from a
+    /// measurement, or from a narrower reading than the declared ranges — has
+    /// [`estimate_above_floor`].
     FloorUnknown,
-    /// **Two rungs above the floor and below the target do not both fit.** The
-    /// shipped `speed_lines` pairing is this case at the reference size: its
-    /// floor is 719 rows and the target is 720, so there is nowhere below the
-    /// target that is not also below the floor. Nothing was drawn.
+    /// **Two rungs above the floor and below the target do not both fit.**
+    /// **This is what every per-element Set in `examples/` answers at the
+    /// reference size**, and it is where ADR-0285 left them: the rungs are half
+    /// and a quarter of the target's height, and the lowest floor any of them
+    /// states is 715 rows against an upper rung of 360. `speed_lines` is the
+    /// starkest — its `width` is one pixel at 720 rows and the target is 720 —
+    /// but it is not the exception. Nothing was drawn.
     NoRoomBelowTheTarget {
         /// The floor that left no room, in rows.
         floor: u32,
@@ -435,6 +551,9 @@ pub fn fit(
         target,
         topologies: topologies.clone(),
         floor: Some(floor),
+        // The floor arrived as a number and this function has no way back to
+        // what produced it. [`estimate`] replaces this on the way out.
+        floor_from: Floor::Stated,
         rungs: Some([low, high]),
         fit: Err(why),
     };
@@ -477,6 +596,7 @@ pub fn fit(
         target,
         topologies,
         floor: Some(floor),
+        floor_from: Floor::Stated,
         rungs: Some([low, high]),
         fit: Ok(Fit {
             ms: ms as f32,
@@ -487,13 +607,26 @@ pub fn fit(
     }
 }
 
-/// **Draw `set` at two small sizes and say what it would cost at `target`.**
+/// **Draw `set` at two small sizes and say what it would cost at `target`** —
+/// with no floor from the caller, because the Set states one.
 ///
 /// The measuring half of what `Priming` now means (ADR-0053 gave it the other
-/// half, warming buffers). The floor comes from [`floor_rows`], so a Set that
-/// draws anything per-element is answered [`Unfit::FloorUnknown`] **without
-/// being drawn at all** — see *What is not derivable here* in the module doc,
-/// and [`estimate_above_floor`] for the caller that knows the rate.
+/// half, warming buffers).
+///
+/// **The floor is [`floor_rows`] over `Set::rate_bounds`**, which is
+/// `karakuri_ir::rate`'s static bound on each renderer's `point_rate` against
+/// its params' declared ranges. A renderer whose rate that analysis cannot hold
+/// above zero is answered [`Unfit::FloorUnknown`] **without anything being
+/// drawn**, and so is a Set holding a value outside a declaration one of the
+/// bounds was taken over — see [`Floor`] for both, and
+/// `docs/adr/0285-a-renderers-floor-is-bounded-from-its-declared-ranges-or-refused.md`
+/// for why a refusal is the answer rather than a guess.
+///
+/// **A floor that is knowable is not the same as a rung that fits.** The floors
+/// the shipped corpus states are mostly above half the reference target's
+/// height, and a floor above the upper rung is [`Unfit::NoRoomBelowTheTarget`]
+/// — a different refusal, arrived at with the floor in hand and with the number
+/// on it. See *What this can and cannot answer for* in the module doc.
 ///
 /// Everything else is [`estimate_above_floor`]'s, including the restoration of
 /// the Set and the handling of the probe.
@@ -505,14 +638,43 @@ pub fn estimate(
     target: (u32, u32),
 ) -> Estimate {
     let topologies = set.drawn_topologies();
-    match floor_rows(&topologies) {
-        Some(floor) => estimate_above_floor(probe, device, queue, set, target, floor),
-        None => Estimate {
+    let from = Floor::Analysed {
+        bounds: set.rate_bounds().to_vec(),
+        contradicted: set.rate_bound_contradicted(),
+    };
+    let Floor::Analysed {
+        bounds,
+        contradicted,
+    } = &from
+    else {
+        unreachable!("just built as Analysed")
+    };
+    // **A held value outside a declaration falsifies the bound taken over it**,
+    // and a bound that is not true of the run is not a floor. Refused before
+    // the arithmetic rather than after, because there is nothing wrong with the
+    // arithmetic.
+    let placed = if contradicted.is_some() {
+        Err(Unfit::FloorUnknown)
+    } else {
+        floor_rows(bounds)
+    };
+    match placed {
+        Ok(floor) => {
+            let mut e = estimate_above_floor(probe, device, queue, set, target, floor);
+            // **The floor came from the Set and the record has to say so.**
+            // `estimate_above_floor` is the caller-stated path and marks every
+            // answer it builds [`Floor::Stated`]; this is the one call site that
+            // knows better.
+            e.floor_from = from;
+            e
+        }
+        Err(why) => Estimate {
             target,
             topologies,
             floor: None,
+            floor_from: from,
             rungs: None,
-            fit: Err(Unfit::FloorUnknown),
+            fit: Err(why),
         },
     }
 }
@@ -566,6 +728,7 @@ pub fn estimate_above_floor(
                 target,
                 topologies,
                 floor: Some(floor),
+                floor_from: Floor::Stated,
                 rungs: None,
                 fit: Err(why),
             }
@@ -750,14 +913,14 @@ mod tests {
             measured(4.0, (320, 180)),
             measured(6.0, (640, 360)),
             PROBE_RESOLUTION,
-            // `speed_lines` at the shipped width: one pixel at 719 rows.
-            719,
+            // `speed_lines` at the shipped width: one pixel at 720 rows.
+            720,
             vec![Topology::Lines],
         );
         match e.fit {
             Err(Unfit::RungBelowFloor { rung, floor }) => {
                 assert_eq!(rung, (320, 180));
-                assert_eq!(floor, 719);
+                assert_eq!(floor, 720);
             }
             other => panic!("expected a below-floor refusal, got {other:?}"),
         }
@@ -765,19 +928,53 @@ mod tests {
 
     /// **The shipped `Lines` pairing has nowhere to stand.** `speed_lines`
     /// ships `width` at 0.00139 — its own comment calls it *one pixel at 720
-    /// rows* — so its floor is 719 rows and the reference target is 720. There
+    /// rows* — so its floor is 720 rows and so is the reference target. There
     /// is no rung below the target that is not also below the floor, and
     /// nothing is drawn.
+    ///
+    /// **720 rather than 719**, which this said until ADR-0285 and which
+    /// [`a_rate_becomes_the_height_at_which_it_is_one_pixel`] has always
+    /// contradicted: `1 / 0.00139` is 719.4 and the floor rounds up.
     #[test]
     fn a_floor_at_the_target_leaves_no_room_for_two_rungs() {
-        let why = rungs(PROBE_RESOLUTION, 719).expect_err("719 rows under a 720-row target");
+        let floor = sub_pixel_floor_rows(0.001_39).expect("a positive rate has a floor");
+        assert_eq!(floor, 720);
+        let why = rungs(PROBE_RESOLUTION, floor).expect_err("720 rows under a 720-row target");
         assert_eq!(
             why,
             Unfit::NoRoomBelowTheTarget {
-                floor: 719,
+                floor: 720,
                 target: PROBE_RESOLUTION
             }
         );
+    }
+
+    /// **The finest floor the shipped corpus states still leaves no room.** A
+    /// floor being knowable and a pair of rungs fitting under it are two
+    /// conditions, and this is the one that is still open — see *What this can
+    /// and cannot answer for* in the module doc, and ADR-0285.
+    ///
+    /// 715 rows is `plain_points` and `star_flares` — `point_scale`'s declared
+    /// minimum, the lowest floor any per-element renderer in `examples/` states
+    /// — against a 720-row target whose upper rung is 360. Every other one is
+    /// higher. `crates/karakuri-ir/tests/rate.rs` is where the eight floors are
+    /// written out.
+    #[test]
+    fn no_shipped_per_element_floor_leaves_room_under_the_reference_target() {
+        for floor in [715, 720, 1450, 4141] {
+            assert_eq!(
+                rungs(PROBE_RESOLUTION, floor),
+                Err(Unfit::NoRoomBelowTheTarget {
+                    floor,
+                    target: PROBE_RESOLUTION
+                }),
+                "a floor of {floor} rows"
+            );
+        }
+        // And what it would take: the upper rung is half the target's height,
+        // so the target has to be twice the floor before there is anywhere to
+        // stand.
+        assert!(rungs((2560, 1440), 715).is_ok());
     }
 
     /// The rungs are half and a quarter of the target's height, at the target's
@@ -820,21 +1017,72 @@ mod tests {
         assert_eq!(sub_pixel_floor_rows(f32::NAN), None);
     }
 
-    /// **[`Topology`] decides whether a floor exists, and nothing else.** A
-    /// fullscreen renderer emits no `point_rate` — `karakuri_ir::check` infers
-    /// the topology from the absence of the `vertex` block that would have to
-    /// write one — so there is no primitive to fall under a pixel. Anything
-    /// per-element has a floor this side cannot see.
+    fn bound(procedure: &str, bound: Bound) -> RateBound {
+        RateBound {
+            procedure: procedure.to_string(),
+            bound,
+        }
+    }
+
+    fn at_least(procedure: &str, rate: f32) -> RateBound {
+        bound(
+            procedure,
+            Bound::AtLeast {
+                rate,
+                over: Vec::new(),
+            },
+        )
+    }
+
+    /// **A renderer with no primitive floors at one row**, which is what a
+    /// fullscreen Set is made of. `karakuri_ir::check` infers
+    /// [`Topology::Fullscreen`] from the missing `vertex` block and
+    /// `karakuri_ir::rate` reads [`Bound::NoPrimitive`] off the same absence,
+    /// so the two cannot disagree about it.
     #[test]
-    fn only_a_set_with_no_primitive_has_a_floor_this_side_can_state() {
-        assert_eq!(floor_rows(&[Topology::Fullscreen]), Some(1));
+    fn a_set_that_draws_no_primitive_floors_at_one_row() {
+        assert_eq!(floor_rows(&[bound("wash", Bound::NoPrimitive)]), Ok(1));
         assert_eq!(
-            floor_rows(&[Topology::Fullscreen, Topology::Fullscreen]),
-            Some(1)
+            floor_rows(&[
+                bound("wash", Bound::NoPrimitive),
+                bound("haze", Bound::NoPrimitive)
+            ]),
+            Ok(1)
         );
-        assert_eq!(floor_rows(&[Topology::Points]), None);
-        assert_eq!(floor_rows(&[Topology::Lines]), None);
-        assert_eq!(floor_rows(&[Topology::Fullscreen, Topology::Points]), None);
+        assert_eq!(floor_rows(&[]), Ok(1));
+    }
+
+    /// **The greatest of the renderers' floors, not the first.** The floor is
+    /// the height at which the *smallest* primitive in the frame is still a
+    /// pixel across, so the renderer drawing finest sets it for the whole Set —
+    /// and a fullscreen one beside it does not pull it back down.
+    #[test]
+    fn a_sets_floor_is_the_finest_renderers() {
+        // 0.004 is one pixel at 250 rows and 0.00139 at 720.
+        let floor = floor_rows(&[
+            at_least("dots", 0.004),
+            bound("wash", Bound::NoPrimitive),
+            at_least("streaks", 0.001_39),
+        ]);
+        assert_eq!(floor, Ok(720));
+    }
+
+    /// **One renderer nobody can bound refuses the whole Set.** A floor that
+    /// holds for three renderers of four is not a floor: the fourth is drawing
+    /// something no rung can be certified above.
+    #[test]
+    fn one_unbounded_renderer_refuses_the_set() {
+        let floor = floor_rows(&[
+            at_least("dots", 0.004),
+            bound(
+                "bloom",
+                Bound::Unbounded {
+                    at: karakuri_ir::Span::EMPTY,
+                    lower: 0.0,
+                },
+            ),
+        ]);
+        assert_eq!(floor, Err(Unfit::FloorUnknown));
     }
 
     /// Two draws at one size are one measurement taken twice, and `b` would be

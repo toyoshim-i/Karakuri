@@ -903,6 +903,21 @@ pub struct Set {
     /// only for the range behind a key it already has — see [`Set::published`],
     /// which used to sort these keys and now looks each one up instead.
     ranges: Vec<HashMap<String, [f32; 2]>>,
+    /// **How small a primitive each renderer can draw**, one entry per L4
+    /// *procedure*, in the same order [`Set::nodes_of`] addresses `L4` — so
+    /// entry `i` is the renderer `--param L4:i:` reaches, and its declared
+    /// ranges are `ranges[nodes_of(L4).start + i]`.
+    ///
+    /// Per procedure and not per instance: a source instantiates the same
+    /// renderers, so every source draws the same rate expression and the least
+    /// over the procedures is the least over the Set.
+    ///
+    /// Read by [`crate::estimate`] and by nothing else. It is what closes the
+    /// gap that module documented as *what is not derivable here* — the
+    /// sub-pixel floor ADR-0245 puts under a small draw, which used to need a
+    /// caller who knew it. See
+    /// `docs/adr/0285-a-renderers-floor-is-bounded-from-its-declared-ranges-or-refused.md`.
+    rate_bounds: Vec<karakuri_ir::rate::RateBound>,
     /// **The producer of the built-in camera's state.** Public because a
     /// `camera` record and a Set file both set it from outside; the six numbers
     /// it produces reach a renderer through the camera node below and never
@@ -2864,6 +2879,14 @@ impl Set {
             params,
             moved,
             ranges,
+            // **One per L4 procedure, in `nodes_of(L4)`'s order**, which is
+            // `l4s`' — the same walk `params` and `ranges` take, so a bound and
+            // the declarations it was taken over cannot end up at different
+            // indices.
+            rate_bounds: l4s
+                .iter()
+                .map(|n| karakuri_ir::rate::point_rate_bound(n))
+                .collect(),
             camera: Orbit::default(),
             cameras: camera_nodes,
             // **Built at one texel and resized before anything draws.** A Set
@@ -4056,6 +4079,70 @@ impl Set {
             .flat_map(|s| &s.renderers)
             .map(|r| r.topology())
             .collect()
+    }
+
+    /// **How small a primitive each renderer can draw**, one entry per L4
+    /// procedure in `L4:n` order — [`karakuri_ir::rate::point_rate_bound`]'s
+    /// answer, taken once when the Set was built because it is a property of
+    /// the files rather than of the run.
+    ///
+    /// [`crate::estimate`] is the reader. A Set with no per-element renderer
+    /// answers [`karakuri_ir::rate::Bound::NoPrimitive`] for every entry, which
+    /// is the same fact `Set::drawn_topologies` reports as
+    /// [`karakuri_ir::Topology::Fullscreen`] — one is inferred from the other's
+    /// cause, a vertex block that is not there.
+    pub fn rate_bounds(&self) -> &[karakuri_ir::rate::RateBound] {
+        &self.rate_bounds
+    }
+
+    /// **The first param a rate bound rests on whose held value is outside the
+    /// declaration the bound was taken over**, as its key, its value and the
+    /// declared pair.
+    ///
+    /// A bound from [`Set::rate_bounds`] is over the *declared* range, and
+    /// **nothing in this engine clamps a write to one** — see
+    /// [`Set::carry_moved_from`], which says so of a carried value and of
+    /// `--param` alike. So the bound is a claim about the file that a value
+    /// outside the file's own declaration can falsify, and this is the check
+    /// that catches it. It answers about *now*: a write that lands after the
+    /// question was asked is not covered, which is why a floor is taken from
+    /// the declaration in the first place — the declaration is what does not
+    /// move while the material is on air.
+    ///
+    /// **Only the params a bound named**, from
+    /// [`karakuri_ir::rate::Bound::AtLeast`]'s `over`. A renderer's other
+    /// declarations do not enter its rate and a value outside one of them says
+    /// nothing about the floor.
+    pub fn rate_bound_contradicted(&self) -> Option<(String, f32, [f32; 2])> {
+        let l4s = self.nodes_of(Kind::L4);
+        for (bound, slot) in self.rate_bounds.iter().zip(l4s) {
+            let karakuri_ir::rate::Bound::AtLeast { over, .. } = &bound.bound else {
+                continue;
+            };
+            let (Some(values), Some(ranges)) = (self.params.get(slot), self.ranges.get(slot))
+            else {
+                continue;
+            };
+            for name in over {
+                // **A declaration is one key or one key per component**, and a
+                // vector param is read in the expression under its bare name —
+                // so the held values to check are every key the declaration
+                // expanded to. `declared_ranges` built both maps from
+                // `Param::keys`, so this reaches all of them and nothing else.
+                for (key, declared) in ranges {
+                    if key != name && !key.strip_prefix(name).is_some_and(|r| r.starts_with('.')) {
+                        continue;
+                    }
+                    let Some(&value) = values.get(key) else {
+                        continue;
+                    };
+                    if value < declared[0] || value > declared[1] {
+                        return Some((key.clone(), value, *declared));
+                    }
+                }
+            }
+        }
+        None
     }
 
     pub fn layering(&self) -> Layering {

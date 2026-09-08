@@ -25,11 +25,13 @@
 // that enforces it, are in `tests/gpu_tests_are_under_mod_gpu.rs`.
 mod gpu {
     use karakuri_engine::estimate::{
-        estimate, estimate_above_floor, rungs, sub_pixel_floor_rows, Unfit, PREPARATION_RESOLUTION,
+        estimate, estimate_above_floor, rungs, sub_pixel_floor_rows, Floor, Unfit,
+        PREPARATION_RESOLUTION,
     };
     use karakuri_engine::set::{Edge, Layering, Wiring};
     use karakuri_engine::swap::PROBE_RESOLUTION;
     use karakuri_engine::{Gpu, Probe, Set};
+    use karakuri_ir::rate::Bound;
     use karakuri_ir::typed::Checked;
     use karakuri_ir::Topology;
 
@@ -148,6 +150,96 @@ proc wash {
 
   fragment {
     color = vec4(level, level * 0.5, level, 1.0);
+  }
+}
+"#,
+        );
+        build(gpu, &l1, &l4)
+    }
+
+    /// **A renderer whose rate nothing can bound**: `size` is an attribute, so
+    /// there is no declaration to read it against. `examples/hard_dots.kir`
+    /// ships the same expression.
+    fn unbounded_set(gpu: &Gpu) -> Set {
+        let l1 = compile(
+            r#"
+proc dots {
+  kind     L1
+  topology points
+  capacity [1024, 65536] = 4096
+
+  emit position, velocity, age, size
+
+  element {
+    position = vec3(hash1(seed), hash1(seed + 1u), hash1(seed + 2u));
+    velocity = vec3(0.0, 0.0, 0.0);
+    age      = age + dt;
+    size     = hash1(seed + 3u);
+  }
+}
+"#,
+        );
+        let l4 = compile(
+            r#"
+proc loose_dots {
+  kind  L4
+  blend additive
+
+  param dot_scale : float [0.005, 0.05] = 0.01
+
+  consumes position, size
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    point_rate = dot_scale * size;
+  }
+
+  fragment {
+    color = vec4(0.2, 0.2, 0.2, 1.0);
+  }
+}
+"#,
+        );
+        build(gpu, &l1, &l4)
+    }
+
+    /// **A renderer whose rate is one param**, so a write to that param is the
+    /// whole of what the bound rests on.
+    fn scaled_set(gpu: &Gpu) -> Set {
+        let l1 = compile(
+            r#"
+proc dots {
+  kind     L1
+  topology points
+  capacity [1024, 65536] = 4096
+
+  emit position, velocity, age
+
+  element {
+    position = vec3(hash1(seed), hash1(seed + 1u), hash1(seed + 2u));
+    velocity = vec3(0.0, 0.0, 0.0);
+    age      = age + dt;
+  }
+}
+"#,
+        );
+        let l4 = compile(
+            r#"
+proc scaled_dots {
+  kind  L4
+  blend additive
+
+  param point_scale : float [0.005, 0.05] = 0.01
+
+  consumes position
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    point_rate = point_scale;
+  }
+
+  fragment {
+    color = vec4(0.2, 0.2, 0.2, 1.0);
   }
 }
 "#,
@@ -307,16 +399,68 @@ proc wash {
         assert_eq!(second.method(), first.method());
     }
 
-    /// **A Set that draws a primitive is refused without being drawn.**
-    /// `point_rate` is a vertex-stage expression nothing on this side reads, so
-    /// ADR-0245's floor is not a number `estimate` can compute — and it says so
-    /// rather than answering. Nothing is spent: the probe and the Set are where
-    /// the caller left them.
+    /// **A per-element Set states its own floor now, and `estimate` draws.**
+    /// `point_rate` is still a vertex-stage expression nothing on this side
+    /// evaluates; what changed is that `karakuri_ir::rate` *bounds* it, and
+    /// `plain_dots` writes a literal, so the bound is the literal and the floor
+    /// is the 250 rows it implies.
+    ///
+    /// This is the case that answered `Unfit::FloorUnknown` before ADR-0285 —
+    /// with the same Set, the same probe and the same call.
     #[test]
-    fn a_per_element_set_is_refused_because_its_floor_is_not_knowable_here() {
+    fn a_per_element_set_states_its_own_floor_and_is_drawn() {
         let gpu = gpu();
         let mut probe = Probe::new(&gpu.device, &gpu.queue, gpu.timestamps, PROBE_RESOLUTION);
         let mut set = points_set(&gpu);
+
+        let e = estimate(
+            &mut probe,
+            &gpu.device,
+            &gpu.queue,
+            &mut set,
+            PROBE_RESOLUTION,
+        );
+
+        assert_eq!(e.floor, Some(floor()), "the floor is the procedure's own");
+        assert_eq!(e.topologies, vec![Topology::Points]);
+        let taken = e.rungs.expect("both rungs drawn");
+        assert_eq!(
+            [taken[0].resolution, taken[1].resolution],
+            rungs(PROBE_RESOLUTION, floor()).expect("two rungs fit"),
+        );
+
+        // **And it says where the floor came from**, which is what makes the
+        // number checkable: one bound per renderer, naming the procedure and
+        // the declarations it rests on.
+        match &e.floor_from {
+            Floor::Analysed {
+                bounds,
+                contradicted,
+            } => {
+                assert_eq!(contradicted, &None);
+                assert_eq!(bounds.len(), 1);
+                assert_eq!(bounds[0].procedure, "plain_dots");
+                assert_eq!(bounds[0].rate(), Some(PLAIN_DOTS_RATE));
+            }
+            other => panic!("the floor was read off the Set, not stated: {other:?}"),
+        }
+        assert_eq!(set.viewport(), CALLER_VIEWPORT);
+        assert_eq!(set.time(), 0.0);
+    }
+
+    /// **A rate nothing can bound is still refused, and still without a draw.**
+    /// `size` is an attribute — whatever the simulation left in it — so there
+    /// is no declaration to read and no height at which every primitive is a
+    /// pixel across. `hard_dots` ships this exact expression.
+    ///
+    /// The refusal is the same word it always was, and the *working* is on
+    /// `floor_from`: an analysis that guesses here is worse than one that
+    /// refuses, and this is the test that the refusal is reachable.
+    #[test]
+    fn a_rate_read_from_an_attribute_is_refused_without_being_drawn() {
+        let gpu = gpu();
+        let mut probe = Probe::new(&gpu.device, &gpu.queue, gpu.timestamps, PROBE_RESOLUTION);
+        let mut set = unbounded_set(&gpu);
 
         let e = estimate(
             &mut probe,
@@ -331,12 +475,71 @@ proc wash {
         assert_eq!(e.rungs, None, "nothing may be drawn for a refusal");
         assert_eq!(e.ms(), None);
         assert_eq!(e.topologies, vec![Topology::Points]);
+        match &e.floor_from {
+            Floor::Analysed { bounds, .. } => assert!(
+                matches!(bounds[0].bound, Bound::Unbounded { .. }),
+                "the refusal has to name what could not be bounded: {bounds:?}"
+            ),
+            other => panic!("expected an analysed floor, got {other:?}"),
+        }
         assert_eq!(
             probe.resolution(),
             PROBE_RESOLUTION,
             "the probe was moved for a draw that never happened"
         );
         assert_eq!(set.viewport(), CALLER_VIEWPORT);
+    }
+
+    /// **A held value outside its declaration falsifies the bound taken over
+    /// it, and the estimate refuses rather than using it.**
+    ///
+    /// The bound is over the *declared* range so that it survives a fader, and
+    /// **nothing in this engine clamps a write to a declared range** — a
+    /// `--param` below the minimum is accepted and reaches the uniform. A floor
+    /// computed from a declaration the run is not honouring would be wrong in
+    /// the one direction ADR-0245 forbids, so it is not used at all.
+    #[test]
+    fn a_param_written_below_its_declaration_refuses_the_floor() {
+        let gpu = gpu();
+        let mut probe = Probe::new(&gpu.device, &gpu.queue, gpu.timestamps, PROBE_RESOLUTION);
+        let mut set = scaled_set(&gpu);
+
+        // In range first: the same Set, answered. **The floor is the declared
+        // minimum's and not this value's** — 0.005 is one pixel at 200 rows,
+        // and 201 because the nearest `f32` to 0.005 is a shade under it and
+        // the floor rounds up.
+        assert!(set.set_param("point_scale", 0.01) > 0);
+        let ok = estimate(
+            &mut probe,
+            &gpu.device,
+            &gpu.queue,
+            &mut set,
+            PROBE_RESOLUTION,
+        );
+        assert_eq!(ok.floor, Some(201));
+
+        // A tenth of the declared minimum, which no fader could reach.
+        assert!(set.set_param("point_scale", 0.0005) > 0);
+        let e = estimate(
+            &mut probe,
+            &gpu.device,
+            &gpu.queue,
+            &mut set,
+            PROBE_RESOLUTION,
+        );
+        assert_eq!(e.fit, Err(Unfit::FloorUnknown));
+        assert_eq!(e.floor, None);
+        assert_eq!(e.rungs, None, "nothing may be drawn for a refusal");
+        match &e.floor_from {
+            Floor::Analysed { contradicted, .. } => {
+                let (param, value, declared) =
+                    contradicted.as_ref().expect("the write has to be named");
+                assert_eq!(param, "point_scale");
+                assert_eq!(*value, 0.0005);
+                assert_eq!(*declared, [0.005, 0.05]);
+            }
+            other => panic!("expected an analysed floor, got {other:?}"),
+        }
     }
 
     /// **A fullscreen Set has no primitive, so `estimate` answers it.** The

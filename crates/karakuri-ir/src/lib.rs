@@ -23,6 +23,7 @@ pub mod error;
 pub mod layout;
 mod lexer;
 pub mod parse;
+pub mod rate;
 pub mod span;
 pub mod typed;
 
