@@ -70,8 +70,12 @@
             <span style="color:var(--c-dim)">bar 37</span>
             <span class="tracker">
               <span class="pill armed" data-tip="What the room is being listened to through, and the one control the four things in this group depend on. It carries the input&#39;s name rather than only a light: which one is open is what gets asked at two in the morning, and a pill that was merely lit would say a room is being heard without saying whose. Click for the inputs this machine has and pick one. The list is read at the press rather than kept, so an interface plugged in a minute ago is in it and one unplugged is not &mdash; and picking a name that has gone in between is refused out loud, with the list as it is now. Opening one starts the beat grid following that room: the tempo, the phase, energy, onset and band0..7 all come from here. With none open it reads none and every name answers what it answered before audio existed &mdash; which is not the same as silence: a quiet room measures zero at full confidence, and no input at all measures nothing. A device that goes away mid&#8209;set is not this pill&#39;s to notice: confidence falls to zero over half a second, every bound parameter is handed back and the grid free&#8209;runs from where it was, so what you do about it is pick again here. &#8853; MIDI: unassigned &mdash; a map line names a word from a closed list, and which inputs a machine has is not one.">audio&#8209;in &middot; Scarlett 2i2 &#9662;</span>
-              <span class="pill" data-tip="The latency offset, at &minus;15 ms: the delay between what a room hears and what it sees. Negative and the picture waits for the music; positive and it leads &mdash; the sign is the half that gets read wrong at two in the morning, so it is said in words here rather than left to be worked out. Which of the two is late depends on the room, so it is signed both ways and held inside 200 ms either way. Click to set it outright; o and p step it five milliseconds a press. It only means anything with an audio input attached, and the audio&#8209;in pill is what says whether there is one. &#8853; MIDI: unassigned &mdash; the value is absolute and a fader has to be able to reach it, and no map target names it yet.">offset &minus;15 ms</span>
-              <span class="pill">tap</span>
+              <span style="display:flex;align-items:center;gap:5px" data-tip="The latency offset, at &minus;15 ms: the delay between what a room hears and what it sees. Negative and the picture waits for the music; positive and it leads &mdash; the sign is the half that gets read wrong at two in the morning, so it is said in words here rather than left to be worked out. Which of the two is late depends on the room, so it is signed both ways and held inside 200 ms either way. Click anywhere on the track to set it outright: it is 80 pixels for the 80 five&#8209;millisecond steps between the two ends, so one pixel is one press of a key and pointing at it reaches exactly what stepping it reaches. o and p are that step. It only means anything with an audio input attached, and the audio&#8209;in pill is what says whether there is one &mdash; with nothing open there is no offset yet, and the track is not drawn at all rather than drawn at a number nothing is holding. &#8853; MIDI: unassigned &mdash; the value is absolute and a fader has to be able to reach it, and no map target names it yet.">
+                <span style="color:var(--c-faint)">offset</span>
+                <span class="fader" style="width:80px"><b style="width:46.25%"></b></span>
+                <span class="val">&minus;15 ms</span>
+              </span>
+              <span class="pill" data-tip="Tap the beat. Three taps or more set the tempo; any tap sets the phase, so one tap on the downbeat pulls the grid onto the beat without changing what it is running at. It is as authoritative as the octave beside it &mdash; a person meant it, so the run of evidence behind the estimate the tracker was on is discarded and the ones still arriving from it cannot pull the grid back. Refused without an audio input attached, and the refusal says where to open one rather than doing nothing, because a control that declines and one that is not bound are the same experience. &#8853; MIDI: note &rarr; tap, which is the one control in this group a map already names: a tap is an instant and a note is one.">tap</span>
               <span class="octave"><i data-tip="Halve the grid, to 64.0 BPM, and the tracker's octave window goes with it &mdash; which is the whole of why this is a hand's control rather than a measurement. The tracker folds every candidate into the window the grid is already in, so a grid an octave low stays an octave low however long it listens, and nothing here finds an octave for you. The phase does not move: halving takes every other beat and the one you can see stays where it is. Authoritative like a tap &mdash; the run of evidence behind the old octave is discarded, so the estimates still arriving from it cannot pull the grid back. Refused if the result would leave the trackable range, 60 to 200 BPM. Needs an audio input, like everything else in this group. &#8853; MIDI: unassigned &mdash; a note could reach it, and no map target names one yet.">&frac12;</i><i class="idle" data-tip="Double the grid: refused at this tempo, and inert rather than gone. 128.0 doubled is 256 and the tracker searches 60 to 200 BPM &mdash; outside that there is nothing to lock to, so the next estimate that disagreed would drag the grid back, and a control that undoes itself two seconds later is worse than one that says no. The panel knows the tempo, so it says this before the press rather than after it. The range is under two octaves wide, which is why this half and the one beside it are never both live. &#8853; MIDI: unassigned.">&times;2</i></span>
             </span>
             <span class="pill lav" data-tip="MIDI learn. Off. Click, then point at any control and move a knob on your surface, and the two are mapped. Every control that has a tooltip can be learned, so nothing is unreachable by accident.">learn</span>
@@ -1190,6 +1194,28 @@
           says whether there is. <strong>The value is absolute and the keys are
           the nudge</strong> &mdash; five milliseconds a press &mdash; because a
           control that could only be nudged is a control no fader can reach.
+        </p>
+        <p>
+          <strong>So it is drawn as a track and not as a capsule</strong>, which
+          is the exposure's arrangement at the other end of this row and is the
+          same argument arriving one control earlier: a press has to be able to
+          name a value, and a capsule can only ask for the next one. The track
+          is 80 pixels for the 80 five&#8209;millisecond steps between
+          &minus;200 and &plus;200, so <strong>one pixel is one press of a
+          key</strong> and neither surface can reach a value the other cannot.
+          The word is before it and the figure after it, so the target does not
+          move under the hand as the number it is setting changes width &mdash;
+          and the figure is what carries the sign in words.
+        </p>
+        <p>
+          <strong>With nothing attached there is no track.</strong> An offset
+          belongs to a session, and until one is open there is not a value being
+          held anywhere for a track to point at &mdash; so the row closes up
+          around it rather than drawing a control at a number nobody chose. The
+          tap and the octave beside it are drawn either way, because what those
+          two ask for does not depend on a reading: they say so out loud when
+          they are refused, which a track set to a plausible-looking figure
+          could not.
         </p>
         <p>
           <strong>Two things on this panel are called an offset, and they are

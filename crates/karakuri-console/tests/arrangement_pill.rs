@@ -94,8 +94,8 @@ fn the_pill_is_the_rows_own_geometry() {
     let (panel, ctx) = console(SMALLEST);
     let strip = rect_of(panel.layout(), "transport");
     let arr = filed();
-    let pill =
-        arrangement(&ctx, panel.layout(), Some(mock()), None, &arr).expect("the row draws it");
+    let pill = arrangement(&ctx, panel.layout(), Some(mock()), None, None, &arr)
+        .expect("the row draws it");
     let row = karakuri_console::view::transport(&ctx, panel.layout(), Some(mock())).expect("a row");
 
     assert!(
@@ -146,7 +146,7 @@ fn the_capsule_is_as_wide_as_the_name_in_it() {
         ..Arrangement::NONE
     };
     let of = |arr: &Arrangement| {
-        arrangement(&ctx, panel.layout(), Some(mock()), None, arr)
+        arrangement(&ctx, panel.layout(), Some(mock()), None, None, arr)
             .expect("a pill")
             .pill
             .width()
@@ -184,7 +184,8 @@ fn the_pill_clears_every_boundarys_grab() {
     for viewport in [SMALLEST, PLAUSIBLE] {
         let (mut panel, ctx) = console(viewport);
         let arr = filed();
-        let pill = arrangement(&ctx, panel.layout(), Some(mock()), None, &arr).expect("a pill");
+        let pill =
+            arrangement(&ctx, panel.layout(), Some(mock()), None, None, &arr).expect("a pill");
         let strip = rect_of(panel.layout(), "transport");
 
         let clearance = (strip.h - size::PILL_H) * 0.5;
@@ -247,7 +248,7 @@ fn the_pill_clears_every_boundarys_grab() {
 fn only_the_pill_is_claimed_out_of_the_transport_row() {
     let (mut panel, ctx) = console(PLAUSIBLE);
     let arr = filed();
-    let pill = arrangement(&ctx, panel.layout(), Some(mock()), None, &arr).expect("a pill");
+    let pill = arrangement(&ctx, panel.layout(), Some(mock()), None, None, &arr).expect("a pill");
     let row = karakuri_console::view::transport(&ctx, panel.layout(), Some(mock())).expect("a row");
     let view = view(arr);
 
@@ -283,7 +284,7 @@ fn a_control_that_has_not_been_drawn_is_not_there() {
     let fresh = egui::Context::default();
     assert_eq!(fresh.cumulative_pass_nr(), 0);
     assert_eq!(
-        arrangement(&fresh, panel.layout(), Some(mock()), None, &filed()),
+        arrangement(&fresh, panel.layout(), Some(mock()), None, None, &filed()),
         None
     );
 
@@ -292,7 +293,7 @@ fn a_control_that_has_not_been_drawn_is_not_there() {
     // second one.
     let ctx = drawn_once();
     assert_eq!(
-        arrangement(&ctx, panel.layout(), None, None, &filed()),
+        arrangement(&ctx, panel.layout(), None, None, None, &filed()),
         None
     );
 }
@@ -334,7 +335,7 @@ fn the_default_arrangement_has_no_name_and_is_not_called_default() {
 fn a_press_on_the_pill_opens_the_menu_and_a_press_again_shuts_it() {
     let (panel, ctx) = console(PLAUSIBLE);
     let mut arr = filed();
-    let shut = arrangement(&ctx, panel.layout(), Some(mock()), None, &arr).expect("a pill");
+    let shut = arrangement(&ctx, panel.layout(), Some(mock()), None, None, &arr).expect("a pill");
     assert_eq!(
         shut.menu, None,
         "the menu is drawn with nothing asking for it"
@@ -343,7 +344,7 @@ fn a_press_on_the_pill_opens_the_menu_and_a_press_again_shuts_it() {
     assert_eq!(shut.ask(&arr, at(shut.pill.center())), Some(Ask::Open));
 
     arr.opened();
-    let open = arrangement(&ctx, panel.layout(), Some(mock()), None, &arr).expect("a pill");
+    let open = arrangement(&ctx, panel.layout(), Some(mock()), None, None, &arr).expect("a pill");
     let card = open.menu.expect("the menu is down and nothing is drawn");
     assert_eq!(
         open.rows,
@@ -422,7 +423,7 @@ fn start_a_new_one_is_the_reset_the_r_key_performs() {
     let (panel, ctx) = console(PLAUSIBLE);
     let mut arr = filed();
     arr.opened();
-    let pill = arrangement(&ctx, panel.layout(), Some(mock()), None, &arr).expect("a pill");
+    let pill = arrangement(&ctx, panel.layout(), Some(mock()), None, None, &arr).expect("a pill");
 
     let row = pill.row(1);
     assert_eq!(pill.item(at(row.center())), Some(Item::New));
@@ -465,7 +466,7 @@ fn the_menu_lists_the_names_handed_in_and_a_pick_puts_that_one_back() {
     let (panel, ctx) = console(PLAUSIBLE);
     let mut arr = filed();
     arr.opened();
-    let pill = arrangement(&ctx, panel.layout(), Some(mock()), None, &arr).expect("a pill");
+    let pill = arrangement(&ctx, panel.layout(), Some(mock()), None, None, &arr).expect("a pill");
 
     for (index, name) in arr.filed.iter().enumerate() {
         let row = pill.row(2 + index);
@@ -484,7 +485,7 @@ fn the_menu_lists_the_names_handed_in_and_a_pick_puts_that_one_back() {
     // rather than an empty list.
     let mut none = Arrangement::NONE;
     none.opened();
-    let empty = arrangement(&ctx, panel.layout(), Some(mock()), None, &none).expect("a pill");
+    let empty = arrangement(&ctx, panel.layout(), Some(mock()), None, None, &none).expect("a pill");
     assert_eq!(empty.rows, 2);
 }
 
@@ -499,7 +500,8 @@ fn save_means_the_name_in_use_and_asks_for_one_where_there_is_none() {
 
     let mut in_use = filed();
     in_use.opened();
-    let pill = arrangement(&ctx, panel.layout(), Some(mock()), None, &in_use).expect("a pill");
+    let pill =
+        arrangement(&ctx, panel.layout(), Some(mock()), None, None, &in_use).expect("a pill");
     let row = pill.row(0);
     assert_eq!(pill.item(at(row.center())), Some(Item::Save));
     assert_eq!(
@@ -511,7 +513,7 @@ fn save_means_the_name_in_use_and_asks_for_one_where_there_is_none() {
 
     let mut fresh = Arrangement::NONE;
     fresh.opened();
-    let pill = arrangement(&ctx, panel.layout(), Some(mock()), None, &fresh).expect("a pill");
+    let pill = arrangement(&ctx, panel.layout(), Some(mock()), None, None, &fresh).expect("a pill");
     assert_eq!(pill.ask(&fresh, at(pill.row(0).center())), Some(Ask::Name));
 }
 
@@ -577,7 +579,7 @@ fn a_menu_asking_for_a_name_has_no_rows_to_pick() {
     let (panel, ctx) = console(PLAUSIBLE);
     let mut arr = filed();
     arr.asks_a_name();
-    let pill = arrangement(&ctx, panel.layout(), Some(mock()), None, &arr).expect("a pill");
+    let pill = arrangement(&ctx, panel.layout(), Some(mock()), None, None, &arr).expect("a pill");
     let card = pill.menu.expect("a field to type into");
     assert_eq!(pill.rows, 0, "a field is being drawn as a list of items");
     assert_eq!(pill.item(at(card.center())), None);
@@ -605,8 +607,8 @@ fn the_pill_is_the_harnesss_and_is_stored_nowhere() {
         menu: Menu::Open,
     };
 
-    let first = arrangement(&ctx, panel.layout(), Some(mock()), None, &one).expect("a pill");
-    let other = arrangement(&ctx, panel.layout(), Some(mock()), None, &two).expect("a pill");
+    let first = arrangement(&ctx, panel.layout(), Some(mock()), None, None, &one).expect("a pill");
+    let other = arrangement(&ctx, panel.layout(), Some(mock()), None, None, &two).expect("a pill");
     assert_ne!(
         first, other,
         "two different arrangements drew the same pill, so something in it is not coming \
@@ -615,7 +617,7 @@ fn the_pill_is_the_harnesss_and_is_stored_nowhere() {
     assert_eq!(first.rows, 0, "a shut menu has rows");
     assert_eq!(other.rows, 3, "one name filed is two verbs and one row");
     assert_eq!(
-        arrangement(&ctx, panel.layout(), Some(mock()), None, &one).expect("a pill"),
+        arrangement(&ctx, panel.layout(), Some(mock()), None, None, &one).expect("a pill"),
         first,
         "the pill remembered the arrangement it was last asked about"
     );
@@ -646,7 +648,7 @@ fn the_menu_lists_what_fits_and_says_how_many_it_left_out() {
         filed: (0..200).map(|n| format!("arrangement_{n}")).collect(),
         menu: Menu::Open,
     };
-    let pill = arrangement(&ctx, panel.layout(), Some(mock()), None, &arr).expect("a pill");
+    let pill = arrangement(&ctx, panel.layout(), Some(mock()), None, None, &arr).expect("a pill");
     let card = pill.menu.expect("a menu");
     assert_eq!(pill.of, 202, "two verbs and two hundred names");
     assert!(
@@ -679,13 +681,13 @@ fn a_folded_or_soloed_or_narrow_row_draws_no_pill() {
     let mut panel = Panel::new(PLAUSIBLE.w, PLAUSIBLE.h);
     panel.solve();
     let arr = filed();
-    assert!(arrangement(&ctx, panel.layout(), Some(mock()), None, &arr).is_some());
+    assert!(arrangement(&ctx, panel.layout(), Some(mock()), None, None, &arr).is_some());
 
     let row = panel.layout().find("transport").expect("transport");
     panel.op(Op::Fold(row));
     panel.solve();
     assert_eq!(
-        arrangement(&ctx, panel.layout(), Some(mock()), None, &arr),
+        arrangement(&ctx, panel.layout(), Some(mock()), None, None, &arr),
         None,
         "the transport row is folded away and its control is still being drawn"
     );
@@ -696,7 +698,7 @@ fn a_folded_or_soloed_or_narrow_row_draws_no_pill() {
     panel.op(Op::Solo(library));
     panel.solve();
     assert_eq!(
-        arrangement(&ctx, panel.layout(), Some(mock()), None, &arr),
+        arrangement(&ctx, panel.layout(), Some(mock()), None, None, &arr),
         None,
         "a solo left the transport row invisible and its control still drawn"
     );

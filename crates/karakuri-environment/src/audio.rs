@@ -59,6 +59,15 @@ pub use karakuri_audio::AudioError;
 /// putting a third name in front of it is how they come apart again.
 pub use karakuri_audio::inputs;
 
+/// **The tempo range the tracker searches**, so a surface can say *before* a
+/// press which way the grid can still be moved an octave — `Audio::octave`
+/// refuses outside it, and a control that only found out by asking would have
+/// to perform the move to learn it could not.
+///
+/// Re-exported for [`inputs`]' reason, word for word: this module is the door,
+/// and `karakuri` does not name `karakuri-audio` in its manifest at all.
+pub use karakuri_audio::tempo::BPM_RANGE;
+
 use karakuri_engine::Signals;
 use karakuri_signal::measured::{AudioFrame, MAX_BANDS};
 use karakuri_store::record::Record;

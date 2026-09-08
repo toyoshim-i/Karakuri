@@ -861,14 +861,21 @@ fn reached_through_a_painted_control() -> BTreeSet<&'static str> {
     let mut view = running();
     view.arrangement.name = Some(IN_USE.to_owned());
     view.arrangement.filed = vec![IN_USE.to_owned()];
-    let pill = arrangement(&ctx, p.layout(), view.transport, None, &view.arrangement)
-        .unwrap_or_else(|| {
-            panic!(
-                "the transport row draws no arrangement pill on a solved console with an \
+    let pill = arrangement(
+        &ctx,
+        p.layout(),
+        view.transport,
+        None,
+        None,
+        &view.arrangement,
+    )
+    .unwrap_or_else(|| {
+        panic!(
+            "the transport row draws no arrangement pill on a solved console with an \
                  engine behind it, so nothing here can demonstrate a row of `{SECTION}` from a \
                  pointer — this pass has stopped measuring rather than found the control gone"
-            )
-        });
+        )
+    });
 
     // **Step one of the real route.** `claim` is what the window loop asks
     // before anything acts, and a press it hands to `egui` never reaches the
@@ -893,8 +900,15 @@ fn reached_through_a_painted_control() -> BTreeSet<&'static str> {
         ),
     }
 
-    let open = arrangement(&ctx, p.layout(), view.transport, None, &view.arrangement)
-        .expect("the pill was drawn a moment ago and the panel has not moved");
+    let open = arrangement(
+        &ctx,
+        p.layout(),
+        view.transport,
+        None,
+        None,
+        &view.arrangement,
+    )
+    .expect("the pill was drawn a moment ago and the panel has not moved");
     assert!(
         open.rows > 0,
         "the arrangement pill's menu opened with no rows in it, so every ask below is asked of \

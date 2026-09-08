@@ -358,6 +358,27 @@ pub mod size {
     /// and the beat grid, and every other pair in the row.
     pub const TRANSPORT_GAP: f32 = 14.0;
 
+    /// `.octave`'s `gap: 3px`, between the two halves of the one control that
+    /// moves the grid an octave. The same 3 `.scrub` sets one bay over, and a
+    /// second constant rather than a reuse of [`SCRUB_GAP`] because the two
+    /// are two rules in the stylesheet and either can move on its own.
+    pub const OCTAVE_GAP: f32 = 3.0;
+
+    /// `.octave i`'s `font-size: 9px`: `½` or `×2`, at the type size the
+    /// scrub's arrows and the anchor beside them are drawn at.
+    pub const OCTAVE_SIZE: f32 = 9.0;
+
+    /// `.octave i`'s `padding: 0 4px`, around one half of it — tighter than a
+    /// [`PILL_PAD_X`] for [`SCRUB_PAD_X`]'s reason, since what is inside is a
+    /// mark rather than a word.
+    pub const OCTAVE_PAD_X: f32 = 4.0;
+
+    /// One half's box: [`OCTAVE_SIZE`] at [`LINE`] inside its
+    /// `border: 1px solid var(--c-line)` — **15.5**, which is [`SCRUB_H`]'s own
+    /// number at the same type size, so the pair sits in the transport row
+    /// without making it any taller than the pills beside them.
+    pub const OCTAVE_H: f32 = OCTAVE_SIZE * LINE + HAIRLINE * 2.0;
+
     /// `.bpm`'s `font-size: 20px`, the one large number on the panel.
     pub const BPM_SIZE: f32 = 20.0;
 

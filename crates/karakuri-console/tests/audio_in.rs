@@ -112,8 +112,15 @@ fn a_console_nobody_told_draws_no_pill_and_one_told_nothing_draws_none() {
         None,
         "a console that was told nothing about audio drew a pill anyway"
     );
-    let untold = arrangement(&ctx, panel.layout(), Some(mock()), None, &Arrangement::NONE)
-        .expect("the arrangement pill");
+    let untold = arrangement(
+        &ctx,
+        panel.layout(),
+        Some(mock()),
+        None,
+        None,
+        &Arrangement::NONE,
+    )
+    .expect("the arrangement pill");
     assert!(
         near(untold.pill.min.x, row.bar.max.x + size::TRANSPORT_GAP),
         "with no audio-in pill the arrangement pill starts at {} and the bar ends at {}",
@@ -140,6 +147,7 @@ fn a_console_nobody_told_draws_no_pill_and_one_told_nothing_draws_none() {
         panel.layout(),
         Some(mock()),
         Some(&nothing),
+        None,
         &Arrangement::NONE,
     )
     .expect("the arrangement pill");
