@@ -46,17 +46,20 @@ cargo run -p karakuri-cli -- --render out.png --frames 240   # one frame to a PN
 
 `karakuri` is the panel and `karakuri-cli` is still what you play a whole set with: the
 console has the picture, the deck previews, the transport, the mixer, the Library bay and
-the Inspector, and no MIDI, MCP, replay or session recording yet — the four `mcp` pills that
-open a class of operations to a model are drawn and pressable, and nothing in this process
-serves MCP for them to govern. **It listens to the room**: it opens the
+the Inspector; it serves MCP when `--mcp` names a port and records a session from the
+transport's `rec` pill, and it has no MIDI and no replay yet — the four `mcp` pills that open a
+class of operations to a model are drawn and pressable, and what they govern is the server this
+process is running. **It listens to the room**: it opens the
 default audio input at startup, the transport row's `audio-in` pill says which one and
 lists the others, `b`, `,` and `.` tap the beat and move the grid an octave, and `o` and `p`
 nudge the latency offset. **Every slot
 watches its `.kir` pair**, so the Staging lane is empty until a file changes and then carries a
 row per slot whose newest build has a verdict outstanding. **And it keeps an arrangement**: the
 transport's arrangement pill names the layout you are working in and puts it back later, under
-`arrangements/<name>.arrangement.json` in the store — the one thing this program writes to disk
-on purpose. The Library lists what your store holds and what ships with the
+`arrangements/<name>.arrangement.json` in the store. It is not the only thing this program writes
+on purpose: every deck runs from a working copy made under `<store>/scratch/` before the window
+opens, `k` keeps what the selected deck is playing as a Set file, and `rec` opens a session
+stream. What it does not write is the pair you named on the command line. The Library lists what your store holds and what ships with the
 program, and `l` puts the row under the cursor on the selected deck. The Master bay draws its out row and
 the Sequencer bay draws nothing but its head. Press `h` in the CLI's window for the keys and `s`
 for the status line.
@@ -86,9 +89,10 @@ not about design, and it had no home until the manual had one.
   example until ADR-0214, and for one reason: everything a program needs beyond the panel was in
   `karakuri-cli`, which has no library target, so there was nothing for a binary to sit on. There
   is now — [`karakuri-environment`](crates/karakuri-environment). `karakuri-cli` is still what you
-  play a whole set with: the console has no MIDI, MCP, replay or session recording yet, and it does
+  play a whole set with: the console has no MIDI and no replay yet. It does
   open an audio input — so the signal bus carries a measurement rather than an invention, and the grid follows
-  the room
+  the room — it serves MCP when `--mcp` names a port, which is the server the four `mcp` pills govern,
+  and it records a session from the transport's `rec` pill
 - **Every operation is named once and every surface routes into that name** — the manual's first
   rule. [`karakuri-operation`](crates/karakuri-operation) is every one of those names, checked against
   [the manual's own page](docs/manual/operations.html) by a test — **how many there are is not written
@@ -96,10 +100,14 @@ not about design, and it had no home until the manual had one.
   gains a row; `grep -c '<h3' docs/manual/operations.html` is the count. And
   [`karakuri-operation-record`](crates/karakuri-operation-record) is where one becomes a record —
   the step that makes a fader, a key and a MIDI knob the same thing. **The MIDI map is an
-  `Operation` now** (ADR-0196), and fifteen of the CLI's thirty-nine keys reach the deck through
-  the same call it does (ADR-0198); of the rest, nine name an operation whose record nobody can
-  write yet and twelve name one that writes no record at all and therefore has to be performed by
-  the surface holding the state. **All four surfaces have an answer now**: the console's own
+  `Operation` now** (ADR-0196), and the CLI's keys fall in four groups (ADR-0198): a key whose
+  operation converts to a record reaches the deck through the same call the map does; the beat
+  tracker's keys keep their own path, because their record is owed and routing one today would
+  print the gap where the gesture used to happen; a key naming an operation that writes no record
+  cannot route at all and has to be performed by the surface holding the state; and the rest name
+  nothing in the vocabulary. **Which key is in which group is not written down here** —
+  `Live::key`'s survey in [`crates/karakuri-cli/src/main.rs`](crates/karakuri-cli/src/main.rs)
+  names every one of them, beside the handler it describes. **All four surfaces have an answer now**: the console's own
   arrangement operations stay where they are, blocked on the manual rather than on the code
   (ADR-0197), and **MCP names its seven tools' operations and performs them itself** (ADR-0199) —
   every one of the seven writes no record where it is asked, so there is nothing for `Live::operate`

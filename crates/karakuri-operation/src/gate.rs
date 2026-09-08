@@ -396,9 +396,10 @@ fn because(operation: &Operation, class: Class) -> String {
 /// stops the build here until somebody says which class it is in, which is
 /// `karakuri_operation_record::written`'s discipline and its reason.
 ///
-/// The counts ADR-0235 states, and which
-/// `the_classification_is_the_split_adr_0235_states` holds this to: **40
-/// closed, 23 open, 63 total.**
+/// **The split ADR-0235 states is held by a test rather than restated here**:
+/// `the_classification_is_the_split_adr_0235_states` walks every operation
+/// through this match and asserts the closed, open and total counts, so the
+/// figures move when this match does and a sentence cannot go stale beside it.
 pub fn standing(operation: &Operation, running: Running<'_>) -> Standing {
     match operation {
         // ----- The clock ---------------------------------------------------
