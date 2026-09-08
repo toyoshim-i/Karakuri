@@ -15,9 +15,17 @@
 
 use karakuri_engine::probe::{Measurement, MeasurementMethod};
 use karakuri_engine::set::{Edge, Layering, Wiring, MAX_STEPS};
-use karakuri_engine::swap::PROBE_RESOLUTION;
 use karakuri_engine::{Gpu, Probe, Set, Signals, VideoSource};
 use karakuri_ir::typed::{Checked, Cost};
+
+/// **A size to measure at**, and a fixture rather than a reference.
+///
+/// It was `swap::PROBE_RESOLUTION` until ADR-0303, which removed that
+/// constant: this application has an output size and a preview size and no
+/// third one, so the size a measurement is taken at is named by whoever knows
+/// the layout. This example has no layout, so it names one, and it is
+/// 1280x720 because that is what it was written against.
+const AT: (u32, u32) = (1280, 720);
 
 const CAPACITY: u32 = 262_144;
 const SEED: u32 = 19_274;
@@ -72,12 +80,12 @@ impl Rig {
         // **One probe for the whole process.** `Probe::run` demotes itself to a
         // host clock for life on the first failed sample, so figures from two
         // probes are not comparable.
-        let probe = Probe::new(&gpu.device, &gpu.queue, true, PROBE_RESOLUTION);
+        let probe = Probe::new(&gpu.device, &gpu.queue, true, AT);
         let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("ceiling ladder warm target"),
             size: wgpu::Extent3d {
-                width: PROBE_RESOLUTION.0,
-                height: PROBE_RESOLUTION.1,
+                width: AT.0,
+                height: AT.1,
                 depth_or_array_layers: 1,
             },
             mip_level_count: 1,
@@ -122,7 +130,7 @@ impl Rig {
             },
         )
         .unwrap_or_else(|e| panic!("{what}: Set::build_many: {e}"));
-        set.resize(&self.gpu.device, PROBE_RESOLUTION.0, PROBE_RESOLUTION.1);
+        set.resize(&self.gpu.device, AT.0, AT.1);
         for (name, value) in params {
             let n = set.set_param(name, *value);
             assert!(n > 0, "{what}: no node declares param `{name}`");
@@ -660,7 +668,7 @@ fn ladder_element_fragment(rig: &mut Rig) {
     ];
     let mut specs: Vec<Spec> = Vec::new();
     for scale in scales {
-        let side = scale * PROBE_RESOLUTION.1 as f32;
+        let side = scale * AT.1 as f32;
         specs.push(Spec {
             label: "drift_shell + pad_points".into(),
             dial: format!("point_scale {scale} = {side:.2} px"),
@@ -682,9 +690,9 @@ fn ladder_element_fragment(rig: &mut Rig) {
     );
     println!("| point_scale | sprite side (px) | fragments (M) | canvases | ms | spread |");
     println!("|---|---|---|---|---|---|");
-    let pixels = f64::from(PROBE_RESOLUTION.0) * f64::from(PROBE_RESOLUTION.1);
+    let pixels = f64::from(AT.0) * f64::from(AT.1);
     for (scale, r) in scales.iter().zip(&rungs) {
-        let side = scale * PROBE_RESOLUTION.1 as f32;
+        let side = scale * AT.1 as f32;
         let frags = f64::from(CAPACITY) * f64::from(side) * f64::from(side);
         println!(
             "| {scale} | {side:.2} | {:.2} | {:.1}x | {:.3} | {:.3}-{:.3} |",
@@ -926,7 +934,7 @@ fn main() {
         "reference workload: {CAPACITY} elements at {}x{}; share used downstream: \
          4.15 ms (16.6 / 4). Constants in crates/karakuri-ir/src/cost.rs are patched \
          to u64::MAX/16 in an uncommitted tree for the duration of this run.",
-        PROBE_RESOLUTION.0, PROBE_RESOLUTION.1
+        AT.0, AT.1
     );
     let _ = method;
 

@@ -751,7 +751,10 @@ proc wide_points {
             cost.capacity, SECOND,
             "the measurement is labelled with a capacity the Set was not built at"
         );
-        assert_eq!(cost.resolution, karakuri_engine::swap::PROBE_RESOLUTION);
+        // **The size the slot was told to measure at**, which is the deck's
+        // own until somebody narrows it (ADR-0303) — and a `HotSwap` built
+        // outside a deck is at its own viewport.
+        assert_eq!(cost.resolution, h.swap.measure_size());
     }
 
     /// The other half of "a failed compile changes nothing", and the half that is
@@ -1197,7 +1200,16 @@ proc fountain {
     #[test]
     fn a_rewound_set_is_indistinguishable_from_one_that_was_never_stepped() {
         use karakuri_engine::probe::Probe;
-        use karakuri_engine::swap::{measure, PROBE_RESOLUTION};
+        use karakuri_engine::swap::measure;
+
+        /// **A size to measure at**, and a fixture rather than a reference.
+        ///
+        /// It was `swap::PROBE_RESOLUTION` until ADR-0303, which removed that
+        /// constant: this application has an output size and a preview size and no
+        /// third one, so the size a measurement is taken at is named by whoever
+        /// knows the layout. Nothing here has a layout, so these tests name one
+        /// and it is 1280x720 because that is what they were written against.
+        const AT: (u32, u32) = (1280, 720);
 
         let gpu = Gpu::headless().expect("no GPU available");
         let probed_target = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
@@ -1210,8 +1222,8 @@ proc fountain {
         // being asserted is what the probe run does to the Set, not what it
         // measured, and calibration is half a second of GPU time for a number this
         // test never reads.
-        let mut probe = Probe::new(&gpu.device, &gpu.queue, false, PROBE_RESOLUTION);
-        let measurement = measure(&mut probe, &gpu.device, &gpu.queue, &mut probed);
+        let mut probe = Probe::new(&gpu.device, &gpu.queue, false, AT);
+        let measurement = measure(&mut probe, &gpu.device, &gpu.queue, &mut probed, AT);
         assert!(measurement.ms.is_finite());
 
         assert_eq!(steps_taken(&probed), 0, "the probe run left `t` advanced");

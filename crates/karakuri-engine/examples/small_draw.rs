@@ -40,9 +40,17 @@
 
 use karakuri_engine::probe::{Measurement, MeasurementMethod};
 use karakuri_engine::set::{Edge, Layering, Wiring};
-use karakuri_engine::swap::PROBE_RESOLUTION;
 use karakuri_engine::{Gpu, Probe, Set, Signals};
 use karakuri_ir::typed::Checked;
+
+/// **A size to measure at**, and a fixture rather than a reference.
+///
+/// It was `swap::PROBE_RESOLUTION` until ADR-0303, which removed that
+/// constant: this application has an output size and a preview size and no
+/// third one, so the size a measurement is taken at is named by whoever knows
+/// the layout. This example has no layout, so it names one, and it is
+/// 1280x720 because that is what it was written against.
+const AT: (u32, u32) = (1280, 720);
 
 const CAPACITY: u32 = 262_144;
 const SEED: u32 = 19_274;
@@ -52,7 +60,7 @@ const SEED: u32 = 19_274;
 const PASSES: u32 = 3;
 
 /// The sizes, 16:9 throughout and halving in area at each step from the
-/// reference. 1280x720 is [`PROBE_RESOLUTION`] — what every other figure in
+/// reference. 1280x720 is [`AT`] — what every other figure in
 /// this repository is quoted at — and 112x63 is the console's preview cell,
 /// which is where `tests/deck.rs` measured the floor.
 const SIZES: [(u32, u32); 8] = [
@@ -119,7 +127,7 @@ struct Rig {
 impl Rig {
     fn new() -> Rig {
         let gpu = Gpu::headless().expect("no GPU available");
-        let probe = Probe::new(&gpu.device, &gpu.queue, gpu.timestamps, PROBE_RESOLUTION);
+        let probe = Probe::new(&gpu.device, &gpu.queue, gpu.timestamps, AT);
         Rig { gpu, probe }
     }
 

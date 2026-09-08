@@ -107,8 +107,9 @@
 //!    ([`crate::view::ProgramBay::preview`]), the Library bay's scope chips
 //!    ([`crate::view::LibraryBay::chip`]), the two filter fields under them
 //!    ([`crate::view::LibraryBay::filter`]), the `read` chip in that bay's
-//!    foot ([`crate::view::LibraryBay::read`]) and the **list** between them
-//!    ([`crate::view::LibraryBay::take`]). The rule did not change to hold any
+//!    foot ([`crate::view::LibraryBay::read`]), the **star** at the left of
+//!    each of its rows ([`crate::view::LibraryBay::starred`]) and the **list**
+//!    those stars are in ([`crate::view::LibraryBay::take`]). The rule did not change to hold any
 //!    of the ones that came after the first, which is what it was written for
 //!    — and each is asked exactly the way the first is: the derivation that
 //!    draws it, asked whether the point is on it, with nothing stored.
@@ -467,6 +468,15 @@
 //! [`crate::view::LibraryBay::filter`] emits none: what leaves is
 //! `Operation::ListSets` naming both filters as they will stand.
 //!
+//! **The star at the left of each row names a state and not a step**, which
+//! is the chips' half of that division reached from a third direction: a
+//! toggle is what the *vocabulary* refuses (`Operation::SetFavourite` carries
+//! the state a row is being put in), so the control is what reads the row's
+//! present mark and asks for the other one —
+//! [`crate::view::LibraryBay::starred`]. It is asked before the row it sits
+//! in, because a star is inside a row and rule 4's *a control claims what it
+//! acts on and no more* is what puts the smaller box first.
+//!
 //! **And so is the list under them, except that what it hands back is not an
 //! answer to *what does a press ask for* at all.**
 //! [`crate::view::LibraryBay::take`] answers *is this a control* here and
@@ -605,6 +615,13 @@ use crate::view::{
 /// slice the host handed in. [`Field::ALL`] is the same two, and it is what the
 /// probe walks.
 ///
+/// **The stars' count is one for the list's reason below**, and it is the
+/// same number for the same argument: a press lands on one of however many
+/// rows the bay drew, and how many that is moves when a divider moves. The
+/// star is a control of its own rather than a second reading of the row —
+/// it emits `Operation::SetFavourite` where a row press emits nothing at all —
+/// so it is a row of this table and not a sentence in the one under it.
+///
 /// **The list's count is one, and it is the one number here that could have
 /// been a count and must not be.** A press lands on one of however many rows
 /// the bay drew, exactly as it lands on one of however many chips it drew — and
@@ -618,7 +635,7 @@ use crate::view::{
 /// answering a different question. So the **list** is the control and which row
 /// is inside [`crate::view::LibraryBay::take`], which is the `read` chip's
 /// row read the other way round.
-pub const PROBES: [Probe; 23] = [
+pub const PROBES: [Probe; 24] = [
     Probe {
         name: "the Outputs row's sink",
         claims: 1,
@@ -723,6 +740,11 @@ pub const PROBES: [Probe; 23] = [
         name: "the read chip in the Library bay's foot",
         claims: 1,
         ask: on_read,
+    },
+    Probe {
+        name: "the Library bay's stars",
+        claims: 1,
+        ask: on_star,
     },
     Probe {
         name: "the Library bay's list",
@@ -1138,6 +1160,30 @@ fn on_read(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
         )
         .is_some()
     })
+}
+
+/// **The star at the left of each row of the Library bay's list**,
+/// and it is asked before the row it is in: a star is inside a row,
+/// so a press on one would otherwise be answered by the probe below
+/// and the mark would be dead. Rule 4's *a control claims what it
+/// acts on and no more* is what puts the smaller box first — the
+/// same order the deck head's chips are asked in before the head's
+/// own ground.
+///
+/// **The listing and the marks go in with the point**, exactly as
+/// the listing does for the row below: what a star means is a name
+/// this crate reads no store for and a set of ids the host handed
+/// over (ADR-0156, `View::starred`), and a row with no Set behind
+/// it is not a target — `LibraryBay::starred`.
+fn on_star(panel: &Panel, _ctx: &egui::Context, view: &View, p: Point) -> bool {
+    library(
+        panel.layout(),
+        &view.scopes,
+        &view.library,
+        view.opened(),
+        view.pointed(),
+    )
+    .is_some_and(|bay| bay.starred(&view.library, &view.starred, p).is_some())
 }
 
 /// **The rows of the Library bay's list**, and they are the first
