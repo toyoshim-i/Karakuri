@@ -29,7 +29,8 @@
 //! **`slot` is three things in this vocabulary, and only the prose keeps them apart.**
 //! [`Record::Slot`] is **a node of a Set** — a procedure at a `(layer, index)` address,
 //! optionally with a name. The `slot: u8` field on [`Record::Gain`], [`Record::Opacity`],
-//! [`Record::Blend`], [`Record::Residency`], [`Record::Procedure`], [`Record::Mask`],
+//! [`Record::Blend`], [`Record::Residency`], [`Record::Procedure`], [`Record::Authority`],
+//! [`Record::Ride`], [`Record::Mask`],
 //! [`Record::Transition`], [`Record::Select`], [`Record::Transport`]
 //! and [`Record::Save`] is **a member of the deck** — an index into the mixer, and nothing
 //! about the Set in it. [`Record::Edge`]'s `slot: String` is the third: **an input a node
@@ -105,6 +106,35 @@ pub enum Value {
     Scalar(f32),
     Vec2([f32; 2]),
     Vec3([f32; 3]),
+}
+
+/// **One node of a Set, as a value rather than as two fields beside each
+/// other** — the address [`Record::Ride`] carries and the only place in this
+/// vocabulary a node address is a thing of its own.
+///
+/// **A struct so that half an address cannot be written down.** Every other
+/// record here spells the address as a `layer` beside an `index`, and
+/// [`Record::Param`] pays for it: `index` absent is a wildcard, `layer` is then
+/// read by nobody, and the pair has to be documented as *present or absent as a
+/// unit* because nothing else can hold it to that. An `Option<NodeAt>` holds it
+/// structurally — `docs/contributing.md` §4's third tier — and the wildcard is
+/// the `None`, which is what a wildcard is: a write that names no node, and so
+/// names no layer either.
+///
+/// **Named for `karakuri_operation::NodeAt`, which is the same address one
+/// crate along**, and deliberately not renamed on the way across: an operation
+/// says `{layer, index}` and the record it becomes says `{layer, index}`, so
+/// there is one thing to learn rather than two spellings of it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NodeAt {
+    pub layer: Layer,
+    /// **Which node of that layer. Absent is 0 and 0 is not written**, on
+    /// [`Record::Procedure`]'s terms and emphatically not
+    /// [`Record::Param`]'s: this address names one node, and the "every node
+    /// declaring the key" reading lives one level up, in the absence of the
+    /// whole [`NodeAt`].
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub index: u32,
 }
 
 /// The noise generator a `bind` declares for itself.
@@ -721,6 +751,61 @@ pub enum Record {
         /// global mode"*) and `level` is `residency`'s.
         authority: String,
     },
+    /// **A parameter an operator moved on a deck slot that is playing** — one
+    /// knob turn, at the frame it happened.
+    ///
+    /// **The session's twin of [`Record::Param`], and the third record in this
+    /// vocabulary to name a node of the Set a deck slot is playing.**
+    /// [`Record::Procedure`] was the first and [`Record::Authority`] the
+    /// second, and the reason is the same one all three times: a `param` says
+    /// what a Set *is* and carries no `slot`, because what a Set is does not
+    /// depend on which deck slot it is playing in. This says what an operator
+    /// *did*, to one deck slot, at one instant — a fact about a performance,
+    /// which is what a session stream is made of. A `param` in a stream can
+    /// only mean the Set at the head of it, and a deck holds four.
+    ///
+    /// **Two spellings of one act is the cost, and it is the cost `slot` and
+    /// `procedure` already charge** — both say *this node runs this
+    /// procedure*, in a Set file and in a session, and the format keeps them
+    /// apart rather than growing one a `slot` field. What makes it two facts
+    /// rather than one fact written twice is the projection: folding a session
+    /// down to a Set file drops this, on `select`'s terms, because nothing in a
+    /// stream says which deck slot the Set at its head was played in. See
+    /// `karakuri_store::project::key_for`.
+    ///
+    /// **`at` absent is every node declaring `key`**, which is
+    /// [`Record::Param`]'s wildcard and the useful default: one knob moving
+    /// every renderer that has an `exposure`. It is refused where the nodes it
+    /// lands on are not under one authority — `karakuri_engine::set::Set::write_param`
+    /// is where that is decided and the only place it is decided, so this
+    /// record reaches it by the road a `--param` and a `param` reach it by.
+    ///
+    /// **`key` is a component key where the parameter is a vector** — `glow.x`
+    /// and never `glow` — because a parameter is driven one component at a time
+    /// ([ADR-0268](../../../docs/adr/0268-a-vector-parameter-is-driven-one-component-at-a-time.md)).
+    /// A wide [`Value`] is still legal here for the reason it is legal on a
+    /// `param`: it is one line a person or a model writes, and the reader
+    /// expands it into one write per component.
+    ///
+    /// **What a replay does with it**, and this is the whole reason it exists:
+    /// a knob turn used to write nothing at all, so a session recorded an
+    /// operator riding a parameter for a minute and replayed it at the value
+    /// the Set was loaded with —
+    /// [P-0092](../../../docs/principles/0092-the-same-inputs-produce-the-same-frame.md)'s
+    /// *"mutating a live Set in place, which opens a hole in the record
+    /// stream"*, exactly. Decided in
+    /// `docs/adr/0280-a-parameter-written-to-a-live-set-is-a-session-record.md`.
+    Ride {
+        /// The deck slot whose Set is being written — *a deck slot*, on
+        /// [`Record::Procedure`]'s and [`Record::Authority`]'s terms.
+        slot: u8,
+        /// **Which node, or every node declaring `key`.** Absent is the
+        /// wildcard; see [`NodeAt`] for why the address is one field.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        at: Option<NodeAt>,
+        key: String,
+        value: Value,
+    },
     /// **What size the session renders at**, in texels — the canvas every
     /// `VideoSource` draws into and every deck slot is sized to match.
     ///
@@ -1330,6 +1415,7 @@ impl Record {
             | Record::Canvas { .. }
             | Record::Procedure { .. }
             | Record::Authority { .. }
+            | Record::Ride { .. }
             | Record::Transport { .. }
             | Record::Transition { .. }
             | Record::Select { .. }
@@ -1454,6 +1540,88 @@ mod tests {
         // carried one would also be claiming a layering it cannot record.
         assert!(!rec.is_set_state());
         assert!(!rec.is_metadata());
+    }
+
+    /// **A `ride` round-trips through the line a session writes**, bytes and
+    /// all, in both of its two shapes: addressed, and the wildcard.
+    ///
+    /// `round_trip_verbatim` for [`Record::Select`]'s reason with one more of
+    /// its own — this record's whole shape is what it leaves out. `at` absent
+    /// is *every node declaring the key*, and an `at` acquiring a serde default
+    /// would turn every wildcard ever recorded into a write addressed at `L1:0`
+    /// while still comparing equal to itself. The bare wildcard line is
+    /// therefore the one that has to survive untouched.
+    #[test]
+    fn a_ride_round_trips_addressed_and_as_a_wildcard() {
+        // Addressed, and at a node that is not 0 — the index is written only
+        // where it says something, so an addressed write at node 0 and a
+        // wildcard are told apart by `at` and never by `index`.
+        let rec = round_trip_verbatim(
+            r#"{"t":"ride","slot":2,"at":{"layer":"L4","index":1},"key":"glow.x","value":0.4}"#,
+        );
+        assert_eq!(
+            rec,
+            Record::Ride {
+                slot: 2,
+                at: Some(NodeAt {
+                    layer: Layer::L4,
+                    index: 1
+                }),
+                key: "glow.x".to_string(),
+                value: Value::Scalar(0.4),
+            }
+        );
+        // The session's, and for `procedure`'s and `authority`'s reason rather
+        // than `select`'s: it is state, and it is the deck's. A Set file that
+        // carried one would restore a knob position wherever it was loaded.
+        assert!(!rec.is_set_state());
+        assert!(!rec.is_metadata());
+
+        // Node 0 of a layer, addressed. The `index` is absent because it is
+        // zero, and the `at` is present because a node was named — which is the
+        // distinction `Record::Param` cannot draw at all.
+        let rec = round_trip_verbatim(
+            r#"{"t":"ride","slot":0,"at":{"layer":"L1"},"key":"radius","value":2.6}"#,
+        );
+        assert_eq!(
+            rec,
+            Record::Ride {
+                slot: 0,
+                at: Some(NodeAt {
+                    layer: Layer::L1,
+                    index: 0
+                }),
+                key: "radius".to_string(),
+                value: Value::Scalar(2.6),
+            }
+        );
+
+        // The wildcard: no node, and so no layer either.
+        let rec = round_trip_verbatim(r#"{"t":"ride","slot":1,"key":"exposure","value":2.0}"#);
+        assert_eq!(
+            rec,
+            Record::Ride {
+                slot: 1,
+                at: None,
+                key: "exposure".to_string(),
+                value: Value::Scalar(2.0),
+            }
+        );
+
+        // A wide value on one line, which is what a model writes and what a
+        // reader with the Set in hand expands — `param`'s rule exactly
+        // (ADR-0268).
+        let rec =
+            round_trip_verbatim(r#"{"t":"ride","slot":0,"key":"glow","value":[0.4,0.7,1.0]}"#);
+        assert_eq!(
+            rec,
+            Record::Ride {
+                slot: 0,
+                at: None,
+                key: "glow".to_string(),
+                value: Value::Vec3([0.4, 0.7, 1.0]),
+            }
+        );
     }
 
     /// **A merge round-trips through the line the spec prints**, bytes and all,

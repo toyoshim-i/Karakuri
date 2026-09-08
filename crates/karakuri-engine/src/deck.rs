@@ -1195,6 +1195,50 @@ impl Deck {
         &self.slots[slot].swap
     }
 
+    /// **Write one parameter of the Set a slot is playing, now**, and say how
+    /// many declarations it reached. Zero is the caller's cue to say so — a
+    /// name a rebuild no longer declares should not take the show down.
+    ///
+    /// **This compiles nothing.** A parameter value is the one piece of Set
+    /// state that is not structural: [`crate::set::Set::write_param`] writes a
+    /// number into a map, and the map is packed into a uniform by
+    /// `Set::prepare`, which runs on every slot on every frame. So the write is
+    /// on screen at the next frame with no build, no worker and no swap — which
+    /// is what makes a knob a knob rather than a rebuild.
+    ///
+    /// **It reaches `live_mut` and that is not the thing that method refuses.**
+    /// `HotSwap::live_mut` is `pub(crate)` because handing the live `Set` out
+    /// would be *"a second way to render a Set, next to the one that installs
+    /// builds on a frame boundary"* — an argument about **rendering and
+    /// replacement**, not about writing a value. Nothing here renders and
+    /// nothing here replaces: which Set this frame is made of has exactly the
+    /// answer it had before the call. [`Deck::schedule_selection`] is the
+    /// public writer of the same shape and reaches `live_mut` by the same road.
+    ///
+    /// **The refusal is the Set's and is not restated here.** A bare key over
+    /// nodes that are not under one authority is refused whole by
+    /// `Set::write_param` — see [`crate::set::CrossesAuthority`] and
+    /// `docs/adr/0223-a-wildcard-write-is-refused-where-the-nodes-it-lands-on-disagree.md`
+    /// — so every route in meets it, including this one, and a refused write
+    /// moves nothing.
+    ///
+    /// **A rebuild is a separate question and this call does not answer it.**
+    /// What a `--watch` rebuild puts back is [`crate::swap::Request::params`],
+    /// and a value moved here is not in it: nothing writes one there, so a save
+    /// of any `.kir` walks this knob back to where the slot was loaded. That is
+    /// an open decision rather than an oversight, and what it turns on — that a
+    /// `Set` holds current values and declared ranges and **no declared
+    /// defaults**, so it cannot tell a value a hand moved from one nobody has
+    /// touched — is in
+    /// `docs/adr/0280-a-parameter-written-to-a-live-set-is-a-session-record.md`.
+    pub fn write_param(
+        &mut self,
+        slot: usize,
+        write: &crate::binding::ParamWrite,
+    ) -> Result<usize, crate::set::CrossesAuthority> {
+        self.slots[slot].swap.live_mut().write_param(write)
+    }
+
     /// The linear HDR render target for one slot.
     pub fn slot_view(&self, slot: usize) -> Option<&wgpu::TextureView> {
         self.slots.get(slot).map(|s| &s.view)

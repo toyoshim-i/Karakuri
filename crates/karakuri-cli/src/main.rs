@@ -38,7 +38,7 @@ use karakuri_environment::compile::{sort_slot, Material, Named, Placed};
 use karakuri_environment::mix::{op_name, op_wire_names, parse_op};
 use karakuri_environment::setfile::{layer_named, Names, SavedNode, Sources};
 use karakuri_environment::{
-    accepted_save, no_such_renderer, no_such_slot, nothing_to_save, Asked, SAVE_WAIT,
+    accepted_save, no_such_param, no_such_renderer, no_such_slot, nothing_to_save, Asked, SAVE_WAIT,
 };
 
 use std::fmt::Write as _;
@@ -2426,6 +2426,20 @@ fn apply_replayed(deck: &mut Deck, look: &mut Look, record: &karakuri_store::rec
                     slot, renderer, start,
                 )),
                 Err(refusal) => eprintln!("  {refusal} — skipped"),
+            }
+        }
+        // **The knob turn, replayed.** One record is one or three writes, and
+        // each of them is reported where it lands on nothing: a session
+        // replayed against material that has since lost the parameter is the
+        // path this is actually likely on, exactly as it is for the selection
+        // above.
+        Ok(Some(mix::Change::Ride { slot, writes })) => {
+            for write in &writes {
+                match deck.write_param(slot, write) {
+                    Ok(0) => eprintln!("  {} — skipped", no_such_param(slot, &write.key)),
+                    Ok(_) => {}
+                    Err(refused) => eprintln!("  {refused}"),
+                }
             }
         }
         // **Governed, exactly as the live path governs.** `set_residency`
@@ -6983,6 +6997,27 @@ impl Live {
                             ))
                     }
                     Err(refusal) => eprintln!("{refusal}"),
+                }
+            }
+            // **The one change that reaches inside a Set.** Every arm around
+            // it moves the deck the Sets are playing on; this writes a number
+            // into the Set in one slot, and `Deck::write_param` is the public
+            // road to it. It compiles nothing — the value is packed into the
+            // uniform by the next `Set::prepare`, which is the next frame.
+            //
+            // **A rebuild does not carry it**, and that is not settled here:
+            // what a `--watch` rebuild restates is `swap::Request::params`, and
+            // nothing puts a live write there. See
+            // `docs/adr/0280-a-parameter-written-to-a-live-set-is-a-session-record.md`,
+            // which names it as the open question and why it is a bigger one
+            // than the record was.
+            mix::Change::Ride { slot, writes } => {
+                for write in &writes {
+                    match self.deck.write_param(slot, write) {
+                        Ok(0) => eprintln!("{}", no_such_param(slot, &write.key)),
+                        Ok(_) => {}
+                        Err(refused) => eprintln!("{refused}"),
+                    }
                 }
             }
             mix::Change::Residency { slot, level } => {

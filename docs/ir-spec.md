@@ -2588,11 +2588,11 @@ session tempo, which **v0.2 had no record for**.
 Neither is state, so neither appears in a Set file: both are what a frame *saw* or
 *decided*, and the tempo belongs to the session rather than to any one Set.
 
-### The mix in the stream — `gain`, `opacity`, `blend`, `mask`, `transition`, `select`, `residency`, `look`, `master_out`, `canvas`, `procedure`, `authority` and `transport`
+### The mix in the stream — `gain`, `opacity`, `blend`, `mask`, `transition`, `select`, `residency`, `look`, `master_out`, `canvas`, `procedure`, `authority`, `ride` and `transport`
 
 A session that carried the material and not the performance would replay the same Sets, on
 the same beat, all at whatever gain they happened to start at, with nothing ever going on
-or off air. Twelve records carry what an operator moves — ten states and two events:
+or off air. Fourteen records carry what an operator moves — twelve states and two events:
 
 ```ndjson
 {"t":"gain","slot":0,"value":0.75}
@@ -2876,12 +2876,60 @@ so a node's authority would not survive the next swap — see
 [ADR-0211](adr/0211-authority-is-set-per-node-and-the-record-is-the-sessions.md), which names
 that as owed.
 
+**`ride` is a parameter an operator moved on a deck slot that is playing**, and it is the
+third record here to name a node of the Set in a slot.
+
+```ndjson
+{"t":"ride","slot":0,"at":{"layer":"L4","index":1},"key":"glow.x","value":0.4}
+{"t":"ride","slot":2,"key":"exposure","value":2.0}
+{"t":"ride","slot":1,"key":"glow","value":[0.4,0.7,1.0]}
+```
+
+**It is the session's twin of `param`, and the two are two records rather than one grown a
+`slot`.** That is `slot` and `procedure`'s arrangement exactly — both say *this node runs
+this procedure*, one in a Set file and one in a stream — and the reason is the one stated at
+`authority` above: what a Set *is* does not depend on which deck slot it is playing in, and
+what an operator *did* is addressed to a deck slot or it is addressed to nothing. A `param`
+in a stream can only mean the Set at the head of it, and a deck holds four.
+
+**The address is one field and not two.** `at` absent is *every node declaring `key`* —
+`param`'s wildcard, and the useful default: one knob moving every renderer that has an
+`exposure`. `at` present names one node, and `index` inside it is absent when it is 0, on
+`procedure`'s terms. Written this way because a wildcard names no node and therefore no
+layer, so a `layer` beside an `index` would have to carry a placeholder for it — which is
+what `param`'s `layer` is, and what that record's *present or absent as a unit* is prose for.
+Here nothing can write half an address down.
+
+**`key` is a component key where the parameter is a vector** — `glow.x` and never `glow` —
+because a parameter is driven one component at a time. A wide `value` is legal for `param`'s
+reason: it is one line a person or a model writes, and the reader that has the Set in hand
+expands it into one write per component.
+
+**A bare `key` is refused where the nodes it lands on are not under one authority**, and the
+refusal names them — the same refusal a `--param` and a `param` meet, in the same place,
+because there is one entry point into a Set's parameters and every route comes through it.
+
+**It goes in a session stream and never in a Set file**, and it is the sharpest of the drops
+a projection makes: it names a layer, an index, a key and a value, so a fold *could* key it
+and the result would look right. What it also names is a deck slot, and nothing in a stream
+says which deck slot the Set at its head was played in — "What no record says is what the
+deck held", above. The value an operator ended on reaches a Set file the other way, through
+`save`, which reads the live Set. Decided in
+[ADR-0280](adr/0280-a-parameter-written-to-a-live-set-is-a-session-record.md).
+
+**What no reader does yet is put it back after a rebuild.** A `--watch` rebuild restates the
+parameters its request carries, and a value a knob moved is not one of them, so a save of any
+`.kir` walks that knob back to where the slot was loaded. That is a live-run defect and not a
+replay one — a replay meets `procedure` records and then these, in that order, at the frames
+they happened — and ADR-0280 records why closing it is a decision about what a rebuild *is*
+rather than about where a value is kept.
+
 **One thing it cannot carry.** A rollback restores the outgoing Set at the `t` it was parked
 at; a reader meeting these records builds afresh, so `t` restarts there. A swap *in* is
 defined to start cold and therefore replays exactly — only a rollback differs, and a
 rollback means the candidate was over budget, which is an exceptional frame already.
 
-**These twelve stay out of a Set file**, ten because they are state that is the
+**These fourteen stay out of a Set file**, twelve because they are state that is the
 session's rather than any Set's and `transition` and `select` because they are not state at
 all.  `select` is out for a second reason of its own, and it is no longer that a Set file
 cannot say whether a slot composites its renderers — the `merge` record says exactly that,
