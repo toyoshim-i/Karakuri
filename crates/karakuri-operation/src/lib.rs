@@ -1367,6 +1367,35 @@ operations! {
     /// Whatever a scope turns out to be named by, this names one.
     SelectScope { scope: Undecided } => "Choose which scope the library shows",
 
+    /// **The star on a library row, and the fact it is a control over.** `id`
+    /// is the Set the store holds; `favourite` is the state it is being put
+    /// in.
+    ///
+    /// **`my sets` is what this fills.** It is not the listing of what
+    /// `<store>/sets/` holds — that is
+    /// [`ListSets`](Operation::ListSets) — but the starred subset of it, so a
+    /// preset packaged on load and a recording's head land in the library
+    /// without appearing there until somebody presses the star
+    /// (`docs/adr/0299-my-sets-is-the-starred-subset-and-the-star-is-kept-beside-the-sets.md`).
+    ///
+    /// **Not a toggle**, on this crate's general rule: a map with a button per
+    /// direction, a model that says which one it wants and a key all have to
+    /// be able to say *star this* and mean it. `favourite` is the state, the
+    /// way [`SetResidency`](Operation::SetResidency) names one of three.
+    ///
+    /// **The fact is a favourite and the control is a star**, which is
+    /// `docs/manual/console.html`'s pair and is why this is spelled two ways.
+    /// That page also decides where the value lives — beside the Sets, in the
+    /// store, rather than in the Set file or in the session stream — and
+    /// `karakuri-operation-record` answers `Silent(Surface)` for the second
+    /// half of that sentence.
+    ///
+    /// **MIDI cannot reach it and that is a `gap` rather than a plan.** Every
+    /// target a map line can name carries a slot, a range or a word from a
+    /// closed list, and a Set id is none of the three — the same sentence the
+    /// `read` and `load` pills beside this control already carry.
+    SetFavourite { id: String, favourite: bool } => "Star a Set, or take the star off",
+
     /// Every knob with its range and default, the element count, the
     /// attributes emitted — each read off the artifact's own card, so those
     /// three fetch no source and compile nothing.

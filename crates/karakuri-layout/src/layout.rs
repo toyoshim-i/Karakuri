@@ -68,6 +68,18 @@ struct Node {
     /// Folded by the operator: what [`Layout::collapse`] writes, what a
     /// [`Spec`] can start a node with, and what a saved arrangement carries.
     collapsed: bool,
+    /// **Declared**: a fold on this node leaves its edge behind rather than
+    /// taking it out of its parent's layout — [`Spec::keeps_its_edge`], and
+    /// [`Layout::is_closed`] for what the two of them together mean.
+    ///
+    /// It is part of the arrangement in the sense `min` and `max` are — a
+    /// property of the tree the [`Spec`] built, not a state anything writes —
+    /// so it is on the wire with them. `default` rather than required,
+    /// because a file written before this existed says nothing about it and
+    /// what it means is *false*: every node in it folds the way every node
+    /// used to.
+    #[serde(default)]
+    edge: bool,
     /// Set aside by whoever is drawing, because it has put that region
     /// somewhere else or has nowhere to put it.
     ///
@@ -575,8 +587,8 @@ impl Layout {
         }
     }
 
-    /// A split's **visible** children in order: the ones that are laid out,
-    /// which is what a divider index counts and what
+    /// A split's **placed** children in order: the ones it tiles, which is
+    /// what a divider index counts and what
     /// [`set_divider`](Layout::set_divider) and [`Hit::Divider`] mean by one.
     ///
     /// **This is the distinction most easily got wrong**, and it was stated
@@ -586,24 +598,25 @@ impl Layout {
     /// [`children`](Layout::children) would move the wrong pair.
     ///
     /// An iterator rather than a `Vec`, because this is on the frame path: a
-    /// view asking which children a split is showing does it per split per
+    /// view asking which children a split is laying out does it per split per
     /// frame, and it must not allocate to do it.
     ///
-    /// Only the children's own flags are read, and **both of them are read**:
-    /// a child the operator folded and one whoever is drawing
-    /// [`set_aside`](Layout::set_aside) are equally not here, because a
-    /// divider is drawn between the children a split is showing and neither of
-    /// those is one. A visible child of a folded split is still listed here —
-    /// it is out by its ancestor rather than by itself, which is exactly the
-    /// difference [`visible`](Layout::visible) and
-    /// [`is_collapsed`](Layout::is_collapsed) already carry — and everything
-    /// under a fold solves to zero extent, so what is derived from it is empty
-    /// rather than wrong.
-    pub fn visible_children(&self, id: NodeId) -> impl Iterator<Item = NodeId> + '_ {
+    /// # It was `visible_children`, and the name had to move
+    ///
+    /// Only the children's own flags are read, so a child inside a folded
+    /// split has always been listed here while [`visible`](Layout::visible)
+    /// answered no for it — the two questions were never the same one, and
+    /// calling both of them *visible* was already a name doing two jobs. A
+    /// **closed** child settles it: it is folded, it is not drawn, it takes no
+    /// extent, and it is still one of the children this split tiles, because
+    /// keeping its divider is the whole of the edge it keeps
+    /// ([`is_closed`](Layout::is_closed)). *Placed* is the question a divider
+    /// index asks and this is its name.
+    pub fn placed_children(&self, id: NodeId) -> impl Iterator<Item = NodeId> + '_ {
         self.children(id)
             .iter()
             .copied()
-            .filter(|c| !self.arrangement.out_of_layout(c.0))
+            .filter(|c| self.arrangement.placed(c.0))
     }
 
     /// The split `id` hangs from, or `None` for the root.
@@ -736,6 +749,48 @@ impl Layout {
         self.node(id.0).aside
     }
 
+    /// Whether `id` is one of the children its parent **tiles** — the
+    /// question [`placed_children`](Layout::placed_children) filters on, asked
+    /// of one node.
+    ///
+    /// A folded node is normally not placed. One that
+    /// [`keeps_its_edge`](Layout::keeps_its_edge) still is while it is closed,
+    /// which is what leaves a divider beside a region that has no rectangle.
+    pub fn is_placed(&self, id: NodeId) -> bool {
+        self.arrangement.placed(id.0)
+    }
+
+    /// Whether `id` is **closed**: folded by the operator, and left in its
+    /// parent's line at zero extent with its divider still beside it.
+    ///
+    /// **A reading rather than a state**, and it is the whole of what this
+    /// crate adds for a fold that can be undone with a pointer: it is
+    /// [`is_collapsed`](Layout::is_collapsed) and
+    /// [`keeps_its_edge`](Layout::keeps_its_edge) and no solo in force. There
+    /// is no third bit to save, to restore, or to disagree with the fold — see
+    /// [`Spec::keeps_its_edge`] for why the declaration is the node's and
+    /// [`solo`](Layout::solo) for why a solo takes the edge with everything
+    /// else.
+    ///
+    /// **A closed node is not [`visible`](Layout::visible)**, and nothing
+    /// under it is: there is nothing of it on screen, which is the point. What
+    /// is on screen is the gap beside it, and
+    /// [`hit`](Layout::hit) answers that gap with a
+    /// [`Hit::Divider`] like any other.
+    pub fn is_closed(&self, id: NodeId) -> bool {
+        self.arrangement.is_closed(id.0)
+    }
+
+    /// Whether a fold on `id` leaves its edge behind — the declaration
+    /// [`Spec::keeps_its_edge`] made, read back.
+    ///
+    /// It says what a fold on this node **will** do, where
+    /// [`is_closed`](Layout::is_closed) says what one has done. A caller about
+    /// to fold asks this; a caller drawing asks that.
+    pub fn keeps_its_edge(&self, id: NodeId) -> bool {
+        self.node(id.0).edge
+    }
+
     /// What a [`solo`](Layout::solo) is holding, or `None` where none is in
     /// force.
     ///
@@ -757,12 +812,20 @@ impl Layout {
 
     // -- operations ------------------------------------------------------
 
-    /// Fold `id` away: zero extent, and no divider beside it.
+    /// Fold `id` away: zero extent, and no divider beside it — **unless the
+    /// node [`keeps_its_edge`](Layout::keeps_its_edge)**, in which case the
+    /// divider stays and the node is [`closed`](Layout::is_closed) rather than
+    /// gone.
     ///
-    /// Its stored size is untouched, which is the whole of why
+    /// Its stored size is untouched either way, which is the whole of why
     /// [`expand`](Layout::expand) can restore it exactly. Folding a split
     /// folds everything inside it: nothing under a collapsed node is
     /// [`visible`](Layout::visible), and none of it takes any space.
+    ///
+    /// **There is one fold and not two**, and that is deliberate: which of the
+    /// two a fold turns out to be is read off the node rather than chosen by
+    /// whoever is folding, so a key, a pointer, a map and a restored file
+    /// cannot disagree about it.
     pub fn collapse(&mut self, id: NodeId) {
         self.set_collapsed(id, true);
     }
@@ -904,12 +967,25 @@ impl Layout {
             None => return position,
         };
         let (a, b) = match (
-            self.arrangement.visible_child(split.0, index),
-            self.arrangement.visible_child(split.0, index + 1),
+            self.arrangement.placed_child(split.0, index),
+            self.arrangement.placed_child(split.0, index + 1),
         ) {
             (Some(a), Some(b)) => (a, b),
             _ => return position,
         };
+
+        // **A boundary beside a closed node does not move**, and this is the
+        // one place that has to say so. A closed node's extent is zero and is
+        // not the boundary's to give away: the arithmetic below would write a
+        // size the solve then caps back to zero, and the size it would
+        // overwrite is the one [`expand`](Layout::expand) exists to restore —
+        // so a drag against a closed pane would quietly forget how wide that
+        // pane used to be. What a drag there means instead is *open it*, and
+        // that is the caller's: it is a gesture with a threshold in it, and
+        // this crate has no hand. See `karakuri_console::panel::Panel::moved`.
+        if self.arrangement.is_closed(a) || self.arrangement.is_closed(b) {
+            return axis.far(self.solved.rects[a]);
+        }
 
         let start = axis.origin(self.solved.rects[a]);
         let span = axis.extent(self.solved.rects[a]) + axis.extent(self.solved.rects[b]);
@@ -1120,8 +1196,8 @@ impl Layout {
             "boundary() read a stale solve; call solve() first"
         );
         let axis = self.axis(split)?;
-        let before = self.arrangement.visible_child(split.0, index)?;
-        let after = self.arrangement.visible_child(split.0, index + 1)?;
+        let before = self.arrangement.placed_child(split.0, index)?;
+        let after = self.arrangement.placed_child(split.0, index + 1)?;
         let start = axis.far(self.solved.rects[before]);
         let size = (axis.origin(self.solved.rects[after]) - start).max(0.0);
         Some(axis.slice(self.solved.rects[split.0], start, size))
@@ -1144,7 +1220,7 @@ impl Layout {
     /// extent everything under a fold has.
     pub fn boundaries(&self) -> impl Iterator<Item = (NodeId, usize)> + '_ {
         (0..self.arrangement.nodes.len()).flat_map(move |i| {
-            (0..self.arrangement.visible_count(i).saturating_sub(1)).map(move |k| (NodeId(i), k))
+            (0..self.arrangement.placed_count(i).saturating_sub(1)).map(move |k| (NodeId(i), k))
         })
     }
 
@@ -1173,10 +1249,14 @@ impl Layout {
     /// on the pointer axis: a region that is not laid out claims no space,
     /// declares no staleness, and is under nobody's pointer.
     ///
-    /// The way back does not go through here — [`expand`](Layout::expand) and
-    /// a solo's undo take a node or no argument at all, and a folded region
-    /// has no rectangle for a pointer to reach anyway, which the manual says
-    /// outright.
+    /// **The way back goes through here for exactly one kind of fold.** A
+    /// folded region has no rectangle, so a pointer cannot reach it —
+    /// [`expand`](Layout::expand) and a solo's undo take a node or no argument
+    /// at all. A [`closed`](Layout::is_closed) one has no rectangle either,
+    /// and it still has its **divider**: the gap beside it answers
+    /// [`Hit::Divider`] like any other boundary, so a pointer can take hold of
+    /// the edge of a region that is not on screen. What that press then means
+    /// is the caller's, because it is a gesture and this crate has no hand.
     pub fn hit(&self, p: Point, grab: f32) -> Hit {
         debug_assert!(!self.dirty, "hit() read a stale solve; call solve() first");
         if !self.viewport.contains(p) {
@@ -1225,7 +1305,10 @@ impl Layout {
         let mut prev: Option<usize> = None;
         for k in 0..self.arrangement.child_count(split) {
             let c = self.arrangement.child(split, k);
-            if self.arrangement.out_of_layout(c) {
+            // The children the split tiles, not the ones it draws: a closed
+            // node is placed at zero extent and the gap beside it is the
+            // boundary this is looking for.
+            if !self.arrangement.placed(c) {
                 continue;
             }
             if let Some(a) = prev {
@@ -1291,18 +1374,54 @@ impl Arrangement {
         self.nodes[i].collapsed || self.nodes[i].aside
     }
 
-    fn visible_count(&self, i: usize) -> usize {
+    /// Whether node `i` is folded **and keeps its edge**: zero extent like any
+    /// other fold, and still one of the children its parent tiles, so the
+    /// divider beside it is still drawn and still hit-testable.
+    ///
+    /// **Three things and no fourth bit.** The operator's fold
+    /// ([`Layout::collapse`]), the node's own declaration
+    /// ([`Spec::keeps_its_edge`]), and *no solo in force*. Nothing here is
+    /// written by an operation: a closed node is a folded node read against
+    /// what its arrangement says folding it does, so there is no third state
+    /// to save, to restore, or to disagree with the first two.
+    ///
+    /// **The solo term is the whole of why this is not simply the declaration
+    /// and the bit.** [`Layout::solo`] collapses every node off the solo's
+    /// path, and what a solo promises is that one region holds the **whole**
+    /// viewport — an edge left behind is a divider's width of that viewport it
+    /// does not hold, twice over on a console with two panes. So a solo folds
+    /// everything the old way, whatever a node declares, and an unsolo puts
+    /// back exactly the folds it replaced — edges and all.
+    fn is_closed(&self, i: usize) -> bool {
+        self.nodes[i].collapsed && self.nodes[i].edge && self.soloed.is_none()
+    }
+
+    /// Whether node `i` is one of the children its parent **tiles**: what a
+    /// divider index counts, what a gap is drawn beside, and what
+    /// [`Layout::set_divider`] moves.
+    ///
+    /// **This is not [`Layout::visible`] and it never was.** That one walks
+    /// ancestors and answers *is this drawn*; this one reads a node's own two
+    /// flags and answers *does its parent lay it out in the line*. A child
+    /// inside a folded split has always been placed here and invisible there.
+    /// What is new is the other direction: a **closed** node is placed here
+    /// and takes no extent, which is exactly the edge it keeps.
+    fn placed(&self, i: usize) -> bool {
+        !self.nodes[i].aside && (!self.nodes[i].collapsed || self.is_closed(i))
+    }
+
+    fn placed_count(&self, i: usize) -> usize {
         (0..self.child_count(i))
-            .filter(|k| !self.out_of_layout(self.child(i, *k)))
+            .filter(|k| self.placed(self.child(i, *k)))
             .count()
     }
 
-    /// The `nth` visible child of a split, which is what a divider index and
+    /// The `nth` placed child of a split, which is what a divider index and
     /// [`Layout::set_divider`] count in.
-    fn visible_child(&self, i: usize, nth: usize) -> Option<usize> {
+    fn placed_child(&self, i: usize, nth: usize) -> Option<usize> {
         (0..self.child_count(i))
             .map(|k| self.child(i, k))
-            .filter(|c| !self.out_of_layout(*c))
+            .filter(|c| self.placed(*c))
             .nth(nth)
     }
 
@@ -1314,7 +1433,7 @@ impl Arrangement {
         let Some((_, divider)) = self.split_of(split) else {
             return 0.0;
         };
-        let gaps = self.visible_count(split).saturating_sub(1) as f32;
+        let gaps = self.placed_count(split).saturating_sub(1) as f32;
         if gaps > 0.0 && divider * gaps > extent {
             extent / gaps
         } else {
@@ -1325,7 +1444,7 @@ impl Arrangement {
     /// What is left for the children once the dividers between them are taken
     /// out. Never negative.
     fn avail(&self, split: usize, extent: f32) -> f32 {
-        let gaps = self.visible_count(split).saturating_sub(1) as f32;
+        let gaps = self.placed_count(split).saturating_sub(1) as f32;
         (extent - self.effective_divider(split, extent) * gaps).max(0.0)
     }
 
@@ -1389,18 +1508,23 @@ fn measure(a: &Arrangement, s: &mut Solved, i: usize, parent: Option<Axis>) -> f
         },
         Some((axis, divider)) => {
             let mut sum = 0.0;
-            let mut visible = 0usize;
+            let mut tiled = 0usize;
             for k in 0..a.child_count(i) {
                 let c = a.child(i, k);
                 let child = measure(a, s, c, Some(axis));
-                if a.out_of_layout(c) {
-                    continue;
+                // **Two questions, and a closed child answers them
+                // differently**: it can use nothing, so it adds nothing to the
+                // sum, and it is still tiled, so the divider beside it is
+                // still one of the gaps this split needs room for.
+                if !a.out_of_layout(c) {
+                    sum += child;
                 }
-                sum += child;
-                visible += 1;
+                if a.placed(c) {
+                    tiled += 1;
+                }
             }
-            let gaps = visible.saturating_sub(1) as f32;
-            if visible == 0 {
+            let gaps = tiled.saturating_sub(1) as f32;
+            if tiled == 0 {
                 0.0
             } else if parent == Some(axis) {
                 sum + divider.max(0.0) * gaps
@@ -1567,15 +1691,18 @@ fn solve_split(a: &Arrangement, s: &mut Solved, split: usize) {
     }
 
     let mut cursor = axis.origin(rect);
-    let mut placed = 0;
-    let visible = a.visible_count(split);
+    let mut done = 0;
+    let tiled = a.placed_count(split);
     for k in 0..n {
         let c = a.child(split, k);
         s.rects[c] = axis.slice(rect, cursor, s.sizes[k].max(0.0));
         cursor += s.sizes[k].max(0.0);
-        if !a.out_of_layout(c) {
-            placed += 1;
-            if placed < visible {
+        // A closed child is placed at zero extent and **still gets its
+        // divider**, which is the whole of the edge it keeps: the gap lands
+        // between the window's own edge and whatever took the pane's width.
+        if a.placed(c) {
+            done += 1;
+            if done < tiled {
                 cursor += divider;
             }
         }
@@ -1587,14 +1714,23 @@ fn solve_split(a: &Arrangement, s: &mut Solved, split: usize) {
 /// [`Layout::new`] refuses a duplicate with, since after that check there is at
 /// most one node per name.
 fn build(nodes: &mut Vec<Node>, spec: Spec, parent: Option<NodeId>) -> NodeId {
-    let (kind, sizing, min, max, collapsed, children) = match spec {
+    let (kind, sizing, min, max, collapsed, edge, children) = match spec {
         Spec::View {
             name,
             sizing,
             min,
             max,
             collapsed,
-        } => (Kind::View { name }, sizing, min, max, collapsed, Vec::new()),
+            edge,
+        } => (
+            Kind::View { name },
+            sizing,
+            min,
+            max,
+            collapsed,
+            edge,
+            Vec::new(),
+        ),
         Spec::Split {
             name,
             axis,
@@ -1604,6 +1740,7 @@ fn build(nodes: &mut Vec<Node>, spec: Spec, parent: Option<NodeId>) -> NodeId {
             min,
             max,
             collapsed,
+            edge,
         } => (
             Kind::Split {
                 name,
@@ -1615,6 +1752,7 @@ fn build(nodes: &mut Vec<Node>, spec: Spec, parent: Option<NodeId>) -> NodeId {
             min,
             max,
             collapsed,
+            edge,
             children,
         ),
     };
@@ -1625,6 +1763,7 @@ fn build(nodes: &mut Vec<Node>, spec: Spec, parent: Option<NodeId>) -> NodeId {
         min,
         max,
         collapsed,
+        edge,
         // Nothing a `Spec` can say sets this: it is not the arrangement's, it
         // is the caller's, and it is stated per frame rather than declared.
         aside: false,

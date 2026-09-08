@@ -15,9 +15,10 @@ use crate::{Axis, Sizing};
 
 /// One node of an arrangement, before it is built.
 ///
-/// The constraints on a node — [`Sizing`], `min`, `max`, `collapsed` — apply
-/// along its *parent's* axis, so they are set on the child rather than by the
-/// parent that arranges it. The root's are ignored: the root is the viewport.
+/// The constraints on a node — [`Sizing`], `min`, `max`, `collapsed`,
+/// [`keeps_its_edge`](Spec::keeps_its_edge) — apply along its *parent's* axis,
+/// so they are set on the child rather than by the parent that arranges it.
+/// The root's are ignored: the root is the viewport.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Spec {
     /// A leaf. Whatever draws the panel looks `name` up; nothing here knows
@@ -29,6 +30,7 @@ pub enum Spec {
         min: f32,
         max: f32,
         collapsed: bool,
+        edge: bool,
     },
     /// An axis, a divider thickness, and children laid out along it.
     ///
@@ -47,6 +49,7 @@ pub enum Spec {
         min: f32,
         max: f32,
         collapsed: bool,
+        edge: bool,
     },
 }
 
@@ -60,6 +63,7 @@ impl Spec {
             min: 0.0,
             max: f32::INFINITY,
             collapsed: false,
+            edge: false,
         }
     }
 
@@ -75,6 +79,7 @@ impl Spec {
             min: 0.0,
             max: f32::INFINITY,
             collapsed: false,
+            edge: false,
         }
     }
 
@@ -127,9 +132,43 @@ impl Spec {
         self.with(|_, _, m, _| *m = max)
     }
 
-    /// Start collapsed — folded to zero extent, with no divider beside it.
+    /// Start collapsed — folded to zero extent, and out of its parent's
+    /// layout unless it also [`keeps_its_edge`](Spec::keeps_its_edge).
     pub fn collapsed(self) -> Spec {
         self.with(|_, _, _, c| *c = true)
+    }
+
+    /// **A fold on this node leaves its edge behind.**
+    ///
+    /// A node that is folded normally leaves its parent's layout entirely: no
+    /// extent, and **no divider beside it**, so nothing about it is on screen
+    /// and the only way back is
+    /// [`expand`](crate::Layout::expand). A node that keeps its edge is folded
+    /// to zero extent and stays one of the children its parent tiles, so the
+    /// divider beside it is still drawn and still
+    /// [`hit`](crate::Layout::hit)-testable — which is a **pointer route back
+    /// in**, on a region that has no rectangle to press.
+    ///
+    /// **It is declared on the node rather than chosen by whoever folds it**,
+    /// because two callers deciding it apart is two answers to *what does
+    /// folding this do* — the mistake
+    /// [ADR-0183](../../../docs/adr/0183-a-node-is-out-of-the-layout-for-two-reasons-and-they-are-two-bits.md)
+    /// records one field along. A key, a pointer, a MIDI map, a restored
+    /// arrangement and MCP all fold the same node the same way.
+    ///
+    /// **A solo folds nothing this way**, whatever a node declares: a solo
+    /// leaves one region holding the whole viewport, and an edge left behind
+    /// is a strip of that viewport it does not hold. See
+    /// [`Layout::is_closed`](crate::Layout::is_closed).
+    ///
+    /// It costs the divider: a parent with a closed child still spends one
+    /// divider on it, where a fold that took the node out spends none.
+    pub fn keeps_its_edge(self) -> Spec {
+        let mut spec = self;
+        match &mut spec {
+            Spec::View { edge, .. } | Spec::Split { edge, .. } => *edge = true,
+        }
+        spec
     }
 
     /// The one place the two variants' shared fields are reached, so a builder

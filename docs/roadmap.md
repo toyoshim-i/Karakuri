@@ -1317,10 +1317,33 @@ whatever rule 01 says; what would be freed is MIDI, which cannot address any of 
 position is as plainly a surface's own state as the folds beside it, and files it elsewhere only
 because its payload is `Undecided`.
 
-Two are the console's and two are the host's. **The folds want a hit test.** The bay head is painted
-and never hit-tested, so the only route is still a key, and they reach the console as
-`karakuri_console::panel::Op::Fold` rather than through the operation vocabulary — which is why
-`tests/vocabulary.rs` rather than `panel_column.rs` is what checks them. **Sizing and quitting are
+Two are the console's and two are the host's. **The folds want a hit test**, and the two of them no
+longer want the same one. Both reach the console as `karakuri_console::panel::Op::Fold` rather than
+through the operation vocabulary — which is why `tests/vocabulary.rs` rather than `panel_column.rs`
+is what checks them.
+
+**A pane no longer wants one at all.**
+[ADR-0300](adr/0300-a-pane-folds-by-dragging-its-boundary-out-and-comes-back-by-dragging-it-in.md)
+makes *Fold a pane away* a **drag**: a pane's boundary pulled `GRAB` past that pane's own minimum
+closes it, and the pane keeps its outer edge — zero width, its divider still drawn at the window's
+edge — so a drag inward brings it back at its minimum. A boundary is claimed by `input`'s rule 3
+before any control is asked, and the window loop already routes a boundary drag into `Panel`, so
+**the row needed no probe, no claim and no press arm** — its badge is `has`, `console.html`'s lede
+says how a pane folds, and `crates/karakuri`'s own drag test carries the sufficient half, which
+`karakuri-console` cannot. That record supersedes the half of
+[ADR-0295](adr/0295-the-grip-is-the-fold-and-a-panes-outer-edge-is-the-other-one.md) which gave the
+pane a band on its outer edge; the band overlapped every Library row by three pixels, which is why it
+was never registered.
+
+**A bay wanted one and has it.** The grip in a bay head was painted and never hit-tested, so the
+only route into *Fold a bay away* was a key; it is now a row of `karakuri_console::input::PROBES`,
+an arm in `crates/karakuri/src/main.rs`'s press handler, and a fifth pass in `tests/vocabulary.rs`
+that claims, derives, performs and reads the console's shape back. Both fold rows are `has`.
+**Four of the seven headed regions carry a grip** — the mixer, the staging lane and the sequencer
+do not, so those three fold from the keyboard alone, and whether that is the exit met or a page
+that has to change is not this file's to say.
+
+**So two of this section's four rows are met, and the two that are left are the host's.** **Sizing and quitting are
 the host's**: `crates/karakuri` answers `WindowEvent::Resized` and `WindowEvent::CloseRequested`
 itself, and `esc` reaches the second. What is owed there is the `a` binding, which is bound to
 nothing, and the `close` control on the panel.

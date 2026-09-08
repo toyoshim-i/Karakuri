@@ -70,6 +70,34 @@
 //! caller re-derives it every frame and a layout that went dirty every frame
 //! would cost a still panel the price of a moving one.
 //!
+//! # A fold may leave the node's edge behind, and that is not a third bit
+//!
+//! A fold takes a region's extent **and** the divider beside it, so there is
+//! nothing left of it on screen and no pointer can reach it: the way back is a
+//! named operation. That is right for a bay stacked among other bays, and it
+//! is what left the console's two side panes with no pointer route back at
+//! all — their outer edge is the *window's* edge, and once the pane is gone
+//! there is nothing there to press.
+//!
+//! So a node may declare, in its [`Spec`], that a fold on it
+//! [`keeps_its_edge`](Spec::keeps_its_edge). Such a node folds to zero extent
+//! like any other and stays one of the children its parent **tiles**, so the
+//! divider beside it is still drawn, still hit-tested, and still the thing a
+//! drag takes hold of. [`Layout::is_closed`] is that state, and
+//! [`Layout::placed_children`] — which is what a divider index counts — is the
+//! one query it changes.
+//!
+//! **It is a reading of two things already here, not a third bit**: the
+//! operator's fold, and a declaration the arrangement made when it was built.
+//! Nothing writes it, nothing has to restore it, and it cannot come apart from
+//! the fold it describes — which is what the two bits above cost and why they
+//! are two. **A solo suppresses it**, because a solo promises one region
+//! holding the whole viewport and an edge is a strip of viewport it would not
+//! hold.
+//!
+//! What it costs is the divider: a parent with a closed child spends one gap
+//! on it, where a fold that took the node out spends none.
+//!
 //! # The tree answers upward and across, not only downward
 //!
 //! A caller can walk from [`Layout::root`] down and solve, and for a while
@@ -81,7 +109,7 @@
 //! model of one tree is two answers that drift.
 //!
 //! So the questions that go the other way are answered here:
-//! [`parent`](Layout::parent), [`visible_children`](Layout::visible_children)
+//! [`parent`](Layout::parent), [`placed_children`](Layout::placed_children)
 //! — the ones a divider index counts —
 //! [`boundary`](Layout::boundary) and [`boundaries`](Layout::boundaries),
 //! [`sizing`](Layout::sizing), [`soloed`](Layout::soloed),

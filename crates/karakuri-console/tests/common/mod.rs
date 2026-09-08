@@ -221,6 +221,15 @@ fn assert_tiles(l: &Layout, id: NodeId, axis: Axis) {
                 "{:?} is out of the layout and took {e}",
                 l.name(*c)
             );
+        }
+
+        // **Two questions, and a closed region answers them differently**: it
+        // takes no extent, and it is still one of the children this split
+        // tiles, so the divider beside it is still one of the gaps. That is
+        // the edge a pane keeps when it folds (ADR-0300), and a checker that
+        // skipped it here would find the next child starting a divider's width
+        // in from the split's own origin.
+        if !l.is_placed(*c) {
             continue;
         }
 

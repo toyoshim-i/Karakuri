@@ -911,40 +911,46 @@ fn head_capsule(
 }
 
 // ---------------------------------------------------------------------------
-// The two folds a pointer reaches: a bay's grip and a pane's own edge
+// The fold a pointer reaches by a rectangle: the grip in a bay's head
 // ---------------------------------------------------------------------------
 
 /// **A fold, as a rectangle to press and the node it folds** — the console's
 /// own shape, reached from the panel instead of from `f`.
 ///
-/// One type over two controls, which is [`McpPill`]'s arrangement rather than
-/// a merge: what a press asks for is [`Op::Fold`] of a node either way, and
-/// where the rectangle *is* differs completely — a bay's is furniture inside a
-/// painted head ([`bay_grip`]) and a pane's is a band on the edge of a split
-/// nothing is drawn in ([`pane_edge`]). So the answer is one type and the
-/// placement is two derivations, exactly as three class pills come out of a
-/// head and the fourth out of a headless row.
+/// # It was two controls and it is one, because a pane stopped needing a shape
 ///
-/// **They are two rows on `docs/manual/operations.html` and one variant
-/// here**, and that is the page describing two consequences rather than two
-/// operations: *Fold a bay away* says what a folded bay does to the pane it is
-/// stacked in, *Fold a pane away* says the centre takes the width, and
-/// `tests/vocabulary.rs`'s `rows_of` already gives [`Op::Fold`] both.
+/// [ADR-0295](../../../docs/adr/0295-the-grip-is-the-fold-and-a-panes-outer-edge-is-the-other-one.md)
+/// gave *Fold a pane away* a second derivation here — `pane_edge`, a band
+/// `GRAB` deep on the pane's outer edge with nothing drawn in it — and it was
+/// never registered, because that band lay over the outer three pixels of
+/// every row of the Library bay's list.
+/// [ADR-0300](../../../docs/adr/0300-a-pane-folds-by-dragging-its-boundary-out-and-comes-back-by-dragging-it-in.md)
+/// replaced it with a **drag**: a pane's boundary pulled out past the pane's
+/// own minimum closes it, and the divider it leaves behind at the window's
+/// edge is what pulls it back. There is no band while the pane is open,
+/// nothing overlaps a library row, and the control needs no derivation at all
+/// — a boundary is `karakuri_console::input`'s rule 3, claimed before any
+/// control is asked. So this type is one control now: the grip, which never
+/// had the conflict.
+///
+/// **The two are still one row's worth of operation apiece and one variant
+/// here** — [`Op::Fold`] of a node — and `tests/vocabulary.rs`'s `rows_of`
+/// gives it both of *Fold a bay away* and *Fold a pane away*.
 ///
 /// # There is no unfold on it, and that is the arrangement rather than a gap
 ///
 /// [`Outputs::op`] and [`ProgramHead::op`] each choose between two operations,
 /// because the thing they act on is still on screen when it is off. **A folded
-/// node has no rectangle**, so neither of these controls is drawn once its
-/// press has landed: the grip goes with the head it is in and the band goes
-/// with the pane it is on. That is `Op`'s own sentence about the pointer —
+/// node has no rectangle**, so this control is not drawn once its press has
+/// landed: the grip goes with the head it is in. That is `Op`'s own sentence
+/// about the pointer —
 /// *"a folded region has no rectangle, so the pointer could never be over one,
 /// so `f` on the keyboard only ever folded"* — met by a control instead of by
 /// a key, and the way back is `z` for the same reason it is for `f`.
 ///
 /// # A fold writes no session record
 ///
-/// `karakuri-operation-record` answers `Silent::Surface` for all four of these
+/// `karakuri-operation-record` answers `Silent::Surface` for all four fold
 /// operations — *a surface's own state* — so nothing here routes through the
 /// window's `written`, and there is no `Operation` for it to route as: this is
 /// [`Op`] and the two unnamed splits are why (ADR-0204).
@@ -1064,108 +1070,6 @@ pub fn bay_grip(layout: &karakuri_layout::Layout, name: &str) -> Option<FoldGrip
     // no control rather than half of one — [`head_capsule`]'s own guard, one
     // capsule along.
     head.contains_rect(grip).then_some(FoldGrip { grip, id })
-}
-
-/// **The two panes that fold**, by name.
-///
-/// `docs/manual/console.html`: *"a **left pane** and a **right pane**, which
-/// fold away to give room, and the **centre**, which is what they give it to
-/// … The middle one is not a third pane on purpose: folding it is not a thing
-/// anybody wants, and *solo* is."* So this is a list of two and not *whatever
-/// is at the end of the body row*: fold the left pane and the centre inherits
-/// its edge, and a derivation reading the edge alone would hand a hand the
-/// fold the page has just refused it.
-pub const FOLDING_PANES: [&str; 2] = ["left-pane", "right-pane"];
-
-/// **A pane's own outer edge, derived** — the panel's route into *Fold a pane
-/// away*, and the one control on this console with no mark at all.
-///
-/// `None` for anything that is not one of [`FOLDING_PANES`], for a pane that is
-/// folded or off a solo somewhere else, for a pane that is neither the first
-/// nor the last thing in the row it is stacked in, and for a pane narrower
-/// than the band itself.
-///
-/// # Nothing is drawn, and that is the page rather than an omission
-///
-/// `docs/manual/operations.html` puts this row at the **pane edge**, and the
-/// mock draws no handle, no gutter and no mark there — the pane's outer edge
-/// *is* the window's edge, because `.console`'s own 10px of padding is not
-/// drawn (see this module's head). This crate's rule is that a shape which
-/// looks like a control and is not does not get drawn; **the converse is not a
-/// rule**, and [`Mixer::select`] is the standing case of a control that is a
-/// rectangle rather than a capsule. What that costs an operator is that the
-/// edge has to be told about, which is `console.html`'s job and not this
-/// function's.
-///
-/// # Where the band is, and how wide
-///
-/// The pane's outer edge, [`GRAB`] deep and the whole height of the pane.
-/// **[`GRAB`] rather than a number chosen here**: it is this console's one
-/// statement of how far from an edge a hand is still on it — *"a 9px gap is
-/// not a target a hand finds"* — and a second number would be a second answer
-/// to a question the panel has already answered for every boundary.
-///
-/// **Which edge is derived and not listed.** The pane is the first or the last
-/// visible child of the row it is in, and the outer edge is the leading edge of
-/// the first and the trailing edge of the last — read off the split's own axis,
-/// so a body row that ever became a column takes its bands with it. A pane that
-/// is *both* — alone in the row, everything beside it folded — takes the
-/// leading edge, because a band on each would be one control with two
-/// rectangles.
-///
-/// # What it costs, and it is three pixels of a library row
-///
-/// The band is over whatever the pane's bays draw at their outer edge, and
-/// [`GRAB`] clears all of it but one: `.lib-list`'s padding is
-/// [`size::LIB_LIST_PAD`] = 3, so the outer 3 pixels of a **library row** are
-/// under the band. The row wins, because this control is asked **last** — the
-/// pane's edge is what nothing inside the pane claimed, which is
-/// [`Mixer::select`]'s sentence one level out. Everything else clears it: the
-/// scope chips and the filter fields at 9, the mixer's strips at
-/// [`size::STRIPS_PAD`] = 6 exactly, the transition row at
-/// [`size::XFADE_PAD_X`] = 10 and the Master bay's out at 10.
-///
-/// **Up and down it is the ordinary price of rule 3**: the pane's top and
-/// bottom edges are the body row's own boundaries, so the first and last
-/// [`GRAB`] of the band belong to them. `tests/fold_grip.rs` measures both by
-/// asking [`karakuri_layout::Layout::hit`] rather than by arithmetic.
-///
-/// `layout` must be solved. No `egui`: there is no word here to be as wide as.
-pub fn pane_edge(layout: &karakuri_layout::Layout, name: &str) -> Option<FoldGrip> {
-    if !FOLDING_PANES.contains(&name) {
-        return None;
-    }
-    let id = layout.find(name)?;
-    if !layout.visible(id) {
-        return None;
-    }
-    let row = layout.parent(id)?;
-    let axis = layout.axis(row)?;
-    let leading = match (
-        layout.visible_children(row).next()? == id,
-        layout.visible_children(row).last()? == id,
-    ) {
-        (true, _) => true,
-        (false, true) => false,
-        (false, false) => return None,
-    };
-    let rect = to_egui(layout.rect(id));
-    let band = match (axis, leading) {
-        (Axis::Row, true) => Rect::from_min_max(rect.min, Pos2::new(rect.min.x + GRAB, rect.max.y)),
-        (Axis::Row, false) => {
-            Rect::from_min_max(Pos2::new(rect.max.x - GRAB, rect.min.y), rect.max)
-        }
-        (Axis::Column, true) => {
-            Rect::from_min_max(rect.min, Pos2::new(rect.max.x, rect.min.y + GRAB))
-        }
-        (Axis::Column, false) => {
-            Rect::from_min_max(Pos2::new(rect.min.x, rect.max.y - GRAB), rect.max)
-        }
-    };
-    // A pane thinner than its own band has no edge to press, which is
-    // [`bay_grip`]'s guard on the other axis.
-    rect.contains_rect(band)
-        .then_some(FoldGrip { grip: band, id })
 }
 
 /// **A class's pill, derived**: the capsule, the class it opens, and whether
@@ -14845,6 +14749,38 @@ pub struct View {
     /// documentation, and [`preview_rects`] for where the rectangles come
     /// from.
     pub previews: [Option<Picture>; DECKS],
+    /// **What the governor budgeted each of the four slots at**, in slot
+    /// order, or `None` for a slot it has no number for — which is every test
+    /// in this crate and is a console nobody has governed.
+    ///
+    /// **The risk badge is read from this and from nothing else.**
+    /// [`band_of`] turns the number into one of five bands and
+    /// [`caption_into`] draws the dot; `None` draws no dot at all, which is
+    /// the manual's own state for a slot with no cost and is not a hollow one.
+    ///
+    /// **A second field rather than a third member of [`Picture`]**, and the
+    /// two halves of a cell keep different clocks on purpose. A picture is a
+    /// texture registration and is rewritten every frame by whoever owns the
+    /// device; a cost is `karakuri_engine::governor::Report`, which is taken
+    /// on a governor pass and not on a frame — before the first frame, and
+    /// again whenever a residency is written. Folding the cost into `Picture`
+    /// would make every frame's texture aim carry a number it did not take,
+    /// and the number would be dropped and re-fetched sixty times a second to
+    /// no purpose.
+    ///
+    /// **Where it comes from.** One entry per `Decision` in
+    /// `Report::decisions`, at `Decision::slot`: `budgeted_ms` and
+    /// `Decision::basis`, with `governor::Basis::Unbudgetable` written as
+    /// `None` — that is a slot nothing measured and nothing estimated, and it
+    /// is *not* a zero. `src/` takes no engine (ADR-0156), so whoever holds
+    /// the deck reads the report and writes this, exactly as
+    /// [`View::previews`] is written by whoever holds the device.
+    ///
+    /// **It is not gated on residency and it is not gated on the picture
+    /// here.** A parked deck is the one whose cost an operator most wants,
+    /// because the cost is why it is parked; the gate that does exist is
+    /// [`caption_into`]'s, which is the mock's *no slot is no cost*.
+    pub costs: [Option<Budgeted>; DECKS],
     /// **What the transport row reads this frame**, or `None` for a console
     /// with no engine behind it — which is every test in this crate, and what
     /// the row draws then is nothing at all.
@@ -15320,6 +15256,7 @@ impl View {
             room,
             picture: None,
             previews: [None; DECKS],
+            costs: [None; DECKS],
             transport: None,
             // The default arrangement, nothing filed and the menu shut, which
             // is every test in this crate and is a console with no store
@@ -16139,6 +16076,10 @@ impl View {
             carried.and_then(|at| program.and_then(|bay| bay.dropped(at, self.mixer.len())));
         let picture = self.picture;
         let previews = self.previews;
+        // **Beside the pictures, and read once for the frame for their
+        // reason.** What each cell costs and what each cell is showing are two
+        // fields because they arrive from two places — see [`View::costs`].
+        let costs = self.costs;
         let values = self.transport;
         let arr = &self.arrangement;
         // **Read once for the frame beside the arrangement**, and for the same
@@ -16433,7 +16374,7 @@ impl View {
                         drop_ring(ui, &pal, cell, size::PREVIEW_RADIUS);
                     }
                     preview(ui, &pal, cell, previews[deck]);
-                    caption_into(ui, &pal, cell, deck, previews[deck], marked);
+                    caption_into(ui, &pal, cell, deck, previews[deck], costs[deck], marked);
                 }
             }
 
@@ -16654,6 +16595,200 @@ pub const PREVIEW_MATERIAL: &str = "material";
 /// A cell with no deck slot behind it. See [`state_word`].
 pub const PREVIEW_NO_SLOT: &str = "no slot";
 
+// ---------------------------------------------------------------------------
+// The risk badge: one number, five bands.
+// ---------------------------------------------------------------------------
+
+/// **What the governor budgeted one slot at, and which of its two numbers that
+/// is** — the seam the risk badge is drawn from.
+///
+/// `karakuri_engine::governor::Decision` carries `budgeted_ms` and a `Basis`
+/// saying whether it is the two-draw estimate at the output's size or the
+/// single-draw measurement at the reference resolution
+/// ([ADR-0296](../../../docs/adr/0296-the-governor-budgets-on-the-estimate-where-it-answers-and-on-the-measurement-where-it-does-not.md)).
+/// This is that pair, arriving the way every other value does: `src/` takes no
+/// engine (ADR-0156), so whoever holds the deck reads the report and writes
+/// [`View::costs`].
+///
+/// **The engine's third basis is this type's [`None`].**
+/// `governor::Basis::Unbudgetable` is a slot nothing measured and nothing
+/// estimated, and `Decision::budgeted_ms` is `None` there. It is not a number
+/// and it is emphatically not a zero, so it does not cross this seam as one:
+/// no entry, no dot. See [`View::costs`].
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Budgeted {
+    /// The number the governor spent on this slot, in milliseconds —
+    /// `Decision::budgeted_ms`. What [`band_of`] reads.
+    pub ms: f32,
+    /// **How it was taken.** See [`Basis`], and the argument on [`band_of`]
+    /// for why the dot does not draw it.
+    pub basis: Basis,
+}
+
+/// **Which of the governor's two numbers [`Budgeted::ms`] is** —
+/// `karakuri_engine::governor::Basis`, less the variant this crate spells
+/// [`None`].
+///
+/// Carried across the seam and **not drawn**, which is a decision rather than
+/// an omission: see [`band_of`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Basis {
+    /// The single draw at the engine's reference resolution, because nothing
+    /// estimated this slot or the estimate refused. It is a real reading of
+    /// this Set and it is a reading at a size that is the operator's only by
+    /// coincidence.
+    Measured,
+    /// The two-draw fit, evaluated at the size this deck is actually drawing
+    /// into.
+    Estimated,
+}
+
+/// **The five bands the risk badge is drawn in**, and the words the mock's
+/// `.risk.green`, `.risk.blue`, `.risk.yellow`, `.risk.red` and `.risk.purple`
+/// name them by.
+///
+/// **The table is the console's and not the engine's.**
+/// `karakuri_engine::estimate`'s own documentation says so, and
+/// `crates/karakuri-engine/tests/governor.rs` quotes the boundaries rather
+/// than sharing them for the same reason: the engine produces a number of
+/// milliseconds and has no opinion about how many of a thing an operator can
+/// mix. The scale is a reading of one frame's worth of budget shared four
+/// ways, which is a fact about this panel's four cells.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Band {
+    /// Up to [`BAND_BLUE_MS`]: four of these at 60 Hz.
+    Green,
+    /// Over [`BAND_BLUE_MS`]: not four at 60, and two at 60 is fine.
+    Blue,
+    /// [`BAND_YELLOW_MS`]: two at 60 Hz, four at 30 Hz.
+    Yellow,
+    /// [`BAND_RED_MS`]: one at 60 Hz, two at 30 Hz.
+    Red,
+    /// [`BAND_PURPLE_MS`] and over: one slot eats a whole frame.
+    Purple,
+}
+
+impl Band {
+    /// The word the mock's class names this band by — `.risk.green` and its
+    /// four siblings. What `tests/transcribed_constants_cite_the_mock.rs`
+    /// looks the boundary up in `docs/manual/console.html` by, and what
+    /// `karakuri-engine`'s own band prediction spells.
+    pub fn word(self) -> &'static str {
+        match self {
+            Band::Green => "green",
+            Band::Blue => "blue",
+            Band::Yellow => "yellow",
+            Band::Red => "red",
+            Band::Purple => "purple",
+        }
+    }
+
+    /// The colour it is drawn in, from the room's own five — `--c-band-*`.
+    /// See [`Palette`], where the argument for five properties of their own
+    /// rather than `--c-mint` and `--c-pink` is written.
+    pub fn colour(self, pal: &Palette) -> Color32 {
+        match self {
+            Band::Green => pal.band_green,
+            Band::Blue => pal.band_blue,
+            Band::Yellow => pal.band_yellow,
+            Band::Red => pal.band_red,
+            Band::Purple => pal.band_purple,
+        }
+    }
+
+    /// The five, worst last. The order the scale is written in.
+    pub const ALL: [Band; 5] = [
+        Band::Green,
+        Band::Blue,
+        Band::Yellow,
+        Band::Red,
+        Band::Purple,
+    ];
+}
+
+/// **Where green ends and blue begins**: `docs/manual/console.html`, *What a
+/// deck preview cell shows, and when* — *"Green, up to 4 ms: four of these at
+/// 60 Hz."*
+///
+/// Four slots share one frame and 16.7 ms at 60 Hz is about 4 ms each, which
+/// is where the whole scale comes from: it answers *how many of these, and at
+/// what rate* rather than handing an operator a number to divide in a dark
+/// room.
+///
+/// **Each of these four is named for the band it lets you into rather than the
+/// one it leaves**, because that is the rounding rule written into the name: a
+/// value *on* a boundary rounds to the worse band, so 4.0 is blue and not
+/// green. See [`band_of`].
+pub const BAND_BLUE_MS: f32 = 4.0;
+
+/// *"Yellow, about 8 ms: the boundary for two at 60 Hz, and four at 30 Hz."*
+pub const BAND_YELLOW_MS: f32 = 8.0;
+
+/// *"Red, about 12 ms: one at 60 Hz, two at 30 Hz."*
+pub const BAND_RED_MS: f32 = 12.0;
+
+/// *"Purple, over 16 ms: one slot eats a whole frame and the cell stops
+/// drawing."*
+///
+/// **The last band is the one that is also a behaviour**, and the behaviour is
+/// not this crate's: a slot over budget is stopped by the governor rather than
+/// shown harder, and a stopped slot reaches the console as a cell with no
+/// picture in it. So the console never has to decide to stop drawing — what it
+/// draws is the band, and the stopping has already happened upstream.
+pub const BAND_PURPLE_MS: f32 = 16.0;
+
+/// **The band one number falls in**, and the whole of the console's half of
+/// the risk badge.
+///
+/// The four boundaries are [`BAND_BLUE_MS`], [`BAND_YELLOW_MS`],
+/// [`BAND_RED_MS`] and [`BAND_PURPLE_MS`], and **a value on a boundary rounds
+/// to the worse band** — the mock says so in those words, and it is the reason
+/// every comparison here is `>=` and the fall-through is green. The direction
+/// is the same one the estimate rounds in: `karakuri_engine::estimate` rounds
+/// toward refusing at every step, so a badge that rounded a boundary the
+/// generous way would be the one place in the chain that reads a number
+/// kindly.
+///
+/// # It does not read [`Basis`], and that is the decision rather than the
+/// default
+///
+/// A dot drawn from an estimate at this deck's own size and a dot drawn from a
+/// measurement at 1280x720 are **not the same statement** — P-0095 is exactly
+/// that, and ADR-0296 §3 carries `FloorRead` and `Floored` on the decision so
+/// the difference cannot be lost. The console keeps it ([`Budgeted::basis`])
+/// and does not draw it, for two reasons.
+///
+/// - **The number is the one the governor spent.** A badge that drew a dot
+///   only where the basis is [`Basis::Estimated`] would be drawing a different
+///   quantity from the one the deck is being governed on: every Set swapped in
+///   on a live run arrives unestimated (ADR-0296, *Consequences*), so the dot
+///   would vanish at the moment an operator loaded something — and a slot the
+///   governor parks on a measured number would be parked with no visible
+///   cause, which is
+///   [ADR-0191](../../../docs/adr/0191-the-panels-parked-deck-is-parked-by-the-governor-or-it-is-a-drawing-of-one.md)'s
+///   complaint. **A refusal is not a green dot; a number that was spent is not
+///   a refusal.**
+/// - **The mock does not distinguish them**, and the page moves first. `.risk`
+///   has five classes and there is no sixth mark, no hollow ring and no second
+///   word in the caption for *how this was taken*. Inventing one here would be
+///   the console specifying itself. What the page would have to say is
+///   reported rather than drawn — see the module documentation on
+///   [`caption_into`].
+///
+/// **What P-0095 does get** is the one thing the page already specifies: no
+/// number, no dot. `governor::Basis::Unbudgetable` does not cross the seam
+/// (see [`Budgeted`]), and a cell handed nothing draws nothing — not hollow,
+/// not grey, not green by default.
+pub fn band_of(ms: f32) -> Band {
+    match ms {
+        _ if ms >= BAND_PURPLE_MS => Band::Purple,
+        _ if ms >= BAND_RED_MS => Band::Red,
+        _ if ms >= BAND_YELLOW_MS => Band::Yellow,
+        _ if ms >= BAND_BLUE_MS => Band::Blue,
+        _ => Band::Green,
+    }
+}
+
 /// **One deck preview cell's caption**: the mock's `.caption`, under the
 /// image and never on it.
 ///
@@ -16689,24 +16824,60 @@ pub const PREVIEW_NO_SLOT: &str = "no slot";
 /// the one thing on a cell that already names the operand
 /// ([`drop_ring`], and `console.html`'s *How a Set reaches a deck*).
 ///
-/// # No badge
+/// # The badge, and the two ways it is not drawn
 ///
-/// The mock's `.risk` dot is the estimated cost of the slot in five bands, and
-/// **nothing in this workspace estimates what a slot costs**. So it is not
-/// drawn — not hollow, not grey, not green by default, which would each assert
-/// a reading nobody took. That is
-/// [ADR-0200](../../../docs/adr/0200-a-bays-first-pass-draws-the-values-that-exist-and-omits-the-rest.md):
-/// draw the values that exist and omit the rest. The bands are specified on
-/// the mock's caption tooltip and in *What a deck preview cell shows, and
-/// when*, and the one worth carrying here is the last: **purple stops the cell
-/// drawing.** A slot over budget is stopped rather than shown harder, so the
-/// day this badge is drawn it is the one band that is also a behaviour.
+/// `.risk` is `width: 6px; height: 6px; border-radius: 999px; margin-left:
+/// auto` — a 6px dot in the band's colour, pushed to the far end of the
+/// caption so the four line up down the row and can be read as a column
+/// without reading a word ([`size::PREVIEW_RISK`], and the stylesheet's own
+/// comment says the reason). [`band_of`] is the table; [`Band::colour`] is the
+/// five properties the room states for it.
+///
+/// **A slot with no number draws no dot**, which is the state the manual
+/// already describes and is not a fifth thing this function invents: not
+/// hollow, not grey, not green by default, each of which would assert a
+/// reading nobody took —
+/// [ADR-0200](../../../docs/adr/0200-a-bays-first-pass-draws-the-values-that-exist-and-omits-the-rest.md),
+/// draw the values that exist and omit the rest. It covers three cases and
+/// they are three different nothings: the governor found neither number for
+/// this slot (`governor::Basis::Unbudgetable`, which does not cross the seam —
+/// [`Budgeted`]), nobody has governed this deck yet, and **a number that is
+/// not finite**, which is a failed reading rather than a small one.
+///
+/// **And a cell with no slot behind it draws no dot either, whatever it was
+/// handed.** The mock's D cell is the case and its tooltip is the rule: *"No
+/// slot is no cost, so there is no dot."* A dot beside [`PREVIEW_NO_SLOT`]
+/// would be a cost for a thing that is not there, so the picture gates the
+/// badge — which also means the two halves of a cell can never disagree about
+/// whether there is a slot.
+///
+/// **Purple is the one band that is also a behaviour, and the behaviour is not
+/// this crate's.** *One slot eats a whole frame and the cell stops drawing* —
+/// stopping it is the governor's, and a stopped slot arrives here as a cell
+/// with no picture. So this function never decides to stop drawing; it draws
+/// the band it was handed and the stopping has already happened upstream.
+///
+/// # What the page would have to say before the badge could say more
+///
+/// The dot is one mark for two kinds of number. A band read from an estimate
+/// at this deck's own size and a band read from a measurement at the reference
+/// resolution are not the same statement (P-0095, and ADR-0296 §3), and the
+/// mock has five classes on `.risk` and nothing for *how this was taken*.
+/// [`Budgeted::basis`] carries the difference across the seam and this draws
+/// it nowhere; [`band_of`] argues why that is the honest reading today, and
+/// **the page moves first** if it is to stop being. What it would have to
+/// state is a second mark on the caption and what it means — a ring round the
+/// dot for a measured number, say, against a filled dot for an estimated one —
+/// because the operator-facing difference is that a measured band is about a
+/// frame at 1280x720 and can therefore be a band too good on a larger output,
+/// which is the one direction the whole estimate is built to round away from.
 fn caption_into(
     ui: &Ui,
     pal: &Palette,
     image: Rect,
     deck: usize,
     picture: Option<Picture>,
+    cost: Option<Budgeted>,
     marked: bool,
 ) {
     let at = caption_of(image);
@@ -16734,6 +16905,28 @@ fn caption_into(
         word,
         pal.faint,
     );
+
+    // **The badge, where there is a slot and a number for it.** Both halves
+    // are gates rather than one: `picture` is whether there is a slot at all
+    // and `cost` is whether anything budgeted it, and the mock's D cell is the
+    // first of the two — *"No slot is no cost, so there is no dot."* A number
+    // that is not finite is a failed reading and takes the same path as no
+    // number; see this function's documentation for all three nothings.
+    let dot = picture
+        .and(cost)
+        .filter(|budgeted| budgeted.ms.is_finite())
+        .map(|budgeted| band_of(budgeted.ms));
+    if let Some(band) = dot {
+        // `margin-left: auto` — the far end of the caption, centred in its
+        // height, and `border-radius: 999px` on a 6px box is a circle of half
+        // that across.
+        let radius = size::PREVIEW_RISK * 0.5;
+        painter.circle_filled(
+            Pos2::new(at.max.x - radius, at.center().y),
+            radius,
+            band.colour(pal),
+        );
+    }
 }
 
 /// **The Outputs row's contents**: the word, and the one `.sink`.
@@ -17140,7 +17333,7 @@ fn pane_dividers(ui: &Ui, pal: &Palette, panel: &Panel, id: NodeId, rect: Rect) 
         return;
     };
     let top = (rect.min.y + size::HEAD_H).min(rect.max.y);
-    for (index, _) in layout.visible_children(id).enumerate().skip(1) {
+    for (index, _) in layout.placed_children(id).enumerate().skip(1) {
         let Some(gap) = layout.boundary(id, index - 1) else {
             continue;
         };

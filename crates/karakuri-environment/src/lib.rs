@@ -74,8 +74,15 @@
 //! window, the arguments, the key handler and `Live`. That is the line
 //! ADR-0214 said it would not name in advance, and ADR-0215 named the two ends
 //! of it: `Live` holds a window and a device and stays with the surface, while
-//! `Clock` is owed a move it has not had yet, because wall-clock time comes
-//! from outside this process.
+//! `Clock` was owed a move, because wall-clock time comes from outside this
+//! process.
+//!
+//! **[`clock`] is that move, taken.** It was owed for as long as one program
+//! read a clock; the second one needs the same derivation now, and a frame's
+//! step count is the live half of a determinism rule
+//! ([P-0092](../../../docs/principles/0092-the-same-inputs-produce-the-same-frame.md)),
+//! so two copies of it would be two answers to that rule. See
+//! `docs/adr/0297-the-panels-tick-is-measured-and-the-fixed-step-a-frame-ran-the-room-at-the-displays-rate.md`.
 //!
 //! ## The five items here that are no module's
 //!
@@ -104,6 +111,7 @@
 // written. A `//` comment such as this one is not a fragment and costs nothing.
 //
 // - `audio` — a microphone, the beat it is tracking, and the record for both.
+// - `clock` — real time, as the step count a frame writes into its `tick`.
 // - `compile` — a `.kir` off a disk, through the pipeline, with its bytes kept.
 // - `history` — the edit history: a directory per day, a chain per procedure.
 // - `mcp` — a socket, and the Model Context Protocol a model speaks over it.
@@ -118,6 +126,7 @@
 // - `tempo_source` — another program's clock, and what to believe of it.
 // - `watch` — a slot's files, polled, and the rebuild a change asks for.
 pub mod audio;
+pub mod clock;
 pub mod compile;
 pub mod history;
 pub mod mcp;

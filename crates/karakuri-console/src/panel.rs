@@ -24,7 +24,7 @@
 //! every one this file used to answer for itself. A folded region is
 //! [`Layout::is_collapsed`], a solo is [`Layout::soloed`], the split enclosing
 //! a region is [`Layout::parent`], the children a divider index counts are
-//! [`Layout::visible_children`], where a boundary is is [`Layout::boundary`],
+//! [`Layout::placed_children`], where a boundary is is [`Layout::boundary`],
 //! every boundary is [`Layout::boundaries`], and where a drag landed is what
 //! [`Layout::set_divider`] returned.
 //!
@@ -50,7 +50,10 @@
 //!
 //! **What the three disagree about is what a drag moves.** A boundary drag
 //! moves the arrangement, which is this crate's, so [`moved`](Panel::moved)
-//! writes it and reports where it landed. A fader drag moves the **engine's**
+//! writes it and reports where it landed — **including a fold**: a pane pulled
+//! out past its own minimum is closed, and one whose closed edge is pulled
+//! back in is opened, both performed here and reported as
+//! [`Dragged::Pane`] (ADR-0300). A fader drag moves the **engine's**
 //! value, which this crate does not have and cannot reach (ADR-0156) — so it
 //! writes nothing at all and reports a [`karakuri_operation::Operation`],
 //! which is the whole of what a GUI component is for: pointer motion into a
@@ -98,6 +101,30 @@ pub const GRAB: f32 = 6.0;
 /// below anything an eye or a display can resolve, so a `held` is a stop and
 /// nothing else.
 const STOPPED: f32 = 0.05;
+
+/// **How far a drag has to go on past a stop before it is pulling a region out
+/// through its own edge**, rather than leaning on a boundary that will not
+/// move, in pixels.
+///
+/// [`STOPPED`] is where *held* begins and this is where *pulling* does, and
+/// there is a real difference between them: a boundary against its stop is the
+/// ordinary end of a drag and an operator meets it every time they make a pane
+/// as narrow as it goes. Closing the pane at the first hundredth of a pixel
+/// past that would make the fold an accident of where the drag ended.
+///
+/// **[`GRAB`], rather than a number chosen here.** It is this console's one
+/// statement of how far from a boundary a hand is still on it, and past it the
+/// pointer is further from the boundary it is holding than the distance at
+/// which it could have taken hold of it at all — so it is no longer pressing
+/// on the boundary, it is pulling the region out from behind it. A second
+/// number would be a second answer to a question the panel has already
+/// answered, which is
+/// [ADR-0295](../../../docs/adr/0295-the-grip-is-the-fold-and-a-panes-outer-edge-is-the-other-one.md)'s
+/// own argument for `GRAB` one control along.
+///
+/// It reads the same both ways: **`GRAB` past the stop closes the pane, and
+/// `GRAB` in from its closed edge opens it again.**
+const PULLED_THROUGH: f32 = GRAB;
 
 /// How far the boundary has to have moved since the last thing this drag said
 /// before it is worth saying anything again, in pixels.
@@ -156,6 +183,19 @@ struct Boundary {
     /// and the next [`Dragged`] is the one where the boundary moves again.
     said: Option<f32>,
     held: bool,
+    /// **Whether this gesture has already closed a pane or opened one.**
+    ///
+    /// One drag asks for one of them. Without this the two conditions are each
+    /// other's inverse the instant either fires — a pane closed at `GRAB` past
+    /// its stop puts its own edge under a pointer that is `GRAB` the other
+    /// side of it, which is the open condition, met on the very next move —
+    /// and the pane would flicker at sixty asks a second for as long as the
+    /// button was down.
+    ///
+    /// **So it is once per gesture, and the way back is another gesture.**
+    /// That is [`Fading::said`]'s rule about a drag that has already said what
+    /// it had to say, on a thing that happens once rather than on a value.
+    acted: bool,
 }
 
 /// A fader in hand: the control, its track and the grab — and **the last value
@@ -623,6 +663,36 @@ pub enum Dragged {
         /// where it was asked to.
         held: Option<f32>,
     },
+    /// **A boundary drag closed a pane, or brought one back** — and the [`Op`]
+    /// this module **performed**, rather than one it is handing over.
+    ///
+    /// [`Op::Fold`] where a pane was pulled out through its own edge, and
+    /// [`Op::Unfold`] where a closed pane's edge was pulled back in. It names
+    /// the node, so a caller with a sentence to print has everything it needs
+    /// and reads the rest off [`Panel::layout`].
+    ///
+    /// # Performed here, where [`Fader`](Dragged::Fader) is not, and the module
+    /// documentation is why
+    ///
+    /// *A boundary drag moves the arrangement, which is this crate's, so
+    /// `moved` writes it and reports where it landed; a fader drag moves the
+    /// engine's value, which this crate does not have and cannot reach.* A
+    /// fold is the arrangement, so it is written here and this says what was
+    /// written. The alternative — handing an unperformed `Op` back and waiting
+    /// for the caller — would leave the layout disagreeing with itself for one
+    /// event, on the pane the *next* move is about to ask a question of.
+    ///
+    /// # Why it is an [`Op`] at all, rather than a size the drag wrote
+    ///
+    /// A drag that only zeroed the pane's extent would leave nothing
+    /// [`Layout::is_collapsed`] could answer yes to, so `z`
+    /// ([`Op::UnfoldAll`]) would not bring it back — and `z` is the way back
+    /// the manual promises for everything that folds. Going through
+    /// [`Op::Fold`] is what makes the close a **fold** rather than a very
+    /// small pane, and it costs nothing: these operations write no session
+    /// record either way (`karakuri-operation-record` answers
+    /// `Silent::Surface` for all four).
+    Pane(Op),
     /// **A fader turned the drag into one operation of the vocabulary**, which
     /// is the whole of what it did.
     ///
@@ -957,11 +1027,16 @@ impl Panel {
     /// console's body row is, deliberately — so a split and an index alone do
     /// not say which boundary a pointer has hold of, and the pair does.
     ///
-    /// [`Layout::visible_children`] is what an index counts, and this is that
+    /// [`Layout::placed_children`] is what an index counts, and this is that
     /// twice: the readout wants both names, and asking for the pair is what
     /// every caller of it was doing.
+    ///
+    /// **A closed pane is one of them**, which is the whole of how a drag
+    /// reaches a region that has no rectangle: the pane is placed at zero
+    /// extent with its divider still beside it, so the pair either side of
+    /// that divider names it (ADR-0300).
     pub fn pair(&self, split: NodeId, index: usize) -> Option<(NodeId, NodeId)> {
-        let mut children = self.layout.visible_children(split).skip(index);
+        let mut children = self.layout.placed_children(split).skip(index);
         Some((children.next()?, children.next()?))
     }
 
@@ -987,6 +1062,7 @@ impl Panel {
                     offset,
                     said: None,
                     held: false,
+                    acted: false,
                 }));
                 Pressed::Grabbed {
                     split,
@@ -1084,17 +1160,64 @@ impl Panel {
         }
     }
 
+    /// A move with a boundary in hand.
+    ///
+    /// # A pane is closed by pulling its boundary out, and opened by pulling it
+    /// in
+    ///
+    /// The overshoot a stop keeps — `landed - asked` — is the whole of what
+    /// this reads. Its **sign** says which side of the boundary the pointer is
+    /// pressing into, its **size** says how far past the stop the hand has gone
+    /// on, and whether that side is already [`Layout::is_closed`] says whether
+    /// the drag is closing it or opening it. See [`PULLED_THROUGH`] for the
+    /// distance and [`Boundary::acted`] for why it happens once.
+    ///
+    /// **Only a region whose arrangement says a fold leaves its edge behind is
+    /// closed this way** ([`Layout::keeps_its_edge`]), and only one that is
+    /// **at its own minimum** — a boundary held by a *neighbour's* maximum is
+    /// not one that has run this region out of room, and folding it there would
+    /// be a fold nobody was asking for.
     fn moved_boundary(&mut self, p: Point) -> Option<Dragged> {
         let Some(Drag::Boundary(drag)) = self.drag.as_ref() else {
             return None;
         };
         let (split, index, axis, offset) = (drag.split, drag.index, drag.axis, drag.offset);
+        let acted = drag.acted;
         let asked = axis.coord(p) - offset;
         let landed = self.layout.set_divider(split, index, asked);
         // `set_divider` solves before it returns, so the reads below are of a
         // clean layout.
         let by = landed - asked;
         let held = by.abs() >= STOPPED;
+
+        if let Some(op) = (!acted)
+            .then(|| self.pane_pulled(split, index, axis, by))
+            .flatten()
+        {
+            self.op(op);
+            if let Op::Unfold(pane) = op {
+                self.open_at_minimum(split, index, pane);
+            }
+            self.solve();
+            let at = self
+                .layout
+                .boundary(split, index)
+                .map(|gap| axis.origin(gap));
+            if let Some(Drag::Boundary(drag)) = self.drag.as_mut() {
+                drag.acted = true;
+                // **Where the boundary is now, said once** — by this very
+                // value. The fold moved it to the pane's own edge, or out to
+                // the pane's minimum, and [`Dragged::Pane`] is this drag
+                // saying so; a second report of the same position, from the
+                // next of sixty pointer events a second, would be the flood
+                // [`Boundary::said`] exists to stop. `held`, because the
+                // boundary is not following the pointer and will not until
+                // the hand comes back to it.
+                drag.said = at;
+                drag.held = true;
+            }
+            return Some(Dragged::Pane(op));
+        }
 
         let Some(Drag::Boundary(drag)) = self.drag.as_mut() else {
             return None;
@@ -1117,6 +1240,83 @@ impl Panel {
             landed,
             held: held.then_some(by),
         })
+    }
+
+    /// **Put a pane a drag has just brought back at the smallest extent it
+    /// declares**, whichever side of the boundary it is on.
+    ///
+    /// *"A pane reopened by dragging inward comes back at its declared
+    /// minimum, not at whatever it was before"* — because the hand that opened
+    /// it is at the window's edge, and a pane that sprang back to the 340 it
+    /// was months ago would jump out from under the pointer. What it was is
+    /// still stored, and `z` still brings that back.
+    ///
+    /// **The ask is the far end and the layout's own clamp is what stops it.**
+    /// [`Layout::set_divider`] clamps a drag to the pair's combined bounds, so
+    /// asking for the boundary to go all the way to the pane's own side lands
+    /// it at exactly the pane's minimum — or at the most the pair can give it,
+    /// where the neighbour's own bounds allow less. Working the position out
+    /// here instead would be a second copy of that clamp, one term of which is
+    /// the *other* region's.
+    fn open_at_minimum(&mut self, split: NodeId, index: usize, pane: NodeId) {
+        self.solve();
+        let Some((a, _)) = self.pair(split, index) else {
+            return;
+        };
+        let position = match pane == a {
+            true => f32::NEG_INFINITY,
+            false => f32::INFINITY,
+        };
+        self.layout.set_divider(split, index, position);
+        self.solve();
+    }
+
+    /// **What a drag at `asked` is asking of the pair either side of this
+    /// boundary, where what it is asking is a fold**, or `None` for the
+    /// ordinary case of a boundary that is simply being moved.
+    ///
+    /// Reads, and writes nothing: the caller performs the [`Op`] so that a
+    /// fold is a fold wherever it comes from.
+    ///
+    /// **`by` is what the stop kept — `landed - asked`, after the drag has
+    /// been made.** Asked against the boundary's position *before* the move
+    /// would answer a different question on the first event of a gesture: a
+    /// drag that runs from a pane's full width to well past its minimum in one
+    /// pointer event would find the pane not yet at its stop and decline the
+    /// fold it plainly asked for. After the drag, the pane is at whatever the
+    /// clamp allowed and the overshoot is exactly what the clamp kept.
+    ///
+    /// A closed pane's boundary never moves — [`Layout::set_divider`] refuses
+    /// it, because a closed pane's extent is not the boundary's to give away —
+    /// so for the opening case `landed` is the boundary where it stands and
+    /// `by` is how far in from it the pointer has gone.
+    fn pane_pulled(&mut self, split: NodeId, index: usize, axis: Axis, by: f32) -> Option<Op> {
+        let (a, b) = self.pair(split, index)?;
+
+        // **Opening comes first**, because a boundary with a closed pane beside
+        // it is not a boundary anybody can be pushing against: there is nothing
+        // on that side to run out of room.
+        if self.layout.is_closed(a) && by <= -PULLED_THROUGH {
+            return Some(Op::Unfold(a));
+        }
+        if self.layout.is_closed(b) && by >= PULLED_THROUGH {
+            return Some(Op::Unfold(b));
+        }
+        let (into, pulled) = match by >= 0.0 {
+            true => (a, by),
+            false => (b, -by),
+        };
+        if pulled < PULLED_THROUGH || !self.layout.keeps_its_edge(into) {
+            return None;
+        }
+        // At its own minimum, and not merely stopped: `set_divider` clamps
+        // against the pair's *combined* bounds, so a boundary can be held by
+        // the far side's maximum with this side nowhere near its floor. The
+        // extent is read after the drag, which is what makes the whole of a
+        // one-event drag count towards it.
+        let (min, _) = self.layout.bounds(into);
+        let extent = axis.extent(self.layout.rect(into));
+        (extent <= min + STOPPED).then_some(Op::Fold(into))
     }
 
     /// A move with a fader in hand: the pointer becomes a value, and the value

@@ -84,7 +84,7 @@ fn a_fixed_split_claims_what_its_visible_content_can_use() {
 }
 
 #[test]
-fn the_dividers_between_visible_children_count_toward_what_a_split_can_use() {
+fn the_dividers_between_placed_children_count_toward_what_a_split_can_use() {
     // Two fixed views in a split whose divider is 8: what the split can use is
     // 40 + 8 + 60, not 100. A cap that summed the children alone would put
     // eight pixels of the split's content outside the split.

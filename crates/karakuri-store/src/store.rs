@@ -10,6 +10,7 @@
 //! sandbox/<id>.kbset
 //! sessions/<stamp>.ndjson
 //! arrangements/<name>.arrangement.json
+//! favourites.json                   the ids of the Sets that are starred
 //! ```
 //!
 //! `<hash>` is the artifact's content address rendered as bare lowercase
@@ -45,6 +46,17 @@
 //! Which of the two a save goes to is decided by whoever asked and never here:
 //! [`Store::write_set`] and [`Store::write_sandbox_set`] are two methods so
 //! that no caller can reach the library by leaving an argument at its default.
+//!
+//! **`favourites.json` is the fifth thing here and it is beside the Sets on
+//! purpose.** A star is not part of a Set: putting it in the file would make it
+//! travel to whoever the Set is sent to, and would have to be *written*, so a
+//! starred Set would jump to the top of a listing ordered by when it was made.
+//! Putting it in a session would make it an event rather than something that is
+//! true. So it sits at the root, one document naming ids, and the cost is
+//! stated where the decision is: a favourite does not travel with a Set. See
+//! `docs/manual/console.html`'s *What keeps a favourite, and where it does not
+//! travel* and
+//! `docs/adr/0299-my-sets-is-the-starred-subset-and-the-star-is-kept-beside-the-sets.md`.
 
 use std::collections::BTreeSet;
 use std::fs;
@@ -74,6 +86,30 @@ pub enum StoreError {
     /// somebody typed, and the sentence an operator needs is the name back.
     #[error("no arrangement named `{0}`")]
     NoArrangement(String),
+    /// **A star was asked for on an id `sets/` does not hold.**
+    ///
+    /// Its own variant beside [`StoreError::NoArrangement`] and for that
+    /// variant's reason: [`StoreError::NotFound`] carries a [`Hash`] and could
+    /// not say this, and what an operator needs back is the id they named
+    /// ([P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md)).
+    ///
+    /// **Only starring is refused.** Taking a star *off* an id the store no
+    /// longer holds is how a stale mark is cleared, so
+    /// [`Store::set_favourite`] asks this question in one direction only.
+    #[error("no Set named `{0}` in this store, so there is nothing to star")]
+    NoSet(String),
+    /// **The favourites file is on disk and is not a list of ids.**
+    ///
+    /// Said rather than swallowed: a file somebody hand-edited into something
+    /// unparseable would otherwise read exactly like a library nobody has
+    /// starred in, and the whole of `my sets` would go quiet with nothing to
+    /// notice. A missing file is *not* this — that is a store nobody has
+    /// starred in, and [`Store::favourites`] answers it with an empty set.
+    #[error("`{}` is not a list of Set ids: {source}", Store::FAVOURITES_FILE)]
+    Favourites {
+        #[source]
+        source: serde_json::Error,
+    },
     /// A Set file carries no time — see `docs/ir-spec.md`, Set file format.
     /// `tick` was the only such record when this was named; `audio` and `tempo`
     /// are the same kind of thing, so the check is `Record::is_set_state` and the
@@ -575,6 +611,116 @@ impl Store {
         }
         out.sort_by(|a, b| a.id.cmp(&b.id));
         Ok(out)
+    }
+
+    /// **What the file of starred ids is called**, and the one place it is
+    /// spelled — [`Store::favourites`] reads it and [`Store::set_favourite`]
+    /// writes it, and two literals could drift into a store that writes stars
+    /// it cannot read back.
+    ///
+    /// **`.json` and not `.ndjson`, for `arrangements/`'s reason.** It is one
+    /// document rather than a stream of records: there is no line to append —
+    /// taking a star off is a removal, and a stream would need a tombstone and
+    /// a projection to express one — and nothing here is a [`Record`], because
+    /// the session vocabulary carrying a favourite is exactly what
+    /// `docs/manual/console.html` refused. It never goes through
+    /// [`crate::ndjson`]'s reader.
+    ///
+    /// **A file rather than a directory of markers.** Both keep the same fact
+    /// and both leave the same stale entries behind; this one is a single read
+    /// and a single atomic write, and the whole answer is one `BTreeSet` a
+    /// caller can hold.
+    pub const FAVOURITES_FILE: &str = "favourites.json";
+
+    fn favourites_path(&self) -> PathBuf {
+        self.root.join(Store::FAVOURITES_FILE)
+    }
+
+    /// **The ids of the Sets that are starred**, which is what `my sets` lists.
+    ///
+    /// **A missing file is an empty set and not an error**, which is
+    /// [`Store::list_sets`]'s rule about an empty store read one file along: a
+    /// store nobody has starred in has nothing to say, and it says it by having
+    /// no file. A file that will not parse *is* an error — see
+    /// [`StoreError::Favourites`], which is where the difference between those
+    /// two is argued.
+    ///
+    /// **Ids the store no longer holds are returned as they are.** This is a
+    /// question and a question writes nothing, so nothing is pruned here; what
+    /// makes a stale mark harmless is that a listing is the intersection of
+    /// this with [`Store::list_sets`], so an id naming no Set lists no row. Put
+    /// a Set back under the same id and its star is back with it, which is the
+    /// right answer when the id is a name an operator typed.
+    ///
+    /// **A `BTreeSet` rather than a `Vec`.** The question a caller asks is *is
+    /// this row starred*, once per row of a listing, and the order stars were
+    /// written in is not an order anything draws: `my sets` is the Set listing
+    /// narrowed, so the rows keep the listing's own order.
+    ///
+    /// **Off the frame**, like every other directory or file read here
+    /// ([P-0091](../../../docs/principles/0091-cost-is-known-before-it-is-paid.md)):
+    /// it is read when a listing is built, which is at startup and on the press
+    /// that changes the scope, and never per pass.
+    pub fn favourites(&self) -> Result<BTreeSet<String>, StoreError> {
+        let bytes = match fs::read(self.favourites_path()) {
+            Ok(bytes) => bytes,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(BTreeSet::new()),
+            Err(e) => return Err(StoreError::Io(e)),
+        };
+        let ids: Vec<String> =
+            serde_json::from_slice(&bytes).map_err(|source| StoreError::Favourites { source })?;
+        Ok(ids.into_iter().collect())
+    }
+
+    /// **Star a Set, or take the star off**, and say whether the file moved.
+    ///
+    /// `false` back is the state already being the one asked for, which is an
+    /// ordinary answer rather than a refusal: an operation names a state rather
+    /// than a toggle, so a second press of *star this* is a press that says the
+    /// same thing (`karakuri_operation::Operation::SetFavourite`). Nothing is
+    /// written in that case, so a star does not touch the file's own time.
+    ///
+    /// **Starring an id `sets/` does not hold is refused** —
+    /// [`StoreError::NoSet`] — because a star is a control on a row, and a row
+    /// is a Set this store holds. **Unstarring one is not**, and that asymmetry
+    /// is the whole answer to a stale mark: a Set that left the library outside
+    /// this program leaves its id behind, the listing already ignores it, and
+    /// this is the way to be rid of it without opening the file in an editor.
+    ///
+    /// **One stat and one atomic write.** The check is
+    /// [`Store::set_path`]'s existence and not [`Store::list_sets`]: pruning
+    /// the whole file against a directory read would make a star that lands
+    /// while `sets/` is briefly unreadable delete every other star, and losing
+    /// what somebody chose is a worse failure than keeping an id that names
+    /// nothing.
+    ///
+    /// **The file is written sorted**, which costs nothing and makes two stores
+    /// starred in the same order the same bytes — the same reason
+    /// [`Store::list_sets`] orders on the id rather than on what `read_dir`
+    /// handed back.
+    ///
+    /// **Nothing here checks the id**, exactly as nothing checks it in
+    /// [`Store::write_set`]: what may be a Set id is the caller's rule, and
+    /// `karakuri_environment`'s `mcp::checked_id` is where one reached from a
+    /// protocol is refused rather than sanitised. An id that is not one names
+    /// no file, so starring it is refused above by the check that is here.
+    pub fn set_favourite(&self, id: &str, favourite: bool) -> Result<bool, StoreError> {
+        if favourite && !self.set_path(id).is_file() {
+            return Err(StoreError::NoSet(id.to_string()));
+        }
+        let mut ids = self.favourites()?;
+        let moved = if favourite {
+            ids.insert(id.to_string())
+        } else {
+            ids.remove(id)
+        };
+        if !moved {
+            return Ok(false);
+        }
+        let ids: Vec<&String> = ids.iter().collect();
+        let bytes = serde_json::to_vec(&ids).expect("a list of strings serialises");
+        ndjson::write_atomic(&self.favourites_path(), &bytes)?;
+        Ok(true)
     }
 
     /// **List the artifacts the store holds, and say which of them have a

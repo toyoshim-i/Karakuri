@@ -649,6 +649,19 @@
           <span class="rt plan">MCP <b>&mdash;</b></span>
           <span class="rt-none"></span>
         </div>
+      <div class="op">
+        <div class="op-name" tabindex="0" data-tip="One press on the star at the left of a library row, and it names the state rather than flipping one: a map with a button per direction, a model that says which one it wants and a key all have to be able to say star this and mean it. What it fills is `my sets`, which is the starred subset of this library and not the listing of it &mdash; so a preset packaged on load and a recording&#39;s head both land in the library and neither appears under `my sets` until somebody presses this. The mark is kept beside the Sets, in the store, and never inside the Set file: in the file it would travel to whoever you sent the Set to, and it would have to be written, so a starred Set would jump to the top of a listing ordered by when it was made. It is not in the session either &mdash; a press with `rec` off would keep nothing, and a replay would hand a favourite back as an event rather than as something that is true. The cost is stated rather than designed around: a favourite does not travel with a Set. Copy the library and the stars come with it; hand somebody one Set and it arrives unstarred. Starring a Set this store does not hold is refused with the id back; taking a star off one is not, which is how a mark left behind by a file somebody deleted is cleared.">
+          <div class="op-head"><h3>Star a Set, or take the star off</h3></div>
+        </div>
+        <span class="op-when">immediate</span>
+        <div class="rts">
+          <span class="rt plan">panel <b>library star</b></span>
+          <span class="rt plan">key <b>v</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt-none"></span>
+        </div>
+      </div>
       </div>
       <div class="op">
         <div class="op-name" tabindex="0" data-tip="Every knob with its range and default, the element count, the attributes emitted &mdash; each read off the artifact's own card, so those three fetch no source and compile nothing. What a node's element storage comes to is the figure that is not a card's: it needs every source in the Set fetched and checked before anything can be sized, and it pays for that. The panel draws the three that cost nothing; a model asking over MCP is offered the fourth as well.">
@@ -798,7 +811,7 @@
         </div>
         <span class="op-when">immediate</span>
         <div class="rts">
-          <span class="rt plan">panel <b>bay head</b></span>
+          <span class="rt has">panel <b>bay head</b></span>
           <span class="rt has">key <b>f g</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt plan">MCP <b>&mdash;</b></span>
@@ -806,12 +819,12 @@
         </div>
       </div>
       <div class="op">
-        <div class="op-name" tabindex="0" data-tip="The whole left or right pane, with everything in it, and the centre takes the width. The centre is not a third pane and does not fold &mdash; what you want there is solo.">
+        <div class="op-name" tabindex="0" data-tip="The whole left or right pane, with everything in it, and the centre takes the width. Drag the pane&#39;s boundary out past the narrowest the pane goes and it closes; it keeps its outer edge, so the gutter left at the window&#39;s edge is what you drag back in to bring it back &mdash; at its narrowest, whatever it was before. <code>z</code> brings it back at the width it had. The centre is not a third pane and does not fold &mdash; what you want there is <em>solo</em>.">
           <div class="op-head"><h3>Fold a pane away</h3></div>
         </div>
         <span class="op-when">immediate</span>
         <div class="rts">
-          <span class="rt plan">panel <b>pane edge</b></span>
+          <span class="rt has">panel <b>pane edge</b></span>
           <span class="rt has">key <b>f g</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt plan">MCP <b>&mdash;</b></span>
@@ -819,7 +832,7 @@
         </div>
       </div>
       <div class="op">
-        <div class="op-name" tabindex="0" data-tip="A folded region has no rectangle, so a pointer cannot reach it, which makes this the one operation here a mouse cannot be the only way into. The key brings back everything folded rather than one region, because a region a pointer cannot reach is a region a key has no way to name either.">
+        <div class="op-name" tabindex="0" data-tip="A folded region has no rectangle, so a pointer cannot reach it, which makes this the one operation here a mouse cannot be the only way into &mdash; except a pane, which keeps its outer edge and is dragged back in. The key brings back everything folded rather than one region, because a region a pointer cannot reach is a region a key has no way to name either.">
           <div class="op-head"><h3>Bring back what is folded</h3></div>
         </div>
         <span class="op-when">immediate</span>

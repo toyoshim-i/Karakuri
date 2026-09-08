@@ -230,8 +230,12 @@ fn check(l: &Layout, id: NodeId) {
 }
 
 /// Children exactly tile their parent: none of them overlaps, the gaps between
-/// them are the divider and are only between *visible* children, and together
-/// they account for the parent exactly.
+/// them are the divider and are only between the children the split **places**,
+/// and together they account for the parent exactly.
+///
+/// **A closed child is one of them and takes no extent**, which is the edge a
+/// node that `keeps_its_edge` keeps when it folds: it is out of the layout by
+/// its own bit and still tiled, so the gap beside it is still one of these.
 fn assert_tiles(l: &Layout, id: NodeId, axis: Axis) {
     let parent = l.rect(id);
     let declared = l.divider(id).unwrap();
@@ -257,6 +261,8 @@ fn assert_tiles(l: &Layout, id: NodeId, axis: Axis) {
         if !laid_out(l, *c) {
             // A child that is out of the layout takes no space at all.
             assert!(near(e, 0.0), "child {c:?} is out and took {e} of extent");
+        }
+        if !l.is_placed(*c) {
             continue;
         }
         visible += 1;
