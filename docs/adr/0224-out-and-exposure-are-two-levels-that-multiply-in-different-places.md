@@ -11,6 +11,31 @@ tags: [engine, colour, mixing, console, ui]
 
 # `out` and `exposure` are two levels that multiply in different places
 
+> **Annotated 2026-09-08: two of the three things *What this leaves undone* names were done the same
+> day.** Commit `cf86ce4`, *Draw the Master bay's body, which is one level and the reason it is one*
+> (2026-08-30), quotes this record's list as the whole of what it was for.
+>
+> **A route reaches `Deck::set_out`.** `Operation::SetMasterOut` is in the vocabulary and in
+> `gate.rs`, `karakuri-operation-record`'s `written` turns it into `Record::MasterOut`,
+> `karakuri-store` carries that record, and `crates/karakuri/src/main.rs` decodes it back to
+> `Deck::set_out`. So *"there is no operation, no `Record` … `karakuri-operation`, `karakuri-store`
+> and the panel are all untouched"* is a statement about what **this record** left, and no longer a
+> statement about the workspace. **And the Master bay is drawn**: `view::master` paints
+> `.master-row`, `Knob::Out` is the drag it answers, and
+> `crates/karakuri-console/tests/master.rs` is the bay's own test file.
+>
+> **The rest of the list still holds, and none of it is over-corrected here.** There is still **no
+> key, no MIDI target and no CLI flag** — counted, and the operations page's *Master out* row reads
+> `key —` and `MIDI —` to match. The three master-chain effects are still drawn nowhere, so the
+> chain is still empty and `with_nothing_in_the_master_chain_the_two_levels_are_the_same_picture` is
+> still the tripwire it was written as. **No transition** is unchanged.
+>
+> **The `master`-in-the-engine count wants nothing.** It reads 64 today against the zero counted
+> above, and this record's own decision — `mix_in.master_out` in `composite.wgsl`, `Deck::set_out`
+> in `deck.rs` — is what put every one of them there. The sentence dates itself (*"today"*) and
+> reports the survey the decision was taken from; it is not a claim about the present that has gone
+> wrong.
+
 ## Context
 
 [The console page](../manual/console.html)'s Master bay draws one row — `out 1.00` — over a chain of

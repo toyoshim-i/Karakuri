@@ -108,11 +108,20 @@
 //!    ([`crate::view::LibraryBay::chip`]), the two filter fields under them
 //!    ([`crate::view::LibraryBay::filter`]), the `read` chip in that bay's
 //!    foot ([`crate::view::LibraryBay::read`]) and the **list** between them
-//!    ([`crate::view::LibraryBay::take`]). The rule did not change to hold
-//!    any of the thirty-five that came after the first, which is what it was
-//!    written for — and each is asked exactly the way the first is: the
-//!    derivation that draws it, asked whether the point is on it, with nothing
-//!    stored.
+//!    ([`crate::view::LibraryBay::take`]). The rule did not change to hold any
+//!    of the ones that came after the first, which is what it was written for
+//!    — and each is asked exactly the way the first is: the derivation that
+//!    draws it, asked whether the point is on it, with nothing stored.
+//!
+//!    **How many that is, is not written in this paragraph and must not be**,
+//!    which is the rule two paragraphs up applied to this one: [`CONTROLS`] is
+//!    *what the pointer reaches here*, it moves the day a control lands, and a
+//!    fixed number in prose is a second answer that stops agreeing on that
+//!    day. This sentence said *the thirty-five that came after the first*, and
+//!    it was wrong by nine before anybody read it again. **So the controls
+//!    below are named rather than numbered**, and each paragraph is checkable
+//!    on its own: what a control is, what it clears, and which test measures
+//!    it.
 //!
 //!    **The list is the first of them a press does not act on**, and rule 4 did
 //!    not change for that either. A press on a row takes a Set in hand and asks
@@ -126,8 +135,9 @@
 //!    [`crate::view::Mixer::dropped`], which is the destination and is asked at
 //!    the release rather than here.
 //!
-//!    **The last five are the first two that a boundary's grab reaches**, and
-//!    the rule holds them unchanged for the reason it holds everything else:
+//!    **The `solo` capsule and the four preview cells are the first controls a
+//!    boundary's grab reaches**, and the rule holds them unchanged for the
+//!    reason it holds everything else:
 //!    rule 3 gives the boundary first refusal, so what the overlap costs is
 //!    the sliver of the control inside the band and never an ambiguity about
 //!    who is dragging. Both live where `docs/manual/console.html` draws them,
@@ -138,31 +148,32 @@
 //!    changing either of them is a change to the console page or to [`GRAB`]
 //!    rather than a nudge.
 //!
-//!    **The sixth was the first control in the transport row**, which was four
-//!    readouts and nothing a press acted on until it landed
+//!    **The arrangement pill was the first control in the transport row**,
+//!    which was four readouts and nothing a press acted on until it landed
 //!    ([`crate::view::transport`]). It clears every boundary by more than any
-//!    of the other five: the row is 48 and a `.pill` is 16.5, centred, so
-//!    there is (48 - 16.5) / 2 = **15.75** of row above it and 15.75 below,
+//!    of the five that came before it: the row is 48 and a `.pill` is 16.5,
+//!    centred, so there is (48 - 16.5) / 2 = **15.75** of row above it and
+//!    15.75 below,
 //!    against a [`GRAB`] of 6 — `tests/arrangement_pill.rs`, which is
 //!    `tests/outputs.rs`'s arithmetic over this control and fails the same
 //!    three ways.
 //!
-//!    **The seventh and the eighth are in that row too, and their clearance is
-//!    measured rather than inherited from it** — which is this file's rule
-//!    about every control, and here it happens to come out at the same number
-//!    twice. The tone map's capsule is a `.pill`, so it is the pill's own
-//!    **15.75**. The exposure control is a 5px track, and a 5px-tall target is
-//!    not something a hand finds — so what a press is tested against is the
+//!    **The tone map's capsule and the exposure track are in that row too, and
+//!    their clearance is measured rather than inherited from it** — which is
+//!    this file's rule about every control, and here it happens to come out at
+//!    the same number twice. The tone map's capsule is a `.pill`, so it is
+//!    the pill's own **15.75**. The exposure control is a 5px track, and a
+//!    5px-tall target is not something a hand finds — so what a press is
+//!    tested against is the
 //!    track grown to a line's height, [`crate::view::LookRow::grip`], which is
 //!    `.mini`'s padding argument met with a band. That is 16.5 in a row of 48
 //!    and therefore **15.75** as well. `tests/look.rs` measures both and fails
-//!    the same three ways `tests/arrangement_pill.rs` does; that two of the
-//!    twenty-seven agree is a fact about two capsules being one height, not a
-//!    number
-//!    either of them inherited.
+//!    the same three ways `tests/arrangement_pill.rs` does; that the two agree
+//!    is a fact about two capsules being one height, not a number either of
+//!    them inherited.
 //!
-//!    **The ninth to the twelfth are the first controls that are not in a row
-//!    of their own**, and they are measured off their own rectangles like
+//!    **A deck head's four are the first controls that are not in a row of
+//!    their own**, and they are measured off their own rectangles like
 //!    everything else here. A deck head is the second row *inside* an
 //!    inspector pane, so the nearest boundary is not the one under the row it
 //!    sits in — it is the **pane divider down the side of the pane**, and what
@@ -184,8 +195,8 @@
 //!    controls against every boundary and fails the same three ways
 //!    `tests/arrangement_pill.rs` does.
 //!
-//!    **The thirteenth is the Master bay's out**, and it was measured the same
-//!    way off its own rectangle. The knob is 11 tall on a row of 16.5 that
+//!    **The Master bay's out** was measured the same way off its own
+//!    rectangle. The knob is 11 tall on a row of 16.5 that
 //!    starts [`crate::room::size::HEAD_H`] plus
 //!    [`crate::room::size::MASTER_PAD_TOP`] below the bay's top edge, so what
 //!    holds it off the boundary **above** is a sum and not a centring:
@@ -221,8 +232,8 @@
 //!    on the chip is one rectangle either way
 //!    ([ADR-0203](../../../docs/adr/0203-the-mask-chip-carries-the-angle-it-does-not-control.md)).
 //!
-//!    **The twenty-fourth to the twenty-seventh are the Library bay's scope
-//!    chips**, and they are the first controls here whose *number* is a value
+//!    **The Library bay's scope chips** are the first controls here whose
+//!    *number* is a value
 //!    rather than a constant — one per scope the host handed the bay, which is
 //!    why [`PROBES`]' row for them counts [`Scope::ALL`] rather than
 //!    naming a four. Their clearance is a sum and not a centring, which is the
@@ -263,8 +274,8 @@
 //!    from the load pill it sits beside, which happens to stand at the same
 //!    4.75 and is not a control at all.
 //!
-//!    **The thirty-sixth is a whole strip, and it is the first control here
-//!    that is not drawn as one.** [`crate::view::Mixer::select`] is the
+//!    **One of them is a whole strip, and it is the first control here that is
+//!    not drawn as one.** [`crate::view::Mixer::select`] is the
 //!    strip's own rectangle, so what a press on it means — *address the keys
 //!    to this deck* — is offered by the column rather than by a capsule, and
 //!    `console.html`'s strip tip says so in those terms: *"Two ways into that

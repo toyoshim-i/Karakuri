@@ -33,16 +33,23 @@
 //!    [ADR-0155](../../../docs/adr/0155-egui-draws-the-panel-and-the-price-is-wgpu-30.md)
 //!    made.
 //! 2. **That the engine's rendered texture reaches the panel**, which is the
-//!    other half of that bet: a `Deck` on the same `Device`, with one Set of
-//!    its two on air, drawn
-//!    through `Present` into the picture's rectangle **and again into deck A's
-//!    preview cell**, sampled by `egui` in the same submission. One `Present`
-//!    and two targets of different sizes, because `Present::draw` letterboxes
-//!    into whatever it is handed. Both are `karakuri_engine::Sink`s and the
-//!    frame is one `frame::compose`; the panel goes into that frame's own
-//!    encoder through its `finally`, because the panel is not a sink — it does
-//!    not receive the composited frame, it samples what a sink produced. See
-//!    [`Engine`] and [`Presented`].
+//!    other half of that bet: a `Deck` on the same `Device`, one of its
+//!    [`SLOTS`] Sets on air, drawn through `Present` into the picture's
+//!    rectangle **and again into every deck's preview cell**, sampled by
+//!    `egui` in the same submission. One `Present` and targets of several
+//!    sizes, because `Present::draw` letterboxes into whatever it is handed.
+//!
+//!    **The picture is the only `karakuri_engine::Sink`, and the cells are not
+//!    in the slice.** A sink is what the composited frame is handed to, and
+//!    the picture is the one thing here that draws the whole mix, so
+//!    `frame::compose` is given `[picture]` and nothing else. Each cell is a
+//!    present pass off **its own slot's** target rather than off the fold —
+//!    ADR-0240 and ADR-0258 — so it is not a sink at all, and [`monitor`]
+//!    draws all [`DECKS`] of them inside that frame's own encoder, through
+//!    `compose`'s `finally`. The panel goes into the same encoder for a
+//!    related but different reason: it does not receive the composited frame
+//!    either, it samples what a sink produced. See [`Engine`], [`Presented`]
+//!    and [`monitor`].
 //! 3. That the arrangement's numbers look right at real sizes against
 //!    `docs/manual/console.html`.
 //! 4. That dragging a boundary still works with a toolkit in the loop.
@@ -501,30 +508,38 @@ static ALLOCATOR: Counting = Counting;
 #[derive(Debug, Clone, Copy, Default)]
 struct Cost {
     /// **The engine's half**: [`compose`] from its first statement up to the
-    /// moment it hands the encoder back for the panel — both sinks' `acquire`,
-    /// the committing closure, the tone-map write, `Deck::begin_frame` with
-    /// every install in it, the deck's render, and the present passes into
-    /// whichever sinks took the frame. **Two present passes and one deck
-    /// render** with both sinks on, because an audition is a second present of
-    /// the same canvas and not a second simulation of it — and one pass, or
-    /// none, when a region is folded away and its sink refuses.
+    /// moment it hands the encoder back for the panel — the picture's
+    /// `acquire`, the committing closure, the tone-map write,
+    /// `Deck::begin_frame` with every install in it, the deck's render, and
+    /// the present pass into the picture if it took the frame. **One deck
+    /// render and one present pass**, or none when the picture's region is
+    /// folded away and its sink refuses.
+    ///
+    /// **The preview cells are in this number and are inside `finally`**, and
+    /// the two are not in disagreement. [`monitor`]'s [`DECKS`] present passes
+    /// are the first thing `finally` does and the panel's clock is started
+    /// after them, so the cells are recorded here with the rest of the
+    /// engine's work rather than against the panel — which is the split this
+    /// field names. Nothing separates the cells from the picture; if they ever
+    /// want a number of their own it is a field here and not a subtraction.
     ///
     /// **Where it stops is the start of [`Cost::paint`] and not a second
-    /// clock**: the panel's half begins when `compose` calls `finally`, so the
-    /// two are adjacent by construction and no part of the frame falls between
-    /// them. CPU time only, like everything else here; what the GPU then does
-    /// with the command buffer is not on this clock, and
-    /// `docs/contributing.md` §1 says why there is no other one.
+    /// clock**: the panel's half begins on the statement after [`monitor`]
+    /// inside `finally`, so the two are adjacent by construction and no part
+    /// of the frame falls between them. CPU time only, like everything else
+    /// here; what the GPU then does with the command buffer is not on this
+    /// clock, and `docs/contributing.md` §1 says why there is no other one.
     engine: Duration,
     /// `take_egui_input` through `tessellate`: the whole immediate-mode pass,
     /// including this console's own layout walk and every shape it emits.
     ui: Duration,
     /// Uploading the tessellated geometry, recording the panel's render pass,
-    /// and the one submission that carries both halves — the whole of what the
-    /// program records from inside [`compose`]'s `finally`, plus `compose`'s
-    /// own tail: `Frame::finish`, and each sink's `present`, which for these
-    /// two sinks is nothing at all. Excludes `Queue::present` on the surface,
-    /// which is the display's pace and not a cost.
+    /// and the one submission that carries both halves — the whole of what
+    /// this program records from inside [`compose`]'s `finally` after
+    /// [`monitor`], plus `compose`'s own tail:
+    /// `Frame::finish`, and the picture's `present`, which for this sink is
+    /// nothing at all. Excludes `Queue::present` on the surface, which is the
+    /// display's pace and not a cost.
     paint: Duration,
     /// **Uploading `egui`'s texture deltas, out of [`Cost::paint`]** — the
     /// font atlas and its patches. Zero on a steady frame, because the atlas
@@ -5941,12 +5956,14 @@ fn monitor(
 /// decides whether the loop asks for another frame.
 ///
 /// **The rule, rather than the expression: anything that makes texels this
-/// frame keeps the loop awake, and the list is closed.** Every sink the engine
-/// draws into is read here — the picture and all [`DECKS`] preview cells — so
-/// a fifth sink added later and not added to this is the same bug again, and
-/// it is the bug this file has already shipped once: `live` was the picture
-/// alone, so folding the picture away left deck A auditioning under it while
-/// the loop stopped asking for frames. It fails in whichever direction the
+/// frame keeps the loop awake, and the list is closed.** Everything the engine
+/// draws into is read here — the picture, which is the one sink `compose` is
+/// handed, and all [`DECKS`] preview cells, which [`monitor`] draws in that
+/// frame's `finally` off each slot's own target — so a target added later and
+/// not added to this is the same bug again, and it is the bug this file has
+/// already shipped once: `live` was the picture alone, so folding the picture
+/// away left deck A auditioning under it while the loop stopped asking for
+/// frames. It fails in whichever direction the
 /// mistake is made — a window that goes on drawing what nobody asked for, or a
 /// panel that keeps changing while the loop sleeps.
 ///
@@ -10188,15 +10205,37 @@ impl ApplicationHandler for App {
             .with_inner_size(winit::dpi::LogicalSize::new(WINDOW.0, WINDOW.1))
             // **The panel is not dragged under its own arrangement.**
             // `karakuri_console::MINIMUM_VIEWPORT` is the declared minima
-            // summed along each axis — 692 x 658.5 — and below it the solve
-            // stops honouring them and scales everything down together
+            // summed along each axis — **777 x 658.5** — and below it the
+            // solve stops honouring them and scales everything down together
             // (ADR-0250), which takes the Mixer's strips off the panel while
             // the deck previews stay: the pointer can no longer select a deck
-            // and `0`..`3` still can. The units are the same on both sides —
-            // the viewport handed to `Panel::set_viewport` below is this
-            // window's inner size divided by the scale factor. A screen
-            // narrower than this leaves the window larger than the screen,
-            // which is an ordinary state and not a failure (ADR-0272).
+            // and `0`..`3` still can.
+            //
+            // **The width is the body row's three tracks plus its two column
+            // dividers**: `left-pane` 160, `centre` 425, `right-pane` 172,
+            // `+ 10 + 10`. The centre is the term that moved — it was 340,
+            // which was `.body-grid`'s CSS track rather than a reading of
+            // what the console draws, and it is now an inspector pane's own
+            // minimum twice over one pane divider, `2 x 208 + 9`. At 340 a
+            // pane is 165.5 where a parameter row's fixed tracks want 207
+            // before the fader has any width, so the faders were not drawn at
+            // the centre's declared minimum — and a divider drag reaches that
+            // centre at any window width, so no window minimum could close
+            // it. **A pane that cannot draw a fader is not a minimum**
+            // (ADR-0279), which is the change; the height is unmoved.
+            //
+            // **This comment said 692 x 658.5 until 2026-09-08**, and the
+            // arithmetic behind it went with the total. The one place either
+            // figure is stated is `karakuri_console::MINIMUM_VIEWPORT`, whose
+            // own documentation carries every term, and
+            // `karakuri-console`'s `tests/arrangement.rs` recomputes both from
+            // the tree.
+            //
+            // The units are the same on both sides — the viewport handed to
+            // `Panel::set_viewport` below is this window's inner size divided
+            // by the scale factor. A screen narrower than this leaves the
+            // window larger than the screen, which is an ordinary state and
+            // not a failure (ADR-0272).
             .with_min_inner_size(winit::dpi::LogicalSize::new(
                 karakuri_console::MINIMUM_VIEWPORT.0,
                 karakuri_console::MINIMUM_VIEWPORT.1,

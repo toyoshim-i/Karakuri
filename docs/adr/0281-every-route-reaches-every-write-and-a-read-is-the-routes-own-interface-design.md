@@ -197,9 +197,23 @@ permits. The split is available the day somebody wants to un-take it.
   input to a node* writes an edge and rebuilds, and *Narrow the published interface* changes what
   the console shows and what a MIDI knob counts. Both are writes; both still need a home.
 
-- ***Walk the edit history* is a write.** `Operation::WalkHistory`'s payload is settled as *a
-  revision to land on* (`crates/karakuri-operation/src/lib.rs:1374`) and `docs/roadmap.md` M5.3 says
+- ***Walk the edit history* is a write.** `Operation::WalkHistory`'s doc names *a revision to land
+  on* as the answer among the three shapes a walk could be addressed by
+  (`crates/karakuri-operation/src/lib.rs`, at the variant) and `docs/roadmap.md` M5.3 says
   *"landing on a row is a **load**"*. The walking is a listing and the row is not.
+
+  *(**Corrected 2026-09-08: *settled* ran one step ahead of the code.** This read
+  *"`Operation::WalkHistory`'s payload is settled as a revision to land on
+  (`crates/karakuri-operation/src/lib.rs:1374`)"*, and line 1374 was the variant itself —
+  `WalkHistory { step: Undecided }`. What the doc settles is **which of the three** a walk needs — a
+  cursor and a direction, a revision to land on, or a count of steps — *"because a row is what an
+  operator picks"*. It then declines to write it into the payload, in the next sentence: *"It is not
+  written into the payload here, because a payload is what a surface can say
+  ([ADR-0192](0192-an-operation-asks-for-what-a-surface-can-say-and-the-record-stays-whole.md)) and
+  no surface can say a revision yet."* So the payload is deliberately open, not settled. **The
+  conclusion is untouched**: whichever of the three the payload ends up spelling, a walk lands on a
+  revision and landing is a load, so the row is a write and rule 01 asks all four routes of it. The
+  line number has drifted since and the citation names the item instead.)*
 
 - **`index.html`'s cap is not touched.** This is rule 01 saying less, not an eighth rule.
 

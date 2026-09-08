@@ -86,9 +86,10 @@ impl Requirements {
 /// The helper function name for `mod`/`%` at type `ty`.
 ///
 /// This is the one builtin whose call-site name is not [`Builtin::name`]
-/// verbatim: WGSL has no function named `mod`, and `%` on `f32` does not
-/// have `mod`'s always-non-negative semantics (the IR spec is explicit that
-/// this differs from WGSL and lowering must insert a wrapper). Every other
+/// verbatim: WGSL has no function named `mod`, and `%` on `f32` does not have
+/// `mod`'s semantics — `a - b * floor(a / b)` takes the sign of the
+/// **divisor** where WGSL's `%` takes the dividend's, so lowering must insert
+/// a wrapper. Every other
 /// helper in this module is named identically to the `Builtin` it
 /// implements, so a call site can always emit `func.name()(args)` — except
 /// this one, which is why lowering special-cases exactly one variant instead

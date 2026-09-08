@@ -131,24 +131,40 @@
 //! which is the card styling, and neither carries a `.bay-head`
 //! ([ADR-0159](../../../docs/adr/0159-the-consoles-words-are-the-manuals-and-the-middle-one-is-not-a-pane.md)).
 //!
-//! # The transport row is five readouts and one control
+//! # The transport row is four readouts and nine controls
 //!
-//! [`Kind::Transport`] draws the tempo, the beat grid, the bar, the frame
-//! readout and the health capsule — **the things in the mock's row that are a
-//! value somebody measured rather than a control over something that does not
-//! exist.** The capsule was the fifth, on 2026-09-08: it is drawn as a
-//! `.pill` and is no more a control than the frame readout beside it, which is
-//! the reading a press proves rather than the shape of the box. The
-//! ones the console cannot know are named in [`transport`], one by one, with
-//! what is missing behind each; the paragraph above is the whole of the
-//! argument and this row is where it costs the most, because **most of what the
-//! mock draws there goes.**
+//! **The four readouts are the beat grid, the bar, the frame readout and the
+//! health capsule** — the things in the mock's row that are a value somebody
+//! measured rather than a control over something that does not exist. All
+//! four are [`Kind::Transport`]'s, which is [`transport`]. The capsule joined
+//! them on 2026-09-08: it is drawn as a `.pill` and is no more a control than
+//! the frame readout beside it, which is the reading a press proves rather
+//! than the shape of the box.
 //!
-//! **The one that stayed is the arrangement pill, and it stayed for the rule
-//! rather than despite it.** Every other control in this row is a control over
-//! machinery that is in neither this crate nor the program — a tap nothing
-//! times, a learn mode with no map, a recorder that writes no stream. The
-//! arrangement is not one of those: it is the tree this crate owns, it is
+//! **The nine controls are six rows of [`crate::input::PROBES`]**, and the row
+//! is where this module's rule has cost the most and bought the most back. Two
+//! of them are [`transport`]'s own — the tempo figure
+//! ([`TransportRow::tempo`]) and the `rec` pill ([`TransportRow::record`]),
+//! which landed together and are why the tempo is not counted above: the
+//! number **is** the track a press names a value on ([ADR-0291](../../../docs/adr/0291-the-tempo-figure-is-the-track-and-the-band-is-a-guard-on-the-hand.md)).
+//! The other seven are laid out from that row and derived beside it: the
+//! audio-in pill ([`audio_in`]), the tracker group's tap, offset and octave
+//! ([`tracker_group`]), the arrangement pill ([`arrangement`]), and the tone
+//! map's capsule and exposure track ([`look`]). The ones the console still
+//! cannot know are named in [`transport`], one by one, with what is missing
+//! behind each.
+//!
+//! **The count is of what this crate draws and not of the mock**, which is
+//! why it is written here at all: the nine are what those six probe rows claim
+//! between them, so the figure is checkable against one table rather than
+//! remembered. The mock's own total is not written anywhere in this module and
+//! must not be — see the paragraph below.
+//!
+//! **The arrangement pill is the one that was here first, and it was here for
+//! the rule rather than despite it.** Every control in this row that is still
+//! undrawn is a control over machinery that is in neither this crate nor the
+//! program — a learn mode with no map, a map file this program has not got.
+//! The arrangement is not one of those: it is the tree this crate owns, it is
 //! already saved and put back by name over a real file, and `r` already
 //! resets it. So `arr · night ▾` is a control over something that exists,
 //! which is the only test this module's rule has ever applied — see
@@ -2450,19 +2466,24 @@ impl Transport {
 /// arithmetic something `tests/transport.rs` can ask about without a device,
 /// which is the whole of how this crate is checked.
 ///
-/// # Five of the six are readouts, and the sixth is this row's one control
+/// # Four of the six are readouts, and two are controls
 ///
 /// A point in this row that is not inside a boundary's [`GRAB`] and not on one
-/// of this row's controls is `egui`'s. A tempo, a beat, a bar, a frame time
-/// and what the last write did are five readouts, and a readout is not
-/// something a press acts on. **The fifth is drawn as a capsule and is still
-/// one**: the shape is the mock's, and what makes a thing a control here is
-/// that a press on it asks for something. `tests/transport.rs` asserts it over
-/// the row rather than leaving it to be inferred from the absence of a hit
-/// test, and it asks with the pill drawn so that the assertion cannot pass on
-/// the control having gone.
+/// of this row's controls is `egui`'s. A beat, a bar, a frame time and what
+/// the last write did are four readouts, and a readout is not something a
+/// press acts on. **The last of them is drawn as a capsule and is still one**:
+/// the shape is the mock's, and what makes a thing a control here is that a
+/// press on it asks for something. `tests/transport.rs` asserts it over the
+/// row rather than leaving it to be inferred from the absence of a hit test,
+/// and it asks with the pill drawn so that the assertion cannot pass on the
+/// control having gone.
 ///
-/// **The sixth is [`TransportRow::rec`], and it is drawn *inside* this
+/// **The tempo is not one of the four**, and it left them when the figure
+/// became the track: the number is still a reading, and a press on it names a
+/// value outright — [`TransportRow::tempo`], and ADR-0291. A readout that a
+/// press acts on is a control, which is the same test the capsule fails.
+///
+/// **The other control is [`TransportRow::rec`], and it is drawn *inside* this
 /// derivation where [`arrangement`] is drawn beside it.** The difference is
 /// where each one sits: the arrangement pill is laid out from
 /// [`TransportRow::bar`] and held clear of [`TransportRow::frame`], so a row
@@ -2472,8 +2493,10 @@ impl Transport {
 /// them, and two derivations of one right-hand end are two answers.
 ///
 /// **This paragraph said *nothing here is a control*, then *none of these five
-/// is*, and both changes are deliberate.** What a press on the capsule asks
-/// for is [`TransportRow::record`].
+/// is*, then *the sixth is this row's one control*, and every one of those
+/// changes is deliberate.** What a press on the capsule asks for is
+/// [`TransportRow::record`], and what a press on the number asks for is
+/// [`TransportRow::tempo`].
 ///
 /// # What is in the mock's row and is deliberately not here
 ///
@@ -2649,6 +2672,10 @@ pub struct TransportRow {
     /// ends is where the next one starts, so the pill's place and the
     /// readouts' places are one derivation and not two that agree until they
     /// do not.
+    ///
+    /// **It said it was the one control in this row and it is one of two**:
+    /// the tempo figure is the other ([`TransportRow::tempo`]), landed in the
+    /// same commit and drawn at the row's other end.
     pub rec: Option<Rect>,
     /// **The values these rectangles were measured from.**
     ///
@@ -2870,9 +2897,11 @@ impl TransportRow {
         })
     }
 
-    /// **Whether `p` is on the `rec` pill**, which is the whole of what this
-    /// row owns as a control: the five things beside it are readouts, and a
-    /// readout is not something a press acts on.
+    /// **Whether `p` is on the `rec` pill**, which is one of the two controls
+    /// this derivation owns: the tempo figure is the other
+    /// ([`TransportRow::on_tempo`]), and the four things beside them — the
+    /// beat grid, the bar, the frame readout and the health capsule — are
+    /// readouts, which are not something a press acts on.
     ///
     /// `false` where the pill is not drawn — a console nobody has told
     /// anything about recording claims nothing.
@@ -10386,11 +10415,22 @@ fn chip_width(ctx: &egui::Context, name: &str) -> f32 {
 ///
 /// - **The `+` at the end of the scope row.** Adding a scope is the arena's
 ///   own gap drawn a fifth time, which [`outputs`] already names, and what it
-///   would add is a folder — which is the chip already drawn and already
-///   waiting on an operation to ask a directory for its listing.
-/// - **The `.path` row**, `~/sets/tour-2026/night-b › opening`. It is the
-///   walk *inside* a folder scope, so it says nothing until that scope can be
-///   asked for a listing at all.
+///   would add is a folder — which is the chip already drawn, and what that
+///   chip waits on is a directory rather than a fifth chip ([`Scope`]).
+/// - **The `.path` row**, `~/sets/tour-2026/night-b › opening`. **It waits on
+///   a directory, and this said it waits on an operation until 2026-09-08** —
+///   *"It is the walk inside a folder scope, so it says nothing until that
+///   scope can be asked for a listing at all"* — which is
+///   [`Scope::Folder`]'s corrected reason read one bullet up and the same
+///   `ListSets` misreading ADR-0275 settled. It is also no longer only the
+///   folder scope's: `console.html` draws this row **whichever scope is
+///   marked**, because it is two things at once — the walk inside a folder,
+///   and the place a send lands, which has to be on screen before the press
+///   (ADR-0267). What is missing is the directory itself, and ADR-0275 says
+///   how one arrives: a folder dragged off the desktop and let go anywhere
+///   over the window, which nothing in `crates/` reads yet. Until one has
+///   been dropped the row is not drawn at all, so it is a row this bay is
+///   without rather than a row it draws empty.
 /// - **`.lib-row`'s `.star`.** A favourite is a fact about a Set that nothing
 ///   in this workspace keeps — there is no such field on a `SetEntry`, no
 ///   record that carries one, and no metadata card that mentions one. Drawing
@@ -11695,11 +11735,31 @@ pub struct Candidate {
     ///
     /// **It is not the node the page's row addresses**, and it is not a
     /// stand-in for one: the node is finer than anything on the wire (see
-    /// [`staging`]) and this is the address the verdict actually has. It is
-    /// drawn because without it the lane cannot be read: the program this
-    /// panel is drawn by plays one pair of files in both its slots, so one
-    /// save produces two builds whose labels are the same string — and *put a
-    /// node's previous version back* is an act on one slot.
+    /// [`staging`]) and this is the address the verdict actually has.
+    ///
+    /// **It is drawn because a label does not say where.** The program this
+    /// panel is drawn by runs every one of its [`DECKS`] slots from its
+    /// **own** copy of the material — `working_copies` in
+    /// `karakuri/src/main.rs`, and `docs/manual/console.html`'s *Every deck
+    /// runs from its own copy* — so a save reaches the one deck whose file it
+    /// is. What it does not do is make the labels distinct: four slots opened
+    /// on one preset build four labels that are the same string, because a
+    /// label is every node's `proc` name joined and those are the same
+    /// procedures. So the label says what was built and only this says where.
+    ///
+    /// **And where is the reading this lane exists for.** A trial is frozen on
+    /// a slot that is not being drawn (see [`Stage::Landed`]), so a load into a
+    /// parked deck lands a build in a slot nobody is watching: the verdict
+    /// stays outstanding and the row stays in the lane until that deck goes on
+    /// air. This letter is the only thing in the instrument that says which
+    /// deck to look at, and *put a node's previous version back* is likewise an
+    /// act on one slot.
+    ///
+    /// **This said the program *"plays one pair of files in both its slots, so
+    /// one save produces two builds whose labels are the same string"* until
+    /// 2026-09-08.** That was two slots sharing one pair, which was a defect in
+    /// the program rather than a property of the lane; the copies ended it, and
+    /// the argument for the letter is the parked deck above.
     pub deck: usize,
     /// **What the build calls itself** — `Request::label`, which is every
     /// node's own `proc` name joined with ` + `, and the harness's word rather

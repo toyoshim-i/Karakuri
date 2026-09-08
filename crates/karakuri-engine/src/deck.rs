@@ -1628,10 +1628,15 @@ impl Deck {
     /// per-slot gain has.
     ///
     /// **No [`Deck::cancel`] here, because nothing can be moving it.** A
-    /// [`Control`] is per slot and the master out is not; a scheduled move on
-    /// it would need a control that names the deck rather than a slot, and
-    /// there is no operation, record or key that reaches this at all yet. What
-    /// it is for is drawn in `docs/manual/console.html`'s Master bay.
+    /// [`Control`] is per slot and the master out is not, so a scheduled move
+    /// on it would need a control that names the deck rather than a slot and
+    /// there is no such control. **That is the whole of what is missing.**
+    /// Setting it outright is built and reaches here on all three of the
+    /// routes a level has: `karakuri_operation::Operation::SetMasterOut`,
+    /// `karakuri_store::Record::MasterOut`, and the Master bay's own fader —
+    /// `karakuri_console`'s `panel::Knob::Out`, which is the one knob on that
+    /// panel naming no deck. What it is for is drawn in
+    /// `docs/manual/console.html`'s Master bay.
     ///
     /// **A monitor cell is not behind this and cannot be.** The master out is
     /// applied where the mix writes the frame; a cell samples a slot's own

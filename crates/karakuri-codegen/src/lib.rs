@@ -405,7 +405,8 @@ mod tests {
     }
 
     /// `%` on a float attribute must route through the `mod_f32` helper
-    /// (IR `mod` semantics, always non-negative) — and that helper must be
+    /// (IR `mod` semantics, which take the sign of the **divisor** rather than
+    /// being always non-negative) — and that helper must be
     /// entirely absent when nothing in the procedure uses `%` on a float.
     fn float_rem_proc() -> Checked {
         let mut p = empty_checked("wrap_age", Kind::L1);

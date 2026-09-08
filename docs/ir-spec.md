@@ -761,9 +761,12 @@ Prefer `let` wherever it works. `var` is for accumulation and for values that ge
 differ between the arms of an `if`. Everything else reads better immutable, and an
 immutable binding cannot be accidentally clobbered by a later line the LLM added.
 
-Operators follow GLSL. `%` on `float` follows `mod` semantics (always non-negative), which
-differs from WGSL — the lowering inserts a wrapper. On `int` and `uint` it is the ordinary
-remainder.
+Operators follow GLSL. `%` on `float` follows `mod` semantics — `a - b * floor(a / b)`, so the
+result **takes the sign of the divisor** — which differs from WGSL's `%`, and the lowering inserts a
+wrapper. `(-1.0) % 3.0` is `2.0` and `1.0 % (-3.0)` is `-2.0`. **This said *always non-negative***,
+which is true only where the divisor is positive and was the description `karakuri-ir`'s own
+`BinOp::Rem` doc was written from; `karakuri-codegen`'s lowering has said *the sign of the divisor*
+the whole time. On `int` and `uint` it is the ordinary remainder.
 
 ---
 
