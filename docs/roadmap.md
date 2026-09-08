@@ -256,158 +256,44 @@ column and are in no sub-milestone. The arena's insert and remove is above.
 
 #### M5.1 — Program — **closed**
 
-**Rows.** No `plan` panel badge or key badge remains. The two key badges previously planned were
-resolved: *Put a deck on air, prime it, or take it off* retired its key shortcut in favor of mixer
-controls, and *Choose what the output shows* was retired
-([ADR-0240](adr/0240-the-output-shows-the-mix-and-residency-keys-belong-to-the-mixer.md); see
-[docs/history/m5.md](history/m5.md)). **The reason ADR-0240 gave for that retirement is not the
-reason.** It said redundancy with the four cells.
-[ADR-0243](adr/0243-the-program-picture-is-an-output-and-the-four-cells-are-monitors.md) settles the
-model: the picture is one of the outputs, so once material is on it, it is the broadcast of the
-final result and never a preview of anything; the four cells are monitors, each welded to the letter
-under it, and nothing routes one. An operation that pointed the output at a deck was wrong from the
-start rather than made redundant. `Operation::RouteFrame` names the picture and can never name a
-cell, which is one more constraint on M5.6's naming question.
+The picture is one of the outputs — the set `Operation::RouteFrame` has to name, and it can never
+name a cell — and the four cells are monitors welded to the letters under them, each drawing its own
+slot's material whatever that slot's residency
+([ADR-0243](adr/0243-the-program-picture-is-an-output-and-the-four-cells-are-monitors.md)).
+[history/m5.md](history/m5.md).
 
-**Exit.** No `plan` badge in the panel or key column of this bay's rows on
-[every operation](manual/operations.html).
+**Exit, met on 2026-09-03**: no `plan` badge in the panel or key column of this bay's rows on
+[every operation](manual/operations.html). It closed one drawing short of the mock — the risk badge,
+undrawn because nothing could then estimate what a slot costs — which did not block the exit and
+which M5.14 exists to name and has since drawn.
 
-**Closed on 2026-09-03**, and the exit is a grep rather than a judgement: the board names no control
-of this bay, and no row still carrying a `plan` key badge is one of its. See
-[docs/history/m5.md](history/m5.md) for what met it. The bay draws one thing less than the mock does,
-and it is not a badge and does not block the exit — see the risk badge, below.
-
-**A cell's letter and state are outside the image.** Each cell is an image with a caption band under
-it: the deck's letter, one word for what the cell is showing — `material`, or `no slot` — and a
-place kept for the risk badge. `karakuri-console`'s `caption_of` derives the band from the image
-rectangle rather than taking it beside one, so `preview_rects`, which is what the engine sizes a
-texture from, stays the image and never the image plus its label.
-
-**The risk badge is not drawn, and it is not a drawing that is owed.** Its five bands are specified
-in [the console page](manual/console.html), under *What a deck preview cell shows, and when* and on
-deck A's caption tooltip; the panel draws no dot because nothing a deck can reach estimates what a
-slot costs. What would produce that estimate is `karakuri-engine`'s `estimate` module, which is built
-and wired to nothing — see *The preparation slot is the measurement* under *Performance discipline*,
-below.
-
-**The bay's prose, as tooltips.** Three notes now. *Program, sized by height* is the height drag and
-the letterbox, the picture being the `program view` sink and on screen exactly when that sink is on,
-and why the picture carries no label of its own. *What a deck preview cell shows, and when* is the
-cell: its slot's own material with no fader in it, that residency does not gate it, the caption's
-three parts, which nothing a cell can be showing is *off*, and the five bands. *What a model is
-refused, and where a class opens* is the `mcp` pill: what a shut class refuses, that the call is
-answered rather than hidden, and that the pill says the word and is drawn armed. The mock tips
-`solo`, `mcp · shut`, `previews 3 of 4` and all four cells and their captions already; the size pill
-and the picture carry none. So the second note is largely condensed and the other two are not. That last
-note also covers the pills in the Mixer's, the Master's and the Outputs' heads, so it is written
-here once and the other three bays take it as it stands. **Done.** The size pill and the picture were
-the two controls in the bay with no `data-tip`, and both carry one now: the pill says the size is an
-output's rather than this bay's ([ADR-0246](adr/0246-the-render-size-belongs-to-the-output-and-the-sessions-canvas-is-only-its-default.md),
-[ADR-0247](adr/0247-one-frame-is-rendered-and-scaled-into-each-output.md)), and the picture carries
-*Program, sized by height* whole.
+What M5.1 left owed is rescheduled: the rejected build's cell — black, or the sentence saying what
+went wrong — is
+[ADR-0258](adr/0258-the-look-comes-before-the-fader-so-a-cell-draws-every-slot-and-says-which-nothing-it-is.md)'s
+and is stated under *Where to start: M5.1 — Program*, below.
 
 #### M5.2 — Mixer — **closed**
 
-**Rows.** None carries a `plan` panel badge any more. *Choose the wipe shape, the quantum, the
-length* and *Wipe the next deck in* are built, and ***Fade a deck out or in* is a `gap`**, decided on
-2026-09-05: a fade is an opacity moved over a few seconds and the fader is already the control for
-moving one, so a capsule asking for the same move would take permanent room on a strip to save the
-gesture the strip is built around. What it would have bought is the one thing a hand cannot do —
-landing the move on the beat rather than near it — and that is not worth a control here. The
-argument an operator reads is *Nothing on a strip starts a fade* on
-[the console page](manual/console.html), beside *The mixer has no crossfader*, which is the same
-shape of decision and the precedent for the `gap`. *Gain*, *Opacity* and *Blend mode* reach the
-instrument's keyboard as well, bound on 2026-09-05. **The four rows still carrying a `plan` key
-badge are M5.13's and not this bay's** — the letters they name (`f g`, `x`, `c`, `z n j`) are a
-scheme ADR-0259 retired, and binding them here would have been work thrown away.
+The mixer draws the deck: a trim, a fader, a blend button, a meter and a mask mini per deck the
+session has, no strip at all for a track nothing fills
+([ADR-0178](adr/0178-the-mixer-draws-four-tracks-and-as-many-strips-as-the-deck-has.md)), and under
+them a transition row that sets the wipe's shape, quantum and length and emits the wipe. A fade has
+no control of its own, because the fader is already the control for moving an opacity — *Nothing on
+a strip starts a fade* on [the console page](manual/console.html). [history/m5.md](history/m5.md).
 
-***Choose which renderer of a deck is live* was counted here and is M5.5's**, moved on 2026-09-05.
-It was never a control of this bay: the mock draws `rend-row` in the **Inspector** and nowhere in
-the Mixer, and [the console page](manual/console.html) describes it and *Composite a deck's
-renderers* as one thing — *"Composite is the deck's, and the renderer chips below are what it turns
-into a choice"* — while that other half was already counted under M5.5. Split across two
-sub-milestones, the chips would have been built first and meant nothing until the toggle above them
-existed. Its `plan` key badge (`r`) goes with it, and is
-[ADR-0259](adr/0259-the-keyboard-is-addressed-to-the-bay-that-has-focus-and-a-global-letter-is-a-convenience-or-the-operators-own.md)'s
-rather than that bay's.
+**Exit, met on 2026-09-05**: no `plan` badge in the panel column of this bay's rows on
+[every operation](manual/operations.html). It closed short of the key column on purpose.
 
-**Exit.** No `plan` badge in the panel column of this bay's rows on
-[every operation](manual/operations.html).
-
-**Closed on 2026-09-05**, and the exit is a grep rather than a judgement: no row of this bay carries
-a `plan` panel badge. What it drew on the way is the transition row, which was painted by nothing;
-what it stopped drawing is the mock's fourth strip, which a record had rejected; and what it decided
-is that a fade has no control on a strip. The key column it used to owe left with ADR-0259 and is
-M5.13's.
-
-**Order inside the bay.** *Choose the wipe shape, the quantum, the length* went first and **is
-drawn**: `.xfade` was painted by nothing, and the console now owns the quantum, the length and the
-wipe shape as a pointer of its own and emits the operation from three pills. The other three rows
-convert only once a surface holds what that row sets: *Fade a deck out or in* answers `Owed::NotRead` until the transition settings
-are handed over, and *Choose which renderer of a deck is live* and *Wipe the next deck in* read the
-same way — the wipe reading the row's third setting, its front shape, as well as the other two.
-
-**Blocked on — the panel column, nothing; the key column, four rows.** *Fade a deck out or in*
-(`f g`), *Choose which renderer of a deck is live* (`r`) and *Choose the wipe shape, the quantum, the
-length* (`z n j`) name letters this binary already binds to folding, resetting and unfolding — the
-collision ADR-0220 recorded and did not resolve — and
+What M5.2 left owed is rescheduled: **the key column, on four rows — *Fade a deck out or in*,
+*Crossfade to the next deck*, *Wipe the next deck in* and *Choose the wipe shape, the quantum, the
+length* — is M5.13's**, because
 [ADR-0259](adr/0259-the-keyboard-is-addressed-to-the-bay-that-has-focus-and-a-global-letter-is-a-convenience-or-the-operators-own.md)
-now dissolves it rather than picking a winner: the keyboard is addressed to the bay that has focus,
-and those rows' badges stop naming letters at all. **So this sub-milestone closes short of its stated
-exit on purpose**, and the four `plan` key badges it leaves are ADR-0259's to clear rather than
-work anybody skipped. What is still this bay's own is the `go` pill and *Crossfade to the next deck*,
-both of which wait on the binary's `reading()`, which answers `None` for the transition settings and
-the mix. *Wipe the next deck in* was the one row of the eight that was blocked, and it
-waited on who says the front shape and the soft edge are its. Both have an owner now: the shape is
-`Operation::SetTransition`'s third setting and reaches the conversion inside `Current::transition`
-beside the quantum and the length, which are that operation's other two, and the soft edge is read
-off the mask already running on the deck being wiped in. `written(Wipe)` writes its six records —
-four or five where the deck arriving is already under `over` or already live, because the mode is
-the operator's and a wipe does not take it back — and `karakuri-cli`'s `c` is one `operate` call, so
-what the panel's row needs is the control, not a decision.
-
-*Set a deck's mask position* carries no `plan` badge in either column and is not in this exit
-condition. It is the mixer's under-draw, named in
-[ADR-0206](adr/0206-a-fader-marks-where-it-is-going-and-keeps-reaching-for-it.md), and whatever
-surface gives the mask's front a position closes it.
-
-**The bay's prose, as tooltips. Done on 2026-09-03, re-opened the day the transition row was built,
-and done again on 2026-09-05.** Two notes and half of a third — *Mixer*, *The mixer has no
-crossfader*, and the selection half of *Two focuses, and they do not look alike* — are on the
-controls they describe. Eleven tips on 2026-09-03: the strip-count readout, deck A's strip (the
-selection, which is why the strip has no capsule of its own), three trims, three faders, three
-meters, deck B's pending-fade number, and the transition row, which carried the crossfader argument
-whole and said where the wipe's shape and soft edge come from — the row itself and the arriving
-deck's mask. (That tip said they were open questions while they were; it was rewritten when they
-were answered.)
-
-**It re-opened on 2026-09-05**, because `74719c3` and `094804c` drew four capsules the mock had no
-tip for — the shape pill, the quantum pill, the length pill and `go` — and a bay whose prose is on
-its controls is a claim about the controls it has and not about the ones it had on the day it was
-closed. Four tips written the same day, sourced rather than invented: the three cycles and the words
-in them are `karakuri-console`'s `WIPE_SHAPES`, `QUANTA` and `FADE_BEATS`, and `go`'s two refusals
-are `TransitionRow::go`'s. The row's own tip keeps the argument — the crossfader, the wipe this bay
-cannot draw, and the soft edge, which is no control's anywhere — and what each setting *means* moved
-down onto the pill that sets it, as did the two decks a wipe names and the two ways it is refused.
-Moved and not copied: the row's tip is 705 characters shorter and no sentence it lost is still on
-it. The capsules carry more than that, because the cycles' own words and what each refusal names are
-read off the code rather than off the row.
-
-The meters are the only ones not sourced from the notes, which say nothing about a
-meter: they come from
-[ADR-0043](adr/0043-the-meter-never-waits-and-the-deck-owns-it.md) and
-[ADR-0178](adr/0178-the-mixer-draws-four-tracks-and-as-many-strips-as-the-deck-has.md).
-
-**And it found the mock drawing what ADR-0178 rejected.** The fourth track carried a whole empty
-strip — a name, a `tally off`, a trim, a fader and a meter — and that record's *Alternatives
-rejected* is precisely *"a well per track, empty where no deck fills it … A track nothing fills
-draws nothing at all"*, on the grounds that an empty strip asserts *there is a deck here and it is
-at zero*. `karakuri-console`'s `tests/mixer.rs` already holds the panel to the record and says so
-against the mock. **Four tips for that strip were written and then removed rather than kept**: a
-tooltip is what an operator reads, and one on a control the panel is decided never to draw is a
-reading nobody can take. **The mock lost that strip on 2026-09-05**, which was a change to a
-designed page and this bay's rather than a tidy-up; `.tally.off` went with it, the one rule in
-`docs/manual/style.css` nothing else used.
+addresses a key press to the bay that has focus: what those rows want is one pass over the keyboard
+and not a letter apiece, the maintainer has decided the global shortcuts get that pass together, and
+the letters those badges used to print are not the debt. **And *Set a deck's mask position* is under
+*Mx — TODO*** rather than here: it carries no `plan` badge in either column, so no exit condition in
+this file reads it, and a debt only a closed milestone names is the failure this file has now been
+caught by twice.
 
 #### M5.3 — Library
 
@@ -480,10 +366,29 @@ which neither is. ADR-0262's decision stands as the first cut until somebody ans
 **Exit.** No `plan` badge in the panel column of this bay's rows on
 [every operation](manual/operations.html).
 
-**Blocked on. Two rows, and this said one.** *Send a Set to somebody, and take one in* is task 1
-below, and *Walk the edit history* is task 2 — both carry a `plan` panel badge in this bay's group,
-and counting only the first is how the second came to be described as work with no task. *Send a Set
-to somebody* waited on a destination the vocabulary could carry, and
+**Blocked on. Two rows, and one of them on a decision.**
+
+- ***Send a Set to somebody* waits on the gesture, and nothing else.** Where it lands is ADR-0267's
+  (the folder the bay is pointed at), what it writes is ADR-0231's (a `.kbset` with every source
+  inlined), and why the operation carries no destination is ADR-0260's. **What nobody has decided is
+  what an operator presses**, and `docs/manual/console.html` draws no send control at all — so under
+  `docs/contributing.md` §5 step 3 the page moves before the panel can. The two shapes on the table
+  are a third pill in the bay's foot beside `read` and `load → A`, reading its destination the way
+  `load → A` reads its deck; or a drag from a row onto the `.path` row. **The other half of the row
+  is built**: a press on a `presets` or `folder` row takes that Set in.
+- ***Walk the edit history* waits on a history to read.** The lister is `history::list`; only
+  `karakuri-cli` constructs a `Snapshots`, so a panel run has nothing to walk. The writing is
+  M5.10's, and this is the sentence that says the row depends on it.
+
+**And one question about a control that is built.** `load → A` is a **readout** — the cursor says
+which Set, the deck selection says which deck, and the pill says where a press will land before it
+is made, which is what makes a load *"a cursor and a key with no pointer anywhere in it"* (ADR-0264,
+ADR-0265). The maintainer has asked whether it should be split — `load` a button, `→` a label, `A` a
+pulldown over A–D — which would let a load name a deck without moving the selection. **That is a
+third route to naming a deck** (the selection and the drag are the other two) and it spends the
+keyboard-only property, so it is a new record rather than a repair. It is open.
+
+*Send a Set to somebody* waited on a destination the vocabulary could carry, and
 [ADR-0260](adr/0260-sending-a-set-is-a-read-and-a-reads-answer-goes-where-the-surface-that-asked-puts-answers.md)
 answers it by refusing the premise: sending is a **read**, and a read's answer goes where the surface
 that asked puts answers, so the operation names no destination and none is owed. `SetTransfer` does
@@ -508,7 +413,7 @@ needs `Scope::Folder` to have a directory, and no operation can carry one. This 
 chip *"waits on a row of the page and not on a decision"*, quoting `view.rs`; **that sentence is
 gone from that file and the file now says the reverse** — *"it waits on a directory, and not on an
 operation"* — because
-[ADR-0275](adr/0275-a-folder-is-chosen-by-dropping-one-on-the-window-and-the-drop-is-the-windows.md)
+[ADR-0275](adr/0275-a-folder-is-chosen-by-dropping-one-on-the-window-and-the-drop-is-the-windows-rather-than-a-bays.md)
 took the mechanism on 2026-09-07. What is left is implementation, and it is task 1 below.
 
 **The page turned with that record.** This paragraph named a sentence in `console.html` that had to
@@ -746,6 +651,15 @@ because `written(TapBeat)` and `written(ScaleGrid)` both answer `Owed(NotSettled
 was one early return in `App::performed` and the record that argues for it (ADR-0278). **The gap is
 still open**, and closing it means saying what a `Current` carries about a beat lock.
 
+**One readout in this row is drawing the wrong number, and it is a decision rather than a repair.**
+The frame readout says `12.4 / 16.6` and its tooltip promises *"frame time against the budget …
+there is headroom"*. The numerator is `Cost::whole`, which is the CPU's three stretches; measured on
+2026-09-08 the CPU was **29%** of what a frame cost (CPU 1.30 ms, GPU 3.20 ms, period 4.50 ms at
+1280x720) — so a frame the GPU is holding up draws as headroom, which is the one case the readout
+exists for. `Cost::period` is the frame now (ADR-0303). **What is open is which number that row
+carries**: the period in place of the CPU figure, both numbers side by side, or the tooltip's
+promise rewritten. All three are page changes before they are code.
+
 **The bay's prose, as tooltips.** Six notes: *The beat moves, always*, *The octave is a person's,
 and only one half of it is ever live*, *Health, in the transport*, *The latency offset, and which
 offset it is*, *The arrangement is a file, and the reset is one of them*, and *The look is two
@@ -942,7 +856,7 @@ not the dot**, because a seven-pixel dot is not a target a hand finds. What it o
 switchable list.
 
 **Two things it waits on are not this bay's drawing.**
-[ADR-0243](adr/0243-the-picture-is-in-the-set-and-a-cell-is-not.md) hands this milestone a model to
+[ADR-0243](adr/0243-the-program-picture-is-an-output-and-the-four-cells-are-monitors.md) hands this milestone a model to
 reconcile and not only a name: the picture's on and off is `Layout::visible` on a layout node, read
 and never stored so that there is no second copy to drift, and naming an output means a sink and a
 layout node stop being one thing read two ways. And the same `Undecided` holds a badge in M5.10's
@@ -1118,6 +1032,27 @@ of five rather than the row. Where a pattern is
 ([ADR-0227](adr/0227-a-pattern-and-a-master-chain-setting-are-library-data-in-two-tiers.md)) and is
 not the machinery. The bay draws nothing but its head.
 
+**The mock's grid head has been internally inconsistent since it was written, and the maintainer
+has said which side is wrong.** The three pills read `16`, `1/8`, `2 bars`; two lines below, the
+ruler draws four numbers over sixteen cells, which is a beat every four cells — sixteenths, one bar.
+Both were in the mock's first commit (`5311dc7`, 2026-08-23), and `Operation::SetPatternGrid`'s doc
+later rationalised **the pills** — *"sixteen steps of an eighth apiece is two bars, so any two of the
+three fix the third"* — which is arithmetic taken from the wrong two.
+
+**The design is a mode.** Eighths or sixteenths, **both one bar**, the cell width halving in the
+finer one. So the length is fixed and the step count follows the mode: `2 bars` has nothing to say
+and `16` is not independently chosen, which leaves one control where the mock draws three. The
+ruler and the cells are already the sixteenth mode drawn correctly.
+
+**What that moves.** The row's heading on [every operation](manual/operations.html) is *Choose a
+pattern's steps and what a step is worth*, and it stops choosing steps. `SetPatternGrid`'s payload
+gets easier rather than harder: its `Undecided` was argued partly on a subdivision being *"a list
+this crate has to own, on `Curve`'s terms, that nothing anywhere holds yet"*, and a two-valued mode
+is exactly that list. And ADR-0222 and ADR-0255 both take **an eighth at 128 BPM, 234 ms** as the
+example against the beat clock's 0.5–4 s band; a sixteenth is 117 ms, so the finer mode is the worse
+case and neither record has it. **What is left to say is whether one pill replaces three, and what
+the row is then called.**
+
 This is the estimate's excluded item — the sequencer's producer — and it is why this bay is last
 rather than because of its weight on the page.
 
@@ -1220,6 +1155,21 @@ or any bay's — `grep -c 'rt plan">key' docs/manual/operations.html` is the cou
 written down here.
 
 **Exit.** No `plan` badge in the key column of [every operation](manual/operations.html).
+
+**The maintainer has deferred the letters to this milestone and taken four cells off the page in
+the meantime.** On 2026-09-08 *Scrub a deck a quarter beat* (`u i`), *Fade a deck out or in*
+(`f g`), *Choose the wipe shape, the quantum, the length* (`z n j`) and *Choose which renderer of a
+deck is live* (`r`) were changed to read `&mdash;`. Every letter they named was already bound in
+`crates/karakuri/src/main.rs`'s key match to something else — `u` to `Op::Unsolo`, `f`/`g` to the
+folds, `z` to `Op::UnfoldAll`, `r` to `Op::Reset` — and that match is flat, first arm wins, so the
+`has` side took every collision and the `plan` side could never arrive. **`n` was bound to the
+day/night room toggle with no row on the page claiming it at all.** The cells stay `plan` rather
+than `gap` because rule 01 still owes a write a keyboard route; what they no longer do is promise a
+letter that was already spent. His instruction: *global shortcuts get thought about together, and
+anything doubtful comes off in the meantime.*
+
+**The letters still promised and still free**, checked against that match on the same day: `y`,
+`x`, `c`, `t`, `-`, `=`, the backtick, and `a`.
 
 **What it is.**
 [ADR-0259](adr/0259-the-keyboard-is-addressed-to-the-bay-that-has-focus-and-a-global-letter-is-a-convenience-or-the-operators-own.md):
@@ -1613,6 +1563,15 @@ rather than under a closed milestone because work left under one is never picked
 carries no number because a holding list with a milestone number would claim a goal it does not
 have.
 
+- **The mixer's mask has no front position, and no column asks for one.** *Set a deck's mask
+  position* carries no badge in either the panel or the key column, so no sub-milestone's exit reads
+  it, and it left M5.2 by being unreadable rather than by being done. What it wants is a surface
+  that gives the mask's front a position —
+  [ADR-0206](adr/0206-a-fader-marks-where-it-is-going-and-keeps-reaching-for-it.md) is the record.
+  **It is here for the reason the risk badge should have been**: an unfinished task under a closed
+  milestone is never picked up, and that is exactly what happened to the badge between 2026-09-03
+  and 2026-09-08.
+
 - **A session stream cannot say what a deck held.** A Set file describes one Set, so only slot 0's
   material reaches the head of a recording and a multi-slot session replays the rest against a deck
   of one, reporting what it skipped. A format change. From M2.
@@ -1856,6 +1815,21 @@ M6's and is open there.
 ---
 
 ## The instrumentation
+
+**Nothing in the test suite opens a window, and on 2026-09-08 that cost a program that would not
+start.** `cargo test --workspace` was green over 1953 tests while `cargo run -p karakuri` aborted on
+its first frame: a startup line asserted `View::select_scope`'s return value, which answers whether
+the mark *moved*, and the scope it selects is the console's own default — so the console agreeing
+read as the console refusing. Nothing in the suite reaches `resumed`, so nothing ran the line.
+`mod gpu`'s tests take a device and still open no window.
+
+**The same shape was caught the same day by a different route.** A `#[cfg(test)]` placed nine
+thousand lines above the test modules silenced five source-scanning tests in
+`crates/karakuri/src/main.rs`, because each bounds its scan at the first `#[cfg(test)]` it finds.
+That one was found by verifying in a throwaway `git worktree` at HEAD plus one change. **The pair is
+worth keeping together**: a green suite proves that what ran passed, and neither of these ran.
+What closes the first is a test that reaches the startup path; what closes the second is nothing
+written down yet.
 
 **These four commands are the only source of the numbers in this project, and they are not to be
 summarised or transcribed into prose.** Every figure ever written into this file went stale — the
