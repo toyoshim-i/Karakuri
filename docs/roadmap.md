@@ -442,7 +442,10 @@ declarer's, the emitted attributes unioned in file order — is done in
 copy of what `karakuri_environment::mcp::read_set` walks. **The right home is a structured reading
 in `karakuri-environment`** that both the tool and the panel render; it is in the host because that
 crate was not writable in the pass that drew the panel. `declared()`'s own head says so, and it is
-said here as well because nothing under `karakuri-environment` says it is owed anything. **The sentence is no longer owed**: the tip gave way on 2026-09-06. It had promised a reading
+said here as well because nothing under `karakuri-environment` says it is owed anything.
+**It is M5.10's item and not this bay's**, and it was floating because it is written here: what a
+model reads and what the panel draws being one structured reading is the model-facing surface,
+where this bay's stake in it closed the day the row went `has`. **The sentence is no longer owed**: the tip gave way on 2026-09-06. It had promised a reading
 *"without fetching a source or compiling it"*, which is exact for the three blocks read off each
 artifact's own card and untrue of the fourth `read_set` volunteers — `element_storage_block` runs
 `compile::check` over every source before `Set::validate` can size anything. Both the row and
@@ -691,6 +694,28 @@ knob and the bay with no way to turn one.
   step rather than take letters. A source editor is a second one, and that is a console-wide
   decision nobody has taken.
 
+**Three more this bay owes, and none of them is a row.** They were recorded, verified and left in
+prose, which is how a bay's exit — a grep over one column — could be met while its pane drew
+nothing an operator could reach.
+
+- **A pane draws a node group whole or not at all, and there is no scroll position anywhere in the
+  crate.** With the pair a bare run opens on, the first group is the L1's at 26.5 + 19 x 22.5 =
+  454px against a bay minimum of 151.5, so below roughly 534px of Inspector bay **not one parameter
+  row is drawn**. `view.rs` says outright that this is the first region of the console that
+  genuinely wants a scroll. The decision in front of it — scroll, or a group that can be part-drawn
+  — is this bay's rather than the arrangement's.
+- **`centre`'s declared minimum is the mock's CSS track and not a reading of its content.** 340
+  where the `.param` grid wants 207 in a pane before its fader has any width, and a divider drag
+  reaches a 340 centre at *any* window width, so no window minimum can hold it (ADR-0272). Closing
+  it moves `centre` to 2 x 207 + 9 = 423 and the arrangement's declared width minimum to 775, which
+  is a change to the arrangement and wants its own record. **It is the item above on the other
+  axis**: the Inspector's declared minima do not fit the Inspector's contents.
+- **Adding and removing a node**, which *What no sub-milestone owns* names and which the node
+  editor below is the drawing half of. **The engine half is not this bay's and should not be
+  smuggled in**: `karakuri-layout`'s arena has no insert or remove and `NodeId` is a bare index, so
+  a removal shifts every id anything holds. That is an engine item, and naming it here is not the
+  same as this bay carrying it.
+
 **Two of the ten wait on nothing, and both are short.** *Keep what a deck is playing* — the save
 path is built and `k` runs it, so the pill is a rectangle, a claim and the same call. *Choose which
 renderer of a deck is live* — `Deck::schedule_selection` is public and reaches the swap on the beat,
@@ -766,9 +791,12 @@ repository owns from one a plugin brings. The mock already draws four of them: *
 **Blocked on.** Nothing outside this bay. The bay draws its sinks and hit-tests the dot; what it owes is
 the switchable list, which is the blocked part.
 
-**Also here.** A second `Sink`, which the estimate excluded from its range. The fan-out is built
+**A second `Sink`, and it is an item rather than an aside.** The fan-out is built
 ([ADR-0171](adr/0171-the-deck-advances-and-each-sink-either-gets-the-frame-or-misses-it.md)) and
-nothing has been written to put in the slice. A projector window is the one this repository owns.
+nothing has been written to put in the slice, so *Choose where the frame goes* is a control over a
+list of one. A projector window is the one this repository owns. It carries no row on the
+operations page, which is how it sat in *Also here* while this bay's exit — one badge — could be
+met without it.
 
 **The bay's prose, as tooltips.** One note, *Outputs*: every place a frame goes as one switchable
 list, which sinks live in this repository and which appear only with a plugin, that the Program
@@ -803,9 +831,11 @@ item is a decision nobody has taken.
    and one `swap::Event`. One row cannot name two nodes, and two rows means the lane's row model
    stops being one-per-slot — which is what `staging()` and `view::Candidate` are built on. **A
    decision and not an implementation**, and it stands in front of both controls.
-5. **A reader for the edit history.** `karakuri_environment::history` has `record`, `seed` and
-   `stamped_id` and no lister: nothing opens `<store>/history/` to answer *what came before this
-   version*. `Operation::WalkHistory` is `Undecided` for the same absence.
+5. **A reader for the edit history — built, and it is M5.3's now.** `history::list` answers
+   *what versions has this had*, most recent first, and ADR-0276 puts the Set a version belongs to
+   in its name. The row it serves is *Walk the edit history*, which left *Rows the manual has not
+   given a home* because it is a listing and a load rather than undo. What this bay still waits on
+   is item 6: nothing in this program writes a history for it to read.
 6. **A history to read at all.** Item 5 has nothing to list until this program keeps one, and it
    is not item 1's wiring: `storing_to` puts a build's sources under a content address,
    `snapshotting_to` keeps every version that compiled. A restore owes both.
@@ -827,6 +857,11 @@ with nothing in the instrument saying so. And **a checker refusal reaches no row
 `.kir` the checker turns down produces no `Request`, so the disagreement an operator most wants
 to see is said on stdout. Closing the second is an engine change, `Source::poll` having no way to
 say *I refused*.
+
+**Both are blockers 7 and 8 rather than prose, and the first is a *Live safety* item as well.**
+Neither has a row, so this bay's exit — the two rows' badges — can be met with both still true, and
+a picture that disagrees with the disk while nothing says so is the one thing that section refuses.
+The lane exists to say exactly these two things.
 
 **The bay's prose, as tooltips.** The staging half of *Library, and staging under it* — a candidate
 waits whether it came from you or from an agent, and a rejected one costs nothing — and *The staging
@@ -1051,9 +1086,9 @@ can be dragged under the arrangement's own minima — where the solve scales eve
 the deck selection and the keys keep it.
 [ADR-0272](adr/0272-the-window-has-a-minimum-and-only-one-of-adr-0250s-three-cases-is-real.md) takes
 the decision and `karakuri-console` publishes the number as `MINIMUM_VIEWPORT` — 692 x 658.5, the
-declared minima summed along each axis, with a test recomputing both from the tree. What is left is
-`.with_min_inner_size(...)` on `crates/karakuri/src/main.rs`'s window attributes; until that lands
-the constant is a claim nothing enforces.
+declared minima summed along each axis, with a test recomputing both from the tree, and
+`crates/karakuri/src/main.rs`'s window attributes set it — so the constant is enforced rather than
+claimed.
 
 **And it leaves one thing undone that a window minimum cannot reach**: `centre`'s declared minimum
 of 340 is `.body-grid`'s CSS track rather than a reading of its content, and the inspector's
@@ -1222,6 +1257,21 @@ have.
   to a rate than to a limit and the shape of it is not settled here. **Polishing rather than a
   feature**, and it wants two things first: the estimate *The preparation slot is the measurement*
   builds, and a run long enough to have a history worth quoting. From M5.
+
+- **An artifact card states no default for a vector param.** `meta.rs` writes
+  `default: p.default_scalar()`, which is `None` for a `vec3` since ADR-0268 gave the engine three
+  keys and three numbers. The card and the run cannot disagree — both folds share one literal
+  reader — but the card is silent where the run is not, and the Library's reading draws that field.
+  What it waits on is a decision the metadata format owns: whether `Record::ParamDecl`'s `default`
+  grows an array, or a card carries one record per component. **M6 is what makes it matter** — an
+  agent with no declared ranges has nothing to search over. From M4's three card fields, which are
+  the same absence.
+
+- **A Set installed part-way through a session starts at `t = 0` against a clock that has run.**
+  So material reading `beats` jumps when that slot goes on air, which is the last live case of the
+  lag correction and a preview-honesty defect of exactly the kind ADR-0258 and ADR-0269 exist for.
+  Recorded in ADR-0269 and hooked from nowhere until now; the bay that would have owned it, M5.1,
+  is closed. From M5.
 
 ---
 
@@ -1673,6 +1723,16 @@ which makes an extrapolation a per-output question rather than a global one.
 what it has: more capacity, more slots resident, longer chains. Capping that to make a small
 machine's experience the only experience would be this project choosing against its own
 operator.
+
+**The case that tested this rule is not named anywhere else, so it is named here.** A Set whose
+elements land on one destination texel costs about 74 ms where the same Set scattered costs 2.6 —
+the raster back-end serialising order-dependent blending at one address, and the cost tracking the
+number of distinct texels rather than the number of fragments. Nothing about the arithmetic is
+wrong, an operator can reach it with a picture anybody would write, and **no limit is being added**:
+somebody with the hardware who wants that picture is allowed it (ADR-0269). What it does break is
+the extrapolation, which measures how much coverage there is and not how concentrated — so
+`estimate` is right at the sizes it measures and wrong extrapolating a concentrated Set to full
+size. That belongs to M5.14 rather than to a limit here.
 
 **What is not allowed is waste that a bigger machine merely hides.** The two are easy to
 confuse and the test between them is simple: *does spending it buy anything?* Capacity buys
