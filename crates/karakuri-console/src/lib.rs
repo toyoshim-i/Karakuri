@@ -135,6 +135,45 @@ const BAY_DIVIDER: f32 = 10.0;
 /// the picture and the row of deck previews under it.
 const PROGRAM_DIVIDER: f32 = 4.0;
 
+/// **The narrowest an inspector pane may be**, and the one number the centre's
+/// declared width is built from.
+///
+/// A pane is exactly as wide as the parameter rows drawn in it — `node_into`
+/// in [`view`] gives a row the pane's full width and nothing insets it — so
+/// this is one `.param` read across: [`size::PARAM_PAD_L`] 12, the ordinal's
+/// [`size::PARAM_ORD_W`] 15, the name's [`size::PARAM_NAME_W`] 88, the
+/// value's [`size::PARAM_VAL_W`] 58, the three [`size::PARAM_GAP`]s between
+/// the four tracks, and [`size::PARAM_PAD_R`] 10 — **207**, which is what the
+/// row needs before the fader has any width at all.
+///
+/// **Plus one pixel, because the fader is the track that is left over.** The
+/// mock's fourth track is `1fr`, so what a pane gives the fader is whatever it
+/// has over 207, and `param_into` in [`view`] draws the fader only where that
+/// leftover is positive. At exactly 207 the leftover is zero and the pane
+/// holds parameter rows with no fader in them — the control the bay exists
+/// for, missing, on a pane at its own declared minimum. One logical pixel is
+/// the least leftover that is still a whole pixel, which is the rounding rule
+/// stated once in the module documentation.
+///
+/// **So a pane is 208 and the fader at that pane is one pixel wide.** This is
+/// a floor under the solve rather than a comfortable width, exactly as the
+/// right pane's 172 is the Mixer's last strip fitting with nothing to spare;
+/// what a pane is at a window anyone works at is far wider — 335.5 at 1920,
+/// where the fader is 128.5.
+///
+/// **The one pixel is where this differs from the mixer's threshold**, and it
+/// is the reason ADR-0272's 2 x 207 + 9 is not the answer: `strip_box`'s
+/// condition is *not narrower than* the fader column, so 172 is a width at
+/// which the strips are drawn, while a fader's is *wider than* its fixed
+/// tracks, so 207 is a width at which the fader is not.
+const INSPECTOR_PANE_MIN: f32 = size::PARAM_PAD_L
+    + size::PARAM_ORD_W
+    + size::PARAM_GAP * 3.0
+    + size::PARAM_NAME_W
+    + size::PARAM_VAL_W
+    + size::PARAM_PAD_R
+    + 1.0;
+
 /// The console's default arrangement.
 /// child is `.body-grid` in the mock, and *the body row* wherever the
 /// comments below have to refer to it.
@@ -270,13 +309,20 @@ pub fn layout() -> Layout {
 /// axis at all, so what is summed here is the minima this file chooses, each
 /// argued where it is declared.
 ///
-/// **692 wide** is the body row's three tracks at the minima each declares,
+/// **777 wide** is the body row's three tracks at the minima each declares,
 /// plus the two [`COLUMN_DIVIDER`]s between them: `left-pane` 160, `centre`
-/// 340, `right-pane` 172, `+ 10 + 10`. It is exactly where the Mixer bay's
-/// last strip fits — at a right pane of 172 a track is 37 and the fader
-/// column is 29 inside 4 + 4 of padding, which is `strip_box`'s own threshold
-/// in [`view`] met to the pixel — so one logical pixel narrower and the bay
-/// draws no strips at all.
+/// 425, `right-pane` 172, `+ 10 + 10`. Two of the three are thresholds in
+/// [`view`] met to the pixel. The right pane's 172 is where the Mixer bay's
+/// last strip fits — a track is 37 and the fader column is 29 inside 4 + 4 of
+/// padding, which is `strip_box`'s own condition — so one logical pixel
+/// narrower and the bay draws no strips at all. The centre's 425 is
+/// [`INSPECTOR_PANE_MIN`] twice over one [`size::PANE_DIVIDER`], which is the
+/// narrowest centre an inspector pane can draw a parameter fader in.
+///
+/// **It was 692, and the term that moved is the centre's**: 340 was
+/// `.body-grid`'s CSS track and not a reading of the console's own content,
+/// which is what [ADR-0279](../../../docs/adr/0279-the-centre-is-two-parameter-rows-wide-because-a-pane-that-cannot-draw-a-fader-is-not-a-minimum.md)
+/// changed and what the paragraph below used to have to say instead.
 ///
 /// **658.5 high** is the root column's three rows at theirs, plus the two
 /// [`ROOT_DIVIDER`]s: `transport` 48, the body row 556.5, `outputs` 34,
@@ -292,18 +338,22 @@ pub fn layout() -> Layout {
 /// screen changes them.
 ///
 /// **It is a floor under the solve rather than a promise about every
-/// control.** One of the three width terms is not derived from its own
-/// content: `centre`'s 340 is `.body-grid`'s CSS track, and the inspector says
-/// in as many words that its `.param` grid wants 207 in a pane before the
-/// fader has any width. At 692 a pane is 165.5 and the parameter faders are
-/// not drawn — and no window minimum can fix that, because a divider drag
-/// reaches a 340 centre at any window width. What would fix it is the centre's
-/// declared minimum, which is a decision about the arrangement and not about
-/// the window.
+/// control**, and every width term in it is now a reading of what the console
+/// draws. The centre's was not: at the 340 the CSS track states, a pane is
+/// 165.5 where a parameter row's fixed tracks want 207 before the fader has
+/// any width, so the faders were not drawn at the centre's own declared
+/// minimum — which a divider drag reaches at any window width, so no window
+/// minimum could close it. It was closed on the axis it was on, by moving the
+/// declared minimum; this constant moved with it.
+///
+/// **What it still does not promise is comfort.** At 777 a parameter fader is
+/// one pixel wide and a mixer strip clears its own threshold by nothing at
+/// all: a floor is where the panel stops being able to draw what it describes,
+/// and not where it is pleasant to work.
 ///
 /// `tests/arrangement.rs` recomputes both figures from the tree, so this is a
 /// claim about the arrangement rather than a copy of one.
-pub const MINIMUM_VIEWPORT: (f32, f32) = (692.0, 658.5);
+pub const MINIMUM_VIEWPORT: (f32, f32) = (777.0, 658.5);
 
 /// The library over the staging lane.
 ///
@@ -366,10 +416,25 @@ fn left_pane() -> Spec {
 fn centre() -> Spec {
     Spec::column(BAY_DIVIDER, vec![program(), inspector()])
         .named("centre")
-        // `.body-grid`'s middle track: `minmax(340px, 1fr)` — flexible, with the
-        // minimum the CSS states.
+        // `.body-grid`'s middle track is `minmax(340px, 1fr)`: flexible, which
+        // this takes, and a minimum of 340, which it no longer does.
         .flex(1.0)
-        .min(340.0)
+        // Minimum: the inspector's two panes at [`INSPECTOR_PANE_MIN`] with one
+        // [`size::PANE_DIVIDER`] between them — 208 + 9 + 208 = **425**. The
+        // panes are the narrowest thing in this column: the Program bay above
+        // them declares no width minimum at all — its picture is a rectangle
+        // fitted into whatever it is given — so the centre is as narrow as an
+        // inspector pane lets it be, exactly as the right pane is as narrow as
+        // four mixer strips side by side let it be.
+        //
+        // **It was the CSS track's 340**, which is a number about a web page's
+        // grid rather than a reading of anything this console draws: at 340 a
+        // pane is 165.5 against the 207 a parameter row's fixed tracks want, so
+        // the bay drew rows with no fader in them at the centre's own declared
+        // minimum — and a divider drag reaches that minimum at any window width
+        // at all, which is why no window minimum could close it (ADR-0272,
+        // ADR-0279).
+        .min(INSPECTOR_PANE_MIN * 2.0 + size::PANE_DIVIDER)
         // No maximum: the centre is what a fold gives its width to, and what a
         // solo on the program has to be able to fill.
         .max(f32::INFINITY)
@@ -511,19 +576,23 @@ fn inspector() -> Spec {
     Spec::row(
         size::PANE_DIVIDER,
         vec![
-            // Minimum: (340 - 9) / 2, rounded down — half of what the centre
-            // says it will not go below, less the divider between them.
-            // Deriving it from the parent rather than from the content is
-            // deliberate, because the content does not fit: `.param`'s track
-            // list is `15px 88px 1fr 58px` with 8px gaps and 12 + 10 of
-            // padding, which is 207 before the fader has any width at all. The
-            // mock never meets that, because `.console`'s `min-width: 1010px`
-            // holds the centre at 484 and each inspector pane at 237. See
-            // the report on 340 against 1010 — the two numbers in the CSS do
-            // not agree, and this takes the one the panel is actually held to
-            // by its parent.
-            Spec::view("inspector-1").flex(1.0).min(165.0),
-            Spec::view("inspector-2").flex(1.0).min(165.0),
+            // Minimum: [`INSPECTOR_PANE_MIN`] — one parameter row with a fader
+            // in it, 208, and the derivation is written at the constant.
+            //
+            // **It was 165, and it was read off the parent**: (340 - 9) / 2
+            // rounded down, half of what the centre said it would not go below.
+            // Deriving it that way was deliberate and it was the wrong way
+            // round, because the content did not fit in what came back — a pane
+            // whose minimum its own rows overflow is not a minimum. The pane now
+            // reads its own content and the centre sums the panes (ADR-0279).
+            //
+            // **The mock's own two numbers still do not agree, and 208 is
+            // neither of them**: `.console`'s `min-width: 1010px` holds the
+            // centre at 484 and a pane at 237, while `.body-grid`'s middle track
+            // says 340 and a pane of 165.5. This is a reading of `.param`, which
+            // is what makes it a minimum rather than a transcription.
+            Spec::view("inspector-1").flex(1.0).min(INSPECTOR_PANE_MIN),
+            Spec::view("inspector-2").flex(1.0).min(INSPECTOR_PANE_MIN),
         ],
     )
     .named("inspector")

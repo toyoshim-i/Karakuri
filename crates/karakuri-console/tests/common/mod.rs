@@ -62,9 +62,11 @@ pub const PLAUSIBLE: Rect = Rect {
 /// scales everything down together — which is the right behaviour and is not a
 /// panel anyone can work on — while 1244 is a claim about the *content*, and
 /// the solve goes on honouring every minimum down to
-/// [`karakuri_console::MINIMUM_VIEWPORT`]'s 692. That constant is the window's
-/// floor and this is the console's claim; ADR-0272 is why they are two
-/// numbers.
+/// [`karakuri_console::MINIMUM_VIEWPORT`]'s 777. That constant is the window's
+/// floor and this is the console's claim; ADR-0272 is why they are two numbers
+/// and ADR-0279 is why the floor is 777 rather than the 692 it was written at:
+/// the centre's declared minimum stopped being `.body-grid`'s CSS track and
+/// became the width two inspector panes need to draw a parameter fader.
 pub const SMALLEST: Rect = Rect {
     x: 0.0,
     y: 0.0,

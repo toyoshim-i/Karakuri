@@ -87,11 +87,15 @@ fn the_panel_is_usable_at_the_smallest_window_it_claims() {
 
     // The width is not the tree's sum. That sum is
     // `karakuri_console::MINIMUM_VIEWPORT.0` — the width below which the solve
-    // stops honouring what the three tracks declare — and the panel is already
-    // unusable there, because at a centre of 340 an inspector pane is 165.5
-    // and the `.param` grid wants 207 before its fader has any width. So this
-    // window is the wider of the two claims and that one is the floor under
-    // the solve; the assertion is that they are in that order.
+    // stops honouring what the three tracks declare — and it is 777 against
+    // this window's 1244. The floor under the solve holds every declared
+    // minimum and no more; this window holds the *content* claim on top of
+    // them, which is the mock's own centre of 484 and the 237.5 panes that come
+    // with it. So this window is the wider of the two and the assertion is that
+    // they are in that order. **The gap between them used to be a defect as
+    // well as a claim** — at a centre of 340 a pane was 165.5 against the 207 a
+    // parameter row's fixed tracks want — and ADR-0279 closed that, so what is
+    // left between the two numbers is room rather than a hole.
     assert!(implied_min(&layout, root, Axis::Row) <= SMALLEST.w);
 }
 
@@ -102,14 +106,15 @@ fn the_panel_is_usable_at_the_smallest_window_it_claims() {
 /// two drifting apart the next time a minimum moves.
 ///
 /// It was watched to fail: with the width term written as the 846 this file's
-/// comment used to claim, the recomputation answers 692 and the assertion
-/// names both numbers.
+/// comment used to claim, the recomputation answered the 692 the tree said at
+/// the time and the assertion named both numbers. The tree says 777 today
+/// (ADR-0279); what the test asserts is that the two agree, whatever they are.
 #[test]
 fn the_minimum_viewport_is_the_sum_of_the_declared_minima() {
     let layout = solved(PLAUSIBLE);
     let root = layout.root();
 
-    // 160 + 340 + 172, and the two 10px dividers between the three tracks.
+    // 160 + 425 + 172, and the two 10px dividers between the three tracks.
     let width = implied_min(&layout, root, Axis::Row);
     assert!(
         near(width, karakuri_console::MINIMUM_VIEWPORT.0),
@@ -159,19 +164,109 @@ fn one_pixel_under_the_minimum_no_region_holds_its_minimum() {
     assert_sane(&layout);
     assert_within_bounds(&layout);
     assert!(near(rect_of(&layout, "left-pane").w, 160.0));
-    assert!(near(rect_of(&layout, "centre").w, 340.0));
+    assert!(near(rect_of(&layout, "centre").w, 425.0));
     assert!(near(rect_of(&layout, "right-pane").w, 172.0));
 
     let layout = at(w - 0.1, h);
     assert_sane(&layout);
     assert!(rect_of(&layout, "left-pane").w < 160.0);
-    assert!(rect_of(&layout, "centre").w < 340.0);
+    assert!(rect_of(&layout, "centre").w < 425.0);
     assert!(rect_of(&layout, "right-pane").w < 172.0);
 
     let layout = at(w, h - 0.1);
     assert_sane(&layout);
     assert!(rect_of(&layout, "transport").h < 48.0);
     assert!(rect_of(&layout, "outputs").h < 34.0);
+}
+
+/// **At the minimum viewport an inspector pane is wide enough to draw a
+/// parameter row's fader, and a pixel narrower it is not** — which is what the
+/// centre's declared minimum is *for*, and what it was not before ADR-0279.
+///
+/// The `.param` grid is `15px 88px 1fr 58px` with 8px gaps and 12 + 10 of
+/// padding, and a pane is exactly as wide as the rows in it, so 207 of a pane
+/// is spoken for before the fader — the `1fr` — has any width at all.
+/// `view::param_into` draws the fader only where that leftover is positive, so
+/// a pane of exactly 207 draws a parameter row with no fader in it. The
+/// minimum is therefore 208 a pane and 2 x 208 + 9 = 425 in the centre, and
+/// **not the 2 x 207 + 9 = 423 ADR-0272 names**: at 423 the leftover is zero
+/// and the bay still draws no fader.
+///
+/// The 207 is recomputed from `room::size` rather than written here, so this
+/// is the same reading `lib.rs` makes and not a second copy of it.
+///
+/// **The drag is the other half and it is the reason a window minimum could
+/// not have done this job**: the body row's first boundary starves the centre
+/// to its declared minimum at *any* window width, so the property has to hold
+/// at 1920 as well as at 777, and what makes it hold is the declared minimum
+/// rather than the viewport.
+///
+/// It was watched to fail with `centre` back at the CSS track's 340 and the
+/// panes at 165: *"inspector-1 is 165.5 wide, and a `.param` row's fixed
+/// tracks want 207 before the fader has any width"*, at the minimum viewport
+/// and again after the drag. With the centre at 423 and the panes at 207 it
+/// fails the same way, one pixel out.
+#[test]
+fn at_the_minimum_an_inspector_pane_draws_a_parameter_fader() {
+    use karakuri_console::room::size;
+
+    // The `.param` grid's fixed tracks, term for term: the padding either side,
+    // the ordinal, the name, the value, and the three gaps between the four.
+    // 12 + 15 + 24 + 88 + 58 + 10 = 207.
+    let fixed = size::PARAM_PAD_L
+        + size::PARAM_ORD_W
+        + size::PARAM_GAP * 3.0
+        + size::PARAM_NAME_W
+        + size::PARAM_VAL_W
+        + size::PARAM_PAD_R;
+    assert!(
+        near(fixed, 207.0),
+        "the `.param` grid reads {fixed}, not 207"
+    );
+
+    let panes = |layout: &karakuri_layout::Layout, at: &str| {
+        for pane in ["inspector-1", "inspector-2"] {
+            let w = rect_of(layout, pane).w;
+            assert!(
+                w - fixed > 0.0,
+                "{at}: {pane} is {w} wide, and a `.param` row's fixed tracks \
+                 want {fixed} before the fader has any width"
+            );
+            assert!(
+                w - 1.0 - fixed <= 0.0,
+                "{at}: {pane} is {w} wide, which is more than a pixel over the \
+                 {fixed} its rows need — the minimum is no longer the threshold"
+            );
+        }
+    };
+
+    // At the minimum viewport, where the centre is at its declared minimum
+    // because the whole row is.
+    let (w, h) = karakuri_console::MINIMUM_VIEWPORT;
+    let layout = solved(karakuri_layout::Rect {
+        x: 0.0,
+        y: 0.0,
+        w,
+        h,
+    });
+    assert_within_bounds(&layout);
+    panes(&layout, "at the minimum viewport");
+
+    // And at a window nobody would call small, with the body row's first
+    // boundary dragged as far right as it will go — which is the centre at the
+    // same declared minimum, reached from the other direction.
+    let mut wide = solved(PLAUSIBLE);
+    let body = wide.children(wide.root())[1];
+    wide.set_divider(body, 0, PLAUSIBLE.w);
+    wide.solve();
+    assert_sane(&wide);
+    assert_within_bounds(&wide);
+    assert!(
+        near(rect_of(&wide, "centre").w, 425.0),
+        "the drag starved the centre to {}, not to the 425 it declares",
+        rect_of(&wide, "centre").w
+    );
+    panes(&wide, "with the centre starved by a drag");
 }
 
 /// **The Program bay is two regions, and the split is the bay's own 395 read
