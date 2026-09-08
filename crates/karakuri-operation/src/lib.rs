@@ -1350,14 +1350,27 @@ operations! {
     /// Send a Set to somebody, and take one in.
     TransferSet { transfer: SetTransfer } => "Send a Set to somebody, and take one in",
 
-    /// **Every compile writes into the store's history and nothing reads it.**
+    /// **Every compile writes into the store's history, and there is a reader
+    /// for it now.**
     ///
-    /// Undecided because there is nothing anywhere to read a payload off. A
-    /// walk needs a cursor and a direction, or a revision to land on, or a
-    /// count of steps — and the store has no reader, no surface has a control,
-    /// and the manual's own row marks all four routes empty and calls the
-    /// surface a later milestone. Naming the operation is what this row is
-    /// for; giving it fields would be designing undo here.
+    /// **Still undecided, and one of the two reasons this used to give has
+    /// stopped being true.** *The store has no reader* was the first of them
+    /// and it is false: `karakuri_environment::history::list` reads
+    /// `<store>/history/` back, most recent first, and every row carries the
+    /// node it was a version of and the Set the slot was running when it was
+    /// written — so the rows a walk would step through are readable today, and
+    /// so is the narrowing to one Set that makes a walk about something.
+    ///
+    /// **What is missing is the other half: no surface has a control**, and the
+    /// manual's own row marks all four routes empty. A walk needs a cursor and
+    /// a direction, or a revision to land on, or a count of steps, and the
+    /// answer among those is *a revision to land on*, because a row is what an
+    /// operator picks. It is not written into the payload here, because a
+    /// payload is what a surface can say
+    /// ([ADR-0192](../../../docs/adr/0192-an-operation-asks-for-what-a-surface-can-say-and-the-record-stays-whole.md))
+    /// and no surface can say a revision yet. Naming the operation is what this
+    /// row is for; giving it fields ahead of the control that fills them would
+    /// be designing undo here.
     WalkHistory { step: Undecided } => "Walk the edit history",
 
     // ----- Procedures ---------------------------------------------------

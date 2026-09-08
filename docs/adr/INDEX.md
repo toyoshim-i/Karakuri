@@ -303,6 +303,7 @@ number; new records continue from the end.
 | [ADR-0273](0273-the-carry-lands-on-two-sets-of-rectangles-and-wears-a-face.md) | The carry lands on two sets of rectangles and wears a face | 2026-09-07 | accepted |
 | [ADR-0274](0274-a-control-is-a-row-in-the-consoles-own-table.md) | A control is a row in the console's own table | 2026-09-07 | accepted |
 | [ADR-0275](0275-a-folder-is-chosen-by-dropping-one-on-the-window-and-the-drop-is-the-windows-rather-than-a-bays.md) | A folder is chosen by dropping one on the window, and the drop is the window's rather than a bay's | 2026-09-07 | accepted |
+| [ADR-0276](0276-a-versions-set-id-goes-in-the-snapshots-name-and-a-run-without-one-writes-none.md) | A version's Set id goes in the snapshot's name, and a run without one writes none | 2026-09-08 | accepted |
 
 ## Retired numbers
 

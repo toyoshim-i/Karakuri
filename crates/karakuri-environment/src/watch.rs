@@ -324,15 +324,35 @@ pub struct Watch {
     /// description and touches nothing this watcher owns, so a load costs the
     /// frame it happens on a `send` and no more.
     aimed: Option<Receiver<Aim>>,
-    /// Where every version that compiled is kept, so an edit can be undone.
-    /// `None` when no store root was given, which is the offscreen paths.
+    /// Where every version that compiled is kept, so an edit can be undone,
+    /// **and the Set this slot is running**, which is what a version is filed
+    /// under. `None` when no store root was given, which is the offscreen
+    /// paths.
     ///
     /// **Separate from `stored`, and not folded into it.** That one keeps what
     /// reached the *screen*; this keeps what reached the *compiler*, and the
     /// difference is the whole value — a build that was rolled back for costing
     /// too much never becomes a `Record::Procedure`, never reaches a save, and
     /// is exactly the version an operator wants back.
-    snapshots: Option<crate::history::Shared>,
+    ///
+    /// **The id is inside the pair rather than a field beside it**, because
+    /// this is its only reader: a slot keeping no history has nothing to file
+    /// under, and a second field that meant nothing whenever this was `None`
+    /// would be a second answer to *what is this slot running* with nobody
+    /// asking it. `None` inside the pair is a slot running material no Set
+    /// names — a pair on the command line — which
+    /// [`crate::history::Snapshots::record`] argues is a state rather than a
+    /// missing answer.
+    ///
+    /// **It is what the slot was running when the watcher was built, and
+    /// nothing moves it, which holds only while nothing here loads a Set into a
+    /// running slot.** True as of 2026-09-08: `karakuri-cli` is the only caller
+    /// and its only Set id is `--load-set`'s, settled before the deck is built
+    /// and refused alongside `--set`; [`Watch::aimed_by`]'s channel carries a
+    /// re-wiring and not a library load, and MCP publishes no load. A surface
+    /// that loads a Set into a running slot has to move this with the re-point,
+    /// or every version after the load is filed under the Set before it.
+    snapshots: Option<(crate::history::Shared, Option<String>)>,
 }
 
 impl Watch {
@@ -416,8 +436,17 @@ impl Watch {
 
     /// Keep every version that compiles under `store_root`, so an edit can be
     /// walked back. See [`crate::history`].
-    pub fn snapshotting_to(mut self, snapshots: crate::history::Shared) -> Watch {
-        self.snapshots = Some(snapshots);
+    ///
+    /// `set` is the Set this slot is running, or `None` where it is running
+    /// material no Set names. It is taken here rather than in
+    /// [`Watch::new`] because it is the history's and only the history's —
+    /// see [`Watch::snapshots`].
+    pub fn snapshotting_to(
+        mut self,
+        snapshots: crate::history::Shared,
+        set: Option<String>,
+    ) -> Watch {
+        self.snapshots = Some((snapshots, set));
         self
     }
 
@@ -646,7 +675,7 @@ impl Watch {
         // Reported and never acted on. A snapshot that could not be written
         // must not stop a build that compiled — the operator asked for a
         // picture and this is bookkeeping.
-        if let Some(snapshots) = &self.snapshots {
+        if let Some((snapshots, set)) = &self.snapshots {
             // A poisoned lock means another thread panicked mid-snapshot. That
             // is a bug to find in the log, not a reason to stop a build that
             // compiled — this is bookkeeping either way.
@@ -668,9 +697,20 @@ impl Watch {
                     for node in &placed {
                         let layer = crate::setfile::kind_name(node.layer);
                         let index = node.index as usize;
-                        if let Err(e) =
-                            snapshots.record(slot, layer, index, &node.proc, node.source.as_bytes())
-                        {
+                        // **The Set the slot is running, filed with the
+                        // version.** The write is addressed by slot and this
+                        // watcher is one slot's, so which Set it is a version of
+                        // is a thing in hand at the moment of the write rather
+                        // than something a reader has to work out later — which
+                        // it cannot, the layout being names and nothing else.
+                        if let Err(e) = snapshots.record(
+                            slot,
+                            layer,
+                            index,
+                            set.as_deref(),
+                            &node.proc,
+                            node.source.as_bytes(),
+                        ) {
                             eprintln!("slot {slot}: this version is not in the edit history: {e}");
                         }
                     }

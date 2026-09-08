@@ -3470,11 +3470,22 @@ fn main() {
         // records what replaced the original; without this, what it replaced was
         // never written down and the first edit is the one that cannot be undone.
         let shared = history::Snapshots::shared(&args.store);
+        // **The Set each slot is about to run**, which is `--load-set`'s id or
+        // nothing at all: this program's other route into a slot is a list of
+        // paths, and a pair somebody typed is not a Set. `--load-set` fills
+        // slot 0 and is refused alongside `--set`, so it is the only slot that
+        // can have one. See `history::Snapshots::record` on why the answer is
+        // an `Option` and not a word derived from the file names.
+        let playing = |slot: usize| match slot {
+            0 => args.load_set.as_deref(),
+            _ => None,
+        };
         history::seed(
             &shared,
             args.sets.iter().enumerate().map(|(slot, (l1, l4s))| {
                 (
                     slot,
+                    playing(slot),
                     std::iter::once(l1.path.as_path())
                         .chain(l4s.iter().map(|n| n.path.as_path()))
                         .collect(),
@@ -4143,7 +4154,19 @@ fn build_deck(
                     // slot, because it is also what the launch-time seed
                     // wrote into.
                     let watcher = match &snapshots {
-                        Some(shared) => watcher.snapshotting_to(shared.clone()),
+                        // **The same answer the seed was given**, so a slot's
+                        // starting version and everything it is edited into are
+                        // filed under one Set rather than under two. Slot 0 is
+                        // the only one that can have an id, because
+                        // `--load-set` fills it and is refused alongside
+                        // `--set`.
+                        Some(shared) => watcher.snapshotting_to(
+                            shared.clone(),
+                            match slot {
+                                0 => args.load_set.clone(),
+                                _ => None,
+                            },
+                        ),
                         None => watcher,
                     };
                     // **Whenever the run is editable**, which is where the

@@ -555,13 +555,20 @@ nobody specified (`view::LibraryBay`).
    which Set the slot is running. **It is already kept**: `Gfx::material` is one name per slot,
    rewritten in `played` on the load, and its doc says why a name per deck was not enough. What is
    left open is only what to write where there is no Set: a run launched with a pair on the command
-   line has no id, and `k` writes a new one mid-chain. Rows are a Set's versions. The page owes the
+   line has no id, and `k` writes a new one mid-chain. **Both are answered and the writer is
+   built** ([ADR-0276](adr/0276-a-versions-set-id-goes-in-the-snapshots-name-and-a-run-without-one-writes-none.md)):
+   the id goes in the snapshot's *name*, behind `@`, because a row is a name and `list` opens no
+   file; a run with no Set writes none and `Version::set` is an `Option`; and a save does not move
+   the slot, so only a load re-files a chain. **A narrowing must treat a `None` row as matching no
+   Set rather than as a wildcard** — which is this bay's to get right, the filter being answered
+   where ADR-0262 says. Rows are a Set's versions. The page owes the
    rest: the row
    moves into *The library*, the control is a fifth scope chip beside `my sets`, `favourites`,
    `presets` and `folder`, the order is stated in the row's own sentence as *List what the store
    holds* states its, landing on a row is a **load**, and `WalkHistory`'s payload is *a revision to
-   land on*. `Operation::WalkHistory`'s doc gives *"the store has no reader"* as half its reason for
-   `Undecided`; that half is now false.
+   land on*. `Operation::WalkHistory`'s doc gave *"the store has no reader"* as half its reason for
+   `Undecided`; that half was false and the doc is corrected. The payload is unchanged, and what it
+   now waits on is only the control.
 
    The paragraph this replaces read: `karakuri_environment::history` has `Snapshots::record`, `seed`
    and `stamped_id` and **no lister**: nothing opens `<store>/history/`
@@ -904,8 +911,18 @@ is refused, and where a class opens*).
 would read them**: what makes a version worth keeping is that something other than the operator's
 own hands wrote it, and this is where that something is. M5.3's *Walk the edit history* reads what
 this keeps, and has a lister to build either way. **The Set id goes in with the record** — the
-slot names it and `Gfx::material` already holds it, so recording without it would file a version
-under a node and lose which Set it belonged to, which is the one thing the bay reading it needs.
+slot names it, so recording without it would file a version under a node and lose which Set it
+belonged to, which is the one thing the bay reading it needs. **The writer takes it now**
+([ADR-0276](adr/0276-a-versions-set-id-goes-in-the-snapshots-name-and-a-run-without-one-writes-none.md)):
+`Snapshots::record` takes the Set the slot is running and writes it into the name, and
+`watch::Watch::snapshotting_to` carries it per slot. **What this program owes it is the answer, and
+`Gfx::material` is not it**: that field is a *readout* — one name per slot, and at launch it is the
+pair `"coil_vortex + star_flares"` rather than any id — so a slot that has never been loaded onto
+has no Set and writes `None`, and only `played`'s `LoadSet` arm turns it into a real id. So this
+program owes a per-slot `Option<String>` beside the deck, written where `played` writes the readout,
+handed to `snapshotting_to` at construction, and **moved with every `watch::Aim` a library load
+sends** — `Aim` carries no id today, and without one every version after a load is filed under the
+Set before it.
 
 **Blocked on.** The bays above, for the rest. A row whose operation the engine cannot yet perform has
 nothing for MCP to route to. MCP is a mouth rather than the control stick, so it follows the bays
