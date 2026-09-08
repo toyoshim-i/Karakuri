@@ -291,7 +291,7 @@ cargo test -p karakuri-operation-record  # an operation as the records it writes
 cargo test -p karakuri-layout      # the arrangement, solved to rectangles
 cargo test -p karakuri-environment # the program: the disk, the devices, the ports, the record
 cargo test -p karakuri-console     # the console: arrangement, panel model, view (no device at all)
-cargo test -p karakuri            # the panel as a program: the window, the engine behind it (needs a GPU)
+cargo test -p karakuri            # the panel as a program: that it starts at all, the window, the engine behind it (needs a GPU)
 cargo test -p karakuri-cli         # flags, the key handler, replay, live save (needs a GPU)
 ```
 
@@ -299,7 +299,7 @@ cargo test -p karakuri-cli         # flags, the key handler, replay, live save (
 and so does part of `karakuri-cli`: eight tests in the binary build a Set, and the five in
 `tests/replay.rs` drive `karakuri-cli` as a subprocess, which takes a device of its own. The
 third is **`karakuri`**, the panel as a program — its `src/main.rs` opens a window and builds
-a deck, and its device tests are the ones under `mod gpu` in that file. **No count is written
+a deck, and its device tests are the ones under `mod gpu` in that file — and `tests/starts.rs`, which spawns the panel binary and waits for its legend, so a startup panic goes red somewhere. **No count is written
 down**: `awk '/^mod gpu/,0' crates/karakuri/src/main.rs | grep -c '#\[test\]'` is the number, and
 a transcribed one has already gone stale here twice.
 
