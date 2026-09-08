@@ -161,7 +161,44 @@ impl RateBound {
 /// **Asked of an L4**, which is the only kind with a `vertex` block to write a
 /// rate in. Any other kind answers [`Bound::NoPrimitive`] by the same route a
 /// fullscreen renderer does, and truthfully: it draws no primitive either.
+///
+/// **Over the whole declared range of every param.** That is the bound over
+/// the *file*, and it is the widest one there is. A caller holding the state a
+/// Set is actually in wants [`point_rate_bound_at`] — see there for why the
+/// state and not the file is what
+/// `docs/adr/0282-a-rebuild-inherits-the-values-somebody-moved-and-reads-the-rest-from-the-code.md`
+/// makes the reading.
 pub fn point_rate_bound(proc: &Checked) -> RateBound {
+    point_rate_bound_at(proc, &HashMap::new())
+}
+
+/// **[`point_rate_bound`], with named params pinned to the values they are
+/// holding.**
+///
+/// `held` is read by the param's bare declared name; a name it does not carry
+/// keeps its declared range, and a name that is not a param of `proc` is
+/// ignored. A pinned param is the single point `[v, v]`, so the interval that
+/// comes back is over *this* state rather than over every state the file
+/// permits.
+///
+/// **Which is the reading ADR-0282 settled.** A declared value is the value in
+/// the untouched state — what the code says when nobody has moved anything —
+/// and where somebody moved one, the held value *is* the value. So a caller
+/// holding a Set's values passes all of them and gets the bound over the state
+/// as it stands; the whole-range bound above is what is left when nothing is
+/// known about the state at all.
+///
+/// **It goes stale when a fader moves, and that is the design.** The narrower
+/// bound is a claim about a state, so a write invalidates it and the estimate
+/// standing on it is taken again — rather than the wider bound's bargain,
+/// which is to stay true by covering states nobody is in.
+///
+/// **A vector param is not pinned.** The analysis carries one interval per
+/// declaration and a Set holds a value per *component key*, so pinning `glow`
+/// from `glow.x` would be claiming a bound over a value this map does not
+/// name. Nothing shipped writes a rate through a vector param; a caller that
+/// does gets the declared range and no worse.
+pub fn point_rate_bound_at(proc: &Checked, held: &HashMap<String, f32>) -> RateBound {
     let bound = match proc.block(BlockKind::Vertex) {
         // A procedure with no vertex block emits no rate. `check` infers
         // `Fullscreen` from the same absence, so the two facts are one fact.
@@ -172,10 +209,13 @@ pub fn point_rate_bound(proc: &Checked) -> RateBound {
                     .params
                     .iter()
                     .map(|p| {
-                        (
-                            p.name.as_str(),
-                            Range::new(f64::from(p.min.min(p.max)), f64::from(p.max.max(p.min))),
-                        )
+                        let declared =
+                            Range::new(f64::from(p.min.min(p.max)), f64::from(p.max.max(p.min)));
+                        let range = match held.get(&p.name) {
+                            Some(v) if v.is_finite() => Range::exact(f64::from(*v)),
+                            _ => declared,
+                        };
+                        (p.name.as_str(), range)
                     })
                     .collect(),
                 env: HashMap::new(),
