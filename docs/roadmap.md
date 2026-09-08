@@ -414,19 +414,23 @@ ADR-0260 set out two candidates and chose neither — a save sheet, and the clip
 [ADR-0267](adr/0267-the-panel-sends-into-the-folder-the-library-bay-is-pointed-at-and-the-destination-is-drawn-before-the-press.md)
 takes neither of them either: **the bay is already a file browser, so the directory it is pointed at
 is the destination**, and sending writes `<id>.kbset` there. The mock has been drawing that
-destination the whole time — `docs/manual/console.html:108` is a `.path` row reading
-`~/sets/tour-2026/night-b › opening` — and `view::LibraryBay` lists it as one of the mock's elements
-this crate has not built. It closes the loop the other two could not: the file lands where the
-listing can point at it, so `SetTransfer::Take`, which names a **file**, can consume what a send
-produced.
+destination the whole time — a `.path` row reading `~/sets/tour-2026/night-b › opening`, under the
+scope chips in `docs/manual/console.html` — and **the row is drawn now**: `view::LibraryBay`'s *The
+`.path` row, and it is where this library is pointed* is its derivation, and the row left that
+bay's list of the mock's elements this crate has not built. It closes the loop the other two could
+not: the file lands where the listing can point at it, so `SetTransfer::Take`, which names a
+**file**, can consume what a send produced.
 
-**And it is what puts this milestone back on a blocker — one that has since been taken.** ADR-0267
-needs `Scope::Folder` to have a directory, and no operation can carry one. This paragraph said the
-chip *"waits on a row of the page and not on a decision"*, quoting `view.rs`; **that sentence is
-gone from that file and the file now says the reverse** — *"it waits on a directory, and not on an
-operation"* — because
+**And it is what put this milestone back on a blocker — one that has since been taken, and then
+built.** ADR-0267 needs `Scope::Folder` to have a directory, and no operation can carry one. This
+paragraph said the chip *"waits on a row of the page and not on a decision"*, quoting `view.rs`, and
+then said the file had turned round and said it waits on a directory rather than on an operation.
+**Neither string is in that file now**, and quoting either was a copy of a sentence this document
+does not own:
 [ADR-0275](adr/0275-a-folder-is-chosen-by-dropping-one-on-the-window-and-the-drop-is-the-windows-rather-than-a-bays.md)
-took the mechanism on 2026-09-07. What is left is implementation, and it is task 1 below.
+took the mechanism on 2026-09-07 and `a26e0e7` implemented it. What `view::LibraryBay` says about
+the chip today is that it lists the Set files in a directory somebody dropped on this window during
+the run. What was left was implementation, and it is task 1 below.
 
 **The page turned with that record.** This paragraph named a sentence in `console.html` that had to
 turn around; the section it was in has been rewritten and neither string is in the file. Nothing
@@ -450,9 +454,11 @@ the row in hand, and both were declined in the design pass rather than left open
 The pill beside it is a readout on purpose, so a press on it would be a third route
 nobody specified (`view::LibraryBay`).
 
-**The two pieces of work this milestone is waiting on, as tasks rather than as prose.**
+**The work this milestone was waiting on, as tasks rather than as prose. The first of them has since
+been built and is kept for its argument**, which is what decided that a directory is the host's and
+never a payload; the second is what is left.
 
-1. **A folder scope with a directory in it — and it does not wait on an operation.** Three places
+1. **A folder scope with a directory in it — built, and it never did wait on an operation.** Three places
    said it did: `view::Scope`'s doc bullet, `why_nothing`'s `Folder` arm, and the tip on *List what
    the store holds*. **All three were corrected with ADR-0275** and now say what the argument below
    says. **`ListSets { holds,
@@ -474,9 +480,16 @@ nobody specified (`view::LibraryBay`).
    to rest on is measured rather than open**: `winit` reads `NSFilenamesPboardType` with no
    `isDirectory` test, no extension test and no filtering, and `egui-winit` passes both through, so
    no dialog and no dependency. `console.html`'s `.path` row carries the tooltip that record wrote.
-   What is left is the host handler, the bay's row and its `.path.incoming` treatment, and the three
-   refusals — each of whose sentences ADR-0275 already writes. **Sending is the only `plan` panel badge *this* blocks**, and it
-   is not the only one in the bay: *Walk the edit history* carries the other, which is task 2.
+
+   **It is built, in `a26e0e7`, and this task is done.** The host handler is `crates/karakuri`'s
+   `folder_dropped`, with `folder_over` beside it reading what is hovering; both are called from the
+   window loop. The bay's row is `view::View::folder` and the mark on it is `View::incoming`, which
+   `Pointed` turns into the `.path.incoming` ink — the row in the panel's text ink while a folder is
+   over the window and its faint otherwise. The refusals are ADR-0275's own sentences, each with a
+   test: more than one path let go together, a path that could not be examined at all, a Set file,
+   and anything else that is not a directory. A drop points the bay, marks the `folder` chip and
+   lists what is in it, in one gesture. **So nothing in this bay waits on a directory any more**,
+   and the `plan` badges left are the ones under *Blocked on* above.
 2. **The bay walking the edit history. The lister is built** —
    `karakuri_environment::history::list`, most recent first, foreign entries skipped and counted,
    capped on days opened before a day is read and saying when it stopped short. What is left is the
@@ -503,8 +516,10 @@ nobody specified (`view::LibraryBay`).
    Set rather than as a wildcard** — which is this bay's to get right, the filter being answered
    where ADR-0262 says. Rows are a Set's versions. The page owes the
    rest: the row
-   moves into *The library*, the control is a fifth scope chip beside `my sets`, `favourites`,
-   `presets` and `folder`, the order is stated in the row's own sentence as *List what the store
+   moves into *The library*, the control is another scope chip beside the ones `Scope::ALL` draws —
+   `all`, `my sets`, `presets` and `folder`, and there is no `favourites` chip: ADR-0299 made
+   *my sets* the starred subset and `all` is what lists everything the store holds —
+   the order is stated in the row's own sentence as *List what the store
    holds* states its, landing on a row is a **load**, and `WalkHistory`'s payload is *a revision to
    land on*. `Operation::WalkHistory`'s doc gave *"the store has no reader"* as half its reason for
    `Undecided`; that half was false and the doc is corrected. The payload is unchanged, and what it
@@ -531,15 +546,18 @@ The bay lists what the store holds already; the previews are what waits, and wha
 exit condition.
 
 The scope row is done and the mock puts one shape over it: the list already carries **presets**
-beside favourites and a folder, and says the scope list is itself extensible.
+beside `all`, `my sets` and a folder — there is no `favourites` chip, and this sentence named one
+until ADR-0299 was read against `Scope::ALL` — and it says the scope list is itself extensible.
 
 **The bay's prose, as tooltips.** The library half of *Library, and staging under it*, and five
 notes under it: *A folder scope reads Sets, and a bundle is not a third thing*, *What keeps a
 favourite, and where it does not travel*, *Where the presets come from, and why it is told rather
 than found*, *A Set has two forms, and loading one is packaging it*, and *How a Set reaches a deck*.
 *Every deck runs from its own copy* is here too, because a library load is what writes into
-`<store>/scratch/`. The mock tips four of the five scope chips, the two filter fields, two stars
-and the load's button and pulldown; `my sets`, the path and the rows carry none.
+`<store>/scratch/`. The mock tips every scope chip including the `+`, both filter fields, the `.path`
+row, a starred star and an unstarred one, and the foot's `read`, the load's button and its pulldown.
+The Set rows carry none. This sentence counted the chips and put `my sets` and the path among the
+untipped; both have carried one.
 
 #### M5.4 — Transport
 
@@ -1027,9 +1045,14 @@ it.
 paragraphs, not one**: what `out` is the level of, what `exposure` is the level of, that the chain
 between them is what makes them two and that with nothing in it they are today the same number; then
 that a hand moves this fader now and it is the only route it has; then why `out` is a handled fader
-and `exposure` a handleless track. The mock tips the `out` fader and the `mcp` pill. **The three
-chain rows, `+ add` and the footnote carry none — and their prose is already written**, on the
-operations page, one row each. That is this item, and it does not wait on the chain.
+and `exposure` a handleless track. The mock tips the `out` fader and the `mcp` pill. **This item is
+delivered.** It said the three chain rows, `+ add` and the footnote carried no tip; every one of
+them does. What was actually wrong was inside the three chain rows' tips, and `71419c2` corrected
+it: they described a chain that runs — *"Feedback, at 0.34"*, *"what a control on this row moves"*,
+*"it runs with the two above it"* — where nothing of the chain is built (ADR-0227). Each now says
+the figure is the mock's, the parameters are undecided, a press does nothing today, and what a press
+would be for. The footnote and the `out`, `mcp` and `+ add` tips were already right and are
+untouched. Their prose is on the operations page, one row each, and none of it waited on the chain.
 
 #### M5.9 — Sequencer
 
