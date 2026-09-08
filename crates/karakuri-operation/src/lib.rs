@@ -1164,28 +1164,38 @@ operations! {
     /// operations it will be because a control was drawn for the second.
     PointLane { target: Undecided } => "Point a lane at what it drives",
 
-    /// The head's three pills — `16`, `1/8`, `2 bars` — and **they are not
-    /// three settings**: sixteen steps of an eighth apiece *is* two bars, so
-    /// any two of the three fix the third, and the panel shows all three
-    /// because an operator reads a pattern in whichever of them they are
-    /// counting in. A length and a subdivision is what this carries either
-    /// way, and which two a hand sets is a decision about the control rather
-    /// than about the operation.
+    /// **A mode with two values** — a sixteenth or an eighth — drawn as one
+    /// pill on the grid head. The pattern is one bar, fixed, so the step count
+    /// is not a second thing a hand sets: it follows the mode, sixteen cells
+    /// at a sixteenth and eight at an eighth, the row keeping its width so the
+    /// cells halve in the finer one.
     ///
-    /// **[`Undecided`] although the manual says what it will carry**, and the
-    /// two do not disagree: a length and a subdivision are a *pattern's*, and
-    /// no pattern has a name for this to be of. This vocabulary names what an
-    /// operation acts on and never implies it — [`Operation::SelectDeck`]'s
-    /// rule, applied where there is not even a selection to imply — and a
-    /// subdivision would additionally be a list this crate has to own, on
-    /// [`Curve`]'s terms, that nothing anywhere holds yet.
+    /// **This paragraph rationalised three pills until 2026-09-08** —
+    /// *"sixteen steps of an eighth apiece is two bars, so any two of the
+    /// three fix the third"* — which is arithmetic taken from the wrong two.
+    /// The mock's ruler had drawn one bar of sixteenths since the same first
+    /// commit, and with the length fixed at a bar neither a count nor a length
+    /// has anything left to say. ADR-0306.
+    ///
+    /// **[`Undecided`] still, and what it waits on has narrowed to one
+    /// thing.** The list is closed: a subdivision was *"a list this crate has
+    /// to own, on [`Curve`]'s terms, that nothing anywhere holds yet"*, and a
+    /// two-valued mode is exactly that list. What is left is ADR-0192's rule
+    /// — an operation asks for what a surface can say — and no surface can say
+    /// either value: the panel draws nothing of this bay but its head, and no
+    /// pattern exists for a mode to be of. So the payload waits on a control
+    /// rather than on a decision, and this vocabulary still names what an
+    /// operation acts on rather than implying it ([`Operation::SelectDeck`]'s
+    /// rule, applied where there is not even a selection to imply).
     ///
     /// **An eighth at 128 BPM is 234 ms**, which is faster than the band
     /// `docs/adr/0255-three-clocks-run-at-once-and-a-slower-ones-work-never-lands-on-a-faster-one.md`
-    /// writes the beat clock's rule for. ADR-0222 records that caveat rather
-    /// than waving it away, and this is the row a hand would first feel it
-    /// through, because it is the one that chooses the subdivision.
-    SetPatternGrid { grid: Undecided } => "Choose a pattern's steps and what a step is worth",
+    /// writes the beat clock's rule for; a sixteenth is 117 ms, so the finer
+    /// of the two modes is the worse case and neither that record nor ADR-0222
+    /// has it. ADR-0222 records the caveat rather than waving it away, and
+    /// this is the row a hand would first feel it through, because it is the
+    /// one that chooses the subdivision.
+    SetPatternGrid { grid: Undecided } => "Choose what a step is worth",
 
     /// The bay head's `seq 1 · seq 2 · +`: which pattern the lanes are
     /// reading. **The `+` is this same choice landing on an empty one** rather

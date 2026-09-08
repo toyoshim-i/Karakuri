@@ -330,6 +330,7 @@ number; new records continue from the end.
 | [ADR-0301](0301-a-models-star-is-refused-because-a-favourite-has-no-sandbox-to-land-in.md) | A model's star is refused, because a favourite has no sandbox to land in | 2026-09-08 | accepted |
 | [ADR-0303](0303-a-frames-cost-is-the-period-and-a-measurement-names-which-resolution-it-is-about.md) | A frame's cost is the period, and a measurement names which resolution it is about | 2026-09-08 | accepted |
 | [ADR-0304](0304-the-set-a-version-is-filed-under-rides-the-aim-that-re-points-the-slot.md) | The Set a version is filed under rides the aim that re-points the slot | 2026-09-08 | accepted |
+| [ADR-0306](0306-the-grid-head-is-one-pill-because-the-bar-is-one-bar-and-the-count-follows-the-mode.md) | The grid head is one pill because the bar is one bar and the count follows the mode | 2026-09-08 | accepted |
 
 ## Retired numbers
 
