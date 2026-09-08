@@ -1026,8 +1026,8 @@ operations page, one row each. That is this item, and it does not wait on the ch
 #### M5.9 — Sequencer
 
 **Rows.** All five of the bay's rows carry a `plan` panel badge: *Toggle a step*, *Mute a lane*,
-*Point a lane at what it drives*, *Choose a pattern's steps and what a step is worth*, *Choose
-which pattern the sequencer plays*.
+*Point a lane at what it drives*, *Choose what a step is worth*, *Choose which pattern the
+sequencer plays*.
 
 **Exit.** No `plan` badge in the panel column of this bay's rows on
 [every operation](manual/operations.html).
@@ -1052,14 +1052,19 @@ finer one. So the length is fixed and the step count follows the mode: `2 bars` 
 and `16` is not independently chosen, which leaves one control where the mock draws three. The
 ruler and the cells are already the sixteenth mode drawn correctly.
 
-**What that moves.** The row's heading on [every operation](manual/operations.html) is *Choose a
+**What that moves.** The row's heading on [every operation](manual/operations.html) was *Choose a
 pattern's steps and what a step is worth*, and it stops choosing steps. `SetPatternGrid`'s payload
 gets easier rather than harder: its `Undecided` was argued partly on a subdivision being *"a list
 this crate has to own, on `Curve`'s terms, that nothing anywhere holds yet"*, and a two-valued mode
 is exactly that list. And ADR-0222 and ADR-0255 both take **an eighth at 128 BPM, 234 ms** as the
 example against the beat clock's 0.5–4 s band; a sixteenth is 117 ms, so the finer mode is the worse
-case and neither record has it. **What is left to say is whether one pill replaces three, and what
-the row is then called.**
+case and neither record has it. **Both of the questions that were left are answered**, on
+2026-09-08 and in
+[ADR-0306](adr/0306-the-grid-head-is-one-pill-because-the-bar-is-one-bar-and-the-count-follows-the-mode.md):
+one pill replaces the three, reading the ruler's own mode, and the row is called *Choose what a
+step is worth*. The head, the row, the vocabulary's title and `SetPatternGrid`'s doc are drawn and
+written to that; the payload stays `Undecided`, because the panel draws nothing of this bay but its
+head and so no surface can say either value.
 
 This is the estimate's excluded item — the sequencer's producer — and it is why this bay is last
 rather than because of its weight on the page.
