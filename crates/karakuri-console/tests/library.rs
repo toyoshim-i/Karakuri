@@ -76,7 +76,7 @@ fn console(viewport: Rect) -> Panel {
 
 /// The bay, laid out with the mock's names.
 fn bay(panel: &Panel) -> LibraryBay {
-    library(panel.layout(), SCOPES, &mock(), None).expect("the library bay lists its rows")
+    library(panel.layout(), SCOPES, &mock(), None, None).expect("the library bay lists its rows")
 }
 
 /// `egui`'s rectangle, from `karakuri_layout`'s.
@@ -300,7 +300,7 @@ fn the_rows_tile_the_list_and_stay_inside_it() {
     // chose. Asked of a store with more in it than the bay can hold, because
     // with five names the bay stops at five for the other reason.
     let many: Vec<String> = (0..200).map(|n| format!("set_{n:03}")).collect();
-    let full = library(panel.layout(), SCOPES, &many, None).expect("the bay lists its rows");
+    let full = library(panel.layout(), SCOPES, &many, None, None).expect("the bay lists its rows");
     assert!(full.rows < full.total, "200 names all fitted");
     let over = full.row(full.rows);
     assert!(
@@ -324,7 +324,7 @@ fn the_foot_says_how_many_are_listed_of_how_many_there_are() {
 
     // A window with room for all five.
     let tall = console(PLAUSIBLE);
-    let bay = library(tall.layout(), SCOPES, &names, None).expect("the bay lists its rows");
+    let bay = library(tall.layout(), SCOPES, &names, None, None).expect("the bay lists its rows");
     assert_eq!(bay.total, names.len(), "the total is not the store's");
     assert_eq!(
         bay.rows,
@@ -338,7 +338,7 @@ fn the_foot_says_how_many_are_listed_of_how_many_there_are() {
     // And a store with more in it than the bay can show: the total follows the
     // store and the count stops at what fits.
     let many: Vec<String> = (0..200).map(|n| format!("set_{n:03}")).collect();
-    let bay = library(tall.layout(), SCOPES, &many, None).expect("the bay lists its rows");
+    let bay = library(tall.layout(), SCOPES, &many, None, None).expect("the bay lists its rows");
     assert_eq!(bay.total, 200, "the total is not the store's");
     assert!(
         bay.rows < 200,
@@ -350,7 +350,7 @@ fn the_foot_says_how_many_are_listed_of_how_many_there_are() {
     // The narrowest window the arrangement is claimed to work at fits fewer,
     // and the number is the library region's own height read the same way.
     let small = console(SMALLEST);
-    let bay = library(small.layout(), SCOPES, &many, None).expect("the bay lists its rows");
+    let bay = library(small.layout(), SCOPES, &many, None, None).expect("the bay lists its rows");
     let region = to_egui(rect_of(small.layout(), "library"));
     let room = region.height()
         - size::HEAD_H
@@ -489,11 +489,11 @@ fn a_console_with_no_store_lists_nothing() {
 #[test]
 fn nothing_said_about_any_library_is_no_listing() {
     let panel = console(PLAUSIBLE);
-    assert_eq!(library(panel.layout(), &[], &[], None), None);
-    assert!(library(panel.layout(), &[], &mock(), None).is_some());
-    assert!(library(panel.layout(), SCOPES, &mock(), None).is_some());
+    assert_eq!(library(panel.layout(), &[], &[], None, None), None);
+    assert!(library(panel.layout(), &[], &mock(), None, None).is_some());
+    assert!(library(panel.layout(), SCOPES, &mock(), None, None).is_some());
 
-    let empty = library(panel.layout(), SCOPES, &[], None).expect(
+    let empty = library(panel.layout(), SCOPES, &[], None, None).expect(
         "a scope with nothing in it is a question that has been answered, and the chips \
          saying which question it was are still drawn",
     );
@@ -507,7 +507,7 @@ fn nothing_said_about_any_library_is_no_listing() {
     // And a console handed no scopes draws no scope row, whatever it lists:
     // the row is the chips it was given and never a band of empty card.
     assert_eq!(
-        library(panel.layout(), &[], &mock(), None).and_then(|bay| bay.scopes),
+        library(panel.layout(), &[], &mock(), None, None).and_then(|bay| bay.scopes),
         None,
         "a console nobody told what libraries there are drew a scope row"
     );
@@ -519,27 +519,27 @@ fn nothing_said_about_any_library_is_no_listing() {
 fn a_folded_or_soloed_or_short_bay_lists_nothing() {
     let names = mock();
     let mut layout = solved(PLAUSIBLE);
-    assert!(library(&layout, SCOPES, &names, None).is_some());
+    assert!(library(&layout, SCOPES, &names, None, None).is_some());
 
     layout.collapse(id_of(&layout, "library"));
     layout.solve();
     assert_eq!(
-        library(&layout, SCOPES, &names, None),
+        library(&layout, SCOPES, &names, None, None),
         None,
         "the library is folded away and its rows are still being drawn"
     );
 
     layout.expand(id_of(&layout, "library"));
     layout.solve();
-    assert!(library(&layout, SCOPES, &names, None).is_some());
+    assert!(library(&layout, SCOPES, &names, None, None).is_some());
 
     // A solo somewhere else takes the bay off the panel with it.
     layout.solo(id_of(&layout, "mixer"));
     layout.solve();
-    assert_eq!(library(&layout, SCOPES, &names, None), None);
+    assert_eq!(library(&layout, SCOPES, &names, None, None), None);
     layout.unsolo();
     layout.solve();
-    assert!(library(&layout, SCOPES, &names, None).is_some());
+    assert!(library(&layout, SCOPES, &names, None, None).is_some());
 
     // **And a bay with no room for the foot and one row lists nothing**, which
     // is the same answer and not a special case.
@@ -565,7 +565,7 @@ fn a_folded_or_soloed_or_short_bay_lists_nothing() {
         to_egui(rect_of(&short, "library")).height()
     );
     assert_eq!(
-        library(&short, SCOPES, &names, None),
+        library(&short, SCOPES, &names, None, None),
         None,
         "a bay with no room for one row listed some"
     );
@@ -584,7 +584,7 @@ fn a_folded_or_soloed_or_short_bay_lists_nothing() {
         region.height()
     );
     assert_eq!(
-        library(&barely, SCOPES, &names, None).map(|bay| bay.rows),
+        library(&barely, SCOPES, &names, None, None).map(|bay| bay.rows),
         Some(1),
         "a bay with room for exactly one row listed something else"
     );
@@ -603,7 +603,7 @@ fn a_folded_or_soloed_or_short_bay_lists_nothing() {
         to_egui(rect_of(&sliver, "library")).width()
     );
     assert_eq!(
-        library(&sliver, SCOPES, &names, None),
+        library(&sliver, SCOPES, &names, None, None),
         None,
         "a bay with no room for the list's own padding listed some"
     );
@@ -1028,7 +1028,8 @@ fn a_chip_is_pressed_only_where_it_is_drawn() {
     layout.set_divider(split, 0, 218.0);
     layout.solve();
     let ctx = drawn_once();
-    let bay = library(&layout, SCOPES, &mock(), None).expect("the library bay lists its rows");
+    let bay =
+        library(&layout, SCOPES, &mock(), None, None).expect("the library bay lists its rows");
     let row = bay.scopes.expect("the bay was handed scopes");
 
     let (scope, last) = bay
@@ -1221,15 +1222,15 @@ fn the_names_are_the_harnesss_and_are_stored_nowhere() {
     let one = vec!["morph01".to_owned()];
     let two = vec!["morph01".to_owned(), "night01".to_owned()];
     assert_eq!(
-        library(panel.layout(), SCOPES, &one, None).map(|b| b.total),
+        library(panel.layout(), SCOPES, &one, None, None).map(|b| b.total),
         Some(1)
     );
     assert_eq!(
-        library(panel.layout(), SCOPES, &two, None).map(|b| b.total),
+        library(panel.layout(), SCOPES, &two, None, None).map(|b| b.total),
         Some(2)
     );
     assert_eq!(
-        library(panel.layout(), SCOPES, &one, None).map(|b| b.total),
+        library(panel.layout(), SCOPES, &one, None, None).map(|b| b.total),
         Some(1)
     );
 
@@ -1966,7 +1967,7 @@ fn the_fields_read_what_is_set_and_a_stale_candidate_reads_as_unset() {
 #[test]
 fn a_console_with_no_scopes_draws_no_filter_row() {
     let panel = console(PLAUSIBLE);
-    let bay = library(panel.layout(), &[], &mock(), None).expect("the bay lists its rows");
+    let bay = library(panel.layout(), &[], &mock(), None, None).expect("the bay lists its rows");
     assert_eq!(bay.scopes, None);
     assert_eq!(
         bay.filters, None,
@@ -2090,7 +2091,7 @@ fn the_read_chip_asks_for_the_set_under_the_cursor() {
     // **A library that lists nothing has no Set to read**, and the chip is
     // still drawn because the foot is what the count is in. A press on it asks
     // nothing rather than asking for a Set with no name.
-    let empty = library(panel.layout(), SCOPES, &[], None).expect("the bay draws its foot");
+    let empty = library(panel.layout(), SCOPES, &[], None, None).expect("the bay draws its foot");
     let chip = empty.read_chip(&ctx, DECK_LETTERS[0]);
     assert_eq!(
         empty.read(
@@ -2107,7 +2108,7 @@ fn the_read_chip_asks_for_the_set_under_the_cursor() {
     // block's own state read off the bay rather than off anything the chip is
     // told.
     let (view, panel) = showing_reading();
-    let open = library(panel.layout(), SCOPES, &view.library, view.opened())
+    let open = library(panel.layout(), SCOPES, &view.library, view.opened(), None)
         .expect("the bay lists its rows");
     assert!(open.reading.is_some(), "nothing was open to close");
     let chip = open.read_chip(&ctx, DECK_LETTERS[0]);
@@ -2136,7 +2137,7 @@ fn the_read_chip_asks_for_the_set_under_the_cursor() {
 fn a_reading_opens_under_the_cursor_row_and_pushes_the_rest_down() {
     let (view, panel) = showing_reading();
     let shut = bay(&panel);
-    let open = library(panel.layout(), SCOPES, &view.library, view.opened())
+    let open = library(panel.layout(), SCOPES, &view.library, view.opened(), None)
         .expect("the bay lists its rows");
     let block = open.reading.expect("the reading is open under the cursor");
 
@@ -2221,9 +2222,9 @@ fn a_reading_opens_under_the_cursor_row_and_pushes_the_rest_down() {
     let mut of_first = reading();
     of_first.id = many[0].clone();
     deep.read(of_first);
-    let full = library(panel.layout(), SCOPES, &many, None).expect("the bay lists its rows");
-    let cut =
-        library(panel.layout(), SCOPES, &many, deep.opened()).expect("the bay lists its rows");
+    let full = library(panel.layout(), SCOPES, &many, None, None).expect("the bay lists its rows");
+    let cut = library(panel.layout(), SCOPES, &many, deep.opened(), None)
+        .expect("the bay lists its rows");
     let block = cut.reading.expect("the reading is open");
     assert!(
         full.rows < full.total,
@@ -2388,7 +2389,7 @@ fn the_read_chip_clears_every_boundary_but_the_one_under_the_bay() {
 #[test]
 fn a_reading_draws_a_line_per_declaration_and_counts_what_it_could_not_read() {
     let (mut view, mut panel) = showing_reading();
-    let open = library(panel.layout(), SCOPES, &view.library, view.opened())
+    let open = library(panel.layout(), SCOPES, &view.library, view.opened(), None)
         .expect("the bay lists its rows");
     let block = open.reading.expect("the reading is open");
     let drawn = shapes_inside(&mut view, &mut panel, block.well);
@@ -2443,7 +2444,7 @@ fn a_reading_draws_a_line_per_declaration_and_counts_what_it_could_not_read() {
     let mut short = reading();
     short.described = 3;
     view.read(short);
-    let open = library(panel.layout(), SCOPES, &view.library, view.opened())
+    let open = library(panel.layout(), SCOPES, &view.library, view.opened(), None)
         .expect("the bay lists its rows");
     let block = open.reading.expect("the reading is open");
     let drawn = shapes_inside(&mut view, &mut panel, block.well);
@@ -2475,7 +2476,7 @@ fn a_reading_with_nothing_to_declare_says_so_rather_than_drawing_blanks() {
         nodes: 1,
         described: 1,
     });
-    let open = library(panel.layout(), SCOPES, &view.library, view.opened())
+    let open = library(panel.layout(), SCOPES, &view.library, view.opened(), None)
         .expect("the bay lists its rows");
     let block = open.reading.expect("the reading is open");
     assert_eq!(block.rows, 2, "a head and a foot are the whole of it");

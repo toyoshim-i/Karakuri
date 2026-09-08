@@ -427,7 +427,7 @@
 //! because every slot is drawn on every frame.
 
 use crate::binding::Signals;
-use crate::governor::{Governor, Report, SlotState};
+use crate::governor::{Estimated, Governor, Report, SlotState};
 use crate::meter::{Level, Meters};
 use crate::mix::{Composite, Input};
 use crate::present::Present;
@@ -1498,10 +1498,71 @@ impl Deck {
         measured
     }
 
+    /// **Estimate every slot nothing has estimated yet, at this deck's own
+    /// output size.** Returns how many it estimated.
+    ///
+    /// The two-draw counterpart of [`Deck::measure_slots`], and everything that
+    /// call says about *when* holds here twice over: **at startup, before the
+    /// first frame**, never on the render thread and never inside a frame. It
+    /// submits and waits once per sample and it does it at two sizes, so it is
+    /// the most expensive thing in this file and the least suited to a frame.
+    ///
+    /// **The same "has not stepped" predicate**, for the same reason: an
+    /// estimate ends in [`Set::rewind`](crate::set::Set::rewind), which puts a
+    /// Set back to what `Set::build` left rather than to what this call found.
+    /// On a running slot that is a reset and on an on-air one it is a visible
+    /// one, so a deck estimated late stays partly un-estimated — which the
+    /// governor reports and falls back from — rather than losing a session's
+    /// simulation to a status line.
+    ///
+    /// **The target is `(width, height)`, this deck's own**, which is what
+    /// makes the number worth having: ADR-0246 makes the render size the
+    /// output's, so what a slot costs is a question about *this* deck rather
+    /// than about 1280x720. [`Deck::resize`] drops every estimate through
+    /// [`HotSwap::resize`], because the size the answer was for has moved.
+    ///
+    /// **What it does not do is refuse.** ADR-0293 leaves `estimate` answering
+    /// for any material whose rate can be bounded at all and placing the rungs
+    /// against the widest floor where it cannot, so a refusal here is a fit
+    /// that failed — a negative term, two instruments, a target too short —
+    /// and is stored as such. The slot then governs on its measurement exactly
+    /// as it did before, and [`Report::refused_estimates`] is where a caller
+    /// finds out.
+    ///
+    /// One [`Probe`] for the whole deck, on [`Deck::measure_slots`]'s terms and
+    /// for its reason: two probes can land on different
+    /// [`MeasurementMethod`](crate::probe::MeasurementMethod)s, and a fit
+    /// through two rungs taken by different instruments is refused outright.
+    pub fn estimate_slots(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) -> usize {
+        let target = (self.width, self.height);
+        let estimable =
+            |slot: &Slot| slot.swap.estimated_cost().is_none() && slot.swap.set().time() == 0.0;
+        if !self.slots.iter().any(estimable) {
+            // Before the probe: `Probe::new` calibrates for half a second, and
+            // a deck with nothing to estimate should not pay for it.
+            return 0;
+        }
+        let mut probe = Probe::new(
+            device,
+            queue,
+            device.features().contains(wgpu::Features::TIMESTAMP_QUERY),
+            PROBE_RESOLUTION,
+        );
+        let mut estimated = 0;
+        for slot in &mut self.slots {
+            if estimable(slot) {
+                slot.swap.estimate_live(&mut probe, device, queue, target);
+                estimated += 1;
+            }
+        }
+        estimated
+    }
+
     /// **Decide what may prime and how fast, and apply it.**
     ///
-    /// Reads each slot's *requested* residency, the per-Set measurement its
-    /// `HotSwap` is carrying, and whether its Set is closed form; hands them to
+    /// Reads each slot's *requested* residency, the per-Set measurement **and
+    /// the estimate** its `HotSwap` is carrying, and whether its Set is closed
+    /// form; hands them to
     /// [`Governor::decide`]; and writes the *effective* residencies and the
     /// rates back. The request is never written — that is the operator's, and a
     /// governor that overwrote it would turn "not now" into "no" and make a
@@ -1509,9 +1570,18 @@ impl Deck {
     /// slots are read and never written at all — see "What it does not touch"
     /// in [`crate::governor`].
     ///
-    /// Returns the whole [`Report`], including the numbers it decided on and
-    /// the one warning it can raise, so a status line has something to print
-    /// and a test has something to assert. **Nothing is printed here**, on the
+    /// **Which number each slot is decided on** is
+    /// [`crate::governor::SlotState::budgeted`]: the estimate at this deck's
+    /// own output size where [`Deck::estimate_slots`] has taken one and it
+    /// answered, and the reference-resolution measurement everywhere else — an
+    /// estimate that refuses changes nothing about what this call does. See
+    /// "Two numbers, and which one is budgeted on" in [`crate::governor`].
+    ///
+    /// Returns the whole [`Report`], including the numbers it decided on, which
+    /// kind each of them is ([`Decision::basis`](crate::governor::Decision::basis)),
+    /// what the estimate carries about how it was taken, and the one warning it
+    /// can raise — so a status line has something to print and a test has
+    /// something to assert. **Nothing is printed here**, on the
     /// same terms as `swap.rs`'s events: the engine does not print, so a test
     /// can assert on the same values a user reads.
     ///
@@ -1530,6 +1600,14 @@ impl Deck {
                 // "not asked", and never be reconsidered.
                 requested: s.requested,
                 cost: s.swap.measured_cost(),
+                // **The other number, where there is one** — summarised rather
+                // than borrowed, because the report outlives this borrow and
+                // the whole `Estimate` stays on the slot for anybody who wants
+                // the bounds behind the floor. `None` on every deck until
+                // [`Deck::estimate_slots`] has run, which is the state the
+                // governor behaved in before this existed and goes on behaving
+                // in.
+                estimate: s.swap.estimated_cost().map(Estimated::from),
                 closed_form: s.swap.set().is_closed_form(),
             })
             .collect();

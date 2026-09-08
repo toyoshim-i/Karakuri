@@ -64,7 +64,7 @@ pub use compaction::Compaction;
 pub use deck::{Blend, Deck, Frame, Mask, MaskKind, Residency};
 pub use estimate::{Estimate, Fit, Unfit, PREPARATION_RESOLUTION};
 pub use frame::{compose, Committed, Look, Outcome, Sink, Skip, WindowSink};
-pub use governor::{Decision, Governor, Reason, Report, SlotState};
+pub use governor::{Basis, Decision, Estimated, FloorRead, Governor, Reason, Report, SlotState};
 pub use gpu::{Gpu, GpuError};
 pub use meter::{Level, Meters};
 pub use points::{Params, Points};

@@ -291,10 +291,10 @@ use karakuri_console::panel::{Dragged, InHand, Knob, Op, Outcome, Panel, Pressed
 use karakuri_console::repaint::{Change, Repaint};
 use karakuri_console::room::Room;
 use karakuri_console::view::{
-    self, arrangement as arrangement_pill, audio_in as audio_in_pill, class_at,
+    self, arrangement as arrangement_pill, audio_in as audio_in_pill, bay_grip, class_at,
     deck_head as deck_head_row, deck_name, inspector as inspector_pane, keep_pill,
     library as library_bay, look as look_row, master as master_row, mcp_pill, mixer as mixer_bay,
-    outputs, picture_rect, preview_rects, program_bay, program_head, tracker_group,
+    outputs, pane_edge, picture_rect, preview_rects, program_bay, program_head, tracker_group,
     transition as transition_row, transport as transport_row, Ask, AudioAsk, AudioIn, Chosen, Go,
     Kind, McpPill, Picture, Read, Reading, Scope, Taken, Tracker, TransitionSettings, View, DECKS,
     DECK_LETTERS,
@@ -1900,6 +1900,7 @@ impl Readout {
                     &self.view.scopes,
                     &self.view.library,
                     self.view.opened(),
+                    self.view.pointed(),
                 )
                 .and_then(|bay| bay.chip(ctx, &self.view.scopes, at))
                 {
@@ -1925,6 +1926,7 @@ impl Readout {
                     &self.view.scopes,
                     &self.view.library,
                     self.view.opened(),
+                    self.view.pointed(),
                 )
                 .and_then(|bay| bay.filter(&self.view.holds, self.view.filters(), at))
                 {
@@ -1946,6 +1948,7 @@ impl Readout {
                     &self.view.scopes,
                     &self.view.library,
                     self.view.opened(),
+                    self.view.pointed(),
                 )
                 .and_then(|bay| {
                     bay.read(
@@ -1983,6 +1986,7 @@ impl Readout {
                     &self.view.scopes,
                     &self.view.library,
                     self.view.opened(),
+                    self.view.pointed(),
                 )
                 .and_then(|bay| bay.take(&self.view.library, at))
                 {
@@ -2306,6 +2310,19 @@ impl Readout {
     /// `docs/manual/console.html` says what it is for — *"Solo the program
     /// view: the panel folds away and only the picture is left, which is also
     /// how you capture this window."*
+    /// A press on a fold control. **It says what it did**, because the point of
+    /// both is that they are the fold `f` performs, reached from the console's
+    /// own shape instead of from the keyboard. One operation and no toggle: a
+    /// folded node has no rectangle, so neither control is drawn afterwards
+    /// (ADR-0295), and the way back is `z`.
+    fn folded(&mut self, op: Op) -> Outcome {
+        let Op::Fold(id) = op else {
+            unreachable!("a fold control asked for {op:?}")
+        };
+        println!("fold: {} folds away — `z` brings it back", self.label(id));
+        self.op(op)
+    }
+
     fn soloed(&mut self, op: Op) -> Outcome {
         println!(
             "program: {}",
@@ -3060,6 +3077,7 @@ impl Readout {
                             &self.view.scopes,
                             &self.view.library,
                             self.view.opened(),
+                            self.view.pointed(),
                         ) {
                             Some(bay) => format!(
                                 "bay, {}, {} listed",
@@ -5826,6 +5844,14 @@ impl Engine {
         // skips any slot whose Set has already run — a deck measured late
         // stays unbudgetable rather than losing what it has simulated.
         self.deck.measure_slots(&gpu.device, &gpu.queue);
+        // **And the estimate beside the measurement**, on the same terms: two
+        // draws per cold slot, before the first frame and never on the render
+        // thread. The governor budgets on this where it answers and on the
+        // measurement where it does not
+        // ([ADR-0296](../../../docs/adr/0296-the-governor-budgets-on-the-estimate-where-it-answers-and-on-the-measurement-where-it-does-not.md)),
+        // and it is taken at the deck's own size, so a deck on a small output
+        // stops being judged against a frame nobody is drawing.
+        self.deck.estimate_slots(&gpu.device, &gpu.queue);
         self.deck.set_residency(ASKED_TO_PRIME, Residency::Priming);
         if let (Some(committed), Some(warming)) = (
             self.deck.slot(ON_AIR).measured_cost(),
@@ -6503,6 +6529,88 @@ fn presets_listing(presets: Option<&karakuri_environment::places::Presets>) -> V
     }
 }
 
+/// **Every Set a dropped folder holds**, which is the Set files directly in
+/// the directory this bay was pointed at (ADR-0275).
+///
+/// # What it lists, and why both spellings
+///
+/// `console.html`'s *A folder scope reads Sets, and a bundle is not a third
+/// thing*: *"A Set file and a bundle are the same file … so the scope draws
+/// one kind of row rather than two"*, and the authored form that names its
+/// parts by relative path *"is a Set file, is one row, and is taken in by the
+/// same operation."* So both suffixes are listed and neither is a second kind
+/// of row — `Store::SET_FILE_SUFFIX` for the resolved form and
+/// `setfile::AUTHORING_SUFFIX` for the authored one, borrowed from the modules
+/// that own them rather than spelled here. A `.kir` is **not** listed: it is
+/// one node's source, nothing in the vocabulary takes one, and *"a directory of
+/// `.kir` files is a directory of parts"*.
+///
+/// **A directory that holds `night.kset` and `night.kbset` lists two rows
+/// reading `night`**, and that is deliberate rather than got to by accident:
+/// they are two files, each of which is a Set, and choosing between them here
+/// would be this listing inventing a precedence between the two forms.
+/// Whichever of them a press means is the take-in's question, and nothing
+/// presses a folder row yet.
+///
+/// # Ascending, one directory deep, and the name is all that is read
+///
+/// `places::Presets::list_sets`' three rules, carried over for its reasons:
+/// `read_dir` hands back no order at all, a name the layout does not claim is
+/// skipped rather than repaired, and nothing here opens a file — a malformed
+/// Set is a refusal at the moment it is taken in, where the operator can see
+/// which row they pressed. It is **not** [`library`]'s most-recent-first
+/// (ADR-0263): that order is a store's, where a Set's time is when the
+/// operator wrote it, and a folder full of files somebody copied has mtimes
+/// that are facts about this machine's disk.
+///
+/// # Where this belongs, and it is not here
+///
+/// **`karakuri_environment::places` is the right home**, beside
+/// `Presets::list_sets`, which answers the same question about a directory
+/// this run was told about rather than one it was handed: this is that
+/// function with two suffixes and no `Found` behind it, and a second walk of a
+/// directory of Sets is a second answer to *what is a Set file called*. It is
+/// here because ADR-0275's owed work was this file's, and the reason is
+/// written down rather than left to be inferred — `declared`'s own shape one
+/// bay over.
+fn folder_listing(dir: Option<&std::path::Path>) -> Vec<String> {
+    let Some(dir) = dir else {
+        return Vec::new();
+    };
+    let entries = match std::fs::read_dir(dir) {
+        Ok(entries) => entries,
+        // **Said out loud and then empty**, which is `presets_listing`'s shape
+        // one scope along and for its reason: a folder that will not open
+        // looks exactly like a folder holding no Sets, and the difference has
+        // to be spoken or it is not there. A dropped directory can go between
+        // the drop and a press an hour later — it is somebody else's
+        // directory, which this program neither made nor writes.
+        Err(why) => {
+            println!("  folder: `{}` could not be listed: {why}", dir.display());
+            return Vec::new();
+        }
+    };
+    let mut out: Vec<(String, std::ffi::OsString)> = Vec::new();
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        // Non-UTF-8 falls out of the listing with everything else the layout
+        // does not claim — `Store::list_sets`' own rule, no lossy repair.
+        let Some(id) = name.to_str().and_then(|name| {
+            name.strip_suffix(Store::SET_FILE_SUFFIX)
+                .or_else(|| name.strip_suffix(karakuri_environment::setfile::AUTHORING_SUFFIX))
+        }) else {
+            continue;
+        };
+        // A subdirectory named like a Set file belongs to whoever made it.
+        if entry.file_type().is_ok_and(|kind| kind.is_dir()) {
+            continue;
+        }
+        out.push((id.to_owned(), name));
+    }
+    out.sort();
+    out.into_iter().map(|(id, _)| id).collect()
+}
+
 /// **Why the scope that is marked lists nothing**, in the words that say which
 /// kind of nothing it is — and among these four chips there are two kinds.
 ///
@@ -6521,17 +6629,26 @@ fn presets_listing(presets: Option<&karakuri_environment::places::Presets>) -> V
 ///   decides where the value would live and leaves nothing to read. Nothing
 ///   here writes one: a store invented for it would be the specification
 ///   written backwards, which that page says in as many words.
-/// - **A folder has no directory yet.** `Operation::ListSets` has nowhere to
-///   put one and should not: both its fields narrow what a store already
-///   holds, and which store is asked at all is [`listing`]'s own answer.
-///   ADR-0275 says how one is chosen — a folder dropped anywhere on this
-///   window — so what is owed is this file reading `dropped_files`, and not a
-///   row of `docs/manual/operations.html`.
+/// - **A folder nobody has pointed anywhere is empty for want of a gesture**,
+///   and that is the one of the four that changed on 2026-09-08. It used to be
+///   empty for want of machinery — this said *"nothing here reads a folder
+///   dropped on this window yet"* — and [`folder_dropped`] is that machinery.
+///   `Operation::ListSets` still has nowhere to put a directory and should
+///   not: both its fields narrow what a store already holds, and which store
+///   is asked at all is [`listing`]'s own answer. **So this scope has two
+///   sentences and `pointed` is which**: no folder has been dropped yet, or
+///   one has and holds no Set file. The second is [`Scope::MySets`]' kind of
+///   nothing — a library nobody has filled — read in somebody else's
+///   directory.
 ///
 /// It is said out loud on the step and again on a press, because a scope that
 /// went quiet and a scope that is empty are the same experience — which is the
 /// rule every other refusal in this file is written to.
-fn why_nothing(scope: Scope) -> &'static str {
+///
+/// `pointed` is whether the bay has a directory at all, and it is read only by
+/// the `folder` arm: the other three are the same sentence whatever this
+/// window has been dropped on.
+fn why_nothing(scope: Scope, pointed: bool) -> &'static str {
     match scope {
         Scope::Favourites => {
             "nothing in this workspace keeps a favourite — no field on a Set listing, no \
@@ -6547,12 +6664,203 @@ fn why_nothing(scope: Scope) -> &'static str {
              `--presets DIR` is what names one, and a directory of `.kir` parts is not a \
              library"
         }
+        Scope::Folder if !pointed => {
+            "no folder has been dropped on this window yet — drag one off the desktop and \
+             let go of it anywhere over this window, and this scope lists the Sets in it"
+        }
         Scope::Folder => {
-            "nothing here reads a folder dropped on this window yet, which is how a \
-             directory is chosen — so this scope is empty because the way in is not built \
-             rather than because a directory holds nothing"
+            "the folder this bay is pointed at holds no Set file, which is a directory \
+             nobody has put one in: a folder scope lists `.kbset` and `.kset` files, and a \
+             directory of `.kir` parts is not a library"
         }
     }
+}
+
+/// **What a folder over this window reads in the `.path` row**, written into
+/// the console for the pass that is about to draw it.
+///
+/// **The one thing about this bay that is a frame's business**, and it is
+/// `egui`'s doing rather than a choice here: `RawInput::take` *clones*
+/// `hovered_files` where it *moves* `dropped_files`, so a drag over the window
+/// is a fact about every pass while it lasts and there is no event to hang it
+/// off. Nothing is asked of the file system for it — whether the path is a
+/// folder is the drop's question (P-0091, ADR-0275) — and nothing is
+/// allocated on a pass where the answer has not changed.
+///
+/// **More than one path over the window reads as none.** The row says *"the
+/// path a release would set"*, a release sets nothing where two arrived
+/// (ADR-0275), and drawing the first of them would be this row picking one out
+/// of a list the desktop happened to build — which is the choice the refusal
+/// below exists to refuse.
+fn folder_over(view: &mut View, hovering: &[karakuri_console::egui::HoveredFile]) {
+    let over = match hovering {
+        [one] => one.path.as_deref(),
+        _ => None,
+    };
+    // **Compared before it is written**, so a drag held still over the window
+    // costs nothing per pass. `to_string_lossy` borrows for a path that is
+    // UTF-8, which every path drawn here is in practice, and it is the same
+    // conversion `Path::display` makes — so what is compared is what would be
+    // drawn rather than an approximation of it.
+    let same = match (over, view.incoming.as_deref()) {
+        (None, None) => true,
+        (Some(over), Some(shown)) => *over.to_string_lossy() == *shown,
+        _ => false,
+    };
+    if !same {
+        view.incoming = over.map(|path| path.to_string_lossy().into_owned());
+    }
+}
+
+/// **A folder let go on this window**, which is how the `folder` scope is
+/// given a directory — and the three answers ADR-0275 settles, in the words
+/// that record and `console.html` write.
+///
+/// # It is done here, on the pass the drop arrives on, and nothing is put by
+///
+/// `dropped_files` is visible for exactly one pass and then gone
+/// (`RawInput::take` moves it), so the release does the whole thing rather
+/// than asking a question: it sets the directory **and** marks the `folder`
+/// chip, and the listing under it is the next thing drawn. A bay that had put
+/// the path aside and waited for the chip to be pressed would be waiting on an
+/// operator who has already made the gesture, holding a path nothing will hand
+/// it a second time.
+///
+/// **So the file system is asked here, on a frame**, which is the one place
+/// this program does that and it is P-0091's rule rather than an exception to
+/// it: what is asked once is asked once, and a drop is one act. A drop is also
+/// the only moment the question can be asked at all — the event carries a path
+/// and nothing else, and *"a file and a directory are indistinguishable at the
+/// event"* (ADR-0275).
+///
+/// # The two refusals, and each is a policy the plumbing does not answer
+///
+/// **A path that is not a directory is refused, naming what was dropped.** A
+/// file is not read as the folder it sits in — that would point this bay at a
+/// directory nobody pointed at, which is the mistake the carry one bay over
+/// refuses when it declines to snap a drop mark to the nearest strip
+/// (ADR-0273) — and a `.kbset` is not taken in where it fell, because taking a
+/// Set in is a press on a row of a listing and a file landing on this window
+/// has no row under it.
+///
+/// **More than one path is refused, and all of them are.** A multi-item drag
+/// arrives whole, so three folders let go together are three entries in one
+/// pass and not three drops: there is no first to act on and a rest to ignore,
+/// nothing says which was aimed at, and the order is the desktop's rather than
+/// the operator's. The bay keeps the directory it had and the refusal counts
+/// what arrived.
+///
+/// **Both name what arrived and what to do instead** (P-0083), and both say
+/// where this library is still pointed — because a refusal that left an
+/// operator wondering whether the bay had moved anyway is a refusal that costs
+/// a second gesture to read.
+///
+/// `None` where nothing was dropped, which is every pass but one.
+fn folder_dropped(
+    view: &mut View,
+    folder: &mut Option<std::path::PathBuf>,
+    store: &std::path::Path,
+    presets: Option<&karakuri_environment::places::Presets>,
+    dropped: &[&std::path::Path],
+) -> Option<String> {
+    // **Where the bay is still pointed**, read before anything moves, because
+    // both refusals say it and the accept below replaces it.
+    let kept = match folder.as_deref() {
+        Some(at) => format!("This library is still pointed at `{}`.", at.display()),
+        None => String::from("This library is still pointed nowhere."),
+    };
+    let one = match dropped {
+        [] => return None,
+        [one] => *one,
+        many => {
+            return Some(format!(
+                "  folder: {} paths were let go together and none of them was taken — a drop \
+                 tells this window a path and never a place, so nothing says which of them was \
+                 aimed at and the order is the desktop's rather than yours. Let go of one \
+                 folder on its own. {kept}",
+                many.len()
+            ))
+        }
+    };
+    // **Asked once, here.** `is_dir` would answer `false` for a path that
+    // cannot be examined at all, which is a different thing and is said as one.
+    match std::fs::metadata(one) {
+        Err(why) => Some(format!(
+            "  folder: `{}` could not be examined ({why}), so whether it is a folder is not \
+             known and nothing was taken. {kept}",
+            one.display()
+        )),
+        Ok(what) if !what.is_dir() => Some(match set_file(one) {
+            true => format!(
+                "  folder: `{}` is a Set file and what this takes is a folder — a Set is taken \
+                 in by pressing its row in a listing, and a file let go on this window has no \
+                 row under it. Let go of the folder that holds it and press the row. {kept}",
+                one.display()
+            ),
+            false => format!(
+                "  folder: `{}` is not a folder and what this takes is one — this bay is \
+                 pointed at a directory and lists the Sets in it, so let go of the folder that \
+                 holds it rather than the file itself. {kept}",
+                one.display()
+            ),
+        }),
+        Ok(_) => {
+            *folder = Some(one.to_path_buf());
+            // **The line the bay draws is spelled here**, which is
+            // `View::library`'s seam one row up: this side reads the disk and
+            // the panel is handed what to draw (ADR-0156).
+            view.folder = Some(one.display().to_string());
+            // **And the chip is marked in the same act**, which is the whole
+            // of *the drop is recorded on the frame it is seen on*: the
+            // directory and the mark are one gesture's outcome, and a bay
+            // pointed at a folder it is not showing would be waiting for a
+            // press nobody owes it.
+            view.select_scope(Scope::Folder);
+            // **Asked of the mark rather than of the call**, because
+            // `select_scope` answers *whether it moved* and a second drop
+            // while `folder` is already marked moves nothing: the sentence is
+            // about where the mark **is**. `false` here is a console handed no
+            // `folder` chip, which cannot mark one — the row is still drawn,
+            // since it is where a send lands whichever scope is marked
+            // (ADR-0267), and the listing under it is whatever scope this
+            // console does have.
+            let marked = match view.scope() == Some(Scope::Folder) {
+                true => "the `folder` chip is marked",
+                false => "this console draws no `folder` chip, so nothing is marked",
+            };
+            let said = listing(view, store, presets, folder.as_deref());
+            // **And the cursor goes back to the top of a listing it has never
+            // seen**, which is `View::select_scope`'s own rule reached the
+            // other way: that method resets the cursor when the *mark* moves,
+            // and a second drop while `folder` is already marked moves the
+            // listing without moving the mark. Left where it was it would
+            // point at the fifteenth row of a directory of three — a Set
+            // nobody chose, sitting under a pill that says a press will load
+            // it.
+            view.point_at(0);
+            Some(format!(
+                "  folder: this library is pointed at `{}` — {marked} and the listing under it \
+                 is what that directory holds\n{said}",
+                one.display(),
+            ))
+        }
+    }
+}
+
+/// **Whether a name is one a Set file wears**, which is the two suffixes
+/// [`folder_listing`] lists and is asked here for one reason: an operator who
+/// let go of a `.kbset` on this window was trying to take a Set in, and the
+/// refusal owes them the press that does it (P-0083).
+///
+/// It is a **name** and not a reading: nothing is opened, exactly as nothing
+/// is opened to draw a row.
+fn set_file(path: &std::path::Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| {
+            name.ends_with(Store::SET_FILE_SUFFIX)
+                || name.ends_with(karakuri_environment::setfile::AUTHORING_SUFFIX)
+        })
 }
 
 /// **The rows the Library bay lists for the scope that is marked**, written
@@ -6572,13 +6880,18 @@ fn why_nothing(scope: Scope) -> &'static str {
 /// states one scope down and the reason this is not called from the frame
 /// handler.
 ///
-/// Two of the four answer with rows and two answer with nothing —
+/// Three of the four answer with rows and one answers with nothing —
 /// [`why_nothing`] is where that is argued, and it is one function so that a
-/// scope which stops being empty stops being empty in one place.
+/// scope which stops being empty stops being empty in one place. **`folder`
+/// moved across that line on 2026-09-08** and it is the one of the four whose
+/// answer depends on something that happened during the run: `folder` is
+/// `None` until somebody drops a directory on this window ([`folder_dropped`]),
+/// and a bay pointed nowhere lists nothing and says which nothing it is.
 fn listing(
     view: &mut View,
     store: &std::path::Path,
     presets: Option<&karakuri_environment::places::Presets>,
+    folder: Option<&std::path::Path>,
 ) -> String {
     let Some(scope) = view.scope() else {
         return String::from(
@@ -6618,10 +6931,16 @@ fn listing(
             .into_iter()
             .map(|preset| preset.id)
             .collect(),
-        // **Drawn and answered with nothing**, and the two are not the same
-        // nothing — see [`why_nothing`], which is where each of them says
-        // which it is.
-        Scope::Favourites | Scope::Folder => Vec::new(),
+        // **The directory a folder was dropped on this window to name**, and
+        // it is the host's for [`presets_listing`]'s reason one arm up: a
+        // listing is a directory read, and this side is the only side with a
+        // disk (ADR-0156). Pointed nowhere it lists nothing and the sentence
+        // about it is [`why_nothing`]'s.
+        Scope::Folder => folder_listing(folder),
+        // **Drawn and answered with nothing**, and it is not the same nothing
+        // the folder above answers with — see [`why_nothing`], which is where
+        // each of them says which it is.
+        Scope::Favourites => Vec::new(),
     };
     // **Only where the filter was applied.** `layer` survives a scope change —
     // it is the console's own value and not a position in a listing — so a bay
@@ -6650,7 +6969,7 @@ fn listing(
         (0, None) => format!(
             "  library: `{}` lists nothing — {}",
             scope.name(),
-            why_nothing(scope)
+            why_nothing(scope, folder.is_some())
         ),
         (listed, Some(narrowed)) => format!(
             "  library: `{}` lists {listed} of {} Set{}, {narrowed}",
@@ -9281,6 +9600,22 @@ struct App {
     /// probably did. `None` is a machine with no library, which reaches this
     /// far only on a run that was given its pair by hand.
     presets: Option<karakuri_environment::places::Presets>,
+    /// **The directory the Library bay is pointed at**, or `None` until a
+    /// folder has been dropped on this window — which is where every run
+    /// starts, because nothing names one before the run (ADR-0275).
+    ///
+    /// **Beside [`presets`](App::presets) because it is the same kind of
+    /// thing**: a directory outside this store that a scope of the bay lists.
+    /// The difference is when it is decided — a presets root is resolved
+    /// before the window opens and this arrives during the run — and that is
+    /// why one is on [`Launch`] and this is not.
+    ///
+    /// **The path is here and the *spelling* is in the console**
+    /// (`view::View::folder`): this side reads the directory and the panel
+    /// draws the line, which is the seam every other library value crosses
+    /// (ADR-0156). Two fields for one fact, and they are written in one place
+    /// — [`folder_dropped`].
+    folder: Option<std::path::PathBuf>,
     /// A validation fault is said once rather than sixty times a second.
     faulted: bool,
     readout: Readout,
@@ -9860,6 +10195,10 @@ impl App {
             running,
             store: launch.store,
             presets: launch.presets,
+            // **Pointed nowhere**, which is where every run starts: a folder
+            // is chosen by dropping one on this window and no flag names one
+            // before it opens (ADR-0275).
+            folder: None,
             faulted: false,
             readout,
             costs: Costs::new(),
@@ -10375,7 +10714,12 @@ impl ApplicationHandler for App {
         );
         println!(
             "{}",
-            listing(&mut self.readout.view, &self.store, self.presets.as_ref())
+            listing(
+                &mut self.readout.view,
+                &self.store,
+                self.presets.as_ref(),
+                self.folder.as_deref(),
+            )
         );
         // **And the arrangement pill's menu, once for the run**, for
         // `library`'s reason and for one more: this is a directory read, and
@@ -10484,7 +10828,12 @@ impl ApplicationHandler for App {
                 if self.keeping.finished_saves() {
                     println!(
                         "{}",
-                        listing(&mut self.readout.view, &self.store, self.presets.as_ref())
+                        listing(
+                            &mut self.readout.view,
+                            &self.store,
+                            self.presets.as_ref(),
+                            self.folder.as_deref(),
+                        )
                     );
                 }
                 // **A frame, because a build lands at a frame boundary and
@@ -10657,7 +11006,12 @@ impl ApplicationHandler for App {
                 ) {
                     println!(
                         "{}",
-                        listing(&mut self.readout.view, &self.store, self.presets.as_ref())
+                        listing(
+                            &mut self.readout.view,
+                            &self.store,
+                            self.presets.as_ref(),
+                            self.folder.as_deref(),
+                        )
                     );
                 }
                 // **And a press that asked to read a Set is a Set file and its
@@ -10766,6 +11120,26 @@ impl ApplicationHandler for App {
                                 Acted::Nothing
                             }
                         }
+                    }
+                    // **And a Set dragged out of a *folder* is refused**, for
+                    // `l`'s reason on the same pair of rows: a folder row is a
+                    // take, taking one in from a folder is not built, and
+                    // falling through would load a Set of this store's that
+                    // happens to share the file's name — a release doing
+                    // something other than what the row in hand says.
+                    (
+                        Acted::Emitted(Some(Operation::LoadSet { deck, set })),
+                        Some(Scope::Folder),
+                    ) => {
+                        println!(
+                            "  load: `{set}` is a row of the folder this bay is pointed at, and \
+                             a folder row is a **take** — taking a Set in from a folder is not \
+                             built, so nothing was loaded and what is on deck {} is still \
+                             running. A `presets` row is taken in and loaded by this drag, and \
+                             a Set this store already holds is listed under `my sets`",
+                            deck_letter(*deck)
+                        );
+                        Acted::Nothing
                     }
                     _ => acted,
                 };
@@ -11019,6 +11393,7 @@ impl ApplicationHandler for App {
                             &self.readout.view.scopes,
                             &self.readout.view.library,
                             self.readout.view.opened(),
+                            self.readout.view.pointed(),
                         )
                         .map_or(0, |bay| bay.rows);
                         let moved = self.readout.view.walk(step, listed);
@@ -11080,7 +11455,12 @@ impl ApplicationHandler for App {
                         if self.readout.view.step_scope() {
                             println!(
                                 "{}",
-                                listing(&mut self.readout.view, &self.store, self.presets.as_ref())
+                                listing(
+                                    &mut self.readout.view,
+                                    &self.store,
+                                    self.presets.as_ref(),
+                                    self.folder.as_deref(),
+                                )
                             );
                         }
                         // **Emitted whether or not the mark moved**, which is
@@ -11248,6 +11628,37 @@ impl ApplicationHandler for App {
                                     }
                                 }
                             }
+                            // **A folder row is a take and taking one in is
+                            // not built**, so it is refused here rather than
+                            // fallen through to the load below — which is not
+                            // a nicety: a folder holding `night01.kbset` and a
+                            // store holding `night01` are two different Sets
+                            // under one word, and the arm below would load the
+                            // store's off a row that names the file. That is a
+                            // press doing something other than what the row
+                            // under it says, which is worse than a refusal by
+                            // the width of the whole panel.
+                            //
+                            // `console.html`: *"a folder row is a **take**"*,
+                            // and what a take needs is the packaging step
+                            // `taking_in` does for a preset — off the folder's
+                            // own listing rather than the presets root's. That
+                            // is `docs/manual/operations.html`'s *Send a Set
+                            // to somebody, and take one in*, whose panel badge
+                            // is still `plan`, and it is what ADR-0275 left
+                            // for whoever builds the rest of this bay.
+                            (Some(Scope::Folder), Some(row)) => {
+                                println!(
+                                    "  load: `{row}` is a row of the folder this bay is \
+                                     pointed at, and a folder row is a **take** — taking a \
+                                     Set in from a folder is not built, so nothing was \
+                                     loaded and what is on deck {} is still running. A \
+                                     `presets` row is taken in and loaded by this key, and a \
+                                     Set this store already holds is listed under `my sets`",
+                                    deck_letter(deck)
+                                );
+                                Acted::Nothing
+                            }
                             // A row of `my sets`, which is a Set this store
                             // already holds and is the route ADR-0228 built.
                             (_, Some(set)) => {
@@ -11257,10 +11668,10 @@ impl ApplicationHandler for App {
                             // the cursor because this scope lists nothing. The
                             // bay says so by drawing no rows; this says so in
                             // words, and it says **which** nothing it is —
-                            // `favourites` and `folder` are drawn and answer
-                            // nothing for two different reasons, and a key
-                            // that did nothing and a key that is not bound are
-                            // the same experience.
+                            // `favourites`, a folder nobody has pointed
+                            // anywhere and a folder holding nothing are three
+                            // different reasons, and a key that did nothing and
+                            // a key that is not bound are the same experience.
                             (scope, None) => {
                                 println!(
                                     "  load: `{}` lists nothing, so there is no Set under the \
@@ -11270,7 +11681,7 @@ impl ApplicationHandler for App {
                                         None => "the library",
                                     },
                                     match scope {
-                                        Some(scope) => why_nothing(scope),
+                                        Some(scope) => why_nothing(scope, self.folder.is_some()),
                                         None => "this console was handed no scopes at all",
                                     }
                                 );
@@ -11560,7 +11971,12 @@ impl ApplicationHandler for App {
                     // silent.
                     println!(
                         "{}",
-                        listing(&mut self.readout.view, &self.store, self.presets.as_ref())
+                        listing(
+                            &mut self.readout.view,
+                            &self.store,
+                            self.presets.as_ref(),
+                            self.folder.as_deref(),
+                        )
                     );
                 }
                 // **And what a recording's start or stop came back with**, on
@@ -11803,6 +12219,41 @@ impl ApplicationHandler for App {
                     Change::Animating(self.readout.view.animating(self.readout.panel.layout()))
                         .repaint(),
                 );
+
+                // -- a folder let go on this window --------------------
+                // **Read off `egui`'s accumulated input and above the pass
+                // that draws it**, for two reasons that are not the same one.
+                //
+                // *Above the timers*, because the drop asks the file system
+                // what a path is and then reads a directory: inside them it
+                // would land in `cost.ui`, which is *"`take_egui_input`
+                // through `tessellate`"* and is the number the still-panel
+                // reading is made of. A drop is one act on one frame and its
+                // cost is the operator's, not the panel's.
+                //
+                // *Off the input rather than the events*, because the platform
+                // delivers a multi-item drag as N entries **in one pass** and
+                // not as N passes: `egui-winit` appends each `DroppedFile` to
+                // one `Vec`, and it is that whole `Vec` the *one path* rule is
+                // about. Taking them here is what makes this program the one
+                // that answers a drop — nothing else in `crates/` reads either
+                // field, which is the mechanism ADR-0275 took rather than
+                // designed around.
+                folder_over(&mut self.readout.view, &gfx.egui.egui_input().hovered_files);
+                let dropped = std::mem::take(&mut gfx.egui.egui_input_mut().dropped_files);
+                if !dropped.is_empty() {
+                    let paths: Vec<&std::path::Path> =
+                        dropped.iter().map(|file| file.path()).collect();
+                    if let Some(said) = folder_dropped(
+                        &mut self.readout.view,
+                        &mut self.folder,
+                        &self.store,
+                        self.presets.as_ref(),
+                        &paths,
+                    ) {
+                        println!("{said}");
+                    }
+                }
 
                 // -- the egui pass -------------------------------------
                 let started = Instant::now();
@@ -14104,14 +14555,20 @@ mod tests {
     }
 
     /// **A scope is a listing on this side, and stepping to one answers it** —
-    /// two of the four with rows, and two with nothing and a sentence saying
-    /// which kind of nothing it is.
+    /// two of the four with rows here, and two with nothing and a sentence
+    /// saying which kind of nothing it is.
     ///
     /// The two that answer nothing are the whole point of the test: they are
     /// empty for two *different* reasons — a favourite is a fact nothing in
-    /// this workspace keeps, and a folder waits on an operation that can ask a
-    /// directory for its listing — and a program that said the same thing
-    /// about both would be hiding one of them.
+    /// this workspace keeps, and this console has not been pointed at a
+    /// folder — and a program that said the same thing about both would be
+    /// hiding one of them.
+    ///
+    /// **`folder` is here because of the console and not because of the
+    /// scope**: it answers with rows the moment one is dropped on the window,
+    /// which is `a_folder_dropped_on_the_window_points_the_bay_at_it`, and the
+    /// sentence it answers with here is the third of the three — a scope
+    /// nobody has pointed anywhere.
     ///
     /// A CPU test: a `View` takes no device.
     #[test]
@@ -14125,13 +14582,13 @@ mod tests {
         view.scopes = Scope::ALL.to_vec();
         assert!(view.select_scope(Scope::MySets));
 
-        let said = listing(&mut view, &root, Some(&presets));
+        let said = listing(&mut view, &root, Some(&presets), None);
         assert_eq!(view.library, vec!["night01".to_owned()]);
         assert!(said.contains("my sets") && said.contains('1'), "{said}");
 
         assert!(view.step_scope(), "the scope did not step");
         assert_eq!(view.scope(), Some(Scope::Presets));
-        let said = listing(&mut view, &root, Some(&presets));
+        let said = listing(&mut view, &root, Some(&presets), None);
         assert!(
             view.library.iter().any(|id| id == "beat_cloud"),
             "the `presets` scope lists {:?}",
@@ -14139,11 +14596,14 @@ mod tests {
         );
         assert!(said.contains("presets"), "{said}");
 
-        // The two that are drawn and answer nothing, and the sentences they
-        // answer with are not one sentence.
+        // The two that answer nothing here, and the sentences they answer
+        // with are not one sentence. **`folder` is in this list because this
+        // console has been pointed nowhere**, and not because the scope cannot
+        // be answered: point it at a directory and it lists what is in it,
+        // which is `a_folder_dropped_on_the_window_points_the_bay_at_it`.
         for scope in [Scope::Favourites, Scope::Folder] {
             assert!(view.select_scope(scope));
-            let said = listing(&mut view, &root, Some(&presets));
+            let said = listing(&mut view, &root, Some(&presets), None);
             assert!(
                 view.library.is_empty(),
                 "`{}` listed {:?}, and nothing in this workspace can produce it",
@@ -14151,21 +14611,21 @@ mod tests {
                 view.library
             );
             assert!(
-                said.contains(scope.name()) && said.contains(why_nothing(scope)),
+                said.contains(scope.name()) && said.contains(why_nothing(scope, false)),
                 "`{}` lists nothing and says `{said}`",
                 scope.name()
             );
         }
         assert_ne!(
-            why_nothing(Scope::Favourites),
-            why_nothing(Scope::Folder),
+            why_nothing(Scope::Favourites, false),
+            why_nothing(Scope::Folder, false),
             "the two scopes that answer nothing are empty for two different reasons and this \
              program gives one sentence for both"
         );
         assert!(
-            why_nothing(Scope::Favourites).contains("favourite"),
+            why_nothing(Scope::Favourites, false).contains("favourite"),
             "the `favourites` sentence does not say what is missing: {}",
-            why_nothing(Scope::Favourites)
+            why_nothing(Scope::Favourites, false)
         );
         // **It says how a directory is chosen, and it used to say `operation`.**
         // This asserted that word until ADR-0275, on the reading that the chip
@@ -14173,12 +14633,263 @@ mod tests {
         // narrow what a store already holds, and which store is asked at all
         // never was the operation's. What the sentence owes now is the way in.
         assert!(
-            why_nothing(Scope::Folder).contains("dropped"),
+            why_nothing(Scope::Folder, false).contains("drag")
+                && why_nothing(Scope::Folder, false).contains("dropped"),
             "the `folder` sentence does not say how a directory is chosen: {}",
-            why_nothing(Scope::Folder)
+            why_nothing(Scope::Folder, false)
+        );
+        // **And a folder that *has* been pointed somewhere is a third kind of
+        // nothing**, which is the sentence that arrived with the drop: an
+        // empty scope for want of a gesture and one for want of a Set file in
+        // the directory are the same drawing and not the same fact.
+        assert_ne!(
+            why_nothing(Scope::Folder, false),
+            why_nothing(Scope::Folder, true),
+            "a folder nobody has pointed anywhere and a folder holding no Set are given one \
+             sentence"
         );
 
         std::fs::remove_dir_all(&root).expect("clean up");
+    }
+
+    /// **A folder let go on this window points the bay at it, marks the chip
+    /// and lists what is in it — all three on the pass the drop arrives on.**
+    ///
+    /// The three are one act by ADR-0275's third policy: `dropped_files` is
+    /// visible for one pass and then gone, so a bay that had set the directory
+    /// and waited for the chip to be pressed would be holding a path nothing
+    /// will hand it again. It is asserted as three outcomes of one call for
+    /// that reason.
+    ///
+    /// **And what the listing holds is Sets and not parts**, which is the
+    /// `presets` scope's rule one chip along: both spellings of a Set file are
+    /// rows, a `.kir` is not, and a subdirectory named like a Set file belongs
+    /// to whoever made it.
+    ///
+    /// A CPU test: a directory and a `View`.
+    #[test]
+    fn a_folder_dropped_on_the_window_points_the_bay_at_it() {
+        let root = scratch_dir("folder-drop");
+        let store = root.join("store");
+        let handed = root.join("from-somebody");
+        std::fs::create_dir_all(&handed).expect("a folder to drop");
+        for name in ["night01.kbset", "sketch.kset", "adrift.kbset"] {
+            std::fs::write(handed.join(name), "").expect("a Set file");
+        }
+        // What a folder scope must not list: a part, and a directory wearing a
+        // Set file's name.
+        std::fs::write(handed.join("blur.kir"), "").expect("a part");
+        std::fs::create_dir_all(handed.join("unpacked.kbset")).expect("a directory");
+
+        let mut view = View::new(Room::Day);
+        view.scopes = Scope::ALL.to_vec();
+        assert!(view.select_scope(Scope::MySets));
+        let mut folder: Option<std::path::PathBuf> = None;
+
+        let said = folder_dropped(&mut view, &mut folder, &store, None, &[handed.as_path()])
+            .expect("a drop of one folder was answered");
+
+        assert_eq!(folder.as_deref(), Some(handed.as_path()));
+        assert_eq!(
+            view.folder.as_deref(),
+            Some(handed.display().to_string().as_str()),
+            "the panel was not handed the line to draw in the `.path` row"
+        );
+        assert_eq!(
+            view.scope(),
+            Some(Scope::Folder),
+            "the drop set the directory and left another chip marked"
+        );
+        assert_eq!(
+            view.library,
+            vec![
+                "adrift".to_owned(),
+                "night01".to_owned(),
+                "sketch".to_owned()
+            ],
+            "the folder scope lists {:?}",
+            view.library
+        );
+        assert!(
+            said.contains(&handed.display().to_string())
+                && said.contains("the `folder` chip is marked"),
+            "the drop said `{said}`"
+        );
+
+        // **And the row is not drawn as a hover**: the release is what was
+        // read, so nothing is on its way in afterwards.
+        assert_eq!(view.pointed().map(|at| at.incoming), Some(false));
+
+        // A second drop re-points it, which is the whole of *re-pointing the
+        // bay is another drop*.
+        let empty = root.join("empty");
+        std::fs::create_dir_all(&empty).expect("a second folder");
+        let said = folder_dropped(&mut view, &mut folder, &store, None, &[empty.as_path()])
+            .expect("a second drop was answered");
+        assert_eq!(folder.as_deref(), Some(empty.as_path()));
+        assert!(view.library.is_empty(), "{:?}", view.library);
+        assert!(
+            said.contains(why_nothing(Scope::Folder, true)),
+            "a folder holding no Set said `{said}`"
+        );
+        // **The chip is marked on this one too**, and the sentence says so:
+        // the second drop moved the listing without moving the mark, which is
+        // the one case a *whether it moved* answer would have got backwards.
+        assert!(
+            said.contains("the `folder` chip is marked"),
+            "a second drop said `{said}`"
+        );
+
+        std::fs::remove_dir_all(&root).expect("clean up");
+    }
+
+    /// **The two refusals ADR-0275 writes, and what they leave behind.**
+    ///
+    /// - **One path, and it has to be a directory.** A file is refused naming
+    ///   what was dropped rather than read as the folder it sits in, which
+    ///   would point this bay at a directory nobody pointed at; a `.kbset` is
+    ///   refused with the press that *does* take a Set in, because a file
+    ///   landing on this window has no row under it.
+    /// - **More than one path is refused, and all of them are**, counting what
+    ///   arrived: a multi-item drag is one pass with several entries, so there
+    ///   is no first to act on and nothing says which was aimed at.
+    ///
+    /// **Every one of them says where the library is still pointed**, which is
+    /// the half that makes a refusal readable at a glance (P-0083): a bay that
+    /// went on listing what it listed and a bay that quietly moved are the
+    /// same drawing.
+    ///
+    /// A CPU test: a directory and a `View`.
+    #[test]
+    fn a_drop_that_is_not_one_folder_is_refused_and_the_bay_keeps_what_it_had() {
+        let root = scratch_dir("folder-refusal");
+        let store = root.join("store");
+        let handed = root.join("from-somebody");
+        std::fs::create_dir_all(&handed).expect("a folder to drop");
+        std::fs::write(handed.join("night01.kbset"), "").expect("a Set file");
+        let second = root.join("another");
+        std::fs::create_dir_all(&second).expect("a second folder");
+        let loose = root.join("notes.txt");
+        std::fs::write(&loose, "").expect("a file to drop");
+        let set = root.join("handover.kbset");
+        std::fs::write(&set, "").expect("a Set file to drop");
+
+        let mut view = View::new(Room::Day);
+        view.scopes = Scope::ALL.to_vec();
+        let mut folder: Option<std::path::PathBuf> = None;
+        folder_dropped(&mut view, &mut folder, &store, None, &[handed.as_path()])
+            .expect("the folder this bay is pointed at");
+        let listed = view.library.clone();
+
+        // A file, and it is not read as the directory it sits in.
+        let said = folder_dropped(&mut view, &mut folder, &store, None, &[loose.as_path()])
+            .expect("a file was answered");
+        assert!(
+            said.contains("notes.txt") && said.contains("folder"),
+            "the refusal an operator reads is `{said}`"
+        );
+        // **And it says where the bay is still pointed**, which is the half
+        // that makes the refusal readable rather than the operator having to
+        // look at the row to find out whether anything moved.
+        assert!(
+            said.contains(&format!("still pointed at `{}`", handed.display())),
+            "the refusal does not say where the library is still pointed: `{said}`"
+        );
+
+        // A Set file, and the refusal carries the press that takes one in.
+        let said = folder_dropped(&mut view, &mut folder, &store, None, &[set.as_path()])
+            .expect("a Set file was answered");
+        assert!(
+            said.contains("handover.kbset") && said.contains("row"),
+            "a `.kbset` let go on the window said `{said}`"
+        );
+
+        // Two folders at once, and neither of them is taken.
+        let said = folder_dropped(
+            &mut view,
+            &mut folder,
+            &store,
+            None,
+            &[handed.as_path(), second.as_path()],
+        )
+        .expect("two paths were answered");
+        assert!(
+            said.contains('2') && said.contains("none of them"),
+            "two folders at once said `{said}`"
+        );
+
+        // A path that is not there at all, which is a third thing and is said
+        // as one: whether it is a folder was never learned.
+        let gone = root.join("no-such-folder");
+        let said = folder_dropped(&mut view, &mut folder, &store, None, &[gone.as_path()])
+            .expect("a path that is not there was answered");
+        assert!(
+            said.contains("no-such-folder") && said.contains("could not be examined"),
+            "a path that is not there said `{said}`"
+        );
+
+        // **And after all four the bay is where it was**, which every one of
+        // them said it would be.
+        assert_eq!(folder.as_deref(), Some(handed.as_path()));
+        assert_eq!(view.library, listed);
+        assert_eq!(view.scope(), Some(Scope::Folder));
+
+        // Nothing dropped is not a refusal and is not an answer.
+        assert_eq!(
+            folder_dropped(&mut view, &mut folder, &store, None, &[]),
+            None
+        );
+
+        std::fs::remove_dir_all(&root).expect("clean up");
+    }
+
+    /// **A folder over the window reads in the `.path` row, and two read as
+    /// none.**
+    ///
+    /// The hover is the one thing about this bay that a frame does — `egui`
+    /// clones the hovered files onto every pass while a drag lasts — so this
+    /// is the whole of what a pass owes it: the path where there is one to
+    /// draw, nothing where a release would set nothing, and no allocation
+    /// where neither has changed.
+    ///
+    /// A CPU test: a `View` and a list of paths.
+    #[test]
+    fn a_folder_over_the_window_reads_in_the_path_row_and_two_read_as_none() {
+        let one = karakuri_console::egui::HoveredFile {
+            path: Some(std::path::PathBuf::from("/Volumes/stick/handover")),
+            mime: String::new(),
+        };
+        let two = karakuri_console::egui::HoveredFile {
+            path: Some(std::path::PathBuf::from("/Volumes/stick/another")),
+            mime: String::new(),
+        };
+
+        let mut view = View::new(Room::Day);
+        folder_over(&mut view, std::slice::from_ref(&one));
+        assert_eq!(view.incoming.as_deref(), Some("/Volumes/stick/handover"));
+        assert_eq!(view.pointed().map(|at| at.incoming), Some(true));
+
+        // **Two at once say nothing**, because there is no path a release
+        // would set — and picking the first would be the choice the refusal
+        // above exists to refuse.
+        folder_over(&mut view, &[one.clone(), two]);
+        assert_eq!(view.incoming, None);
+
+        // Out of the window again, and what was chosen is what is drawn.
+        view.folder = Some("/Users/somebody/sets".to_owned());
+        folder_over(&mut view, std::slice::from_ref(&one));
+        assert_eq!(
+            view.pointed().map(|at| at.path),
+            Some("/Volumes/stick/handover")
+        );
+        folder_over(&mut view, &[]);
+        assert_eq!(
+            view.pointed(),
+            Some(karakuri_console::view::Pointed {
+                path: "/Users/somebody/sets",
+                incoming: false,
+            })
+        );
     }
 
     /// **A load writes the Set's procedures where the slot's watcher is
@@ -15642,6 +16353,7 @@ mod tests {
                 &readout.view.scopes,
                 &readout.view.library,
                 readout.view.opened(),
+                readout.view.pointed(),
             )
             .expect("the bay lists its rows")
             .read_chip(&ctx, DECK_LETTERS[usize::from(readout.view.selection())]);
@@ -15830,6 +16542,7 @@ mod tests {
                 &readout.view.scopes,
                 &readout.view.library,
                 readout.view.opened(),
+                readout.view.pointed(),
             )
             .expect("the bay lists its rows");
             let (_, at) = bay
@@ -15941,6 +16654,7 @@ mod tests {
                 &readout.view.scopes,
                 &readout.view.library,
                 readout.view.opened(),
+                readout.view.pointed(),
             )
             .expect("the bay lists its rows")
             .field(which)
@@ -16173,6 +16887,7 @@ mod tests {
                 &readout.view.scopes,
                 &readout.view.library,
                 readout.view.opened(),
+                readout.view.pointed(),
             )
             .expect("the bay lists its rows")
             .row(index);
@@ -16309,6 +17024,7 @@ mod tests {
                 &readout.view.scopes,
                 &readout.view.library,
                 readout.view.opened(),
+                readout.view.pointed(),
             )
             .expect("the bay lists its rows")
             .row(index);
@@ -16423,6 +17139,7 @@ mod tests {
                 &readout.view.scopes,
                 &readout.view.library,
                 readout.view.opened(),
+                readout.view.pointed(),
             )
             .expect("the bay lists its rows")
             .row(index);
@@ -16525,7 +17242,7 @@ mod tests {
 
         // Unnarrowed: both Sets, and the candidates are what their nodes are
         // called — sorted, deduplicated, and read off the *unfiltered* listing.
-        let said = listing(&mut view, &root, None);
+        let said = listing(&mut view, &root, None, None);
         assert_eq!(view.library.len(), 2, "the bay lists {:?}", view.library);
         assert_eq!(
             view.holds,
@@ -16537,7 +17254,7 @@ mod tests {
 
         // Narrowed by what a node is called.
         assert!(view.narrow(Some("drift_shell"), None));
-        let said = listing(&mut view, &root, None);
+        let said = listing(&mut view, &root, None, None);
         assert_eq!(view.library, vec!["night01".to_owned()], "{said}");
         assert!(
             said.contains("1 of 2") && said.contains("drift_shell"),
@@ -16547,7 +17264,7 @@ mod tests {
         // And by which layer a Set uses, which is the other half of the row and
         // is answered against the whole Set rather than against one node.
         assert!(view.narrow(None, Some(Layer::L4)));
-        let said = listing(&mut view, &root, None);
+        let said = listing(&mut view, &root, None, None);
         assert_eq!(view.library, vec!["veil02".to_owned()], "{said}");
         assert!(said.contains("L4"), "{said}");
 
@@ -16555,10 +17272,11 @@ mod tests {
         // store**, and the line says which: the store is not empty, and what to
         // do about it is press a field rather than save a Set.
         assert!(view.narrow(Some("drift_shell"), Some(Layer::L4)));
-        let said = listing(&mut view, &root, None);
+        let said = listing(&mut view, &root, None, None);
         assert!(view.library.is_empty(), "the bay lists {:?}", view.library);
         assert!(
-            said.contains("none of the 2 Sets here") && !said.contains(why_nothing(Scope::MySets)),
+            said.contains("none of the 2 Sets here")
+                && !said.contains(why_nothing(Scope::MySets, false)),
             "{said}"
         );
 
@@ -21490,13 +22208,24 @@ mod gpu {
             !governed.over_budget,
             "one live slot is already over the budget this program set — {governed}"
         );
-        let committed = engine
-            .deck
-            .slot(ON_AIR)
-            .measured_cost()
-            .expect("the probe measured deck A");
+        // **Against what deck A is *budgeted* on rather than what it was
+        // measured at**, which since
+        // [ADR-0296](../../../docs/adr/0296-the-governor-budgets-on-the-estimate-where-it-answers-and-on-the-measurement-where-it-does-not.md)
+        // are two different numbers: the governor spends the estimate where a
+        // Set has one and the measurement where it does not, and this test is
+        // about *which slots* are in the sum rather than about which reading
+        // each of them contributed. Taking it off the decision is also what
+        // stops this assertion passing by arithmetic coincidence the day the
+        // estimate stops arriving — the number it compares against moves with
+        // the same rule the sum is built from.
+        let budgeted = governed
+            .decisions
+            .iter()
+            .find(|decision| decision.slot == ON_AIR)
+            .and_then(|decision| decision.budgeted_ms)
+            .expect("deck A is governed and has a number to be budgeted on");
         assert!(
-            (governed.committed_ms - committed.ms).abs() < f32::EPSILON,
+            (governed.committed_ms - budgeted).abs() < f32::EPSILON,
             "the committed cost is not deck A's alone, so a slot nobody asked for is being \
              budgeted as if it were on air — {governed}"
         );

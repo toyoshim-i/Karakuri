@@ -1051,8 +1051,14 @@ fn on_cells(panel: &Panel, _ctx: &egui::Context, view: &View, p: Point) -> bool 
 /// is this rule's ordinary price and is measured in
 /// `tests/library.rs`.
 fn on_scope(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
-    library(panel.layout(), &view.scopes, &view.library, view.opened())
-        .is_some_and(|bay| bay.chip(ctx, &view.scopes, p).is_some())
+    library(
+        panel.layout(),
+        &view.scopes,
+        &view.library,
+        view.opened(),
+        view.pointed(),
+    )
+    .is_some_and(|bay| bay.chip(ctx, &view.scopes, p).is_some())
 }
 
 /// **The Library bay's two filter fields**, one row under the
@@ -1070,8 +1076,14 @@ fn on_scope(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
 /// earlier because the row it is in is drawn only where the chips
 /// above it are.
 fn on_filter(panel: &Panel, _ctx: &egui::Context, view: &View, p: Point) -> bool {
-    library(panel.layout(), &view.scopes, &view.library, view.opened())
-        .is_some_and(|bay| bay.filter(&view.holds, view.filters(), p).is_some())
+    library(
+        panel.layout(),
+        &view.scopes,
+        &view.library,
+        view.opened(),
+        view.pointed(),
+    )
+    .is_some_and(|bay| bay.filter(&view.holds, view.filters(), p).is_some())
 }
 
 /// **The `read` chip in the Library bay's foot**, and it is the
@@ -1088,7 +1100,14 @@ fn on_filter(panel: &Panel, _ctx: &egui::Context, view: &View, p: Point) -> bool
 /// Set there, and the chip then claims nothing —
 /// `LibraryBay::read`.
 fn on_read(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
-    library(panel.layout(), &view.scopes, &view.library, view.opened()).is_some_and(|bay| {
+    library(
+        panel.layout(),
+        &view.scopes,
+        &view.library,
+        view.opened(),
+        view.pointed(),
+    )
+    .is_some_and(|bay| {
         bay.read(
             ctx,
             DECK_LETTERS[usize::from(view.selection())],
@@ -1115,8 +1134,14 @@ fn on_read(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
 /// ground below the last row is nobody's, which is rule 4's *a
 /// control claims what it acts on and no more*.
 fn on_row(panel: &Panel, _ctx: &egui::Context, view: &View, p: Point) -> bool {
-    library(panel.layout(), &view.scopes, &view.library, view.opened())
-        .is_some_and(|bay| bay.take(&view.library, p).is_some())
+    library(
+        panel.layout(),
+        &view.scopes,
+        &view.library,
+        view.opened(),
+        view.pointed(),
+    )
+    .is_some_and(|bay| bay.take(&view.library, p).is_some())
 }
 
 /// **The four class pills, one derivation asked four times**, which

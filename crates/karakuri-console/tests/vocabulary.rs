@@ -136,6 +136,30 @@
 //! console can be *asked* for and what a hand on the panel can *do* are
 //! different questions, and this file pins both.
 //!
+//! # There is no fifth pass yet, and what is missing is the registration
+//!
+//! **Two more painted controls exist and neither is reachable.**
+//! `karakuri_console::view::bay_grip` is the grip in a bay head and
+//! `view::pane_edge` is the band on a pane's own outer edge; both answer a
+//! `view::FoldGrip`, both ask for [`Op::Fold`], and
+//! [ADR-0295](../../../docs/adr/0295-the-grip-is-the-fold-and-a-panes-outer-edge-is-the-other-one.md)
+//! is where they are decided. They are the panel homes
+//! `docs/manual/operations.html` names for *Fold a bay away* and *Fold a pane
+//! away* — **bay head** and **pane edge** — and `tests/fold_grip.rs` measures
+//! both rectangles, both clearances and both presses.
+//!
+//! **What neither has is step one.** A press reaches a painted control through
+//! [`claim`], a row in `karakuri_console::input::PROBES`, and an arm in
+//! `crates/karakuri/src/main.rs`'s press handler; the derivations landed
+//! without either, so a press on a grip or on a pane's edge still goes to
+//! `egui` and reaches nothing at all. **So the two rows are not reached and
+//! their badges stay `plan`**, which is what
+//! [`every_arrangement_operation_the_pointer_reaches_is_marked_built`] would
+//! otherwise fail on, in the direction that says the page is behind the panel.
+//! A fifth pass belongs here the day the registration lands — driven exactly as
+//! the fourth is, [`claim`] first — and flipping either badge before then would
+//! be the page claiming a control an operator cannot find.
+//!
 //! # What the sweep cannot see, and which way each one fails
 //!
 //! - **Reachability is `crates/karakuri/src/main.rs`'s, and this crate cannot

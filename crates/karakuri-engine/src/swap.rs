@@ -143,6 +143,12 @@
 //!   L4 cost is fill-rate bound, so a slot on a 4K output costs several times
 //!   this. The number is comparable *between slots* — which is what a budget
 //!   needs — and is not a prediction of this machine's frame time.
+//!   **This one now has an answer beside it**, and it is the only one of the
+//!   four that does: [`crate::estimate`] fits `a + b·area` through two draws
+//!   and evaluates it at the output's size, [`HotSwap::estimate_live`] is where
+//!   a slot gets one, and the governor budgets on it in preference to this
+//!   (ADR-0296). It is a second measurement rather than a correction to this
+//!   one — both are kept, because they are statements about different sizes.
 //! - **The composite, the meters, the present pass, and `prepare`.** None of
 //!   them is inside `render`. The deck's own per-frame cost is not in here.
 //! - **The future.** It is one measurement of a cold Set at one instant. A
@@ -169,6 +175,7 @@ use karakuri_ir::typed::Checked;
 use karakuri_ir::Kind;
 
 use crate::binding::{Binding, Signals};
+use crate::estimate::{estimate, Estimate};
 use crate::probe::{Measurement, Probe};
 use crate::set::{Authority, Set, SetError};
 
@@ -608,6 +615,25 @@ pub struct HotSwap {
     /// Its measurement, parked with it. A rollback restores both, or the
     /// governor would go on budgeting for a Set that is no longer there.
     previous_cost: Option<Measurement>,
+    /// **What two small draws say this Set would cost at the output's size**,
+    /// if anything estimated it — [`HotSwap::estimate_live`], and
+    /// [`Deck::estimate_slots`](crate::deck::Deck::estimate_slots) deck-wide.
+    ///
+    /// A second measurement rather than a refinement of the first: `cost` is
+    /// one draw at [`PROBE_RESOLUTION`] and this is a fit through two, so it
+    /// answers for the size the deck is actually drawing. The governor prefers
+    /// it where it answers — see "Two numbers, and which one is budgeted on"
+    /// in [`crate::governor`].
+    ///
+    /// **Dropped whenever it would stop being about this Set at this size**: a
+    /// build landing (`install_if_ready`), a replay's `install`, and a
+    /// `resize`, which changes the very target the number is for. There is no
+    /// estimate on the worker's side to replace it with, because the worker
+    /// does not know the output's size.
+    estimate: Option<Estimate>,
+    /// The parked Set's estimate, held with `previous_cost` and restored by the
+    /// same rollback, for the same reason.
+    previous_estimate: Option<Estimate>,
     trial: Option<Trial>,
     /// Frame intervals in the current judging window. Capacity is fixed at
     /// [`JUDGE_FRAMES`] here so that `push` on the render thread never grows
@@ -677,6 +703,8 @@ impl HotSwap {
             cost: None,
             previous: None,
             previous_cost: None,
+            estimate: None,
+            previous_estimate: None,
             trial: None,
             samples: Vec::with_capacity(JUDGE_FRAMES),
             budget_ms,
@@ -713,6 +741,12 @@ impl HotSwap {
         self.cost = None;
         self.previous = None;
         self.previous_cost = None;
+        // The estimate went with the Set it was taken of. Nothing carries one
+        // across a replaced Set: it is a fit through two draws of *that*
+        // material, and the incoming Set is unestimated exactly as it is
+        // unmeasured.
+        self.estimate = None;
+        self.previous_estimate = None;
         self.trial = None;
         self.samples.clear();
     }
@@ -730,6 +764,8 @@ impl HotSwap {
             cost: None,
             previous: None,
             previous_cost: None,
+            estimate: None,
+            previous_estimate: None,
             trial: None,
             samples: Vec::new(),
             budget_ms: f32::INFINITY,
@@ -927,6 +963,71 @@ impl HotSwap {
         self.cost = Some(cost);
     }
 
+    /// **What the live Set is estimated to cost at the size it was estimated
+    /// for**, or [`None`] where nothing has estimated it.
+    ///
+    /// The [`Estimate`] and not a millisecond figure, because
+    /// [`Estimate::ms`] alone is never enough to act on: `P-0095` puts the
+    /// instrument, the two rungs, the floor it was placed against
+    /// ([`Estimate::floor_from`]) and how strictly that floor was read
+    /// ([`Estimate::floored`]) on the same object, and a consumer that cannot
+    /// see them cannot check the number. [`crate::governor`] reads a Copy
+    /// summary of exactly those; the whole record stays here.
+    ///
+    /// `None` is not "free" and not "cheap", on the same terms as
+    /// [`HotSwap::measured_cost`]. It means the slot is budgeted on its
+    /// measurement instead, and where there is no measurement either it is
+    /// unbudgetable.
+    pub fn estimated_cost(&self) -> Option<&Estimate> {
+        self.estimate.as_ref()
+    }
+
+    /// **Estimate the Set that is live now at `target`**, and keep the result.
+    ///
+    /// The two-draw counterpart of [`HotSwap::measure_live`], and it carries
+    /// every one of that call's warnings: **never on the render thread and
+    /// never inside a frame** — it submits and waits, now twice over — and
+    /// **destructive on a Set that has stepped**, because
+    /// [`crate::estimate::estimate_above_floor`] ends in
+    /// [`Set::rewind`](crate::set::Set::rewind).
+    /// [`Deck::estimate_slots`](crate::deck::Deck::estimate_slots) is the
+    /// deck-wide version, holds the "has not stepped" check, and constructs one
+    /// probe for every slot.
+    ///
+    /// `target` is the size the number is *for* — the output's, which since
+    /// ADR-0246 is a per-output question rather than a global one. It is
+    /// recorded on [`Estimate::target`], and [`HotSwap::resize`] drops the
+    /// estimate when that size moves.
+    ///
+    /// **An estimate that refuses is stored too**, and deliberately: the
+    /// refusal names what would have to change, carries the rungs and the
+    /// floor, and is what a status line shows instead of a number. What it is
+    /// not is a licence — the governor falls back to the measurement, and to
+    /// [`Reason::Unmeasured`](crate::governor::Reason::Unmeasured) where there
+    /// is not one.
+    pub fn estimate_live(
+        &mut self,
+        probe: &mut Probe,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        target: (u32, u32),
+    ) -> &Estimate {
+        let e = estimate(probe, device, queue, &mut self.live, target);
+        self.estimate.insert(e)
+    }
+
+    /// Attach an estimate to the Set that is live now.
+    ///
+    /// [`HotSwap::estimate_live`] is the one that takes it; this is for a
+    /// caller that has one from somewhere else — a test pinning exact
+    /// arithmetic, which is what most of the governor's is pinned with.
+    ///
+    /// Replaced wholesale by the next build that lands and dropped by the next
+    /// [`HotSwap::resize`], for the reasons on the field.
+    pub fn set_estimated_cost(&mut self, estimate: Estimate) {
+        self.estimate = Some(estimate);
+    }
+
     /// Whether a candidate is currently on trial. While one is, incoming
     /// builds are left in the channel — see [`HotSwap::install_if_ready`].
     pub fn on_trial(&self) -> bool {
@@ -961,6 +1062,14 @@ impl HotSwap {
         if let Some(previous) = &mut self.previous {
             previous.resize(device, width, height);
         }
+        // **An estimate is a number *at a target*, and the target just
+        // moved.** `Estimate::target` says which size it answered for, so a
+        // kept one would be a right number about a frame nobody is drawing any
+        // more — and the governor would spend it. Dropping it puts the slot
+        // back on its measurement until something estimates it again, which is
+        // the fallback the whole wiring is built around.
+        self.estimate = None;
+        self.previous_estimate = None;
     }
 
     /// Feed the watchdog one frame interval, and act on it if the window is
@@ -994,6 +1103,7 @@ impl HotSwap {
             // on budgeting for the candidate that is no longer there.
             let candidate = std::mem::replace(&mut self.live, previous);
             self.cost = self.previous_cost.take();
+            self.estimate = self.previous_estimate.take();
             self.retire(candidate);
             self.events.push(Event::RolledBack {
                 id: trial.id,
@@ -1003,6 +1113,7 @@ impl HotSwap {
             });
         } else {
             self.previous_cost = None;
+            self.previous_estimate = None;
             self.retire(previous);
             self.events.push(Event::Accepted {
                 id: trial.id,
@@ -1093,6 +1204,11 @@ impl HotSwap {
                 let outgoing = std::mem::replace(&mut self.live, candidate);
                 self.previous = Some(outgoing);
                 self.previous_cost = std::mem::replace(&mut self.cost, built.cost);
+                // The worker measures what it built and cannot estimate it —
+                // an estimate is taken against the output's size, which the
+                // worker does not know. So the incoming Set arrives with none
+                // and the outgoing one's is parked for a rollback.
+                self.previous_estimate = self.estimate.take();
                 self.samples.clear();
                 self.trial = Some(Trial {
                     id: built.id,

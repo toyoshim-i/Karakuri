@@ -757,12 +757,12 @@ pub struct Head {
 /// answering `None` here is what makes the fourth class pill a placement of its
 /// own** — see [`outputs`], which is where it goes instead.
 pub fn head_of(region: &Region) -> Option<Head> {
-    let (title, pills, grip): (_, &'static [&'static str], _) = match region.kind {
-        Kind::Bay { title, pills, grip } => (title, pills, grip),
-        Kind::Mixer => (MIXER_TITLE, &[], false),
-        Kind::Master => (MASTER_TITLE, &[], true),
-        Kind::Library => (LIBRARY_TITLE, &[], true),
-        Kind::Staging => (STAGING_TITLE, &[], false),
+    let (title, pills): (_, &'static [&'static str]) = match region.kind {
+        Kind::Bay { title, pills, .. } => (title, pills),
+        Kind::Mixer => (MIXER_TITLE, &[]),
+        Kind::Master => (MASTER_TITLE, &[]),
+        Kind::Library => (LIBRARY_TITLE, &[]),
+        Kind::Staging => (STAGING_TITLE, &[]),
         Kind::Transport | Kind::Outputs | Kind::Pane | Kind::Picture | Kind::Previews => {
             return None
         }
@@ -770,9 +770,60 @@ pub fn head_of(region: &Region) -> Option<Head> {
     Some(Head {
         title,
         pills,
-        grip,
+        grip: head_grip(region.kind),
         class: class_at(region.name),
     })
+}
+
+/// **Whether a region's head draws a grip**, said once and in a form a `const`
+/// can ask.
+///
+/// It was the third term of [`head_of`]'s own match, which was one statement
+/// while the paint was the only reader of it. [`BAY_GRIPS`] is the second
+/// reader and it is a `const`: [`crate::input`]'s table says how many controls
+/// a probe reaches, that number is *how many heads draw one of these*, and a
+/// hand-written four is the shape of thing this crate counts rather than
+/// remembers ([`REGIONS`], `Scope::ALL`, `Class::ALL`). A `bool` per kind in
+/// two places would be two answers to *does this head carry a grip*, and the
+/// day they disagreed the mark and the control would be in different heads.
+///
+/// **`Kind::Bay` carries its own**, because [`REGIONS`] states it there; the
+/// four bays that are kinds of their own state it here, which is where they
+/// stated it before. Everything headless answers `false` rather than being
+/// unreachable, so the count above is a walk over every region and not over a
+/// subset somebody has to keep.
+const fn head_grip(kind: Kind) -> bool {
+    match kind {
+        Kind::Bay { grip, .. } => grip,
+        // The mock draws one in these two heads and not in the other two —
+        // see each kind's own documentation, which is where the reading is.
+        Kind::Library | Kind::Master => true,
+        Kind::Mixer | Kind::Staging => false,
+        Kind::Transport | Kind::Outputs | Kind::Pane | Kind::Picture | Kind::Previews => false,
+    }
+}
+
+/// **How many bay heads draw a grip**, counted off [`REGIONS`] — which is how
+/// many bays a pointer can fold, because the grip is the control ([`bay_grip`]).
+///
+/// Four, on the day it is written: the Library, the Program bay, the Inspector
+/// and the Master. It is a count and not a four for [`crate::input::PROBES`]'
+/// reason — the row that registers this control says how many controls it
+/// reaches, and a grip drawn in a fifth head has to raise that number on its
+/// own rather than wait for somebody to notice.
+pub const BAY_GRIPS: usize = grips();
+
+/// [`BAY_GRIPS`], in a `const` — which `Iterator::filter` is not.
+const fn grips() -> usize {
+    let mut total = 0;
+    let mut at = 0;
+    while at < REGIONS.len() {
+        if head_grip(REGIONS[at].kind) {
+            total += 1;
+        }
+        at += 1;
+    }
+    total
 }
 
 /// **How many capsules one bay head can hold**: the most any entry in
@@ -857,6 +908,264 @@ fn head_capsule(
         }
     });
     found.filter(|capsule| head_box(rect).contains_rect(*capsule))
+}
+
+// ---------------------------------------------------------------------------
+// The two folds a pointer reaches: a bay's grip and a pane's own edge
+// ---------------------------------------------------------------------------
+
+/// **A fold, as a rectangle to press and the node it folds** — the console's
+/// own shape, reached from the panel instead of from `f`.
+///
+/// One type over two controls, which is [`McpPill`]'s arrangement rather than
+/// a merge: what a press asks for is [`Op::Fold`] of a node either way, and
+/// where the rectangle *is* differs completely — a bay's is furniture inside a
+/// painted head ([`bay_grip`]) and a pane's is a band on the edge of a split
+/// nothing is drawn in ([`pane_edge`]). So the answer is one type and the
+/// placement is two derivations, exactly as three class pills come out of a
+/// head and the fourth out of a headless row.
+///
+/// **They are two rows on `docs/manual/operations.html` and one variant
+/// here**, and that is the page describing two consequences rather than two
+/// operations: *Fold a bay away* says what a folded bay does to the pane it is
+/// stacked in, *Fold a pane away* says the centre takes the width, and
+/// `tests/vocabulary.rs`'s `rows_of` already gives [`Op::Fold`] both.
+///
+/// # There is no unfold on it, and that is the arrangement rather than a gap
+///
+/// [`Outputs::op`] and [`ProgramHead::op`] each choose between two operations,
+/// because the thing they act on is still on screen when it is off. **A folded
+/// node has no rectangle**, so neither of these controls is drawn once its
+/// press has landed: the grip goes with the head it is in and the band goes
+/// with the pane it is on. That is `Op`'s own sentence about the pointer —
+/// *"a folded region has no rectangle, so the pointer could never be over one,
+/// so `f` on the keyboard only ever folded"* — met by a control instead of by
+/// a key, and the way back is `z` for the same reason it is for `f`.
+///
+/// # A fold writes no session record
+///
+/// `karakuri-operation-record` answers `Silent::Surface` for all four of these
+/// operations — *a surface's own state* — so nothing here routes through the
+/// window's `written`, and there is no `Operation` for it to route as: this is
+/// [`Op`] and the two unnamed splits are why (ADR-0204).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FoldGrip {
+    /// **The control**: what a press has to land in.
+    pub grip: Rect,
+    /// The node a press folds.
+    pub id: NodeId,
+}
+
+impl FoldGrip {
+    /// **What a press asks for**, and there is one answer — see the type's own
+    /// documentation for why this is not the two [`ProgramHead::op`] chooses
+    /// between.
+    pub fn op(&self) -> Op {
+        Op::Fold(self.id)
+    }
+
+    /// Whether `p` is on the control.
+    pub fn hit(&self, p: karakuri_layout::Point) -> bool {
+        self.grip.contains(Pos2::new(p.x, p.y))
+    }
+}
+
+/// **The grip in a bay head, derived** — the mark `docs/manual/console.html`
+/// draws in four of the seven heads this console has, and the panel's route
+/// into *Fold a bay away*.
+///
+/// `None` where there is nothing to press: a region this console draws no head
+/// for, a head with no grip in it, a bay that is folded or off a solo
+/// somewhere else, or a bay clipped shorter or narrower than the target.
+///
+/// # The mark is the control, and it is not given a second shape
+///
+/// The page's lede says what the mark means — *"The grip in a bay's head says
+/// whose size you are setting: a bay with one is yours to size, and a bay
+/// without one is the height of what is in it"* — and the operations page puts
+/// *Fold a bay away* at the **bay head**. A fold is the far end of setting that
+/// height, so the reading a press takes is the reading the mark already
+/// carries. **A *reading* which is a control does not get a second shape
+/// invented for it**
+/// ([ADR-0291](../../../docs/adr/0291-the-tempo-figure-is-the-track-and-the-band-is-a-guard-on-the-hand.md)),
+/// so nothing new is drawn here: [`bay_head`] paints the same six dots it
+/// painted before this function existed.
+///
+/// **What that costs is the three heads the mock draws no grip in** — the
+/// Mixer, the Staging lane and the Sequencer, and the two headless rows beside
+/// them — which have no pointer route into this row and keep `f`. Drawing a
+/// grip in every head would buy them one and would be an edit to the page
+/// rather than to this function: the mark would stop saying which side of a
+/// divider the number belongs to, which is the whole of what the lede says it
+/// is for.
+/// [ADR-0295](../../../docs/adr/0295-the-grip-is-the-fold-and-a-panes-outer-edge-is-the-other-one.md)
+/// is where that is taken.
+///
+/// # Where the rectangle is, and the 0.75 of a pixel it shares with `solo`
+///
+/// The mark is [`GRIP_W`] = **5.5** wide and 9 tall, which is not a target a
+/// hand finds — the same sentence [`GRAB`] is written under, and the same one
+/// [`LookRow::grip`] answers with a band. So the target is **the head's own
+/// reservation for the mark, grown to a line's height**: [`head_pills`] steps
+/// `GRIP_W + PILL_GAP` back from [`size::HEAD_PAD_X`] before it places a
+/// capsule, so that **10.5** is the strip of head no other control can ever be
+/// drawn in, and this is it — 10.5 x [`size::PILL_H`], hard against the head's
+/// right-hand padding and centred on the head's mid-line, which is the box
+/// every other capsule in this head is placed in.
+///
+/// **The reservation rather than a pill's padding**, and the capsule beside it
+/// is what settles it: a `.pill` is its content inside `padding: 0 8px`, and
+/// 5.5 + 16 = 21.5 would reach 6 pixels into the capsule [`head_pills`] places
+/// one [`size::PILL_GAP`] to the left of the mark. The reservation ends exactly
+/// where that capsule ends, so the two **abut and never overlap** — two
+/// rectangles sharing an edge, which is what two rows of the Library bay's list
+/// already are, and the capsule is asked first in both the claim and the
+/// caller.
+///
+/// **What it takes that is not the mark is the gap**, and the gap is what the
+/// head keeps between the mark and the capsule so that a hand aiming at one
+/// does not land on the other. Giving it to the fold is what makes the mark
+/// findable at all; giving it to nobody would be a control 5.5 wide, which is
+/// the thing this paragraph starts by refusing.
+///
+/// **Sideways it clears every boundary**: [`size::HEAD_PAD_X`] is 10 against a
+/// [`GRAB`] of 6, and that padding is the page's. **Down the head it is
+/// `program_head`'s own 0.75 of a pixel**, arrived at the same way and for the
+/// same reason: a head is [`size::HEAD_H`] = 27 and the target is 16.5,
+/// centred, so 5.25 of head sits above it against a `GRAB` of 6, and a bay
+/// whose top edge is a boundary lends that boundary the top 0.75 of the
+/// target. Rule 3 gives the boundary first refusal and there is no case where
+/// both think they are dragging; `tests/fold_grip.rs` measures it by asking
+/// [`karakuri_layout::Layout::hit`] at the target's own corners rather than by
+/// doing the arithmetic again.
+///
+/// **No `egui` and no first frame.** The grip is six dots at a fixed width, so
+/// nothing here is as wide as a word — this is the one control in a bay head
+/// that costs no galley and exists on the frame before anything has been
+/// laid out. `layout` must be solved.
+pub fn bay_grip(layout: &karakuri_layout::Layout, name: &str) -> Option<FoldGrip> {
+    if !head_grip(region(name)?.kind) {
+        return None;
+    }
+    let id = layout.find(name)?;
+    // The bay itself, a column folded around it, or a solo somewhere else: one
+    // question for every ancestor, which is [`program_head`]'s own guard.
+    if !layout.visible(id) {
+        return None;
+    }
+    let head = head_box(to_egui(layout.rect(id)));
+    let mid = head.center().y;
+    let right = head.max.x - size::HEAD_PAD_X;
+    let grip = Rect::from_min_max(
+        Pos2::new(right - GRIP_W - size::PILL_GAP, mid - size::PILL_H * 0.5),
+        Pos2::new(right, mid + size::PILL_H * 0.5),
+    );
+    // A head clipped to a bay too short or too narrow to hold the target draws
+    // no control rather than half of one — [`head_capsule`]'s own guard, one
+    // capsule along.
+    head.contains_rect(grip).then_some(FoldGrip { grip, id })
+}
+
+/// **The two panes that fold**, by name.
+///
+/// `docs/manual/console.html`: *"a **left pane** and a **right pane**, which
+/// fold away to give room, and the **centre**, which is what they give it to
+/// … The middle one is not a third pane on purpose: folding it is not a thing
+/// anybody wants, and *solo* is."* So this is a list of two and not *whatever
+/// is at the end of the body row*: fold the left pane and the centre inherits
+/// its edge, and a derivation reading the edge alone would hand a hand the
+/// fold the page has just refused it.
+pub const FOLDING_PANES: [&str; 2] = ["left-pane", "right-pane"];
+
+/// **A pane's own outer edge, derived** — the panel's route into *Fold a pane
+/// away*, and the one control on this console with no mark at all.
+///
+/// `None` for anything that is not one of [`FOLDING_PANES`], for a pane that is
+/// folded or off a solo somewhere else, for a pane that is neither the first
+/// nor the last thing in the row it is stacked in, and for a pane narrower
+/// than the band itself.
+///
+/// # Nothing is drawn, and that is the page rather than an omission
+///
+/// `docs/manual/operations.html` puts this row at the **pane edge**, and the
+/// mock draws no handle, no gutter and no mark there — the pane's outer edge
+/// *is* the window's edge, because `.console`'s own 10px of padding is not
+/// drawn (see this module's head). This crate's rule is that a shape which
+/// looks like a control and is not does not get drawn; **the converse is not a
+/// rule**, and [`Mixer::select`] is the standing case of a control that is a
+/// rectangle rather than a capsule. What that costs an operator is that the
+/// edge has to be told about, which is `console.html`'s job and not this
+/// function's.
+///
+/// # Where the band is, and how wide
+///
+/// The pane's outer edge, [`GRAB`] deep and the whole height of the pane.
+/// **[`GRAB`] rather than a number chosen here**: it is this console's one
+/// statement of how far from an edge a hand is still on it — *"a 9px gap is
+/// not a target a hand finds"* — and a second number would be a second answer
+/// to a question the panel has already answered for every boundary.
+///
+/// **Which edge is derived and not listed.** The pane is the first or the last
+/// visible child of the row it is in, and the outer edge is the leading edge of
+/// the first and the trailing edge of the last — read off the split's own axis,
+/// so a body row that ever became a column takes its bands with it. A pane that
+/// is *both* — alone in the row, everything beside it folded — takes the
+/// leading edge, because a band on each would be one control with two
+/// rectangles.
+///
+/// # What it costs, and it is three pixels of a library row
+///
+/// The band is over whatever the pane's bays draw at their outer edge, and
+/// [`GRAB`] clears all of it but one: `.lib-list`'s padding is
+/// [`size::LIB_LIST_PAD`] = 3, so the outer 3 pixels of a **library row** are
+/// under the band. The row wins, because this control is asked **last** — the
+/// pane's edge is what nothing inside the pane claimed, which is
+/// [`Mixer::select`]'s sentence one level out. Everything else clears it: the
+/// scope chips and the filter fields at 9, the mixer's strips at
+/// [`size::STRIPS_PAD`] = 6 exactly, the transition row at
+/// [`size::XFADE_PAD_X`] = 10 and the Master bay's out at 10.
+///
+/// **Up and down it is the ordinary price of rule 3**: the pane's top and
+/// bottom edges are the body row's own boundaries, so the first and last
+/// [`GRAB`] of the band belong to them. `tests/fold_grip.rs` measures both by
+/// asking [`karakuri_layout::Layout::hit`] rather than by arithmetic.
+///
+/// `layout` must be solved. No `egui`: there is no word here to be as wide as.
+pub fn pane_edge(layout: &karakuri_layout::Layout, name: &str) -> Option<FoldGrip> {
+    if !FOLDING_PANES.contains(&name) {
+        return None;
+    }
+    let id = layout.find(name)?;
+    if !layout.visible(id) {
+        return None;
+    }
+    let row = layout.parent(id)?;
+    let axis = layout.axis(row)?;
+    let leading = match (
+        layout.visible_children(row).next()? == id,
+        layout.visible_children(row).last()? == id,
+    ) {
+        (true, _) => true,
+        (false, true) => false,
+        (false, false) => return None,
+    };
+    let rect = to_egui(layout.rect(id));
+    let band = match (axis, leading) {
+        (Axis::Row, true) => Rect::from_min_max(rect.min, Pos2::new(rect.min.x + GRAB, rect.max.y)),
+        (Axis::Row, false) => {
+            Rect::from_min_max(Pos2::new(rect.max.x - GRAB, rect.min.y), rect.max)
+        }
+        (Axis::Column, true) => {
+            Rect::from_min_max(rect.min, Pos2::new(rect.max.x, rect.min.y + GRAB))
+        }
+        (Axis::Column, false) => {
+            Rect::from_min_max(Pos2::new(rect.min.x, rect.max.y - GRAB), rect.max)
+        }
+    };
+    // A pane thinner than its own band has no edge to press, which is
+    // [`bay_grip`]'s guard on the other axis.
+    rect.contains_rect(band)
+        .then_some(FoldGrip { grip: band, id })
 }
 
 /// **A class's pill, derived**: the capsule, the class it opens, and whether
@@ -10234,6 +10543,44 @@ fn stepped_layer(at: Option<Layer>) -> Option<Layer> {
     LAYERS.get(next).map(|(kind, _)| *kind)
 }
 
+/// **Where this library is pointed**: the directory in the `.path` row, and
+/// whether what it reads is a folder that has *arrived* or one that is on its
+/// way in.
+///
+/// # One string for two states, because the row is one row
+///
+/// `console.html`'s *How a folder is chosen, and why the drop is the window's*
+/// gives that row two readings and never both at once — the directory the bay
+/// is pointed at, and *"the path a release would set"* while a folder is over
+/// the window. So this is the row's own value: what is drawn, and which of the
+/// two it is. [`View::pointed`] is where the second wins over the first, and
+/// it is the whole of the difference between them here — a hover replaces the
+/// line rather than adding one, because the mock has one `.path` and a second
+/// would be a place, which is the one thing this gesture cannot say.
+///
+/// # A path this crate is handed and never reads
+///
+/// It is a `&str` the host formatted, for [`View::library`]'s reason two rows
+/// down: a directory is a thing on a disk, and this crate reaches no disk at
+/// all (ADR-0156). **Whether it is a directory is not this type's question
+/// either** — that is asked of the file system once, on the drop, by whoever
+/// owns it (ADR-0275), and a bay that asked it would be asking it on a frame
+/// (P-0091).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Pointed<'a> {
+    /// The directory, as the host spells it.
+    pub path: &'a str,
+    /// **A folder is over the window and this is what a release would set.**
+    ///
+    /// `.path.incoming` in `style.css`, which is the row in `--c-text` rather
+    /// than its own `--c-faint` — and it is the whole of the mark, because a
+    /// drop carries no pointer position and there is no rectangle to ring
+    /// (ADR-0275). It says nothing about whether the release will be allowed:
+    /// one path is refused for being a file and two are refused for being two,
+    /// and neither is known before the release.
+    pub incoming: bool,
+}
+
 /// **One chip in the Library bay's scope row**, and it names *which library is
 /// being read* rather than a place a Set can be.
 ///
@@ -10386,23 +10733,28 @@ fn chip_width(ctx: &egui::Context, name: &str) -> f32 {
 /// # What the bay is standing on: a scope, and the listing that scope answers
 ///
 /// The manual: *"A scope and a walk, not one flat list: favourites, my sets,
-/// app presets, a folder."* **The scopes are drawn now, and two of the four
+/// app presets, a folder."* **The scopes are drawn now, and three of the four
 /// are answered** — `my sets`, which is
 /// [`karakuri_store::Store::list_sets`](../../../crates/karakuri-store/src/store.rs)
-/// and is a directory of Set files, and `presets`, which is the `.kset` files
-/// in the root the program was told about (ADR-0230). The other two are drawn
-/// and answer nothing, for two different reasons written out at [`Scope`] —
-/// and neither is the placeholder ADR-0200 refuses, because a chip **is** the
-/// question and the question is real.
+/// and is a directory of Set files; `presets`, which is the `.kset` files in
+/// the root the program was told about (ADR-0230); and `folder`, which is the
+/// Set files in a directory somebody dropped on this window during the run
+/// (ADR-0275) and which answered nothing until 2026-09-08. `favourites` is the
+/// one that is drawn and answers nothing, for the reason written out at
+/// [`Scope`] — and it is not the placeholder ADR-0200 refuses, because a chip
+/// **is** the question and the question is real.
 ///
 /// **The chips answer a press now**, which is `console.html`'s own affordance
 /// on each of them — *"Click to show it; click another scope to leave it"* —
 /// and it is the row `docs/manual/operations.html` names as this operation's
 /// home. What a press asks for is [`LibraryBay::chip`], and it is asked of
-/// the same derivation that paints the capsule. **Two of the four still
-/// answer nothing when they are chosen**, and that is unchanged and is the
-/// host's to say out loud: choosing *favourites* or *folder* is a question
-/// asked, and what is missing is the answer rather than the asking.
+/// the same derivation that paints the capsule. **One of the four still
+/// answers nothing when it is chosen**, and that is the host's to say out
+/// loud: choosing *favourites* is a question asked, and what is missing is the
+/// answer rather than the asking. **So is a *folder* nobody has pointed
+/// anywhere yet** — which is a different nothing again, because what it is
+/// short of is a gesture rather than a mechanism, and the host says that one
+/// out loud too.
 ///
 /// **Both halves are handed in.** The scopes are a slice and the rows are a
 /// slice, and which rows go with which scope is the host's answer rather than
@@ -10411,26 +10763,42 @@ fn chip_width(ctx: &egui::Context, name: &str) -> f32 {
 /// draws the row of questions it was given and the answer to the one that is
 /// marked.
 ///
+/// # The `.path` row, and it is where this library is pointed
+///
+/// `~/sets/tour-2026/night-b › opening` in the mock, between the scope row and
+/// the filters, and **it is drawn whichever scope is marked** — because it is
+/// two things at once (`console.html`): the walk inside a folder scope, and
+/// the place a send lands, which has to be on screen before the press
+/// (ADR-0267, [P-0090]).
+///
+/// **Until a folder has been dropped the row is not drawn at all**, so the bay
+/// is one line shorter and the scopes sit straight on the filters. That is the
+/// staging lane's own answer to an empty lane read one bay up: a row saying
+/// there is no folder would be a sentence about an absence. It is why
+/// [`LibraryBay::path`] is an `Option` and why every rectangle under it moves
+/// with it.
+///
+/// **While a folder is over the window it reads the path a release would
+/// set**, in `--c-text` where the row is otherwise `--c-faint` — `.path`
+/// against `.path.incoming`, and the whole of the mark this gesture gets. The
+/// drop-mark idiom one bay over does not transfer and the page says so
+/// plainly: that mark says *where*, and a folder coming in from the desktop
+/// carries no pointer position at all (ADR-0275). See [`Pointed`], which is
+/// the row's value, and `path_into`, which paints it.
+///
+/// **It is a readout and takes no press.** Nothing in [`crate::input::claim`]
+/// hit-tests it, for the load pill's reason in the foot: re-pointing the bay
+/// is another drop, and the gesture that points it is not one this panel can
+/// offer as a capsule.
+///
+/// [P-0090]: ../../../docs/principles/0090-a-surface-offers-it-never-decides.md
+///
 /// # What is in the mock's bay and is deliberately not here
 ///
 /// - **The `+` at the end of the scope row.** Adding a scope is the arena's
 ///   own gap drawn a fifth time, which [`outputs`] already names, and what it
 ///   would add is a folder — which is the chip already drawn, and what that
 ///   chip waits on is a directory rather than a fifth chip ([`Scope`]).
-/// - **The `.path` row**, `~/sets/tour-2026/night-b › opening`. **It waits on
-///   a directory, and this said it waits on an operation until 2026-09-08** —
-///   *"It is the walk inside a folder scope, so it says nothing until that
-///   scope can be asked for a listing at all"* — which is
-///   [`Scope::Folder`]'s corrected reason read one bullet up and the same
-///   `ListSets` misreading ADR-0275 settled. It is also no longer only the
-///   folder scope's: `console.html` draws this row **whichever scope is
-///   marked**, because it is two things at once — the walk inside a folder,
-///   and the place a send lands, which has to be on screen before the press
-///   (ADR-0267). What is missing is the directory itself, and ADR-0275 says
-///   how one arrives: a folder dragged off the desktop and let go anywhere
-///   over the window, which nothing in `crates/` reads yet. Until one has
-///   been dropped the row is not drawn at all, so it is a row this bay is
-///   without rather than a row it draws empty.
 /// - **`.lib-row`'s `.star`.** A favourite is a fact about a Set that nothing
 ///   in this workspace keeps — there is no such field on a `SetEntry`, no
 ///   record that carries one, and no metadata card that mentions one. Drawing
@@ -10594,6 +10962,21 @@ pub struct LibraryBay {
     /// of empty card with a rule under it would be a scope row with no
     /// questions in it.
     pub scopes: Option<Rect>,
+    /// `.path`: the directory this library is pointed at, between the scope
+    /// row and the filters, one [`size::PATH_H`] tall and the full width of
+    /// the bay, with its own rule along the bottom of it.
+    ///
+    /// **`None` until a folder has been chosen**, which is every run before a
+    /// drop and every test in this crate that does not say otherwise — see
+    /// this module's [`library`] and the section on this row at [`LibraryBay`]
+    /// for why an absent row rather than an empty one.
+    ///
+    /// **It is not [`scopes`](Self::scopes)' condition and not the filters'.**
+    /// A console handed no scopes at all can still be pointed somewhere — the
+    /// row says where a send lands, and that is true of a bay with no chips
+    /// drawn over it — so the two are independent and the arithmetic below
+    /// takes them in the order the mock stacks them.
+    pub path: Option<Rect>,
     /// `.lib-filters`: the row of two fields between the scope row and the
     /// list, one [`size::LIB_FILTERS_H`] tall and the full width of the bay,
     /// with its own rule along the bottom of it.
@@ -11115,11 +11498,21 @@ impl LibraryBay {
 /// below it goes and how many of them there is room for both follow the
 /// cursor — see [`Opened`] and [`Block`]. `None` is a bay with nothing open,
 /// which is every console until a press on the `read` chip.
+///
+/// **`pointed` is a row of furniture rather than a pointer**, and only whether
+/// there is one reaches the arithmetic: the `.path` row is drawn once a folder
+/// has been chosen and not at all before, so everything under it — the fields,
+/// the list, and how many rows there is room for — is measured from where it
+/// ends. What it *reads* goes to `path_into` and nowhere else, exactly as the
+/// marked chip does. `None` is a bay pointed nowhere with nothing over the
+/// window, which is every console until a folder is dropped on one
+/// (ADR-0275) — see [`Pointed`] and [`View::pointed`].
 pub fn library(
     layout: &karakuri_layout::Layout,
     scopes: &[Scope],
     sets: &[String],
     open: Option<Opened<'_>>,
+    pointed: Option<Pointed<'_>>,
 ) -> Option<LibraryBay> {
     // **Nothing said about any library, so there is nothing to draw.** Not the
     // same as a scope that holds nothing — see this function's own doc, and
@@ -11130,6 +11523,7 @@ pub fn library(
     library_box(
         to_egui(layout.rect(layout.find("library")?)),
         !scopes.is_empty(),
+        pointed.is_some(),
         sets.len(),
         open.map(|open| (open.at, open.reading.rows())),
     )
@@ -11145,6 +11539,10 @@ pub fn library(
 /// - `.scopes { display: flex; gap: 4px; padding: 7px 9px }` — a
 ///   [`size::SCOPES_H`] row under the bay head, its own rule the bottom pixel
 ///   of it, and drawn only where there are scopes to put in it.
+/// - `.path { padding: 4px 10px; font-size: 10px; border-bottom: 1px solid
+///   var(--c-hair) }` — a [`size::PATH_H`] row under the scopes, its own rule
+///   the bottom pixel of it, and drawn only once a folder has been dropped on
+///   the window.
 /// - `.lib-list { display: flex; flex-direction: column; padding: 3px }` —
 ///   what is left between the scope row and the foot, inset by
 ///   [`size::LIB_LIST_PAD`] on all four sides.
@@ -11171,6 +11569,7 @@ pub fn library(
 fn library_box(
     region: Rect,
     chips: bool,
+    pointed: bool,
     total: usize,
     open: Option<(usize, usize)>,
 ) -> Option<LibraryBay> {
@@ -11189,6 +11588,21 @@ fn library_box(
             Pos2::new(region.max.x, under_head + size::SCOPES_H),
         )
     });
+    // **The path row is under the chips and above the fields**, which is where
+    // the mock puts it, and it is nobody's condition: a bay is pointed at a
+    // directory or it is not, and that is true whether or not it was handed
+    // scopes to draw over it. **Its own condition is that there is a path at
+    // all** — until a folder has been dropped the row is not drawn and this
+    // bay is a line shorter (ADR-0275), which is why every rectangle under it
+    // is measured from where it ends rather than from the scope row.
+    let under_scopes = scopes.map_or(under_head, |scopes| scopes.max.y);
+    let path = pointed.then(|| {
+        Rect::from_min_max(
+            Pos2::new(region.min.x, under_scopes),
+            Pos2::new(region.max.x, under_scopes + size::PATH_H),
+        )
+    });
+    let under_path = path.map_or(under_scopes, |path| path.max.y);
     // **The filter row is the scope row's condition and not a second one.**
     // Both are the bay's head rather than its body — one says which library is
     // being read and the other narrows what that library answers — so a
@@ -11198,16 +11612,14 @@ fn library_box(
     let filters = (chips
         && region.width() - size::LIB_FILTERS_PAD_X * 2.0 - size::LIB_FILTERS_GAP > 0.0)
         .then(|| {
-            let top = under_head + size::SCOPES_H;
             Rect::from_min_max(
-                Pos2::new(region.min.x, top),
-                Pos2::new(region.max.x, top + size::LIB_FILTERS_H),
+                Pos2::new(region.min.x, under_path),
+                Pos2::new(region.max.x, under_path + size::LIB_FILTERS_H),
             )
         });
-    let top = match (filters, scopes) {
-        (Some(filters), _) => filters.max.y,
-        (None, Some(scopes)) => scopes.max.y,
-        (None, None) => under_head,
+    let top = match filters {
+        Some(filters) => filters.max.y,
+        None => under_path,
     };
     let list = Rect::from_min_max(
         Pos2::new(region.min.x + size::LIB_LIST_PAD, top + size::LIB_LIST_PAD),
@@ -11262,6 +11674,7 @@ fn library_box(
     };
     (fits > 0).then_some(LibraryBay {
         scopes,
+        path,
         filters,
         list,
         rows,
@@ -11556,6 +11969,69 @@ fn scopes_into(ui: &Ui, pal: &Palette, bay: &LibraryBay, scopes: &[Scope], scope
     // and the same hairline the bay head above it and the foot below it are
     // both drawn with. It is inside the row rather than under it, which is
     // what keeps the list's top where [`library_box`] put it.
+    let rule = row.max.y - size::HAIRLINE * 0.5;
+    painter.line_segment(
+        [Pos2::new(row.min.x, rule), Pos2::new(row.max.x, rule)],
+        Stroke::new(size::HAIRLINE, pal.hair),
+    );
+}
+
+/// **The path row, painted**: the directory this library is pointed at, and
+/// the rule under it.
+///
+/// Where the row goes is [`library`]'s, so this paints and derives nothing —
+/// [`scopes_into`]'s rule one row up.
+///
+/// Term for term from `style.css`:
+///
+/// - `.path { padding: 4px 10px; color: var(--c-faint); border-bottom: 1px
+///   solid var(--c-hair); font-size: 10px }` — the path at
+///   [`size::PATH_SIZE`], one [`size::PATH_PAD_X`] in from the left and
+///   centred across the row's own height, over a rule the row's bottom pixel.
+/// - `.path.incoming { color: var(--c-text) }` — **the same row in the panel's
+///   text ink while a folder is over the window**, which is the whole of the
+///   mark that gesture gets: a folder dragged in from outside tells this
+///   window a path and never a position, so nothing can be ringed the way
+///   `.strip.drop` rings the rectangle a carried Set would land on (ADR-0275).
+///   It says nothing about whether the release will be allowed — the text ink
+///   is what a word is drawn in when nothing is being said about it.
+///
+/// **A path too long for the row is clipped rather than elided**, which is
+/// `.lib-row`'s answer one box down and is a departure from this row's own
+/// declaration: `.path` sets `text-overflow: ellipsis` where `.lib-row` sets
+/// none, and `egui` has no ellipsis to draw here — [`room`](crate::room)'s own
+/// sentence about a mock declaration this console cannot honour. **What is cut
+/// is the end of the path**, which is the half that says where you have got
+/// to; the alternative is a second layout pass measuring the string against
+/// the row, and a readout is not worth a measurement the rest of this bay does
+/// not make.
+fn path_into(ui: &Ui, pal: &Palette, bay: &LibraryBay, at: Pointed<'_>) {
+    let Some(row) = bay.path else {
+        return;
+    };
+    let painter = ui.painter().with_clip_rect(row);
+    // `.path` is `--c-faint`; `.path.incoming` is `--c-text`. One line and one
+    // colour: the row comes up out of its own faint rather than being drawn a
+    // second way, so the line that changes is the line that will hold the
+    // answer.
+    let ink = match at.incoming {
+        true => pal.text,
+        false => pal.faint,
+    };
+    let galley = painter.layout_job(span_at(at.path, size::PATH_SIZE, ink));
+    painter.galley(
+        Pos2::new(
+            row.min.x + size::PATH_PAD_X,
+            row.center().y - galley.size().y * 0.5,
+        ),
+        galley,
+        ink,
+    );
+
+    // `border-bottom: 1px solid var(--c-hair)` — the row's own bottom pixel,
+    // and the same hairline the scope row above it draws. It is inside the row
+    // rather than under it, which is what keeps the list's top where
+    // [`library_box`] put it.
     let rule = row.max.y - size::HAIRLINE * 0.5;
     painter.line_segment(
         [Pos2::new(row.min.x, rule), Pos2::new(row.max.x, rule)],
@@ -14550,6 +15026,43 @@ pub struct View {
     /// candidates read off a filtered listing would shrink as the filter bit,
     /// and a step would then wander somewhere it could not come back from.
     pub holds: Vec<String>,
+    /// **Which directory this library is pointed at**, as the host spells
+    /// it — and `None` until a folder has been dropped on this window, which
+    /// is where every run starts and is a bay with no `.path` row at all.
+    ///
+    /// **The same seam as [`View::library`]**, one row up in the same bay: a
+    /// directory is a thing on a disk, this crate reaches no disk (ADR-0156),
+    /// and what crosses is the line to draw. The host writes it on the drop
+    /// that chose it and never on a frame — a drop is one act, and asking the
+    /// file system what a path is is not a thing to do per frame (P-0091).
+    ///
+    /// **It is not a scope and it is not `Scope::Folder`.** The row is drawn
+    /// whichever chip is marked, because it is also where a send lands
+    /// (ADR-0267); what the folder scope's *listing* is arrives in
+    /// [`View::library`] like every other scope's.
+    ///
+    /// It is a `String` rather than a `PathBuf` for the same reason the
+    /// listing is: this crate never opens it, so what it needs is the
+    /// spelling. See [`Pointed`].
+    pub folder: Option<String>,
+    /// **The path a release would set**, while a folder is over the window —
+    /// and `None` whenever no drag is over it, which is nearly always.
+    ///
+    /// **Beside [`View::folder`] rather than inside it**, because the two are
+    /// different facts: one is where this bay *is* pointed and the other is
+    /// where it *would be*. A drag that leaves the window without being let go
+    /// clears this and leaves the other standing, which is the row going back
+    /// to what it said — see [`View::pointed`], where the two become the one
+    /// row the mock draws.
+    ///
+    /// **Written per frame by whoever reads the platform's hover**, which is
+    /// the one thing about this bay that is a frame's business: `egui` clones
+    /// the hovered files onto every pass while a drag is over the window, so
+    /// there is no event to hang it off. Nothing is asked of the file system
+    /// for it (P-0091) — whether the path is a folder is the drop's question
+    /// and not the hover's, and the row says nothing about whether the release
+    /// will be allowed (ADR-0275).
+    pub incoming: Option<String>,
     /// **What the Staging lane lists this frame**: one candidate per deck slot
     /// whose newest build has a verdict outstanding or whose file no longer
     /// agrees with its picture — and **empty** for a console with no engine
@@ -14844,6 +15357,13 @@ impl View {
             // store's Sets are made of. No capacity is reserved, for
             // `library`'s reason one field up.
             holds: Vec::new(),
+            // **And pointed nowhere**, which is where every run begins: no
+            // folder has been dropped on the window, so there is no `.path`
+            // row and the scopes sit straight on the filters. Nothing over the
+            // window either — the second is a drag that is happening now, and
+            // one is not.
+            folder: None,
+            incoming: None,
             // Neither field set, which is the whole library rather than a
             // narrowed one — where a run begins, and every test in this crate
             // that does not say otherwise.
@@ -15168,6 +15688,35 @@ impl View {
                 .and_then(|at| self.holds.get(at))
                 .map(String::as_str),
             layer: self.layer,
+        }
+    }
+
+    /// **What the `.path` row reads**, or `None` for a bay that is pointed
+    /// nowhere and has a folder over nothing — which is where a run starts and
+    /// is every test in this crate that does not say otherwise.
+    ///
+    /// **A folder over the window wins over the folder that was chosen**,
+    /// which is the whole of [`Pointed::incoming`]: the mock draws one `.path`
+    /// row, so a hover *replaces* the line rather than adding one, and what is
+    /// on screen while a drag is over this window is what a release would set.
+    /// Take the folder back out of the window and the row goes back with it,
+    /// because the platform says when a drag leaves as well as when it
+    /// arrives (ADR-0275).
+    ///
+    /// **It is the whole of what the bay's arithmetic needs**, and it is asked
+    /// once per pass beside [`View::filters`] for that method's reason: `draw`
+    /// takes `&mut self`, and this borrows two of its fields.
+    pub fn pointed(&self) -> Option<Pointed<'_>> {
+        match (self.incoming.as_deref(), self.folder.as_deref()) {
+            (Some(path), _) => Some(Pointed {
+                path,
+                incoming: true,
+            }),
+            (None, Some(path)) => Some(Pointed {
+                path,
+                incoming: false,
+            }),
+            (None, None) => None,
         }
     }
 
@@ -15609,6 +16158,11 @@ impl View {
         // it borrows from — `draw` takes `&mut self`, and a filter read inside
         // the arm below would be a second borrow of `holds`.
         let narrowed = self.filters();
+        // **And where this library is pointed, read once beside it** — the
+        // `.path` row is a rectangle in the bay as well as a line of type, so
+        // the derivation and the paint are asked one value, and `draw` takes
+        // `&mut self` where this borrows two fields.
+        let pointed = self.pointed();
         // **The sixth, read here for the two above's reason**: it borrows the
         // listing this frame is drawing, and `draw` takes `&mut self`. It is
         // the cursor and the reading put together — see [`View::opened`].
@@ -15781,7 +16335,7 @@ impl View {
                     Kind::Library => {
                         card(ui, &pal, rect);
                         head_into(ui, &pal, rect, placed.region, opening);
-                        if let Some(bay) = library(panel.layout(), scopes, sets, opened) {
+                        if let Some(bay) = library(panel.layout(), scopes, sets, opened, pointed) {
                             // **The chips before the rows**, and painted from
                             // the draw rather than from inside the listing's
                             // own paint: the scope row belongs to the bay's
@@ -15789,6 +16343,16 @@ impl View {
                             // where everything under it is what that library
                             // holds.
                             scopes_into(ui, &pal, &bay, scopes, scope);
+                            // **And the path row between them and the fields**,
+                            // for the scope row's reason and one more of its
+                            // own: it says which directory this library is
+                            // pointed at, where the chips say which library —
+                            // and it is drawn whichever chip is marked,
+                            // because it is also where a send lands
+                            // (ADR-0267).
+                            if let Some(at) = pointed {
+                                path_into(ui, &pal, &bay, at);
+                            }
                             // **And the filter row between them and the
                             // rows**, for the scope row's reason: it belongs
                             // to the bay's head — it narrows what the library
@@ -16539,7 +17103,11 @@ const GRIP_STEP: f32 = 3.5;
 /// **How wide a grip is**, which [`head_pills`] steps back by before it places
 /// the first pill. A constant rather than a return value, because the pills
 /// are now laid out where nothing is painting.
-const GRIP_W: f32 = GRIP_STEP * (GRIP_COLS - 1) as f32 + GRIP_R * 2.0;
+///
+/// **Public since the mark became a control** ([`bay_grip`]): 5.5 is what says
+/// a target grown the way a `.pill` grows would reach into the capsule beside
+/// it, and that measurement is a test's rather than this module's.
+pub const GRIP_W: f32 = GRIP_STEP * (GRIP_COLS - 1) as f32 + GRIP_R * 2.0;
 
 /// The mock's `.grip`, `⋮⋮` — drawn rather than typed, because whether a
 /// vertical ellipsis is in `egui`'s default face is a question with no good
