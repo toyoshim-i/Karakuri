@@ -307,6 +307,8 @@ number; new records continue from the end.
 | [ADR-0277](0277-the-latency-offset-is-a-track-because-a-capsule-cannot-name-a-value.md) | The latency offset is a track, because a capsule cannot name a value | 2026-09-08 | accepted |
 | [ADR-0278](0278-an-operation-no-record-can-be-written-for-leaves-the-window-before-it-is-written.md) | An operation no record can be written for leaves the window before it is written | 2026-09-08 | accepted |
 | [ADR-0279](0279-the-centre-is-two-parameter-rows-wide-because-a-pane-that-cannot-draw-a-fader-is-not-a-minimum.md) | The centre is two parameter rows wide, because a pane that cannot draw a fader is not a minimum | 2026-09-08 | accepted |
+| [ADR-0280](0280-a-parameter-written-to-a-live-set-is-a-session-record.md) | A parameter written to a live Set is a session record, and the rebuild question is not settled with it | 2026-09-08 | accepted |
+| [ADR-0281](0281-every-route-reaches-every-write-and-a-read-is-the-routes-own-interface-design.md) | Every route reaches every write, and a read is the route's own interface design | 2026-09-08 | accepted |
 
 ## Retired numbers
 
