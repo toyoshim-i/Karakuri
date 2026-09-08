@@ -725,9 +725,12 @@ lands operation → `Record` → `apply` → a `Deck` setter, and `Deck`'s publi
 binding or authority writer. `Deck::slot` hands back a `&HotSwap` and says why — *"Deliberately not
 mutable"* — and `HotSwap::live_mut` is `pub(crate)` with the same argument written out. The engine's
 writers all exist and are all reachable only at a build: `Set::write_param`, `Set::set_published`,
-`Set::bind`, `Set::set_authority`. That one hole stops *Write a parameter*, *Attach a signal to a
-parameter* and *Set a node's authority*, and it is what makes this the bay where an operator turns a
-knob and the bay with no way to turn one.
+`Set::bind`, `Set::set_authority`. **`Set::write_param` no longer is**:
+[ADR-0280](adr/0280-a-parameter-written-to-a-live-set-is-a-session-record.md) put `Deck::write_param`
+over it and `Record::Ride` under it, so *Write a parameter* has a route through the engine and what
+the panel owes is the control. The hole still stops *Attach a signal to a parameter* and *Set a
+node's authority*, both the same one-line shape once somebody decides what each records — and it is
+what made this the bay where an operator turns a knob and the bay with no way to turn one.
 
 - ***Take a parameter back* has nothing to call even once that route exists**: `Set::bind` has no
   inverse anywhere in the workspace and `Binding` carries no suspended state. The row's own tip
