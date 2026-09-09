@@ -95,9 +95,12 @@ fn travel(at: StripBox, knob: Knob) -> f32 {
     match knob {
         Knob::Trim { .. } => at.trim.width(),
         Knob::Fader { .. } => at.fader.height() - size::VFADER_INSET * 2.0,
-        // The Master bay's, which is no strip's and has a file of its own:
-        // `tests/master.rs` measures that track off the bay it is in.
-        Knob::Out => panic!("the master out is not one of a strip's two faders"),
+        // The Master bay's four, which are no strip's and have a file of
+        // their own: `tests/master.rs` measures those tracks off the bay they
+        // are in.
+        Knob::Out | Knob::Feedback { .. } | Knob::Bloom | Knob::RgbShift => {
+            panic!("a Master bay knob is not one of a strip's two faders")
+        }
         // The Inspector's, which is no strip's either: `tests/param_fader.rs`
         // measures that track off the pane it is in.
         Knob::Param { .. } => panic!("a parameter fader is not one of a strip's two faders"),

@@ -10,7 +10,8 @@
 //!
 //! - **Never allocate on the render thread. Never compile shaders on it.**
 //! - Pipelines are double-buffered; swaps happen only on frame boundaries.
-//! - If a new pipeline exceeds the frame budget, roll back automatically.
+//! - If a new pipeline exceeds the frame budget, stop the slot it landed in
+//!   and say so, rather than putting anything back (ADR-0316).
 //!   (The last two live in [`swap`], which is where all four of these are
 //!   under load at once and where the reasoning behind them is written down.)
 //! - Every structural change forks a Set. A live Set is never mutated in place;
@@ -36,6 +37,10 @@ pub mod estimate;
 pub mod frame;
 pub mod governor;
 pub mod gpu;
+/// The master chain: three fixed passes between the mix's write and the tone
+/// map. See [`master`] for what is fixed, what is chosen, and what each pass
+/// costs per pixel.
+pub mod master;
 pub mod meter;
 pub mod mix;
 /// Private: the node types a Set is a grouping of. Nothing outside chooses
@@ -66,6 +71,7 @@ pub use estimate::{Estimate, Fit, Unfit, PREPARATION_RESOLUTION};
 pub use frame::{compose, Committed, Look, Outcome, Sink, Skip, WindowSink};
 pub use governor::{Basis, Decision, Estimated, FloorRead, Governor, Reason, Report, SlotState};
 pub use gpu::{Gpu, GpuError};
+pub use master::{Chain, Cut};
 pub use meter::{Level, Meters};
 pub use points::{Params, Points};
 pub use present::{letterbox, Present, TonemapOp};

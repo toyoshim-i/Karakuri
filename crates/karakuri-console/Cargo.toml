@@ -21,6 +21,14 @@ karakuri-layout = { version = "0.1.0", path = "../karakuri-layout" }
 # nothing to translate *into* (ADR-0156).
 karakuri-operation = { version = "0.1.0", path = "../karakuri-operation" }
 
+# **What a pattern is, because the Sequencer bay draws one.** The bay reads the
+# armed pattern per frame and hands back an operation on a press; it holds no
+# pattern and applies nothing to one, which is `karakuri-operation`'s seam one
+# type along (ADR-0156). The crate costs this one nothing it was not already
+# paying: it depends on the vocabulary above and on nothing else, and carries no
+# serialiser (ADR-0320).
+karakuri-pattern = { version = "0.1.0", path = "../karakuri-pattern" }
+
 # **The view lives in this crate, so the toolkit is a dependency of it.**
 # ADR-0155 chose `egui` and paid a `wgpu` major version for it; this is where
 # that lands. The three move together and are re-exported from `lib.rs` for the

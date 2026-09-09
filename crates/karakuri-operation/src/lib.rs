@@ -138,20 +138,33 @@
 //!
 //! # Where a payload is not decided
 //!
-//! Twelve rows name an operation whose payload cannot be written down without
-//! a decision nobody has made, and one third of a thirteenth, the camera arm
-//! of [`Property`]. Four have been here longest —
+//! Four rows name an operation whose payload cannot be written down without
+//! a decision nobody has made, and one third of a fifth, the camera arm
+//! of [`Property`]. They are the four that have been here longest —
 //! [`Operation::MoveBoundary`], [`Operation::WalkHistory`],
-//! [`Operation::WatchFiles`] and [`Operation::RouteFrame`] — and **eight
-//! arrived at once, which is two whole bays being specified for the first
-//! time**: the master chain's three effects ([`Operation::SetFeedback`],
-//! [`Operation::SetBloom`], [`Operation::SetRgbShift`]), whose parameters
-//! cannot be named while the chain itself does not exist, and the sequencer's
-//! five ([`Operation::SetStep`], [`Operation::SetLaneMute`],
-//! [`Operation::PointLane`], [`Operation::SetPatternGrid`] and
-//! [`Operation::SelectPattern`]), which wait on a pattern — authored state
-//! nothing in this program holds. They carry [`Undecided`], which is a marker
-//! and not a
+//! [`Operation::WatchFiles`] and [`Operation::RouteFrame`].
+//!
+//! **The sequencer's five left on 2026-09-09** ([`Operation::SetStep`],
+//! [`Operation::SetLaneMute`], [`Operation::PointLane`],
+//! [`Operation::SetPatternGrid`] and [`Operation::SelectPattern`]). They waited
+//! on a pattern — authored state nothing in this program held — and a pattern
+//! is one bar, a [`StepMode`] and a list of lanes now
+//! (`docs/adr/0320-a-pattern-is-one-bar-of-sixteen-slots-a-lane-is-a-target-and-two-levels-and-a-cell-is-a-bit.md`),
+//! with a lane's target an operation of this vocabulary with its value elided
+//! ([`LaneTarget`],
+//! `docs/adr/0321-a-lanes-target-is-an-operation-with-its-value-elided.md`).
+//! Each of the five names the bank it acts on rather than implying the armed
+//! one.
+//!
+//! **Three left on 2026-09-09.** The master chain's effects
+//! ([`Operation::SetFeedback`], [`Operation::SetBloom`],
+//! [`Operation::SetRgbShift`]) carried [`Undecided`] because their parameters
+//! could not be named while the chain did not exist; the chain is three fixed
+//! passes now and they carry [`Feedback`], [`Bloom`] and [`RgbShift`] — which
+//! is what this marker is for, since replacing it was a compile error at every
+//! construction site rather than a search.
+//!
+//! The nine carry [`Undecided`], which is a marker and not a
 //! placeholder: it says *this operation exists and what it acts on is an open
 //! question*, and it is greppable. Nothing here guesses, because nothing in
 //! this repository draws or declares something that claims an answer exists
@@ -327,6 +340,163 @@ impl Sync {
     }
 }
 
+/// **What one step of a sequencer pattern is worth**: a sixteenth or an
+/// eighth, and the list is closed.
+///
+/// The pattern is one bar, fixed, so the count follows the mode rather than
+/// being a second thing a hand sets — sixteen cells at a sixteenth and eight
+/// at an eighth, the row keeping its width so the cells halve in the finer one
+/// (`docs/adr/0306-the-grid-head-is-one-pill-because-the-bar-is-one-bar-and-the-count-follows-the-mode.md`).
+///
+/// **It is the pattern's and not the session's or a lane's**, which is the
+/// console's own sentence about the pill that draws it: *"It is armed because
+/// it is what the pattern is rather than a preference the head is holding."*
+/// So [`Operation::SetPatternGrid`] names the bank it is the mode of.
+///
+/// **A pattern stores sixteen slots in both modes and an eighth reads slot
+/// `2k`**, so this is a change of *reading* and never of the pattern — which
+/// is [`StepMode::slot_of`] and
+/// `docs/adr/0320-a-pattern-is-one-bar-of-sixteen-slots-a-lane-is-a-target-and-two-levels-and-a-cell-is-a-bit.md`.
+/// The stored width is `karakuri_pattern`'s, because it belongs to the thing
+/// that holds the steps.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum StepMode {
+    /// Sixteen steps to the bar, four to the beat. What the console's ruler
+    /// and cells have been drawn in since the mock's first commit, and what a
+    /// pattern nobody has pressed the pill on is in.
+    #[default]
+    Sixteenth,
+    /// Eight steps to the bar, two to the beat.
+    Eighth,
+}
+
+impl StepMode {
+    /// Both values, in the order the pill names them.
+    pub const ALL: [StepMode; 2] = [StepMode::Sixteenth, StepMode::Eighth];
+
+    /// **The word the head's pill reads**, which is the mock's own spelling.
+    ///
+    /// A match rather than a table, exactly as [`Sync::name`] and
+    /// [`BlendMode::name`] are and for their reason: a mode added to this enum
+    /// does not compile until it has a name.
+    pub fn name(self) -> &'static str {
+        match self {
+            StepMode::Sixteenth => "1/16",
+            StepMode::Eighth => "1/8",
+        }
+    }
+
+    /// **How many steps there are in the bar at this mode** — sixteen and
+    /// eight. The bar is fixed, so this follows the mode and is not a second
+    /// choice beside it (ADR-0306).
+    pub fn count(self) -> usize {
+        match self {
+            StepMode::Sixteenth => 16,
+            StepMode::Eighth => 8,
+        }
+    }
+
+    /// **The multiplier in the step index**, which is
+    /// `floor(beats × steps_per_beat) mod count` — ADR-0222's own formula, a
+    /// pure function of `Oscillator::beats`.
+    pub fn steps_per_beat(self) -> f64 {
+        match self {
+            StepMode::Sixteenth => 4.0,
+            StepMode::Eighth => 2.0,
+        }
+    }
+
+    /// **Which of the sixteen stored slots step `step` reads.**
+    ///
+    /// The identity at a sixteenth and `2k` at an eighth, which is what makes
+    /// a mode press a change of reading: the finer mode and back returns
+    /// exactly what was there, and an eighth-mode step sits at the same
+    /// musical instant as the sixteenth it is drawn over. Sizing the store to
+    /// the count instead would throw half a bar away on one press with nothing
+    /// to confirm against, which is the alternative ADR-0320 refuses.
+    pub fn slot_of(self, step: usize) -> usize {
+        match self {
+            StepMode::Sixteenth => step,
+            StepMode::Eighth => step * 2,
+        }
+    }
+}
+
+/// **What a sequencer lane drives**: an operation of this vocabulary with its
+/// value left out.
+///
+/// A lane is a fifth route into this vocabulary rather than a binding
+/// (`docs/adr/0222-a-sequencer-lane-is-a-fifth-route-and-not-a-binding.md`), so
+/// what it needs is not a new operation but an *address* — and the address a
+/// lane wants is one of these arms plus the level the step is worth, which is
+/// [`LaneTarget::operation`].
+///
+/// **This is the bay's sharpest question and this is the answer**
+/// (`docs/adr/0321-a-lanes-target-is-an-operation-with-its-value-elided.md`).
+/// The console draws four lanes — three deck faders and a Set parameter — and
+/// the two obvious spellings each reach one kind and not the other: a
+/// published-interface position is a control a *Set* declares, and
+/// `Record::Opacity` is no Set's; a slot number cannot say which parameter.
+/// **An operation minus its value reaches all four**, because the vocabulary
+/// already addresses both.
+///
+/// **Two of this vocabulary's rows are not lane targets**, and it is one
+/// reason: [`Operation::SetResidency`] and [`Operation::SetBlend`] take a word
+/// from a closed list rather than a level, and a step is a level — so a lane
+/// pointed at one would have to invent the word an on-step means. It is
+/// written here rather than left to be noticed from this enum's silence.
+///
+/// **[`Operation::SetGain`], [`Operation::SetMaskPosition`],
+/// [`Operation::SetMasterOut`] and [`Operation::SetExposure`] are each one arm
+/// and one line of [`LaneTarget::operation`]** — additions to a closed list, so
+/// none of them is a decision and their absence is scope rather than a gap.
+#[derive(Debug, Clone, PartialEq)]
+pub enum LaneTarget {
+    /// **A deck's channel fader** — three of the four lanes the console draws.
+    Fader { deck: u8 },
+    /// **A parameter inside the Set on a deck** — the fourth.
+    ///
+    /// A vector parameter costs nothing extra:
+    /// `docs/adr/0268-a-vector-parameter-is-driven-one-component-at-a-time.md`
+    /// makes [`ParamAt::key`] `glow.x` and never `glow`, so a lane reaches a
+    /// component by the road `--param` reaches it by and needs no field of its
+    /// own.
+    Param { deck: u8, param: ParamAt },
+}
+
+impl LaneTarget {
+    /// **The operation this lane emits at a step worth `value`.**
+    ///
+    /// [`crate::gate`]'s discipline applied to an address: an exhaustive
+    /// `match`, so a target added does not compile until it says what it
+    /// emits. It is `karakuri_console::panel::Knob::operation` and
+    /// `karakuri_midi::map::Target::operation` a third time — *an address plus
+    /// a value becomes an operation* — which is why this is not a new
+    /// mechanism.
+    pub fn operation(&self, value: f32) -> Operation {
+        match self {
+            LaneTarget::Fader { deck } => Operation::SetOpacity {
+                deck: *deck,
+                opacity: value,
+            },
+            LaneTarget::Param { deck, param } => Operation::WriteParam {
+                deck: *deck,
+                param: param.clone(),
+                value: ParamValue::Scalar(value),
+            },
+        }
+    }
+
+    /// **Which deck this lane writes into**, which is what a caller asking
+    /// *does a lane hold this control* starts from
+    /// (`docs/adr/0323-a-scheduled-move-is-refused-on-a-control-a-lane-holds.md`).
+    pub fn deck(&self) -> u8 {
+        match self {
+            LaneTarget::Fader { deck } | LaneTarget::Param { deck, .. } => *deck,
+        }
+    }
+}
+
 /// What a deck slot is *for*. `karakuri_engine::deck::Residency`'s three, in
 /// the order they cost.
 ///
@@ -459,6 +629,109 @@ impl Tonemap {
             Tonemap::AgX => "agx",
         }
     }
+}
+
+/// **Which frame the master chain's feedback pass reads back.**
+/// `karakuri_engine::master::Cut`'s two, mirrored here rather than imported
+/// for this crate's own reason — see the module documentation.
+///
+/// The maintainer's decision on 2026-09-09 was *both, selectable*: the two are
+/// different pictures and a design that picked one would be taking a decision
+/// away from a hand. See
+/// `docs/adr/0317-the-master-chain-is-three-fixed-passes-and-feedback-reads-either-cut.md`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Cut {
+    /// The frame as the mix wrote it, before this chain touched it. One echo
+    /// of the previous frame and not a trail: nothing read back has been fed
+    /// back.
+    #[default]
+    Mix,
+    /// The chain's own exit, after rgb shift and before the tone map. A trail,
+    /// because what is read back already contains it.
+    Exit,
+}
+
+impl Cut {
+    /// Both, in the order a surface shows them. **A list is not a cycle** —
+    /// [`BlendMode::ALL`]'s rule, and the console's own chip does the
+    /// arithmetic over these two.
+    pub const ALL: [Cut; 2] = [Cut::Mix, Cut::Exit];
+
+    /// **The lower-case word for this cut**, which is what
+    /// `karakuri_store::record::Record::MasterChain` carries and what a map
+    /// file spells. [`BlendMode::name`]'s rule: a cut added to the enum does
+    /// not compile until it has a name.
+    pub fn name(self) -> &'static str {
+        match self {
+            Cut::Mix => "mix",
+            Cut::Exit => "exit",
+        }
+    }
+}
+
+/// **The feedback pass's parameters**: how much of the retained frame comes
+/// back, and which frame that is.
+///
+/// **Two fields and not two operations.** The amount without the cut is not a
+/// picture anybody can reconstruct — the same 0.5 is a one-frame echo under
+/// [`Cut::Mix`] and a compounding trail under [`Cut::Exit`] — so a surface
+/// that could move one without saying the other would be asking for a look it
+/// had not named. That is `Record::Look`'s argument at the size of one pass.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct Feedback {
+    /// `[0, 0.95]`, and the ceiling is the engine's: at 1.0 the exit cut is an
+    /// accumulator with no decay in it. Clamped where the record is applied
+    /// and not here — `karakuri_engine::master::Chain::clamped`.
+    pub amount: f32,
+    /// Which frame the amount is of.
+    pub cut: Cut,
+}
+
+impl Feedback {
+    /// **The most a surface may ask for**, and the reason it is short of 1.0
+    /// is the engine's: under [`Cut::Exit`] the pass is an accumulator with no
+    /// decay in it, so 1.0 runs still material away to infinity. At 0.95 the
+    /// ceiling is twenty times the frame.
+    ///
+    /// **This is the reach a control draws, and it is not the wall.** The wall
+    /// is `karakuri_engine::master::Chain::clamped`, where the record is
+    /// applied, so a MIDI map and a model meet it too
+    /// (`docs/principles/0090-a-surface-offers-it-never-decides.md`). The
+    /// number is here as well so a fader can be laid out without reading the
+    /// engine, and the two being one number is asserted where both are
+    /// visible — `crates/karakuri`, which depends on this crate and on the
+    /// engine. That is [`Tonemap`]'s arrangement for a range instead of a
+    /// list.
+    pub const MAX: f32 = 0.95;
+}
+
+/// **The bloom pass's parameters**: how much of the blurred bright part is
+/// added back.
+///
+/// **One field, and the two numbers that are not here are stated rather than
+/// forgotten.** The *knee* — what counts as bright — is 1.0 and fixed,
+/// because in a linear HDR pipeline 1.0 is the top of the range the sRGB
+/// encode is honest about rather than an arbitrary level, and what decides how
+/// much of a frame is above it is [`Operation::SetMasterOut`] one pass
+/// upstream. The *radius* is fixed because the tap count is what a radius
+/// costs and a cost is known before it is paid
+/// (`docs/principles/0091-cost-is-known-before-it-is-paid.md`). Both are named
+/// in `karakuri_engine::master`, with the numbers.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct Bloom {
+    /// `[0, 1]`.
+    pub amount: f32,
+}
+
+/// **The rgb shift pass's parameters**: how far the three channels are pulled
+/// apart.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct RgbShift {
+    /// `[0, 1]`, of the engine's `Chain::SHIFT_MAX` — 2% of the frame's
+    /// height. In fractions of the frame and never in texels, so the same
+    /// session shifts the same distance on a second display
+    /// (ADR-0247).
+    pub amount: f32,
 }
 
 /// How a signal is shaped on its way to a parameter.
@@ -655,9 +928,33 @@ pub struct Control {
     pub range: [f32; 2],
 }
 
-/// One of the three things [`Operation::SetProperty`] can set — and the row is
-/// *"Element capacity, seeds, the camera"*, which is three operations wearing
-/// one heading. Carried as a sum for [`TransitionSetting`]'s reason.
+/// One of the two things [`Operation::SetProperty`] can set — and the row is
+/// *"Element capacity, seeds, the camera"*, which was three operations wearing
+/// one heading and is two. Carried as a sum for [`TransitionSetting`]'s reason.
+///
+/// # The camera was the third and is not one of these
+///
+/// It was carried as `Camera(Undecided)` because *the camera* looked like two
+/// things that were not one operation: the built-in orbit, whose numbers came
+/// in through a `camera` record and which declared nothing, or an L3 procedure
+/// whose params are written like any other node's. **The answer is that they
+/// were never two.** The built-in orbit's `radius`, `speed` and `height` are
+/// parameters of the camera node — the engine declares them where an artifact
+/// would, because the built-in is a node with no procedure behind it — so
+/// [`Operation::WriteParam`] moves them, `--param L3:0:radius` reaches them,
+/// and a knob learned against their positions in the published interface
+/// reaches them too. **The arm is deleted rather than filled in**: an arm
+/// carrying three numbers would have been a second way to write a parameter,
+/// and the two would disagree the first time one of them grew a refusal.
+///
+/// **The heading still names the camera** and this crate's title still matches
+/// it exactly, which `the_manual_and_the_vocabulary_agree` checks. That is a
+/// cost taken on purpose: *the camera* is the word an operator comes to that
+/// row looking for, and the row's own tip is where the page says which row took
+/// it. Renaming it to *Element capacity and seeds* was the alternative and is
+/// recorded as the one that lost, so it stays a one-line change if a reader
+/// disagrees.
+/// `docs/adr/0318-the-built-in-cameras-three-placement-numbers-are-parameter-rows.md`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Property {
     /// How many elements a geometry runs at, overriding what its own
@@ -666,17 +963,6 @@ pub enum Property {
     /// The salt for one node's hash builtins, so re-seeding changes randomness
     /// without touching anything structural. There is no flag for this.
     Seed { node: NodeAt, salt: u64 },
-    /// **The camera, and it is the one arm with no payload that can be
-    /// written down.**
-    ///
-    /// There are two live answers and they are not the same operation.
-    /// `karakuri_store::record::Record::Camera` describes a built-in orbit —
-    /// `{ kind, index, radius, speed }` — while L3 is a procedure layer whose
-    /// params are written by [`Operation::WriteParam`] like any other node's.
-    /// Which of those *is* "the camera" decides whether this arm carries three
-    /// numbers or should not exist at all, and there is no flag and no key on
-    /// either side to read the answer off.
-    Camera(Undecided),
 }
 
 /// Sending a Set and taking one in — **two operations under one heading**, and
@@ -1057,20 +1343,27 @@ operations! {
     /// chain, switches one effect off or adds an effect somebody wrote; those
     /// are controls the panel does not draw and decisions nobody has taken.
     ///
-    /// **[`Undecided`] twice over, which is what makes this the sharpest of
-    /// the three.** No parameter of it can be written down while the chain
-    /// does not exist —
-    /// `docs/adr/0227-a-pattern-and-a-master-chain-setting-are-library-data-in-two-tiers.md`
-    /// declines to name a chain's contents for exactly that reason, *"a record
-    /// kept for a thing that does not exist would be inventing its
-    /// contents"* — and feedback has a second question the other two do not:
-    /// **which cut of the previous frame it reads**. A Set's output, the raw
-    /// frame the mix wrote, or the frame as it stands after some effect in
-    /// this chain are three different things and nothing here can say which,
-    /// and it is not a control that is missing: a cut that is read has to be
-    /// held, so naming one recomposes the pipeline rather than setting a
-    /// value on it.
-    SetFeedback { params: Undecided } => "Feedback",
+    /// **A state and never a step**: [`Feedback`] is where the pass is put,
+    /// not how far it moves, so two surfaces holding this operation cannot
+    /// disagree about where the pass is
+    /// (`docs/principles/0090-a-surface-offers-it-never-decides.md`).
+    ///
+    /// **The cut was the open question and it is answered.** Until 2026-09-09
+    /// this payload was [`Undecided`] because *which cut of the previous frame
+    /// it reads* had three live answers and a cut that is read has to be held,
+    /// so naming one recomposed the pipeline rather than setting a value on
+    /// it. The maintainer's answer was **both, selectable** — so the cut is a
+    /// parameter of this pass, only the chosen one is retained, and the
+    /// pipeline it recomposes is one `copy_texture_to_texture` at a different
+    /// point in the frame. See
+    /// `docs/adr/0317-the-master-chain-is-three-fixed-passes-and-feedback-reads-either-cut.md`.
+    ///
+    /// **The amount is bounded and this crate does not bound it.** The engine
+    /// clamps to `[0, 0.95]` where the record is applied, so every route in
+    /// meets the same wall — a conversion that clamped here would be a second
+    /// opinion about a range the setter already holds, which is
+    /// [`Operation::SetMasterOut`]'s rule.
+    SetFeedback { params: Feedback } => "Feedback",
 
     /// The frame's bright parts spreading into what is beside them, on
     /// [`Operation::SetFeedback`]'s terms: a preset, always present, and what
@@ -1085,23 +1378,24 @@ operations! {
     /// [`Operation::SetMasterOut`]'s and not [`Operation::SetExposure`]'s,
     /// which is ADR-0224's two multiplications seen from between them.
     ///
-    /// [`Undecided`] because the chain does not exist and no parameter of it
-    /// is named anywhere — the row above carries the argument.
-    SetBloom { params: Undecided } => "Bloom",
+    /// **One parameter, and the two that are fixed are named at [`Bloom`]
+    /// rather than left out of the story**: the knee is 1.0 because that is
+    /// the top of the range the sRGB encode is honest about, and the radius is
+    /// fixed because the tap count is what a radius costs.
+    SetBloom { params: Bloom } => "Bloom",
 
     /// The three channels sampled apart, so an edge fringes. The last of the
     /// three and on [`Operation::SetFeedback`]'s terms, so it is the one the
     /// other two are seen through.
     ///
-    /// **The console drawing a dash here where the other two carry a number
-    /// is an effect nobody has given a value, not a fourth state**: the chain
-    /// is every preset, always, so there is no per-effect switch for a dash to
-    /// be the off position of. Written down because an empty payload here
-    /// would be that reading — *this acts on nothing* — and it is the one the
-    /// manual refuses at this row.
-    ///
-    /// [`Undecided`] for the row above's reason.
-    SetRgbShift { params: Undecided } => "RGB shift",
+    /// **The console drew a dash here where the other two carried a number,
+    /// and it draws a figure now.** The dash meant *an effect nobody has given
+    /// a value*, which stopped being true the moment the chain existed: every
+    /// pass has an amount, zero is a value, and an amount of zero is the pass
+    /// not being recorded at all. It is still not a per-effect switch — the
+    /// chain is every preset, always — and an empty payload here would still
+    /// be the reading the manual refuses at this row.
+    SetRgbShift { params: RgbShift } => "RGB shift",
 
     /// The transfer from unbounded linear HDR to something displayable.
     ///
@@ -1142,11 +1436,13 @@ operations! {
     // emitting [`Operation::SetOpacity`] and the fourth writes a Set
     // parameter, which is [`Operation::WriteParam`]. **A lane needs no new
     // operation to drive anything.** These five are the other half — what a
-    // hand does to the pattern — and every one of them carries [`Undecided`]
-    // because **nothing in this program holds a pattern**. Where one is kept
-    // is settled (ADR-0227: library data in two tiers, on the arrangement's
-    // shape) and what one *is* is not, so a step, a lane and a target have no
-    // spelling for an operation to carry.
+    // hand does to the pattern — and every one of them carried [`Undecided`]
+    // until 2026-09-09 because **nothing in this program held a pattern**.
+    // Where one is kept was already settled (ADR-0227: library data in two
+    // tiers, on the arrangement's shape); what one *is* is ADR-0320, and
+    // `karakuri_pattern` is what holds it. **Each names the bank it acts on**,
+    // which is [`Operation::SelectDeck`]'s rule: implying the armed one is the
+    // shape that record refuses.
 
     /// A step of one lane, on or off, heard the next time the playhead reaches
     /// that step rather than when it was asked for.
@@ -1158,14 +1454,31 @@ operations! {
     /// mean it. The manual's heading is the operator's word for the control
     /// and the title is copied from it verbatim, which is all a title is for.
     ///
-    /// [`Undecided`], because the payload is which step of which lane of which
-    /// pattern, and this row *"names a step and cannot yet say what it is a
-    /// step of"*. **The grid under it is no new clock** — a step is the beat
-    /// clock subdivided and a pure function of `Oscillator::beats`, so
-    /// correcting the tempo changes the rate from now on without moving a beat
-    /// that has already happened (ADR-0222) — so what is open is the address
-    /// and the state it is set to, and nothing about time.
-    SetStep { step: Undecided } => "Toggle a step",
+    /// **The address is a bank, a lane and a slot**, which is the sentence
+    /// this payload used to be [`Undecided`] for: it *"names a step and cannot
+    /// yet say what it is a step of"*, and
+    /// `docs/adr/0320-a-pattern-is-one-bar-of-sixteen-slots-a-lane-is-a-target-and-two-levels-and-a-cell-is-a-bit.md`
+    /// is what it is a step of. Every one of the three is named rather than
+    /// implied, which is [`Operation::SelectDeck`]'s rule: implying the armed
+    /// bank would be the shape that record refuses.
+    ///
+    /// **`step` is one of sixteen stored slots and not a step index.** A
+    /// pattern holds sixteen either way and an eighth reads slot `2k`
+    /// ([`StepMode::slot_of`]), so a surface in the finer reading sends the
+    /// even ones. That keeps this payload independent of the mode, so a step
+    /// press and a mode press cannot race into an address that means two
+    /// things.
+    ///
+    /// **What an on step is *worth* is not here**, and that is the decision
+    /// rather than an omission: a cell is a bit and the two levels are the
+    /// lane's, because a level only means anything against what the lane
+    /// drives. `karakuri_pattern::Lane` carries them.
+    ///
+    /// **The grid under it is no new clock** — a step is the beat clock
+    /// subdivided and a pure function of `Oscillator::beats`, so correcting
+    /// the tempo changes the rate from now on without moving a beat that has
+    /// already happened (ADR-0222).
+    SetStep { pattern: u8, lane: u8, step: u8, on: bool } => "Toggle a step",
 
     /// The pattern is kept and drives nothing, and the control is the lane's
     /// own label.
@@ -1180,10 +1493,15 @@ operations! {
     /// operation that reaches one lane in four is not this row. The mute is a
     /// lane's, addressed the way a lane is addressed.
     ///
-    /// [`Undecided`], because what that address is spelled as waits on the
-    /// same pattern the row above waits on. **Not a toggle**, for
-    /// [`Operation::SetStep`]'s reason.
-    SetLaneMute { lane: Undecided } => "Mute a lane",
+    /// **A bank, a lane and the state**, addressed the way [`Operation::SetStep`]
+    /// is addressed and for its reason. **Not a toggle**, also for its reason.
+    ///
+    /// **It is where a hand takes a lane back.** A hand's write lands at once
+    /// and the lane writes again at the next step, so the way to keep what a
+    /// hand did is to mute the lane — rule 02's *take back sits next to it*,
+    /// drawn on the lane label rather than on the strip
+    /// (`docs/adr/0322-the-sequencer-is-polled-like-a-transition-live-only-and-its-writes-are-its-record.md`).
+    SetLaneMute { pattern: u8, lane: u8, muted: bool } => "Mute a lane",
 
     /// The foot's `+ lane`, and **the target is the whole of what is being
     /// added**: a lane with nothing to drive emits nothing, so there is no
@@ -1192,16 +1510,22 @@ operations! {
     /// What a target may *be* is answered by the rest of this vocabulary —
     /// anything on it a lane can emit — which is why the console draws three
     /// deck faders and a Set parameter side by side and calls all four lanes.
-    /// **What a target is spelled as is not answered**: a deck fader is a slot
+    /// **What a target is spelled as is [`LaneTarget`]**: an operation of this
+    /// vocabulary with its value left out, which reaches all four where a slot
+    /// number reaches three and a node address reaches one
+    /// (`docs/adr/0321-a-lanes-target-is-an-operation-with-its-value-elided.md`).
+    /// It was [`Undecided`] until 2026-09-09 because *"a deck fader is a slot
     /// number and a Set parameter is a [`NodeAt`] and a [`ParamAt`], and
-    /// nothing here spells both. So [`Undecided`], and picking one of the two
-    /// would be an operation that reaches one lane in four — this section's
-    /// own failure, one row up.
+    /// nothing here spells both"* — the spelling that reaches both is the one
+    /// this vocabulary already uses to reach either.
     ///
-    /// The panel draws no control for re-pointing a lane that already exists,
-    /// so this row is where a target is chosen; if it turns out to be two
-    /// operations it will be because a control was drawn for the second.
-    PointLane { target: Undecided } => "Point a lane at what it drives",
+    /// **It appends, so there is no lane index.** The panel draws no control
+    /// for re-pointing a lane that already exists, so this row is where a
+    /// target is chosen; if it turns out to be two operations it will be
+    /// because a control was drawn for the second. **Removing a lane has no
+    /// control, no row and no operation**, and that is a gap the console page
+    /// carries a note for rather than an invention here.
+    PointLane { pattern: u8, target: LaneTarget } => "Point a lane at what it drives",
 
     /// **A mode with two values** — a sixteenth or an eighth — drawn as one
     /// pill on the grid head. The pattern is one bar, fixed, so the step count
@@ -1216,16 +1540,14 @@ operations! {
     /// commit, and with the length fixed at a bar neither a count nor a length
     /// has anything left to say. ADR-0306.
     ///
-    /// **[`Undecided`] still, and what it waits on has narrowed to one
-    /// thing.** The list is closed: a subdivision was *"a list this crate has
-    /// to own, on [`Curve`]'s terms, that nothing anywhere holds yet"*, and a
-    /// two-valued mode is exactly that list. What is left is ADR-0192's rule
-    /// — an operation asks for what a surface can say — and no surface can say
-    /// either value: the panel draws nothing of this bay but its head, and no
-    /// pattern exists for a mode to be of. So the payload waits on a control
-    /// rather than on a decision, and this vocabulary still names what an
-    /// operation acts on rather than implying it ([`Operation::SelectDeck`]'s
-    /// rule, applied where there is not even a selection to imply).
+    /// **The payload is a bank and a [`StepMode`]**, and it was [`Undecided`]
+    /// until 2026-09-09 on two things that are both gone. The list was *"a
+    /// list this crate has to own, on [`Curve`]'s terms, that nothing anywhere
+    /// holds yet"*, and a two-valued mode is exactly that list; what was left
+    /// was ADR-0192's rule — an operation asks for what a surface can say —
+    /// and the console now draws the pill that says it. **The bank is named
+    /// rather than implied** ([`Operation::SelectDeck`]'s rule), because the
+    /// mode is what a *pattern* is rather than a preference the head holds.
     ///
     /// **An eighth at 128 BPM is 234 ms**, which is faster than the band
     /// `docs/adr/0255-three-clocks-run-at-once-and-a-slower-ones-work-never-lands-on-a-faster-one.md`
@@ -1234,7 +1556,7 @@ operations! {
     /// has it. ADR-0222 records the caveat rather than waving it away, and
     /// this is the row a hand would first feel it through, because it is the
     /// one that chooses the subdivision.
-    SetPatternGrid { grid: Undecided } => "Choose what a step is worth",
+    SetPatternGrid { pattern: u8, grid: StepMode } => "Choose what a step is worth",
 
     /// The bay head's `seq 1 · seq 2 · +`: which pattern the lanes are
     /// reading. **The `+` is this same choice landing on an empty one** rather
@@ -1242,17 +1564,23 @@ operations! {
     /// it is why [`Operation::ResetArrangement`] is the special case of
     /// putting a saved one back rather than a control of its own.
     ///
-    /// [`Undecided`], because a pattern has no identity anywhere: ADR-0227
-    /// settles that one is kept under the store under a name the operator
-    /// typed, and leaves what the file is called and what it holds to the
-    /// record that has something to serialise.
+    /// **A bank index, and it is not a name.** A bank is a position in the
+    /// session — four of them, fixed — and a name is what a save files a
+    /// pattern under, as different as a deck slot and a Set's id
+    /// (`docs/adr/0320-a-pattern-is-one-bar-of-sixteen-slots-a-lane-is-a-target-and-two-levels-and-a-cell-is-a-bit.md`).
+    /// That is what lets the `+` be this choice landing on an empty bank: an
+    /// empty bank has no name, and asking for one would make the `+` a dialog.
+    /// It was [`Undecided`] until 2026-09-09 because *"a pattern has no
+    /// identity anywhere"* — a bank is the identity a *session* gives one, and
+    /// ADR-0227's name is the one a *store* gives it.
     ///
     /// **Keeping a pattern and putting a saved one back are not rows on the
     /// page**, so they are not variants here either: the console draws no
     /// control that saves one. They will arrive the way
     /// [`Operation::SaveArrangement`] and [`Operation::RestoreArrangement`]
-    /// did — specified on the page, drawn on the console, built after that.
-    SelectPattern { pattern: Undecided } => "Choose which pattern the sequencer plays",
+    /// did — specified on the page, drawn on the console, built after that,
+    /// and they are the rows that introduce the name.
+    SelectPattern { pattern: u8 } => "Choose which pattern the sequencer plays",
 
     // ----- Inside a Set -------------------------------------------------
 
@@ -1509,26 +1837,35 @@ operations! {
     /// manual.
     WatchFiles { watching: Undecided } => "Edit the file instead",
 
-    /// Landed, rolled back for costing too much, or failed to build. A write
+    /// Landed, overloaded for costing too much, or failed to build. A write
     /// returning cleanly means it compiled, not that it is on screen.
+    ///
+    /// **The middle word is a state and not an outcome**, since ADR-0316: the
+    /// version is in the slot and the slot has stopped updating, holding the
+    /// frame it last drew, and nothing ends that on its own.
     SwapOutcome => "Find out what a write did",
 
     /// **The operator's verdict on a candidate, and it is not the watchdog's.**
     ///
-    /// A version reaches the screen because it compiled and then held the frame
-    /// budget over thirty measured frames, which is
-    /// `karakuri_engine::swap::Event::Accepted` and is a judgement about
+    /// A version reaches the screen because it compiled, and it goes on
+    /// *running* because one frame of it was measured under the frame budget —
+    /// `karakuri_engine::swap::Event::Accepted`, which is a judgement about
     /// **cost**. Whether it is the one to keep is a judgement about **taste**
     /// and nothing in this instrument can take it. This row is where a person
     /// takes it.
     ///
     /// **The engine's three words are deliberately not reused.** *Accepted*,
-    /// *rejected* and *rolled back* already name the budget's verdict on the
+    /// *rejected* and *overloaded* already name the budget's verdict on the
     /// same object, and the staging lane is the one surface where both
     /// verdicts are visible at once — a lane offering *accept* over a
     /// candidate the watchdog had already accepted would spell two different
     /// judgements the same way
     /// (`docs/contributing.md` §4).
+    ///
+    /// **And it is not offered on an overloaded row at all.** That row is a
+    /// slot that has stopped, which is not a candidate a person is choosing
+    /// between; keeping it would settle the one row whose whole job is to say
+    /// the slot is not running (ADR-0316).
     ///
     /// **Addressed by the node rather than by the version, because a node has
     /// at most one unsettled version.** A write is not held anywhere: it is
@@ -1547,8 +1884,11 @@ operations! {
     /// **What *a rejected candidate costs nothing* is made of.** The version
     /// before it is a file under `<store>/history/`, kept because it
     /// **compiled** rather than because it landed — so the one thing a person
-    /// most wants back, a real attempt that was rolled back for cost, is
-    /// exactly the one that is there.
+    /// most wants back, the version before the one that stopped their slot, is
+    /// exactly the one that is there. **It is also the way out of a stopped
+    /// slot**: nothing puts a version back on its own since ADR-0316, so
+    /// landing an earlier one from here is one of the three things that ends a
+    /// freeze.
     ///
     /// **Which version is a [`Revision`], because two surfaces can ask and
     /// each says a different half.** A staging lane row names the node and

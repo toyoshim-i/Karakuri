@@ -120,22 +120,28 @@ reader reaches for when the enum grows: a name is the four-fields-in-one-`&str` 
 
 ## Consequences
 
-**Nothing is built by this record.** `Operation::PointLane`'s payload does not move on it: what
-`Undecided` waits on has narrowed from *what a target is spelled as* to *a control that can say
-one*, and the bay draws no target chooser.
+**The payload it makes constructible is the one thing here nothing presses yet**, and that is the
+scope rather than a gap: `PointLane`'s row stays `plan` because the bay draws no target chooser.
 
-**What phase 2 builds** (2026-09-09):
+**What was built the same day** (2026-09-09):
 
-- **`karakuri-operation` gains `LaneTarget` with its two arms and `LaneTarget::operation(value)`**,
-  an exhaustive `match`, and `StepMode` beside it (ADR-0320). No dependency is added.
-- **`PointLane { pattern: u8, target: LaneTarget }`** is the payload this makes constructible; it
-  is not in the first slice, which draws no target chooser, and lands with one.
-- **`docs/manual/console.html`'s `+ lane` tip loses *"What a target is spelled as is not
-  answered"*** and gains the two arms and why they reach all four lanes. It **keeps its
+- **`karakuri-operation` carries `LaneTarget`** with its two arms, `LaneTarget::operation(value)` as
+  an exhaustive `match`, and `LaneTarget::deck()` for the lookup ADR-0323 needs. `StepMode` sits
+  beside it (ADR-0320). **No dependency is added**, which is what the arms being made of `u8` and
+  `ParamAt` buys.
+- **`PointLane { pattern: u8, target: LaneTarget }`** is the payload. Nothing constructs it on a
+  surface yet; `karakuri_pattern::Pattern::push` is the act it names, and `crates/karakuri`'s
+  `demonstration_banks` is what calls that until a chooser is drawn.
+- **The fader arm is what the first slice runs on**:
+  `Fader { deck: 0 }` → `Operation::SetOpacity`, polled per frame, and
+  `a_parameter_lane_emits_a_parameter_write` in `karakuri-pattern` is what holds the other arm
+  honest before a surface can point at it.
+- **`docs/manual/console.html`'s `+ lane` tip lost *"What a target is spelled as is not
+  answered"*** and gained the two arms and why they reach all four lanes. It **keeps its
   arena-insert gap**, which this record does not touch: the panel still cannot grow a bay's body
   while it is running, and that is one gap drawn in five places.
 - **`docs/manual/operations.html`'s *Point a lane at what it drives* stops saying nothing spells
-  both.**
+  both**, and its panel badge stays `plan`.
 - **The fourth lane's tip stops calling this the bay's hardest question.**
 
 **What it does not decide.** M5.12's learn spelling, which is a different question with a different

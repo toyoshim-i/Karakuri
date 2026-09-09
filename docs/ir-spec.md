@@ -69,6 +69,19 @@ and not the sentence about the layer. **None of it exists**: no `.kir` may decla
 `karakuri-engine` folds one fixed shader, and the sentence above is the state rather than a
 preference about what the state should be.
 
+**The master chain landed on 2026-09-09 and the condition still holds**, which is worth
+saying because the chain is exactly the *master effect* the proposal above is about. It is
+**three hand-written passes in the engine** — feedback, bloom, rgb shift, in that order,
+between the mix's write and the tone map — with parameters this vocabulary can name and
+`crates/karakuri-engine/src/shaders/master.wgsl` as the one shader behind all three. Fixed,
+like the compositing and for the same reason: nothing declares them, nothing reorders them,
+and a `kind L5` file would still have nothing to contain. **So this is not an L5 and adds
+none**: no `kind` was added, no `.kir` may declare one of these passes, the grammar is
+unchanged, and the node the chain runs beside is still `crate::node::Merge`. What would end
+the condition is unchanged too — somebody writing the compositing down — and
+`docs/adr/0317-the-master-chain-is-three-fixed-passes-and-feedback-reads-either-cut.md`
+records a writable L5 as **deferred rather than refused**, with what would revive it.
+
 **A note on the word, because it is used in two senses here.** A bare **layer** in this
 specification is a **kind** — the `layer` field on a record names one, and so does every
 bare use in the prose below. The other sense is *what one deck slot contributes to the
@@ -1162,12 +1175,31 @@ A renderer that declares a slot is saying *which*, which is the question a Set o
 no other way to be asked.
 
 **The built-in orbit is a node.** A Set whose files declare no `kind L3` holds one camera all
-the same, produced from the `camera` record's six numbers, and it is called `orbit` so that an
+the same, produced from the three numbers the `camera` record carries and the three it declares,
+and it is called `orbit` so that an
 edge can name it: `--edge lens.view=orbit`. It was a field on the Set before, which is why a
 renderer could draw from it only by saying nothing — one fact with two shapes, and the shape
 without a name was the one that could not be pointed at. So `L3:0` addresses something in
-every Set now, `node_names` has an entry for it, and the parameter map beside it is empty,
-because the built-in is a node rather than a procedure.
+every Set now, `node_names` has an entry for it, and the parameter map beside it holds **three
+entries: `radius`, `speed` and `height`**.
+
+**Those three are declared by the engine, and that is the only thing unusual about them.** A
+procedure declares its `param`s and the Set reads them off the artifact; the built-in has no
+artifact to read, so the engine states the three names, the three ranges and the three defaults
+where a `.kir` would — `radius : float [1.0, 40.0]`, `speed : float [0.0, 2.0]` and
+`height : float [-40.0, 40.0]`, which are the ranges the `sweep` example above declares for the
+first two and the symmetric one the third earns by being a height on the radius's own scale.
+Everything downstream follows from the map being populated rather than from a rule about
+cameras: `--param L3:0:radius=12`, a published control, a `bind`, an authority, a ride carried
+across a rebuild. **The map was empty until 2026-09-09**, and the sentence that said so gave the
+reason as *the built-in is a node rather than a procedure* — which is why it declares nothing
+*of its own* and not why nothing could be declared for it.
+
+**The lens three are not in it** — `fov_y`, `near` and `far` are what the projection is rather
+than where the camera is, and a weighted blend normalises every fragment's depth against the
+near and far planes, so a control over either would move how the picture composites while
+appearing to move the camera. They come from the record and the declared defaults, and a hand
+that wants them writes an L3.
 
 **Fan-out needs no rule.** Two renderers naming one camera is the ordinary case — one
 viewpoint drawn two ways — and what is refused is two edges into one *slot*, which is one
@@ -2085,7 +2117,7 @@ store that has never held the material, not a resolution pass.
 {"t":"bind","layer":"L1","key":"turbulence","signal":"energy","curve":"pow2","range":[0.1,2.4]}
 {"t":"edge","node":"morph","slot":"far","to":"sphere_shell"}
 {"t":"merge","live":1}
-{"t":"camera","kind":"orbit","radius":8.0,"speed":0.15}
+{"t":"camera","kind":"orbit","radius":8.0,"speed":0.15,"height":2.0}
 {"t":"seed","stream":"L1","value":19274}
 {"t":"seed","stream":"L1","index":1,"value":48113}
 ```
@@ -2181,6 +2213,20 @@ without either appearing in the file.
   a record can be about, since a camera that is a procedure writes its own six numbers every
   frame. An index naming one of those is reported and skipped rather than applied to a node
   that would overwrite it.
+- **`camera` carries the built-in's three placement numbers, and they are the whole of what a
+  Set file says about it**: `radius`, `speed` and `height`. It carried two until 2026-09-09 —
+  the height came back at its default, so a Set kept with a camera looking down and loaded
+  again was looking along the equator, and nothing said so. **`height` is absent from every
+  file written before that and reads as 2.0**, which is what those files did.
+- **The built-in camera has no `param` records, and it is the `slot` rule one level down.** It
+  has no `slot` record because it has no procedure to reference; it has no `param` records
+  because the `camera` record already carries its values, and a node's three numbers written
+  twice in one file is two spellings of one fact. Its three *are* parameters of that node —
+  `--param L3:0:radius=12` writes one, a `bind` may drive one, and the Inspector draws three
+  rows — so this is a rule about the file rather than about the engine, and it is the same
+  rule the `slot` line follows: **a node with no procedure is described by the record that
+  describes it, and by nothing else.** The lens three, `fov_y`, `near` and `far`, are not
+  parameters and are not recorded either; they come back as declared.
 - **`merge` says the Set composites its renderers** rather than overdrawing them, and it is
   the `camera` precedent rather than a new rule. A Set built with `--merge N` gives every
   renderer a cleared target of its own and folds them through an L5; a Set without one draws
@@ -2310,7 +2356,7 @@ content address.
 {"t":"part","layer":"L4","path":"soft_points.kir"}
 {"t":"capacity","layer":"L1","value":32768}
 {"t":"edge","node":"morph","slot":"far","to":"sphere_shell"}
-{"t":"camera","kind":"orbit","radius":8.0,"speed":0.15}
+{"t":"camera","kind":"orbit","radius":8.0,"speed":0.15,"height":2.0}
 ```
 
 **A `part` carries what a `slot` carries, with a path where the address is**: `layer` and

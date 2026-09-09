@@ -581,7 +581,7 @@ proc flat_strand {{
         };
 
         let mut set = try_build(&gpu, CROSSING_STRANDS_L1, &strand_l4("weighted")).expect("a pair");
-        set.camera = stationary;
+        set.aim_camera(stationary);
         set.resize(&gpu.device, W, H);
         let w = draw(&gpu, &mut set);
 
@@ -590,7 +590,7 @@ proc flat_strand {{
         // flips is the weighting and not the geometry.
         let mut control =
             try_build(&gpu, CROSSING_STRANDS_L1, &strand_l4("additive")).expect("a pair");
-        control.camera = stationary;
+        control.aim_camera(stationary);
         control.resize(&gpu.device, W, H);
         let a = draw(&gpu, &mut control);
 

@@ -155,28 +155,45 @@ being owed reads as debt somebody still has to pay.
 
 ## Consequences
 
-**Nothing is built by this record**, and the badges do not move on it.
+**What was built the same day** (2026-09-09):
 
-**What phase 2 builds** (2026-09-09):
-
-- **The poll in `crates/karakuri/src/main.rs`'s frame loop**, live only, emitting through the same
-  `operate` a press emits through.
-- **The bay's declaration**, `moves_in` = time to the next step boundary, beside the transport
-  row's and the mixer bay's.
-- **`karakuri-operation-record`'s five arms move from `Owed(Undecided)` to `Silent(Surface)`**, with
-  the arrangement family's sentence at the arm and a test beside
-  `keeping_an_arrangement_writes_a_file_and_no_record`.
-- **Tests watched to fail first**: the poll emits exactly at boundaries and never twice for one
-  step; an eighth reads slot `2k`; a muted lane emits nothing; replay emits nothing from the
-  sequencer.
-- **`docs/manual/console.html`'s `step 6` tip loses *"where the thing producing steps runs"*** and
+- **The poll is eight lines in `crates/karakuri/src/main.rs`'s frame handler**, taken from
+  `deck.signals().oscillator().beats()` before the frame is composed, and every emission goes
+  through `App::performed` — the same function a press goes through — so what reaches the stream is
+  `Record::Opacity` and nothing this bay invented. `karakuri_pattern::Playhead::advance` is what
+  answers *has the step index moved*, and it is indexed rather than iterated so a boundary
+  allocates nothing.
+- **Live only, and there is no replay path in this window to exclude it from.** That is the honest
+  state rather than a test: `crates/karakuri` has no `--replay`, and the block is where an exclusion
+  would go the day it gains one. What makes a replay correct is asserted where it can be —
+  `editing_a_pattern_writes_a_file_and_no_record` in `karakuri-operation-record` — because a lane's
+  consequences are `Record::Opacity` and its kin, which already replay.
+- **The bay declares**, `karakuri_console::view::View::sequencer_declares`: `STEP_STALENESS` (one
+  sixteenth at the mock's tempo, 117.19 ms, stated at that tempo for ADR-0212's reason) and
+  `step_moves_in`, the distance to the next boundary, clamped to the rate. It declares **only while
+  the pattern has a lane**, because the playhead is the picture that moves and it has nothing to
+  stand over otherwise. `tests/sequencer.rs` holds both, and `tests/schedulable.rs` sums it.
+- **`karakuri-operation-record`'s five arms moved from `Owed(Undecided)` to `Silent(Surface)`**,
+  with the arrangement family's sentence at the arm and
+  `editing_a_pattern_writes_a_file_and_no_record` beside
+  `keeping_an_arrangement_writes_a_file_and_no_record`. The crate's own counts moved with them.
+- **Tests watched to fail first**: the playhead answers once per step and a stall drops the step it
+  missed; an eighth reads slot `2k`; a muted lane emits nothing and keeps its steps; a cell press is
+  a state and not a flip; the bay's declaration and its invariant; and the press-handler seam, which
+  fails naming the row when the window stops asking the control it drew.
+- **`docs/manual/console.html`'s `step 6` tip lost *"where the thing producing steps runs"*** and
   says it is polled per frame against `beats`, like a transition, live only. The *Sequencer* note
-  gains the mute as the take-back.
+  gained the mute as the take-back.
 
-**What this opens, and it is not settled here.** ADR-0315 makes the members of `written`'s
-`Silent::Surface` arm `gap` in the MCP column, *read off the arm rather than off a list*. When the
-five join that arm the sentence reaches them, and the bay head's *"the operations page still marks
-their MCP route as designed, and which of the two gives way is not decided"* gets an answer it was
-not given here. **No MCP badge moves in this work**: that column is M5.10's, ADR-0315's sweep was
-taken while the five were not on the arm, and moving five badges as a side effect of a `written`
-change is the kind of consequence that should be decided rather than inherited.
+**The MCP column gave way, and the class stays shut.** ADR-0315 makes the members of `written`'s
+`Silent::Surface` arm `gap` in the MCP column, *read off the arm rather than off a list*, so joining
+that arm reaches these five: all five now read `gap` there, carrying ADR-0315's sentence word for
+word — one refusal per mistake, worded once (ADR-0131). That answers the bay head's *"which of the
+two gives way is not decided"*: the page did, and `gate.rs` is unchanged — the five stay
+`ClosedUnclassed(Unclassed::Lanes)`, in a group no bay head opens.
+
+**M6's agents may reopen it, and this is where a reader should start.** The badge says what is true
+while a model cannot see the console; an agent that *programs* a lane is asking for a route into a
+pattern rather than into a window, and nothing here forecloses one. What it would have to answer
+first is ADR-0315's own question — whether a model has a view of the console — and then whether a
+bank index means anything to a caller that cannot see which bank is armed.

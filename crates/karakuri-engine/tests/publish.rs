@@ -231,7 +231,12 @@ proc cool {
         // means everywhere else in this system, and what publishing it per
         // declaration could not be: two controls of one name is a console that
         // cannot address either.
-        assert_eq!(all.len(), 2, "{all:#?}");
+        // **Five, and three of them are the built-in camera's.** Every Set has
+        // one, it declares `radius`, `speed` and `height`, and they publish
+        // **addressed** rather than bare — a bare `radius` is a control over
+        // every node that declares one and this Set's L1 declares one of its
+        // own (ADR-0318).
+        assert_eq!(all.len(), 5, "{all:#?}");
         // **The intersection, not the union.** `near` declares `[0, 8]` and `far`
         // declares `[0, 4]`; one knob moving both must not offer a position only one
         // of them said it still looks like itself at.
@@ -245,6 +250,11 @@ proc cool {
             all,
             vec![
                 every("radius", "radius", [0.5, 8.0]),
+                // The camera sits between the deformations and the renderers,
+                // which is where its node is.
+                control("radius", Kind::L3, 0, "radius", [1.0, 40.0]),
+                control("speed", Kind::L3, 0, "speed", [0.0, 2.0]),
+                control("height", Kind::L3, 0, "height", [-40.0, 40.0]),
                 every("exposure", "exposure", [0.0, 4.0])
             ]
         );
@@ -297,8 +307,10 @@ proc cool {
         assert!(err.to_string().contains("narrows"), "{err}");
 
         // And nothing was published, so a refusal leaves the Set as it was rather
-        // than half-configured: the default interface, one control per key.
-        assert_eq!(set.published().len(), 2);
+        // than half-configured: the default interface, one control per key —
+        // plus the built-in camera's three, which are addressed rather than
+        // bare and so are one control per declaration (ADR-0318).
+        assert_eq!(set.published().len(), 5);
 
         set.publish(control("size", Kind::L1, 0, "radius", [0.5, 8.0]))
             .expect("the declared range itself is a subset of itself");
@@ -558,7 +570,12 @@ proc cool {
         let names: Vec<&str> = all.iter().map(|p| p.name.as_str()).collect();
         assert_eq!(
             names,
-            vec!["radius", "amount", "exposure", "gain", "blur"],
+            // **Node by node in the order the nodes run**, and the built-in
+            // camera is a node between the deformations and the renderers —
+            // so its three sit there, which is where the Inspector draws them
+            // (ADR-0318). The second `radius` is the camera's and is addressed;
+            // the first is the L1's and is a wildcard.
+            vec!["radius", "amount", "radius", "speed", "height", "exposure", "gain", "blur"],
             "not the order the procedures declare them in"
         );
 
@@ -566,7 +583,10 @@ proc cool {
         // order have to differ, or a sort passes this and nothing was asserted.
         let mut sorted = names.clone();
         sorted.sort_unstable();
-        assert_eq!(sorted, vec!["amount", "blur", "exposure", "gain", "radius"]);
+        assert_eq!(
+            sorted,
+            vec!["amount", "blur", "exposure", "gain", "height", "radius", "radius", "speed"]
+        );
         assert_ne!(
             names, sorted,
             "the fixture declares its parameters alphabetically, so it proves nothing"
@@ -580,7 +600,17 @@ proc cool {
             1,
             "{all:#?}"
         );
-        assert_eq!(all[2], every("exposure", "exposure", [0.0, 4.0]));
+        assert_eq!(all[5], every("exposure", "exposure", [0.0, 4.0]));
+        // **And two controls may share a name now**, which is what the camera's
+        // three being addressed costs: one `radius` is the L1's, over what the
+        // L1 declared, and the other is the camera's, over what the engine
+        // declares for an orbit. A surface reads a control's value by the
+        // address it carries rather than by its name — `Set::value_at`.
+        assert_eq!(all[0], every("radius", "radius", [0.5, 8.0]));
+        assert_eq!(
+            all[2],
+            control("radius", Kind::L3, 0, "radius", [1.0, 40.0])
+        );
 
         // **It holds still.** Twice off one Set, and once off a second Set built
         // the same way — the second is the one that catches an order read out of

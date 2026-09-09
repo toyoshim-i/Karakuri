@@ -19,7 +19,7 @@
 use std::path::Path;
 
 use karakuri_engine::frame::{self, Committed, Sink, Skip};
-use karakuri_engine::{Deck, Gpu, Look, Present};
+use karakuri_engine::{Chain, Deck, Gpu, Look, Present};
 
 /// Rows in a texture-to-buffer copy must be a multiple of this.
 const COPY_ALIGN: u32 = 256;
@@ -63,9 +63,15 @@ pub fn to_sequence(
 /// Render a session's frames, driven by the stream rather than by a clock.
 ///
 /// `drive` is called once before each frame with its index and the deck, and
-/// returns the step count that frame's `tick` recorded **and the look that
-/// frame is under**. There is no `look` parameter beside it on purpose: see
-/// [`sequence_driven`].
+/// returns the step count that frame's `tick` recorded, **the look that frame
+/// is under, and the master chain it is under**. There is no `look` parameter
+/// and no `chain` parameter beside it on purpose: see [`sequence_driven`].
+///
+/// **The chain is the third for the look's reason exactly.** A `master_chain`
+/// record moves it mid-session, so a run that took it as a parameter would
+/// replay every frame under whatever the stream started with — which is what
+/// happened to the look before it was returned rather than passed, and is the
+/// paragraph `karakuri-cli`'s replay loop writes about its own `look`.
 #[allow(clippy::too_many_arguments)]
 pub fn replay(
     gpu: &Gpu,
@@ -74,7 +80,7 @@ pub fn replay(
     height: u32,
     frames: u32,
     wanted: impl Fn(u32) -> Option<std::path::PathBuf>,
-    drive: impl FnMut(u32, &mut Deck) -> (u8, Look),
+    drive: impl FnMut(u32, &mut Deck) -> (u8, Look, Chain),
 ) -> Result<(), String> {
     sequence_driven(gpu, deck, width, height, frames, wanted, drive)
 }
@@ -88,10 +94,13 @@ fn sequence(
     frames: u32,
     wanted: impl Fn(u32) -> Option<std::path::PathBuf>,
 ) -> Result<(), String> {
-    // One step a frame and the same look throughout, which is what an offscreen
-    // run with no stream driving it means.
+    // One step a frame, the same look throughout and no master chain at all,
+    // which is what an offscreen run with no stream driving it means.
+    // `Chain::default` is every amount at zero, which records no pass — so a
+    // `--render` is the frame this program drew before the chain existed, and
+    // is bit for bit what it was.
     sequence_driven(gpu, deck, width, height, frames, wanted, move |_, _| {
-        (1, look)
+        (1, look, Chain::default())
     })
 }
 
@@ -267,16 +276,37 @@ fn sequence_driven(
     height: u32,
     frames: u32,
     wanted: impl Fn(u32) -> Option<std::path::PathBuf>,
-    mut drive: impl FnMut(u32, &mut Deck) -> (u8, Look),
+    mut drive: impl FnMut(u32, &mut Deck) -> (u8, Look, Chain),
 ) -> Result<(), String> {
     let mut sink = PngSink::new(gpu, width, height);
-    let present = Present::new(&gpu.device, sink.format(), width, height);
+    let mut present = Present::new(&gpu.device, sink.format(), width, height);
 
     // Simulation is advanced by whole steps, so frame N here is the same image
     // the window shows at frame N — no clock is involved anywhere, which is
     // what makes an offline preview and a live run agree.
     for i in 0..frames {
         sink.want(wanted(i));
+        // **Driven before `compose` rather than inside its commit, and only
+        // because the chain has to land on the `Present` first.**
+        // `Present::set_chain` moves what the mix writes into — the chain's
+        // entry when a pass runs — and `compose` holds this by shared
+        // reference for the whole call, so a chain arriving from the commit
+        // closure would arrive one statement after the decision it makes.
+        //
+        // **What that costs here is nothing, and it is provable rather than
+        // hoped.** `compose`'s rule is that a sink is never asked to answer
+        // for a frame that has already been committed; the only sink on this
+        // path is [`PngSink`], whose `acquire` is `Ok(())` unconditionally and
+        // says so — *"never skips. An offscreen target is made once and is
+        // always there"* — and the check below already treats anything else as
+        // an error rather than as a frame. A loop with a sink that can refuse
+        // keeps the commit closure, which is `karakuri`'s window and
+        // `karakuri-cli`'s.
+        let (steps, look, chain) = drive(i, deck);
+        // Per frame and unconditionally, which is `compose`'s own treatment of
+        // the tone map at the other end of the same chain: one
+        // `queue.write_buffer` into storage sized at construction.
+        present.set_chain(&gpu.queue, chain);
         // Where a refusal would be said, if one could happen. See the check
         // below the call.
         let mut refusal = None;
@@ -288,10 +318,7 @@ fn sequence_driven(
                 &present,
                 &mut sinks,
                 &mut |at, skip| refusal = Some((at, skip)),
-                |deck| {
-                    let (steps, look) = drive(i, deck);
-                    Committed { steps, look }
-                },
+                |_| Committed { steps, look },
                 // Nothing of this program's belongs in the frame's encoder: a
                 // PNG's readback is the sink's own `after_draw`, which is
                 // already inside it. See `frame::compose`.

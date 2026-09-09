@@ -198,6 +198,11 @@ fn a_bay_gets_a_head_and_a_row_does_not() {
             // which by the table. Its title is `view::STAGING_TITLE` and the
             // rest of that bay is asserted in `tests/staging.rs`.
             Kind::Staging => assert_eq!(*name, "staging"),
+            // And the sequencer is the fifth, since it got a body: the ruler,
+            // the rows and the playhead go in one bay and `View::draw` has to
+            // be told which by the table. Its title is `view::SEQUENCER_TITLE`
+            // and the rest of that bay is asserted in `tests/sequencer.rs`.
+            Kind::Sequencer => assert_eq!(*name, "sequencer"),
             other => panic!("{name} is a bay in the mock and a {other:?} here"),
         }
     }
@@ -254,14 +259,19 @@ fn a_bay_gets_a_head_and_a_row_does_not() {
             .filter(|r| {
                 matches!(
                     r.kind,
-                    Kind::Bay { .. } | Kind::Mixer | Kind::Library | Kind::Master | Kind::Staging
+                    Kind::Bay { .. }
+                        | Kind::Mixer
+                        | Kind::Library
+                        | Kind::Master
+                        | Kind::Staging
+                        | Kind::Sequencer
                 )
             })
             .count(),
         BAYS.len(),
         "the bay head has seven call sites, which is the whole of why it is a component"
     );
-    // And four of the seven are the bays with something in their bodies.
+    // And five of the seven are the bays with something in their bodies.
     assert_eq!(
         REGIONS.iter().filter(|r| r.kind == Kind::Mixer).count(),
         1,
@@ -281,6 +291,11 @@ fn a_bay_gets_a_head_and_a_row_does_not() {
         REGIONS.iter().filter(|r| r.kind == Kind::Staging).count(),
         1,
         "a second staging region: `View::draw` has one lane of candidates to give"
+    );
+    assert_eq!(
+        REGIONS.iter().filter(|r| r.kind == Kind::Sequencer).count(),
+        1,
+        "a second sequencer region: `View::draw` has one armed pattern to give"
     );
 }
 

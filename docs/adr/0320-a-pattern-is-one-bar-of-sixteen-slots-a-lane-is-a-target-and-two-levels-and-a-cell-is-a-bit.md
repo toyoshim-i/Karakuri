@@ -175,23 +175,47 @@ patterns this row holds … [is] not decided"*, and four is the count that draws
 
 ## Consequences
 
-**Nothing is built by this record.** What it buys is that the bay's five payloads are waiting on one
-crate rather than on an unasked question, and that the console's tips can stop asking twice what a
-cell is worth.
+**The pages moved first and nothing was built on the day this was written.** What it bought then was
+that the bay's five payloads were waiting on one crate rather than on an unasked question, and that
+the console's tips could stop asking twice what a cell is worth.
 
-**What phase 2 builds, and it is written here so the next reader can check it** (2026-09-09):
+**What was built the same day, and each clause is a description of the tree** (2026-09-09):
 
 - **`crates/karakuri-pattern`**, a new workspace member (`members = ["crates/*"]` picks it up), with
-  `Pattern`, `Lane`, `StepMode` and `Pattern::default()` — four empty banks — and **no serialiser**.
-  It depends on `karakuri-operation` for `LaneTarget` and on nothing else in this pass.
+  `Pattern` — one bar, a `StepMode` and a `Vec<Lane>` — `Lane`, `Banks` (the session's four, and
+  which is armed) and `Playhead` (the poll's memory of the step index, which is *not* in the pattern
+  because a pattern is what gets saved). `SLOTS` is 16 and `BANKS` is 4. It depends on
+  `karakuri-operation` and on nothing else, and it holds **no serialiser and no path**.
 - **`karakuri-operation` gains `LaneTarget` and `StepMode`**, which is ADR-0321's consequence and is
-  listed there.
-- **`docs/manual/console.html`'s cell tip loses *"Two things a cell still cannot say"***: the
+  listed there. `StepMode::slot_of` is where *an eighth reads slot `2k`* lives, and
+  `an_eighth_reads_every_second_slot` and `a_mode_press_keeps_every_slot` are what hold it.
+- **The five payloads carry what this record decided**: `SetStep { pattern, lane, step, on }`,
+  `SetLaneMute { pattern, lane, muted }`, `PointLane { pattern, target }`,
+  `SetPatternGrid { pattern, grid }`, `SelectPattern { pattern }` — each naming the bank rather than
+  implying the armed one. `SetStep`'s `step` is a stored slot and not a step index, and the console
+  sends `2k` in the finer reading (`a_cell_press_sends_the_stored_slot_and_not_the_drawn_step`).
+- **The console draws the bay**: `view::Sequencer` — the mode pill, the `step n of m` readout, the
+  ruler, the playhead column and a row per lane — off a `view::Sequenced` the host writes per frame.
+  The cells and the labels are controls and the ruler, the readout and the playhead are readouts.
+- **`crates/karakuri` holds the four banks and polls them**, and seeds bank 0 with one lane over
+  deck A's fader, **muted**. The mute is not decoration: an unmuted lane writes its target at every
+  boundary, on-steps and off-steps alike, so a lane seeded live would hold deck A at `off` from the
+  moment the window opened — see `demonstration_banks`, which is where that is argued.
+- **`docs/manual/console.html`'s cell tip lost *"Two things a cell still cannot say"***: the
   address is a bank, a lane and a slot, an on cell writes the lane's `on` and an off cell its `off`.
-  The two bank pills and the `+` lose *"whether a bank and a saved name are the same thing has never
-  been asked"* and *"a pattern has no identity anywhere yet"*; the grid head loses *"there is
+  The two bank pills and the `+` lost *"whether a bank and a saved name are the same thing has never
+  been asked"* and *"a pattern has no identity anywhere yet"*; the grid head lost *"there is
   nothing to press here yet … nothing in this workspace holds a pattern"*.
-- **The *Sequencer* note gains a paragraph** saying what a lane's two levels are.
-- **`docs/manual/operations.html`'s five rows stop saying they wait on a pattern** and name what
-  their payloads carry. **No badge moves** on this record: a badge is `has` only where a program a
-  player runs reaches it today, and on 2026-09-09 none of them does.
+- **The *Sequencer* note gained two paragraphs**: what a lane's two levels are, and the two gaps
+  this bay owes a note rather than a fix.
+- **`docs/manual/operations.html`'s five rows name what their payloads carry**, and three panel
+  badges are `has`: *Toggle a step*, *Mute a lane* and *Choose what a step is worth*. *Point a lane
+  at what it drives* and *Choose which pattern the sequencer plays* stay `plan`, because the target
+  chooser and the bank pills are not drawn.
+
+**What is still not drawn, and why each one is scope rather than a gap.** The bay head's
+`seq 1 · seq 2 · +` bank pills: four banks exist and `SelectPattern` names one, and what is missing
+is a head that can say *which* pill is armed — `view::Head::words` carries `&'static str`s, so the
+arming is a change to the head machinery rather than to this bay. The foot's `+ lane`, which needs a
+target chooser nobody has drawn and a bay body the arena can grow. The `Param` lane arm, the store
+directory, the file format and saving.

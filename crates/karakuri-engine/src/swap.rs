@@ -7,9 +7,11 @@
 //!
 //! - **Never allocate on the render thread. Never compile shaders on it.**
 //! - Pipelines are double-buffered; swaps happen only on frame boundaries.
-//! - If a new pipeline exceeds the frame budget, roll back automatically —
-//!   where *the frame budget* is what one frame of **that Set** may cost, and
-//!   not what the deck's frames happen to be taking (ADR-0313).
+//! - If a new pipeline exceeds the frame budget, **stop the slot and say so**
+//!   — where *the frame budget* is what one frame of **that Set** may cost,
+//!   and not what the deck's frames happen to be taking (ADR-0313). It used to
+//!   roll back automatically, and does not since ADR-0316: the version stays
+//!   where the operator put it and the slot stops updating.
 //!
 //! ## Compiling somewhere else
 //!
@@ -65,11 +67,28 @@
 //! residency model to exist first; half of it built here would be a second,
 //! worse answer that the deck would then have to remove.
 //!
-//! The outgoing Set, by contrast, is not stepped while it waits to see whether
-//! it is needed again — `t` is simulation time and does not advance for a Set
-//! nothing is calling `prepare` on. A rollback therefore resumes it exactly
-//! where it was parked, which is the same property
+//! **The outgoing Set is not held to see whether it is needed again**, since
+//! ADR-0316: nothing puts a version back, so it is retired at the install and
+//! the graveyard has it before the verdict is reached. What survives of the
+//! property it used to lean on is the one this module still needs — `t` is
+//! simulation time and does not advance for a Set nothing is calling `prepare`
+//! on, which is what makes **stopping a slot free**: a stopped slot skips its
+//! `prepare` and its `render`, so it costs no step and no draw, and its target
+//! goes on holding the frame it was stopped at. The same property
 //! [`Allocated`](crate::deck::Residency::Allocated) residency has.
+//!
+//! ## What a verdict against does
+//!
+//! **The candidate stays in the slot and the slot stops updating**
+//! ([`Event::Overloaded`], [`HotSwap::overloaded`], ADR-0316). The maintainer's
+//! sentence is the whole of the reason: *"rolled backが分かりにくい。事情を知らな
+//! いとバグってるようにしか見えないんだよね"* — a rollback is unreadable, and
+//! without knowing the machinery it looks like a bug. A rollback restored the
+//! *picture* and not the *file*, so the disk went on holding the version that
+//! had been refused and the next unrelated save reinstalled it; what an
+//! operator saw was their save not taking, twice, with nothing saying why.
+//! A stopped slot is the same safety bought loudly instead of quietly, which
+//! is `P-0094`'s third admissible answer in place of its second.
 //!
 //! ## A candidate is judged on the candidate's own cost
 //!
@@ -286,7 +305,7 @@ pub const PERIOD_FRAMES: usize = 30;
 /// probe falls back to [`MeasurementMethod::HostWallClock`](crate::probe::MeasurementMethod),
 /// which brackets a submit-and-wait the GPU never spent and **reads biased
 /// high** (`docs/contributing.md` §1). A biased-high number against an exact
-/// 16.7 ms line rolls back candidates that would have fitted, which is the
+/// 16.7 ms line stops slots whose candidates would have fitted, which is the
 /// false-reject direction this whole gate exists to stop doing. The slack is
 /// now for the bias rather than for vsync, and it is the same three
 /// milliseconds.
@@ -462,7 +481,7 @@ pub struct Request {
     /// plain one, where a parameter value has since become the one thing a Set
     /// can hand across a swap itself.
     pub bindings: Vec<Binding>,
-    /// What a swap or rollback message calls this.
+    /// What a swap or verdict message calls this.
     /// What each node of the rebuilt Set is called, in the same per-layer shape
     /// the procedures are given in. Restated rather than carried over for the
     /// reason `bindings` is.
@@ -650,8 +669,12 @@ pub enum Event {
     /// the watchdog decides on was taken on the worker before this Set was
     /// handed over, so there is nothing to wait for and no window in which a
     /// candidate is "on trial". A caller reading events in order sees this and
-    /// then either [`Event::Accepted`] or [`Event::RolledBack`] about the same
+    /// then either [`Event::Accepted`] or [`Event::Overloaded`] about the same
     /// `id`.
+    ///
+    /// **It is the only event that changes which Set is live**, since
+    /// ADR-0316. The verdict that follows decides whether that Set is
+    /// *stepped*, and never whether it is there.
     Swapped { id: u64, label: Arc<str> },
     /// A build failed. **Nothing changed**: the running Set is still running,
     /// with its `t` and its live count untouched.
@@ -670,7 +693,12 @@ pub enum Event {
     /// **No `id`**, unlike every variant around it: nothing was requested, so
     /// there is nothing for a caller to match it back to.
     SourceRefused { label: Arc<str>, said: Vec<String> },
-    /// **The candidate stays.** The outgoing Set is released.
+    /// **The candidate stays and the slot goes on running.** The outgoing Set
+    /// is released.
+    ///
+    /// **Since ADR-0316 the candidate stays either way**, and what this word
+    /// carries is the other half: this slot is being stepped and drawn, where
+    /// [`Event::Overloaded`]'s is not.
     ///
     /// Two ways to arrive here and [`Event::Accepted::cost_ms`] tells them
     /// apart: the candidate's own cost fitted the budget, or **nothing could
@@ -702,19 +730,45 @@ pub enum Event {
         /// display's own interval instead.
         budget_ms: f32,
     },
-    /// The watchdog's verdict, against. The outgoing Set is live again, at the
-    /// `t` it was parked at, and the candidate is released.
-    RolledBack {
+    /// **The watchdog's verdict, against: the candidate stays in the slot and
+    /// the slot stops updating.**
+    ///
+    /// One frame of this Set costs more than a frame may, so
+    /// [`HotSwap::overloaded`] is set and
+    /// [`crate::deck::Frame::render`] skips this slot's `prepare` and its
+    /// `render` from the next frame on. The slot's target keeps the last image
+    /// it drew, which the composite and the deck's cells already read, so the
+    /// slot costs **zero step and zero draw** and goes on contributing exactly
+    /// the frame it was stopped at.
+    ///
+    /// **Nothing is put back**, and that is the change ADR-0316 records.
+    /// The outgoing Set is retired here as it is on the accepted side: there
+    /// is no rollback target, in this type or on [`HotSwap`]. A rollback
+    /// restored the *picture* and not the *file*, so the next unrelated save
+    /// reinstalled the over-budget version and the operator was never told
+    /// which of the two they were looking at. Leaving the version they asked
+    /// for exactly where they put it, and stopping it loudly, is
+    /// `P-0094`'s *be loud* in place of its *undo* — the undo was not one.
+    ///
+    /// **Three ways out and all of them are the operator's**: a fader to zero
+    /// on that slot (ADR-0040's zero-skip takes it out of the mix), a previous
+    /// version landed out of the history (ADR-0308's `Revision::Previous`,
+    /// which is a build like any other), or the next save — the freeze belongs
+    /// to the *installed version*, so any build landing in this slot clears
+    /// it. A residency change does **not**: a stopped slot taken off air and
+    /// put back is still stopped, because what stopped is the version and not
+    /// the placement.
+    Overloaded {
         id: u64,
         label: Arc<str>,
         /// **The candidate's own cost**, which exceeded `budget_ms`.
         ///
         /// **An `f32` and not an `Option<f32>`, unlike [`Event::Accepted`]'s**,
-        /// and that asymmetry is the rule in the type: a rollback can only ever
-        /// be reached *through* a number, so there is no rollback without one to
-        /// print. Making both optional would let a future edit throw a
-        /// candidate out for a cost nobody measured, which is the defect
-        /// ADR-0313 exists to end in its second form.
+        /// and that asymmetry is the rule in the type: a slot can only ever be
+        /// stopped *through* a number, so there is no freeze without one to
+        /// print. Making both optional would let a future edit stop a slot for
+        /// a cost nobody measured, which is the defect ADR-0313 exists to end
+        /// in its second form.
         cost_ms: f32,
         /// Which of the two it was — never [`Basis::Unbudgetable`], for the
         /// reason on `cost_ms`.
@@ -773,7 +827,13 @@ impl std::fmt::Display for Event {
                  estimated it, so there is no number to hold against {budget_ms:.2} ms \
                  (see docs/principles/0084-…)"
             ),
-            Event::RolledBack {
+            // **The word says the state and the sentence says what to do
+            // about it.** A reader of this line — a terminal, a model in a
+            // loop, the MCP surface — is being told about a slot that is
+            // still holding the version they asked for and has stopped
+            // running it, which is a thing they can end and nothing else
+            // will.
+            Event::Overloaded {
                 label,
                 id: _,
                 cost_ms,
@@ -781,8 +841,10 @@ impl std::fmt::Display for Event {
                 budget_ms,
             } => write!(
                 f,
-                "rolled back `{label}`: {cost_ms:.2} ms for its own frame exceeds the \
-                 {budget_ms:.2} ms budget ({} — see docs/contributing.md, working style)",
+                "`{label}` is overloaded: {cost_ms:.2} ms for its own frame exceeds the \
+                 {budget_ms:.2} ms budget ({} — see docs/contributing.md, working style). \
+                 It is still in the slot and the slot has stopped updating; a fader to \
+                 zero, an earlier version, or a build that fits is what ends it",
                 said(*basis)
             ),
             Event::WorkerLost => write!(
@@ -801,7 +863,7 @@ fn said(basis: Basis) -> &'static str {
     match basis {
         Basis::Measured => "one draw at the size the caller named, host clock",
         Basis::Estimated => "a two-draw fit at the output's size",
-        // Unreachable from `RolledBack` by construction and printed by the
+        // Unreachable from `Overloaded` by construction and printed by the
         // `Accepted` arm above instead; here so that a third basis added later
         // fails at a `match` rather than being passed over.
         Basis::Unbudgetable => "no number",
@@ -864,29 +926,19 @@ struct Period {
     last: Option<Instant>,
 }
 
-/// **The Set a swap displaced, with its numbers**, held across exactly one
-/// call — [`HotSwap::install_if_ready`] hands it to [`HotSwap::judge`], which
-/// either releases it or puts it back.
-///
-/// **It used to be three fields on [`HotSwap`]** (`previous`, `previous_cost`,
-/// `previous_estimate`) because a rollback target had to survive a
-/// thirty-eight-frame trial. A verdict is reached in the same call now
-/// (ADR-0313), so the rollback target is a local: it cannot be resized under,
-/// cannot be stepped, and cannot be left behind by a code path that forgot to
-/// clear it. `HotSwap::previous` existing *only* inside the trial window is
-/// what ADR-0071 and `P-0084` rest on when they refuse a panic key; there is
-/// now no window at all, which is the same argument with nothing left to
-/// qualify.
-struct Parked {
-    set: Set,
-    /// Restored with the Set on a rollback, or the governor would go on
-    /// budgeting for the candidate that is no longer there.
-    cost: Option<Measurement>,
-    /// Likewise. The incoming Set arrives unestimated — the worker cannot
-    /// estimate, because an estimate is taken against the output's size and the
-    /// worker does not know it — so this is the only estimate either Set has.
-    estimate: Option<Estimate>,
-}
+// **There is no `Parked` here, and its absence is a decision.** The Set a swap
+// displaced used to be held — first as three fields on `HotSwap` (`previous`,
+// `previous_cost`, `previous_estimate`) across a thirty-eight-frame trial, then
+// as a local struct across the one call the verdict is reached in (ADR-0313).
+// A verdict against no longer puts anything back (ADR-0316), so the displaced
+// Set is retired on both sides of the `match` and there is nothing left to
+// hold. `HotSwap::previous` existing *only* inside the trial window is what
+// ADR-0071 and `P-0084` rest on when they refuse a panic key; there is now no
+// rollback target at all, in any lifetime, which is the same argument with
+// nothing left to qualify. What replaces the put-back is
+// `Revision::Previous` — a version out of the history, rebuilt and installed
+// like any other build (ADR-0308, ADR-0089) — which is the operator's act and
+// not the engine's.
 
 impl Period {
     fn new() -> Period {
@@ -962,6 +1014,18 @@ pub struct HotSwap {
     /// [`DEFAULT_BUDGET_MS`] where it did not. Written by
     /// [`HotSwap::set_budget_ms`].
     budget_ms: f32,
+    /// **The live Set costs more than one frame may, so it is not being
+    /// stepped or drawn** — see [`HotSwap::overloaded`], which is the whole of
+    /// what this is and where it is argued.
+    ///
+    /// **A property of the installed version and not of the slot**, which is
+    /// what decides where it is written: [`HotSwap::judge`] sets it, and every
+    /// path that replaces `live` clears it — `install_if_ready` before the
+    /// verdict, and [`HotSwap::install`] for a replay. Nothing else writes it.
+    /// A residency change is not one of those paths, deliberately: a stopped
+    /// slot taken off air and put back is still stopped, because the version
+    /// in it has not changed.
+    overloaded: bool,
     viewport: (u32, u32),
     /// **The deck's frames, measured and never used as a verdict** — see
     /// [`Period`] and [`HotSwap::frame_period_ms`].
@@ -1052,6 +1116,7 @@ impl HotSwap {
             cost: None,
             estimate: None,
             budget_ms,
+            overloaded: false,
             viewport: (1, 1),
             period: Period::new(),
             frames: 0,
@@ -1068,21 +1133,26 @@ impl HotSwap {
 
     /// Put `set` in, now, with no worker and no trial.
     ///
-    /// **For a replay, and only a replay.** A live run's swaps arrive from a
-    /// worker and are judged for thirty frames against the budget; a replay is
-    /// reading what a live run already decided, out of a `procedure` record, so
-    /// there is nothing left to judge. Judging again would be worse than
-    /// pointless — an offscreen render has no frame budget to fail, and a
-    /// rollback the live run did not have would put the replay on a procedure
-    /// the performance never showed.
+    /// **For a replay, and only a replay.** A live run's swaps are judged on
+    /// the candidate's own measured cost as they land; a replay is reading what
+    /// a live run already decided, out of a `procedure` record, so there is
+    /// nothing left to judge. Judging again would be worse than pointless — an
+    /// offscreen render has no frame budget to fail, and a slot stopped here
+    /// that the live run never stopped would put the replay on a still the
+    /// performance never showed.
     ///
-    /// The outgoing Set is retired rather than parked: there is no rollback to
-    /// park it for. Its measured cost goes with it, so the governor treats the
+    /// The outgoing Set is retired, as it is on the live path: nothing here
+    /// holds a version to put back. Its measured cost goes with it, so the governor treats the
     /// incoming one as unmeasured — which is what it is.
     pub fn install(&mut self, device: &wgpu::Device, mut set: Set) {
         set.resize(device, self.viewport.0, self.viewport.1);
         let outgoing = std::mem::replace(&mut self.live, set);
         self.retire(outgoing);
+        // **The freeze is the outgoing version's and goes with it** — see
+        // [`HotSwap::overloaded`]. A replay that installed a Set into a slot
+        // stopped by a live run's verdict would draw nothing at all, which is
+        // a picture the performance never showed.
+        self.overloaded = false;
         self.cost = None;
         // The estimate went with the Set it was taken of. Nothing carries one
         // across a replaced Set: it is a fit through two draws of *that*
@@ -1105,6 +1175,9 @@ impl HotSwap {
             cost: None,
             estimate: None,
             budget_ms: f32::INFINITY,
+            // Nothing will ever be judged here, so nothing can ever stop this
+            // slot: `fixed` is a Set and no worker.
+            overloaded: false,
             viewport: (1, 1),
             period: Period::new(),
             frames: 0,
@@ -1123,8 +1196,8 @@ impl HotSwap {
     ///
     /// Everything that can change which Set is live happens here, before the
     /// borrow is handed out: the previous frame's interval is fed to the
-    /// watchdog (which may roll back), and then a finished build is installed
-    /// if one has arrived. The caller records its whole frame through the
+    /// deck alarm, and then a finished build is installed and judged if one
+    /// has arrived — which may stop this slot, and never takes it back. The caller records its whole frame through the
     /// returned reference, and cannot touch this `HotSwap` again until it
     /// drops it.
     ///
@@ -1217,6 +1290,30 @@ impl HotSwap {
     /// **one frame of one candidate** — see [`DEFAULT_BUDGET_MS`].
     pub fn budget_ms(&self) -> f32 {
         self.budget_ms
+    }
+
+    /// **Whether the live Set has been stopped for costing more than one frame
+    /// may** — [`Event::Overloaded`], and ADR-0316.
+    ///
+    /// **What a caller must do about it**: skip this slot's `prepare` and its
+    /// `render`. [`crate::deck::Frame::render`] does, which is the whole of
+    /// the behaviour on the deck path; a caller driving a `HotSwap` on its own
+    /// — `karakuri-cli`, `tests/hot_swap.rs` — reads this or goes on stepping
+    /// a Set the watchdog said is too expensive.
+    ///
+    /// **The Set is still there and the target still holds its last image.**
+    /// A stopped slot is not an empty one: nothing was taken out, nothing was
+    /// put back, and what the composite and the deck's cells read is the frame
+    /// it was stopped at. That is why the word reaches every surface — an
+    /// unmarked still is a preview that lies (ADR-0269).
+    ///
+    /// **It clears when a build lands and at no other time**, because the
+    /// freeze belongs to the version rather than to the slot. A fader to zero
+    /// takes a stopped slot out of the mix and leaves it stopped; a residency
+    /// change moves it and leaves it stopped; landing an earlier version out
+    /// of the history clears it, because that is a build.
+    pub fn overloaded(&self) -> bool {
+        self.overloaded
     }
 
     /// **Say what one frame of the display this is being shown on may cost.**
@@ -1408,7 +1505,7 @@ impl HotSwap {
     /// The same events, read without taking them.
     ///
     /// [`HotSwap::events`] is the caller's — it drains, because a caller that
-    /// reads an event twice would print a rollback twice. Something that has
+    /// reads an event twice would print one verdict twice. Something that has
     /// to *react* to a swap rather than report it cannot use that without
     /// stealing it, so this is the read-only view: `Deck::begin_frame` notes
     /// the length before the frame boundary and looks at what was appended,
@@ -1425,8 +1522,10 @@ impl HotSwap {
     /// **There is no parked Set to resize any more.** A rollback target used to
     /// live here across a thirty-frame trial and had to be resized with the
     /// live one; the verdict is reached in the same call the swap lands in
-    /// since ADR-0313, so an outgoing Set is either released or back on air
-    /// before this can be called again.
+    /// since ADR-0313 and puts nothing back since ADR-0316, so an outgoing Set
+    /// is released before this can be called again. **A stopped slot is
+    /// resized like any other**: it is not drawing, and the day it is drawn
+    /// again — the next build — it must already be the right size.
     pub fn resize(&mut self, device: &wgpu::Device, width: u32, height: u32) {
         self.viewport = (width, height);
         self.live.resize(device, width, height);
@@ -1473,7 +1572,18 @@ impl HotSwap {
     }
 
     /// **Judge the candidate that has just been installed, on the candidate's
-    /// own number**, and put the outgoing Set back if it does not fit.
+    /// own number**, and stop the slot if it does not fit.
+    ///
+    /// # What a verdict against does, and what it deliberately does not
+    ///
+    /// It sets [`HotSwap::overloaded`], and that is the whole of it: the
+    /// candidate stays live, the displaced Set is retired exactly as it is on
+    /// the other side, and the slot's `prepare` and `render` are skipped from
+    /// the next frame on. **Nothing is put back** (ADR-0316). A rollback put
+    /// the previous *Set* back and could not put the previous *file* back, so
+    /// the picture and the disk disagreed with nothing saying so and the next
+    /// unrelated save reinstalled the over-budget version; a stopped slot says
+    /// what it is, on three surfaces, and ends when the operator ends it.
     ///
     /// # What is compared, and what is deliberately not
     ///
@@ -1482,7 +1592,7 @@ impl HotSwap {
     /// not, through [`governor::budgeted`], which is the same rule
     /// [`Governor::decide`](crate::governor::Governor::decide) sums the
     /// committed cost with and admits priming slots on. One rule and not two,
-    /// so a Set cannot be rolled back here on one reading and admitted there on
+    /// so a Set cannot be stopped here on one reading and admitted there on
     /// another (`P-0085`).
     ///
     /// The right-hand side is [`HotSwap::budget_ms`]: one frame of the display,
@@ -1505,8 +1615,8 @@ impl HotSwap {
     ///
     /// The probe run on the worker is caught rather than propagated, so a build
     /// can arrive with `cost: None`; nothing has estimated an incoming Set
-    /// either. A candidate in that state is **kept and reported as not
-    /// judged**. It is not rolled back, because rolling it back would be
+    /// either. A candidate in that state is **kept, run, and reported as not
+    /// judged**. Its slot is not stopped, because stopping it would be
     /// deciding it is over a budget on a number it does not have, which is
     /// `P-0084`'s confident wrong judgement exactly — and `P-0095`'s: an
     /// instrument that declined to answer has not said the answer is large.
@@ -1521,7 +1631,7 @@ impl HotSwap {
     /// asked for — and `P-0094` will not buy safety with the operator's
     /// authority. The deck alarm still fires if the frames actually stop
     /// arriving.
-    fn judge(&mut self, id: u64, label: Arc<str>, outgoing: Parked) {
+    fn judge(&mut self, id: u64, label: Arc<str>) {
         let (basis, budgeted) =
             governor::budgeted(self.cost, self.estimate.as_ref().map(Estimated::from));
         // **A number that is not a number is not a number.** `is_nan` is
@@ -1536,16 +1646,14 @@ impl HotSwap {
         };
         match judged {
             Some(cost_ms) if cost_ms > self.budget_ms => {
-                // The candidate goes, the outgoing Set comes back. It resumes
-                // at the `t` it stopped at, because nothing stepped it in
-                // between — the verdict is in the same call the swap was — and
-                // its measurement comes back with it, or the governor would go
-                // on budgeting for the candidate that is no longer there.
-                let candidate = std::mem::replace(&mut self.live, outgoing.set);
-                self.cost = outgoing.cost;
-                self.estimate = outgoing.estimate;
-                self.retire(candidate);
-                self.events.push(Event::RolledBack {
+                // **The candidate stays and the slot stops.** Nothing is
+                // replaced here: `live` is the Set the operator asked for and
+                // goes on being what this slot holds, its measurement is the
+                // one the governor budgets on, and the only state that changes
+                // is this flag. The displaced Set was already retired at the
+                // install — there is no rollback target to keep.
+                self.overloaded = true;
+                self.events.push(Event::Overloaded {
                     id,
                     label,
                     cost_ms,
@@ -1554,7 +1662,6 @@ impl HotSwap {
                 });
             }
             _ => {
-                self.retire(outgoing.set);
                 self.events.push(Event::Accepted {
                     id,
                     label,
@@ -1576,7 +1683,14 @@ impl HotSwap {
     /// latency on a drawn slot and, on a parked one whose trial was frozen,
     /// however long the slot stayed off air. ADR-0313 removed the trial, so a
     /// build and a refusal are both reported on the first boundary after they
-    /// arrive, and the rollback target lives for one call inside [`Parked`].
+    /// arrive. ADR-0316 removed the rollback target itself: the displaced Set
+    /// is retired here, on both sides of the verdict.
+    ///
+    /// **A build landing clears [`HotSwap::overloaded`]**, which is the third
+    /// of the three ways out of a stopped slot and the only one the engine
+    /// takes by itself. It happens before the verdict, so a candidate that is
+    /// itself over budget stops the slot again on its own number rather than
+    /// inheriting the last one's.
     fn install_if_ready(&mut self, device: &wgpu::Device) {
         // `try_recv`, never `recv`, and drained to the *newest* result rather
         // than stopping at the first. An `mpsc` channel is FIFO and two saves
@@ -1657,15 +1771,24 @@ impl HotSwap {
                 // per key it carries, once per swap rather than once per frame.
                 // A swap is already the frame that resizes render targets.
                 candidate.carry_moved_from(&self.live);
-                let outgoing = Parked {
-                    set: std::mem::replace(&mut self.live, candidate),
-                    cost: std::mem::replace(&mut self.cost, built.cost),
-                    // The worker measures what it built and cannot estimate it
-                    // — an estimate is taken against the output's size, which
-                    // the worker does not know. So the incoming Set arrives
-                    // with none and the outgoing one's is held for a rollback.
-                    estimate: self.estimate.take(),
-                };
+                let outgoing = std::mem::replace(&mut self.live, candidate);
+                self.cost = built.cost;
+                // The worker measures what it built and cannot estimate it —
+                // an estimate is taken against the output's size, which the
+                // worker does not know. So the incoming Set arrives with none
+                // and the outgoing one's goes with the Set it was taken of;
+                // there is no rollback for it to be held against any more.
+                self.estimate = None;
+                // **Retired here rather than after the verdict** (ADR-0316).
+                // Both verdicts leave the candidate live, so neither of them
+                // wants this Set back, and holding it across the call would be
+                // a rollback target kept for a rollback that cannot happen.
+                self.retire(outgoing);
+                // **The freeze belongs to the version that was in this slot,
+                // and that version has just left.** Cleared before the verdict
+                // so that an over-budget candidate sets it again on its own
+                // number — see [`HotSwap::overloaded`].
+                self.overloaded = false;
                 self.events.push(Event::Swapped {
                     id: built.id,
                     label: Arc::clone(&built.label),
@@ -1674,7 +1797,7 @@ impl HotSwap {
                 // on was taken on the worker before this Set was handed over,
                 // so there is nothing to wait for; a caller draining events
                 // sees the swap and then its verdict, in that order.
-                self.judge(built.id, built.label, outgoing);
+                self.judge(built.id, built.label);
             }
         }
     }
@@ -1898,12 +2021,18 @@ fn run_worker(
             .map(|mut set| {
                 // **The camera the request states, into the node it is about**,
                 // at the point the startup path assigns a `camera` record — see
-                // `Request::camera`. Before the params, as it is there: the
-                // built-in orbit declares no parameters of its own, so nothing
-                // in `params` can address it and the order is not a contest,
-                // but the two paths agreeing about where this lands is what
-                // keeps a rebuilt Set the same Set as a started one.
-                set.camera = request.camera;
+                // `Request::camera`.
+                //
+                // **Before the params, and the order is a contest now.** It was
+                // not while the built-in orbit declared no parameters: nothing
+                // in `params` could address it, and the two paths agreeing
+                // about where this landed was the whole of what the order
+                // bought. Since ADR-0318 the orbit's `radius`, `speed` and
+                // `height` are that node's parameters, so a `--param
+                // L3:0:radius` in this request is a statement about the same
+                // number and has to land after the camera it overrides — which
+                // is where it already was.
+                set.aim_camera(request.camera);
                 // **The fold the request states, beside the camera it states**
                 // and for the same reason — see [`Request::live`]. A renderer
                 // this build no longer has is said and passed over: the files

@@ -47,8 +47,8 @@
 //!    alone says a save did not take and nothing about why (ADR-0310).
 //!
 //! And the four words a row can end in are the manual's own, which is
-//! ADR-0159 asked of this bay: *"whether it is on screen: landed, rolled back
-//! for costing too much, refused, or did not compile"*. **This quoted
+//! ADR-0159 asked of this bay: *"whether it is on screen: landed, overloaded
+//! for costing more than one frame may, refused, or did not compile"*. **This quoted
 //! *refused by the checker* until 2026-09-08**, which was a paraphrase of a
 //! sentence the page does not have and had the two refusals the other way
 //! round: *refused* is a build that failed, and the checker's is the fourth
@@ -330,7 +330,7 @@ fn a_candidate_is_a_row_where_the_mock_puts_it() {
         let panel = console(viewport);
         let bay = to_egui(rect_of(panel.layout(), "staging"));
         let rows = vec![
-            candidate(0, "drift_shell + soft_points", Stage::RolledBack),
+            candidate(0, "drift_shell + soft_points", Stage::Overloaded),
             candidate(1, "drift_shell + soft_points", Stage::Landed),
         ];
         let lane = staging(panel.layout(), &rows).expect("two candidates and a bay to draw in");
@@ -470,7 +470,7 @@ fn a_row_is_a_well_and_three_things_in_it() {
     let mut panel = console(PLAUSIBLE);
     let mut view = View::new(Room::Day);
     view.staging = vec![
-        candidate(0, "drift_shell + soft_points", Stage::RolledBack),
+        candidate(0, "drift_shell + soft_points", Stage::Overloaded),
         candidate(1, "drift_shell + soft_points", Stage::Landed),
     ];
     let lane = staging(panel.layout(), &view.staging).expect("two candidates and a lane");
@@ -491,7 +491,7 @@ fn a_row_is_a_well_and_three_things_in_it() {
     // **The name is one of the four**, so the two beside the well and the name
     // are the deck's letter and the verdict — neither of which an empty name
     // takes with it.
-    view.staging = vec![candidate(0, "", Stage::RolledBack)];
+    view.staging = vec![candidate(0, "", Stage::Overloaded)];
     let bare = shapes_inside(&mut view, &mut panel, lane.row(0));
     assert_eq!(
         bare, 3,
@@ -600,8 +600,8 @@ fn a_row_the_checker_turned_down_draws_the_first_diagnostic_and_counts_the_rest(
 /// ADR-0159 asked of this bay: the console's words are the manual's.
 ///
 /// `console.html` says what a row's third thing is — *"whether it is on
-/// screen: landed, rolled back for costing too much, refused, or did not
-/// compile"* — and the transport's health capsule names the same four answers
+/// screen: landed, overloaded for costing more than one frame may, refused, or
+/// did not compile"* — and the transport's health capsule names the same four answers
 /// in the same words. A word invented here would be the specification written
 /// backwards.
 ///
@@ -618,7 +618,7 @@ fn the_verdicts_are_the_manuals_words() {
     let mut asked = 0;
     for stage in [
         Stage::Landed,
-        Stage::RolledBack,
+        Stage::Overloaded,
         Stage::Refused,
         Stage::NotCompiled,
     ] {
@@ -633,7 +633,7 @@ fn the_verdicts_are_the_manuals_words() {
     // And they are four words rather than one written four times.
     let words = [
         Stage::Landed.word(),
-        Stage::RolledBack.word(),
+        Stage::Overloaded.word(),
         Stage::Refused.word(),
         Stage::NotCompiled.word(),
     ];
@@ -680,7 +680,7 @@ fn nothing_in_the_staging_lane_is_a_control() {
     let full = || {
         let mut view = showing(&strips);
         view.staging = (0..3)
-            .map(|deck| candidate(deck, "drift_shell + soft_points", Stage::RolledBack))
+            .map(|deck| candidate(deck, "drift_shell + soft_points", Stage::Overloaded))
             .collect();
         view
     };

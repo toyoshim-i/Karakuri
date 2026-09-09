@@ -1387,6 +1387,7 @@ dependencies = [
  "karakuri-layout",
  "karakuri-operation",
  "karakuri-operation-record",
+ "karakuri-pattern",
  "karakuri-signal",
  "karakuri-store",
  "pollster",
@@ -1441,6 +1442,7 @@ dependencies = [
  "egui-winit",
  "karakuri-layout",
  "karakuri-operation",
+ "karakuri-pattern",
  "serde_json",
 ]
 
@@ -1513,6 +1515,13 @@ version = "0.1.0"
 dependencies = [
  "karakuri-operation",
  "karakuri-store",
+]
+
+[[package]]
+name = "karakuri-pattern"
+version = "0.1.0"
+dependencies = [
+ "karakuri-operation",
 ]
 
 [[package]]

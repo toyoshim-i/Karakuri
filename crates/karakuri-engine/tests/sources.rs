@@ -139,12 +139,12 @@ proc dots {
             },
         )?;
         set.resize(&gpu.device, W, H);
-        set.camera = karakuri_engine::camera::Orbit {
+        set.aim_camera(karakuri_engine::camera::Orbit {
             radius: 6.0,
             speed: 0.0,
             height: 0.0,
             ..Default::default()
-        };
+        });
         Ok(set)
     }
 
@@ -189,12 +189,12 @@ proc dots {
         .expect("several sources and some renderers");
         set.resize(&gpu.device, W, H);
         // Head-on and still, so the lattice lands on the frame as a lattice.
-        set.camera = karakuri_engine::camera::Orbit {
+        set.aim_camera(karakuri_engine::camera::Orbit {
             radius: 6.0,
             speed: 0.0,
             height: 0.0,
             ..Default::default()
-        };
+        });
         set
     }
 
@@ -919,12 +919,12 @@ proc morph {
         )
         .expect("two static sources and a derived attribute");
         set.resize(&gpu.device, W, H);
-        set.camera = karakuri_engine::camera::Orbit {
+        set.aim_camera(karakuri_engine::camera::Orbit {
             radius: 6.0,
             speed: 0.0,
             height: 0.0,
             ..Default::default()
-        };
+        });
 
         let centre_x = |set: &mut Set| -> f32 {
             let px = frame(&gpu, set);

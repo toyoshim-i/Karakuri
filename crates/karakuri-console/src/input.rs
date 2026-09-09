@@ -581,8 +581,8 @@ use karakuri_operation::gate::Class;
 use crate::panel::{Panel, GRAB};
 use crate::view::{
     arrangement, audio_in, bay_grip, deck_head, deck_name, inspector, keep_pill, library, look,
-    master, mcp_pill, mixer, outputs, program_bay, program_head, tracker_group, transition,
-    transport, Field, Scope, View, BAY_GRIPS, DECKS, REGIONS,
+    master, mcp_pill, mixer, outputs, program_bay, program_head, sequencer, tracker_group,
+    transition, transport, Field, Scope, View, BAY_GRIPS, DECKS, REGIONS,
 };
 
 /// **What each of rule 4's derivations answers for**, one row per probe and in
@@ -595,7 +595,8 @@ use crate::view::{
 /// Program bay head's `solo`, the four deck preview cells,
 /// the Library bay's scope chips, its two filter fields, the `params` chip in
 /// its foot, the `load` button and deck pulldown beside it, the list above
-/// them, and the four class pills.
+/// them, the four class pills, and the Sequencer bay's cells, labels and mode
+/// pill.
 ///
 /// **One probe per derivation, cheapest answer first**, and [`on_mcp`] is last
 /// because it is the dearest probe here — each class lays out its bay's whole
@@ -713,7 +714,7 @@ use crate::view::{
 /// answering a different question. So the **list** is the control and which row
 /// is inside [`crate::view::LibraryBay::take`], which is the `params` chip's
 /// row read the other way round.
-pub const PROBES: [Probe; 25] = [
+pub const PROBES: [Probe; 26] = [
     Probe {
         name: "the Outputs row's sink",
         claims: 1,
@@ -760,8 +761,8 @@ pub const PROBES: [Probe; 25] = [
         ask: on_transition,
     },
     Probe {
-        name: "the Master bay's out",
-        claims: 1,
+        name: "the Master bay's five",
+        claims: 5,
         ask: on_master,
     },
     Probe {
@@ -839,6 +840,11 @@ pub const PROBES: [Probe; 25] = [
         claims: Class::ALL.len(),
         ask: on_mcp,
     },
+    Probe {
+        name: "the Sequencer bay's cells, labels and mode pill",
+        claims: SEQ_CONTROLS,
+        ask: on_step,
+    },
 ];
 
 /// **One of rule 4's derivations, as a value.**
@@ -872,6 +878,22 @@ pub struct Probe {
     pub ask: fn(&Panel, &egui::Context, &View, Point) -> bool,
 }
 
+/// **How many controls the Sequencer bay claims**: a cell per drawn step of
+/// every lane, a label per lane, and the mode pill.
+///
+/// **A count of what a *full* pattern draws rather than of what is on screen**,
+/// which is [`BAY_GRIPS`]' shape asked of a bay whose rows are data: this is a
+/// `const` and a pattern arrives at run time, so the number registered is the
+/// most a pointer could reach — four lanes, sixteen cells apiece — and a
+/// console drawing one lane claims one lane's worth. That is the honest
+/// direction for a registration: [`CONTROLS`] is what the pointer *may* have
+/// to hit-test, and a number that followed the pattern would make the console's
+/// own legend move when an operator added a lane.
+///
+/// `karakuri_console::view::Sequencer::controls` is what a drawn bay answers,
+/// and it is the number this bounds.
+const SEQ_CONTROLS: usize = DECKS * (karakuri_pattern::SLOTS + 1) + 1;
+
 /// **How many controls rule 4 hit-tests**, summed over [`PROBES`].
 ///
 /// Exported because the answer to *what can the pointer press here* is this
@@ -900,6 +922,17 @@ pub enum Claim {
     Panel,
     /// `egui`'s.
     Egui,
+}
+
+/// **The Sequencer bay's controls, derived once for all of them**, which is a
+/// mixer strip's arrangement one bay down: a cell, a label and the mode pill
+/// are three questions about one laid-out bay, and a second walk would put the
+/// cell a press lands on somewhere the cell that was painted is not.
+///
+/// **A console with no pattern behind it pays one branch** — [`sequencer`]'s
+/// first line is the reading, and `None` is a bay that draws nothing.
+fn on_step(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    sequencer(ctx, panel.layout(), view.sequencer.as_ref()).is_some_and(|bay| bay.owns(p))
 }
 
 /// **The Outputs row's one sink**, and the first control this console drew —
@@ -1051,13 +1084,13 @@ fn on_tempo(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
     transport(ctx, panel.layout(), view.transport).is_some_and(|row| row.on_tempo(p))
 }
 
-/// **The Master bay's one control**, and the bay is derived for it
-/// exactly as the mixer's is for its five — one question about one
-/// laid-out row here, because there is one thing in this bay a hand
-/// can move. A console with no level behind it has no row at all
-/// and pays nothing.
+/// **The Master bay's five**, and the bay is derived for them exactly as the
+/// mixer's is for its five: one derivation, asked once, answering for the out
+/// knob, the three effect rows' knobs and the feedback row's cut chip. A
+/// console with no level behind it has no row at all and pays nothing, and one
+/// with a level and no chain has the out knob alone.
 fn on_master(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
-    master(ctx, panel.layout(), view.master_out).is_some_and(|row| row.owns(p))
+    master(ctx, panel.layout(), view.master_out, view.master_chain).is_some_and(|row| row.owns(p))
 }
 
 /// **The name in each Inspector pane's head**, and it is [`on_keep`]'s

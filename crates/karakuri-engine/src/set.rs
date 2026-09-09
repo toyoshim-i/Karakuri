@@ -918,15 +918,33 @@ pub struct Set {
     /// caller who knew it. See
     /// `docs/adr/0285-a-renderers-floor-is-bounded-from-its-declared-ranges-or-refused.md`.
     rate_bounds: Vec<karakuri_ir::rate::RateBound>,
-    /// **The producer of the built-in camera's state.** Public because a
-    /// `camera` record and a Set file both set it from outside; the six numbers
-    /// it produces reach a renderer through the camera node below and never
-    /// directly.
+    /// **The built-in camera as it was stated** — by a `camera` record, by a
+    /// rebuild's request, or by the default. Written through
+    /// [`Set::aim_camera`]; read through [`Set::orbit`].
+    ///
+    /// **Private since 2026-09-09, and that is the guarantee rather than a
+    /// tidying.** It was `pub`, and an assignment to it now states half a
+    /// camera: the three placement numbers live in the camera node's parameter
+    /// map, so a caller that wrote the field would leave the map holding the
+    /// numbers the Set was built with and the picture would go on using those.
+    /// Nothing would say so. `docs/contributing.md` §4's third tier is to make
+    /// the mistake unspellable, and a private field with one writer is that —
+    /// eighteen call sites in this crate's own tests were the demonstration
+    /// that a comment would not have held it.
+    ///
+    /// **Three of the six move without this field moving**, and that is the one
+    /// thing to know about it: `radius`, `speed` and `height` are parameters of
+    /// the camera node, so a hand, a binding and a carried ride all leave their
+    /// answer in the node's parameter map and this holds what was last
+    /// *declared*. It is the same split every other node has — a declaration in
+    /// the code and a value in the Set — and it is here rather than in the map
+    /// because the lens three, `fov_y`, `near` and `far`, have no other home
+    /// and are not parameters. `docs/adr/0318-…`.
     ///
     /// **One, because a Set holds one built-in camera**: the last camera node
     /// is the orbit, whatever else the Set's files declared, and it is the only
     /// one whose six numbers come from outside. See [`Set::cameras`].
-    pub camera: Orbit,
+    camera: Orbit,
     /// **The camera edges, one per camera node**, in the order they are
     /// addressed as `L3:n`. Written every frame, derived on the GPU, and each
     /// read by the renderers bound to it — see [`crate::node::Camera`] for why
@@ -2799,17 +2817,26 @@ impl Set {
             .iter()
             .map(|(l1, _)| declared_defaults(l1))
             .chain(l2s.iter().map(|n| declared_defaults(n)))
-            // **One map per camera node, including the built-in's**, which is
-            // empty: it is not a procedure and declares no params. Empty rather
-            // than absent is the whole of what makes this list addressable —
-            // `slot_of` sums the layers before it, so a Set whose camera
-            // contributed no entry would put the first renderer's map at the
-            // camera's index and hand every `L4:n` the node before it.
-            .chain(
-                cameras
-                    .iter()
-                    .map(|n| n.map(declared_defaults).unwrap_or_default()),
-            )
+            // **One map per camera node, including the built-in's**, which
+            // holds the orbit's three placement numbers. Present rather than
+            // absent is what makes this list addressable at all — `slot_of`
+            // sums the layers before it, so a Set whose camera contributed no
+            // entry would put the first renderer's map at the camera's index
+            // and hand every `L4:n` the node before it — and **the entry was
+            // empty until 2026-09-09**, when the three stopped being the Set's
+            // own numbers and became the node's parameters
+            // (`docs/adr/0318-the-built-in-cameras-three-placement-numbers-are-parameter-rows.md`).
+            //
+            // **`Orbit::default`'s three, restated by [`Set::aim_camera`].**
+            // Nothing here is told which camera this Set is being built with —
+            // the request states it after the build, where the startup path
+            // assigns a `camera` record — so what a declaration *is* for this
+            // node arrives on the same step it always did, and this is the
+            // value a Set built with no camera stated has. See `swap::Request`.
+            .chain(cameras.iter().map(|n| match n {
+                Some(n) => declared_defaults(n),
+                None => Orbit::default().placement_values().into_iter().collect(),
+            }))
             .chain(l4s.iter().map(|n| declared_defaults(n)))
             // **Last, and by declared name.** The prefix belongs to the WGSL
             // spelling and to nothing else: an operator writes
@@ -2823,11 +2850,16 @@ impl Set {
             .iter()
             .map(|(l1, _)| declared_ranges(l1))
             .chain(l2s.iter().map(|n| declared_ranges(n)))
-            .chain(
-                cameras
-                    .iter()
-                    .map(|n| n.map(declared_ranges).unwrap_or_default()),
-            )
+            // **The built-in's three declared ranges**, which are the engine's
+            // rather than an artifact's for the reason its values are: there is
+            // no `.kir` to read them off. They do not move with the camera the
+            // Set is built with — a range is what the declaration says the
+            // number still looks like itself over, and that is a property of an
+            // orbit and not of one Set's orbit.
+            .chain(cameras.iter().map(|n| match n {
+                Some(n) => declared_ranges(n),
+                None => Orbit::placement_ranges().into_iter().collect(),
+            }))
             .chain(l4s.iter().map(|n| declared_ranges(n)))
             .chain(fields.iter().map(|n| declared_ranges(n)))
             .collect();
@@ -2942,7 +2974,7 @@ impl Set {
         // nothing depends on it; it costs 64 bytes once and removes a shape of
         // failure that would only ever appear in a caller's test.
         for camera in &set.cameras {
-            camera.write_state(queue, &set.camera.state(0.0));
+            camera.write_state(queue, &set.orbit().state(0.0));
             camera.write_canvas(queue, 1.0);
         }
         // **After the simulation's own initialisation**, because what it primes
@@ -3494,12 +3526,24 @@ impl Set {
     /// apart; [`Set::write_param`] is the one entry point both come through.
     pub fn set_param(&mut self, name: &str, value: f32) -> usize {
         let mut written = 0;
+        // **The built-in camera is not written by a bare name** — see
+        // [`Set::addressed_only`], which carries the argument. Taken before the
+        // loop because the loop borrows `self` mutably.
+        let addressed_only = self.addressed_only();
         // **Zipped rather than indexed**, which is what lets one walk write both
         // lists: `moved` is one entry per node in `params`' own order, and a
         // second index into it would be a second copy of the arithmetic this
         // file has already been wrong about twice. See [`Set::moved`] for what
         // the mark means.
-        for (node, moved) in self.params.iter_mut().zip(self.moved.iter_mut()) {
+        for (at, (node, moved)) in self
+            .params
+            .iter_mut()
+            .zip(self.moved.iter_mut())
+            .enumerate()
+        {
+            if Some(at) == addressed_only {
+                continue;
+            }
             if let Some(slot) = node.get_mut(name) {
                 *slot = value;
                 moved.insert(name.to_string());
@@ -3543,6 +3587,98 @@ impl Set {
         }
     }
 
+    /// **Which node of the L3 layer the built-in orbit is**, counting from
+    /// zero.
+    ///
+    /// Asked of the nodes rather than derived from a count. *The one with no
+    /// procedure behind it* is the property; *the last one* is the shape that
+    /// property currently takes, and a reader that took the shape would be
+    /// right until the day a Set holds its cameras in another order
+    /// ([P-0087](../../../docs/principles/0087-name-the-property-never-the-shape.md)).
+    /// `docs/ir-spec.md`, *Several cameras*, is where there being exactly one
+    /// is settled.
+    fn builtin_camera(&self) -> Option<usize> {
+        self.cameras.iter().position(|c| c.is_builtin())
+    }
+
+    /// **The one node a bare name does not reach**: the built-in camera, as a
+    /// position in [`Set::params`].
+    ///
+    /// # A bare name is a statement about what this Set's material declares
+    ///
+    /// *A bare name reaches every node that declares the key* is the rule, and
+    /// its reason is that two renderers' `exposure` is one knob: two authors
+    /// wrote the same word about the same idea, so one control moving both is
+    /// what was meant. **Nobody wrote the built-in camera's three.** The engine
+    /// declares them because the node has no procedure to declare them
+    /// (`Orbit::PLACEMENT`), and `radius` is a word seven of this repository's
+    /// own example procedures already use — so a bare `--param radius=3.0`
+    /// would swing the camera as a side effect of moving a geometry, and the
+    /// only thing the two ever shared was a spelling.
+    ///
+    /// **So the three are reached by address and never by a bare name**:
+    /// `--param L3:0:radius`, a published control that carries its address, a
+    /// `bind` that names `L3`, a `Record::Ride` with an `at`. That is the same
+    /// sentence the Set file follows one level along — a node with no procedure
+    /// is described by the record that describes it and by nothing else — and
+    /// it is one rule with four readers below rather than four rules.
+    ///
+    /// **Not a general "engine-declared params are addressed" rule**, because
+    /// there is exactly one such node and inventing the general case would be
+    /// designing for a second one that does not exist.
+    /// `docs/adr/0318-the-built-in-cameras-three-placement-numbers-are-parameter-rows.md`.
+    fn addressed_only(&self) -> Option<usize> {
+        self.builtin_camera()
+            .and_then(|at| self.nodes_of(Kind::L3).nth(at))
+    }
+
+    /// **The built-in camera as it is now**: the three placement numbers out of
+    /// that node's parameter map, and the lens three as the Set holds them.
+    ///
+    /// **The one derivation of what the orbit is**, which is
+    /// [P-0087](../../../docs/principles/0087-name-the-property-never-the-shape.md)'s
+    /// *there is exactly one derivation of X*. [`Set::camera`] is what was
+    /// **stated** — by a `camera` record, by a rebuild's request, or by the
+    /// default — and the parameter map is where a hand, a binding's blend and a
+    /// carried ride leave their answer, so a caller that read the field would
+    /// show the number nobody has been moving. This is what a save writes and
+    /// what the frame path starts from.
+    pub fn orbit(&self) -> Orbit {
+        let slot = self.addressed_only();
+        self.camera
+            .with_placement(|key| slot.and_then(|slot| self.params[slot].get(key).copied()))
+    }
+
+    /// **State the built-in camera**, which is what a `camera` record and a
+    /// rebuild's request each do once.
+    ///
+    /// The lens three land on [`Set::camera`] and the placement three land in
+    /// the camera node's parameter map, **unmarked**: this is a declaration and
+    /// not a ride, so [`Set::moved`] stays empty for them and
+    /// [`Set::carry_moved_from`]'s one rule reads the same from both ends — *a
+    /// value the code declared comes from the code, and a value anything else
+    /// stated carries*. That is also what makes
+    /// `docs/adr/0132-a-rebuild-restates-the-camera-it-was-aimed-with.md` true
+    /// with nothing added for it: a rebuild restates this, and a radius
+    /// somebody rode is carried back over the top of it.
+    ///
+    /// **A method rather than an assignment to the field**, because the field
+    /// is half the answer now. Writing it and leaving the map holding the
+    /// numbers the Set was built with is exactly the drift
+    /// `docs/contributing.md` §4 is about, and it would be invisible: the
+    /// picture would keep using the map and the save would write the field.
+    pub fn aim_camera(&mut self, orbit: Orbit) {
+        self.camera = orbit;
+        let Some(slot) = self.addressed_only() else {
+            return;
+        };
+        for (key, value) in orbit.placement_values() {
+            if let Some(held) = self.params[slot].get_mut(&key) {
+                *held = value;
+            }
+        }
+    }
+
     /// **Who may move one node.** `None` if that node does not exist.
     ///
     /// The read the console's `man / sug / auto` chip has been missing:
@@ -3579,6 +3715,33 @@ impl Set {
         }
     }
 
+    /// **Where a bare `key` lands**, in node order, and nothing else about it.
+    ///
+    /// [`Set::landing`] without the authorities, for a caller that is asking
+    /// *which nodes is this one control over* rather than *may it be written*.
+    ///
+    /// # It exists so a surface stops re-deriving this
+    ///
+    /// `karakuri/src/main.rs`'s `node_of` puts a published control in a node
+    /// group, and a wildcard over two or more nodes belongs to several groups
+    /// at once and is drawn in none. It answered that by walking
+    /// [`Set::params`] itself and counting the nodes that hold the key — the
+    /// same walk this one makes, agreeing with the engine by coincidence
+    /// rather than by construction. It stopped agreeing the day the built-in
+    /// camera declared a `radius`
+    /// (`docs/adr/0318-the-built-in-cameras-three-placement-numbers-are-parameter-rows.md`):
+    /// a bare name does not reach that node ([`Set::addressed_only`]), so the
+    /// engine saw one landing where the panel saw two, and the panel dropped a
+    /// row a Set publishes and draws. **The rule is where the write is
+    /// decided** and a surface asks for it
+    /// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
+    pub fn landing_of(&self, key: &str) -> Vec<(Kind, u32)> {
+        self.landing(key)
+            .into_iter()
+            .map(|(layer, index, _)| (layer, index))
+            .collect()
+    }
+
     /// **Every node that declares `key`**, addressed and with the authority it
     /// is under — the walk [`CrossesAuthority::over`] decides on.
     ///
@@ -3595,6 +3758,11 @@ impl Set {
                     .enumerate()
                     .map(move |(index, slot)| (layer, index as u32, slot))
             })
+            // **The built-in camera is not in a bare name's landing**, because
+            // a bare name does not reach it — [`Set::addressed_only`]. A node
+            // this write cannot land on cannot make the landing disagree about
+            // authority either.
+            .filter(|(_, _, slot)| Some(*slot) != self.addressed_only())
             .filter(|(_, _, slot)| self.params[*slot].contains_key(key))
             .map(|(layer, index, slot)| {
                 (
@@ -3792,6 +3960,14 @@ impl Set {
                 if at.is_some_and(|(l, i)| l != layer || i != index as u32) {
                     continue;
                 }
+                // **A wildcard's range does not narrow against the built-in
+                // camera**, because a wildcard does not reach it
+                // ([`Set::addressed_only`]). Intersecting against a node no
+                // write of this shape can land on would make one control's
+                // travel depend on a node it cannot move.
+                if at.is_none() && Some(slot) == self.addressed_only() {
+                    continue;
+                }
                 let Some([min, max]) = self.ranges.get(slot).and_then(|n| n.get(key)).copied()
                 else {
                     continue;
@@ -3872,26 +4048,50 @@ impl Set {
         // but reaching for one here is how the iteration this walk must not do
         // gets back in. An interface is tens of controls and this is off the
         // frame path.
+        //
+        // **One node's controls are addressed rather than bare, and it is the
+        // built-in camera** — [`Set::addressed_only`] is where that is decided
+        // and why. Emitted in the walk rather than appended, because the
+        // position in this list is a MIDI control's address and the order has
+        // to be node order: the camera's three sit between the deformations'
+        // and the renderers', which is where the console draws them.
         let mut keys: Vec<&String> = Vec::new();
+        let mut out: Vec<Published> = Vec::new();
         for layer in Kind::ALL {
-            for names in self.declared_names(layer) {
+            for (index, names) in self.declared_names(layer).into_iter().enumerate() {
+                let addressed = self.nodes_of(layer).nth(index) == self.addressed_only();
                 for key in names {
-                    if !keys.contains(&key) {
-                        keys.push(key);
+                    if addressed {
+                        // **One control per declaration**, since the address is
+                        // what makes it reachable at all; the dedup below is a
+                        // bare name's rule and a bare name is not what this is.
+                        let at = Some((layer, index as u32));
+                        if let Some(range) = self.declared_range(at, key) {
+                            out.push(Published {
+                                name: key.clone(),
+                                at,
+                                key: key.clone(),
+                                range,
+                            });
+                        }
+                        continue;
+                    }
+                    if keys.contains(&key) {
+                        continue;
+                    }
+                    keys.push(key);
+                    if let Some(range) = self.declared_range(None, key) {
+                        out.push(Published {
+                            name: key.clone(),
+                            at: None,
+                            key: key.clone(),
+                            range,
+                        });
                     }
                 }
             }
         }
-        keys.into_iter()
-            .filter_map(|key| {
-                Some(Published {
-                    name: key.clone(),
-                    at: None,
-                    key: key.clone(),
-                    range: self.declared_range(None, key)?,
-                })
-            })
-            .collect()
+        out
     }
 
     /// **Set a published control, in the units the console shows it in.**
@@ -3978,7 +4178,13 @@ impl Set {
     /// unless something addressed one of them behind the control's back — which
     /// is exactly what an unpublished control still being reachable means, and
     /// is the operator's business rather than a case to reconcile here.
-    fn value_at(&self, at: Option<(Kind, u32)>, key: &str) -> Option<f32> {
+    /// **Public since 2026-09-09**, because a control's value is a question
+    /// about its address rather than about its name: the built-in camera's
+    /// three publish addressed, so a Set whose geometry also declares `radius`
+    /// has two controls under that name and
+    /// [`Set::published_value`]'s name lookup would answer for the wrong one
+    /// (ADR-0318). A surface that has a [`Published`] in hand asks this.
+    pub fn value_at(&self, at: Option<(Kind, u32)>, key: &str) -> Option<f32> {
         for layer in Kind::ALL {
             for (index, slot) in self.nodes_of(layer).enumerate() {
                 if at.is_some_and(|(l, i)| l != layer || i != index as u32) {
@@ -4475,10 +4681,39 @@ impl Set {
             // frame over no geometry — so a camera's uniform has no such field
             // for the walk to find, and the answer is never asked for.
             let no_sources = |_: &str| None;
-            let fallback = self.camera.state(t);
+            // **What the built-in's six numbers were *stated* as**, copied out
+            // because the loop below takes `self.cameras` mutably. The three a
+            // hand can move are not read from here — see the fallback inside
+            // the loop, and [`Set::orbit`], which is the same derivation for a
+            // caller.
+            let stated = self.camera;
             let params = &self.params[first..];
             for (at, (camera, params)) in self.cameras.iter_mut().zip(params).enumerate() {
                 camera.write_canvas(queue, aspect);
+                // **The built-in's producer, built from that node's own
+                // parameter map, this frame.**
+                //
+                // **Per node and inside the loop**, where it was one state
+                // computed above it: the three placement numbers are
+                // parameters of the camera node now, so which camera node is
+                // being prepared decides what they are — and `effective` is
+                // the same read every other layer's params go through, so a
+                // `bind` on `radius` blends on confidence here with nothing
+                // written for it
+                // (`docs/adr/0318-the-built-in-cameras-three-placement-numbers-are-parameter-rows.md`,
+                // [P-0084](../../../docs/principles/0084-a-confident-wrong-automatic-judgement-is-worse-than-not-judging.md)).
+                //
+                // **Only for the built-in.** A camera procedure ignores this
+                // argument — [`crate::node::Camera::prepare`] matches on which
+                // producer it has — and a procedure that happened to declare a
+                // `radius` would otherwise have it read as an orbit's.
+                let orbit = match camera.is_builtin() {
+                    true => {
+                        stated.with_placement(|key| effective(bindings, params, Kind::L3, at, key))
+                    }
+                    false => stated,
+                };
+                let fallback = orbit.state(t);
                 let view = crate::node::View {
                     t,
                     beats,
@@ -5673,8 +5908,19 @@ proc probe_shared_l4 {
             );
             assert_eq!(
                 radius(&set),
-                vec![(Kind::L1, 0, 2.0), (Kind::L4, 0, 2.0)],
-                "both declarations should hold what the wildcard wrote"
+                vec![
+                    (Kind::L1, 0, 2.0),
+                    // **The built-in camera declares a `radius` too and the
+                    // wildcard did not reach it**, which is the count above
+                    // read from the other end: a bare name is a statement about
+                    // what this Set's material declares, and nobody wrote the
+                    // camera's three ([`Set::addressed_only`], ADR-0318). It
+                    // holds `Orbit::default().radius`.
+                    (Kind::L3, 0, 8.0),
+                    (Kind::L4, 0, 2.0),
+                ],
+                "both declarations should hold what the wildcard wrote, and the camera's own \
+                 `radius` should be untouched by a bare name"
             );
 
             // One node handed to an agent, and the same control now spans two
@@ -5693,7 +5939,7 @@ proc probe_shared_l4 {
             );
             assert_eq!(
                 radius(&set),
-                vec![(Kind::L1, 0, 2.0), (Kind::L4, 0, 2.0)],
+                vec![(Kind::L1, 0, 2.0), (Kind::L3, 0, 8.0), (Kind::L4, 0, 2.0)],
                 "a refused write moves nothing — landing on the permitted node is the \
                  silently partial control P-0094 rules out"
             );
@@ -5706,7 +5952,7 @@ proc probe_shared_l4 {
             );
             assert_eq!(
                 radius(&set),
-                vec![(Kind::L1, 0, 2.0), (Kind::L4, 0, 7.0)],
+                vec![(Kind::L1, 0, 2.0), (Kind::L3, 0, 8.0), (Kind::L4, 0, 7.0)],
                 "the addressed write lands on the node it names and on no other"
             );
         }

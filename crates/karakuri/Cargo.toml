@@ -60,6 +60,13 @@ karakuri-layout = { version = "0.1.0", path = "../karakuri-layout" }
 karakuri-operation = { version = "0.1.0", path = "../karakuri-operation" }
 karakuri-operation-record = { version = "0.1.0", path = "../karakuri-operation-record" }
 
+# **The sequencer's four banks, because this window is what holds and polls
+# them.** A pattern is authored state and no engine holds any of it: a lane is a
+# fifth route into the vocabulary, so what it does reaches the deck as an
+# operation like every other press (ADR-0222, ADR-0322). The console draws a
+# copy handed to it per frame and applies nothing.
+karakuri-pattern = { version = "0.1.0", path = "../karakuri-pattern" }
+
 # **For one number: `BEATS_PER_BAR`**, which the transport row's beat grid is as
 # many dots as. It is written down as *provisional* — a fixed assumption of
 # common time until the IR format carries a real time signature — so it is asked

@@ -95,9 +95,9 @@
 //! are settled — `Written::Silent(Silent::Surface)` and
 //! `Written::Silent(Silent::OnLanding)`. What the lane says without them is
 //! still the thing nothing else in this instrument says: after
-//! `swap::Event::RolledBack` the watchdog puts the previous *Set* back on
-//! screen and does not put the previous *file* back, so the picture is the old
-//! version and the disk is the over-budget one.
+//! `swap::Event::Overloaded` the version is still in the slot and the slot has
+//! stopped updating, so what is on screen is a held frame and only a word says
+//! so — the row's, and the deck cell's caption beside it.
 //!
 //! **The height is what this leaves wrong, and it is not this module's to
 //! fix.** `lib.rs` pins the lane at `fixed(125.0)` with a minimum of `66.0` —
@@ -277,8 +277,8 @@ use egui::{Color32, CornerRadius, FontFamily, FontId, Pos2, Rect, Stroke, Stroke
 use karakuri_layout::{Axis, Hit, NodeId};
 use karakuri_operation::gate::{Class, Open};
 use karakuri_operation::{
-    Authority, BeatSource, BlendMode, GridScale, Layer, Operation, Recording, Residency, Sync,
-    Tonemap, TransitionSetting, Undecided, WipeKind,
+    Authority, BeatSource, BlendMode, GridScale, LaneTarget, Layer, Operation, Recording,
+    Residency, StepMode, Sync, Tonemap, TransitionSetting, Undecided, WipeKind,
 };
 
 use crate::budget::{Declared, PANEL_PASS};
@@ -471,6 +471,20 @@ pub enum Kind {
     /// and for the six things in the mock's lane and the page's row that are
     /// **not** drawn.
     Staging,
+    /// **The Sequencer bay**, which is a bay in every other respect: the same
+    /// card and the same [`bay_head`], carrying [`SEQUENCER_TITLE`], no pill
+    /// and no grip — the mock gives this head three bank pills and the console
+    /// draws none of them yet.
+    ///
+    /// A kind of its own for [`Kind::Mixer`]'s reason: [`View::draw`] has to
+    /// know **which** bay the ruler, the rows and the playhead go in, and the
+    /// alternative is comparing a name on the frame path, which puts a string
+    /// where the table already says what a region is.
+    ///
+    /// See [`sequencer`] for what is drawn here, for where the pattern comes
+    /// from, and for the three things in the mock's bay that are **not**
+    /// drawn.
+    Sequencer,
     /// One subdivision of a bay, which has no head of its own because the bay
     /// around it has one. The inspector's two panes.
     Pane,
@@ -643,11 +657,7 @@ pub const REGIONS: &[Region] = &[
     },
     Region {
         name: "sequencer",
-        kind: Kind::Bay {
-            title: "Sequencer",
-            pills: &[],
-            grip: false,
-        },
+        kind: Kind::Sequencer,
     },
     Region {
         name: "outputs",
@@ -763,6 +773,7 @@ pub fn head_of(region: &Region) -> Option<Head> {
         Kind::Master => (MASTER_TITLE, &[]),
         Kind::Library => (LIBRARY_TITLE, &[]),
         Kind::Staging => (STAGING_TITLE, &[]),
+        Kind::Sequencer => (SEQUENCER_TITLE, &[]),
         Kind::Transport | Kind::Outputs | Kind::Pane | Kind::Picture | Kind::Previews => {
             return None
         }
@@ -798,7 +809,7 @@ const fn head_grip(kind: Kind) -> bool {
         // The mock draws one in these two heads and not in the other two —
         // see each kind's own documentation, which is where the reading is.
         Kind::Library | Kind::Master => true,
-        Kind::Mixer | Kind::Staging => false,
+        Kind::Mixer | Kind::Staging | Kind::Sequencer => false,
         Kind::Transport | Kind::Outputs | Kind::Pane | Kind::Picture | Kind::Previews => false,
     }
 }
@@ -2522,10 +2533,11 @@ pub struct Transport {
     /// # It is [`Stage`] and not a fourth spelling of the same three words
     ///
     /// `docs/manual/console.html` gives the pill and the Staging lane's rows
-    /// one sentence apiece and they are the same three answers — *"landed,
-    /// rolled back for cost, or failed to build"* under *Health, in the
-    /// transport*, and *"whether it is on screen: landed, rolled back for
-    /// costing too much, or refused"* on a candidate row. A second enum here
+    /// one sentence apiece and they are the same answers — *"landed,
+    /// overloaded, failed to build, or did not compile"* under *Health, in the
+    /// transport*, and *"whether it is on screen: landed, overloaded for
+    /// costing more than one frame may, refused, or did not compile"* on a
+    /// candidate row. A second enum here
     /// would be `docs/contributing.md` §4's *a name meaning two things* built
     /// on purpose, so [`Stage`] has two readers and one set of words.
     ///
@@ -3598,9 +3610,9 @@ fn transport_into(ui: &Ui, pal: &Palette, row: &TransportRow) {
     // verdict the mock draws it on. `armed` is this console's *live in the
     // good sense* — the same treatment the audio-in pill wears with an input
     // open and the wipe shape wears with a shape chosen — so it is the word
-    // for a build that is on screen and the wrong one for a build that is
-    // not: a rollback drawn in the mint that says *this is working* would
-    // read as the opposite of what it means. The other two take the plain
+    // for a build that is on screen and running, and the wrong one for a
+    // build that is not: a stopped slot drawn in the mint that says *this is
+    // working* would read as the opposite of what it means. The other two take the plain
     // `.pill`, which is the mock's other treatment and not a third one
     // invented here; a colour of alarm is a decision `console.html` has not
     // taken for this capsule and is not taken for it here.
@@ -9763,6 +9775,148 @@ pub struct MasterRow {
     /// [`LookRow::values`]' reason: whoever measured the type and whoever
     /// paints it are one statement.
     pub out: f32,
+    /// **The master chain's three rows**, in the chain's own order —
+    /// feedback, bloom, rgb shift — and `None` for one there is no room for.
+    ///
+    /// **A fixed three and not a list**, because the chain is fixed: three
+    /// built-in passes, all of them loaded, in that order
+    /// ([ADR-0317](../../../docs/adr/0317-the-master-chain-is-three-fixed-passes-and-feedback-reads-either-cut.md)).
+    /// A `Vec` here would be a claim that the count can change, which is the
+    /// `+ add` row's question and is not this one's.
+    ///
+    /// A row drops out from the bottom up when the bay is short, on
+    /// [`strips_row`]'s rule: the arrangement's own minimum for this bay keeps
+    /// room for the out row and one effect, so a bay at its minimum draws one.
+    pub fx: [Option<FxRow>; 3],
+}
+
+/// **Which pass of the master chain a row is**, in the chain's order.
+///
+/// The order is the engine's and is not a preference: feedback reads the
+/// previous frame, bloom spreads what is over the knee, and rgb shift is last
+/// so the other two are seen through it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Fx {
+    Feedback,
+    Bloom,
+    RgbShift,
+}
+
+impl Fx {
+    /// The three, in the order the bay draws them.
+    pub const ALL: [Fx; 3] = [Fx::Feedback, Fx::Bloom, Fx::RgbShift];
+
+    /// **The word the row draws**, which is the mock's own and the operations
+    /// page's heading in lower case.
+    pub fn name(self) -> &'static str {
+        match self {
+            Fx::Feedback => "feedback",
+            Fx::Bloom => "bloom",
+            Fx::RgbShift => "rgb shift",
+        }
+    }
+}
+
+/// **One effect row of the master chain, laid out**: the dot, the word, the
+/// feedback row's cut chip, the track and the figure.
+///
+/// `.fx` in `docs/manual/console.html` — a well with `FX_PAD_X` either side
+/// and `FX_PAD_Y` above and below, its items [`size::FX_GAP`] apart, the track
+/// taking what is left between the word and the figure exactly as the out
+/// row's does.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FxRow {
+    /// Which pass, which is what decides the word and the operation.
+    pub fx: Fx,
+    /// The well the row is drawn in.
+    pub well: Rect,
+    /// `.fx .dot`: lit when this pass is in the frame.
+    pub dot: Rect,
+    /// The word.
+    pub name: Rect,
+    /// **The cut chip, on the feedback row and on neither of the others** —
+    /// a `.mini`, the mixer's own blend chip: the same 9px word inside the
+    /// same padding, because it is the same thing, one value of a closed list
+    /// shown and cycled.
+    ///
+    /// `None` is *this row has no second parameter*, and it is the shape that
+    /// says so: an always-present rectangle nobody draws would be a control
+    /// two rows can be pressed on.
+    pub cut: Option<Rect>,
+    /// The track.
+    pub fader: Fader,
+    /// The figure, in a box as wide as the widest reading — [`MasterRow::value`]'s
+    /// rule and its reason.
+    pub value: Rect,
+    /// **What this pass is set to**, `[0, 1]` of its own reach. Carried for
+    /// [`MasterRow::out`]'s reason.
+    pub amount: f32,
+    /// Which cut the feedback pass is reading. Carried on every row because
+    /// the chip is laid out from it and the operation a drag asks for needs
+    /// it; meaningless on the other two, which is why only the feedback row
+    /// has a chip to draw it in.
+    pub reading: karakuri_operation::Cut,
+    /// **Whether this pass is in the frame at all.** An amount of zero is not
+    /// a pass multiplying by nothing: no pass is recorded, so the row is dim
+    /// and the dot is out.
+    pub runs: bool,
+}
+
+impl FxRow {
+    /// **What a drag on this row asks for.** The amount is the track's
+    /// position, and the feedback row's knob carries the cut beside it because
+    /// the operation is the whole of what the pass is set to.
+    pub fn knob(&self) -> Knob {
+        match self.fx {
+            Fx::Feedback => Knob::Feedback { cut: self.reading },
+            Fx::Bloom => Knob::Bloom,
+            Fx::RgbShift => Knob::RgbShift,
+        }
+    }
+
+    /// **What a press on the cut chip asks for**, or `None` where `p` is not
+    /// on one — which is every point of the two rows that have no chip.
+    ///
+    /// **The next cut and not a step**, which is the difference between the
+    /// affordance and the operation: the chip cycles because a surface may,
+    /// and what it emits names where the pass is going
+    /// (`docs/principles/0090-a-surface-offers-it-never-decides.md`). The
+    /// list is two long and the cycle is this crate's arithmetic over it,
+    /// exactly as the blend chip's is.
+    pub fn chip(&self, p: karakuri_layout::Point) -> Option<Operation> {
+        let chip = self.cut?;
+        if !chip.contains(Pos2::new(p.x, p.y)) {
+            return None;
+        }
+        let at = karakuri_operation::Cut::ALL
+            .iter()
+            .position(|c| *c == self.reading)
+            .unwrap_or(0);
+        let next = karakuri_operation::Cut::ALL[(at + 1) % karakuri_operation::Cut::ALL.len()];
+        Some(Operation::SetFeedback {
+            params: karakuri_operation::Feedback {
+                amount: self.amount * karakuri_operation::Feedback::MAX,
+                cut: next,
+            },
+        })
+    }
+}
+
+/// **What the master chain is running at**, as the Master bay reads it.
+///
+/// `karakuri_engine::master::Chain` mirrored into this crate for the reason
+/// every mirrored list here is mirrored: the panel depends on the vocabulary
+/// and on no engine. Four values, because a row that drew one without the
+/// others could not build the operation the whole chain's record is made from.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Chain {
+    /// `[0, 1]` of `karakuri_operation::Feedback::MAX`, which is the track's
+    /// own position — a fader draws a position and the operation carries the
+    /// amount.
+    pub feedback: f32,
+    pub cut: karakuri_operation::Cut,
+    pub bloom: f32,
+    pub rgb_shift: f32,
 }
 
 impl MasterRow {
@@ -9791,13 +9945,26 @@ impl MasterRow {
     /// depends on what the deck said this frame, and this is the same reading
     /// the row was laid out from.
     pub fn grab(&self, p: karakuri_layout::Point) -> Option<Grab> {
-        grabbed(self.fader, Knob::Out, Pos2::new(p.x, p.y))
+        let at = Pos2::new(p.x, p.y);
+        grabbed(self.fader, Knob::Out, at).or_else(|| {
+            self.fx
+                .iter()
+                .flatten()
+                .find_map(|row| grabbed(row.fader, row.knob(), at))
+        })
     }
 
-    /// **Whether `p` is on the one thing here a hand can move**, which is what
-    /// [`crate::input::claim`] asks — the knob, and not the track under it.
+    /// **What a press on the feedback row's cut chip asks for**, or `None`.
+    /// The bay's one control that is not a fader — see [`FxRow::chip`].
+    pub fn chip(&self, p: karakuri_layout::Point) -> Option<Operation> {
+        self.fx.iter().flatten().find_map(|row| row.chip(p))
+    }
+
+    /// **Whether `p` is on one of the things here a hand can move**, which is
+    /// what [`crate::input::claim`] asks — the four knobs and the cut chip,
+    /// and not the tracks under them.
     pub fn owns(&self, p: karakuri_layout::Point) -> bool {
-        self.grab(p).is_some()
+        self.grab(p).is_some() || self.chip(p).is_some()
     }
 }
 
@@ -9861,6 +10028,7 @@ pub fn master(
     ctx: &egui::Context,
     layout: &karakuri_layout::Layout,
     out: Option<f32>,
+    chain: Option<Chain>,
 ) -> Option<MasterRow> {
     let out = out?;
     // Fonts are not valid until `egui` has run a pass, exactly as in `mixer`,
@@ -9921,6 +10089,26 @@ pub fn master(
         return None;
     }
 
+    // **The three effect rows, under the out row and off the same width.**
+    // `None` for a chain nothing is behind — a console with no engine draws
+    // the out row it was handed a level for and nothing under it — and `None`
+    // per row for one the bay is too short to hold.
+    let mut fx = [None, None, None];
+    if let Some(chain) = chain {
+        let mut top = row.max.y + size::MASTER_STACK_GAP;
+        for (at, kind) in Fx::ALL.into_iter().enumerate() {
+            let well = Rect::from_min_size(
+                Pos2::new(row.min.x, top),
+                egui::vec2(row.width(), size::FX_H),
+            );
+            if !region.contains_rect(well) {
+                break;
+            }
+            fx[at] = fx_row(ctx, kind, well, chain, widest, &width);
+            top = well.max.y + size::MASTER_STACK_GAP;
+        }
+    }
+
     Some(MasterRow {
         label,
         // `.fader b` fills its 5px track edge to edge, so there is no inset —
@@ -9934,6 +10122,113 @@ pub fn master(
         ),
         value,
         out,
+        fx,
+    })
+}
+
+/// **One effect row, laid out inside `well`.**
+///
+/// The out row's arrangement one line down and inside a padded well: the dot,
+/// the word, the feedback row's chip, the track taking what is left, and the
+/// figure in a box that does not move. `widest` is the out row's own
+/// measurement of the widest `d.dd`, passed in rather than taken again —
+/// the figures are the same shape and one measurement is what keeps the two
+/// rows' boxes the same width.
+fn fx_row(
+    ctx: &egui::Context,
+    fx: Fx,
+    well: Rect,
+    chain: Chain,
+    widest: f32,
+    width: &dyn Fn(&str) -> f32,
+) -> Option<FxRow> {
+    // The chip's word is 9px where everything else on the row is `BASE`, so
+    // this row needs the one measurement `master`'s own closure cannot give it.
+    let width_at = |text: &str, size: f32| {
+        ctx.fonts_mut(|f| {
+            f.layout_no_wrap(
+                text.to_owned(),
+                FontId::new(size, FontFamily::Proportional),
+                Color32::PLACEHOLDER,
+            )
+            .size()
+            .x
+        })
+    };
+    let amount = match fx {
+        Fx::Feedback => chain.feedback,
+        Fx::Bloom => chain.bloom,
+        Fx::RgbShift => chain.rgb_shift,
+    };
+    let inner = Rect::from_min_max(
+        Pos2::new(well.min.x + size::FX_PAD_X, well.min.y + size::FX_PAD_Y),
+        Pos2::new(well.max.x - size::FX_PAD_X, well.max.y - size::FX_PAD_Y),
+    );
+    if inner.width() <= 0.0 {
+        return None;
+    }
+    let mid = inner.center().y;
+    let dot = Rect::from_center_size(
+        Pos2::new(inner.min.x + size::FX_DOT * 0.5, mid),
+        egui::vec2(size::FX_DOT, size::FX_DOT),
+    );
+    let name = Rect::from_min_size(
+        Pos2::new(dot.max.x + size::FX_GAP, inner.min.y),
+        egui::vec2(width(fx.name()), inner.height()),
+    );
+    // **The chip is on the feedback row and on neither of the others**, and it
+    // is as wide as the wider of the two words rather than as wide as the one
+    // it is showing — the figure's rule at the other end of the row, for the
+    // same reason: a chip that changed width when it was pressed would move
+    // the track it sits beside.
+    let cut = (fx == Fx::Feedback).then(|| {
+        // **A `.mini`, the mixer's own blend chip** — the same 9px word inside
+        // the same padding and the same border, because it is the same thing:
+        // one value of a closed list, shown and cycled.
+        let word = karakuri_operation::Cut::ALL
+            .iter()
+            .map(|c| width_at(c.name(), size::MINI_SIZE))
+            .fold(0.0, f32::max);
+        let chip = word + size::MINI_PAD_X * 2.0 + size::HAIRLINE * 2.0;
+        Rect::from_center_size(
+            Pos2::new(name.max.x + size::FX_GAP + chip * 0.5, mid),
+            egui::vec2(chip, size::MINI_H),
+        )
+    });
+    let value = Rect::from_min_size(
+        Pos2::new(inner.max.x - widest, inner.min.y),
+        egui::vec2(widest, inner.height()),
+    );
+    let after = cut.map_or(name.max.x, |c| c.max.x);
+    let track = Rect::from_min_max(
+        Pos2::new(after + size::FX_GAP, mid - size::FADER_H * 0.5),
+        Pos2::new(value.min.x - size::FX_GAP, mid + size::FADER_H * 0.5),
+    );
+    // **A track with no length is no control** — [`master`]'s own refusal, and
+    // a row without one is not drawn at all rather than drawn half.
+    if track.width() <= 0.0 {
+        return None;
+    }
+    Some(FxRow {
+        fx,
+        well,
+        dot,
+        name,
+        cut,
+        fader: fader(
+            track,
+            Axis::Row,
+            amount,
+            0.0,
+            egui::vec2(size::FADER_KNOB_W, size::FADER_KNOB_H),
+        ),
+        value,
+        amount,
+        reading: chain.cut,
+        // **The one thing a row says that is not a number**: an amount of zero
+        // is the pass not being recorded at all, so the row is dim and the dot
+        // is out. See `karakuri_engine::master`.
+        runs: amount > 0.0,
     })
 }
 
@@ -9995,6 +10290,649 @@ fn master_into(ui: &Ui, pal: &Palette, row: &MasterRow) {
         galley,
         pal.text,
     );
+    for fx in row.fx.iter().flatten() {
+        fx_into(ui, pal, fx);
+    }
+}
+
+/// **One effect row, painted.** Term for term from `style.css`:
+///
+/// - `.fx` — a `--c-well` recess with an 8px radius.
+/// - `.fx.sel` — `--c-text` and an inset mint ring, which on this bay means
+///   **this pass is in the frame**: an amount above zero, so it is recorded
+///   and it costs its passes. `.fx.off` is `--c-faint`, which is the same
+///   sentence the other way round.
+/// - `.fx .dot` — mint with a glow when the pass runs, `--c-faint` and no glow
+///   when it does not.
+/// - the cut chip — `.mini`, the mixer's own blend chip, on the feedback row
+///   alone.
+/// - `.fx .amt` — `--c-text`, right-aligned in a box that does not move.
+fn fx_into(ui: &Ui, pal: &Palette, row: &FxRow) {
+    let painter = ui.painter();
+    painter.rect_filled(row.well, CornerRadius::same(size::FX_RADIUS), pal.well);
+    if row.runs {
+        painter.rect_stroke(
+            row.well,
+            CornerRadius::same(size::FX_RADIUS),
+            Stroke::new(size::HAIRLINE, pal.mint),
+            StrokeKind::Inside,
+        );
+    }
+    let ink = if row.runs { pal.text } else { pal.faint };
+    painter.circle_filled(
+        row.dot.center(),
+        size::FX_DOT * 0.5,
+        if row.runs { pal.mint } else { pal.faint },
+    );
+    let word = |rect: Rect, text: &str, colour: Color32| {
+        let galley = painter.layout_no_wrap(
+            text.to_owned(),
+            FontId::new(size::BASE, FontFamily::Proportional),
+            colour,
+        );
+        painter.galley(
+            Pos2::new(rect.min.x, rect.center().y - galley.size().y * 0.5),
+            galley,
+            colour,
+        );
+    };
+    word(row.name, row.fx.name(), ink);
+    // **`.mini.sel`**, which is the mixer's blend chip exactly: a lavender
+    // wash and a lavender word, because what it says is *this is the one
+    // chosen* and lavender is this console's ink for a selection.
+    if let Some(chip) = row.cut {
+        mini_into(painter, pal, chip, true, |painter, colour| {
+            let galley = painter.layout_no_wrap(
+                row.reading.name().to_owned(),
+                FontId::new(size::MINI_SIZE, FontFamily::Proportional),
+                colour,
+            );
+            painter.galley(
+                Pos2::new(
+                    chip.center().x - galley.size().x * 0.5,
+                    chip.center().y - galley.size().y * 0.5,
+                ),
+                galley,
+                colour,
+            );
+        });
+    }
+    fader_into(painter, pal, row.fader, false, None);
+    let galley = painter.layout_no_wrap(
+        master_text(row.amount),
+        FontId::new(size::BASE, FontFamily::Proportional),
+        ink,
+    );
+    painter.galley(
+        Pos2::new(
+            row.value.max.x - galley.size().x,
+            row.value.center().y - galley.size().y * 0.5,
+        ),
+        galley,
+        ink,
+    );
+}
+
+// ---------------------------------------------------------------------------
+// The Sequencer bay
+// ---------------------------------------------------------------------------
+
+/// **The word at the head of the Sequencer bay**, in the source's own
+/// capitalisation for [`Kind::Bay`]'s reason: the mock upper-cases in CSS, and
+/// that is done at paint time so the word a reader searches for is the word in
+/// the source.
+const SEQUENCER_TITLE: &str = "Sequencer";
+
+/// **The mark a lane's label carries after the deck's letter**: `▮` for a
+/// fader and `∿` for a parameter, which are the two glyphs
+/// `docs/manual/console.html` draws on the four lane labels.
+///
+/// A `match` over the target and not a field on the reading, for
+/// `karakuri_operation::Sync::name`'s reason one crate down: a target added to
+/// that enum does not compile until it has a mark to be drawn with.
+fn lane_mark(target: &LaneTarget) -> &'static str {
+    match target {
+        LaneTarget::Fader { .. } => "\u{25AE}",
+        LaneTarget::Param { .. } => "\u{223F}",
+    }
+}
+
+/// **What one lane's row reads**: the deck's letter and the mark for what it
+/// drives — `A ▮`, `B ∿` — which is the mock's own label word for word.
+fn lane_label(target: &LaneTarget) -> String {
+    let letter = DECK_LETTERS
+        .get(usize::from(target.deck()))
+        .copied()
+        // A deck past the four is a caller's error and not a state, and is
+        // drawn rather than panicked for [`deck_letter`]'s reason one bay
+        // along: a label is a readout and a readout does not stop a frame.
+        .unwrap_or("?");
+    format!("{letter} {}", lane_mark(target))
+}
+
+/// **What the sequencer bay reads this frame**: the armed pattern, which bank
+/// it is, and where the playhead was left.
+///
+/// **A pattern and not a copy of one, taken apart.** The bay draws the mode,
+/// the lanes, what each drives, its steps and its mute, which is the whole of
+/// what a pattern is — so a reading with a field per drawn thing would be a
+/// second spelling of `karakuri_pattern::Pattern` that could disagree with it.
+/// This crate holds no pattern and applies nothing to one (ADR-0156); the host
+/// writes this per frame beside the frame it is about, which is
+/// [`View::mixer`]'s seam.
+///
+/// **`step` comes from the poll and not from `beats`.** Where the playhead is
+/// is what the *producer* last answered — `karakuri_pattern::Playhead` — and
+/// deriving it here from the transport's beats would be a second derivation
+/// that could name a step the sequencer never emitted (P-0087). `None` before
+/// the first poll, which draws no column: a bay that has not been polled is
+/// not a bay at step zero.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Sequenced {
+    /// The armed pattern, as the host read it this frame.
+    pub pattern: karakuri_pattern::Pattern,
+    /// Which of `karakuri_pattern::BANKS` is armed.
+    pub bank: usize,
+    /// Where the poll last put the playhead.
+    pub step: Option<usize>,
+}
+
+/// **One lane's row**: the label a press mutes it by, and the cells a press
+/// sets a step by.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SeqRow {
+    /// **The label, and it is a control**: *"Click to mute the lane and keep
+    /// the pattern"*, which is where rule 02's take-back sits for a lane.
+    pub label: Rect,
+    /// **One rectangle per step of the mode**, so there are sixteen of these
+    /// at a sixteenth and eight at an eighth: the row keeps its width and the
+    /// cells halve in the finer one (ADR-0306).
+    pub cells: Vec<Rect>,
+    /// What the row draws from: the lane's own label, which slots are on, and
+    /// whether it is muted.
+    pub words: String,
+    pub muted: bool,
+    /// **Whether each drawn cell is on**, in the cells' order — the mode's
+    /// reading of the lane's sixteen slots, taken where the row is laid out so
+    /// the paint and the press cannot disagree about which slot a cell is.
+    pub on: Vec<bool>,
+    /// **Which stored slot each drawn cell is**, which is what a press sends:
+    /// the identity at a sixteenth and `2k` at an eighth, so
+    /// `Operation::SetStep` carries a slot and never a step
+    /// (`karakuri_operation::StepMode::slot_of`).
+    pub slots: Vec<usize>,
+}
+
+/// **The Sequencer bay, laid out**: the head's mode pill and step readout, the
+/// ruler, the playhead column and a row per lane.
+///
+/// # What is drawn and what is not
+///
+/// [ADR-0200](../../../docs/adr/0200-a-bays-first-pass-draws-the-values-that-exist-and-omits-the-rest.md)
+/// is satisfied here for the first time in this bay, and ADR-0222 said why it
+/// could not be before: every part of the drawing now reads a value that
+/// exists, because a pattern exists. **Three things the mock draws are still
+/// not drawn**, each because the control behind it has nothing to act on yet:
+/// the bay head's `seq 1 · seq 2 · +` bank pills, the foot's `+ lane`, and the
+/// foot's sentence. The bank pills are the nearest: four banks exist and
+/// `Operation::SelectPattern` names one, and what is missing is a head that
+/// can say *which* pill is armed — [`Head::words`] carries `&'static str`s and
+/// a bank's arming is a value, so drawing them in the bay head is a change to
+/// the head machinery rather than to this bay.
+///
+/// # The cells are the row divided by the count, and the count follows the mode
+///
+/// `.seq-lane` is `repeat(16, 1fr)` with a [`size::SEQ_CELL_GAP`] between, so
+/// a cell is as wide as what is left of the row after the gaps — and at an
+/// eighth there are eight of them over the same width, which is the mock's
+/// *"the row keeps its width, so the cells halve in the finer one"* read the
+/// other way round.
+pub fn sequencer(
+    ctx: &egui::Context,
+    layout: &karakuri_layout::Layout,
+    reading: Option<&Sequenced>,
+) -> Option<Sequencer> {
+    let reading = reading?;
+    // Fonts are not valid until `egui` has run a pass, exactly as in `mixer`,
+    // `outputs` and `transport`.
+    if ctx.cumulative_pass_nr() == 0 {
+        return None;
+    }
+    let region = to_egui(layout.rect(layout.find("sequencer")?));
+    let left = region.min.x + size::SEQ_PAD_X;
+    let right = region.max.x - size::SEQ_PAD_X;
+    if right <= left {
+        return None;
+    }
+    let mut y = region.min.y + size::HEAD_H + size::SEQ_PAD_TOP;
+
+    // -- the head: the mode pill, then the step readout ---------------------
+    let mode = reading.pattern.mode();
+    let pill_w = pill_width(ctx, mode.name());
+    let mode_pill = Rect::from_min_size(Pos2::new(left, y), egui::vec2(pill_w, size::PILL_H));
+    let words = step_words(reading.step, mode);
+    let step_w = ctx.fonts_mut(|f| {
+        f.layout_no_wrap(
+            words.clone(),
+            FontId::new(size::BASE, FontFamily::Proportional),
+            Color32::PLACEHOLDER,
+        )
+        .size()
+        .x
+    });
+    let step = Rect::from_min_size(
+        Pos2::new(mode_pill.max.x + size::SEQ_HEAD_GAP, y),
+        egui::vec2(step_w, size::PILL_H),
+    );
+    if step.max.x > right {
+        return None;
+    }
+    y = mode_pill.max.y + size::SEQ_STACK_GAP;
+
+    // -- the ruler, inset so its numbers stand over the cells ---------------
+    let ruler = Rect::from_min_max(
+        Pos2::new(left + size::SEQ_RULER_INSET, y),
+        Pos2::new(right, y + size::SEQ_RULER_SIZE * size::LINE),
+    );
+    if ruler.width() <= 0.0 {
+        return None;
+    }
+    y = ruler.max.y + size::SEQ_STACK_GAP;
+
+    // -- the rows, and the lane track every cell is measured in -------------
+    let track_x = left + size::SEQ_LABEL_W + size::SEQ_ROW_GAP;
+    if track_x >= right {
+        return None;
+    }
+    let count = mode.count();
+    let gaps = size::SEQ_CELL_GAP * (count as f32 - 1.0);
+    let cell_w = (right - track_x - gaps) / count as f32;
+    // **A cell with no width is no control**, which is `master`'s own refusal
+    // one bay up: a bay narrow enough that the label and the track meet has
+    // nothing to draw sixteen cells in, and half a grid is worse than none.
+    if cell_w <= 0.0 {
+        return None;
+    }
+    let cell_at = |row_top: f32, at: usize| {
+        Rect::from_min_size(
+            Pos2::new(track_x + (cell_w + size::SEQ_CELL_GAP) * at as f32, row_top),
+            egui::vec2(cell_w, size::SEQ_CELL_H),
+        )
+    };
+    let body_top = y;
+    let mut rows = Vec::with_capacity(reading.pattern.lanes().len());
+    for lane in reading.pattern.lanes() {
+        let label = Rect::from_min_size(
+            Pos2::new(left, y),
+            egui::vec2(size::SEQ_LABEL_W, size::SEQ_CELL_H),
+        );
+        let cells: Vec<Rect> = (0..count).map(|at| cell_at(y, at)).collect();
+        rows.push(SeqRow {
+            label,
+            cells,
+            words: lane_label(lane.target()),
+            muted: lane.muted(),
+            on: (0..count).map(|at| lane.step_on(at, mode)).collect(),
+            slots: (0..count).map(|at| mode.slot_of(at)).collect(),
+        });
+        y += size::SEQ_CELL_H + size::SEQ_BODY_GAP;
+    }
+    // **The bay is clipped rather than half drawn.** A bay too short for the
+    // rows it has is `master`'s refusal again: what would be drawn is a lane
+    // over the card's own edge, and a cell a press could not reach.
+    let bottom = match rows.is_empty() {
+        true => body_top,
+        false => y - size::SEQ_BODY_GAP,
+    };
+    if bottom > region.max.y - size::SEQ_PAD_X {
+        return None;
+    }
+    // **The playhead is one column over every row**, which is `.seq-play`'s
+    // `position: absolute; inset: 0`: it is the body's height and the cell's
+    // width, and it is drawn under nothing — `pointer-events: none`, so it
+    // claims no press.
+    let playhead = reading
+        .step
+        .filter(|_| !rows.is_empty())
+        .map(|step| step.min(count.saturating_sub(1)))
+        .map(|step| {
+            Rect::from_min_max(
+                Pos2::new(cell_at(body_top, step).min.x, body_top),
+                Pos2::new(cell_at(body_top, step).max.x, bottom),
+            )
+        });
+    Some(Sequencer {
+        mode_pill,
+        mode,
+        step,
+        step_words: words,
+        ruler,
+        playhead,
+        rows,
+        bank: reading.bank,
+    })
+}
+
+/// **What the head's readout says** — `step 6 of 16`, counting from one as the
+/// ruler does, and `step — of 16` before the first poll.
+///
+/// **The count is in it and the mock's is not.** `docs/manual/console.html`
+/// draws `step 6` and says *"Step 6 of sixteen"* in its tip; the count follows
+/// the mode now and the pill beside it can be pressed, so a readout that said
+/// only `6` would leave a hand that had just halved the grid reading the same
+/// figure against a different bar.
+fn step_words(step: Option<usize>, mode: StepMode) -> String {
+    match step {
+        Some(step) => format!("step {} of {}", step + 1, mode.count()),
+        None => format!("step \u{2014} of {}", mode.count()),
+    }
+}
+
+/// **The Sequencer bay's controls, as rectangles to press.**
+///
+/// Everything here is derived from the pattern the host handed in this frame,
+/// so the cell that is painted is the cell that is pressed — the rule every
+/// other bay in this module follows, and the one that makes
+/// [`crate::input::claim`] and the press handler ask the same question.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Sequencer {
+    /// **The mode pill**, reading `1/16` or `1/8`. A press asks for the other
+    /// of the two by naming it — a state and never a flip.
+    pub mode_pill: Rect,
+    /// The mode those rectangles were laid out from, carried for
+    /// [`MasterRow::out`]'s reason: whoever measured the type and whoever
+    /// paints it are one statement.
+    pub mode: StepMode,
+    /// **The step readout**, which is a readout: there is nothing here to
+    /// press, and a hand that wants a pattern to begin somewhere else has no
+    /// control in this bay for it.
+    pub step: Rect,
+    /// The words in it, measured once and painted from the same string.
+    pub step_words: String,
+    /// **The ruler**, which is a readout too: four numbers over the cells.
+    pub ruler: Rect,
+    /// **The playhead's column**, or `None` for a bay nothing has polled and
+    /// for a pattern with no lanes to stand over.
+    pub playhead: Option<Rect>,
+    /// One per lane, in the order the pattern draws them.
+    pub rows: Vec<SeqRow>,
+    /// Which bank these rows are, carried so a caller's operation names the
+    /// bank it acted on rather than implying the armed one
+    /// (`Operation::SelectDeck`'s rule).
+    pub bank: usize,
+}
+
+impl Sequencer {
+    /// **What a press at `p` asks for**, or `None` where there is nothing
+    /// under it.
+    ///
+    /// Three controls and one answer, in the order the mock draws them: a cell
+    /// sets a step, a label mutes a lane, and the pill chooses what a step is
+    /// worth. **The pill is asked last** and cannot overlap either of the
+    /// others, so the order is arbitrary rather than a precedence — it is
+    /// written down so that this file and the window that acts on it ask in
+    /// one order.
+    ///
+    /// **Every arm names the bank**, which is why [`Sequencer::bank`] is
+    /// carried: implying the armed one is the shape `Operation::SelectDeck`'s
+    /// rule refuses, and a press that arrived while a bank press was in flight
+    /// would otherwise land on whichever pattern won.
+    pub fn press(&self, p: karakuri_layout::Point) -> Option<Operation> {
+        let at = Pos2::new(p.x, p.y);
+        for (index, row) in self.rows.iter().enumerate() {
+            if let Some(cell) = row.cells.iter().position(|cell| cell.contains(at)) {
+                return Some(Operation::SetStep {
+                    pattern: self.bank as u8,
+                    lane: index as u8,
+                    // **The stored slot and not the drawn step**, which is
+                    // what keeps the payload independent of the mode: at an
+                    // eighth this sends `2k`, so a step press and a mode press
+                    // cannot race into an address that means two things.
+                    step: row.slots[cell] as u8,
+                    // **A state and never a flip**, which is the cell's own
+                    // rule: the press asks for that step to be on, or for it
+                    // to be off, and a control that could only flip has no way
+                    // to arrive.
+                    on: !row.on[cell],
+                });
+            }
+            if row.label.contains(at) {
+                return Some(Operation::SetLaneMute {
+                    pattern: self.bank as u8,
+                    lane: index as u8,
+                    muted: !row.muted,
+                });
+            }
+        }
+        self.mode_pill
+            .contains(at)
+            .then_some(Operation::SetPatternGrid {
+                pattern: self.bank as u8,
+                // **The other of the two, named**: the cycle is the surface's
+                // affordance and the operation carries where it arrived
+                // (P-0090).
+                grid: match self.mode {
+                    StepMode::Sixteenth => StepMode::Eighth,
+                    StepMode::Eighth => StepMode::Sixteenth,
+                },
+            })
+    }
+
+    /// **Whether `p` is on anything here a press means something on**, which
+    /// is what [`crate::input::claim`] asks. The ruler, the readout and the
+    /// playhead are readouts and answer `false`.
+    pub fn owns(&self, p: karakuri_layout::Point) -> bool {
+        self.press(p).is_some()
+    }
+
+    /// **How many controls this bay draws**, which is what
+    /// [`crate::input::PROBES`] registers: a cell per drawn step of every
+    /// lane, a label per lane, and the mode pill.
+    pub fn controls(&self) -> usize {
+        self.rows
+            .iter()
+            .map(|row| row.cells.len() + 1)
+            .sum::<usize>()
+            + 1
+    }
+}
+
+/// **The Sequencer bay, painted.**
+///
+/// Where everything goes is [`sequencer`]'s, so this paints and derives
+/// nothing. Term for term from `style.css`:
+///
+/// - the mode pill — `.pill.armed`, because *"it is armed because it is what
+///   the pattern is rather than a preference the head is holding"*.
+/// - the step readout — `.seq-head`'s own `color: var(--c-faint)` with the
+///   figure in `.val`'s ink, which is what the mock draws.
+/// - the ruler — `.seq-ruler`, four numbers centred over the cells they start,
+///   at [`size::SEQ_RULER_SIZE`] in the faint ink. **Four numbers whatever the
+///   mode**, because the ruler counts *beats* and a bar has four of them: at
+///   an eighth they group two cells rather than four, which is the same bar
+///   read at the other width.
+/// - the playhead — `.seq-play .lane i.at`, a wash of the lavender with its
+///   own hairline, painted **under** the rows so a lit cell stays the colour
+///   its lane is.
+/// - a lane's label — `.seq-label`, right-aligned, with the mark in the
+///   lavender; and `.seq-row.mute`'s faint ink where the lane is muted.
+/// - a cell — `.seq-lane i`, the well with its hairline; `.on` in the mint;
+///   `.on.hot` in the pink where the lane drives the deck on air, which this
+///   console cannot know here and so does not draw; and `.seq-row.mute`'s
+///   `opacity: 0.3` over the whole row.
+fn sequencer_into(ui: &Ui, pal: &Palette, bay: &Sequencer) {
+    let painter = ui.painter();
+    // **The playhead first**, which is what `.seq-play` sitting before the
+    // rows in the mock's markup means once the rows are opaque: a wash under
+    // the cells rather than over them.
+    if let Some(column) = bay.playhead {
+        painter.rect_filled(
+            column,
+            CornerRadius::same(size::SEQ_PLAY_RADIUS),
+            tint(pal.lav, PLAYHEAD_WASH),
+        );
+        painter.rect_stroke(
+            column,
+            CornerRadius::same(size::SEQ_PLAY_RADIUS),
+            Stroke::new(size::HAIRLINE, pal.lav),
+            StrokeKind::Inside,
+        );
+    }
+    pill_into(ui, pal, bay.mode_pill, bay.mode.name(), true);
+    let galley = painter.layout_no_wrap(
+        bay.step_words.clone(),
+        FontId::new(size::BASE, FontFamily::Proportional),
+        pal.dim,
+    );
+    painter.galley(
+        Pos2::new(bay.step.min.x, bay.step.center().y - galley.size().y * 0.5),
+        galley,
+        pal.dim,
+    );
+    // **The ruler's four numbers**, centred over the cell each group starts.
+    // The groups are the bar's beats, so this is the count of beats and not of
+    // cells — `Transport::grid`'s four, arrived at from the other side.
+    let cells = bay.rows.first().map(|row| row.cells.len()).unwrap_or(0);
+    if cells > 0 {
+        let per_beat = (cells / RULER_GROUPS).max(1);
+        for beat in 0..RULER_GROUPS {
+            let at = beat * per_beat;
+            if at >= cells {
+                break;
+            }
+            let over = bay.rows[0].cells[at];
+            let galley = painter.layout_no_wrap(
+                format!("{}", beat + 1),
+                FontId::new(size::SEQ_RULER_SIZE, FontFamily::Proportional),
+                pal.faint,
+            );
+            painter.galley(
+                Pos2::new(
+                    over.center().x - galley.size().x * 0.5,
+                    bay.ruler.center().y - galley.size().y * 0.5,
+                ),
+                galley,
+                pal.faint,
+            );
+        }
+    }
+    for row in &bay.rows {
+        let ink = match row.muted {
+            true => pal.faint,
+            false => pal.text,
+        };
+        let galley = painter.layout_no_wrap(
+            row.words.clone(),
+            FontId::new(size::SEQ_LABEL_SIZE, FontFamily::Proportional),
+            ink,
+        );
+        // `.seq-label`'s `justify-content: flex-end`: the name is right
+        // against the cells, so the letters line up down the column.
+        painter.galley(
+            Pos2::new(
+                row.label.max.x - galley.size().x,
+                row.label.center().y - galley.size().y * 0.5,
+            ),
+            galley,
+            ink,
+        );
+        for (at, cell) in row.cells.iter().enumerate() {
+            let radius = CornerRadius::same(size::SEQ_CELL_RADIUS);
+            match row.on[at] {
+                true => {
+                    let lit = match row.muted {
+                        true => tint(pal.mint, MUTED_LANE),
+                        false => pal.mint,
+                    };
+                    painter.rect_filled(*cell, radius, lit);
+                }
+                false => {
+                    painter.rect_filled(*cell, radius, pal.well);
+                    painter.rect_stroke(
+                        *cell,
+                        radius,
+                        Stroke::new(size::HAIRLINE, pal.hair),
+                        StrokeKind::Inside,
+                    );
+                }
+            }
+        }
+    }
+}
+
+/// **How many numbers the ruler draws**: four, which is the beats in a bar.
+///
+/// It is the bar's own count rather than a division of the cells, which is
+/// what makes the ruler read the same in both modes — four numbers over
+/// sixteen cells is a group of four, and over eight is a group of two.
+/// `docs/manual/console.html` draws exactly this: *"Four numbers over sixteen
+/// cells makes a group of four, which is a bar of sixteenths counted in
+/// beats."*
+const RULER_GROUPS: usize = 4;
+
+/// **`.seq-play .lane i.at`'s `color-mix(in srgb, var(--c-lav) 22%,
+/// transparent)`**, as the percentage [`tint`] takes.
+const PLAYHEAD_WASH: u8 = 22;
+
+/// **`.seq-row.mute .seq-lane`'s `opacity: 0.3`**, applied to a lit cell as
+/// the percentage [`tint`] takes — the pattern is kept and drives nothing, so
+/// its steps are still drawn and are drawn dim.
+const MUTED_LANE: u8 = 30;
+
+/// **How stale the sequencer's picture may get**, which is what this bay
+/// declares under
+/// [P-0091](../../../docs/principles/0091-cost-is-known-before-it-is-paid.md)
+/// and what the harness turns into a deadline.
+///
+/// **One sixteenth at the mock's tempo — 117.19 ms**, which is
+/// [`BEAT_MICROS`] quartered. The unit this picture moves in is a whole cell:
+/// the playhead stands over one step and then over the next, so there is
+/// nothing between two positions to be smooth about and the step *is* the
+/// step. The finer of the two modes is the one written down, because a
+/// declaration made for the eighth would be half the rate the sixteenth needs
+/// and the mode is one press away.
+///
+/// **Stated at the mock's tempo, for [`BEAT_STALENESS`]'s reason**: a
+/// staleness that fell with the tempo would make `Σ (cost / staleness)` a
+/// function of how fast the music is, and the two schedulability conditions
+/// could then only be asserted against a fastest tempo nobody has written down
+/// (ADR-0212). What the music moves is [`step_moves_in`], which is the
+/// deadline and not the rate.
+///
+/// **It is the first declaration on this panel whose unit is a beat
+/// subdivision**, so it is what `moves_in >= staleness` is tightest against
+/// (ADR-0322, ADR-0283).
+pub const STEP_STALENESS: Duration = Duration::from_micros(BEAT_MICROS / 4);
+
+/// **How long until the playhead next stands over a different cell**, from the
+/// beat count and the tempo the transport row is drawing.
+///
+/// The step index is `floor(beats × steps_per_beat)`, so the next boundary is
+/// the next whole multiple of the subdivision and this is the distance to it
+/// in seconds — the same arithmetic the producer polls with
+/// (`karakuri_pattern::Pattern::step_at`), read forwards.
+///
+/// **It never answers finer than the rate it declared**, which is
+/// [`roll_moves_in`]'s rule and [`crate::budget::Declared`]'s invariant: a
+/// frame taken a hair before a boundary would otherwise ask for a deadline
+/// tending to zero, which is the spin [`crate::repaint`] exists to refuse.
+///
+/// **A pure function of its two arguments**, so a test chooses the beat it
+/// asserts at and nothing here reads a clock.
+pub fn step_moves_in(mode: StepMode, beats: f64, bpm: f32) -> Duration {
+    // A grid at no tempo has no next boundary, and the rate this declared is
+    // the only honest answer — the same shape as a rest longer than the period
+    // one bay up.
+    if bpm <= 0.0 || !bpm.is_finite() {
+        return STEP_STALENESS;
+    }
+    let per_beat = mode.steps_per_beat();
+    let at = beats * per_beat;
+    let left = (at.floor() + 1.0 - at) / per_beat * 60.0 / f64::from(bpm);
+    // `left` is positive and at most one step, so this is a duration and never
+    // a negative one; the clamp is the invariant rather than a guard against
+    // the arithmetic.
+    Duration::from_secs_f64(left.max(0.0)).max(STEP_STALENESS)
 }
 
 // ---------------------------------------------------------------------------
@@ -13303,8 +14241,8 @@ fn filters_into(ui: &Ui, pal: &Palette, bay: &LibraryBay, at: Filters<'_>) {
 const STAGING_TITLE: &str = "Staging";
 
 /// **Where a candidate stands, in the four words `console.html` uses for
-/// it** — *"Whether it is on screen: landed, rolled back for costing too much,
-/// refused, or did not compile"*.
+/// it** — *"Whether it is on screen: landed, overloaded for costing more than
+/// one frame may, refused, or did not compile"*.
 ///
 /// # Two readers, and one set of words
 ///
@@ -13346,16 +14284,24 @@ pub enum Stage {
     /// screen and this row says what is on screen. ADR-0313 removed the trial —
     /// the verdict is reached on the candidate's own measured cost, in the same
     /// call the swap lands in — so a row on this word is a build that landed
-    /// **and was kept**, and a build that was not kept goes straight to
-    /// [`Stage::RolledBack`] in the same drain.
+    /// **and is running**, and a build that landed and was stopped goes
+    /// straight to [`Stage::Overloaded`] in the same drain.
     Landed,
-    /// `Event::RolledBack` — **the row this lane most needs to draw.** The
-    /// watchdog threw the version out for cost and put the previous Set back
-    /// at the `t` it was parked at; it did not put the previous *file* back.
-    /// So the picture is the old version, the source on disk is the
-    /// over-budget one, and the next rebuild of anything in that slot swaps it
-    /// in again.
-    RolledBack,
+    /// `Event::Overloaded` — **the row this lane most needs to draw.** The
+    /// version costs more than one frame may, so it stayed in the slot and the
+    /// slot stopped updating: no step, no draw, and the target holding the
+    /// last image it made, which the mix and that deck's cell go on reading.
+    ///
+    /// **Nothing was put back, and that is why the row matters more than it
+    /// used to.** The watchdog used to restore the previous *Set* and could
+    /// not restore the previous *file*, so the picture and the disk disagreed
+    /// silently; now the picture is a still of the version the operator asked
+    /// for, which looks like working material until something says otherwise.
+    /// Two things say it — this row, and that deck's caption
+    /// ([`PREVIEW_OVERLOADED`]) — and it stands until the operator fades the
+    /// slot out, lands an earlier version, or saves something that fits
+    /// (ADR-0316).
+    Overloaded,
     /// `Event::Rejected` — the build failed and **nothing changed**: the
     /// running Set is still running, with its `t` and its live count
     /// untouched, and the disk holds material that does not assemble.
@@ -13376,8 +14322,8 @@ impl Stage {
     /// **The word drawn at the far end of a candidate row, and the word in
     /// the transport's health capsule**, which is `console.html`'s and the
     /// mock's own: the capsule names the same four answers in the same
-    /// words — *"the other answers are rolled back for cost, failed to
-    /// build, and did not compile"*.
+    /// words — *"the other answers are overloaded, failed to build, and did
+    /// not compile"*.
     ///
     /// **That capsule is in the transport row and this said *the deck head*
     /// until 2026-09-08**, which was wrong rather than stale: there is no
@@ -13386,7 +14332,7 @@ impl Stage {
     pub fn word(self) -> &'static str {
         match self {
             Stage::Landed => "landed",
-            Stage::RolledBack => "rolled back",
+            Stage::Overloaded => "overloaded",
             Stage::Refused => "refused",
             Stage::NotCompiled => "did not compile",
         }
@@ -13545,7 +14491,7 @@ pub struct Candidate {
 ///
 /// The rows are the caller's ([`View::staging`]), read off
 /// `karakuri_engine::deck::Deck`'s per-slot events: a slot gets a row when its
-/// newest event is `Swapped`, `Rejected`, `RolledBack` or `SourceRefused`, and
+/// newest event is `Swapped`, `Rejected`, `Overloaded` or `SourceRefused`, and
 /// loses it on `Accepted` — the watchdog saying the version held the budget,
 /// which is the one outcome that leaves the file and the picture agreeing.
 ///
@@ -13557,11 +14503,13 @@ pub struct Candidate {
 /// this lane's ordinary state"*. So the cost verdict clears the row, and the
 /// day a `Keep` control lands it is what clears it instead.
 ///
-/// **A parked slot's row stays on `landed`, and that is a reading rather than
-/// a stall.** `HotSwap::begin_frame_parked` freezes a trial — a slot that is
-/// not being drawn is not paying for the frames it would be judged on — so a
-/// build that lands in a parked slot has a verdict outstanding for as long as
-/// the slot stays off air, and the row says exactly that.
+/// **A parked slot's row is settled like any other's**, and that was not
+/// always so. `HotSwap::begin_frame_parked` used to freeze a trial — a slot
+/// that was not being drawn was not paying for the frames it would be judged
+/// on — so a build landing in a parked slot had a verdict outstanding for as
+/// long as the slot stayed off air. A candidate is judged on its own measured
+/// cost since ADR-0313, which does not move with residency, so the verdict
+/// arrives at the install wherever the slot is.
 ///
 /// # Where it goes
 ///
@@ -16455,6 +17403,29 @@ pub struct View {
     /// documentation, and [`preview_rects`] for where the rectangles come
     /// from.
     pub previews: [Option<Picture>; DECKS],
+    /// **Which of the four slots have stopped updating**, in slot order, and
+    /// `false` for every cell with nothing behind it — which is every test in
+    /// this crate and is a console with no engine behind it.
+    ///
+    /// **A slot is stopped when the version in it costs more than one frame
+    /// may** (`karakuri_engine::deck::Deck::overloaded`, ADR-0316). The engine
+    /// then skips that slot's step and its draw, so its target holds the last
+    /// image it made and this cell goes on showing it. **The caption is where
+    /// that is said** — [`PREVIEW_OVERLOADED`] in place of
+    /// [`PREVIEW_MATERIAL`] — because the picture cannot say it: a held frame
+    /// of good material looks like material, and an unmarked still is a
+    /// preview that lies
+    /// ([ADR-0269](../../../docs/adr/0269-a-slot-that-is-drawn-is-stepped-and-a-preview-runs-at-the-rooms-tempo.md)).
+    ///
+    /// **A `bool` beside the picture rather than a third state of it.** The two
+    /// keep different clocks, exactly as [`View::costs`] does: a picture is a
+    /// texture registration rewritten every frame by whoever owns the device,
+    /// and this changes when a build lands. It is also not a residency and
+    /// must not be read as one — a stopped Live slot is still in the mix.
+    ///
+    /// **The same seam every value here crosses**: `src/` takes no engine
+    /// (ADR-0156), so whoever holds the deck reads it and writes this.
+    pub overloaded: [bool; DECKS],
     /// **What the governor budgeted each of the four slots at**, in slot
     /// order, or `None` for a slot it has no number for — which is every test
     /// in this crate and is a console nobody has governed.
@@ -16580,14 +17551,23 @@ pub struct View {
     /// (ADR-0156), so whoever owns one reads it and writes this per frame
     /// beside the frame it was drawn under.
     ///
-    /// **A bare level rather than a struct**, where the look is three values
-    /// in one: there is one number in the master chain that anything can read
-    /// or move. The chain's own effects are drawn on the console page and
-    /// exist nowhere, so a field with room for them would be room for readings
-    /// nobody can take — see [`master`], and
-    /// [ADR-0224](../../../docs/adr/0224-out-and-exposure-are-two-levels-that-multiply-in-different-places.md)
-    /// for what is deliberately left undone.
+    /// **A bare level rather than a struct**, and it stays one now that the
+    /// chain exists: this is the level at the chain's *entry*, and what the
+    /// chain is set to is [`View::master_chain`] beside it. The two are two
+    /// fields for the reason they are two records — one is a level a fader
+    /// rides and one is a set of settings a press moves
+    /// ([ADR-0224](../../../docs/adr/0224-out-and-exposure-are-two-levels-that-multiply-in-different-places.md),
+    /// [ADR-0317](../../../docs/adr/0317-the-master-chain-is-three-fixed-passes-and-feedback-reads-either-cut.md)).
     pub master_out: Option<f32>,
+    /// **What the Master bay's three effect rows read this frame**, or `None`
+    /// for a console with no engine behind it — in which case the bay draws
+    /// the out row and nothing under it.
+    ///
+    /// [`View::master_out`]'s seam exactly, one row down:
+    /// `karakuri_engine::present::Present::chain` is what a harness reads it
+    /// from, and [`Chain`] is that value mirrored into a crate with no engine
+    /// in it.
+    pub master_chain: Option<Chain>,
     /// **What each mixer strip reads this frame**, one per slot the deck has,
     /// in slot order — and **empty** for a console with no deck behind it,
     /// which is every test in this crate and what the bay draws then is
@@ -17096,6 +18076,19 @@ pub struct View {
     /// [`TransitionSettings::START`] until somebody says otherwise, which is
     /// every test in this crate and is where a run begins.
     transition: TransitionSettings,
+    /// **What the Sequencer bay reads this frame**, or `None` for a console
+    /// with no sequencer behind it — which is every test in this crate that
+    /// does not hand one in, and what the bay draws then is nothing at all.
+    ///
+    /// **The same seam as [`View::mixer`]**: a pattern is authored state a
+    /// *session* holds and `src/` holds no session (ADR-0156), so whoever owns
+    /// one writes this per frame beside the frame it is about. It is not this
+    /// console's own pointer — a press here hands back an
+    /// [`Operation`] and applies nothing, exactly as a fader's drag does.
+    ///
+    /// **Why the reading is a whole pattern**: see [`Sequenced`], which is
+    /// where the alternative — a field per drawn thing — is refused.
+    pub sequencer: Option<Sequenced>,
     placed: Vec<Placed>,
 }
 
@@ -17105,6 +18098,9 @@ impl View {
             room,
             picture: None,
             previews: [None; DECKS],
+            // Nothing is stopped on a console with no engine behind it, which
+            // is every test in this crate.
+            overloaded: [false; DECKS],
             costs: [None; DECKS],
             transport: None,
             // The default arrangement, nothing filed and the menu shut, which
@@ -17124,6 +18120,7 @@ impl View {
             // And no level at the other end of the same chain, for the same
             // reason: the Master bay draws its head and nothing under it.
             master_out: None,
+            master_chain: None,
             // As many strips as a deck can ever have, so the frame path never
             // grows it — the same reason `placed` is built with a capacity.
             mixer: Vec::with_capacity(DECKS),
@@ -17212,6 +18209,11 @@ impl View {
             // `karakuri-cli`'s own opening state. Not a reading of anything
             // either, for the three above's reason.
             transition: TransitionSettings::START,
+            // **Nothing said about a sequencer**, which is a console with no
+            // session behind it and draws no ruler, no rows and no head —
+            // `View::mixer`'s empty list one bay along, in the `Option` shape
+            // `View::transport` uses for the same seam.
+            sequencer: None,
             // Every region the console has, so the frame path never grows it.
             placed: Vec::with_capacity(REGIONS.len()),
         }
@@ -18000,9 +19002,13 @@ impl View {
         // the second live region was one more element rather than a change of
         // shape, which is what it turned out to be. In `REGIONS`' order, so
         // the declarations read down the panel.
-        [self.transport_declares(layout), self.mixer_declares(layout)]
-            .into_iter()
-            .flatten()
+        [
+            self.transport_declares(layout),
+            self.mixer_declares(layout),
+            self.sequencer_declares(layout),
+        ]
+        .into_iter()
+        .flatten()
     }
 
     /// **What the transport row declares**: the beat's staleness for as long
@@ -18059,6 +19065,48 @@ impl View {
             // was not (ADR-0283). There is no rest to find and nothing to
             // gate — P-0094 is the rule that says there had better not be.
             moves_in: BEAT_STALENESS,
+        })
+    }
+
+    /// **What the Sequencer bay declares**: the step's staleness while it has a
+    /// playhead to move *and* the bay is laid out, and nothing otherwise —
+    /// with the deadline taken from where the beat has got to inside the
+    /// current step.
+    ///
+    /// # Three conditions, and the third is what makes it honest
+    ///
+    /// **The bay is laid out**, which is ADR-0193 and is
+    /// [`View::mixer_declares`]'s first condition word for word.
+    ///
+    /// **There is a pattern behind it.** [`View::sequencer`] is `None` for a
+    /// console with no session, and [`sequencer`] draws nothing then.
+    ///
+    /// **And it has a lane.** The picture that moves here is the playhead
+    /// column, which stands over the rows — so a pattern with no lanes has
+    /// nothing for it to stand on and this bay is a head and a ruler that do
+    /// not move. A declaration made for it would buy frames that redraw a
+    /// still picture, which is the whole of what
+    /// [ADR-0283](../../../docs/adr/0283-a-region-declares-when-its-picture-next-changes-not-that-something-is-pending.md)
+    /// is about. **A muted lane still counts**: the mute stops the lane
+    /// *writing*, and the column goes on crossing its cells.
+    ///
+    /// # The deadline is the music's and the rate is not
+    ///
+    /// [`step_moves_in`] is a function of `beats` and the tempo, so the
+    /// deadline moves with the grid the way the steps do; [`STEP_STALENESS`]
+    /// is a constant at the mock's tempo, so the sums `tests/schedulable.rs`
+    /// asserts do not become a function of how fast the music is (ADR-0212).
+    fn sequencer_declares(&self, layout: &karakuri_layout::Layout) -> Option<Declared> {
+        let bay = layout
+            .find("sequencer")
+            .is_some_and(|id| layout.visible(id));
+        let reading = self.sequencer.as_ref()?;
+        let transport = self.transport.as_ref()?;
+        (bay && !reading.pattern.lanes().is_empty()).then(|| Declared {
+            region: "sequencer",
+            cost: PANEL_PASS,
+            staleness: STEP_STALENESS,
+            moves_in: step_moves_in(reading.pattern.mode(), transport.beats, transport.bpm),
         })
     }
 
@@ -18245,6 +19293,10 @@ impl View {
             carried.and_then(|at| program.and_then(|bay| bay.dropped(at, self.mixer.len())));
         let picture = self.picture;
         let previews = self.previews;
+        // **Beside the pictures, and read once for the frame with them**: the
+        // word a caption draws is a function of the pair, so a frame that read
+        // one of them twice could draw a mark against the other's answer.
+        let overloaded = self.overloaded;
         // **Beside the pictures, and read once for the frame for their
         // reason.** What each cell costs and what each cell is showing are two
         // fields because they arrive from two places — see [`View::costs`].
@@ -18261,6 +19313,7 @@ impl View {
         let tracking = self.tracker;
         let look_at = self.look;
         let out = self.master_out;
+        let chain = self.master_chain;
         let strips = self.mixer.as_slice();
         let sets = self.library.as_slice();
         // **Which of them are starred, read once for the frame beside the
@@ -18312,6 +19365,10 @@ impl View {
         // (`LibraryBay::scroll`, P-0082).
         let scrolled_to = self.library_scroll();
         let waiting = self.staging.as_slice();
+        // **What the Sequencer bay reads, taken once for the pass** beside the
+        // strips it sits under: `draw` takes `&mut self` and the loop below
+        // borrows the fields a reading would be read off.
+        let sequenced = self.sequencer.as_ref();
         let panes = self.inspector.as_slice();
         // **The eighth pointer, read once for the frame beside the panes it is
         // about** — how far each of them is scrolled. It is `Copy` and two
@@ -18443,10 +19500,27 @@ impl View {
                     // `master`'s answer and not this pass's: the same call
                     // `input::claim` makes, so the knob that is painted is the
                     // knob a hand takes hold of.
+                    // **The fifth bay with something in its body**, and the
+                    // first one whose body reads a value no engine holds: a
+                    // pattern is authored state a session keeps, handed in
+                    // per frame like every other reading here. The card and
+                    // the head are every other bay's; with no pattern behind
+                    // the console there are no rows and the body is as empty
+                    // as every other one in this pass — `sequencer`'s answer,
+                    // not this pass's. Where the cells go is that function's
+                    // too: the same call `input::claim` makes, so the cell
+                    // that is painted is the cell a press lands on.
+                    Kind::Sequencer => {
+                        card(ui, &pal, rect);
+                        head_into(ui, &pal, rect, placed.region, opening);
+                        if let Some(bay) = sequencer(ui.ctx(), panel.layout(), sequenced) {
+                            sequencer_into(ui, &pal, &bay);
+                        }
+                    }
                     Kind::Master => {
                         card(ui, &pal, rect);
                         head_into(ui, &pal, rect, placed.region, opening);
-                        if let Some(row) = master(ui.ctx(), panel.layout(), out) {
+                        if let Some(row) = master(ui.ctx(), panel.layout(), out, chain) {
                             master_into(ui, &pal, &row);
                         }
                     }
@@ -18570,7 +19644,16 @@ impl View {
                         drop_ring(ui, &pal, cell, size::PREVIEW_RADIUS);
                     }
                     preview(ui, &pal, cell, previews[deck]);
-                    caption_into(ui, &pal, cell, deck, previews[deck], costs[deck], marked);
+                    caption_into(
+                        ui,
+                        &pal,
+                        cell,
+                        deck,
+                        previews[deck],
+                        overloaded[deck],
+                        costs[deck],
+                        marked,
+                    );
                 }
             }
 
@@ -18788,15 +19871,28 @@ fn preview(ui: &Ui, pal: &Palette, cell: Rect, picture: Option<Picture>) {
 
 /// **The word a cell's caption gives for what the cell is showing.**
 ///
-/// Two, because two is what [`View::previews`] distinguishes and drawing a
-/// third would be drawing a state the program cannot be in.
+/// Three, because three is what the pair of values this reads distinguishes
+/// and drawing a fourth would be drawing a state the program cannot be in.
 ///
 /// - [`PREVIEW_MATERIAL`] — there is a deck slot behind this cell and the
 ///   image is that slot's own target. It says nothing about residency: a
 ///   parked deck's still and a live deck's frame are the same word, which is
 ///   [ADR-0258](../../../docs/adr/0258-the-look-comes-before-the-fader-so-a-cell-draws-every-slot-and-says-which-nothing-it-is.md).
+/// - [`PREVIEW_OVERLOADED`] — there is a slot behind this cell and it has
+///   **stopped updating**: the version in it costs more than one frame may, so
+///   the engine skips its step and its draw and the image is the last frame it
+///   made (ADR-0316). **It outranks `material` and does not replace what the
+///   cell shows**, which is the whole shape of the decision — the image stays,
+///   because blanking it would be indistinguishable from an empty slot, and
+///   the word is what separates a still from a preview
+///   ([ADR-0269](../../../docs/adr/0269-a-slot-that-is-drawn-is-stepped-and-a-preview-runs-at-the-rooms-tempo.md)).
+///   It is not residency either: this cell reads the same word on air and off.
 /// - [`PREVIEW_NO_SLOT`] — there is no slot behind this cell at all: a deck of
 ///   fewer slots than there are cells, or a console with no engine behind it.
+///   **It wins over the mark**, because a mark about a slot that is not there
+///   is about nothing: the flag crosses the seam per cell and a caller writing
+///   one beside no picture is saying two things at once, of which this draws
+///   the one that is about the cell.
 ///
 /// **Not `empty` and not `off`, and both of those are worth naming.** The
 /// mock's D cell said `D · off` when
@@ -18809,15 +19905,21 @@ fn preview(ui: &Ui, pal: &Palette, cell: Rect, picture: Option<Picture>) {
 /// `slot_view` is `None` only past `slot_count`. Writing either here would
 /// assert a reading nobody took, which is ADR-0200's rule and ADR-0191's
 /// before it.
-fn state_word(picture: Option<Picture>) -> &'static str {
-    match picture {
-        Some(_) => PREVIEW_MATERIAL,
-        None => PREVIEW_NO_SLOT,
+fn state_word(picture: Option<Picture>, overloaded: bool) -> &'static str {
+    match (picture, overloaded) {
+        (None, _) => PREVIEW_NO_SLOT,
+        (Some(_), true) => PREVIEW_OVERLOADED,
+        (Some(_), false) => PREVIEW_MATERIAL,
     }
 }
 
 /// A cell showing its slot's own material. See [`state_word`].
 pub const PREVIEW_MATERIAL: &str = "material";
+
+/// A cell showing the last frame a stopped slot drew — the word
+/// `swap::Event::Overloaded` and [`Stage::Overloaded`] carry, said here because
+/// this is where the still is. See [`state_word`] and [`View::overloaded`].
+pub const PREVIEW_OVERLOADED: &str = "overloaded";
 
 /// A cell with no deck slot behind it. See [`state_word`].
 pub const PREVIEW_NO_SLOT: &str = "no slot";
@@ -19098,12 +20200,17 @@ pub fn band_of(ms: f32) -> Band {
 /// because the operator-facing difference is that a measured band is about a
 /// frame at 1280x720 and can therefore be a band too good on a larger output,
 /// which is the one direction the whole estimate is built to round away from.
+#[allow(clippy::too_many_arguments)]
 fn caption_into(
     ui: &Ui,
     pal: &Palette,
     image: Rect,
     deck: usize,
     picture: Option<Picture>,
+    // **Whether this slot has stopped updating** — [`View::overloaded`]. It
+    // changes the word and nothing else: not the letter, not the badge, and
+    // not the image above, which is the still it is about.
+    overloaded: bool,
     cost: Option<Budgeted>,
     marked: bool,
 ) {
@@ -19123,7 +20230,7 @@ fn caption_into(
         ink,
     );
 
-    let word = painter.layout_no_wrap(state_word(picture).to_owned(), font, pal.faint);
+    let word = painter.layout_no_wrap(state_word(picture, overloaded).to_owned(), font, pal.faint);
     painter.galley(
         Pos2::new(
             at.min.x + width + size::PREVIEW_CAPTION_GAP_X,

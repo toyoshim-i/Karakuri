@@ -81,7 +81,7 @@
 //! operation leaves the layout clean behind it.
 
 use karakuri_layout::{Axis, Hit, Layout, NodeId, Point, Rect};
-use karakuri_operation::{Operation, ParamAt, ParamValue};
+use karakuri_operation::{Bloom, Cut, Feedback, Operation, ParamAt, ParamValue, RgbShift};
 
 /// How far either side of a boundary still grabs it. Wider than any divider
 /// the console draws, which is [`Layout::hit`]'s whole argument for taking a
@@ -290,6 +290,23 @@ pub enum Knob {
     /// `docs/adr/0224-out-and-exposure-are-two-levels-that-multiply-in-different-places.md`
     /// for why it is not the tone mapper's exposure).
     Out,
+    /// **The feedback pass's amount** — the first of the master chain's three
+    /// rows, and the one that carries a second value.
+    ///
+    /// `cut` is not what this knob moves: it is what the row is *at*, carried
+    /// so that the operation a drag asks for is the whole of what the pass is
+    /// set to. [`Knob::Param`] carries its range for the same reason — a
+    /// track position is not an operation until something beside it says what
+    /// it means.
+    Feedback {
+        /// Which cut of the previous frame the pass is reading, from the row
+        /// this knob was laid out from.
+        cut: Cut,
+    },
+    /// **The bloom pass's amount** — the chain's second row.
+    Bloom,
+    /// **The rgb shift pass's amount** — the chain's third row.
+    RgbShift,
     /// **A published parameter's fader**, in an Inspector pane —
     /// [`Operation::WriteParam`]. It is the one knob that names something
     /// inside a Set rather than a level on it, which is why it carries a name
@@ -323,6 +340,22 @@ impl Knob {
                 opacity: value,
             },
             Knob::Out => Operation::SetMasterOut { out: value },
+            // **The whole of what the pass is set to, and never a step.** The
+            // cut rides along because the amount alone is not a picture: the
+            // same 0.5 is a one-frame echo under `mix` and a compounding trail
+            // under `exit`.
+            Knob::Feedback { cut } => Operation::SetFeedback {
+                params: Feedback {
+                    amount: value * Feedback::MAX,
+                    cut: *cut,
+                },
+            },
+            Knob::Bloom => Operation::SetBloom {
+                params: Bloom { amount: value },
+            },
+            Knob::RgbShift => Operation::SetRgbShift {
+                params: RgbShift { amount: value },
+            },
             // `crate::view::Param::at` inverted, which is the relation
             // `Grab::value` has to `crate::view::filled` one field along.
             Knob::Param {
@@ -345,7 +378,7 @@ impl Knob {
     pub fn deck(&self) -> Option<u8> {
         match self {
             Knob::Trim { deck } | Knob::Fader { deck } | Knob::Param { deck, .. } => Some(*deck),
-            Knob::Out => None,
+            Knob::Out | Knob::Feedback { .. } | Knob::Bloom | Knob::RgbShift => None,
         }
     }
 }

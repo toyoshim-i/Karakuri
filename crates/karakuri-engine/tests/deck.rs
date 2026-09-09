@@ -56,7 +56,7 @@ mod gpu {
     const SWAPPED: u32 = 8192;
 
     /// A budget no frame in these tests will come near: they are about the deck,
-    /// not about the watchdog, and a rollback firing in the middle of one would
+    /// not about the watchdog, and a slot stopping in the middle of one would
     /// be measuring the host's mood.
     const GENEROUS_MS: f32 = 10_000.0;
 
@@ -391,14 +391,17 @@ proc wash {
     /// the number it was decided on, and which of the slot's two numbers that
     /// was. `None` for every other event.
     ///
-    /// `cost_ms` is an `Option` on the keeping side and not on the other, which
-    /// is `swap::Event`'s own asymmetry: a candidate nothing could measure is
-    /// kept and reported as unjudged, and a rollback can only be reached through
-    /// a number.
+    /// `cost_ms` is an `Option` on the favourable side and not on the other,
+    /// which is `swap::Event`'s own asymmetry: a candidate nothing could measure
+    /// is kept, run, and reported as unjudged, and a slot can only be stopped
+    /// through a number.
+    ///
+    /// **The `bool` is whether the slot goes on running, not whether the
+    /// candidate stayed.** Since ADR-0316 the candidate stays either way.
     fn said_verdict(e: Event) -> Option<(bool, Option<f32>, karakuri_engine::Basis)> {
         match e {
             Event::Accepted { cost_ms, basis, .. } => Some((true, cost_ms, basis)),
-            Event::RolledBack { cost_ms, basis, .. } => Some((false, Some(cost_ms), basis)),
+            Event::Overloaded { cost_ms, basis, .. } => Some((false, Some(cost_ms), basis)),
             _ => None,
         }
     }
@@ -3019,7 +3022,7 @@ proc wash {
     /// not move with residency, so there is nothing to freeze.
     ///
     /// The budget here is zero, so nothing can pass it: the verdict must arrive
-    /// while the slot is still parked, and it must be a rollback.
+    /// while the slot is still parked, and it must be against.
     #[test]
     fn an_off_air_slots_candidate_is_judged_at_the_install() {
         /// What the old freeze cost: eight warmup and thirty judged frames, and
@@ -3074,8 +3077,8 @@ proc wash {
                     "Accepted `{label}` at {:.3} ms",
                     cost_ms.unwrap_or(f32::NAN)
                 )),
-                Event::RolledBack { label, cost_ms, .. } => {
-                    Some(format!("RolledBack `{label}` at {cost_ms:.3} ms"))
+                Event::Overloaded { label, cost_ms, .. } => {
+                    Some(format!("Overloaded `{label}` at {cost_ms:.3} ms"))
                 }
                 _ => None,
             })
@@ -3087,7 +3090,12 @@ proc wash {
         let started = Instant::now();
         let mut seen = None;
         let mut frames = 0usize;
+        // The parked slot's step count while it was still running its own Set —
+        // read at the top of each frame, so the last reading is the one taken
+        // before the build landed on it.
+        let mut stepped_off_air = 0u64;
         while seen.is_none() {
+            stepped_off_air = stepped_off_air.max(steps_taken(deck.slot(1).set()));
             frame(&gpu, &mut deck, &present, 1);
             frames += 1;
             seen = verdict(&mut deck);
@@ -3099,13 +3107,19 @@ proc wash {
         let seen = seen.expect("just set");
 
         assert!(
-            seen.starts_with("RolledBack"),
-            "a candidate that cannot fit a zero budget was kept: {seen}"
+            seen.starts_with("Overloaded"),
+            "a candidate that cannot fit a zero budget was judged in its favour: {seen}"
         );
+        // **The candidate is in the slot, off air or not** (ADR-0316): `CAPACITY`
+        // here would be the Set the build displaced, put back.
         assert_eq!(
             deck.slot(1).set().capacity(),
-            CAPACITY,
-            "the rollback did not put the parked slot's own Set back"
+            SWAPPED,
+            "the verdict took the build out of a parked slot instead of stopping it"
+        );
+        assert!(
+            deck.overloaded(1),
+            "a parked slot over the budget was not marked stopped"
         );
         // **The whole point of the change, as a number.** The verdict arrives on
         // the frame the build lands on, while the slot is still Allocated. The
@@ -3122,9 +3136,21 @@ proc wash {
             "the slot went on air by itself, so this says nothing about a parked one"
         );
         assert!(
-            steps_taken(deck.slot(1).set()) > 0,
-            "the off-air slot did not step, so this test is no longer about a slot \
-             that is paying into the interval it is not being judged by"
+            stepped_off_air > 0,
+            "the off-air slot did not step before the build landed, so this test is no \
+             longer about a slot that is paying into the interval it is not being judged by"
+        );
+        // **And it stops paying into it now**, which is the freeze reaching the
+        // off-air branch of `Frame::render`: a stopped slot takes no step
+        // whatever its residency, so the Set that just landed is still at zero
+        // several frames later.
+        for _ in 0..5 {
+            frame(&gpu, &mut deck, &present, 1);
+        }
+        assert_eq!(
+            steps_taken(deck.slot(1).set()),
+            0,
+            "a stopped slot went on stepping off air"
         );
     }
 
@@ -3218,9 +3244,13 @@ proc wash {
         let (kept, cost_ms, basis) = verdict.expect("just set");
         assert!(
             kept,
-            "a candidate costing {cost_ms:?} ms was rolled back in a deck whose frames \
+            "a candidate costing {cost_ms:?} ms stopped its slot in a deck whose frames \
              are {:?} long — the verdict is still reading the deck's interval",
             SLOW_FRAME
+        );
+        assert!(
+            !deck.overloaded(1),
+            "the verdict was in the candidate's favour and the slot is marked stopped"
         );
         assert_eq!(
             deck.slot(1).set().capacity(),
@@ -3265,6 +3295,232 @@ proc wash {
         assert!(
             report.to_string().contains("OVER its period"),
             "the report's line does not say the deck is over its period: {report}"
+        );
+    }
+
+    /// **A slot the watchdog stopped takes no step, and its target keeps the
+    /// last image it made** — two of the three things ADR-0316 says *stops
+    /// updating* means.
+    ///
+    /// The budget is zero, so the candidate cannot pass and the branch is
+    /// certainly reached on every machine (`docs/contributing.md` §1: the
+    /// alternative is a shader chosen for being slow somewhere).
+    ///
+    /// **What each half rules out.** The step count would advance if
+    /// `Frame::render` were skipping the draw and not the step, and the target's
+    /// bits would go *black* if a stopped slot were skipped by clearing rather
+    /// than by being left alone — which is the state an operator cannot tell
+    /// from an empty slot.
+    ///
+    /// **What no assertion here can reach is the draw**, and saying so is
+    /// better than implying otherwise. A stopped slot's buffers do not change,
+    /// and `points.rs` clears its target and redraws from those buffers — so a
+    /// slot that was still being drawn would produce the **same bits**, and this
+    /// test would pass. *Keep drawing without stepping* is therefore ruled out
+    /// by ADR-0316's argument (it removes almost nothing, because the draw is
+    /// the fill-rate half) and not by this file; what an outside observer can
+    /// see of it is a cost, and this suite asserts no costs.
+    #[test]
+    fn a_stopped_slot_takes_no_step_and_keeps_the_image_it_stopped_at() {
+        let gpu = Gpu::headless().expect("no GPU available");
+        let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
+
+        let (tx, rx) = mpsc::channel();
+        let watched = HotSwap::new(
+            &gpu.device,
+            &gpu.queue,
+            build(&gpu, SEED_B, CAPACITY),
+            // Nothing is faster than zero milliseconds.
+            0.0,
+            Box::new(rx),
+        );
+        let mut deck = Deck::new(
+            &gpu.device,
+            vec![HotSwap::fixed(build(&gpu, SEED_A, CAPACITY)), watched],
+            WIDTH,
+            HEIGHT,
+        );
+        deck.set_residency(1, Residency::Live);
+
+        // Frames before the request, so the slot's own Set has drawn something
+        // real into its target and the image this test says is *kept* is not an
+        // empty one.
+        for _ in 0..4 {
+            frame(&gpu, &mut deck, &present, 1);
+        }
+        tx.send(candidate(1)).expect("worker alive");
+
+        let started = Instant::now();
+        let mut verdict = None;
+        while verdict.is_none() {
+            frame(&gpu, &mut deck, &present, 1);
+            verdict = deck.events(1).find_map(said_verdict);
+            assert!(started.elapsed() < PATIENCE, "no verdict on the candidate");
+        }
+        let (kept, _, _) = verdict.expect("just set");
+        assert!(!kept, "a candidate held a budget of zero milliseconds");
+        assert!(
+            deck.overloaded(1),
+            "the verdict was against and the slot is not marked stopped"
+        );
+        assert_eq!(
+            deck.slot(1).set().capacity(),
+            SWAPPED,
+            "the verdict took the candidate out of the slot"
+        );
+
+        let steps = steps_taken(deck.slot(1).set());
+        let image = readback(&gpu, deck.slot_target(1));
+        assert!(
+            image.iter().any(|&bits| bits != 0),
+            "the slot's target is empty before this test starts, so *kept* is not \
+             a claim about anything"
+        );
+
+        for _ in 0..8 {
+            frame(&gpu, &mut deck, &present, 1);
+        }
+        assert_eq!(
+            steps_taken(deck.slot(1).set()),
+            steps,
+            "a stopped slot is still being stepped"
+        );
+        assert_eq!(
+            readback(&gpu, deck.slot_target(1)),
+            image,
+            "a stopped slot's target changed, so something is still drawing into it"
+        );
+
+        // **And the freeze is the version's**: a build that fits clears it and
+        // the slot runs again. The budget is what moves, because moving it is
+        // what makes the same machinery answer differently.
+        deck.set_frame_budget_ms(GENEROUS_MS);
+        tx.send(candidate(2)).expect("worker alive");
+        let started = Instant::now();
+        let mut kept = None;
+        while kept.is_none() {
+            frame(&gpu, &mut deck, &present, 1);
+            kept = deck.events(1).find_map(said_verdict).map(|v| v.0);
+            assert!(
+                started.elapsed() < PATIENCE,
+                "no verdict on the second build"
+            );
+        }
+        assert_eq!(
+            kept,
+            Some(true),
+            "a generous budget stopped the slot anyway"
+        );
+        assert!(
+            !deck.overloaded(1),
+            "a build that held the budget left the slot marked stopped"
+        );
+        for _ in 0..4 {
+            frame(&gpu, &mut deck, &present, 1);
+        }
+        assert!(
+            steps_taken(deck.slot(1).set()) > 0,
+            "the slot is unmarked and still not stepping"
+        );
+    }
+
+    /// **A fader to zero reaches a stopped slot**, which is
+    /// [ADR-0040](../../../docs/adr/0040-a-gain-of-zero-means-no-contribution-so-the-slot-is-skipped.md)'s
+    /// zero-skip and `P-0094`'s last resort: the way out of material an operator
+    /// cannot use is to pull it down, and it has to work on exactly the material
+    /// that has gone wrong. A stopped slot is still mixed — that is the point of
+    /// stopping it rather than blanking it — so *still mixed* has to be
+    /// something the fader can end.
+    ///
+    /// One slot Live and the other off air, so the picture is this slot's held
+    /// image and nothing else, and *out of the mix* is *black* rather than a
+    /// difference somebody has to interpret.
+    #[test]
+    fn a_fader_to_zero_takes_a_stopped_slot_out_of_the_picture() {
+        let gpu = Gpu::headless().expect("no GPU available");
+        let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
+
+        let (tx, rx) = mpsc::channel();
+        let watched = HotSwap::new(
+            &gpu.device,
+            &gpu.queue,
+            build(&gpu, SEED_B, CAPACITY),
+            0.0,
+            Box::new(rx),
+        );
+        let mut deck = Deck::new(
+            &gpu.device,
+            vec![HotSwap::fixed(build(&gpu, SEED_A, CAPACITY)), watched],
+            WIDTH,
+            HEIGHT,
+        );
+        // The other slot stays off air, so what reaches the picture is this one
+        // or nothing.
+        deck.set_residency(0, Residency::Allocated);
+        deck.set_residency(1, Residency::Live);
+
+        for _ in 0..4 {
+            frame(&gpu, &mut deck, &present, 1);
+        }
+        tx.send(candidate(1)).expect("worker alive");
+        let started = Instant::now();
+        let mut verdict = None;
+        while verdict.is_none() {
+            frame(&gpu, &mut deck, &present, 1);
+            verdict = deck.events(1).find_map(said_verdict);
+            assert!(started.elapsed() < PATIENCE, "no verdict on the candidate");
+        }
+        assert!(
+            deck.overloaded(1),
+            "the slot is not stopped, so this test is about an ordinary fader"
+        );
+
+        frame(&gpu, &mut deck, &present, 1);
+        let showing = readback(&gpu, present.hdr_texture());
+        assert!(
+            showing.iter().any(|&bits| bits != 0),
+            "a stopped slot is contributing nothing to the picture already, so \
+             pulling it down proves nothing"
+        );
+
+        deck.set_gain(1, 0.0);
+        frame(&gpu, &mut deck, &present, 1);
+        let faded = readback(&gpu, present.hdr_texture());
+        assert!(
+            faded.iter().all(|&bits| bits == 0),
+            "a fader at zero on a stopped slot left it in the picture"
+        );
+        // **And the slot is still stopped**, because a fader is not a build. The
+        // operator took it out of the mix; nothing decided that ended the freeze
+        // for them.
+        assert!(
+            deck.overloaded(1),
+            "the fader cleared the freeze, which is a state changing by itself"
+        );
+
+        // **Nor does taking it off air and putting it back**, which is the
+        // other thing an operator does to a slot that is misbehaving. What
+        // stopped is the version and not the placement (ADR-0316), so the
+        // residency moves and the freeze does not — and the slot takes no step
+        // at either level, which is what the off-air branch of `Frame::render`
+        // has to honour as well.
+        let steps = steps_taken(deck.slot(1).set());
+        deck.set_residency(1, Residency::Allocated);
+        for _ in 0..3 {
+            frame(&gpu, &mut deck, &present, 1);
+        }
+        deck.set_residency(1, Residency::Live);
+        for _ in 0..3 {
+            frame(&gpu, &mut deck, &present, 1);
+        }
+        assert!(
+            deck.overloaded(1),
+            "a stopped slot taken off air and put back came back running"
+        );
+        assert_eq!(
+            steps_taken(deck.slot(1).set()),
+            steps,
+            "a stopped slot stepped while it was off air"
         );
     }
 
@@ -3347,7 +3603,7 @@ proc wash {
 
         assert!(
             idle.0,
-            "the candidate was rolled back on an idle deck, so this test is about \
+            "the candidate stopped its slot on an idle deck, so this test is about \
              something other than the neighbours"
         );
         assert_eq!(

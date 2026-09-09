@@ -68,8 +68,8 @@
 //! ## Most of this never touches the frame
 //!
 //! Reading a procedure is reading a file. Writing one is checking it and
-//! writing a file — the compile, the frame-boundary swap, the thirty measured
-//! frames and the rollback if it costs too much are `--watch`'s, built for
+//! writing a file — the compile, the frame-boundary swap, the measurement and
+//! the stopped slot if it costs too much are `--watch`'s, built for
 //! editing by hand and now doing the most dangerous part of this: **a model
 //! that writes something too expensive is caught by the machinery that already
 //! catches a human who does.**
@@ -134,7 +134,7 @@ use serde_json::{json, Value};
 /// and a swap is rare enough that the send costs less than the `eprintln!`
 /// beside it already does.
 pub enum Event {
-    /// A build landed, was rolled back, or failed, in the words the operator
+    /// A build landed, was overloaded, or failed, in the words the operator
     /// saw on the terminal.
     Swap { slot: usize, said: String },
 }
@@ -218,15 +218,15 @@ impl Reply {
 ///    unable to change its mind.
 /// 2. **Rebuild the slot the deck names**, on the path an edit takes: compiled
 ///    on a worker, swapped at a frame boundary, judged against the budget and
-///    rolled back on its own if it costs too much. An edge is priced by the same
+///    left in the slot with the slot stopped if it costs too much. An edge is priced by the same
 ///    validation as everything else between nodes, which is the whole of why
 ///    this is inside MCP's scope — see the description of [`tools`]'s
 ///    `wire_input`.
 /// 3. **Answer once, at the frame it was applied on** — [`Reply::settled`],
 ///    with what the loop would have printed. Not at the swap: what the *build*
 ///    made of it is `swap_outcome`'s answer, as it is for every other rebuild,
-///    and a tool that waited for thirty judged frames would be a tool that holds
-///    a connection open across a transition.
+///    and a tool that waited for a verdict would be a tool that holds a
+///    connection open across a transition.
 pub struct WireRequest {
     /// Which deck slot the edge is about. Checked against [`Slots`] before it
     /// is sent, in the sentence every other surface refuses an absent slot in.
@@ -1413,8 +1413,8 @@ fn tools() -> Value {
                  built — in the same sentence `--edge` meets — and comes back through \
                  `swap_outcome` with everything else a rebuild decided. The rebuild \
                  itself is a procedure write's: compiled on a worker thread, swapped \
-                 at a frame boundary, measured for thirty frames and rolled back on \
-                 its own if it costs too much.",
+                 at a frame boundary, judged on that Set's own measured frame, and \
+                 left in the slot with the slot stopped if it costs too much.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -1454,9 +1454,16 @@ fn tools() -> Value {
             "name": "swap_outcome",
             "description":
                 "What the swap machinery has said recently: whether a written procedure \
-                 landed, was rolled back for cost, or failed to build. Call it after a \
+                 landed, was overloaded, or failed to build. Call it after a \
                  write to find out what happened — a write returning cleanly means it \
-                 compiled, not that it is on screen.",
+                 compiled, not that it is on screen. **Overloaded is a state rather \
+                 than an outcome**: one frame of that Set costs more than a frame may, \
+                 so it is still in the slot and the slot has stopped updating — it \
+                 takes no step and draws no frame, and the picture holds the last frame \
+                 it drew. Nothing puts anything back and nothing ends it on its own: \
+                 the ways out are a write that fits, an earlier version landed on the \
+                 node, or the operator's hand on the fader. So a procedure this names \
+                 is one worth writing again, cheaper.",
             "inputSchema": { "type": "object", "properties": {} },
         },
         {
@@ -1470,8 +1477,8 @@ fn tools() -> Value {
                  whether it composites and which renderer is live, and the camera — and \
                  not what any file on disk says, which is exactly what the operator's \
                  `k` key writes. That distinction is the \
-                 point: a procedure that was written and then rolled back for cost is on \
-                 disk and not on screen, and this saves the screen. **What you save goes \
+                 point: a procedure that was written and never picked up is on disk and \
+                 not on screen, and this saves the screen. **What you save goes \
                  into the store's sandbox, `<store>/sandbox/`, and not into the \
                  operator's library**: the library is written by the operator's own act \
                  and nothing else, and what lands in the sandbox is the edit history of \
@@ -2172,7 +2179,7 @@ fn write_procedure(deck: u8, node: NodeAt, source: &str, state: &State) -> Resul
         format!(
             "compiled and written to slot {slot} {name}:{index}.{shared} It is being built on a \
              worker thread and will swap in at a frame boundary; call `swap_outcome` to \
-             find out whether it landed or was rolled back for cost.\n\n{kept} Every later \
+             find out whether it landed or was overloaded.\n\n{kept} Every later \
              version that compiles is kept there too."
         )
     } else {
@@ -2200,7 +2207,7 @@ fn swap_outcome(state: &mut State) -> Result<String, String> {
     };
     Ok(if state.recent.is_empty() {
         format!(
-            "nothing has swapped, rolled back or failed to build since this run \
+            "nothing has swapped, been overloaded or failed to build since this run \
              started.{missing}"
         )
     } else {
@@ -6849,7 +6856,7 @@ mod tests {
                 "read_procedure" | "read_set" | "list_sets" | "swap_outcome" => Silent::Question,
                 // Its record is written where the work lands: `Record::Save` at
                 // the frame the save landed, `Record::Procedure` when a swap
-                // lands or is rolled back.
+                // lands.
                 "save_set" | "write_procedure" => Silent::OnLanding,
                 // **Nothing carries it**, which is the hole named above and not
                 // a question this tool asks or work it lands.

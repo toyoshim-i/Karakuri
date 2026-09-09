@@ -54,18 +54,24 @@
 //!
 //! - [`Written::Records`] — it writes these, in this order. Eighteen
 //!   operations, eight of which need no reading at all.
-//! - [`Written::Silent`] — it writes none, and that is settled. Thirty-one,
+//! - [`Written::Silent`] — it writes none, and that is settled. Thirty-six,
 //!   for [`Silent`]'s four different reasons.
-//! - [`Written::Owed`] — it writes one and this build cannot make it.
-//!   Fourteen, for [`Owed`]'s three different reasons.
+//! - [`Written::Owed`] — it writes one and this build cannot make it. Nine,
+//!   for [`Owed`]'s three different reasons.
 //!
 //! **`Owed` is not a refusal and not an error.** It is a gap this crate
 //! declares about itself, in the shape `karakuri_operation::Undecided` is: a
 //! caller that meets one has met a question nobody has answered, and printing
-//! it is more use than a silent no-op. Twelve of the fourteen are the
-//! vocabulary's own `Undecided` rows, and eight of those twelve are the master
-//! chain's three effects and the sequencer's five — two bays the manual
-//! specifies and nothing holds.
+//! it is more use than a silent no-op. Four of the nine are the vocabulary's
+//! own `Undecided` rows.
+//!
+//! **The sequencer's five left on 2026-09-09**, and they are the largest thing
+//! this answer has stopped being asked about at once. They were `Owed` because
+//! nothing held a pattern; a pattern is library data under the store on the
+//! arrangement's terms now (ADR-0227, ADR-0320) and a lane's writes are its
+//! record (ADR-0322), so editing one writes a file and no record — which is
+//! the arrangement family's answer and is where they went, five rows down into
+//! [`Silent::Surface`].
 //!
 //! # What this crate deliberately cannot do
 //!
@@ -150,6 +156,29 @@ pub struct Look {
     /// record is written whole and a conversion that dropped it would rewrite
     /// a value nobody asked about.
     pub white_point: f32,
+}
+
+/// **What the master chain is set to**, which is what each of
+/// [`Operation::SetFeedback`], [`Operation::SetBloom`] and
+/// [`Operation::SetRgbShift`] needs the other two thirds of.
+///
+/// [`Look`]'s arrangement exactly, and for ADR-0192's reason: `Record::MasterChain`
+/// is written whole — three amounts and a cut — and each of the three
+/// operations asks for one pass of it. A bloom amount written without the
+/// feedback beside it would put the trail back wherever a default left it,
+/// mid-set.
+///
+/// The vocabulary's [`karakuri_operation::Cut`] rather than a wire word, for
+/// [`Look::tonemap`]'s reason: a `String` here would make this crate the place
+/// a typo arrives.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Chain {
+    /// How much of the retained frame comes back, and which frame that is.
+    /// One field pair rather than two fields for
+    /// `karakuri_operation::Feedback`'s reason.
+    pub feedback: karakuri_operation::Feedback,
+    pub bloom: f32,
+    pub rgb_shift: f32,
 }
 
 /// **The mask a deck's layer is wearing**, which is what
@@ -421,6 +450,13 @@ pub struct Mix {
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Current {
     pub look: Option<Look>,
+    /// **What the master chain is running at**, which is what each of its
+    /// three rows needs the other two thirds of. See [`Chain`], and
+    /// [`Current::look`] for the shape.
+    ///
+    /// **It belongs to no deck**, which puts it beside `look` rather than
+    /// beside `transport`: the chain reads what the fold produced.
+    pub master_chain: Option<Chain>,
     pub transport: Option<Transport>,
     pub mask: Option<Mask>,
     /// **The tempo the room is going at**, in BPM, which is what
@@ -487,6 +523,9 @@ pub struct Current {
 pub enum Reading {
     /// [`Current::look`].
     Look,
+    /// [`Current::master_chain`] — the master chain that is running, and the
+    /// other reading here that names no deck.
+    MasterChain,
     /// [`Current::transport`], for the deck the operation names.
     Transport,
     /// [`Current::mask`], for the deck the operation names — and for
@@ -585,16 +624,18 @@ pub enum Owed {
     /// caller's to fix, and the only one of the three that is.
     NotRead(Reading),
     /// **The vocabulary itself says what this acts on is open** —
-    /// `karakuri_operation::Undecided`, at twelve variants, each with its
+    /// `karakuri_operation::Undecided`, at four variants, each with its
     /// question written at its own definition. Nothing can be written down
     /// here that is not already decided there.
     ///
-    /// **Eight of the twelve arrived together and are two whole bays**: the
-    /// master chain's three effects and the sequencer's five, specified on
-    /// the manual's page before anything holds a chain or a pattern. They are
-    /// the largest thing this answer has ever been asked about at once, and
-    /// they are the reason the arm below says which of them will owe a record
-    /// and which nobody can yet say owes one.
+    /// **Eight of them once arrived together and were two whole bays**: the
+    /// master chain's three effects and the sequencer's five, specified on the
+    /// manual's page before anything held a chain or a pattern. They were the
+    /// largest thing this answer was ever asked about at once, and both bays
+    /// left on 2026-09-09 — the chain's three into a record they can now name,
+    /// the sequencer's five into [`Silent::Surface`], because a pattern turned
+    /// out to be library data under the store on the arrangement's terms and a
+    /// lane's writes turned out to be its record.
     Undecided,
     /// **Its record is not a function of values alone, and who supplies the
     /// rest is undecided.** Two operations, and they are one shape: moving the
@@ -645,6 +686,9 @@ impl Owed {
     pub fn why(self) -> &'static str {
         match self {
             Owed::NotRead(Reading::Look) => "the look that is running was not read",
+            Owed::NotRead(Reading::MasterChain) => {
+                "the master chain that is running was not read"
+            }
             Owed::NotRead(Reading::Transport) => {
                 "the transport of the deck it names was not read"
             }
@@ -844,6 +888,47 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
                 white_point: look.white_point,
             }),
             None => Written::Owed(Owed::NotRead(Reading::Look)),
+        },
+        // **The master chain's three, and they are the look pair's argument
+        // with one more row in it.** `Record::MasterChain` is written whole,
+        // each operation names one pass of it, and the other two come from the
+        // chain that is running — so a press on the bloom row cannot put the
+        // feedback back where a default left it. These carried
+        // `karakuri_operation::Undecided` and answered `Owed::Undecided` until
+        // 2026-09-09, on the ground that *"a record kept for a thing that does
+        // not exist would be inventing its contents"* (ADR-0227); the chain
+        // exists now and the contents are three amounts and a cut. See
+        // `docs/adr/0317-…`.
+        //
+        // **And no clamp**, on `SetMasterOut`'s terms: the ranges are
+        // `karakuri_engine::master::Chain::clamped`'s, where the record is
+        // applied, so every route in meets one wall.
+        Operation::SetFeedback { params } => match current.master_chain {
+            Some(chain) => one(Record::MasterChain {
+                feedback: params.amount,
+                cut: params.cut.name().to_string(),
+                bloom: chain.bloom,
+                rgb_shift: chain.rgb_shift,
+            }),
+            None => Written::Owed(Owed::NotRead(Reading::MasterChain)),
+        },
+        Operation::SetBloom { params } => match current.master_chain {
+            Some(chain) => one(Record::MasterChain {
+                feedback: chain.feedback.amount,
+                cut: chain.feedback.cut.name().to_string(),
+                bloom: params.amount,
+                rgb_shift: chain.rgb_shift,
+            }),
+            None => Written::Owed(Owed::NotRead(Reading::MasterChain)),
+        },
+        Operation::SetRgbShift { params } => match current.master_chain {
+            Some(chain) => one(Record::MasterChain {
+                feedback: chain.feedback.amount,
+                cut: chain.feedback.cut.name().to_string(),
+                bloom: chain.bloom,
+                rgb_shift: params.amount,
+            }),
+            None => Written::Owed(Owed::NotRead(Reading::MasterChain)),
         },
         // **Half a mask each, and the record is whole.** The half that was
         // not asked for comes from the mask that is running, exactly as the
@@ -1152,40 +1237,7 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
         Operation::MoveBoundary { .. }
         | Operation::WalkHistory { .. }
         | Operation::WatchFiles { .. }
-        | Operation::RouteFrame { .. }
-        // **The master chain's three effects will owe a record**, which is
-        // why calling them silent would be wrong rather than merely early:
-        // ADR-0227 keeps a chain's *levels while it is being played* in the
-        // session stream — *"the same way a Set's gain does"* — and
-        // `Record::MasterOut` says of itself that *"there is nothing else
-        // about the master chain a stream can say yet … it grows the day an
-        // effect lands in the chain."* Nothing can be written here because no
-        // effect and no parameter of one exists to name, and that record
-        // declines to invent them for the same reason this arm declines to:
-        // *"a record kept for a thing that does not exist would be inventing
-        // its contents."*
-        | Operation::SetFeedback { .. }
-        | Operation::SetBloom { .. }
-        | Operation::SetRgbShift { .. }
-        // **The sequencer's five are open one place further out**, and land
-        // here for a different reason. ADR-0227 refuses the session stream a
-        // *pattern* — a lane is a fifth route (ADR-0222), so what a pattern
-        // does already lands as `Record::Opacity` and its kin, sixteen a bar,
-        // and a pattern record beside them would be *"the cause written down
-        // next to every one of its consequences."* That is an argument about
-        // a pattern's contents rather than about what editing one writes, and
-        // neither `Silent` arm can carry the difference today: `Surface` would
-        // call a pattern the console's own state, where ADR-0227 makes it
-        // library data under the store on a Set's and an arrangement's terms;
-        // and `NoRecord` would call the stream's silence a settled gap, where
-        // nothing about these has been settled at all. So they wait on a
-        // pattern here, which is exactly the sentence `Owed::Undecided`
-        // prints.
-        | Operation::SetStep { .. }
-        | Operation::SetLaneMute { .. }
-        | Operation::PointLane { .. }
-        | Operation::SetPatternGrid { .. }
-        | Operation::SelectPattern { .. } => Written::Owed(Owed::Undecided),
+        | Operation::RouteFrame { .. } => Written::Owed(Owed::Undecided),
 
         // ----- Silent: a surface's own state -------------------------------
         Operation::SelectDeck { .. }
@@ -1278,7 +1330,52 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
         // nothing from a star: a session played back in somebody else's room
         // would otherwise arrive carrying this room's attention.
         | Operation::SetFavourite { .. }
-        | Operation::SizeWindow { .. } => Written::Silent(Silent::Surface),
+        | Operation::SizeWindow { .. }
+        // **The sequencer's five, and they are the second family of the kind
+        // the arrangement made this arm hold.** They answered
+        // `Owed(Undecided)` until 2026-09-09 on two reasons, and both are
+        // gone.
+        //
+        // **The first was refuted in this file already.** It read: *"`Surface`
+        // would call a pattern the console's own state, where ADR-0227 makes
+        // it library data under the store on a Set's and an arrangement's
+        // terms."* An **arrangement** is library data under the store on those
+        // same terms and it is four lines up, and the test that pins it says
+        // why in a sentence that transfers word for word — *"a save writes a
+        // file, and a file is not a record whose timing `OnLanding` could be
+        // about, nor a gap `NoRecord` could be about."* So this arm already
+        // covers *a file under the store*, because the arrangement put it
+        // here; nothing is widened to fit these five.
+        //
+        // **The second was that nothing about them had been settled**, and
+        // four records are what settled it (ADR-0320 to ADR-0323). Read as
+        // settling the stream's silence rather than deferring it, ADR-0227's
+        // refusal of a pattern record *is* this answer: a lane is a fifth
+        // route (ADR-0222), so what a pattern does already lands in the stream
+        // as `Record::Opacity` and `Record::Ride` — its writes are its record
+        // — and a pattern record beside them would be *"the cause written down
+        // next to every one of its consequences."*
+        //
+        // **Not `Silent::NoRecord`**, for `Operation::SaveArrangement`'s
+        // reason two paragraphs up: that arm is where an operation goes when
+        // the record vocabulary has no row for what it does **and that is a
+        // gap**, and this is the opposite — the vocabulary having no row for a
+        // pattern is the decision, taken against the stream by name.
+        //
+        // **Not `Silent::OnLanding`**: nothing in the session vocabulary is a
+        // pattern, so there is no record here whose *timing* could be at
+        // issue, and none ever arrives.
+        //
+        // **What a replay does is the other half of the same answer**
+        // (ADR-0322): the sequencer does not run on a replay, because its
+        // consequences are already in the stream verbatim — `tick`'s and
+        // `audio`'s arrangement, derived from the world when live and read
+        // back when not.
+        | Operation::SetStep { .. }
+        | Operation::SetLaneMute { .. }
+        | Operation::PointLane { .. }
+        | Operation::SetPatternGrid { .. }
+        | Operation::SelectPattern { .. } => Written::Silent(Silent::Surface),
 
         // ----- Silent: it asks rather than changes -------------------------
         Operation::ListSets { .. }
@@ -1291,11 +1388,12 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
         // `RestoreProcedure` is beside `WriteProcedure` because it **is** one:
         // putting a node's previous version back is the same check, the same
         // worker and the same frame boundary, so the `Record::Procedure` is
-        // written at the swap and can itself be rolled back. What it restores
-        // is the file rather than the picture, which is the gap the staging
-        // lane exists to show — a rolled-back build leaves the previous *Set*
-        // on screen and the over-budget *file* on disk, and nothing else in
-        // the instrument says so.
+        // written at the swap and the restored version is judged there like any
+        // other. **It is also the way out of a stopped slot** (ADR-0316):
+        // nothing puts a version back on its own any more, so this operation is
+        // what a person reaches for when a build has stopped a slot for cost —
+        // and because it writes the file as well as moving the picture, the two
+        // agree afterwards.
         Operation::SaveSet { .. }
         | Operation::WriteProcedure { .. }
         | Operation::RestoreProcedure { .. } => Written::Silent(Silent::OnLanding),
@@ -1468,6 +1566,19 @@ mod tests {
     /// not the first in the list and a white point that is not the default, so
     /// a conversion filling either in from thin air is visible rather than
     /// coincidentally right.
+    /// A chain with all four values distinct, so a record that copied the
+    /// wrong one is a failing assertion rather than a coincidence.
+    fn chain() -> Chain {
+        Chain {
+            feedback: karakuri_operation::Feedback {
+                amount: 0.34,
+                cut: karakuri_operation::Cut::Exit,
+            },
+            bloom: 0.6,
+            rgb_shift: 0.25,
+        }
+    }
+
     fn look() -> Look {
         Look {
             tonemap: Tonemap::AgX,
@@ -1542,6 +1653,115 @@ mod tests {
             "a tone map change rewrote the exposure or the white point — the record \
              carries all three and only the operator was asked for"
         );
+    }
+
+    /// **The chain that is running is what fills in the rows nobody
+    /// pressed**, which is the look pair's claim with one more row in it: a
+    /// press on the bloom row must not put the feedback back where a default
+    /// left it.
+    #[test]
+    fn a_bloom_press_keeps_the_feedback_and_the_shift_that_are_running() {
+        let current = Current {
+            master_chain: Some(chain()),
+            ..Current::default()
+        };
+        let written = written(
+            &Operation::SetBloom {
+                params: karakuri_operation::Bloom { amount: 0.6 },
+            },
+            &current,
+        );
+        assert_eq!(
+            records(written),
+            vec![Record::MasterChain {
+                feedback: 0.34,
+                cut: "exit".to_string(),
+                bloom: 0.6,
+                rgb_shift: 0.25,
+            }],
+            "a bloom press rewrote a pass it did not name — the record carries all \
+             four and only the bloom was asked for"
+        );
+    }
+
+    /// **Feedback carries two of the four**, and the cut is one of them: the
+    /// same amount is a one-frame echo under `mix` and a compounding trail
+    /// under `exit`, so a surface that could move the amount without saying
+    /// the cut would be asking for a picture it had not named.
+    #[test]
+    fn a_feedback_press_carries_its_cut_and_keeps_the_other_two_passes() {
+        let current = Current {
+            master_chain: Some(chain()),
+            ..Current::default()
+        };
+        let written = written(
+            &Operation::SetFeedback {
+                params: karakuri_operation::Feedback {
+                    amount: 0.9,
+                    cut: karakuri_operation::Cut::Mix,
+                },
+            },
+            &current,
+        );
+        assert_eq!(
+            records(written),
+            vec![Record::MasterChain {
+                feedback: 0.9,
+                cut: "mix".to_string(),
+                bloom: 0.6,
+                rgb_shift: 0.25,
+            }]
+        );
+    }
+
+    /// **And the third row is the other two's arm.** Worth its own test
+    /// because it is the row whose figure used to be a dash: an amount of zero
+    /// is a value that reaches a record, not a row with nothing to say.
+    #[test]
+    fn an_rgb_shift_press_writes_a_zero_rather_than_nothing() {
+        let current = Current {
+            master_chain: Some(chain()),
+            ..Current::default()
+        };
+        let written = written(
+            &Operation::SetRgbShift {
+                params: karakuri_operation::RgbShift { amount: 0.0 },
+            },
+            &current,
+        );
+        assert_eq!(
+            records(written),
+            vec![Record::MasterChain {
+                feedback: 0.34,
+                cut: "exit".to_string(),
+                bloom: 0.6,
+                rgb_shift: 0.0,
+            }]
+        );
+    }
+
+    /// **A chain that was not read is said, never defaulted** — the look
+    /// pair's rule at the row below it. A default chain here would let a
+    /// bloom press silently zero a trail somebody set a moment earlier.
+    #[test]
+    fn a_master_row_with_no_chain_read_is_owed_it_rather_than_given_a_default() {
+        for operation in [
+            Operation::SetFeedback {
+                params: karakuri_operation::Feedback::default(),
+            },
+            Operation::SetBloom {
+                params: karakuri_operation::Bloom::default(),
+            },
+            Operation::SetRgbShift {
+                params: karakuri_operation::RgbShift::default(),
+            },
+        ] {
+            assert_eq!(
+                written(&operation, &Current::default()),
+                Written::Owed(Owed::NotRead(Reading::MasterChain)),
+                "{operation:?} invented a chain nobody read"
+            );
+        }
     }
 
     /// **A reading that was not taken is said, never defaulted.**
@@ -2621,6 +2841,59 @@ mod tests {
                  in the session stream (ADR-0221) — a save writes a file, and a file is not a \
                  record whose timing `OnLanding` could be about, nor a gap `NoRecord` could be \
                  about"
+            );
+        }
+    }
+
+    /// **Editing a pattern writes a file's worth of nothing, exactly as
+    /// keeping an arrangement does.**
+    ///
+    /// The five answered `Owed(Undecided)` until 2026-09-09, and the objection
+    /// at the arm was that `Silent::Surface` *"would call a pattern the
+    /// console's own state, where ADR-0227 makes it library data under the
+    /// store."* The test above is the refutation: an arrangement is library
+    /// data under the store on the same terms and answers `Silent(Surface)`,
+    /// and the sentence that pins it transfers word for word. So this asserts
+    /// the second family of the same kind, all five together, because what
+    /// makes the answer right is that they are one family — a step, a mute, a
+    /// target, a mode and a bank are five edits to one pattern.
+    ///
+    /// **What a lane *does* is not silent and is not asserted here**: a lane
+    /// emits `Operation::SetOpacity` and `Operation::WriteParam`, whose
+    /// records are `Record::Opacity` and `Record::Ride`, and those are what a
+    /// replay reads back (ADR-0322).
+    #[test]
+    fn editing_a_pattern_writes_a_file_and_no_record() {
+        for operation in [
+            Operation::SetStep {
+                pattern: 0,
+                lane: 0,
+                step: 4,
+                on: true,
+            },
+            Operation::SetLaneMute {
+                pattern: 0,
+                lane: 0,
+                muted: true,
+            },
+            Operation::PointLane {
+                pattern: 0,
+                target: karakuri_operation::LaneTarget::Fader { deck: 0 },
+            },
+            Operation::SetPatternGrid {
+                pattern: 0,
+                grid: karakuri_operation::StepMode::Eighth,
+            },
+            Operation::SelectPattern { pattern: 1 },
+        ] {
+            assert_eq!(
+                written(&operation, &Current::default()),
+                Written::Silent(Silent::Surface),
+                "`{operation:?}` did not answer `Silent(Surface)`. A pattern is library data \
+                 under the store on the arrangement's terms (ADR-0227, ADR-0320) and what a \
+                 lane does reaches the stream as its own writes (ADR-0322) — so editing one \
+                 writes a file and no record, which is the arrangement family's sentence and \
+                 not a widening of this arm"
             );
         }
     }

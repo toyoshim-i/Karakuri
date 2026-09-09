@@ -6,11 +6,13 @@
 //! editor and a model over MCP reach the same file through the same path, and
 //! the version that was there is gone. This keeps it.
 //!
-//! The gate is **compiling**, not landing. A build that compiled and was then
-//! rolled back for costing too much is exactly the kind of version worth going
-//! back to — it was a real attempt and something about it was right — and it is
-//! the one the session stream does *not* have, because `Record::Procedure` only
-//! names what reached the screen.
+//! The gate is **compiling**, not landing. A build that compiled and cost too
+//! much to run is in here like any other, and the version *before* it is
+//! exactly the kind of version worth going back to — it was a real attempt and
+//! something about it was right, and landing it is one of the three ways out of
+//! a slot the watchdog stopped (ADR-0316). What the session stream does *not*
+//! have is a version that compiled and never reached a slot, because
+//! `Record::Procedure` only names what reached the screen.
 //!
 //! # A chain is a node, and walking it is a listing
 //!

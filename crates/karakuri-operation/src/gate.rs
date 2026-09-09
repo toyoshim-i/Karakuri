@@ -559,9 +559,9 @@ pub fn standing(operation: &Operation, running: Running<'_>) -> Standing {
 mod tests {
     use super::*;
     use crate::{
-        Authority, BeatSource, BlendMode, Control, Curve, GridScale, Layer, NodeAt, ParamAt,
-        ParamValue, Property, Recording, Residency, SetTransfer, Sync, Tonemap, TransitionSetting,
-        Undecided, WipeKind,
+        Authority, BeatSource, BlendMode, Bloom, Control, Curve, Feedback, GridScale, LaneTarget,
+        Layer, NodeAt, ParamAt, ParamValue, Property, Recording, Residency, RgbShift, SetTransfer,
+        StepMode, Sync, Tonemap, TransitionSetting, Undecided, WipeKind,
     };
 
     fn node() -> NodeAt {
@@ -645,18 +645,39 @@ mod tests {
                 renderer: 0,
             },
             Operation::SetMasterOut { out: 1.0 },
-            Operation::SetFeedback { params: Undecided },
-            Operation::SetBloom { params: Undecided },
-            Operation::SetRgbShift { params: Undecided },
+            Operation::SetFeedback {
+                params: Feedback::default(),
+            },
+            Operation::SetBloom {
+                params: Bloom::default(),
+            },
+            Operation::SetRgbShift {
+                params: RgbShift::default(),
+            },
             Operation::SetTonemap {
                 tonemap: Tonemap::Aces,
             },
             Operation::SetExposure { exposure: 1.0 },
-            Operation::SetStep { step: Undecided },
-            Operation::SetLaneMute { lane: Undecided },
-            Operation::PointLane { target: Undecided },
-            Operation::SetPatternGrid { grid: Undecided },
-            Operation::SelectPattern { pattern: Undecided },
+            Operation::SetStep {
+                pattern: 0,
+                lane: 0,
+                step: 0,
+                on: true,
+            },
+            Operation::SetLaneMute {
+                pattern: 0,
+                lane: 0,
+                muted: true,
+            },
+            Operation::PointLane {
+                pattern: 0,
+                target: LaneTarget::Fader { deck: 0 },
+            },
+            Operation::SetPatternGrid {
+                pattern: 0,
+                grid: StepMode::Sixteenth,
+            },
+            Operation::SelectPattern { pattern: 0 },
             Operation::WriteParam {
                 deck: 0,
                 param: param(),
@@ -1164,7 +1185,13 @@ mod tests {
             (Operation::TapBeat, Unclassed::Clock),
             (Operation::Quit, Unclassed::Quitting),
             (Operation::SelectDeck { deck: 0 }, Unclassed::Selection),
-            (Operation::PointLane { target: Undecided }, Unclassed::Lanes),
+            (
+                Operation::PointLane {
+                    pattern: 0,
+                    target: LaneTarget::Fader { deck: 0 },
+                },
+                Unclassed::Lanes,
+            ),
             (
                 Operation::SetAuthority {
                     deck: 0,

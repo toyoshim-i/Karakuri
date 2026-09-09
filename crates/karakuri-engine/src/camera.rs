@@ -87,6 +87,114 @@ pub struct Basis {
 }
 
 impl Orbit {
+    /// **The three numbers that say where this camera is standing, as a node's
+    /// parameters** — the name and the declared range of each, in the order a
+    /// surface draws them.
+    ///
+    /// **The built-in camera is a node with no procedure behind it, so this is
+    /// the `param` list it would have had.** A procedure states its own names
+    /// and ranges and the Set reads them off the artifact; there is no artifact
+    /// here, so the engine states them, and everything downstream follows from
+    /// the map being populated rather than from a rule about cameras: a
+    /// `--param L3:0:radius`, a published control a knob is learned against, a
+    /// `bind`, an authority, a ride carried across a rebuild. Nothing in this
+    /// crate special-cases a camera to make any of that work.
+    ///
+    /// **The ranges of the first two are `docs/ir-spec.md`'s own**, from the
+    /// `sweep` example under *The `camera` block (L3)* — the simplest L3
+    /// anybody would write, which is this orbit spelled as a procedure and
+    /// declares `radius : float [1.0, 40.0]` and `speed : float [0.0, 2.0]`.
+    /// Taking them from there rather than inventing two is what keeps the
+    /// built-in and the procedure that replaces it the same camera to a hand.
+    /// `height` has no such precedent — the example hard-codes 2.0 — and its
+    /// range is derived rather than chosen: it is symmetric because looking up
+    /// from underneath is as much a shot as looking down, and it reaches as far
+    /// either way as `radius` does, past which the eye is further from the
+    /// target than any radius could put it, which is a distance and not a
+    /// height.
+    ///
+    /// **The other three are not here**, and that is the decision rather than
+    /// an omission: `fov_y`, `near` and `far` are what the projection *is*
+    /// rather than where the camera is, and `blend weighted` normalises every
+    /// fragment's depth against the near and far planes — so a fader on either
+    /// would move how the picture composites while appearing to move the
+    /// camera, which is a control whose effect is not the one it draws. A hand
+    /// that wants them writes an L3, which declares whatever it likes.
+    /// `docs/adr/0318-the-built-in-cameras-three-placement-numbers-are-parameter-rows.md`.
+    pub const PLACEMENT: [(&'static str, [f32; 2]); 3] = [
+        ("radius", [1.0, 40.0]),
+        ("speed", [0.0, 2.0]),
+        ("height", [-40.0, 40.0]),
+    ];
+
+    /// What this orbit holds under one of [`Orbit::PLACEMENT`]'s names, or
+    /// `None` for a name that is not one of the three.
+    ///
+    /// **A read by name because the map is keyed by name**, and the two have to
+    /// agree; a caller that matched on the field would be a second copy of this
+    /// table's spelling.
+    pub fn placement(&self, key: &str) -> Option<f32> {
+        match key {
+            "radius" => Some(self.radius),
+            "speed" => Some(self.speed),
+            "height" => Some(self.height),
+            _ => None,
+        }
+    }
+
+    /// Set one of the three by name. `false` for a name that is not one of
+    /// them, which is a caller writing a lens number through the placement
+    /// door.
+    pub fn set_placement(&mut self, key: &str, value: f32) -> bool {
+        match key {
+            "radius" => self.radius = value,
+            "speed" => self.speed = value,
+            "height" => self.height = value,
+            _ => return false,
+        }
+        true
+    }
+
+    /// This orbit's three, as the parameter map of the node it produces.
+    ///
+    /// **The defaults are this orbit's fields and not [`Orbit::default`]'s**,
+    /// because a Set built from a file that recorded a camera is built with
+    /// that camera: what the declaration *is* for this node is what the record
+    /// said, exactly as a procedure's declaration is what its file said.
+    pub fn placement_values(&self) -> Vec<(String, f32)> {
+        Orbit::PLACEMENT
+            .iter()
+            .filter_map(|(key, _)| Some((key.to_string(), self.placement(key)?)))
+            .collect()
+    }
+
+    /// The three declared ranges, as the range map of the node it produces.
+    pub fn placement_ranges() -> Vec<(String, [f32; 2])> {
+        Orbit::PLACEMENT
+            .iter()
+            .map(|(key, range)| (key.to_string(), *range))
+            .collect()
+    }
+
+    /// **This orbit with its three placement numbers taken from `param`** —
+    /// the lens three left as they are.
+    ///
+    /// What the built-in camera node's producer is every frame: the values live
+    /// in the node's parameter map, so what a hand moved, what a binding is
+    /// blending and what a rebuild carried are all already in the number this
+    /// is handed. `param` returning `None` leaves the field alone, which is
+    /// what a Set whose map has not got the key would want and is unreachable
+    /// where this crate builds the map.
+    pub fn with_placement(&self, param: impl Fn(&str) -> Option<f32>) -> Orbit {
+        let mut out = *self;
+        for (key, _) in Orbit::PLACEMENT {
+            if let Some(value) = param(key) {
+                out.set_placement(key, value);
+            }
+        }
+        out
+    }
+
     /// Where this orbit is at this instant. `t` is simulation time, never wall
     /// clock.
     ///
