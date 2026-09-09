@@ -759,62 +759,44 @@ lane, and the sense in which a candidate waits*, which is the longest note on th
 the absence of a *regenerate* is argued. The mock draws the lane with no `data-tip` anywhere in it,
 so every tip in this bay is written from nothing.
 
-#### M5.8 — Master
+#### M5.8 — Master — **closed**
 
-**Rows. Four, and all four are met.** *Master out*, *Feedback*, *Bloom* and *RGB shift* each carry
-a `has` panel badge. This item said three rows and then four; the count that matters now is that
-none of them is `plan`.
+The chain is **three fixed passes in the engine** — feedback, then bloom, then rgb shift, between the
+composite's write and the present pass, each with parameters the vocabulary names and none of them a
+`kind` a `.kir` can declare — and *Feedback* reads **either cut** of the previous frame, `mix` as the
+mixer wrote it or this chain's own `exit`, chosen by a parameter of the pass with only the chosen cut
+retained
+([ADR-0317](adr/0317-the-master-chain-is-three-fixed-passes-and-feedback-reads-either-cut.md), which
+annotates `docs/ir-spec.md`'s paragraph on why `L5` is absent rather than overturning it). The `out`
+fader at the chain's entry and the tone mapper's `exposure` at its far end stay two levels that
+multiply in different places, which is why the far end is a control in the transport row and not here
+([ADR-0224](adr/0224-out-and-exposure-are-two-levels-that-multiply-in-different-places.md)). An
+amount of zero records no pass at all, so with all three at zero the frame is bit for bit the frame
+this program drew before the chain existed. [history/m5.md](history/m5.md).
 
-**Exit. Met.** No `plan` badge in the panel column of this bay's rows on
-[every operation](manual/operations.html).
+**Exit, met on 2026-09-09**: no `plan` badge in the panel column of this bay's rows on
+[every operation](manual/operations.html). All four rows read `has` — *Master out* since it landed
+with ADR-0224, and *Feedback*, *Bloom* and *RGB shift* since ADR-0317 flipped the three together.
 
-**Blocked on. Nothing — the decision was taken on 2026-09-09 and it is
-[ADR-0317](adr/0317-the-master-chain-is-three-fixed-passes-and-feedback-reads-either-cut.md).**
-The blocker was *which of two things the chain is*: three fixed passes in the engine, or a writable
-L5. **It is three fixed passes** — feedback, then bloom, then rgb shift, between the mix's write and
-the present pass's read, each with parameters the vocabulary names, no `kind L5`, no language
-change. `crates/karakuri-engine/src/master.rs` and `shaders/master.wgsl` are the whole of it, on
-`crate::node::Merge`'s pattern. `docs/ir-spec.md`'s paragraph on why `L5` is absent is annotated
-rather than overturned: its condition — a `kind` says what a procedure *lowers to*, and these passes
-declare nothing and lower nothing — still holds, and a writable L5 is deferred rather than refused.
-
-***Feedback*'s second question is answered the same way, and it was the sharper one.** Which cut of
-the previous frame it reads is **both, selectable**: the frame as the mix wrote it, or the chain's
-own exit, chosen by a parameter of the pass. That is the *decisions nobody has taken* entry
-**Which cut of the previous frame a feedback effect reads, and what holding it costs** — taken, and
-its cost argument honoured rather than dodged: a cut that is read has to be held, so exactly one
-frame-sized target is retained and the cut nothing reads is not copied. What that entry predicted —
-that the selection *recomposes the pipeline* — is what it turned out to be, at the size of one
-`copy_texture_to_texture` at a different point in the frame rather than a graph the language builds.
-The entry is answered and the section that holds it is not this item's to edit.
-
-**What the bay is now.** The `out` fader, and three effect rows under it: each a dot that is lit
-when the pass is in the frame, the word, a track and a figure, with a `mix` / `exit` chip on the
-feedback row. `karakuri_console::view::master` derives all four and `input::PROBES` claims five
-controls here. **An amount of zero records no pass at all**, so the row goes dim, the pass costs
-nothing, and with all three at zero the frame is bit for bit the frame this program drew before the
-chain existed — `tests/master.rs`'s `a_chain_at_zero_is_the_frame_with_no_chain` holds it.
-
-**What it costs, because a change to the frame path names a number.** Four frame-sized
-`Rgba16Float` targets, allocated at build and at resize and never when a parameter moves: 28.1 MB at
-1280x720, which is what a full deck of four slots costs. Per output texel and only for a pass that
-runs: feedback 2 loads and a multiply-add; bloom 19 fetches over two passes; rgb shift 1 load and 2
-samples; and one frame-sized copy when feedback is on. **Measured** by
-`examples/master_cost.rs` on this machine (Metal, Apple M4 Pro, 2026-09-09), over an empty
-submission's own 0.087 ms: feedback 0.38 ms at the mix cut and 0.41 ms at the exit cut, bloom
-0.80 ms, rgb shift 0.34 ms, all three together 1.14 ms — 6.8% of a 60 Hz frame.
-
-**The far end of that chain is drawn and is another bay's**: the tone mapper's `exposure` is a
-control in the transport row, which is ADR-0224's consequence honoured to the letter, and a reader
-of this section alone would not learn it.
-
-**The bay's prose, as tooltips.** *Master, and the two levels that are not one level* — **seven
-paragraphs, not four**: what `out` is the level of and what `exposure` is; that the cost of saying
-so before the chain existed has been paid off; what the chain is, said once; that feedback is the
-one pass that reads a frame instead of a value; that a hand moves the fader and it is the only route
-it has; that the three rows below it end in one record where the fader ends in another; and why
-`out` is a handled fader and `exposure` a handleless track. The three chain rows' tips were corrected in `71419c2` to say the chain was not
-built and are rewritten again to say what a press does. **This item is delivered.**
+What M5.8 left owed is rescheduled, and none of it is a control this bay has not built. **A writable
+`L5`, and the operator-written frame effects it would buy, is deferred rather than refused, and it is
+a deferral on record rather than a debt**: ADR-0317 makes the case — a language change bought to draw
+three rows the console already draws — and [`docs/ir-spec.md`](ir-spec.md) states what would revive
+it, somebody writing the compositing down, after which this chain becomes three procedures in
+`examples/` and nothing in the vocabulary or the record moves. **The bay's `+ add` is the arena's gap
+and is already under *What no sub-milestone owns***, as the arena half of *Adding or removing a node*
+and as *The mock's six body controls*: the panel cannot grow a bay's body while it runs, and
+[the console page](manual/console.html) calls it one gap drawn in five places — this row, the Outputs
+row's `+ add output`, the sequencer's `+ lane`, the library's `+` on the scope list and the
+inspector's `2 up`. What that row owed was the note, and the note is written. **What a master chain
+saved under a name looks like — ADR-0227's library tier, which ADR-0317 leaves untouched — is under
+*Mx — TODO***, having no row on the operations page and so never having been in this exit. **The
+*decisions nobody has taken* entry on the feedback cut has left that list by being decided**, which
+was that section's own pass and is done. And **two things this item carried as owed are delivered
+rather than rescheduled**: the CLI's `MasterOut` and `MasterChain` replay arms, which landed with
+ADR-0317 and closed a stream this program wrote and could not reproduce, and the bay's tooltip item,
+which `71419c2` found delivered rather than owed and ADR-0317's pass rewrote again to say what a
+press does.
 
 #### M5.9 — Sequencer
 
