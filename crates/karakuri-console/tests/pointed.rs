@@ -69,7 +69,7 @@ fn console(viewport: Rect) -> Panel {
 
 /// The bay with the mock's names, pointed at `at` or at nothing.
 fn bay(panel: &Panel, at: Option<Pointed<'_>>) -> LibraryBay {
-    library(panel.layout(), SCOPES, &mock(), None, at).expect("the library bay lists its rows")
+    library(panel.layout(), SCOPES, &mock(), None, at, 0.0).expect("the library bay lists its rows")
 }
 
 /// A console with a library in it and a folder chosen — the state a drop
@@ -202,7 +202,7 @@ fn a_console_with_no_chips_still_says_where_it_is_pointed() {
         path: WHERE,
         incoming: false,
     };
-    let bay = library(panel.layout(), &[], &mock(), None, Some(at))
+    let bay = library(panel.layout(), &[], &mock(), None, Some(at), 0.0)
         .expect("a bay with rows in it and no chips over them");
 
     assert_eq!(

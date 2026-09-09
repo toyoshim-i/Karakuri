@@ -145,14 +145,14 @@
                 <div class="lib-row menued"><span class="star off">&#9734;</span><span>night01</span><span class="dim">14:58</span><div class="rowmenu"><div class="item" data-tip="Load night01 &mdash; the row this menu was opened on, and not the cursor&#39;s row &mdash; onto deck A. It is the same operation the `load` button asks for and the same one `l` asks for, arriving by a third route: the item names the deck outright, so this is the one way in that reads neither of the two marks. Picking it moves nothing else &mdash; not the selection, not the pulldown&#39;s letter, not the cursor &mdash; which is why a Set can be sent to a deck without first aiming anything at it. Nothing is refused: a deck that is on air takes this exactly as it takes the button. &#8853; MIDI: unassigned &mdash; every target a map can name carries a slot, a range or a word from a closed list, and a Set id is none of the three.">Load to Slot A</div><div class="item" data-tip="The same, onto deck B. Four items and not one, because the deck is what the item says: a menu that named a deck by stepping would be the pulldown again, one bay down and with nothing on screen to read it off.">Load to Slot B</div><div class="item" data-tip="The same, onto deck C.">Load to Slot C</div><div class="item" data-tip="The same, onto deck D &mdash; and this item is only here because the mixer is drawing four strips. A deck the mixer draws no strip for is not offered, which is the count `0`&ndash;`3` are refused on and the count the pulldown&#39;s list is cut to: on a three&#8209;slot deck this menu has three loads in it and not four.">Load to Slot D</div><div class="rule"></div><div class="item" data-tip="Write night01 out as a file to hand somebody, and it is the sending half of `send a Set to somebody, and take one in`. What is written is that Set with every source it names inlined after it &mdash; a `.kbset`, the form this store holds and the form that travels, so it loads on a machine whose library has never held the material. One source missing refuses the whole thing and names the node, because a bundle short of a procedure looks self&#8209;contained and is not, and the machine you sent it to is the worst place to find that out. &#8853; Picking it opens the system&#39;s own save dialog, which is where the file is named: the file does not exist yet, and a file that does not exist is the one thing no listing on this panel can point at. It opens in the folder this bay is pointed at where one has been dropped, and in whatever place the platform opens on where none has. A file already there is the dialog&#39;s own question and never this program&#39;s &mdash; asking again on this side would be two programs asking one question. Escape puts it away and nothing is written, and the panel says that rather than going quiet. &#8853; The frame loop does not stop while it is up: the dialog is asked for asynchronously and the panel goes on drawing behind it, so the beat still travels and the picture is still live. What it does take, for as long as it is open, is presses aimed at this window &mdash; which is the price, and it is bounded by the operator having opened it, one key closing it, and nothing about any deck being touched either way. &#8853; MIDI: unassigned &mdash; a read&#39;s answer has nowhere to land on a controller, and a map line names a slot, a range or a word from a closed list, which a Set id and a path are none of.">Save as a kbset</div></div></div>
                 <div class="lib-row"><span class="star off">&#9734;</span><span>strand_bloom</span><span class="dim">14:12</span></div>
               </div>
-              <div class="lib-foot"><span>5 of 27</span><span class="sep"></span><span class="pill" data-tip="Read what the Set under the cursor holds and declares, opened under its row &mdash; every knob with its range and default, the element count, and what it emits. Open here, on drift_night, and a press closes it; move the cursor and the reading moves with it, so one row is open at a time and never a second list. It fetches no source and compiles nothing, which is why it is a press rather than a load: the answer is already beside the Sets, in the cards the store keeps. It carries no lit state of its own, because the block above it is the state: nine lines that were not there a moment ago say more than a chip changing colour, and the one colour this bay spends on an act is spent on the load beside it. &#8853; MIDI: unassigned &mdash; every target a map can name carries a slot, a range or a word from a closed list, and a Set id is none of the three.">read</span><span class="pill lav" data-tip="Load the Set under the cursor into the deck named two capsules along &mdash; deck A here, which is what the pulldown says and not what the selection says. The press lands there and moves nothing else: the solid ring stays on whichever strip it was on, and `l` goes on loading onto the deck the keys are addressed to, so the two routes can be aimed at two different decks and each of them says which. Nothing refuses it: what may be asked for is the instrument&#39;s to decide, and what this control owes instead is to say where it lands before you press it, which is the letter beside it. With no row under the cursor there is nothing to load, and the press says so rather than asking for one. Dragging a row onto a strip is the same command a third way, with the deck named by the strip you drop on rather than by either mark, and the four deck preview cells in the Program bay take the drop too. What the press does to the slot is re&#8209;point its source rather than hand the Set in: the Set&#39;s procedures are written out into that deck&#39;s own copy under `&lt;store&gt;/scratch/`, where its watcher is already looking, and the worker reads them and compiles them off the render thread. So a load is the path an edit already took &mdash; it lands at a frame boundary and is judged for thirty frames against the budget like every other build, and a Set that cannot hold the frame is rolled back on its own onto what the deck was playing, at the t it was parked at. The Staging lane under this bay says which of those happened and on which deck, because a load is a build. Nothing is ever written where the presets are. &#8853; MIDI: unassigned &mdash; every target a map can name carries a slot, a range or a word from a closed list, and a Set id is none of the three.">load</span><span>&rarr;</span><span class="pill" data-tip="Which deck a press on `load` lands on, and it is this bay&#39;s own mark rather than the deck selection. Click for the decks the mixer is drawing strips for and pick one; a pick names the deck and loads nothing, so a load you are aiming somewhere else is two presses and a load onto the deck you are already on is one. A deck the mixer is drawing no strip for is not in the list, which is the count `0`&ndash;`3` are refused on and the same one that keeps a preview cell whose letter names no slot out of the drop. It opens on A and stays where you put it: changing the scope, narrowing the listing or walking the cursor leaves it alone, because what it names is a deck and none of those is about a deck. It is not drawn in lavender and that is the point &mdash; lavender on this panel is the deck the keys are addressed to, and this is the one letter on the console that is allowed to name a different one. &#8853; MIDI: unassigned, and not for the reason the capsule beside it gives: a map line names a deck perfectly well &mdash; `note &rarr; residency N live|priming|allocated` is one &mdash; so a Set id being unnameable is not what is in the way here. This is a pointer inside one console, like the selection and like the cursor in the list above, and a map addresses the instrument rather than the marks a console keeps for its own hands. Select a deck carries the same empty column on the operations page for the same reason.">A &#9662;</span></div>
+              <div class="lib-foot"><span data-tip="How many Sets this bay is showing whole, out of how many the scope holds. Five of twenty&#8209;seven here, so twenty&#8209;two are out of sight and the wheel over the bay is what reaches them: three rows a notch, and the first number falls as a row leaves the top or the bottom. It counts what is <em>whole</em> &mdash; a row cut by the list&#39;s edge is drawn as far as the list goes and is not counted &mdash; so this number and what you can see agree, and `27 of 27` can never be read off a bay with a row hanging over an edge. The reading a `params` press opens is part of what scrolls: it sits between two rows rather than over them, so it moves with them and the rows it pushes down are reachable rather than lost. There is no bar down the side and this is the mark instead, for the reason the inspector&#39;s count is. The position is this bay&#39;s own, like the cursor in the list above: no operation names it, it is not part of the arrangement, and dragging the bay shorter and back leaves it exactly where it was. A readout, and there is nothing here to press. &#8853; MIDI: unassigned &mdash; a readout is not an operation, so there is no target for a map line to name.">5 of 27</span><span class="sep"></span><span class="pill armed" data-tip="What the Set under the cursor declares, opened under its row &mdash; every knob with its range and default, the element count, and what it emits. It is a toggle and it is drawn as one: lit while the block is open, plain while it is shut, so the pill says which of the two the next press will be before you make it. Open here, on drift_night. Move the cursor and the reading moves with it, so one row is open at a time and never a second list. It fetches no source and compiles nothing, which is why it is a press rather than a load: the answer is already beside the Sets, in the cards the store keeps. &#8853; It is called `params` because that is what the block under it is &mdash; a list of the knobs this Set publishes. `read` said what the press does to the file and left an operator to find out what appears; `expand` says what the block does and would be the only control on this panel named for a motion rather than for what it shows. &#8853; The light is mint and not lavender: lavender here is the deck the keys are addressed to and this bay spends it on `load`, which is the press this bay exists for. Mint is what this console draws a control that is on, which is what this one is. &#8853; MIDI: unassigned &mdash; every target a map can name carries a slot, a range or a word from a closed list, and a Set id is none of the three.">params</span><span class="pill lav" data-tip="Load the Set under the cursor into the deck named two capsules along &mdash; deck A here, which is what the pulldown says and not what the selection says. The press lands there and moves nothing else: the solid ring stays on whichever strip it was on, and `l` goes on loading onto the deck the keys are addressed to, so the two routes can be aimed at two different decks and each of them says which. Nothing refuses it: what may be asked for is the instrument&#39;s to decide, and what this control owes instead is to say where it lands before you press it, which is the letter beside it. With no row under the cursor there is nothing to load, and the press says so rather than asking for one. Dragging a row onto a strip is the same command a third way, with the deck named by the strip you drop on rather than by either mark, and the four deck preview cells in the Program bay take the drop too. What the press does to the slot is re&#8209;point its source rather than hand the Set in: the Set&#39;s procedures are written out into that deck&#39;s own copy under `&lt;store&gt;/scratch/`, where its watcher is already looking, and the worker reads them and compiles them off the render thread. So a load is the path an edit already took &mdash; it lands at a frame boundary and is judged for thirty frames against the budget like every other build, and a Set that cannot hold the frame is rolled back on its own onto what the deck was playing, at the t it was parked at. The Staging lane under this bay says which of those happened and on which deck, because a load is a build. Nothing is ever written where the presets are. &#8853; MIDI: unassigned &mdash; every target a map can name carries a slot, a range or a word from a closed list, and a Set id is none of the three.">load</span><span>&rarr;</span><span class="pill" data-tip="Which deck a press on `load` lands on, and it is this bay&#39;s own mark rather than the deck selection. Click for the decks the mixer is drawing strips for and pick one; a pick names the deck and loads nothing, so a load you are aiming somewhere else is two presses and a load onto the deck you are already on is one. A deck the mixer is drawing no strip for is not in the list, which is the count `0`&ndash;`3` are refused on and the same one that keeps a preview cell whose letter names no slot out of the drop. It opens on A and stays where you put it: changing the scope, narrowing the listing or walking the cursor leaves it alone, because what it names is a deck and none of those is about a deck. It is not drawn in lavender and that is the point &mdash; lavender on this panel is the deck the keys are addressed to, and this is the one letter on the console that is allowed to name a different one. &#8853; MIDI: unassigned, and not for the reason the capsule beside it gives: a map line names a deck perfectly well &mdash; `note &rarr; residency N live|priming|allocated` is one &mdash; so a Set id being unnameable is not what is in the way here. This is a pointer inside one console, like the selection and like the cursor in the list above, and a map addresses the instrument rather than the marks a console keeps for its own hands. Select a deck carries the same empty column on the operations page for the same reason.">A &#9662;</span></div>
             </div>
 
             <div class="bay">
               <div class="bay-head"><span>Staging</span><span>2 waiting</span></div>
               <div class="stage-list">
                 <div class="cand"><span class="dot" style="background:var(--c-lav)"></span><span>veil_02</span><span class="sep"></span><span class="who">you, 14:41</span></div>
-                <div class="cand" data-tip="One candidate, which is one deck slot whose newest build has a verdict outstanding. What the row ends in is that verdict, and it is one of four words. `landed` is on screen and being judged, for thirty frames against the budget. `rolled back` is the watchdog throwing a version out for cost and putting the previous Set back at the t it was parked at &mdash; and not the previous file, so the disk still holds the version that was thrown out. `refused` is a build that failed: the files checked, and the Set they were assembled into would not build. `did not compile` is the checker turning the source down before anything was built &mdash; no Set, no version, nothing in the edit history, and the picture is whatever was already playing. That last row carries the first diagnostic with the line and column it is at, and says how many more there are; every one of them goes to standard output and to the MCP surface as well, because the author of the next attempt may be a program in a loop and a refusal has to carry what that attempt needs. The row is addressed by the deck letter and not by the node: a verdict is over a build, and a rebuild restates every node of the slot. Nothing in it takes a press. &#8853; MIDI: unassigned &mdash; a row is a readout, and a map line names a slot, a range or a word from a closed list."><span class="dot" style="background:var(--c-sun)"></span><span>drift_night&nbsp;b</span><span class="sep"></span><span class="who">agent</span></div>
+                <div class="cand" data-tip="One candidate, which is one deck slot whose newest build has a verdict outstanding. What the row ends in is that verdict, and it is one of four words. `landed` is on screen and was kept: the build reached a frame boundary and held the budget in the same frame it landed on. `rolled back` is the watchdog throwing a version out for cost and putting the previous Set back at the t it was parked at &mdash; and not the previous file, so the disk still holds the version that was thrown out. `refused` is a build that failed: the files checked, and the Set they were assembled into would not build. `did not compile` is the checker turning the source down before anything was built &mdash; no Set, no version, nothing in the edit history, and the picture is whatever was already playing. That last row carries the first diagnostic with the line and column it is at, and says how many more there are; every one of them goes to standard output and to the MCP surface as well, because the author of the next attempt may be a program in a loop and a refusal has to carry what that attempt needs. The row is addressed by the deck letter and not by the node: a verdict is over a build, and a rebuild restates every node of the slot. Nothing in it takes a press. &#8853; MIDI: unassigned &mdash; a row is a readout, and a map line names a slot, a range or a word from a closed list."><span class="dot" style="background:var(--c-sun)"></span><span>drift_night&nbsp;b</span><span class="sep"></span><span class="who">agent</span></div>
                 <div class="cand" style="justify-content:center;color:var(--c-faint)">a rejected candidate costs nothing</div>
               </div>
             </div>
@@ -217,7 +217,7 @@
                     <span class="anchor" data-tip="The anchor: 128 BPM, the tempo this deck was engaged at and what its rate is measured against. Click it to re-anchor &mdash; to call whatever the room is doing now the reference tempo, without the deck's mode changing under you. That is this deck's mode asked for again, which is the one thing the chip on the left cannot say: a cycle starts at the mode after the one you are on, so the state you are in is the state it can never arrive at. &#8853; MIDI: unassigned &mdash; a pad naming a mode re-anchors the day one exists, because naming the mode a deck is already in is all re-anchoring ever was.">T<b>128</b></span>
                     <span class="scrub idle" data-tip="Scrub, a quarter beat a press. Inert on this deck, and it keeps its shape and says why rather than going grey: a scrub is an offset added to the room's position under beat sync, and this deck is on tempo because its material accumulates. Nothing here re-runs a deck's history to place it. &#8853; MIDI: unassigned &mdash; it is the one operation that moves by an amount, and a control change can only set."><i>&#9666;</i><i>&#9656;</i></span>
                     <span class="sep"></span>
-                    <span class="mini sel" data-tip="Composite: on. The deck's three renderers are folded into one result rather than overdrawn, which is what makes the chips below a choice of one rather than a list of all of them. Click to overdraw them instead. &#8853; MIDI: unassigned.">composite</span>
+                    <span class="mini sel" data-tip="Composite: on. The deck's three renderers are folded into one result rather than overdrawn, which is what makes the chips below a choice of one rather than a list of all of them. Click to overdraw them instead, and click again to fold them back &mdash; the press names the state it is asking for rather than flipping one, so two hands on one deck cannot disagree about where it is. &#8853; A press re&#8209;aims this slot, and that is the whole mechanism: how a deck lays its renderers up is one field of what the slot's watcher is pointed at, so the press restates the rest of that aim and sends it, and the worker rebuilds the slot off the render thread. The build lands at a frame boundary and is judged there and then, on what one frame of that Set was measured to cost, exactly as an edited file and a library load are &mdash; and a version that cannot hold the frame is rolled back on its own onto what the deck was playing. Compositing costs a frame-sized target per renderer, so that judgement is not a formality: this is the one control on the panel where the picture is what asks for the memory. Nothing is installed into the slot and nothing allocates on the render thread, and the parameters your hands have moved cross the rebuild. &#8853; The Staging lane under the library is where the verdict is, on the deck it happened to, because a composite press is a build like every other build. Which renderer was live is restated with the layering, so a deck taken to overdraw and folded back comes back on the same one. &#8853; MIDI: unassigned.">composite</span>
                   </div>
 
                   <div class="node-group wild">
@@ -927,6 +927,89 @@
           changes nothing either way, because a deck that grows a second one
           needs the control already where it was.
         </p>
+        <p>
+          <strong>Pressing it re-aims the slot, and that is worth saying out
+          loud because it looks like a setting and is a rebuild.</strong> How a
+          slot lays its renderers up is one field of the description its
+          watcher is pointed at &mdash; beside the files, the fold, the
+          capacity, the salts, the camera and the wiring &mdash; so a press
+          restates the rest of that description with this one field changed and
+          hands it over. The worker recompiles the slot off the render thread,
+          the result lands at a frame boundary, and it is then judged for thirty
+          frames against the frame budget exactly as a saved file and a library
+          load are. A build that cannot hold the frame is rolled back on its own
+          onto what the deck was playing. <strong>Nothing is installed and
+          nothing allocates on the render thread</strong>, and the values your
+          hands have moved cross the rebuild rather than snapping back to what
+          the files declare.
+        </p>
+        <p>
+          <strong>That is the reason this is a chip and not a switch, and the
+          reason the verdict is somewhere else.</strong> Compositing gives every
+          renderer its own frame-sized target, so the press is asking for memory
+          and for a fold pass, and this instrument does not let anything reach
+          the screen that nothing measured. What happened to a press is
+          therefore in the <em>staging</em> lane, on the deck it happened to,
+          like every other build &mdash; and the deck head chip goes on saying
+          what the deck is doing rather than what was asked for, so the two can
+          be read against each other. Which renderer was live is restated with
+          the layering, so overdrawing a deck and folding it back comes back on
+          the renderer you left it on.
+        </p>
+        <p>
+          <strong>The capacity and the salts sit in that same description and
+          have no control here.</strong> A geometry's element count and the salt
+          that decides which randomness it got are fields of the aim beside the
+          layering, so the mechanism that would move them is the one this chip
+          just used, and no writer into a live Set is wanted or would be
+          allowed. What is missing is the control, and it is missing on purpose
+          until two questions are answered. A capacity is a number in a declared
+          range, which on this panel is a parameter row's track &mdash; but a
+          parameter track dragged is a uniform write a frame and a capacity
+          track dragged would be a <em>rebuild</em> a frame, which is the one
+          thing this instrument refuses to pay. And an aim carries one capacity
+          for the whole slot where the operation addresses a node, so a row
+          drawn under one geometry of a Set holding two would be saying
+          something the slot cannot carry. Until both have answers there is
+          nothing drawn here, which is a gap this page names rather than a
+          control it is quietly missing.
+        </p>
+      </div>
+
+      <div class="note">
+        <h3>A node's source is not read or written here, and that is settled</h3>
+        <p>
+          <strong>There is no source area in this bay and there is not going to
+          be one.</strong> <em>Read one node's source</em> and <em>check and
+          write one node's source</em> both carried a panel route on the
+          <a href="operations.html">operations</a> page that pointed at this
+          bay; on 2026-09-09 they stopped, and the two rows now say the panel
+          is not a way in at all. A model has both halves over MCP and is where
+          the work is done.
+        </p>
+        <p>
+          <strong>The reason is the console's own bound and not a shortage of
+          room.</strong> This console takes letters in two places &mdash; an
+          arrangement's name, and a Set's id typed into a pane head above
+          &mdash; and each of them is bounded to <em>one path component</em>.
+          A procedure is unbounded text, so an editor here is a third flow
+          rather than the second one again, and it is exactly the bound those
+          two were held to that it would break. Reading has no separate answer,
+          because a source worth reading on a live panel is a source you are
+          about to change: a reader with no writer beside it is a viewer, and a
+          viewer of one node is what the file already is.
+        </p>
+        <p>
+          <strong>What replaces it is the file, and the loop is already
+          closed.</strong> Open the node in whatever editor you use and save
+          it; the slot's watcher picks the save up, the worker builds it off the
+          render thread and it swaps at a frame boundary &mdash; which is
+          <em>edit the file instead</em>, and it is the same check, the same
+          worker and the same budget a write over MCP gets. What the panel owes
+          is the other end of that, and it has it: the staging lane says whether
+          the build landed, was rolled back for cost or never compiled, and the
+          library's fifth scope walks the versions back onto the node.
+        </p>
       </div>
 
       <div class="note">
@@ -1348,7 +1431,10 @@
           &mdash; every key is a letter of the name, including the ones that are
           panel keys the rest of the time. Return finishes it and esc backs out
           with nothing saved, which is the one place on this panel where esc
-          does not quit.
+          does not quit &mdash; and quitting is what esc is going to stop doing
+          everywhere else, leaving the window&#39;s own close as the way out. What
+          esc means here is what it will mean throughout: one step out of
+          whatever has the keyboard.
         </p>
         <p>
           <strong>A name is letters, digits, <code>-</code> and <code>_</code></strong>,
@@ -1590,7 +1676,7 @@
           on a node head. What the procedure <em>calls itself</em>, which is
           its own <code>proc</code> name, and the artifact's short hash where a
           file declares no name. Whether it is <em>on screen</em>: landed,
-          rolled back for costing too much, refused, or did not compile, which
+          rolled back for costing more than one frame may, refused, or did not compile, which
           is <em>find out
           what a write did</em> read against one node &mdash; a candidate you
           cannot see is not one you can judge. And <em>when</em> it arrived,
@@ -1712,12 +1798,12 @@
           whole time.
         </p>
         <p>
-          <strong>The reading it was reporting is still reachable, and it is
-          still worth having.</strong> Load a Set into a parked deck with
-          <code>l</code>, or edit deck C's own scratch file, and a build lands
-          on a slot that is not being drawn: its trial is frozen, its verdict
-          is outstanding, and its row stays until that deck goes on air.
-          <strong>That is now something an operator did on purpose</strong>
+          <strong>The reading it was reporting is no longer reachable at
+          all.</strong> Load a Set into a parked deck with <code>l</code>, or
+          edit deck C's own scratch file, and a build still lands on a slot
+          that is not being drawn &mdash; but it is judged there, on its own
+          cost, and its row clears with the verdict like any other.
+          <strong>What used to make it stay was something an operator did on purpose</strong>
           rather than the by-product of every save, and the row is the only
           thing in this instrument that says so. <strong>It is still an
           argument for <em>keep</em></strong>, and a narrower one than this
@@ -2580,12 +2666,12 @@
           is the same operand the pill beside it already uses</strong> &mdash;
           so the route costs one chip in the foot and nothing else, which is
           the argument <em>How a Set reaches a deck</em> won on and is won here
-          again. <code>read</code> opens what the row under the cursor
+          again. <code>params</code> opens what the row under the cursor
           declares, underneath that row; a second press closes it; the arrow
           keys move the cursor and the reading moves with it. <strong>One row
           is open at a time</strong>, which is what keeps this a mode of the
-          list rather than a second list, and the height it costs lands on the
-          bay in this column that absorbs.
+          list rather than a second list, and the height it costs comes off the
+          rows, which is what the foot's count then says.
         </p>
         <p>
           <strong>It is not a second inspector, and the difference is not a
@@ -2629,17 +2715,39 @@
           which.
         </p>
         <p>
-          <strong>And the chip itself does not light.</strong> A toggle usually
-          owes you a lit state, and this one pays that debt in a louder
-          currency: nine lines appear under the cursor, which is not a thing
-          anybody misses. Lighting it would also have spent this bay's one
-          accent on the smaller of its two acts &mdash; <code>load</code> is lav
-          because it is the press this bay exists for, and a second lav chip
-          beside it would make the colour mean two things at a width of eight
-          characters. The pulldown beside <code>load</code> is the same
-          arithmetic done a second time and coming out the same way: it names
-          the deck rather than performing the act, so it is drawn as this chip
-          is.
+          <strong>It is called <code>params</code>, and it was called
+          <code>read</code> until 2026&#8209;09&#8209;09.</strong> The word was
+          unclear and the reason is worth keeping: <em>read</em> names what the
+          press does to the file, and an operator who has not pressed it has no
+          way to know what appears. <code>params</code> names the block &mdash;
+          the knobs this Set publishes, which is what nine of the ten lines
+          under it are &mdash; so the control says what you will be looking at.
+          <strong><code>expand</code> was the other candidate and it lost on the
+          same test</strong>: it names the <em>motion</em>, and nothing else on
+          this panel is named for one. Every other capsule here is a noun or a
+          verb about the instrument &mdash; <code>load</code>, <code>go</code>,
+          <code>rec</code>, <code>keep</code>, <code>solo</code> &mdash; and a
+          control whose word is the animation it plays would be the first.
+        </p>
+        <p>
+          <strong>And it is drawn as a toggle now, which it was not.</strong>
+          The block below it is still the loudest thing about the state &mdash;
+          nine lines that were not there a moment ago say more than a chip
+          changing colour &mdash; but that was an argument for the block being
+          enough, not for the chip being wrong, and rule 03 asks a symbol to say
+          what state it is in. So it is lit while a reading is open and plain
+          while none is, which is what every other two-state capsule on this
+          panel does. <strong>The light is mint.</strong> Lavender is
+          <em>the deck the keys are addressed to</em> and this bay spends it on
+          <code>load</code>, which is the press it exists for &mdash; a second
+          lavender chip beside it would make the colour mean two things at a
+          width of eight characters, which is the objection this paragraph used
+          to make against lighting it at all. Mint is what this console draws
+          <em>on</em> in, and pink is <em>live</em>, which a reading is not: a
+          file is being looked at and nothing is on air. The pulldown beside
+          <code>load</code> stays plain, and that is not an inconsistency: it
+          names a deck rather than being in one of two states, so there is no
+          <em>on</em> for it to be.
         </p>
         <p>
           <strong>Every line is read off a card, which is the whole of what the
@@ -2677,6 +2785,77 @@
           closed list, and a Set id is none of the three, which is the same
           sentence that keeps <code>load</code> off a map and is the same
           operand behind both.
+        </p>
+      </div>
+
+      <div class="note">
+        <h3>The library scrolls, and the foot says how much it is not showing</h3>
+        <p>
+          A store holds more Sets than a bay holds rows &mdash; twenty-seven
+          against five in the mock, and the number a real library reaches is
+          not bounded by anything &mdash; so <strong>the list scrolls</strong>.
+          The scope chips, the path row and the two filter fields stay where
+          they are, and so does the foot: they say <em>which</em> library is
+          being read and <em>how much of it</em> you are looking at, and both
+          are only legible while they are on screen.
+        </p>
+        <p>
+          <strong>The wheel over the bay is the way in</strong>, three rows a
+          notch, and it is the same notch the inspector's panes take because it
+          is the same wheel and the same row height. It is aimed at the whole
+          bay rather than at the list, so a hand resting over the scope chips
+          turns the listing under them. <strong>The keyboard's way in is not
+          bound here.</strong> The arrows already walk this bay's items and they
+          walk them <em>inside what is drawn</em> &mdash; the cursor cannot
+          leave the rows on screen, because a cursor on a row nobody can see
+          sits under a pill saying a press will load it. Nothing the keyboard
+          could reach before is out of reach now: the rows past the end of the
+          list were unreachable by any means, and they are one notch away. A
+          key that scrolls is owed with the rest of that walk, and inventing
+          one here would be the panel deciding what
+          <a href="operations.html">the operations page</a> reserved.
+        </p>
+        <p>
+          <strong>The count in the foot is what says how much is out of
+          sight</strong> &mdash; <code>5 of 27</code>, which is the number this
+          bay has always drawn and which now has a second job. It counts what
+          is <em>whole</em>: a row cut by the top or the bottom edge is drawn as
+          far as the list goes and is not counted, so the number and the picture
+          cannot disagree and <code>27 of 27</code> means nothing is out of
+          sight. That is rule 04 met by the one part of it that is hard &mdash;
+          <em>says how much</em> &mdash; and it is why the count is rows and not
+          pixels: what an operator counts is items.
+        </p>
+        <p>
+          <strong>The reading scrolls with the rows, because it is between two
+          of them.</strong> A <code>params</code> block is a mode of the list
+          rather than a card over it, so the rows it pushes down are pushed and
+          not lost, and the block itself is part of what there is to scroll
+          through. Before there was a position, a reading opened near the
+          bottom of a short bay pushed rows off the end with nowhere to reach
+          them; now the block and the rows under it move together and the foot
+          says how many are left.
+        </p>
+        <p>
+          <strong>There is no bar down the side.</strong> The reason is the
+          inspector's and is not repeated here except to say that it is the same
+          reason: a bar you can drag is a control, which owes a row on the
+          operations page and a key and a map line beside it, and a bar you
+          cannot drag is a shape that looks like a control and refuses the hand.
+          This console draws no scrollbar anywhere and the library does not add
+          the first one.
+        </p>
+        <p>
+          <strong>The position is this bay's own, and a resize does not rewrite
+          it.</strong> It is the cursor above it and the pane positions one bay
+          over: no operation names it, nothing outside the console could be the
+          record of what it is, and it is not part of the arrangement, so
+          saving one does not carry it and restoring one does not move it. Drag
+          the divider up and the bay draws fewer rows of the same position;
+          drag it back and <strong>what you scrolled to is still there</strong>,
+          exactly and not nearly. <strong>One position and not one per
+          scope</strong>: only one scope is ever being read, and the press that
+          changes the listing is exactly the moment an operator wants the top.
         </p>
       </div>
 
@@ -2818,7 +2997,12 @@
           is not the canvas's captures panel-coloured bars where black would
           read as an ordinary letterbox &mdash; size the window to the canvas
           and there are none. That is what <code>a</code> is for at the engine's
-          own window, and this one has not got it yet.
+          own window, and <strong>this one does not get it</strong>: a size is a
+          pair of viewport pixels and a key press cannot mean one, which is the
+          same sentence that leaves <em>Move a boundary</em> with no key. The
+          engine window's <code>a</code> asks for the canvas's size rather than
+          naming a size, and that keyboard is its own. Here you drag the window,
+          and a solo'd program view is the region you capture.
         </p>
       </div>
 

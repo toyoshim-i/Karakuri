@@ -10087,14 +10087,36 @@ const STAR_WAIST: f32 = 0.46;
 // -- what one Set holds and declares, opened under its row ------------------
 
 /// **The word the foot's first capsule reads**, which is the mock's own
-/// `read` — the chip between the count and the `load` button.
+/// `params` — the chip between the count and the `load` button.
 ///
-/// **It carries no lit state**, which the note *Reading a Set before you spend
-/// a load on it* argues rather than leaves out: a run of lines appears under
-/// the cursor, *"which is not a thing anybody misses"*, and a second lav
-/// capsule beside [`LOAD_PILL`] would make this bay's one accent mean two
-/// things at a width of eight characters. So it is [`pill_at`]'s hairline
-/// round `--c-dim`, open or shut.
+/// # It was `read` until 2026-09-09
+///
+/// The maintainer's own reading of the word: *"readだと意味わかりづらいな"* —
+/// `read` is unclear. It names what the press does to the **file**, and an
+/// operator who has not pressed it has no way to know what appears; `params`
+/// names the **block**, which is what nine of the ten rows under it are. The
+/// other candidate was `expand`, and it lost on the same test: it names the
+/// *motion*, and nothing else on this panel is named for one — `load`, `go`,
+/// `rec`, `keep`, `solo` are all nouns or verbs about the instrument
+/// ([ADR-0312](../../../docs/adr/0312-the-params-pill-is-a-toggle-and-the-library-bay-scrolls.md)).
+///
+/// # It carries a lit state now, and it did not
+///
+/// This said *"it carries no lit state"*, and the argument it carried is kept
+/// where it is still true: a run of lines appears under the cursor, *"which is
+/// not a thing anybody misses"*, so the block is the loudest part of the
+/// state. **That was an argument for the block being enough and not for the
+/// chip being wrong**, and rule 03 of [the manual](../../../docs/manual/index.html)
+/// asks a symbol what state it is in. So it is [`armed_pill_at`]'s mint while a
+/// reading is open and [`pill_at`]'s hairline round `--c-dim` while none is.
+///
+/// **Mint and not lavender**, which is the half of the old argument that
+/// survives intact: lavender is *the deck the keys are addressed to*, this bay
+/// spends it on [`LOAD_PILL`], and a second lavender capsule beside it would
+/// make the colour mean two things at a width of eight characters. Mint is what
+/// this console draws *on* in. **Pink was the other pressed treatment and is
+/// wrong here**: pink is *live* on this panel — a deck on air, a recording
+/// running — and a Set being looked at is not live.
 ///
 /// **The note says nine lines and the mock draws ten**, and neither number is
 /// transcribed here for that reason: how many rows a reading is, is
@@ -10111,7 +10133,7 @@ const STAR_WAIST: f32 = 0.46;
 /// the mock meets one of them and not the pair, and the page is where that
 /// would be repaired; it is written down here because this is the file that
 /// had to choose.
-const READ_PILL: &str = "read";
+const PARAMS_PILL: &str = "params";
 
 /// **The two words at the head of a reading**: what the row under the cursor
 /// declares, and how many controls that comes to.
@@ -10328,7 +10350,7 @@ impl Block {
     }
 }
 
-/// **What a press on the `read` chip asks for.**
+/// **What a press on the `params` chip asks for.**
 ///
 /// Two answers because the press means two different things and only one of
 /// them is an operation. **Opening asks the host to read a Set** — the
@@ -10675,7 +10697,7 @@ impl Scope {
     /// five and false of [`Scope::History`], whose rows are versions.
     ///
     /// **Every control in this bay whose operand is a Set id asks this**, and
-    /// it is one question rather than four: the star, the `read` chip, the
+    /// it is one question rather than four: the star, the `params` chip, the
     /// `load` button and the carry all read the row under a cursor as an id,
     /// and a version handed to any of them would name a Set no store holds.
     /// See [`View::sets`] and [`View::versions`], which is where the answer is
@@ -10999,23 +11021,27 @@ fn chip_width(ctx: &egui::Context, name: &str) -> f32 {
 ///
 /// # The foot's number is the mock's own, read the mock's way
 ///
-/// `5 of 27` is how many rows are listed against how many the scope holds, and
-/// both halves are here: the total is what the harness handed over, and the
-/// count is how many rows the bay had room for. So a library taller than its
-/// list says so in the one place the mock puts it, and **this bay** does not
-/// scroll — which is honest, because it has no scroll position and inventing
-/// one here would be a control.
+/// `5 of 27` is how many rows are drawn **whole** against how many the scope
+/// holds, and both halves are here: the total is what the harness handed over,
+/// and the count is [`LibraryBay::rows`]. So a library taller than its list
+/// says so in the one place the mock puts it.
 ///
-/// **The crate has one now and it is not this bay's.** An Inspector pane
-/// scrolls ([`InspectorPane::scroll`],
-/// [ADR-0307](../../../docs/adr/0307-the-inspectors-pane-scrolls-and-the-position-is-the-panes-own.md)),
-/// so the sentence this paragraph used to end with — *there is no scroll
-/// position anywhere in this crate* — is no longer true and is narrowed here
-/// rather than left to be read as one. What is unchanged is the reason **this
-/// list** does not have one: a pane's position is the console's own state
-/// reached by the wheel, and this bay's list is walked by a cursor that a load
-/// reads, so a row out of reach here is a row a press would name and not one a
-/// hand could see.
+/// **And what is out of sight is reachable, which it was not.** This paragraph
+/// said **this bay** does not scroll — *"which is honest, because it has no
+/// scroll position and inventing one here would be a control"* — and then, once
+/// an Inspector pane had one
+/// ([ADR-0307](../../../docs/adr/0307-the-inspectors-pane-scrolls-and-the-position-is-the-panes-own.md)),
+/// that the reason **this list** had none was unchanged. Both are gone: the bay
+/// scrolls, the position is [`View::library_scroll`], and the wheel over the
+/// bay is the way in
+/// ([ADR-0312](../../../docs/adr/0312-the-params-pill-is-a-toggle-and-the-library-bay-scrolls.md)).
+///
+/// **What the old argument got right is what the count still does.** A row out
+/// of reach *was* a row a press would name and a hand could not see, and that
+/// is exactly the failure the pair [`rows`](Self::rows) and
+/// [`drawn`](Self::drawn) is arranged against: the cursor is held inside the
+/// rows the bay is drawing ([`View::walk`]), a press outside the list reaches
+/// no row at all, and the foot counts the whole ones.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LibraryBay {
     /// `.scopes`: the row of chips between the bay head and the list, one
@@ -11059,8 +11085,28 @@ pub struct LibraryBay {
     /// row and above the foot, inside [`size::LIB_LIST_PAD`], where the rows
     /// are laid from the top with no gap between them.
     pub list: Rect,
-    /// **How many rows are drawn**, which is how many fit in [`list`](Self::list) —
-    /// never more than [`total`](Self::total).
+    /// **How many rows this bay is drawing whole**, which is the `n` of the
+    /// `n of m` in its foot — rule 04 of
+    /// [the manual](../../../docs/manual/index.html): *"A list that showed you
+    /// part of itself says so and says how much."*
+    ///
+    /// # It is the readout's number and not the walk's
+    ///
+    /// [`LibraryBay::drawn`] is what is painted and what a press is hit-tested
+    /// against, and it is the wider of the two: a row cut by the top edge or
+    /// the bottom one is drawn as far as the list goes and can be pressed
+    /// where it is drawn. This counts the ones that are **whole**, so that
+    /// `m of m` means *nothing is out of sight* and can never be read off a
+    /// bay with a row hanging over an edge. [`InspectorPane::shown`] is the
+    /// same pair one bay over, and for the same reason
+    /// ([ADR-0312](../../../docs/adr/0312-the-params-pill-is-a-toggle-and-the-library-bay-scrolls.md),
+    /// [ADR-0307](../../../docs/adr/0307-the-inspectors-pane-scrolls-and-the-position-is-the-panes-own.md)).
+    ///
+    /// **It used to be how many were drawn, and the two were one number**,
+    /// because there was nowhere to scroll to: a listing longer than the list
+    /// simply stopped, and the rows past the end were unreachable by any
+    /// means. At rest the two are still one number, so every reading of the
+    /// foot that was true before is true now.
     ///
     /// **Zero is a state now, and it is the one the scope row bought.** A
     /// scope that holds nothing is a question that has been asked and
@@ -11071,13 +11117,46 @@ pub struct LibraryBay {
     /// above it is asking. A bay with no *room* for a row is still no bay at
     /// all — see `library_box`.
     pub rows: usize,
+    /// **How far down the listing this bay has come, as it is drawn** — the
+    /// clamped position, and never the stored one.
+    ///
+    /// # Clamped here and stored nowhere
+    ///
+    /// The clamp is `0 ..= (content - list height)`, and both ends of that
+    /// range move when a divider moves — so a clamp written back into [`View`]
+    /// would be a resize rewriting what an operator scrolled to. That is
+    /// [`InspectorPane::scroll`]'s rule one bay over and
+    /// [P-0082](../../../docs/principles/0082-looking-never-writes-back.md):
+    /// **a shorter bay draws less of the same position and stores nothing**,
+    /// so dragging it back reproduces what was on screen exactly rather than
+    /// nearly.
+    ///
+    /// What [`View::scroll_library_by`] clamps is the *content*, which is a
+    /// reading of the listing rather than of a viewport.
+    pub scroll: f32,
+    /// **How tall the whole listing comes to**, the reading block included,
+    /// whether or not any of it is on screen — [`library_content_h`].
+    ///
+    /// It is the number [`scroll`](Self::scroll) is clamped against and the
+    /// number [`View::scroll_library_by`] is clamped against, derived in one
+    /// place so the two cannot disagree.
+    pub content: f32,
+    /// **The whole bay**, which is what a wheel over it is aimed at —
+    /// [`crate::input::wheeled`], the region rather than the list.
+    ///
+    /// **The head rows are part of the thing being scrolled**, which is
+    /// [`InspectorPane`]'s own answer: a hand resting over the scope chips or
+    /// the filter fields turns the list under them, exactly as a hand over a
+    /// deck head turns that pane. The foot is in it for the same reason and
+    /// for one more — it is the readout the scroll is about.
+    pub bay: Rect,
     /// **How many Sets the selected scope holds**, which is what the harness
     /// handed over. The second half of the foot's `n of m`.
     pub total: usize,
     /// `.lib-foot`, along the bottom edge of the bay, with its rule on top.
     pub foot: Rect,
     /// **The reading open under the cursor**, or `None` where nothing is
-    /// open — which is every console until a press on the `read` chip, and
+    /// open — which is every console until a press on the `params` chip, and
     /// every one of this crate's tests that does not say otherwise.
     ///
     /// **`None` also where the row it would open under is not drawn**, which
@@ -11442,21 +11521,64 @@ pub fn load_item(deck: u8) -> String {
 }
 
 impl LibraryBay {
-    /// The `index`th row's rectangle, counting from the top of the list.
+    /// The `index`th row's rectangle, **with [`scroll`](Self::scroll) already
+    /// taken off** — so a row above the list has a negative-going top and one
+    /// below it a top past `list.max.y`.
     ///
     /// Derived rather than stored for [`TransportRow::dot`]'s reason: the rows
     /// are a stride and a count, and a `Vec` of them would be an allocation a
-    /// frame does not need. `index` past [`rows`](Self::rows) is a rectangle
-    /// past the end of the list, which is a caller's error and not a state —
-    /// the one caller iterates `0..rows`.
+    /// frame does not need.
+    ///
+    /// **Every index in the listing is an answer**, where this used to be a
+    /// caller's error past [`rows`](Self::rows): a scrolled bay has rows off
+    /// both edges and [`drawn`](Self::drawn) is what says which of them reach
+    /// the picture, so the rectangle has to exist before that question can be
+    /// asked. [`InspectorPane::group`] is the same change one bay over
+    /// (ADR-0312, ADR-0307).
     pub fn row(&self, index: usize) -> Rect {
         Rect::from_min_size(
             Pos2::new(
                 self.list.min.x,
-                self.list.min.y + size::LIB_ROW_H * index as f32 + self.pushed(index),
+                self.list.min.y - self.scroll + size::LIB_ROW_H * index as f32 + self.pushed(index),
             ),
             egui::vec2(self.list.width(), size::LIB_ROW_H),
         )
+    }
+
+    /// **Which rows reach the picture**, as a range into the listing — the
+    /// ones a scrolled list has any of on screen, cut edges included.
+    ///
+    /// It is what [`library_into`] paints and what [`LibraryBay::take`],
+    /// [`LibraryBay::land`], [`LibraryBay::starred`] and
+    /// [`LibraryBay::menu_ask`] walk, so a control is hit-tested over exactly
+    /// the rows that were drawn. **It is not [`rows`](Self::rows)**, which
+    /// counts the whole ones and is the foot's number: a star in a row cut by
+    /// the bottom edge is drawn and is pressable, and the row it is in is not
+    /// counted.
+    ///
+    /// Arithmetic rather than a walk, which is where this parts company with
+    /// [`InspectorPane::drawn`]: the rows are a stride, and the one thing that
+    /// is not is the reading block, which [`pushed`](Self::pushed) already
+    /// holds. So the range is found by asking the two ends rather than by
+    /// walking every row of a listing a store answered.
+    pub fn drawn(&self) -> std::ops::Range<usize> {
+        let touching = |index: usize| {
+            let row = self.row(index);
+            row.max.y > self.list.min.y && row.min.y < self.list.max.y
+        };
+        let first = (0..self.total).find(|index| touching(*index));
+        match first {
+            None => 0..0,
+            // **From the first one that touches, and it is a run**: every row
+            // after it either touches or is below the list, so the end is the
+            // first that does not.
+            Some(first) => {
+                let end = (first..self.total)
+                    .find(|index| !touching(*index))
+                    .unwrap_or(self.total);
+                first..end
+            }
+        }
     }
 
     /// **How far a reading pushes the `index`th row down**, which is nothing
@@ -11465,9 +11587,11 @@ impl LibraryBay {
     /// **The block is between two rows and not over them**, which is what
     /// makes this a mode of the list rather than a card drawn on top of one:
     /// the rows under the cursor keep their order and their stride and start
-    /// lower down, and the ones that no longer fit are not drawn — which the
-    /// foot's `n of m` already says, in the words it says it in for a library
-    /// taller than its list.
+    /// lower down. **So the block scrolls with them** — it is part of
+    /// [`library_content_h`]'s content, and the rows it pushes past the bottom
+    /// are one notch of the wheel away rather than out of reach (ADR-0312).
+    /// The foot's `n of m` says how many are whole, in the words it says it in
+    /// for a library taller than its list.
     fn pushed(&self, index: usize) -> f32 {
         match self.reading {
             Some(block) if index >= block.under => {
@@ -11543,12 +11667,42 @@ impl LibraryBay {
         p: karakuri_layout::Point,
     ) -> Option<Operation> {
         let p = Pos2::new(p.x, p.y);
-        let row = (0..self.rows).find(|index| self.star(*index).contains(p))?;
+        // **The star's own box, inside the list** — `at_row`'s bound stated on
+        // the smaller rectangle: a star belongs to a row, and a row off the
+        // top of the list has one.
+        let row = self
+            .drawn()
+            .find(|index| self.list.contains(p) && self.star(*index).contains(p))?;
         let id = sets.get(row)?;
         Some(Operation::SetFavourite {
             id: id.clone(),
             favourite: !marks.contains(id),
         })
+    }
+
+    /// **Which row `p` is on**, or `None` for a point on the list's own
+    /// ground, on the reading between two rows, or outside the list
+    /// altogether.
+    ///
+    /// # It is bounded by the list and not only by the row
+    ///
+    /// A scrolled bay has rows off both edges and
+    /// [`LibraryBay::row`] answers for every one of them, so a rectangle under
+    /// the filter fields or over the foot is a rectangle a press could land in
+    /// while the row it belongs to is not on screen. That is
+    /// [`InspectorPane::grip`]'s *refuses a press outside the body* one bay
+    /// over, and it is the one thing here that would fail silently: the bay
+    /// would claim a press on a row nobody can see, under controls that are
+    /// drawn there (ADR-0312, ADR-0307).
+    ///
+    /// **[`drawn`](Self::drawn) and not [`rows`](Self::rows)**, so a press on
+    /// the visible half of a cut row reaches it — the row is drawn, and a
+    /// control claims what it acts on.
+    fn at_row(&self, p: Pos2) -> Option<usize> {
+        if !self.list.contains(p) {
+            return None;
+        }
+        self.drawn().find(|index| self.row(*index).contains(p))
     }
 
     /// What the foot reads: `n of m`, the mock's own `5 of 27`.
@@ -11595,7 +11749,7 @@ impl LibraryBay {
     /// **Laid out from the right, because the pulldown is the far end of the
     /// row.** `.lib-foot`'s `gap: 8px` ([`size::LIB_FOOT_GAP`]) is between
     /// every pair of children, so the label and the button are stepped back
-    /// from the pulldown by it and [`LibraryBay::read_chip`] is stepped back
+    /// from the pulldown by it and [`LibraryBay::params_chip`] is stepped back
     /// from the button by it again. The pulldown is as wide as a one-letter
     /// deck name and the button is as wide as `load`, so a row measured
     /// forwards from the count would move both capsules whenever the letter
@@ -11662,7 +11816,7 @@ impl LibraryBay {
         }
     }
 
-    /// **The foot's `read` chip, laid out**: the capsule between the count
+    /// **The foot's `params` chip, laid out**: the capsule between the count
     /// and the `load` button.
     ///
     /// `.lib-foot` is a flex row of the count, a `.sep { flex: 1 }` and the
@@ -11676,16 +11830,16 @@ impl LibraryBay {
     /// [`LibraryBay::load`]'s own rule one capsule along — [`library_into`]
     /// paints this and [`LibraryBay::read`] hit-tests it, so the capsule a
     /// press lands on is the capsule the word is in.
-    pub fn read_chip(&self, ctx: &egui::Context, at: Target) -> Rect {
+    pub fn params_chip(&self, ctx: &egui::Context, at: Target) -> Rect {
         let load = self.load(ctx, at).button;
-        let width = pill_width(ctx, READ_PILL);
+        let width = pill_width(ctx, PARAMS_PILL);
         Rect::from_min_size(
             Pos2::new(load.min.x - size::LIB_FOOT_GAP - width, load.min.y),
             egui::vec2(width, size::PILL_H),
         )
     }
 
-    /// **What a press at `p` on the `read` chip asks for**, or `None` where
+    /// **What a press at `p` on the `params` chip asks for**, or `None` where
     /// there is no chip under it.
     ///
     /// # The operand is the cursor, which is the load button's operand
@@ -11719,7 +11873,7 @@ impl LibraryBay {
         if ctx.cumulative_pass_nr() == 0 {
             return None;
         }
-        if !self.read_chip(ctx, at).contains(Pos2::new(p.x, p.y)) {
+        if !self.params_chip(ctx, at).contains(Pos2::new(p.x, p.y)) {
             return None;
         }
         match self.reading {
@@ -11910,8 +12064,7 @@ impl LibraryBay {
             return None;
         }
         let Some(row) = at.row else {
-            let p = Pos2::new(p.x, p.y);
-            let row = (0..self.rows).find(|index| self.row(*index).contains(p))?;
+            let row = self.at_row(Pos2::new(p.x, p.y))?;
             sets.get(row)?;
             return Some(Picked::Open(row));
         };
@@ -11968,15 +12121,12 @@ impl LibraryBay {
     /// more than [`LibraryBay::rows`] of them, so a press below the last row is
     /// on the list's own ground and belongs to nobody.
     pub fn take(&self, sets: &[String], p: karakuri_layout::Point) -> Option<Taken> {
-        let p = Pos2::new(p.x, p.y);
-        (0..self.rows)
-            .find(|index| self.row(*index).contains(p))
-            .and_then(|row| {
-                Some(Taken {
-                    row,
-                    set: sets.get(row)?.clone(),
-                })
+        self.at_row(Pos2::new(p.x, p.y)).and_then(|row| {
+            Some(Taken {
+                row,
+                set: sets.get(row)?.clone(),
             })
+        })
     }
 
     /// **What a press at `p` on a row of the `history` listing asks for**, or
@@ -12022,8 +12172,7 @@ impl LibraryBay {
         at: Target,
         p: karakuri_layout::Point,
     ) -> Option<Operation> {
-        let p = Pos2::new(p.x, p.y);
-        let row = (0..self.rows).find(|index| self.row(*index).contains(p))?;
+        let row = self.at_row(Pos2::new(p.x, p.y))?;
         Some(Operation::RestoreProcedure {
             deck: at.deck,
             revision: karakuri_operation::Revision::Picked(versions.get(row)?.clone()),
@@ -12255,7 +12404,7 @@ impl LibraryBay {
 /// bay does depend on.** A reading is drawn *under a row*, so where every row
 /// below it goes and how many of them there is room for both follow the
 /// cursor — see [`Opened`] and [`Block`]. `None` is a bay with nothing open,
-/// which is every console until a press on the `read` chip.
+/// which is every console until a press on the `params` chip.
 ///
 /// **`pointed` is a row of furniture rather than a pointer**, and only whether
 /// there is one reaches the arithmetic: the `.path` row is drawn once a folder
@@ -12271,6 +12420,7 @@ pub fn library(
     sets: &[String],
     open: Option<Opened<'_>>,
     pointed: Option<Pointed<'_>>,
+    scroll: f32,
 ) -> Option<LibraryBay> {
     // **Nothing said about any library, so there is nothing to draw.** Not the
     // same as a scope that holds nothing — see this function's own doc, and
@@ -12284,6 +12434,7 @@ pub fn library(
         pointed.is_some(),
         sets.len(),
         open.map(|open| (open.at, open.reading.rows())),
+        scroll,
     )
 }
 
@@ -12330,6 +12481,7 @@ fn library_box(
     pointed: bool,
     total: usize,
     open: Option<(usize, usize)>,
+    scroll: f32,
 ) -> Option<LibraryBay> {
     let foot = Rect::from_min_max(
         Pos2::new(region.min.x, region.max.y - size::LIB_FOOT_H),
@@ -12394,52 +12546,86 @@ fn library_box(
         return None;
     }
     let fits = (list.height() / size::LIB_ROW_H).floor().max(0.0) as usize;
-    let listed = fits.min(total);
-    // **A reading opens under a row that is drawn, and under no other.** The
-    // cursor is held inside the listed rows ([`View::walk`]) and the listing
-    // can be rewritten under it, so this is the one place the two are put
-    // together: a reading of a row this bay is not drawing is not drawn, and
-    // the list goes back to being the list.
-    let (rows, reading) = match open.filter(|(at, _)| *at < listed) {
-        None => (listed, None),
-        Some((at, block)) => {
-            // **The block is between the cursor's row and the next**, so what
-            // is above it is the cursor's row and everything before it.
-            let under = at + 1;
-            let top = list.min.y + size::LIB_ROW_H * under as f32 + size::READING_MARGIN_TOP;
-            let well = Rect::from_min_max(
+    // **A reading opens under the row it is of, whether or not that row is on
+    // screen.** It used to open only under a row this bay was *drawing*,
+    // because a reading scrolled past the bottom had nowhere to be; a bay with
+    // a position has somewhere, and the block scrolls with the rows because it
+    // is between two of them rather than over them. What still holds the two
+    // together is [`View::opened`], which answers `None` the moment the row
+    // under the cursor stops being the Set the reading is of.
+    let block = open
+        .filter(|(at, _)| *at < total)
+        // **The block is between the cursor's row and the next**, so what is
+        // above it is the cursor's row and everything before it.
+        .map(|(at, rows)| (at + 1, rows));
+    let content = library_content_h(total, block.map(|(_, rows)| rows));
+    // **The clamp that is drawn and never stored** — see [`LibraryBay::scroll`]
+    // and [P-0082]. Zero-width where the listing is shorter than the list,
+    // which is a bay that cannot be scrolled at all.
+    //
+    // [P-0082]: ../../../docs/principles/0082-looking-never-writes-back.md
+    let scroll = scroll.clamp(0.0, (content - list.height()).max(0.0));
+    let reading = block.map(|(under, rows)| {
+        let top = list.min.y - scroll + size::LIB_ROW_H * under as f32 + size::READING_MARGIN_TOP;
+        Block {
+            well: Rect::from_min_max(
                 Pos2::new(list.min.x + size::READING_MARGIN_X, top),
                 Pos2::new(
                     list.max.x - size::READING_MARGIN_X,
-                    top + size::LIB_ROW_H * block as f32,
+                    top + size::LIB_ROW_H * rows as f32,
                 ),
-            );
-            // **What is left under the block is what the rest of the listing
-            // gets**, which is `fits`' own arithmetic on a shorter list —
-            // negative where the block itself runs past the bottom, which is a
-            // reading taller than the bay and is clipped rather than refused.
-            let left = list.max.y - well.max.y - size::READING_MARGIN_BOTTOM;
-            let after = (left / size::LIB_ROW_H).floor().max(0.0) as usize;
-            (
-                (under + after).min(total),
-                Some(Block {
-                    well,
-                    rows: block,
-                    under,
-                }),
-            )
+            ),
+            rows,
+            under,
         }
-    };
-    (fits > 0).then_some(LibraryBay {
+    });
+    // **Built once with the count unanswered and then answered off itself**,
+    // because how many rows are whole is a question about the rectangles this
+    // bay hands out — [`LibraryBay::row`] and [`LibraryBay::drawn`] — and a
+    // second arithmetic here would be a second answer to where a row is.
+    let bay = LibraryBay {
         scopes,
         path,
         filters,
         list,
-        rows,
+        rows: 0,
         total,
         foot,
         reading,
-    })
+        scroll,
+        content,
+        bay: region,
+    };
+    // **Down the column and not across it**: a row is exactly as wide as the
+    // list and starts where it starts, so the only edge a row can be cut by is
+    // the top one or the bottom one.
+    let whole = bay
+        .drawn()
+        .filter(|index| {
+            let row = bay.row(*index);
+            row.min.y >= list.min.y && row.max.y <= list.max.y
+        })
+        .count();
+    (fits > 0).then_some(LibraryBay { rows: whole, ..bay })
+}
+
+/// **How tall a library listing comes to**, the reading block included —
+/// [`LibraryBay::content`], and what both clamps are taken against.
+///
+/// One function because the two clamps are one number read twice:
+/// `library_box` clamps the position it *draws* against it and
+/// [`View::scroll_library_by`] clamps the position it *stores* against it, and
+/// a second arithmetic in either would be a bay that could be scrolled to a
+/// place it will not draw. [`content_h`] is the same shape one bay over.
+///
+/// `block` is how many rows the reading under the cursor is, or `None` where
+/// none is open — the same run [`LibraryBay::pushed`] adds to every row below
+/// it, so the two cannot disagree about what a reading costs.
+fn library_content_h(total: usize, block: Option<usize>) -> f32 {
+    size::LIB_ROW_H * total as f32
+        + block.map_or(0.0, |rows| {
+            size::READING_MARGIN_TOP + size::LIB_ROW_H * rows as f32 + size::READING_MARGIN_BOTTOM
+        })
 }
 
 /// **The Library bay's rows, painted.**
@@ -12477,7 +12663,14 @@ fn library_into(
 ) {
     let Listed { sets, starred } = listed;
     let painter = ui.painter().with_clip_rect(bay.list);
-    for (index, name) in sets.iter().take(bay.rows).enumerate() {
+    // **The rows that reach the picture and not the ones that are whole**,
+    // which is `LibraryBay::drawn` against `LibraryBay::rows`: a row cut by an
+    // edge is drawn as far as the list goes, and the clip above is what cuts
+    // it. The foot's count is the other number and says how many are whole.
+    for index in bay.drawn() {
+        let Some(name) = sets.get(index) else {
+            continue;
+        };
         let row = bay.row(index);
         // `.lib-row.cursor` — `background: color-mix(in srgb, var(--c-lav)
         // 13%, transparent)` and `color: var(--c-text)`, where every other row
@@ -12547,12 +12740,23 @@ fn library_into(
         pal.faint,
     );
 
-    // **The `read` chip**, between the count and the `load` button and drawn
-    // as every other capsule on this panel is — [`pill_at`]'s hairline round
-    // `--c-dim`. **It does not light**, open or shut, and [`READ_PILL`] is
-    // where that is argued: the block above it is the state, and this bay's
-    // one accent is spent on the load beside it.
-    pill_at(ui, pal, bay.read_chip(ui.ctx(), at), READ_PILL);
+    // **The `params` chip**, between the count and the `load` button, and it
+    // is a toggle drawn as one: `.pill.armed`'s mint while a reading is open
+    // and `.pill`'s hairline round `--c-dim` while none is.
+    //
+    // **Which of the two is read off the block this bay is *drawing***, and
+    // off nothing else — the same `LibraryBay::reading` that
+    // [`LibraryBay::read`] matches on to decide what a press asks for. So the
+    // capsule an operator is looking at and the answer the press gives cannot
+    // come apart, which is what a toggle owes and is why this is not a second
+    // reading of `View::reading` (ADR-0312).
+    pill_into(
+        ui,
+        pal,
+        bay.params_chip(ui.ctx(), at),
+        PARAMS_PILL,
+        bay.reading.is_some(),
+    );
 
     let load = bay.load(ui.ctx(), at);
     // **`.pill.lav`, and it is the one pill on this panel with no border**:
@@ -12585,7 +12789,7 @@ fn library_into(
     // would put this bay's accent on a thing nobody can press.
     arrow_mark(&painter, load.arrow.center(), LOAD_ARROW, pal.faint, false);
 
-    // **The pulldown, drawn as the `read` chip is and not as the button is.**
+    // **The pulldown, drawn as the `params` chip is and not as the button is.**
     // `console.html`: *"It is deliberately not lavender. Lavender here is the
     // deck the keys are addressed to, and this is the one letter on the
     // console that is allowed to name a different one."* So it is
@@ -13778,11 +13982,26 @@ pub struct Pane {
     /// Whether this deck's Set folds its renderers into one result or
     /// overdraws them: `karakuri_engine::set::Layering`, as a bit.
     ///
-    /// **A readout here and a control in the mock.** The chip's tooltip is
-    /// *"Click to overdraw them instead"*, and layering is a **build**
-    /// decision in the engine — `Set::layering` answers off whether the Set
-    /// was built with a merge — so the press is a rebuild rather than a write.
-    /// The word is drawn; the press is not.
+    /// **What the deck is doing, and what a press names the other of.** The
+    /// chip's tooltip is *"Click to overdraw them instead"*, and this is both
+    /// the word [`deck_head_into`] draws and the state
+    /// [`DeckHead::composite`] reads to say which layering a press is asking
+    /// for — a destination and never a flip
+    /// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
+    ///
+    /// **It said the press was not a control until 2026-09-09**, on the
+    /// grounds that layering is a *build* decision in the engine —
+    /// `Set::layering` answers off whether the Set was built with a merge, and
+    /// nothing writes it afterwards. Both halves of that are still true and
+    /// the conclusion was wrong: a rebuild is what this instrument already
+    /// does to change what a slot is running, and the layering is one field of
+    /// the aim a watcher is pointed at, so a press re-aims the slot and the
+    /// worker rebuilds it — the route a library load takes, judged against the
+    /// budget like any other build
+    /// ([ADR-0314](../../../docs/adr/0314-a-control-that-moves-a-field-of-the-aim-re-aims-the-slot-and-the-rebuild-is-the-write.md)).
+    /// It is a **readout of what landed** rather than of what was asked for,
+    /// which is `Mixer::residency`'s division: the build may still be rolled
+    /// back, and the Staging lane is what says so.
     pub composite: bool,
     /// **The node groups**, in node order, which is the order a Set addresses
     /// its own nodes in.
@@ -13941,10 +14160,17 @@ impl Param {
 ///   and name it, which is `Set::published`'s side of the seam and a different
 ///   question entirely.
 ///
-/// **A third was `composite`, and it is a readout rather than an omission** —
-/// [`Pane::composite`]: layering is a build decision in the engine, so a press
-/// on it is a rebuild rather than a write and there is no operation in the
-/// vocabulary for it to name. The word is drawn; the press is not.
+/// **A third was `composite`, called a readout here until 2026-09-09, and it
+/// is a control** — [`Pane::composite`] and [`DeckHead::composite`]. The
+/// sentence that stood here said layering is a build decision in the engine so
+/// a press on it is a rebuild rather than a write, and *"there is no operation
+/// in the vocabulary for it to name"*, which was wrong twice:
+/// `Operation::SetCompositing` has been in the vocabulary the whole time, and a
+/// rebuild is exactly how this instrument changes what a slot is running. A
+/// press re-aims the slot — the layering is one field of `watch::Aim` — and the
+/// worker builds it off the render thread, which is the route a library load
+/// takes
+/// ([ADR-0314](../../../docs/adr/0314-a-control-that-moves-a-field-of-the-aim-re-aims-the-slot-and-the-rebuild-is-the-write.md)).
 ///
 /// **And the fourth was the anchor, which the mock draws as a readout and
 /// [ADR-0218](../../../docs/adr/0218-re-anchoring-is-set-sync-naming-the-mode-the-deck-is-in-and-a-cycle-cannot-say-it.md)
@@ -14645,8 +14871,9 @@ pub const SCRUB_BEATS: f64 = 0.25;
 /// [`LookRow`]'s reason one bay over: each one's place is measured from the
 /// last, which is what a flex row is, and splitting them into four functions
 /// would mean measuring the chip before each of them again to find out where
-/// it starts. The fold is in here for the same reason and is **not** a control
-/// — see [`DeckHead::composite`].
+/// it starts. The fold is in here for the same reason, and it is a control
+/// too — see [`DeckHead::composite`], which was the one rectangle here that
+/// claimed nothing until 2026-09-09.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DeckHead {
     /// **The sync chip**, which is what a press has to land in to move the
@@ -14668,20 +14895,33 @@ pub struct DeckHead {
     pub back: Rect,
     /// **A quarter beat forward.** The other.
     pub forward: Rect,
-    /// **The fold at the right of the row, and it is not a control** —
-    /// [`Pane::composite`] says why: layering is a *build* decision, so a
-    /// press is a rebuild rather than a write and there is no operation in the
-    /// vocabulary this chip could name. The word is drawn; the press is not,
-    /// and [`DeckHead::owns`] does not claim it.
+    /// **The fold at the right of the row**, and the fourth control on it —
+    /// [`DeckHead::compositing`] is what a press on it asks for.
+    ///
+    /// **It was not a control until 2026-09-09**, on the argument
+    /// [`Pane::composite`] carries and corrects: layering is a *build*
+    /// decision, so a press is a rebuild rather than a write. That is true and
+    /// is the reason this works rather than the reason it could not — a
+    /// rebuild off the render thread, judged against the budget and rolled
+    /// back on its own, is what this instrument does to change what a slot is
+    /// running, and the layering is one field of the aim a watcher is pointed
+    /// at (ADR-0314).
     ///
     /// It is here because the row is laid out **to** it: it is `.sep`'s
     /// `flex: 1` pushing it against the right-hand padding, and what says the
     /// controls on the left fit is that they end before it.
     pub composite: Rect,
-    /// Which deck this head belongs to, as [`Operation::SetSync`] and
-    /// [`Operation::ScrubDeck`] each name one — [`Pane::deck`], carried so
-    /// that a press answers with the deck it was measured for.
+    /// Which deck this head belongs to, as [`Operation::SetSync`],
+    /// [`Operation::ScrubDeck`] and [`Operation::SetCompositing`] each name
+    /// one — [`Pane::deck`], carried so that a press answers with the deck it
+    /// was measured for.
     pub deck: usize,
+    /// **What the fold chip is showing**, and what a press names the other of
+    /// — [`Pane::composite`] as it was read, carried for [`DeckHead::locked`]'s
+    /// reason one field down: whoever measured this row and whoever acts on a
+    /// press in it are one statement, so a chip cannot name a destination
+    /// computed from a state some later frame read.
+    pub composited: bool,
     /// **What the mode chip is showing**, and what re-anchoring re-asks for.
     /// Carried for [`LookRow::values`]' reason: whoever measured this row and
     /// whoever acts on a press in it are one statement.
@@ -14701,6 +14941,11 @@ impl DeckHead {
     pub fn hit_anchor(&self, p: karakuri_layout::Point) -> bool {
         self.anchor
             .is_some_and(|at| at.contains(Pos2::new(p.x, p.y)))
+    }
+
+    /// Whether `p` is on the fold at the right of the row.
+    pub fn hit_composite(&self, p: karakuri_layout::Point) -> bool {
+        self.composite.contains(Pos2::new(p.x, p.y))
     }
 
     /// **Which arrow `p` is on, as the amount it asks for** — or `None` off
@@ -14726,10 +14971,14 @@ impl DeckHead {
         }
     }
 
-    /// **Whether `p` is on any of the three**, which is what
-    /// [`crate::input::claim`] asks. The fold is not one of them.
+    /// **Whether `p` is on any of the four**, which is what
+    /// [`crate::input::claim`] asks. The fold is one of them since 2026-09-09,
+    /// and it is the only one of the four that is claimed on every deck: a
+    /// sync chip is always live, an anchor is not drawn on a free deck and an
+    /// arrow is not claimed off beat sync, where a layering is a state every
+    /// slot is in.
     pub fn owns(&self, p: karakuri_layout::Point) -> bool {
-        self.hit_mode(p) || self.hit_anchor(p) || self.arrow(p).is_some()
+        self.hit_mode(p) || self.hit_anchor(p) || self.arrow(p).is_some() || self.hit_composite(p)
     }
 
     /// **What a press at `p` asks this deck's clock to become**, or `None`
@@ -14839,6 +15088,51 @@ impl DeckHead {
         self.arrow(p).map(|beats| Operation::ScrubDeck {
             deck: self.deck as u8,
             beats,
+        })
+    }
+
+    /// **What a press on the fold asks for**: [`Operation::SetCompositing`]
+    /// naming the layering this deck is **not** in — or `None` off the chip.
+    ///
+    /// # A destination and not a flip, on a chip that reads as a toggle
+    ///
+    /// [`Mixer::blend`]'s division and [`DeckHead::sync`]'s: the affordance is
+    /// *press it and it changes*, and what leaves this crate is the state
+    /// being asked for. Nothing in `karakuri-operation` says *toggle*, because
+    /// two surfaces stepping one control disagree about where they are
+    /// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)),
+    /// and the destination is computed from [`DeckHead::composited`] — the
+    /// state the frame that laid this row out drew — so the chip a hand
+    /// pressed and the operation that leaves are one statement.
+    ///
+    /// # The press is a rebuild, and that is the mechanism rather than a cost
+    ///
+    /// `Set::merge` is written at `Set::build` and nothing moves it
+    /// afterwards, which read for a year as *the engine has no setter for
+    /// this, so the control is blocked*. What it actually means is that the
+    /// control is not a write at all: the layering is one field of the
+    /// description a slot's watcher is pointed at, so the window that acts on
+    /// this operation restates the rest of that description with this field
+    /// changed and sends it, and the worker rebuilds the slot off the render
+    /// thread. That build lands at a frame boundary and is judged there and
+    /// then, on what one frame of that Set was measured to cost, exactly as an
+    /// edited file and a library load are, and rolls itself back if it cannot
+    /// hold the frame — which is
+    /// the point rather than the price, because compositing costs a
+    /// frame-sized target per renderer
+    /// ([P-0091](../../../docs/principles/0091-cost-is-known-before-it-is-paid.md),
+    /// [P-0085](../../../docs/principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md),
+    /// [ADR-0314](../../../docs/adr/0314-a-control-that-moves-a-field-of-the-aim-re-aims-the-slot-and-the-rebuild-is-the-write.md)).
+    ///
+    /// **Nothing here knows any of that**, and this crate could not: it names
+    /// a destination and a deck, and where the rebuild happens is the window's
+    /// (ADR-0156). What it does owe is that the chip goes on reading what
+    /// *landed* rather than what was asked for, which is
+    /// [`Pane::composite`]'s own note.
+    pub fn compositing(&self, p: karakuri_layout::Point) -> Option<Operation> {
+        self.hit_composite(p).then_some(Operation::SetCompositing {
+            deck: self.deck as u8,
+            compositing: !self.composited,
         })
     }
 }
@@ -14959,6 +15253,7 @@ pub fn deck_head(ctx: &egui::Context, at: &InspectorPane, pane: &Pane) -> Option
         forward,
         composite,
         deck: pane.deck,
+        composited: pane.composite,
         locked: pane.sync,
         allows: pane.allows,
     })
@@ -16613,6 +16908,30 @@ pub struct View {
     ///
     /// [`target_open`]: Self::target_open
     menu_row: Option<usize>,
+    /// **How far down its listing the Library bay is scrolled**, in logical
+    /// pixels, as it is **stored** — the number [`library`] clamps and never
+    /// the one it clamped.
+    ///
+    /// [`View::scroll`]'s shape one bay over and for its reasons, which are
+    /// worth reading as a pair rather than restated here: the position is the
+    /// console's own, no operation names it, nothing outside this crate could
+    /// be the model of record for it, and it is not part of the arrangement —
+    /// `karakuri-layout`'s tree holds sizes and folds and holds no scroll
+    /// position
+    /// ([ADR-0307](../../../docs/adr/0307-the-inspectors-pane-scrolls-and-the-position-is-the-panes-own.md),
+    /// [ADR-0312](../../../docs/adr/0312-the-params-pill-is-a-toggle-and-the-library-bay-scrolls.md)).
+    ///
+    /// **One and not one per scope.** A scope is a different listing in the
+    /// same bay, the way a build landing is a different pane's contents one
+    /// bay over — and unlike the Inspector's two panes, which are two places
+    /// in one list at once, only one scope is ever being read. A position per
+    /// scope would be five numbers of which four are always stale, and the
+    /// chip press that changes the listing is exactly the moment an operator
+    /// wants the top.
+    ///
+    /// **Private, with [`View::library_scroll`] and
+    /// [`View::scroll_library_by`] the only ways in.**
+    library_scroll: f32,
     /// **Which Set in the Library bay a load would take**, the mock's
     /// `.lib-row.cursor`, and the second of this console's two pointers.
     ///
@@ -16878,10 +17197,13 @@ impl View {
             // **No menu**, which is not a mark either, for the reason above
             // it: a card is down on a row or there is no card.
             menu_row: None,
+            // **The top of the listing**, which is where every bay starts and
+            // the one position a console with no store behind it can be at.
+            library_scroll: 0.0,
             cursor_row: 0,
             // **Nothing open**, which is not a fourth mark: a reading is a
             // block of rows or it is not there, and the chip that opens one
-            // draws the same either way — `READ_PILL`.
+            // draws the same either way — `PARAMS_PILL`.
             reading: None,
             // The first chip of a row that has none in it yet. Not a reading
             // of anything either, for the two above's reason.
@@ -17071,6 +17393,54 @@ impl View {
         self.menu_row.take().is_some()
     }
 
+    /// **How far the Library bay is scrolled**, as it is stored — the number
+    /// [`library`] clamps and never the one it clamped.
+    ///
+    /// [`View::scroll_in`]'s shape one bay over.
+    pub fn library_scroll(&self) -> f32 {
+        self.library_scroll
+    }
+
+    /// **Turn the Library bay's wheel by `by` pixels**, positive down the
+    /// listing, and answer whether the stored position moved.
+    ///
+    /// # Two clamps, and only one of them is here
+    ///
+    /// This one is against the **content** — how tall the listing and the
+    /// reading under it come to ([`library_content_h`]) — and it is a reading
+    /// of what the store answered rather than of a viewport, so a stored
+    /// position bounded by it is not a position any resize can rewrite.
+    /// Without it a wheel spun over a listing of three would put the number in
+    /// the thousands and an operator would have to spin it all the way back
+    /// before anything moved.
+    ///
+    /// The other clamp is against the list's own height and belongs where the
+    /// bay is laid out — `library_box`, which is
+    /// [P-0082](../../../docs/principles/0082-looking-never-writes-back.md):
+    /// a shorter bay draws less of the same position and stores nothing, so
+    /// dragging it back reproduces the picture exactly rather than nearly.
+    ///
+    /// [`View::scroll_by`]'s shape one bay over, and the difference is what
+    /// the two are told: a pane is named by index and this bay is the only one
+    /// of itself.
+    ///
+    /// **A console with nothing listed refuses the wheel** rather than storing
+    /// a position for it, which is [`View::point_at`]'s rule: what a pointer
+    /// can be at is something drawn.
+    pub fn scroll_library_by(&mut self, by: f32) -> bool {
+        if self.library.is_empty() {
+            return false;
+        }
+        let content = library_content_h(
+            self.library.len(),
+            self.opened().map(|open| open.reading.rows()),
+        );
+        let next = (self.library_scroll + by).clamp(0.0, content);
+        let moved = next != self.library_scroll;
+        self.library_scroll = next;
+        moved
+    }
+
     /// **Which row of the Library bay the cursor is on** — see
     /// [`View::cursor_row`] the field.
     ///
@@ -17085,19 +17455,26 @@ impl View {
     /// **Move the library cursor by `step` rows**, and answer whether it
     /// moved.
     ///
-    /// `listed` is how many rows the bay is drawing — [`LibraryBay::rows`],
-    /// off the same [`library`] call the paint and [`crate::input::claim`]
-    /// make, so there is no second derivation of *how long is this list*.
+    /// `drawn` is which rows the bay is drawing — [`LibraryBay::drawn`], off
+    /// the same [`library`] call the paint and [`crate::input::claim`] make,
+    /// so there is no second derivation of *which rows are on screen*.
     ///
     /// **The cursor is held inside the rows that are drawn, not inside the
-    /// store.** This bay has no scroll position and inventing one would be a
-    /// control (`view::library`) — the Inspector's panes have one and reach it
-    /// with the wheel, which is a different bay and a different answer
-    /// ([`InspectorPane::scroll`]); what this one does instead is list what
-    /// fits and say `n of m`. So the reachable Sets are the listed ones, and a cursor
-    /// allowed past them would sit on a row nobody can see, under a pill that
-    /// says a press will load it. The foot already says how many are out of
-    /// reach.
+    /// store**, and that sentence is older than the scroll: a cursor allowed
+    /// past them would sit on a row nobody can see, under a pill that says a
+    /// press will load it. What has changed is that *drawn* is a **range**
+    /// rather than a prefix, because the bay scrolls now
+    /// ([ADR-0312](../../../docs/adr/0312-the-params-pill-is-a-toggle-and-the-library-bay-scrolls.md)).
+    /// It used to take a count and clamp to `0..listed`.
+    ///
+    /// **The wheel is what moves the window and the arrows are what move the
+    /// cursor inside it**, which is the division
+    /// [ADR-0307](../../../docs/adr/0307-the-inspectors-pane-scrolls-and-the-position-is-the-panes-own.md)
+    /// made one bay over: *"the keyboard's route is not bound here"*. Nothing
+    /// the keyboard could reach before is out of reach now — the rows past the
+    /// end of the list were unreachable by any means, and they are one notch
+    /// away — and **a key that scrolls is owed to M5.13** with the arrows'
+    /// walk of a bay's items, not invented here.
     ///
     /// **Clamped at both ends rather than wrapping.** A listing is a walk and
     /// not a cycle: wrapping from the last row to the first would jump the
@@ -17110,13 +17487,13 @@ impl View {
     ///
     /// The `bool` is [`View::select`]'s, for the same reason: a press that
     /// changed nothing costs no frame.
-    pub fn walk(&mut self, step: i32, listed: usize) -> bool {
-        let reachable = listed.min(self.library.len());
-        if reachable == 0 {
+    pub fn walk(&mut self, step: i32, drawn: std::ops::Range<usize>) -> bool {
+        let last = drawn.end.min(self.library.len());
+        if drawn.start >= last {
             return false;
         }
-        let last = (reachable - 1) as i64;
-        let to = (self.cursor_row as i64 + step as i64).clamp(0, last) as usize;
+        let to = (self.cursor_row as i64 + step as i64).clamp(drawn.start as i64, (last - 1) as i64)
+            as usize;
         let moved = to != self.cursor_row;
         self.cursor_row = to;
         moved
@@ -17276,7 +17653,7 @@ impl View {
     /// are versions.
     ///
     /// **One place the question is asked, rather than four.** The star, the
-    /// `read` chip, the `load` button and the carry all read a row as a Set
+    /// `params` chip, the `load` button and the carry all read a row as a Set
     /// id, and each of them already refuses a listing shorter than the rows
     /// drawn rather than clamping — so handing them nothing is the refusal
     /// they already have, said once. See [`Scope::lists_sets`].
@@ -17344,6 +17721,23 @@ impl View {
             // *the last row*, a Set nobody chose sitting under a pill that
             // says a press will load it.
             self.cursor_row = 0;
+            // **And so does the scroll, for the same reason and not for a
+            // second one.** A position is a distance into [`View::library`],
+            // that field is about to be rewritten, and a listing of three read
+            // at four hundred pixels down draws its last row or nothing at
+            // all. **It is a press moving the console's own state and not a
+            // resize rewriting it**, which is what
+            // [P-0082](../../../docs/principles/0082-looking-never-writes-back.md)
+            // is about: the clamp at the draw is still the only clamp, and a
+            // scope pressed twice does not move it a second time
+            // (ADR-0312).
+            //
+            // **A filter narrowing is not this**, and it is not an omission:
+            // it asks the same scope a narrower question, so the rows are the
+            // same rows fewer of them, and what a position past the end draws
+            // is the clamp's answer — the same division [`View::cursor_row`]
+            // makes between a reset here and a clamp there.
+            self.library_scroll = 0.0;
         }
         moved
     }
@@ -17912,6 +18306,11 @@ impl View {
         // reason** — it counts the strips too, and the arm below borrows the
         // slices it would be read off.
         let menued = self.menued();
+        // **And how far the Library bay is scrolled**, read once for the frame
+        // beside the two pointers above it: `library` clamps it and hands the
+        // clamped value back, and this is the stored one going in
+        // (`LibraryBay::scroll`, P-0082).
+        let scrolled_to = self.library_scroll();
         let waiting = self.staging.as_slice();
         let panes = self.inspector.as_slice();
         // **The eighth pointer, read once for the frame beside the panes it is
@@ -18063,7 +18462,9 @@ impl View {
                     Kind::Library => {
                         card(ui, &pal, rect);
                         head_into(ui, &pal, rect, placed.region, opening);
-                        if let Some(bay) = library(panel.layout(), scopes, sets, opened, pointed) {
+                        if let Some(bay) =
+                            library(panel.layout(), scopes, sets, opened, pointed, scrolled_to)
+                        {
                             // **The chips before the rows**, and painted from
                             // the draw rather than from inside the listing's
                             // own paint: the scope row belongs to the bay's
@@ -18227,7 +18628,9 @@ impl View {
             // because `input`'s rule 2 sends the press that would open a
             // second one to whichever is already open.
             if load.open {
-                if let Some(bay) = library(panel.layout(), scopes, sets, opened, pointed) {
+                if let Some(bay) =
+                    library(panel.layout(), scopes, sets, opened, pointed, scrolled_to)
+                {
                     let at = bay.load(ui.ctx(), load);
                     if let Some(card) = at.list(to_egui(panel.layout().viewport())) {
                         deck_list_into(ui, &pal, &at, load, card);
@@ -18239,7 +18642,9 @@ impl View {
             // card painted from inside the arm would go on before them. It can
             // never be down while any of the other three is, for their reason.
             if menued.row.is_some() {
-                if let Some(bay) = library(panel.layout(), scopes, sets, opened, pointed) {
+                if let Some(bay) =
+                    library(panel.layout(), scopes, sets, opened, pointed, scrolled_to)
+                {
                     if let Some(menu) =
                         bay.menu(ui.ctx(), to_egui(panel.layout().viewport()), menued)
                     {

@@ -326,6 +326,14 @@ artifacts rather than off a built Set — so what it draws costs a directory rea
 nothing and a cursor move re-reads without emitting, which would otherwise reach from the keyboard
 a row whose key column is a `gap`
 ([ADR-0264](adr/0264-a-reading-is-one-question-and-only-the-opening-asks-it.md)).
+**The control it is reached by is called `params` and is drawn as a toggle**, on 2026-09-09: the
+maintainer read `read` as unclear — it names what the press does to the file rather than what
+appears — and `params` names the block, where `expand` would have named the motion and been the
+only control on this panel named for one. It lights while the block is open and is plain while it
+is shut, in mint, because lavender in this bay is `load`'s and pink on this console is *live*.
+**ADR-0264 is untouched by that**: the two presses are still one operation and one console act, and
+what the light says is which of two states the console's own block is in
+([ADR-0312](adr/0312-the-params-pill-is-a-toggle-and-the-library-bay-scrolls.md)).
 
 **What that row still owes is a home and a sentence, and neither is a decision.** The merge of
 several nodes' declarations into one row per key — the range intersected, the default the first
@@ -571,17 +579,20 @@ The scope row is done and the mock puts one shape over it: the list carries **pr
 named one until ADR-0299 was read against `Scope::ALL` — and it says the scope list is itself
 extensible.
 
-**The bay's prose, as tooltips.** The library half of *Library, and staging under it*, and six
+**The bay's prose, as tooltips.** The library half of *Library, and staging under it*, and seven
 notes under it: *A folder scope reads Sets, and a bundle is not a third thing*, *What keeps a
 favourite, and where it does not travel*, *Where the presets come from, and why it is told rather
-than found*, *A Set has two forms, and loading one is packaging it*, *How a Set reaches a deck*, and
+than found*, *A Set has two forms, and loading one is packaging it*, *How a Set reaches a deck*,
+*The library scrolls, and the foot says how much it is not showing*, which ADR-0312 added, and
 *Walking a Set's edit history*, which ADR-0308 added.
 *Every deck runs from its own copy* is here too, because a library load is what writes into
 `<store>/scratch/`. The mock tips every scope chip including the `+`, both filter fields, the `.path`
-row, a starred star and an unstarred one, and the foot's `read`, the load's button and its pulldown.
+row, a starred star and an unstarred one, and the foot's count, its `params` capsule, the load's
+button and its pulldown.
 The Set rows carry none, and **the five items of a row's menu carry one each** while the separator
 between them carries none, because it is not a control (ADR-0311). This sentence counted the chips
-and put `my sets` and the path among the untipped; both have carried one.
+and put `my sets` and the path among the untipped; both have carried one, and it left the foot's
+`n of m` off the list while that number was a readout of what fits rather than of what is whole.
 
 #### M5.4 — Transport
 
@@ -733,15 +744,23 @@ notes against what the tips now say.
 
 **Rows.** The rows whose panel badge names a control this bay draws, which is **not** the page's
 *Inside a Set* section and is where the count has to be derived from: they are spread over five
-sections, and the section holds two rows that are not this bay's. Ten of them —
+sections, and the section holds two rows that are not this bay's. Eight of them —
 *Composite a deck's renderers*, ***Choose which renderer of a deck is live*** (moved here from M5.2
 on 2026-09-05, because the mock draws its chips directly under *Composite* and the console page
 describes the two as one control and the choice it turns into), *Write a parameter*, *Attach a
 signal to a parameter*, *Take a parameter back*, *Element capacity, seeds, the camera*, *Set a
-node's authority*, *Keep what a deck is playing*, *Read one node's source* and *Check and write one
-node's source*. The two the section sweeps in and this bay does not own are *Wire a procedure's
-input to a node* and *Narrow the published interface*, which carry a `plan` badge over a panel cell
-reading `—` and are in *Rows the manual has not given a home*.
+node's authority* and *Keep what a deck is playing*. The two the section sweeps in and this bay
+does not own are *Wire a procedure's input to a node* and *Narrow the published interface*, which
+carry a `plan` badge over a panel cell reading `—` and are in *Rows the manual has not given a
+home*.
+
+***Read one node's source* and *Check and write one node's source* were the ninth and tenth and are
+neither**, dropped on 2026-09-09 with the maintainer's decision that they stay model-only —
+「モデル専用のまま (panel は gap)」. Both panel badges are `gap` now and the two rows say so: a source
+editor is a third letter-taking flow on a console that has two, each bounded to one path component
+(ADR-0292), and a procedure is unbounded; the operator's editor is the file, which `--watch` and
+this panel's own watchers already pick up. So this bay owes them nothing rather than owing them a
+control it has not built — [ADR-0314](adr/0314-a-control-that-moves-a-field-of-the-aim-re-aims-the-slot-and-the-rebuild-is-the-write.md).
 
 ***Keep what a deck is playing* is claimed twice**, here and inside M5.3's rule. The mock draws
 `keep` in this bay's pane head, one per pane, so the control is this bay's; M5.3's paragraph and
@@ -756,13 +775,28 @@ a key press is addressed to the bay that has focus rather than to a letter a bay
 no letter here to bind.
 
 **Exit.** No `plan` badge in the panel column of this bay's rows on
-[every operation](manual/operations.html).
+[every operation](manual/operations.html). **A `gap` meets it as a `has` does**, and the two source
+rows are the first use of that: the exit asks that no row of this bay is still *waiting* on a
+control, and a row saying the panel is not a way in is not waiting on one.
 
-**Blocked on. Four rows, and one mechanism covers three of them.** It was five until 2026-09-08:
-*Write a parameter* landed with the parameter row's fader, on the route ADR-0280 and ADR-0282 had
-already laid through the engine
+**Blocked on. Three rows, and one mechanism covers all three.** It was five until 2026-09-08 and
+four until 2026-09-09. *Write a parameter* landed with the parameter row's fader, on the route
+ADR-0280 and ADR-0282 had already laid through the engine
 ([ADR-0286](adr/0286-a-parameter-row-writes-the-control-it-draws-and-carries-the-range-rather-than-the-position.md)),
-and it is what the sentence below about the writer was written for.
+and it is what the sentence below about the writer was written for. Then *Composite a deck's
+renderers* landed and *Element capacity, seeds, the camera* stopped being blocked at all, for a
+reason that is worth reading before anything else here: **two of the bullets below were wrong, and
+they were wrong in the same way**
+([ADR-0314](adr/0314-a-control-that-moves-a-field-of-the-aim-re-aims-the-slot-and-the-rebuild-is-the-write.md)).
+
+**A layering, a capacity, a seed and the salts are not writes and never wanted a setter.** They are
+fields of `watch::Aim` — the description a slot's watcher is pointed at — so a control that moves
+one restates the other thirteen and sends the aim, the worker recompiles the slot off the render
+thread, and the build lands at a frame boundary and is judged against the budget like an edited
+file or a library load. That is ADR-0228's mechanism, unchanged and eleven days old when these
+bullets were written; what made them read as blockers is that each stops one clause short of its
+own answer. *The engine has no writer* is true, and the sentence it belongs to ends *because a
+live write is not how material changes here*.
 
 **There is no public route from a `&mut Deck` to a live `Set`.** Every control this panel has built
 lands operation → `Record` → `apply` → a `Deck` setter, and `Deck`'s public surface has no param,
@@ -780,23 +814,25 @@ each records.
 - ***Take a parameter back* has nothing to call even once that route exists**: `Set::bind` has no
   inverse anywhere in the workspace and `Binding` carries no suspended state. The row's own tip
   already says it — *"Nothing does this today; it is the second rule's other half."*
-- ***Composite a deck's renderers* waits on a setter.** `Set::merge` is `Some` only where
-  `layering == Layering::Composite` at `Set::build`, nothing writes it afterwards, and neither `Set`
-  nor `Deck` offers one, so the operation names a state the engine cannot be moved into while
-  running.
-- ***Element capacity, seeds, the camera* is two-thirds blocked and one-third undecided.** A capacity
-  sizes buffers at build and a salt is assigned there; `Set::source_capacities` and
-  `Set::source_salts` are readers with no writers. The camera arm is `Property::Camera(Undecided)` —
-  the vocabulary has no numbers for a control to send.
-- **The two *node's source* rows have nothing drawn and nowhere to type.** The mock's Inspector is a
-  half-head, a deck head and node groups; no source area is drawn anywhere on it. And the console
-  now has **two** letter-taking flows — an arrangement's name and a Set's id in a pane head
-  (ADR-0292) — each bounded to **one path component**. A source editor is a third and is unbounded,
-  which is the console-wide decision still nobody has taken. **What ADR-0292 does change is one bay
-  over**: the Library's filter fields stepped rather than took letters because a second flow was a
-  question nobody had asked, and one has now been asked and answered, so that pair is open rather
-  than closed. It is M5.3's, and a filter is an unbounded fragment where both built flows are one
-  component, so it is a different rule and not this one repeated.
+- ***Composite a deck's renderers* is built**, and it is the demonstration of the paragraph above
+  rather than an item in this list. The mock had drawn the chip all along; what was missing was the
+  press. `DeckHead::compositing` names the layering the deck is *not* in, `composited` in
+  `crates/karakuri/src/main.rs` re-aims the slot beside the arm the library load uses, and the
+  Staging lane carries the verdict because a composite press is a build — which matters here, since
+  compositing costs a frame-sized target per renderer. Panel badge `has`, and `op-when` is *on a
+  worker* where it was *launch*.
+- ***Element capacity, seeds, the camera* is nothing-blocked, two-thirds undrawn and one-third
+  undecided.** The engine is not what stands in the way: a capacity and the salts ride the same aim
+  the layering does. What is left for those two is the **control**, and two questions decide what it
+  would be. A capacity is a number in a declared range, which on this panel is a parameter row's
+  track — and a track dragged is a **rebuild a frame** where a parameter's is a uniform write, so
+  the obvious affordance is the one thing P-0091 refuses. And `Aim::capacity` is one `Option<u32>`
+  for the whole slot where `Property::Capacity` addresses a node, which is ADR-0228's own recorded
+  limit, so a row drawn under one geometry of a pairing Set would say something the aim cannot
+  carry. The camera is the third and is undecided outright: `Property::Camera(Undecided)`, because
+  the vocabulary has no numbers for a control to send and nobody has asked the maintainer which of
+  the two live answers it is. The row keeps its `plan` badge and its tip now names all three states,
+  because one row cannot carry a badge that is two-thirds anything.
 
 **Three more this bay owes, and none of them is a row.** They were recorded, verified and left in
 prose, which is how a bay's exit — a grep over one column — could be met while its pane drew
@@ -1368,10 +1404,16 @@ the distance between *homeless* and *built* and took three records to cross.
 #### The console's own shape
 
 Four rows have a panel home that is not a bay: *Fold a bay away* at the bay head, *Fold a pane away*
-at the pane edge, *Size the window* at a drag, and *Quit* at the `close` control. They are the
+at the pane edge, *Size the window* at a drag, and *Quit* at the window's own close. They are the
 panel's own chrome, so no M5.x above owns them, and ADR-0226 does not close without them.
 
-**Three of the four sit inside a question ADR-0281 names and does not take**, and it decides how much
+**The three questions this section carried are answered**, on 2026-09-09, in
+[ADR-0315](adr/0315-a-model-has-no-window-so-the-twelve-surface-rows-mcp-badges-are-gap.md): the
+loosening is not taken and the twelve MCP badges are `gap` rather than debt, *Quit*'s route is the
+window's own close and no `close` control is drawn on the console, and `a` is not bound so *Size the
+window*'s key badge is `gap`. What each of them was, and what it cost to answer, is below.
+
+**Three of the four sat inside a question ADR-0281 names and does not take**, and it decided how much
 of this section is work. That record loosened rule 01 to *every route reaches every write* and named
 a second, larger loosening it declined: *a write is what a replay has to reconstruct*. Under it the
 twelve operations `karakuri-operation-record` files as `Silent::Surface` — *a surface's own state*,
@@ -1389,9 +1431,20 @@ drags, the program view can take the whole panel"* — so nothing here becomes u
 whatever rule 01 says; what would be freed is MIDI, which cannot address any of it and is already
 `gap` on all twelve, and MCP, which offers none of them today.
 
+**It is refused, and the twelve MCP badges are `gap` anyway.** They stay writes, rule 01 goes on
+asking all four routes of a write, and what moved is one column's answer on twelve rows: a model has
+no window, so a route into a surface's own state is a route into a window the model is not looking
+at. The distinction is the whole of the difference between a debt and a decision — `gap` is the
+page's own word for *this surface cannot reach it at all*, and it is now said twelve times with one
+sentence rather than left as twelve promises nobody was going to keep. Only MCP moves; the panel and
+the keyboard are untouched, which is what the paragraph above already predicted.
+
 *Move a boundary* is a thirteenth row waiting on the same answer: the record crate says a divider
 position is as plainly a surface's own state as the folds beside it, and files it elsewhere only
-because its payload is `Undecided`.
+because its payload is `Undecided`. **ADR-0315 leaves its MCP badge at `plan`**, and the reason is
+that it took the twelve off `written`'s own `Silent::Surface` arm rather than off a description of
+them — a row filed under `Owed(Undecided)` is not in that arm, whatever the comment beside it says.
+Its badge is the day somebody settles the payload, and the sentence is already written.
 
 Two are the console's and two are the host's. **The folds want a hit test**, and the two of them no
 longer want the same one. Both reach the console as `karakuri_console::panel::Op::Fold` rather than
@@ -1421,8 +1474,17 @@ that has to change is not this file's to say.
 
 **So two of this section's four rows are met, and the two that are left are the host's.** **Sizing and quitting are
 the host's**: `crates/karakuri` answers `WindowEvent::Resized` and `WindowEvent::CloseRequested`
-itself, and `esc` reaches the second. What is owed there is the `a` binding, which is bound to
+itself, and `esc` reaches the second. What was owed there was the `a` binding, which is bound to
 nothing, and the `close` control on the panel.
+
+**Neither is owed any more, and neither was built.** ADR-0315 answers both by saying the console does
+not draw them. *Quit* names the window's own close, which is a control the window manager already
+draws and the host already answers — so the panel column is `gap`, the badge that says the route is
+real moves to the fifth cell as `window close`, and `esc` keeps its `has` until ADR-0259 takes it.
+`a` is bound to nothing in `crates/karakuri`, is not going to be, and *Size the window*'s key badge
+is `gap` for *Move a boundary*'s reason: a size is a pair of viewport pixels and a key press cannot
+mean one. `karakuri-cli`'s `a` is the one that looks like a counter-example and is not — it asks for
+the canvas's size rather than naming a size, and that keyboard is its own (ADR-0220).
 
 **Sizing has a third owed item, and it is one line.** The window has no minimum inner size, so it
 can be dragged under the arrangement's own minima — where the solve scales everything down together
@@ -1449,17 +1511,27 @@ moved the arrangement instead of the window: a pane declares 208, the centre 2 x
 pane short — the fader is the leftover track and wants *more* than the row's 207, where the mixer's
 threshold is met *at* its 172 — and the record carries both measurements.
 
-**Two of the four are blocked, and this section used to end by saying none was.** The bay-head and
-pane-edge hit tests wait on nothing — `Op::Fold` and `Op::FoldEnclosing` already perform, and the
-pointer is already tracked on every event for exactly this. *Size the window* and *Quit* are the two
-that wait: the second loosening above decides whether either is owed at all, `Quit`'s `panel close`
-names a control **the mock does not draw**, so under `docs/contributing.md` §5 step 3 that is a page
-gap before it is code, and `a`'s payload has to say what a key press means where the page's own
-*Move a boundary* tip says a key press cannot mean a viewport pixel.
+**Two of the four were blocked, and this section used to end by saying none was.** The bay-head and
+pane-edge hit tests waited on nothing — `Op::Fold` and `Op::FoldEnclosing` already perform, and the
+pointer is already tracked on every event for exactly this. *Size the window* and *Quit* were the two
+that waited: the second loosening above decided whether either was owed at all, `Quit`'s `panel
+close` named a control **the mock does not draw**, so under `docs/contributing.md` §5 step 3 that was
+a page gap before it was code, and `a`'s payload had to say what a key press means where the page's
+own *Move a boundary* tip says a key press cannot mean a viewport pixel. **All three are answered and
+one row is left**, which is the next paragraph.
 
-**And this section states no exit condition**, where every M5.x above states one and this file says
-each names its rows, its exit and what it is blocked on. What it inherits is ADR-0226's grep read
-over the four rows above; that is the condition, and saying so is what makes it checkable.
+**The exit is ADR-0226's grep read over this section's four rows** — no `plan` badge in the panel
+column of *Fold a bay away*, *Fold a pane away*, *Size the window* and *Quit*, where a row the page
+marks `gap` is finished because the page has already said the panel cannot reach it. Every M5.x above
+states one and this file says each names its rows, its exit and what it is blocked on; this is that
+sentence said, which is what makes it checkable.
+
+**Three of the four meet it and the exit is not met.** *Fold a bay away* reads `has` at the bay head,
+*Fold a pane away* `has` at the pane edge, *Quit* `gap` — the window's close is not a console
+control, and the fifth cell carries it. **The one left is *Size the window*, at `plan` on a drag**,
+and what it waits on is neither of the two things ADR-0315 answered: the row's own tip says the
+window is not refused a say, and that the output which would hold a size of its own is unbuilt. So
+this section closes when a window drag sets an output's size, and on nothing else.
 
 #### M5.14 — The frame's cost
 
@@ -1803,7 +1875,7 @@ it *"neither can happen yet, so nothing draws either word"*. **Half of that reas
 conclusion is not.** The panel watches every slot's `.kir` pair, so a build can be refused while a
 slot is running and the Staging lane draws that verdict; what cannot happen is the *cell* the page
 describes, because a refused build installs nothing — a failed compile makes no `Request` and a
-rolled-back trial leaves the previous Set running — so the honest picture after a rejection is the
+rolled-back candidate leaves the previous Set running — so the honest picture after a rejection is the
 material that is still there. `crates/karakuri-engine/tests/deck.rs`'s
 `a_rejected_build_shows_what_is_still_running` asserts it.
 **What is owed is the page's sentence**, and the open question under it is whether a cell ever

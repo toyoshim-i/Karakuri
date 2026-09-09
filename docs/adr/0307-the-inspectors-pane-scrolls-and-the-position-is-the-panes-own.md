@@ -11,6 +11,14 @@ tags: [console, ui, inspector, layout]
 
 # The Inspector's pane scrolls, and the position is the pane's own
 
+> **Annotated 2026-09-09: the Library bay took this mechanism whole.**
+> [ADR-0312](0312-the-params-pill-is-a-toggle-and-the-library-bay-scrolls.md) puts a position on
+> the Library bay by the five parts decided below — the wheel over the region, the position as the
+> console's own state, the count as the mark, no scrollbar, and the clamp at the draw with nothing
+> written back — so what is argued here is argued once. **This record is unchanged**, and one of
+> its consequences is not: *"The Library's list still does not scroll and the reason is unchanged"*
+> was true when it was written and is not now.
+
 ## Context
 
 An Inspector pane drew a node group **whole or not at all**. `view.rs` said why, and the argument

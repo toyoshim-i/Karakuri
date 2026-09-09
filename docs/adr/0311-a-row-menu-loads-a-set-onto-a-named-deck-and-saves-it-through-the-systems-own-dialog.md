@@ -77,7 +77,7 @@ file the operator names there is where the package is written.**
   record's sentence performed rather than amended.
 - **What is written is `setfile::bundle`'s output** — the Set file with every source it names
   inlined after it, `docs/ir-spec.md`'s bundled form and
-  [ADR-0231](0231-a-set-file-carries-its-material-and-the-name-says-which-form-it-is-in.md)'s
+  [ADR-0231](0231-a-sets-two-forms-take-two-extensions-and-the-store-holds-only-the-resolved-one.md)'s
   `.kbset`. One missing artifact refuses the whole thing and names the node, which is that
   function's own refusal and is not repeated here.
 - **The dialog opens on `<id>.kbset` in the folder the bay is pointed at**, where a folder has been

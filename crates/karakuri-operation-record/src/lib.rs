@@ -518,6 +518,20 @@ pub enum Silent {
     /// `Operation::SelectDeck` says of itself that it writes no record, and it
     /// is the reason every other operation names its deck rather than meaning
     /// the selected one.
+    ///
+    /// **This arm's members are `gap` in the MCP column of
+    /// `docs/manual/operations.html`, and the reason is this sentence read on
+    /// the model's side**: a model has no window, so a route into a surface's
+    /// own state is a route into a window the model is not looking at
+    /// (`docs/adr/0315-a-model-has-no-window-so-the-twelve-surface-rows-mcp-badges-are-gap.md`).
+    /// **That is not a loosening of what a write is.** They are writes, rule
+    /// 01 still asks all four routes of a write, and what changed is one
+    /// column's answer on twelve rows rather than the rule —
+    /// `docs/adr/0281-…` names the loosening that would have made them
+    /// optional per route and declines it. **This answer is not the reason
+    /// either**: `Silent::Surface` says what a replay reconstructs, and a
+    /// badge is a claim about a surface, so the two agree on the fact and are
+    /// held apart on purpose.
     Surface,
     /// **It asks rather than changes.** Reading a Set, listing the store,
     /// reading a procedure, finding out what a write did. A record is what a
@@ -1312,6 +1326,20 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
         // knob is unworthy of a record, it was that no record could carry the
         // deck. `Record::Ride` carries it, and what is still here is what
         // nobody has written the session's twin of yet.
+        //
+        // **`SetCompositing` has a panel control now and still writes
+        // nothing**, and it is worth saying why the first did not move the
+        // second. The console's deck head folds a slot's renderers by
+        // *re-aiming* it — the layering is one field of the description its
+        // watcher is pointed at, so the window restates the rest and the worker
+        // rebuilds the slot
+        // (`docs/adr/0314-a-control-that-moves-a-field-of-the-aim-re-aims-the-slot-and-the-rebuild-is-the-write.md`).
+        // That is precisely what `Operation::LoadSet` two lines up already
+        // does, and it answers `Silent(NoRecord)` for the same reason: a
+        // re-point is not something the session vocabulary can say. What it
+        // costs is real and is written in that record — a session replayed
+        // does not come back compositing where a hand asked for it — and it is
+        // the load's cost rather than a new one.
         Operation::SetLatencyOffset { .. }
         | Operation::AttachBeatSource { .. }
         | Operation::LoadSet { .. }

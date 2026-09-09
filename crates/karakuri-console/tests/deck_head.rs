@@ -1,11 +1,11 @@
-//! **The deck head's four chips: the console's ninth to twelfth controls, and
-//! the first that are not in a row of their own.**
+//! **The deck head's four chips and the five controls in them, and the first
+//! controls on this console that are not in a row of their own.**
 //!
-//! Eight things, and the first two are why this is its own file rather than a
+//! Nine things, and the first two are why this is its own file rather than a
 //! few more assertions in `view.rs`'s module tests:
 //!
 //! 1. Where the four sit, as `.deck-head`'s flex row lays them out.
-//! 2. **That the three controls clear every boundary's grab**, which is
+//! 2. **That the controls clear every boundary's grab**, which is
 //!    `tests/look.rs`'s arithmetic over a row that is not a row of the
 //!    arrangement: a pane's deck head is measured against the **pane
 //!    divider**, and the number that binds is `.deck-head`'s own 10 pixels of
@@ -18,7 +18,10 @@
 //! 6. That an arrow asks for a quarter beat, signed by which arrow it was.
 //! 7. **That an inert scrub is drawn and not claimed**, which is *a control
 //!    claims what it acts on and no more* answered by a state.
-//! 8. **The route a window loop actually takes** — `claim`, then the
+//! 8. **That the fold names the layering the deck is not in**, which is the
+//!    chip that was drawn and claimed nothing until 2026-09-09 — see
+//!    `docs/adr/0314-…`.
+//! 9. **The route a window loop actually takes** — `claim`, then the
 //!    derivation that drew the control, then the operation.
 //!
 //! None of it needs a window, a device or a disk. It does need `egui`'s fonts,
@@ -345,11 +348,17 @@ fn the_band_the_chips_clear_is_still_a_boundarys() {
     );
 }
 
-/// **A control claims what it acts on and no more.** The fold is not a control
-/// at all, the gaps between the chips are not, and neither is an arrow on a
-/// deck the scrub is inert on.
+/// **A control claims what it acts on and no more.** The gaps between the
+/// chips are not controls, and neither is an arrow on a deck the scrub is
+/// inert on.
+///
+/// **The fold moved from the second list to the first on 2026-09-09**, which
+/// is the whole of what ADR-0314 changed about this row: it was drawn and
+/// claimed nothing, on the argument that layering is a build decision the
+/// engine has no setter for. It has none, and a press re-aims the slot
+/// instead.
 #[test]
-fn nothing_beside_the_three_controls_is_claimed() {
+fn nothing_beside_the_four_controls_is_claimed() {
     let pane = mock();
     let (mut panel, ctx) = console(PLAUSIBLE);
     let view = view(&pane);
@@ -361,6 +370,7 @@ fn nothing_beside_the_three_controls_is_claimed() {
         (anchor.center(), "the anchor"),
         (head.back.center(), "the back arrow"),
         (head.forward.center(), "the forward arrow"),
+        (head.composite.center(), "the fold"),
     ] {
         assert_eq!(
             claim(&mut panel, &ctx, &view, at(probe)),
@@ -369,7 +379,6 @@ fn nothing_beside_the_three_controls_is_claimed() {
         );
     }
     for (probe, what) in [
-        (head.composite.center(), "the composite chip"),
         (
             egui::pos2(
                 head.mode.max.x + size::DECK_HEAD_GAP * 0.5,
@@ -646,7 +655,7 @@ fn the_arrows_ask_for_a_quarter_beat_each_way() {
     );
 }
 
-/// **A press is one of the three or none**, so no point on the row asks two
+/// **A press is one of the four or none**, so no point on the row asks two
 /// questions.
 #[test]
 fn a_press_is_one_control_or_none() {
@@ -667,11 +676,12 @@ fn a_press_is_one_control_or_none() {
             head.sync(at(probe)),
             head.reanchor(at(probe)),
             head.scrub(at(probe)),
+            head.compositing(at(probe)),
         ];
         let answered = asked.iter().filter(|a| a.is_some()).count();
         assert!(
             answered <= 1,
-            "a press at {probe:?} asked {answered} of the three controls for something"
+            "a press at {probe:?} asked {answered} of the four controls for something"
         );
         assert_eq!(
             head.owns(at(probe)),
@@ -684,6 +694,54 @@ fn a_press_is_one_control_or_none() {
 // ---------------------------------------------------------------------------
 // The route a window loop takes
 // ---------------------------------------------------------------------------
+
+/// **The fold names the layering the deck is not in, and never a step.**
+///
+/// Two panes, one compositing and one overdrawing, and the same chip on each:
+/// what leaves is `SetCompositing` carrying the destination, computed from the
+/// state the frame that laid the row out drew — which is
+/// [P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)
+/// and `Mixer::blend`'s division. Nothing in the vocabulary says *toggle*, and
+/// a control that could only step would leave two surfaces disagreeing about
+/// where the deck is.
+///
+/// **It does not claim reachability**: whether the press re-aims the slot is
+/// `crates/karakuri/src/main.rs`'s, which this crate cannot depend on
+/// (ADR-0156). ADR-0314 is the record.
+#[test]
+fn the_fold_asks_for_the_layering_the_deck_is_not_in() {
+    for composite in [false, true] {
+        let pane = Pane {
+            composite,
+            ..mock()
+        };
+        let (mut panel, ctx) = console(PLAUSIBLE);
+        let view = view(&pane);
+        let (_, head) = chips(&panel, &ctx, 0, &pane);
+        let probe = head.composite.center();
+
+        assert_eq!(
+            claim(&mut panel, &ctx, &view, at(probe)),
+            Claim::Panel,
+            "the fold is drawn and not claimed on a deck that composites: {composite}"
+        );
+        assert_eq!(
+            head.compositing(at(probe)),
+            Some(Operation::SetCompositing {
+                deck: pane.deck as u8,
+                compositing: !composite,
+            }),
+            "a press on the fold of a deck compositing {composite} did not ask for the other \
+             layering"
+        );
+        // The other three answer nothing for it, so the destination cannot be
+        // reached twice by one press — `a_press_is_one_control_or_none` is the
+        // same fact over the whole row.
+        assert_eq!(head.sync(at(probe)), None);
+        assert_eq!(head.reanchor(at(probe)), None);
+        assert_eq!(head.scrub(at(probe)), None);
+    }
+}
 
 /// **The whole route, as the window loop drives it**: `claim` first, then the
 /// pane and the head derived a second time, then the operation.
@@ -728,6 +786,13 @@ fn a_press_reaches_both_operations_the_way_the_window_loop_reaches_them() {
                 beats: SCRUB_BEATS,
             },
         ),
+        (
+            laid.composite.center(),
+            Operation::SetCompositing {
+                deck: pane.deck as u8,
+                compositing: !pane.composite,
+            },
+        ),
     ] {
         assert_eq!(
             claim(&mut panel, &ctx, &view, at(probe)),
@@ -742,6 +807,7 @@ fn a_press_reaches_both_operations_the_way_the_window_loop_reaches_them() {
             .sync(at(probe))
             .or_else(|| again.reanchor(at(probe)))
             .or_else(|| again.scrub(at(probe)))
+            .or_else(|| again.compositing(at(probe)))
             .expect("a press the panel claimed on a control it draws asks for something");
         assert_eq!(
             asked, expected,
