@@ -11,6 +11,33 @@ tags: [engine, live]
 
 # A swap lands on a frame boundary, and an over-budget Set rolls back without being asked
 
+> **Annotated 2026-09-09: the swap still lands on a frame boundary and an over-budget Set still
+> rolls back on its own; what "over budget" is measured with has changed, and three paragraphs
+> below describe a mechanism that no longer exists.**
+> [ADR-0313](0313-a-candidate-is-judged-on-its-own-cost-and-the-decks-period-is-a-deck-level-alarm.md)
+> is the record. The decision above is intact — the two clauses this record is named for are what it
+> keeps.
+>
+> **What is superseded is the *number*.** *"The trial does not start at frame one"*, *"The verdict is
+> a median over a window rather than a worst case"*, and the first two Consequences below are all
+> about a **frame interval**: `WARMUP_FRAMES`, `JUDGE_FRAMES`, the median, and a budget sitting
+> between one refresh period and two because vsync quantises. A candidate is now judged on the cost
+> of **its own** frame, measured by the probe the worker already runs on it before the Set is handed
+> over — so there is nothing to settle, no warmup, no window, and no quantisation. `WARMUP_FRAMES` is
+> deleted; `JUDGE_FRAMES` is renamed `PERIOD_FRAMES` and is the window of the deck-level alarm the
+> interval became.
+>
+> **The first Consequence is the finding rather than a limitation now.** *"One Live slot's cost
+> cannot be separated from its neighbours' on this instrument, because a frame interval cannot be
+> divided"* was true and was recorded as something the watchdog lived with. It was not something the
+> watchdog could live with: it rolled back a Set whose own frame costs 9.58 ms on a number that read
+> 33 ms and was mostly the other three slots and the console. The separation the paragraph says is
+> impossible was already available in the per-Set measurement the same sentence points at.
+>
+> **The alternative rejected as *"Judge on a worst-case sample rather than a median"* keeps its
+> reasoning and loses its subject**: there is no sampling in the verdict at all. The false-reject
+> direction it names is exactly what ADR-0313 measured and repaired.
+
 ## Context
 
 P-0005 — *A swap happens on a frame boundary, and an over-budget Set rolls back on its own* — named

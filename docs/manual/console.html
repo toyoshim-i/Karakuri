@@ -1680,19 +1680,25 @@
         </p>
         <p>
           <strong>What the substitution does not do is empty the lane, and
-          this page used to claim it did.</strong> A budget verdict is only
-          ever reached on a slot that is <em>being drawn</em>: a parked or
-          resting slot's trial is frozen, on the rule that a slot nobody is
+          this page used to claim it did.</strong> It said a budget verdict was
+          only ever reached on a slot that is <em>being drawn</em> &mdash; that
+          a parked or resting slot's trial was frozen, because a slot nobody is
           looking at is not paying for the frames it would be judged on, so a
-          build that lands there has a verdict outstanding for as long as the
-          slot stays off air and its row never leaves.
+          build landing there had a verdict outstanding for as long as the deck
+          stayed off air. <strong>That was true until 2026-09-09 and is not
+          any more.</strong> A candidate is judged on what one frame of
+          <em>that Set</em> was measured to cost, which is the same number
+          whether anyone is looking at the slot or not, so there is nothing
+          left to freeze and an off-air build gets its verdict at the frame it
+          lands on. The lane empties on a parked deck exactly as it does on a
+          live one.
         </p>
         <p>
           <strong>What this page said next was a lane defect, and it was not
           one.</strong> It said that the program hosting this panel opens deck
           A live and the other three parked, that <em>every slot watches the
           same pair of files</em>, and that one save therefore rebuilds all
-          four &mdash; deck A's row clearing on its thirty measured frames and
+          four &mdash; deck A's row clearing on its verdict and
           three rows staying in the lane for the rest of the run. The first and
           the last of those were true. The middle one was a
           <strong>defect in the program, not a reading of the lane</strong>:
@@ -2551,10 +2557,13 @@
           writes the library Set's procedures out where the slot's watcher is
           already looking and lets go: the worker reads them, compiles them off
           the render thread, and the swap lands at a frame boundary and is
-          judged for thirty frames against the budget like every other build.
-          <strong>A Set that cannot hold the frame is rolled back on its own</strong>
-          and the deck goes back to what it was playing, at the <code>t</code> it
-          was parked at. That is not a special case written for the library; it
+          judged on what one frame of that Set costs, like every other build.
+          <strong>A Set whose own frame costs more than one frame may is rolled
+          back on its own</strong> and the deck goes back to what it was
+          playing, at the <code>t</code> it was parked at. <strong>Its own
+          frame, and not the deck's</strong>: what a load is judged by is what
+          the worker measured that Set to cost while it was building it, so a
+          Set that fits is kept however busy the other three decks are. That is not a special case written for the library; it
           is the path an edit already took, and the library is now one more thing
           that walks it. The staging lane under this bay says what happened,
           on the deck it happened to, because a load is a build and a build is

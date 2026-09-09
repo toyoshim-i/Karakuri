@@ -13132,13 +13132,18 @@ const STAGING_TITLE: &str = "Staging";
 /// (`docs/adr/0310-a-source-can-say-it-refused-and-the-lane-draws-it.md`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Stage {
-    /// `Event::Swapped` — the build is the live Set and is on screen. The
-    /// watchdog has not reported on it yet, which is
-    /// `karakuri_engine::swap::HotSwap::on_trial` and is **not** a fourth
-    /// word here: the page's row says whether a candidate is on screen, and a
-    /// version being judged is on screen. See [`staging`] for the one state
-    /// where a row stays on this word — a parked slot, whose trial is frozen
-    /// until it is drawn again.
+    /// `Event::Swapped` — the build is the live Set and is on screen.
+    ///
+    /// **There is no fourth word for "being judged", and there is no longer
+    /// anything to name one after.** The watchdog used to hold a candidate on
+    /// trial for eight warmup and thirty judged frames, which
+    /// `karakuri_engine::swap::HotSwap::on_trial` reported; the page's row said
+    /// nothing about it, on the reading that a version being judged is on
+    /// screen and this row says what is on screen. ADR-0313 removed the trial —
+    /// the verdict is reached on the candidate's own measured cost, in the same
+    /// call the swap lands in — so a row on this word is a build that landed
+    /// **and was kept**, and a build that was not kept goes straight to
+    /// [`Stage::RolledBack`] in the same drain.
     Landed,
     /// `Event::RolledBack` — **the row this lane most needs to draw.** The
     /// watchdog threw the version out for cost and put the previous Set back
@@ -13219,13 +13224,16 @@ pub struct Candidate {
     /// label is every node's `proc` name joined and those are the same
     /// procedures. So the label says what was built and only this says where.
     ///
-    /// **And where is the reading this lane exists for.** A trial is frozen on
-    /// a slot that is not being drawn (see [`Stage::Landed`]), so a load into a
-    /// parked deck lands a build in a slot nobody is watching: the verdict
-    /// stays outstanding and the row stays in the lane until that deck goes on
-    /// air. This letter is the only thing in the instrument that says which
-    /// deck to look at, and *put a node's previous version back* is likewise an
-    /// act on one slot.
+    /// **And where is the reading this lane exists for**, though no longer for
+    /// the reason it was written with. A trial used to be *frozen* on a slot
+    /// that was not being drawn, so a load into a parked deck left a verdict
+    /// outstanding and a row in the lane until that deck went on air; ADR-0313
+    /// removed the trial, and an off-air slot's candidate is now judged at the
+    /// install like any other (see [`Stage::Landed`]). What the letter is for
+    /// is unchanged and is the sentence above it: four slots opened on one
+    /// preset build four rows whose labels are the same string, so this is the
+    /// only thing in the instrument that says which deck to look at — and *put
+    /// a node's previous version back* is likewise an act on one slot.
     ///
     /// **This said the program *"plays one pair of files in both its slots, so
     /// one save produces two builds whose labels are the same string"* until

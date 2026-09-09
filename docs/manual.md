@@ -54,10 +54,17 @@ cargo run -p karakuri-cli -- --watch
 Edit either `.kir` and save — **the copies under `.karakuri/scratch/`, whose path and
 per-slot file names are printed at startup**, not the files you named on the command line. A run that can be edited never
 writes to those; see [Where your work lives](#where-your-work-lives). The new procedure is
-compiled on a worker thread and swapped in between two frames. Then it is **judged**: eight warmup frames, thirty measured ones, and if
-the median frame interval over those thirty is over the budget the candidate is dropped and
-the outgoing Set is live again at exactly the `t` it was parked at. A file that does not
-compile prints its diagnostics and never becomes a candidate at all.
+compiled on a worker thread and swapped in between two frames. Then it is **judged**, in the same
+frame it landed on: the worker measured what one frame of that Set costs while it was building it,
+and if that number is over the budget the candidate is dropped and the outgoing Set is live again at
+exactly the `t` it was parked at. A file that does not compile prints its diagnostics and never
+becomes a candidate at all.
+
+**It is judged on its own cost and on nothing else** — not on how long the deck's frames are taking,
+which is one number for every slot plus the console and cannot be divided among them. A Set that
+fits is kept however busy the rest of the deck is; whether the *deck* is keeping up is a separate
+reading, and nothing is taken off air for it
+([ADR-0313](adr/0313-a-candidate-is-judged-on-its-own-cost-and-the-decks-period-is-a-deck-level-alarm.md)).
 
 A procedure that fails
 any stage prints every diagnostic it has, against the source, and stops — there is one
@@ -255,8 +262,9 @@ Six things worth knowing before you rely on it:
 - **`--watch` is what picks a write up.** Without it the file changes and the screen does
   not; the tool says so, but it is easier to just pass it.
 - **A model that writes something too expensive is caught by the same machinery that catches
-  you** — thirty measured frames, then the previous procedure comes back at the time it was
-  parked at.
+  you** — the worker measures what one frame of the new Set costs while it is building it, and if
+  that is over the budget the previous procedure comes back at the time it was parked at, in the
+  same frame the new one landed on.
 - **A write cannot reach the files you named.** It reaches the scratch copy of **the slot
   it was addressed to**, and every version that compiles is kept under `<store>/history/` —
   including the one the run started with. Slots have their own copies, so a write to slot 0
@@ -370,7 +378,7 @@ pressed it. See the keys below.
 |---|---|
 | `--tonemap NAME` | `clamp`, `reinhard`, `aces` (default), `agx` |
 | `--exposure N` | before the tone map |
-| `--budget-ms N` | the frame budget the hot-swap watchdog judges a candidate against, default 20. The governor's priming budget is a different quantity — measured per-Set cost against a 16.7 ms compute budget — and is not on a flag |
+| `--budget-ms N` | what one frame of a swapped-in Set may cost, in milliseconds, default 20. The candidate's own measured cost is held against it; `--budget-ms 0` therefore rejects everything. **Its meaning changed on 2026-09-09**: it used to be the deck's median frame interval that a candidate was held to, which is a different quantity and is now a deck-level reading rather than a verdict ([ADR-0313](adr/0313-a-candidate-is-judged-on-its-own-cost-and-the-decks-period-is-a-deck-level-alarm.md)). The governor's priming budget is a third quantity — a *sum* of per-Set costs against a 16.7 ms compute budget — and is not on a flag |
 
 **Input**
 

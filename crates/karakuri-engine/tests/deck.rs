@@ -362,6 +362,47 @@ proc wash {
         Deck::new(&gpu.device, swaps, width, height)
     }
 
+    /// One build request for the pair this file compiles, at [`SWAPPED`] so that
+    /// which Set a slot is holding is observable from outside.
+    fn candidate(id: u64) -> Request {
+        Request {
+            names: karakuri_engine::swap::RequestNames::default(),
+            edges: Vec::new(),
+            id,
+            l1s: vec![(compile(L1), SWAPPED)],
+            l2s: Vec::new(),
+            l3s: Vec::new(),
+            fields: Vec::new(),
+            layering: karakuri_engine::set::Layering::Overdraw,
+            live: None,
+            published: Vec::new(),
+            l4s: vec![compile(L4)],
+            seed_salt: SEED_B,
+            camera: karakuri_engine::camera::Orbit::default(),
+            salts: Vec::new(),
+            params: Vec::new(),
+            bindings: Vec::new(),
+            authorities: Vec::new(),
+            label: "candidate".to_string(),
+        }
+    }
+
+    /// **A verdict, as the three things it is**: whether the candidate was kept,
+    /// the number it was decided on, and which of the slot's two numbers that
+    /// was. `None` for every other event.
+    ///
+    /// `cost_ms` is an `Option` on the keeping side and not on the other, which
+    /// is `swap::Event`'s own asymmetry: a candidate nothing could measure is
+    /// kept and reported as unjudged, and a rollback can only be reached through
+    /// a number.
+    fn said_verdict(e: Event) -> Option<(bool, Option<f32>, karakuri_engine::Basis)> {
+        match e {
+            Event::Accepted { cost_ms, basis, .. } => Some((true, cost_ms, basis)),
+            Event::RolledBack { cost_ms, basis, .. } => Some((false, Some(cost_ms), basis)),
+            _ => None,
+        }
+    }
+
     /// One frame, shaped the way a caller has to shape it: the guard owns the
     /// encoder, so there is no other shape available.
     ///
@@ -2956,30 +2997,34 @@ proc wash {
         );
     }
 
-    /// **The watchdog does not judge a Set that is not on screen.**
+    /// **An off-air slot's candidate is judged at the install, like every other
+    /// slot's, because the number is the candidate's own.**
     ///
     /// `Deck::begin_frame` gives every slot its frame boundary, off-air ones
     /// included — a build has to be able to land on a slot that is not showing,
-    /// and retired Sets have to keep reaching the worker. What an off-air slot
-    /// must *not* get is a watchdog sample: the frame interval is one number for
-    /// the whole deck, so judging against it accepts a candidate on a budget it
-    /// never spent, and — with a tight budget and busy neighbours, which is what
-    /// this asserts because it is the deterministic direction — rolls one back
-    /// for cost it never caused.
+    /// and retired Sets have to keep reaching the worker.
     ///
-    /// **The reason used to be that an off-air slot renders nothing**, which
-    /// stopped being true when every slot started being drawn (ADR-0258) and
-    /// stepped (ADR-0269). The conclusion did not change with it: the ambiguity
-    /// is attribution, and one interval over four slots cannot be attributed.
+    /// **This test used to assert the opposite half of the same problem.** It was
+    /// `an_off_air_slot_is_not_judged_against_its_neighbours_frames`, and what it
+    /// pinned was that a parked slot's trial was *frozen*: the frame interval is
+    /// one number for the whole deck, so judging a candidate nobody was drawing
+    /// against it accepted it on a budget it never spent and, with a tight budget
+    /// and busy neighbours, rolled one back for cost it never caused. The freeze
+    /// was the best an interval-based watchdog could do and it left the case that
+    /// mattered untouched — a *Live* slot's candidate was still judged on its
+    /// neighbours' cost — and it cost an off-air slot an unbounded wait for a
+    /// verdict, which is the second half of what
+    /// [ADR-0313](../../../docs/adr/0313-a-candidate-is-judged-on-its-own-cost-and-the-decks-period-is-a-deck-level-alarm.md)
+    /// repairs. The verdict is now the candidate's own measured cost, which does
+    /// not move with residency, so there is nothing to freeze.
     ///
-    /// The budget here is zero, so nothing can pass it. While the slot is parked
-    /// no verdict may arrive at all; the moment it goes Live, one must.
+    /// The budget here is zero, so nothing can pass it: the verdict must arrive
+    /// while the slot is still parked, and it must be a rollback.
     #[test]
-    fn an_off_air_slot_is_not_judged_against_its_neighbours_frames() {
-        /// `WARMUP_FRAMES + JUDGE_FRAMES` in `swap.rs`, and slack. Private there,
-        /// so this is a duplicate — if it drifts, the test gets weaker rather than
-        /// wrong, because it would stop being enough frames for a verdict and the
-        /// second half would catch that.
+    fn an_off_air_slots_candidate_is_judged_at_the_install() {
+        /// What the old freeze cost: eight warmup and thirty judged frames, and
+        /// slack. Kept as the *upper* bound this now has to beat — a verdict that
+        /// took this many frames would be one that had gone back to waiting.
         const A_FULL_WINDOW: usize = 8 + 30 + 12;
 
         let gpu = Gpu::headless().expect("no GPU available");
@@ -3025,60 +3070,306 @@ proc wash {
 
         let verdict = |deck: &mut Deck| -> Option<String> {
             deck.events(1).find_map(|e| match e {
-                Event::Accepted {
-                    label, median_ms, ..
-                } => Some(format!("Accepted `{label}` at {median_ms:.3} ms")),
-                Event::RolledBack {
-                    label, median_ms, ..
-                } => Some(format!("RolledBack `{label}` at {median_ms:.3} ms")),
+                Event::Accepted { label, cost_ms, .. } => Some(format!(
+                    "Accepted `{label}` at {:.3} ms",
+                    cost_ms.unwrap_or(f32::NAN)
+                )),
+                Event::RolledBack { label, cost_ms, .. } => {
+                    Some(format!("RolledBack `{label}` at {cost_ms:.3} ms"))
+                }
                 _ => None,
             })
         };
 
-        // The build still lands on the parked slot: that is wanted, and the rest
-        // of the test is about nothing else happening to it.
+        // The build lands on the parked slot and is judged in the same frame, so
+        // both are read out of one loop: the events are drained once, and
+        // `verdict` would consume a verdict that a second drain then waited for.
         let started = Instant::now();
-        while deck.slot(1).set().capacity() != SWAPPED {
+        let mut seen = None;
+        let mut frames = 0usize;
+        while seen.is_none() {
             frame(&gpu, &mut deck, &present, 1);
-            assert!(
-                verdict(&mut deck).is_none(),
-                "a verdict arrived before the build even landed"
-            );
+            frames += 1;
+            seen = verdict(&mut deck);
             assert!(
                 started.elapsed() < PATIENCE,
-                "waited {PATIENCE:?} for the off-air build and it never installed"
+                "waited {PATIENCE:?} for the off-air build and no verdict came"
             );
         }
+        let seen = seen.expect("just set");
 
-        for _ in 0..A_FULL_WINDOW {
-            frame(&gpu, &mut deck, &present, 1);
-            if let Some(v) = verdict(&mut deck) {
-                panic!(
-                    "the watchdog reached a verdict — {v} — on a slot that rendered nothing; \
-                 the interval it measured is the neighbouring slot's cost"
-                );
-            }
-        }
+        assert!(
+            seen.starts_with("RolledBack"),
+            "a candidate that cannot fit a zero budget was kept: {seen}"
+        );
+        assert_eq!(
+            deck.slot(1).set().capacity(),
+            CAPACITY,
+            "the rollback did not put the parked slot's own Set back"
+        );
+        // **The whole point of the change, as a number.** The verdict arrives on
+        // the frame the build lands on, while the slot is still Allocated. The
+        // old freeze would have taken at least a full window *and* the slot going
+        // on air, so any figure under that is a verdict that did not wait — and
+        // the build itself is what the frames before it were spent on.
+        assert!(
+            frames < A_FULL_WINDOW,
+            "the verdict took {frames} frames, which is a window: it is waiting again"
+        );
+        assert_eq!(
+            deck.residency(1),
+            Residency::Allocated,
+            "the slot went on air by itself, so this says nothing about a parked one"
+        );
         assert!(
             steps_taken(deck.slot(1).set()) > 0,
             "the off-air slot did not step, so this test is no longer about a slot \
              that is paying into the interval it is not being judged by"
         );
+    }
 
-        // On air, it is judged — against a budget of zero, so it goes.
-        deck.set_residency(1, Residency::Live);
-        let mut on_air = None;
-        for _ in 0..A_FULL_WINDOW {
-            frame(&gpu, &mut deck, &present, 1);
-            if let Some(v) = verdict(&mut deck) {
-                on_air = Some(v);
-                break;
-            }
+    /// A frame slowed by hand, so that **"the deck is over its period" is a fact
+    /// of the harness rather than of the machine**.
+    ///
+    /// `docs/contributing.md` §1 rules out a test that turns on whether this
+    /// adapter is fast: a workload heavy enough to blow a budget here is
+    /// comfortable somewhere else. The two tests below need a deck whose *frames*
+    /// are certainly over a budget while the *candidate* is certainly under it,
+    /// and the only way to have both on every machine is to make the frame long
+    /// by construction. It stands in for exactly what the old gate could not tell
+    /// apart from a heavy candidate: a long frame, whatever produced it.
+    const SLOW_FRAME: Duration = Duration::from_millis(30);
+
+    /// The budget both of those hold against — a third of [`SLOW_FRAME`], so the
+    /// deck's period is over it whatever the machine, and wide enough that a
+    /// [`SWAPPED`]-element Set at [`WIDTH`]x[`HEIGHT`] is under it by an order of
+    /// magnitude on anything that can run this suite at all.
+    const OVER_A_SLOW_FRAME_MS: f32 = 10.0;
+
+    /// How many frames the deck's period is a median over, plus slack — read
+    /// across from `swap.rs` rather than transcribed, so that moving it there
+    /// moves it here.
+    const PERIOD_WINDOW: usize = karakuri_engine::swap::PERIOD_FRAMES + 4;
+
+    /// One frame, and then a wait long enough that the deck's period is over
+    /// [`OVER_A_SLOW_FRAME_MS`] on any machine.
+    fn slow_frame(gpu: &Gpu, deck: &mut Deck, present: &Present) {
+        frame(gpu, deck, present, 1);
+        std::thread::sleep(SLOW_FRAME);
+    }
+
+    /// **A light candidate is kept in a deck whose frames are over the budget —
+    /// which is the exact case that used to roll it back.**
+    ///
+    /// Measured on 2026-09-09, headless at 1280x720 on an M4 Pro, host clock and
+    /// biased high: the panel's four default slots take 4.3 ms a frame, the
+    /// reference Set in one of four takes 11.3 ms, and on the panel each cell's
+    /// present adds about 1.5 ms on top — so loading the reference Set into one
+    /// slot of four was about 18 ms of work against a 16.7 ms vsync, landed at 33
+    /// ms under Fifo, and was rolled back. What that Set's *own* frame costs is
+    /// about 9 ms. The gate was not too strict; it was reading the wrong
+    /// quantity
+    /// ([ADR-0313](../../../docs/adr/0313-a-candidate-is-judged-on-its-own-cost-and-the-decks-period-is-a-deck-level-alarm.md)).
+    ///
+    /// The deck here is four slots with a build landing on one of them, its frames
+    /// held over the budget by [`SLOW_FRAME`], and the candidate small. Under the
+    /// old gate the median interval decided, so this candidate was certain to go;
+    /// under this one it is kept, and the deck being over its period is said in
+    /// the place that is entitled to say it.
+    #[test]
+    fn a_light_candidate_is_kept_in_a_deck_whose_frames_are_over_the_budget() {
+        let gpu = Gpu::headless().expect("no GPU available");
+        let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
+
+        let (tx, rx) = mpsc::channel();
+        let watched = HotSwap::new(
+            &gpu.device,
+            &gpu.queue,
+            build(&gpu, SEED_B, CAPACITY),
+            OVER_A_SLOW_FRAME_MS,
+            Box::new(rx),
+        );
+        let mut deck = Deck::new(
+            &gpu.device,
+            vec![
+                HotSwap::fixed(build(&gpu, SEED_A, CAPACITY)),
+                watched,
+                HotSwap::fixed(build(&gpu, SEED_A, CAPACITY)),
+                HotSwap::fixed(build(&gpu, SEED_B, CAPACITY)),
+            ],
+            WIDTH,
+            HEIGHT,
+        );
+        deck.set_frame_budget_ms(OVER_A_SLOW_FRAME_MS);
+        deck.set_residency(0, Residency::Live);
+
+        tx.send(candidate(1)).expect("worker alive");
+
+        let started = Instant::now();
+        let mut verdict = None;
+        while verdict.is_none() {
+            slow_frame(&gpu, &mut deck, &present);
+            verdict = deck.events(1).find_map(said_verdict);
+            assert!(
+                started.elapsed() < PATIENCE,
+                "waited {PATIENCE:?} for a verdict on the slow deck and none came"
+            );
         }
+        let (kept, cost_ms, basis) = verdict.expect("just set");
         assert!(
-            on_air.is_some_and(|v| v.starts_with("RolledBack")),
-            "a Live slot's candidate was never judged, so the first half of this test \
-         would pass on a watchdog that had simply stopped working"
+            kept,
+            "a candidate costing {cost_ms:?} ms was rolled back in a deck whose frames \
+             are {:?} long — the verdict is still reading the deck's interval",
+            SLOW_FRAME
+        );
+        assert_eq!(
+            deck.slot(1).set().capacity(),
+            SWAPPED,
+            "the verdict said kept and the slot is not holding the candidate"
+        );
+        assert_eq!(basis, karakuri_engine::Basis::Measured);
+        let cost_ms = cost_ms.expect("the worker measured this Set");
+        assert!(
+            cost_ms < OVER_A_SLOW_FRAME_MS,
+            "this machine reads {cost_ms} ms for one frame of a {SWAPPED}-element Set at \
+             {WIDTH}x{HEIGHT}, which is over the {OVER_A_SLOW_FRAME_MS} ms this test holds \
+             it against — the test's own premise is gone, not the gate"
+        );
+
+        // **And the deck says it is over its period, in the one place entitled
+        // to.** The window is a rolling median, so it needs filling before there
+        // is a number at all — `None` is not `false` (`P-0095`).
+        for _ in 0..PERIOD_WINDOW {
+            slow_frame(&gpu, &mut deck, &present);
+        }
+        let period = deck
+            .frame_period_ms()
+            .expect("thirty frames is a full window");
+        assert!(
+            period > OVER_A_SLOW_FRAME_MS,
+            "the deck's frames are {:?} long and it measured {period} ms",
+            SLOW_FRAME
+        );
+        let report = deck.govern();
+        assert_eq!(
+            report.deck_over_period(),
+            Some(true),
+            "the deck is over its period and the report does not say so"
+        );
+        assert_eq!(report.frame_period_ms, Some(period));
+        assert_eq!(report.frame_budget_ms, Some(OVER_A_SLOW_FRAME_MS));
+        // **And it is not the same flag as `over_budget`**, which is the Live
+        // slots' summed per-Set cost against the *compute* budget and is a
+        // different quantity. M5.14 item 3 is where the deck's total belongs;
+        // this measurement is what that item needs and is not an answer to it.
+        assert!(
+            report.to_string().contains("OVER its period"),
+            "the report's line does not say the deck is over its period: {report}"
+        );
+    }
+
+    /// **The same candidate gets the same verdict whether the other slots are
+    /// idle or loaded.**
+    ///
+    /// The maintainer, 2026-09-09: *"判定は他のスロットのロードとは独立にあるべ
+    /// きだね"* — the verdict on a candidate must be independent of what the
+    /// other slots are carrying. This is that sentence as an assertion. A budget
+    /// divided by the live slot count, or a share taken beside what the
+    /// neighbours are committed to, would both pass the test above and fail this
+    /// one, which is why it is a second test and not a second assertion.
+    ///
+    /// Two runs of one candidate against one budget. The second run's neighbours
+    /// hold sixteen times the elements, three of them are Live rather than one,
+    /// and its frames are slowed so that the deck is certainly over its period on
+    /// any machine — every quantity the old gate could see is different, and the
+    /// only thing that is not is the candidate. The deck-level alarm differing
+    /// between the runs is what keeps this from being vacuous: it says the two
+    /// decks really were in different states.
+    #[test]
+    fn a_candidates_verdict_does_not_move_with_what_the_other_slots_carry() {
+        /// Sixteen times [`CAPACITY`], so the loaded run's neighbours are a real
+        /// difference and not only a slower harness.
+        const LOADED: u32 = CAPACITY * 16;
+
+        let gpu = Gpu::headless().expect("no GPU available");
+        let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
+
+        let run = |neighbours: u32, live: usize, slow: bool| {
+            let (tx, rx) = mpsc::channel();
+            let watched = HotSwap::new(
+                &gpu.device,
+                &gpu.queue,
+                build(&gpu, SEED_B, CAPACITY),
+                OVER_A_SLOW_FRAME_MS,
+                Box::new(rx),
+            );
+            let mut deck = Deck::new(
+                &gpu.device,
+                vec![
+                    HotSwap::fixed(build(&gpu, SEED_A, neighbours)),
+                    watched,
+                    HotSwap::fixed(build(&gpu, SEED_A, neighbours)),
+                    HotSwap::fixed(build(&gpu, SEED_B, neighbours)),
+                ],
+                WIDTH,
+                HEIGHT,
+            );
+            deck.set_frame_budget_ms(OVER_A_SLOW_FRAME_MS);
+            for slot in [0, 2, 3].iter().take(live) {
+                deck.set_residency(*slot, Residency::Live);
+            }
+            tx.send(candidate(1)).expect("worker alive");
+
+            let started = Instant::now();
+            let mut verdict = None;
+            while verdict.is_none() {
+                if slow {
+                    slow_frame(&gpu, &mut deck, &present);
+                } else {
+                    frame(&gpu, &mut deck, &present, 1);
+                }
+                verdict = deck.events(1).find_map(said_verdict);
+                assert!(started.elapsed() < PATIENCE, "no verdict on this deck");
+            }
+            for _ in 0..PERIOD_WINDOW {
+                if slow {
+                    slow_frame(&gpu, &mut deck, &present);
+                } else {
+                    frame(&gpu, &mut deck, &present, 1);
+                }
+            }
+            let over = deck.govern().deck_over_period();
+            (verdict.expect("just set"), over)
+        };
+
+        let (idle, idle_over) = run(CAPACITY, 1, false);
+        let (loaded, loaded_over) = run(LOADED, 3, true);
+
+        assert!(
+            idle.0,
+            "the candidate was rolled back on an idle deck, so this test is about \
+             something other than the neighbours"
+        );
+        assert_eq!(
+            idle.0, loaded.0,
+            "the same candidate was kept on one deck and thrown out on another; the \
+             only difference between them is what the other slots are carrying"
+        );
+        assert_eq!(idle.2, loaded.2, "the two verdicts read different numbers");
+
+        // **Not vacuous.** The two decks really were in different states, and the
+        // one thing that is allowed to notice is the deck-level alarm.
+        assert_eq!(
+            idle_over,
+            Some(false),
+            "the idle deck is already over its period, so the two runs are not \
+             distinguishable and the assertion above proves nothing"
+        );
+        assert_eq!(
+            loaded_over,
+            Some(true),
+            "the loaded deck is not over its period, so the two runs are not \
+             distinguishable and the assertion above proves nothing"
         );
     }
 
