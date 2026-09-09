@@ -811,6 +811,44 @@ of five rather than the row. Where a pattern is
 ([ADR-0227](adr/0227-a-pattern-and-a-master-chain-setting-are-library-data-in-two-tiers.md)) and is
 not the machinery. The bay draws nothing but its head.
 
+**The design is taken, on 2026-09-09, and four records carry it.** What was blocking is answered and
+what is left is building it.
+
+- [ADR-0320](adr/0320-a-pattern-is-one-bar-of-sixteen-slots-a-lane-is-a-target-and-two-levels-and-a-cell-is-a-bit.md)
+  — a pattern is one bar, a mode and a list of lanes; sixteen slots in both modes with the eighth
+  reading `2k`, so a mode press changes a reading and never the pattern; a cell is a bit and the
+  lane carries an `on` and an `off`; four fixed banks, and a bank is not a saved name.
+- [ADR-0321](adr/0321-a-lanes-target-is-an-operation-with-its-value-elided.md) — **the bay's
+  sharpest question**: a lane's target is an operation of the vocabulary with its value elided, so
+  `Fader { deck }` and `Param { deck, param }` reach all four lanes where a slot number or a node
+  address reaches one kind and not the other.
+- [ADR-0322](adr/0322-the-sequencer-is-polled-like-a-transition-live-only-and-its-writes-are-its-record.md)
+  — **the producer, which is the item excluded from the estimate**: polled on the render thread per
+  frame against `beats`, like a transition one row finer; a skipped step is dropped; it emits
+  through the same `operate` a hand does, so `Record::Opacity` and `Record::Ride` are its record; it
+  does not run on replay; the five `written` answers become `Silent(Surface)` on the arrangement
+  family's precedent.
+- [ADR-0323](adr/0323-a-scheduled-move-is-refused-on-a-control-a-lane-holds.md) — a lane reaches
+  `Deck::set_opacity`, which cancels, so a live lane would silently kill a fade onto the deck it
+  drives; the schedule is refused instead and the refusal names the lane. Engine-facing, and it may
+  land after the first slice.
+
+**What the first slice builds**: a new crate `crates/karakuri-pattern` with `Pattern`, `Lane` and
+`StepMode` and no serialiser; `LaneTarget` and `StepMode` in `karakuri-operation` and the five
+payloads with them; `view::Sequencer` with the ruler, the playhead, the rows and the head's pills;
+the cell press and the mute as probes; the poll in `crates/karakuri/src/main.rs`; and **one lane
+driving deck A's fader**, which is what turns *Toggle a step* and *Mute a lane* `has`.
+
+**What stays owed after it**, each with a control nobody has drawn yet: `PointLane` (a target
+chooser), `SetPatternGrid` (the eighth-mode drawing), `SelectPattern` (more than one bank), the
+`Param` lane arm, the store directory and the file format with saving, and ADR-0323's refusal.
+
+**And one item this entry did not name.** **A channel fader does not say who is holding it** — the
+mock draws `seq 1` as a source on a parameter row and nothing of the kind on a strip, so three lanes
+in four would drive a control that says nothing about what is driving it, which is rule 02. It is
+M5.9's because M5.2 is closed, and the console page carries a purposeful note until the readout is
+drawn. **Removing a lane** has no control, no row and no operation, and carries a note beside it.
+
 **The mock's grid head has been internally inconsistent since it was written, and the maintainer
 has said which side is wrong.** The three pills read `16`, `1/8`, `2 bars`; two lines below, the
 ruler draws four numbers over sixteen cells, which is a beat every four cells — sixteenths, one bar.
@@ -838,15 +876,23 @@ written to that; the payload stays `Undecided`, because the panel draws nothing 
 head and so no surface can say either value.
 
 This is the estimate's excluded item — the sequencer's producer — and it is why this bay is last
-rather than because of its weight on the page.
+rather than because of its weight on the page. **The producer is placed as of 2026-09-09**
+([ADR-0322](adr/0322-the-sequencer-is-polled-like-a-transition-live-only-and-its-writes-are-its-record.md)):
+it is the frame loop, polled against `beats`, and it costs the engine nothing new — no record, no
+setter, no scheduler and no store directory.
 
 **The bay's prose, as tooltips.** One note, *Sequencer*: a row per lane under the mixer strip it
 drives, a lane as a fifth route into the vocabulary rather than a binding, and the step grid as the
-beat clock subdivided rather than a fourth clock. The mock tips the four lane labels and nothing
-else — the pattern pills, the step controls, the ruler and the cells carry none. It is **not** the thinnest prose of the nine — the
-*Outputs* note is 168 words to this one's 311, and M5.6 says so of itself — but it is the thinnest
-against the **most undrawn bay**, which is what the item is: most of what this bay ends up drawing
-has no note behind it yet, so writing its tips is authoring rather than condensing.
+beat clock subdivided rather than a fourth clock, and — since 2026-09-09 — the lane's two levels,
+the mute as the take-back, the refusal of a scheduled move on a control a lane holds, and the two
+gaps this bay owes a note rather than a fix. **The sentence that said the mock tips the four lane
+labels and nothing else has stopped being true**: every control in the bay carries a `data-tip`
+today — the three bank pills, the mode pill, the step readout, the ruler, the four lanes and
+`+ lane` — and what the item is left holding is the note itself, which the four records above have
+just made longer rather than shorter. It was **not** the thinnest prose of the nine when that was
+counted — the *Outputs* note was 168 words to this one's 311, and M5.6 says so of itself — and the
+item stands for the reason it always did: most of what this bay ends up drawing was authored here
+rather than condensed from a note that already existed.
 
 #### M5.10 — MCP
 

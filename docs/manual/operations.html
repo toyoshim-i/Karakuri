@@ -452,7 +452,7 @@
     <h2>The sequencer</h2>
     <div class="opgroup">
       <div class="op">
-        <div class="op-name" tabindex="0" data-tip="A step of one lane is on or it is off, and the change is heard the next time the playhead reaches that step. What it waits on is a pattern, which nothing in this program holds: where a pattern is kept is settled and what one is is not. The grid under it is no new clock &mdash; a step is the beat clock subdivided, so correcting the tempo changes the rate from now on without moving a beat that has already happened.">
+        <div class="op-name" tabindex="0" data-tip="A step of one lane is on or it is off, and the change is heard the next time the playhead reaches that step. It carries four things and names every one of them: which pattern of the four banks, which lane of that pattern, which slot, and the state. The slot is one of sixteen and it is a slot rather than a step &mdash; a pattern stores sixteen either way and an eighth reads every second one, so the console sends 2k in the finer reading and a step press and a mode press cannot race into an address that means two things. On and off are states and never a flip, for the reason the cell carries: a control that could only flip has no way to arrive. What an on cell is worth is the lane's, not the cell's: an on step writes the lane's on level and an off step writes its off level, because a level only means anything against the thing a lane drives. The grid under it is no new clock &mdash; a step is the beat clock subdivided, so correcting the tempo changes the rate from now on without moving a beat that has already happened.">
           <div class="op-head"><h3>Toggle a step</h3></div>
         </div>
         <span class="op-when grid">grid</span>
@@ -465,7 +465,7 @@
         </div>
       </div>
       <div class="op">
-        <div class="op-name" tabindex="0" data-tip="The pattern is kept and drives nothing, and the control is the lane's own label, so silencing a lane costs the row no width and the pattern nothing. It is not Take a parameter back: that stops a signal driving a knob inside a deck's Set, and three of the four lanes drawn are deck faders, which are no Set's. The spelling waits on the same pattern the row above waits on.">
+        <div class="op-name" tabindex="0" data-tip="The pattern is kept and drives nothing, and the control is the lane's own label, so silencing a lane costs the row no width and the pattern nothing. It carries a bank, a lane and the state &mdash; muted or not, never a flip. It is not Take a parameter back: that stops a signal driving a knob inside a deck's Set, and three of the four lanes drawn are deck faders, which are no Set's. This is also where a hand takes a lane back. A hand's write lands at once and the lane writes again at the next step, so the way to keep what a hand did is to mute the lane: the take-back sits on the lane label rather than on the strip, which is the one place a lane can be stopped without the pattern being changed.">
           <div class="op-head"><h3>Mute a lane</h3></div>
         </div>
         <span class="op-when">immediate</span>
@@ -478,7 +478,7 @@
         </div>
       </div>
       <div class="op">
-        <div class="op-name" tabindex="0" data-tip="The foot's add-a-lane control, and the target is the whole of what is being added: a lane with nothing to drive emits nothing. What a target may be is answered by this page &mdash; anything on it a lane can emit. What a target is spelled as is not: a deck fader is a slot number, a Set parameter is a node address, and nothing here spells both.">
+        <div class="op-name" tabindex="0" data-tip="The foot's add-a-lane control, and the target is the whole of what is being added: a lane with nothing to drive emits nothing. It carries a bank and a target, and no lane index, because this is where a lane arrives rather than where an existing one is re-pointed. A target is an operation of this page with its value left out &mdash; a deck's channel fader, which is the set-the-opacity three of the four lanes drawn emit, or a parameter inside the Set on a deck, which is the write-a-parameter the fourth emits &mdash; and a lane emits that operation at the level the step is worth. That is what reaches all four lanes where a slot number and a node address each reach one kind and not the other. A vector parameter costs nothing extra: a component is addressed where the write lands, so a lane on glow.x is spelled the way the command line spells it. Two of this page's rows are not lane targets and the reason is the same one: a residency and a blend mode take a word from a closed list rather than a level, and a step is a level. Removing a lane has no control here, no row of its own and no operation.">
           <div class="op-head"><h3>Point a lane at what it drives</h3></div>
         </div>
         <span class="op-when">immediate</span>
@@ -491,7 +491,7 @@
         </div>
       </div>
       <div class="op">
-        <div class="op-name" tabindex="0" data-tip="A mode with two values &mdash; a sixteenth or an eighth &mdash; and nothing else. The pattern is one bar, fixed, so the step count follows the mode rather than being chosen beside it: sixteen cells at a sixteenth, eight at an eighth, the row keeping its width so the cells halve in the finer one. The head drew three pills until 2026-09-08 &mdash; 16, 1/8, 2 bars, any two fixing the third &mdash; which was arithmetic taken from the wrong two: the ruler under them had drawn one bar of sixteenths from the same first commit, and a length nobody sets leaves a count and a length with nothing to say. An eighth at 128 BPM is 234 ms, faster than the band the beat clock's rule was written for; a sixteenth is 117 ms, so the finer mode is the worse case.">
+        <div class="op-name" tabindex="0" data-tip="A mode with two values &mdash; a sixteenth or an eighth &mdash; and nothing else. It carries a bank and the mode, because the mode is what the pattern is rather than a preference the head is holding. The pattern is one bar, fixed, so the step count follows the mode rather than being chosen beside it: sixteen cells at a sixteenth, eight at an eighth, the row keeping its width so the cells halve in the finer one. The head drew three pills until 2026-09-08 &mdash; 16, 1/8, 2 bars, any two fixing the third &mdash; which was arithmetic taken from the wrong two: the ruler under them had drawn one bar of sixteenths from the same first commit, and a length nobody sets leaves a count and a length with nothing to say. An eighth at 128 BPM is 234 ms, faster than the band the beat clock's rule was written for; a sixteenth is 117 ms, so the finer mode is the worse case. A pattern holds sixteen slots in both modes and an eighth reads every second one, so this press changes a reading and not the pattern: going to the eighth and back returns exactly what was there, and a step of an eighth sits at the same instant as the sixteenth it is drawn over. The alternative would have thrown eight steps away on one press with nothing to confirm against.">
           <div class="op-head"><h3>Choose what a step is worth</h3></div>
         </div>
         <span class="op-when">immediate</span>
@@ -504,7 +504,7 @@
         </div>
       </div>
       <div class="op">
-        <div class="op-name" tabindex="0" data-tip="Which pattern the lanes are reading. The plus is this same choice landing on an empty one rather than a second operation. Keeping a pattern and putting a saved one back are not rows here: the console draws no control that saves one, and while where a pattern lives is settled, what its file holds is not.">
+        <div class="op-name" tabindex="0" data-tip="Which pattern the lanes are reading. It carries a bank index and nothing else: there are four banks, fixed, and a bank is a position in the session rather than a name a save files a pattern under &mdash; the two are as different as a deck slot and a Set's id. The plus is this same choice landing on an empty one rather than a second operation, which is why it needs no name: an empty bank has none, and asking for one would make the plus a dialog. It is disabled with a reason when all four are full. Keeping a pattern and putting a saved one back are not rows here: the console draws no control that saves one, and while where a pattern lives is settled, what its file holds is not.">
           <div class="op-head"><h3>Choose which pattern the sequencer plays</h3></div>
         </div>
         <span class="op-when">immediate</span>

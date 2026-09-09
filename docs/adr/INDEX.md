@@ -341,6 +341,10 @@ number; new records continue from the end.
 | [ADR-0313](0313-a-candidate-is-judged-on-its-own-cost-and-the-decks-period-is-a-deck-level-alarm.md) | A candidate is judged on its own cost, and the deck's period is a deck-level alarm | 2026-09-09 | accepted |
 | [ADR-0314](0314-a-control-that-moves-a-field-of-the-aim-re-aims-the-slot-and-the-rebuild-is-the-write.md) | A control that moves a field of the aim re-aims the slot, and the rebuild is the write | 2026-09-09 | accepted |
 | [ADR-0315](0315-a-model-has-no-window-so-the-twelve-surface-rows-mcp-badges-are-gap.md) | A model has no window, so the twelve surface rows' MCP badges are gap | 2026-09-09 | accepted |
+| [ADR-0320](0320-a-pattern-is-one-bar-of-sixteen-slots-a-lane-is-a-target-and-two-levels-and-a-cell-is-a-bit.md) | A pattern is one bar of sixteen slots, a lane is a target and two levels, and a cell is a bit | 2026-09-09 | accepted |
+| [ADR-0321](0321-a-lanes-target-is-an-operation-with-its-value-elided.md) | A lane's target is an operation with its value elided | 2026-09-09 | accepted |
+| [ADR-0322](0322-the-sequencer-is-polled-like-a-transition-live-only-and-its-writes-are-its-record.md) | The sequencer is polled like a transition, live only, and its writes are its record | 2026-09-09 | accepted |
+| [ADR-0323](0323-a-scheduled-move-is-refused-on-a-control-a-lane-holds.md) | A scheduled move is refused on a control a lane holds | 2026-09-09 | accepted |
 
 ## Retired numbers
 
