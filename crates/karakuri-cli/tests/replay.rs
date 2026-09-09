@@ -148,6 +148,65 @@ mod gpu {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// **A `source` record reaches the frames after it, and a take-back gives
+    /// the parameter back** — which is what
+    /// [P-0092](../../../docs/principles/0092-the-same-inputs-produce-the-same-frame.md)
+    /// asks of an attachment made live: *a binding attached during a
+    /// performance must be in the stream*, or a session that recorded an
+    /// operator attaching a signal at the second chorus replays without it.
+    ///
+    /// **Three sessions differing by one record apiece**, on the `look`
+    /// test's terms: the same material, the same tick count and the same step
+    /// counts, so the only thing that can separate the last frames is the
+    /// attachment. The range is constant so the picture does not depend on the
+    /// phase the frame was taken at.
+    ///
+    /// **The take-back is asserted against the untouched run and not merely
+    /// against the attached one.** That is the decision it carries: a
+    /// take-back removes the attachment rather than suspending it, so what the
+    /// parameter is left at is its own value — and a `retain` that dropped the
+    /// binding while the last value it wrote stayed in the uniform would
+    /// pass an "it changed back" test and fail this one
+    /// (`docs/adr/0319-an-attachment-is-a-session-record-and-taking-a-parameter-back-removes-it.md`).
+    #[test]
+    fn an_attachment_reaches_the_frames_after_it_and_a_take_back_gives_the_param_back() {
+        let dir = scratch("source");
+        let (store, head) = store_with_a_set(&dir);
+
+        // A constant range well away from what the file declares, so the
+        // difference is the attachment rather than the phase.
+        // `scale` is a declared L1 param of the pair a bare run opens on,
+        // over `[0.3, 4.0]` at 2.8 — pinned here at the far end of that range.
+        const ATTACH: &str = r#"{"t":"source","slot":0,"layer":"L1","key":"scale","source":{"signal":"beat","curve":"lin","range":[0.4,0.4]}}"#;
+        const TAKE_BACK: &str = r#"{"t":"source","slot":0,"layer":"L1","key":"scale"}"#;
+
+        write_session(&store, "plain", &head, &[CANVAS, TICK, TICK, TICK]);
+        write_session(&store, "bound", &head, &[CANVAS, TICK, ATTACH, TICK, TICK]);
+        write_session(
+            &store,
+            "freed",
+            &head,
+            &[CANVAS, TICK, ATTACH, TAKE_BACK, TICK, TICK],
+        );
+
+        let plain = replay(&store, "plain", &dir.join("plain.png"));
+        let bound = replay(&store, "bound", &dir.join("bound.png"));
+        let freed = replay(&store, "freed", &dir.join("freed.png"));
+
+        assert_ne!(
+            plain, bound,
+            "the `source` record changed nothing — an attachment made live is not \
+             reaching the Set the slot is playing"
+        );
+        assert_eq!(
+            plain, freed,
+            "a `source` with no attachment did not give the parameter back to its own \
+             value: the binding is still driving it, or the last value it wrote was left \
+             behind"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// The canvas comes out of the stream, and the flag cannot overrule it.
     ///
     /// Two sessions that differ only in their `canvas` render at different sizes,

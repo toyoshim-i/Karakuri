@@ -588,18 +588,47 @@ pub enum Silent {
     /// record format has never had — the latency offset, a beat source, a
     /// published interface, loading a Set into a running deck — and a row
     /// whose record is a **Set file's** and has nowhere to put a deck.
-    /// `Operation::AttachSignal` names a deck and [`Record::Bind`] has no
+    /// `Operation::SetProperty` names a deck and [`Record::Capacity`] has no
     /// `slot`, because a Set does not know what fader it is under.
     ///
-    /// **`Operation::WriteParam` was the example this paragraph used and is no
-    /// longer here**, which is worth keeping because it says what this answer
-    /// means. Nothing about a knob turn changed: what changed is that
-    /// [`Record::Ride`] was written, so the session vocabulary now carries the
-    /// act at a deck slot's address while [`Record::Param`] goes on being the
-    /// Set file's. Every row left in this group is one record short in exactly
-    /// that way, and none of them is a decision that the act writes nothing —
-    /// see `docs/adr/0280-a-parameter-written-to-a-live-set-is-a-session-record.md`.
+    /// **`Operation::WriteParam` and `Operation::AttachSignal` were the two
+    /// examples this paragraph used and neither is here now**, which is worth
+    /// keeping because it says what this answer means. Nothing about a knob
+    /// turn or an attachment changed: what changed is that [`Record::Ride`]
+    /// and [`Record::Source`] were written, so the session vocabulary now
+    /// carries both acts at a deck slot's address while [`Record::Param`] and
+    /// [`Record::Bind`] go on being the Set file's. Every row left in this
+    /// group is one record short in exactly that way, and none of them is a
+    /// decision that the act writes nothing — see
+    /// `docs/adr/0280-a-parameter-written-to-a-live-set-is-a-session-record.md`
+    /// and
+    /// `docs/adr/0319-an-attachment-is-a-session-record-and-taking-a-parameter-back-removes-it.md`.
     NoRecord,
+    /// **Publishing is not the performance.** Where a frame *went* is not part
+    /// of the frame, so switching an output on or off writes nothing — and
+    /// this is a decision rather than a gap.
+    ///
+    /// Three things say it and none of them is about the record format.
+    /// `docs/plugins.md` says a sink writes no record.
+    /// `docs/adr/0171-the-deck-advances-and-each-sink-either-gets-the-frame-or-misses-it.md`
+    /// says an operator who turns every output off has stopped the publishing
+    /// and not the instrument — the deck advances either way, so two runs
+    /// differing only in which sinks were on took the same steps and drew the
+    /// same frames. And
+    /// `docs/principles/0086-a-procedure-knows-only-what-it-declares.md` says
+    /// the render size is not part of the picture, so an output's size is not
+    /// part of it either: a replay on a machine with different outputs
+    /// reproduces the same picture at its own sizes, and the session `canvas`
+    /// record is what it draws at when nothing else says
+    /// (`docs/adr/0246-the-render-size-belongs-to-the-output-and-the-sessions-canvas-is-only-its-default.md`).
+    ///
+    /// **Held apart from [`Silent::Surface`] on purpose.** An output is not a
+    /// surface's own state — a projector window is not the console — and every
+    /// member of that arm is `gap` in the MCP column because a model has no
+    /// window, where a model may ask for an output once the *inputs and
+    /// outputs* class is open. Filing this there would have made that sentence
+    /// false and taken a route away from a caller that has one.
+    Published,
 }
 
 impl Silent {
@@ -612,6 +641,9 @@ impl Silent {
                 "its record is written where the work lands, not where it was asked for"
             }
             Silent::NoRecord => "nothing in the session record vocabulary carries it",
+            Silent::Published => {
+                "it says where a frame goes, and where a frame goes is not part of the frame"
+            }
         }
     }
 }
@@ -855,6 +887,68 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
             }),
             key: param.key.clone(),
             value: store_value(*value),
+        }),
+        // **An attachment, and the take-back that removes it — one record and
+        // an `Option`.** `Record::Source` is `Record::Bind`'s session twin on
+        // exactly the terms `Record::Ride` is `Record::Param`'s: a `bind` says
+        // what a Set *is* and carries no deck slot, and this says what an
+        // operator did to one deck slot at one instant. See
+        // `docs/adr/0319-an-attachment-is-a-session-record-and-taking-a-parameter-back-removes-it.md`.
+        //
+        // **The address crosses whole and nothing is invented.**
+        // `karakuri_operation::BindAt` is a layer, an optional index and a
+        // key, which is `Record::Source`'s address field for field — the
+        // reason that operation carries a `BindAt` rather than a `ParamAt` is
+        // that a `ParamAt`'s wildcard names no layer, and a conversion filling
+        // one in would be writing the placeholder `Record::Param`'s `layer`
+        // already is. The `layer` is translated by [`store_layer`], which is
+        // the one thing translated on this route as it is on the authority's.
+        //
+        // **No `noise`, and that is the operation's own decision read
+        // through.** A generator's kind, rate, stream and octaves describe the
+        // *source* and not the attachment, so `Operation::AttachSignal` does
+        // not carry them; an absent `noise` on the record means *the default
+        // generator* rather than *no generator*, which is what a `bind` naming
+        // `noise` and saying nothing else has always meant. A caller that
+        // wants a non-default generator states it in a Set file or on a
+        // `--bind`, and this is where that limit is visible.
+        Operation::AttachSignal {
+            deck,
+            param,
+            signal,
+            curve,
+            range,
+        } => one(Record::Source {
+            slot: *deck,
+            layer: store_layer(param.layer),
+            index: param.index,
+            key: param.key.clone(),
+            source: Some(karakuri_store::record::Source {
+                signal: signal.clone(),
+                curve: curve.name().to_string(),
+                range: *range,
+                noise: None,
+            }),
+        }),
+        // **The same record with nothing in it, which is the whole of the
+        // take-back.** Two records — an `attach` and a `detach` — would be two
+        // `t`s the projection drops for one reason and the applier has to keep
+        // in step by care; one record whose payload is present or absent is a
+        // thing nothing can write down half-detached, which is
+        // `docs/contributing.md` §4's structural tier and `NodeAt`'s argument
+        // one record along.
+        //
+        // **It removes rather than suspends**, and the reason is that there is
+        // no suspended state anywhere to record: `karakuri_engine::binding::Binding`
+        // carries none, and *not driving this parameter* is already written as
+        // the absence — P-0084's blend writes the param's own value when
+        // nothing is attached.
+        Operation::TakeParamBack { deck, param } => one(Record::Source {
+            slot: *deck,
+            layer: store_layer(param.layer),
+            index: param.index,
+            key: param.key.clone(),
+            source: None,
         }),
         // **A free-running tempo being stated**, which is `Record::Tempo`'s own
         // words for a correction with no shift and no confidence: *"The first
@@ -1236,8 +1330,18 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
         // loud.
         Operation::MoveBoundary { .. }
         | Operation::WalkHistory { .. }
-        | Operation::WatchFiles { .. }
-        | Operation::RouteFrame { .. } => Written::Owed(Owed::Undecided),
+        | Operation::WatchFiles { .. } => Written::Owed(Owed::Undecided),
+
+        // ----- Silent: publishing is not the performance -------------------
+        //
+        // **A member of the group above left it on 2026-09-09**, and it left
+        // by having its payload decided rather than by that rule changing:
+        // `Operation::RouteFrame` carries a `karakuri_operation::Output` and a
+        // `bool` now, so *what it acts on* is answered and *what it writes*
+        // could be asked. The answer is nothing, and it is an argument rather
+        // than a gap — see [`Silent::Published`], which is where the three
+        // reasons are.
+        Operation::RouteFrame { .. } => Written::Silent(Silent::Published),
 
         // ----- Silent: a surface's own state -------------------------------
         Operation::SelectDeck { .. }
@@ -1393,7 +1497,12 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
         // nothing puts a version back on its own any more, so this operation is
         // what a person reaches for when a build has stopped a slot for cost —
         // and because it writes the file as well as moving the picture, the two
-        // agree afterwards.
+        // agree afterwards. **The row reporting the stop is where they reach
+        // it**, since ADR-0326: the Staging lane's `back` capsule asks for it
+        // with `Revision::Previous`, one step and never a cursor, where the
+        // Library bay's `history` rows ask for it with `Revision::Picked`.
+        // Neither arm changes the answer here, because this arm reads no
+        // payload.
         Operation::SaveSet { .. }
         | Operation::WriteProcedure { .. }
         | Operation::RestoreProcedure { .. } => Written::Silent(Silent::OnLanding),
@@ -1407,23 +1516,30 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
         // settles is the *lane* — this node is no longer one an operator has
         // still to look at — and that is a surface's own state in exactly the
         // sense the four *Arranging the console* rows are.
+        //
+        // **That is what lets the whole row be the control** (ADR-0326): the
+        // press moves nothing, writes nothing and takes a line off a list, so
+        // it is the one of that row's two acts that can sit on a target a
+        // pointer lands on by accident. The act that writes a file is the
+        // capsule inside it.
         Operation::KeepCandidate { .. } => Written::Silent(Silent::Surface),
 
         // ----- Silent: nothing in the session vocabulary carries it --------
         //
-        // `AttachSignal`, `WireInput` and `SetProperty` are the three that are
-        // not simply absent: `Record::Bind`, `Record::Edge`,
+        // `WireInput` and `SetProperty` are the two that are
+        // not simply absent: `Record::Edge`,
         // `Record::Capacity`, `Record::Seed` and
         // `Record::Camera` all exist and are a **Set file's**, with no `slot`
         // to carry the deck the operation names. `SetCompositing` is the same
         // shape — `Record::Merge` is what a *Set* says about its layering, and
         // *"nothing in a stream says that the Set in slot 3 composites."*
         //
-        // **`WriteParam` was the fourth and has left this group**, which is
-        // what the shape of the answer always was: the reason was never that a
-        // knob is unworthy of a record, it was that no record could carry the
-        // deck. `Record::Ride` carries it, and what is still here is what
-        // nobody has written the session's twin of yet.
+        // **`WriteParam` was the third and `AttachSignal` the fourth, and both
+        // have left this group**, which is what the shape of the answer always
+        // was: the reason was never that a knob or an attachment is unworthy of
+        // a record, it was that no record could carry the deck.
+        // `Record::Ride` and `Record::Source` carry it, and what is still here
+        // is what nobody has written the session's twin of yet.
         //
         // **`SetCompositing` has a panel control now and still writes
         // nothing**, and it is worth saying why the first did not move the
@@ -1442,8 +1558,6 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
         | Operation::AttachBeatSource { .. }
         | Operation::LoadSet { .. }
         | Operation::SetCompositing { .. }
-        | Operation::AttachSignal { .. }
-        | Operation::TakeParamBack { .. }
         | Operation::WireInput { .. }
         | Operation::Publish { .. }
         | Operation::SetProperty { .. }
@@ -2172,6 +2286,107 @@ mod tests {
                 layer: karakuri_store::record::Layer::Field,
                 index: 0,
                 authority: "manual".to_string(),
+            }]
+        );
+    }
+
+    /// **An attachment writes a record, and the take-back is the same record
+    /// with nothing in it.**
+    ///
+    /// Both answered `Silent(NoRecord)` until
+    /// `docs/adr/0319-an-attachment-is-a-session-record-and-taking-a-parameter-back-removes-it.md`,
+    /// and the reason was the one `WriteParam` had: `Record::Bind` is a Set
+    /// file's and has no `slot`. So what is asserted here is the deck arriving
+    /// in the record — an attachment made on slot 3 that came back saying
+    /// nothing about slot 3 is the whole defect back — and that the two
+    /// operations write **one** `t` rather than two, which is what makes them
+    /// one fact for the projection to drop.
+    #[test]
+    fn an_attachment_and_a_take_back_are_one_record_with_and_without_a_source() {
+        let attached = records(written(
+            &Operation::AttachSignal {
+                deck: 3,
+                param: karakuri_operation::BindAt {
+                    layer: karakuri_operation::Layer::L1,
+                    index: Some(2),
+                    key: "turbulence".to_string(),
+                },
+                signal: "energy".to_string(),
+                curve: karakuri_operation::Curve::Pow2,
+                range: [0.1, 2.4],
+            },
+            &Current::default(),
+        ));
+        assert_eq!(
+            attached,
+            vec![Record::Source {
+                slot: 3,
+                layer: karakuri_store::record::Layer::L1,
+                index: Some(2),
+                key: "turbulence".to_string(),
+                source: Some(karakuri_store::record::Source {
+                    signal: "energy".to_string(),
+                    curve: "pow2".to_string(),
+                    range: [0.1, 2.4],
+                    // **Absent means the default generator and not the absence
+                    // of one**, which is what a `bind` naming `noise` and
+                    // saying nothing else has always meant. The operation does
+                    // not carry a generator, because kind, rate, stream and
+                    // octaves describe the *source* rather than the
+                    // attachment.
+                    noise: None,
+                }),
+            }],
+            "an attachment landed on another node, another deck slot or another shape \
+             than the one it named"
+        );
+
+        let taken = records(written(
+            &Operation::TakeParamBack {
+                deck: 3,
+                param: karakuri_operation::BindAt {
+                    layer: karakuri_operation::Layer::L1,
+                    index: Some(2),
+                    key: "turbulence".to_string(),
+                },
+            },
+            &Current::default(),
+        ));
+        assert_eq!(
+            taken,
+            vec![Record::Source {
+                slot: 3,
+                layer: karakuri_store::record::Layer::L1,
+                index: Some(2),
+                key: "turbulence".to_string(),
+                source: None,
+            }],
+            "a take-back is not the attachment's record with its attachment absent"
+        );
+
+        // **The address crosses whole, and a wildcard stays a wildcard.** A
+        // binding with no index is the layer's — every node of it declaring
+        // the key — and an `index` invented here would narrow it to one node
+        // silently.
+        let wild = records(written(
+            &Operation::TakeParamBack {
+                deck: 0,
+                param: karakuri_operation::BindAt {
+                    layer: karakuri_operation::Layer::L4,
+                    index: None,
+                    key: "exposure".to_string(),
+                },
+            },
+            &Current::default(),
+        ));
+        assert_eq!(
+            wild,
+            vec![Record::Source {
+                slot: 0,
+                layer: karakuri_store::record::Layer::L4,
+                index: None,
+                key: "exposure".to_string(),
+                source: None,
             }]
         );
     }

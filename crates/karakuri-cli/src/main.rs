@@ -2475,6 +2475,55 @@ fn apply_replayed(
         // Latent until a session can carry a deck: a replay builds one slot, and
         // one slot does not exhaust a budget. Closed anyway, because the reason
         // it was invisible is that the two paths were different code.
+        // **An attachment, replayed** — and the take-back with it, because
+        // they are one record. A binding is what `Set::prepare` resolves on
+        // every frame, so this is on screen at the next one and compiles
+        // nothing, exactly as the ride above it does.
+        //
+        // A name the material has since lost is reported and skipped, on the
+        // ride's terms: `Bound` says which half of the attachment was not
+        // there, which is the whole content of the message.
+        Ok(Some(mix::Change::Source {
+            slot,
+            layer,
+            index,
+            key,
+            binding,
+        })) => match binding {
+            Some(binding) => match deck.bind(slot, binding) {
+                karakuri_engine::set::Bound::Yes => {}
+                karakuri_engine::set::Bound::NoSuchParam => {
+                    eprintln!("  {} — skipped", no_such_param(slot, &key))
+                }
+                karakuri_engine::set::Bound::NoSuchControl => eprintln!(
+                    "  slot {slot}: `{key}` is bound to a control this Set does not publish —                      skipped"
+                ),
+            },
+            None => {
+                if !deck.unbind(slot, layer, index, &key) {
+                    eprintln!("  slot {slot}: nothing was driving `{key}` — skipped");
+                }
+            }
+        },
+        // **Who may move one node, replayed.** A node the material has since
+        // lost is said and passed over, which is `Request::authorities`' rule
+        // at the other end of the same fact.
+        Ok(Some(mix::Change::Authority {
+            slot,
+            layer,
+            index,
+            authority,
+        })) => {
+            if !deck.set_authority(slot, layer, index, authority) {
+                eprintln!(
+                    "  slot {slot}: no node {}:{index} to make {} — skipped",
+                    karakuri_environment::setfile::layer_name(
+                        karakuri_environment::setfile::layer_of(layer)
+                    ),
+                    authority.name()
+                );
+            }
+        }
         Ok(Some(mix::Change::Residency { slot, level })) => {
             deck.set_residency(slot, level);
             report_governing(&deck.govern(), "residency");
@@ -7015,6 +7064,57 @@ impl Live {
                         Ok(_) => {}
                         Err(refused) => eprintln!("{refused}"),
                     }
+                }
+            }
+            // **The other change that reaches inside a Set**, beside the
+            // ride above: this one says what a parameter blends *towards*
+            // rather than what it blends *from*. `Deck::bind` and
+            // `Deck::unbind` are the public roads, and neither compiles
+            // anything — a binding is resolved by the next `Set::prepare`.
+            //
+            // **A rebuild does not carry it**, on the ride's own terms and for
+            // the same reason: `swap::Request::bindings` is restated from
+            // `Watch::bindings`, which only a re-point writes. See
+            // `docs/adr/0319-an-attachment-is-a-session-record-and-taking-a-parameter-back-removes-it.md`.
+            mix::Change::Source {
+                slot,
+                layer,
+                index,
+                key,
+                binding,
+            } => match binding {
+                Some(binding) => match self.deck.bind(slot, binding) {
+                    karakuri_engine::set::Bound::Yes => {}
+                    karakuri_engine::set::Bound::NoSuchParam => {
+                        eprintln!("{}", no_such_param(slot, &key))
+                    }
+                    karakuri_engine::set::Bound::NoSuchControl => eprintln!(
+                        "slot {slot}: `{key}` is bound to a control this Set does not publish"
+                    ),
+                },
+                None => {
+                    if !self.deck.unbind(slot, layer, index, &key) {
+                        eprintln!("slot {slot}: nothing was driving `{key}`");
+                    }
+                }
+            },
+            // **Who may move one node**, and it changes what one knob may do
+            // from the next press: a bare-name write over nodes that are not
+            // all under one authority is refused whole by `Set::write_param`.
+            mix::Change::Authority {
+                slot,
+                layer,
+                index,
+                authority,
+            } => {
+                if !self.deck.set_authority(slot, layer, index, authority) {
+                    eprintln!(
+                        "slot {slot}: no node {}:{index} to make {}",
+                        karakuri_environment::setfile::layer_name(
+                            karakuri_environment::setfile::layer_of(layer)
+                        ),
+                        authority.name()
+                    );
                 }
             }
             mix::Change::Residency { slot, level } => {

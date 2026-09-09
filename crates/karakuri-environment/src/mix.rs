@@ -259,6 +259,45 @@ pub enum Change {
         slot: usize,
         writes: Vec<karakuri_engine::ParamWrite>,
     },
+    /// **What drives one parameter of a slot that is playing, or nothing** —
+    /// the attachment and the take-back, which are one record and are one
+    /// change here for the same reason.
+    ///
+    /// **The address is carried and the binding is decoded.** A
+    /// `karakuri_engine::binding::Binding` already holds the layer, the index
+    /// and the key, so an attachment needs nothing beside it; a take-back has
+    /// no binding to hold them, so they are fields here. That is one address
+    /// written twice in the attach case and it is the honest arrangement —
+    /// the alternative is an applier that reaches inside a `Binding` to find
+    /// out what to remove, which is the same fields read from a worse place.
+    ///
+    /// **Decoded through `setfile::binding_from_source`**, which builds the
+    /// `bind` the payload spells and hands it to `binding_from_record` — so
+    /// `signal=bpm`, an `octaves` without `fbm`, and a `noise` object on a
+    /// binding that is not to `noise` are refused here in the words a Set file
+    /// and a `--bind` are refused in, and there is one decoder rather than
+    /// two.
+    Source {
+        slot: usize,
+        layer: karakuri_ir::Kind,
+        index: Option<u32>,
+        key: String,
+        /// **`None` is *Take a parameter back*.**
+        binding: Option<karakuri_engine::binding::Binding>,
+    },
+    /// **Who may move one node of a slot's Set.** The writer ADR-0211 said the
+    /// engine owed and `Record::Authority` has been waiting for.
+    ///
+    /// Addressed `(layer, index)` with no wildcard, on
+    /// `karakuri_engine::swap::AuthorityAt`'s terms: a bare name means *every
+    /// node declaring it*, and there is no such thing as an authority every
+    /// node happens to declare.
+    Authority {
+        slot: usize,
+        layer: karakuri_ir::Kind,
+        index: u32,
+        authority: karakuri_engine::set::Authority,
+    },
     Look(Look),
     /// **The level at the master chain's entry**, which names no slot: it is
     /// what the fold *produced*, after every deck's edge has been applied.
@@ -878,6 +917,67 @@ pub fn change(record: &Record, slot_count: usize) -> Result<Option<Change>, Stri
                 karakuri_store::record::Value::Vec3(v) => component_writes(at, key, v),
             };
             Ok(Some(Change::Ride { slot, writes }))
+        }
+        // **An attachment, or the taking of one back.** The one decoder is
+        // `crate::setfile::binding_from_source`, which builds the `bind` this
+        // payload spells and hands it to `binding_from_record` — so a live
+        // attachment cannot come to mean something a Set file's `bind` does
+        // not, and the three diagnostics that reader owns are said here in its
+        // words.
+        //
+        // **A take-back decodes to nothing rather than to a refusal.** There
+        // is no signal to check and no curve to parse; what it names is an
+        // address, and whether anything was attached there is the applier's to
+        // report because only the applier is holding the Set.
+        Record::Source {
+            slot,
+            layer,
+            index,
+            key,
+            source,
+        } => {
+            let slot = in_range(*slot)?;
+            let binding = match source {
+                None => None,
+                Some(source) => Some(crate::setfile::binding_from_source(
+                    *layer, *index, key, source,
+                )?),
+            };
+            Ok(Some(Change::Source {
+                slot,
+                layer: crate::setfile::kind_of(*layer),
+                index: *index,
+                key: key.clone(),
+                binding,
+            }))
+        }
+        // **A word out of a closed list, and the diagnostic is the engine's to
+        // give** — `Record::Authority` carries a `String` so that a stream
+        // from a newer build reaches a sentence about what this build supports
+        // rather than a parser that refuses the line.
+        Record::Authority {
+            slot,
+            layer,
+            index,
+            authority,
+        } => {
+            let slot = in_range(*slot)?;
+            let level = karakuri_engine::set::Authority::from_name(authority).ok_or_else(|| {
+                format!(
+                    "authority `{authority}` — expected {}",
+                    karakuri_engine::set::Authority::ALL
+                        .iter()
+                        .map(|a| a.name())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            })?;
+            Ok(Some(Change::Authority {
+                slot,
+                layer: crate::setfile::kind_of(*layer),
+                index: *index,
+                authority: level,
+            }))
         }
         Record::Transport {
             slot,
@@ -1863,6 +1963,150 @@ mod tests {
                 slot: 0,
                 writes: vec![karakuri_engine::ParamWrite::everywhere("exposure", 1.0)],
             })
+        );
+    }
+
+    /// **An attachment and the taking of it back go operation → record → what
+    /// the deck does**, which is the road this module is the middle of and the
+    /// one a replay travels.
+    ///
+    /// Three things: the binding comes out of the record with the source, the
+    /// shape and the range the operation named; the take-back comes out with
+    /// **no** binding, which is what says the two are one record; and the
+    /// decoder's own diagnostics are reached, because there is one decoder for
+    /// a live attachment and a Set file's `bind` rather than two.
+    #[test]
+    fn an_attachment_decodes_into_the_binding_a_deck_takes_and_a_take_back_into_none() {
+        let record = from_operation(karakuri_operation::Operation::AttachSignal {
+            deck: 2,
+            param: karakuri_operation::BindAt {
+                layer: karakuri_operation::Layer::L1,
+                index: Some(1),
+                key: "turbulence".to_string(),
+            },
+            signal: "energy".to_string(),
+            curve: karakuri_operation::Curve::Pow2,
+            range: [0.1, 2.4],
+        });
+        let line = serde_json::to_string(&record).expect("serialise");
+        let decoded: Record = serde_json::from_str(&line).expect("parse");
+        let Some(Change::Source {
+            slot,
+            layer,
+            index,
+            key,
+            binding,
+        }) = change(&decoded, 4).expect("a record this build built")
+        else {
+            panic!("not an attachment, through {line}");
+        };
+        assert_eq!(
+            (slot, layer, index, key.as_str()),
+            (2, karakuri_ir::Kind::L1, Some(1), "turbulence")
+        );
+        let binding = binding.expect("an attachment carries a binding");
+        assert_eq!(
+            (
+                binding.layer,
+                binding.index,
+                binding.key.as_str(),
+                binding.signal.as_str(),
+                binding.curve,
+                binding.range,
+            ),
+            (
+                karakuri_ir::Kind::L1,
+                Some(1),
+                "turbulence",
+                "energy",
+                karakuri_engine::binding::Curve::Pow2,
+                [0.1, 2.4],
+            ),
+            "the binding is not the attachment the operation named"
+        );
+
+        // **The take-back is the same record with nothing in it**, and what it
+        // has to carry is the address — a decoder that lost the index would
+        // take the layer's binding away instead of this node's.
+        let record = from_operation(karakuri_operation::Operation::TakeParamBack {
+            deck: 2,
+            param: karakuri_operation::BindAt {
+                layer: karakuri_operation::Layer::L1,
+                index: Some(1),
+                key: "turbulence".to_string(),
+            },
+        });
+        assert_eq!(
+            change(&record, 4).expect("built here"),
+            Some(Change::Source {
+                slot: 2,
+                layer: karakuri_ir::Kind::L1,
+                index: Some(1),
+                key: "turbulence".to_string(),
+                binding: None,
+            }),
+            "a take-back did not come back as an attachment that is absent"
+        );
+
+        // **One decoder, so the `bind` diagnostics are reached.** A tempo is
+        // not a `[0, 1]` signal, and a binding to it would sit at the top of
+        // its range for the whole run — which is the same sentence a Set file
+        // and a `--bind` meet, in `setfile::binding_from_record`.
+        let pinned = Record::Source {
+            slot: 0,
+            layer: karakuri_store::record::Layer::L1,
+            index: None,
+            key: "radius".to_string(),
+            source: Some(karakuri_store::record::Source {
+                signal: "bpm".to_string(),
+                curve: "lin".to_string(),
+                range: [0.0, 1.0],
+                noise: None,
+            }),
+        };
+        let refused = change(&pinned, 4).expect_err("a `bpm` source is refused");
+        assert!(
+            refused.contains("bpm") && refused.contains("beat"),
+            "the refusal does not name the source or what to use instead: {refused}"
+        );
+    }
+
+    /// **An authority decodes into the level the operation named**, and a word
+    /// this build does not know reaches a diagnostic rather than a parser that
+    /// refuses the line — which is why `Record::Authority` carries a `String`.
+    #[test]
+    fn an_authority_decodes_into_the_level_it_names() {
+        let record = from_operation(karakuri_operation::Operation::SetAuthority {
+            deck: 3,
+            node: karakuri_operation::NodeAt {
+                layer: karakuri_operation::Layer::L4,
+                index: 1,
+            },
+            authority: karakuri_operation::Authority::Suggesting,
+        });
+        let line = serde_json::to_string(&record).expect("serialise");
+        let decoded: Record = serde_json::from_str(&line).expect("parse");
+        assert_eq!(
+            change(&decoded, 4).expect("a record this build built"),
+            Some(Change::Authority {
+                slot: 3,
+                layer: karakuri_ir::Kind::L4,
+                index: 1,
+                authority: Authority::Suggesting,
+            }),
+            "through {line}"
+        );
+
+        let unknown = Record::Authority {
+            slot: 0,
+            layer: karakuri_store::record::Layer::L1,
+            index: 0,
+            authority: "supervising".to_string(),
+        };
+        let refused = change(&unknown, 4).expect_err("a level this build has not got");
+        assert!(
+            refused.contains("supervising") && refused.contains("manual"),
+            "the refusal does not say what was asked for or what this build has: {refused}"
         );
     }
 

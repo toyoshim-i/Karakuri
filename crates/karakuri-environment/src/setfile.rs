@@ -424,6 +424,37 @@ pub fn binding_from_record(record: &Record) -> Result<Binding, String> {
     }))
 }
 
+/// Convert one [`Record::Source`]'s attachment into the binding the engine
+/// applies — the session record's road into [`binding_from_record`].
+///
+/// **One decoder and not two.** A `source` carries a `bind`'s four payload
+/// fields beside a `bind`'s address, so a second reader for it would be a
+/// second answer to *what does `signal=bpm` mean*, *what does `octaves` need*
+/// and *what does an absent `noise` mean* — the three diagnostics
+/// [`binding_from_record`] says it owns and nowhere else. This builds the
+/// `bind` those fields spell and hands it over, so a live attachment and a Set
+/// file's cannot come to mean different things.
+///
+/// The take-back carries no attachment at all and never reaches here: a
+/// [`Record::Source`] with no `source` is [`crate::mix::Change::Source`] with
+/// no binding.
+pub fn binding_from_source(
+    layer: Layer,
+    index: Option<u32>,
+    key: &str,
+    source: &karakuri_store::record::Source,
+) -> Result<Binding, String> {
+    binding_from_record(&Record::Bind {
+        layer,
+        index,
+        key: key.to_string(),
+        signal: source.signal.clone(),
+        curve: source.curve.clone(),
+        range: source.range,
+        noise: source.noise.clone(),
+    })
+}
+
 /// **One `param` record as the file wrote it**: where it lands, the key it
 /// names, and the value.
 ///
@@ -1294,6 +1325,14 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
             // reaches a Set file the way every other value does — through
             // `save`, off the live Set. See `Record::Ride`.
             | Record::Ride { .. }
+            // **A `source` is a `bind` that names a deck slot**, on the
+            // `ride` above's terms one field along: what an operator attached
+            // to a knob during a performance is a session's fact, and a Set
+            // file obeying one would attach a signal wherever that file was
+            // next loaded and into whatever slot it landed in. The
+            // attachments a Set ends up with reach a Set file as `bind`
+            // records, through `save`, off the live Set. See `Record::Source`.
+            | Record::Source { .. }
             | Record::Transport { .. }
             | Record::Transition { .. }
             // A `select` names a renderer of a *deck slot* and schedules it at

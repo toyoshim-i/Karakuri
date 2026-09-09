@@ -40,13 +40,14 @@
 //! [ADR-0170](../../../docs/adr/0170-a-deck-preview-cell-is-drawn-whether-or-not-a-deck-is-behind-it.md)
 //! for the alternative that lost and for what would reopen it.
 //!
-//! # The Staging lane draws a row per deck slot with a verdict outstanding
+//! # The Staging lane draws a row per node a build changed
 //!
 //! [ADR-0200](../../../docs/adr/0200-a-bays-first-pass-draws-the-values-that-exist-and-omits-the-rest.md)
 //! draws every part of the mock that has a value behind it and omits the
-//! rest. Applied to this bay it draws **three** of the seven things a
-//! candidate row could carry — the deck, what the build calls itself, and
-//! whether it is on screen — and omits the other four outright.
+//! rest. Applied to this bay it draws **four** of the six things a candidate
+//! row could carry — the deck, the node's address, what that node's procedure
+//! calls itself, and whether it is on screen — and omits the other two
+//! outright.
 //!
 //! **This section used to say the lane draws nothing, and the reason it gave
 //! was true of the program rather than of the workspace.** Both halves of the
@@ -63,41 +64,46 @@
 //! watches its own `.kir` pair per slot, and a save is a build, a swap and a
 //! verdict.
 //!
-//! **What a row is, and why it is the deck rather than the node.** A
-//! `swap::Event` carries an `id` and a `label` and no node, because a
-//! `karakuri_engine::Request` restates *every* node of the slot — so a verdict
-//! is over a build. Which node of that build changed is derivable and nothing
-//! derives it: `karakuri_environment::watch::Built` carries
-//! `(layer, index, hash)` for the whole stack on every build, and consecutive
-//! builds differ where the hashes do.
-//! `karakuri_environment::history::Snapshots::record` computes exactly that
-//! discrimination on the worker thread — it returns the path it wrote, or
-//! `None` for a source that did not change — and the watcher drops the answer.
-//! The per-node `proc` name never crosses the channel at all; only the
-//! `label`, which is every node's name joined. So the address a row carries is
-//! the one the verdict has, which is the slot.
+//! **What a row is, and it is the node rather than the slot.** A `swap::Event`
+//! carries an `id` and a `label` and no node, because a
+//! `karakuri_engine::Request` restates *every* node of the slot — so a
+//! **verdict** is over a build. Which node of that build **changed** is a
+//! diff: `karakuri_environment::watch::Built` carries `(layer, index, hash)`
+//! for the whole stack on every build, and consecutive builds differ where the
+//! hashes do. The caller takes it where both lists are in one hand and hands
+//! in one [`Candidate`] per changed node, with the build's one verdict on each
+//! of them
+//! ([ADR-0326](../../../docs/adr/0326-a-staging-row-is-a-changed-node-and-the-row-is-the-keep.md)).
+//! **A verdict with no changed node behind it draws one row on the slot with
+//! no address** — a build that did not happen has no node list to hold against
+//! the one before it, and a rebuild that restated the stack unchanged has an
+//! empty diff.
 //!
-//! **The four omissions, each with what it waits on**, are written out at
-//! [`staging`]: the node above, the coloured dot and the `you` in
-//! `you, 14:41` (`origin` has no producer anywhere), the `14:41` itself (three
-//! spellings exist and none is chosen — the same decision the Library's time
-//! column waits on), and the head's `2 waiting` (a bay head's pills are its
-//! controls, and the rows are the count). The mock's third `.cand` —
+//! **The two omissions, each with what it waits on**, are written out at
+//! [`staging`]: the coloured dot and the `you` in
+//! `you, 14:41` (`origin` has no producer anywhere) and the `14:41` itself
+//! (three spellings exist and none is chosen — the same decision the Library's
+//! time column waits on). The head's `2 waiting` is not drawn either, because
+//! a bay head's pills are its controls and the rows are the count. The mock's third `.cand` —
 //! *a rejected candidate costs nothing* — is a note to whoever is reading the
 //! mock and not a thing the lane draws, and empty this lane draws *"no row, no
 //! placeholder, and no standing sentence"*, which is still every frame of
 //! every run until somebody saves a file.
 //!
-//! **Neither of the lane's two operations is built**, and it is the node that
-//! blocks them rather than the record: `karakuri_operation::Operation` spells
-//! *Keep a candidate* and *Put a node's previous version back* `{ deck, node }`
-//! apiece, and the node is what nothing here can name. Their record questions
-//! are settled — `Written::Silent(Silent::Surface)` and
-//! `Written::Silent(Silent::OnLanding)`. What the lane says without them is
-//! still the thing nothing else in this instrument says: after
-//! `swap::Event::Overloaded` the version is still in the slot and the slot has
-//! stopped updating, so what is on screen is a held frame and only a word says
-//! so — the row's, and the deck cell's caption beside it.
+//! **Both of the lane's operations are built, and they are the row and a
+//! capsule in it.** `karakuri_operation::Operation` spells *Keep a candidate*
+//! and *Put a node's previous version back* `{ deck, node }` apiece, and the
+//! node is what the row now names. A press on the row keeps that candidate —
+//! `Written::Silent(Silent::Surface)`, so nothing moves and the row leaves —
+//! and the `back` capsule at its end lands that node's previous version, which
+//! is a build like any other and writes its record at the swap
+//! (`Written::Silent(Silent::OnLanding)`). The free act is on the large target
+//! and the act that writes a file is on the small one. **What the row says
+//! without either is still the thing nothing else in this instrument says**:
+//! after `swap::Event::Overloaded` the version is still in the slot and the
+//! slot has stopped updating, so what is on screen is a held frame and only a
+//! word says so — the row's, and the deck cell's caption beside it — and the
+//! capsule on that row is the way out.
 //!
 //! **The height is what this leaves wrong, and it is not this module's to
 //! fix.** `lib.rs` pins the lane at `fixed(125.0)` with a minimum of `66.0` —
@@ -277,8 +283,9 @@ use egui::{Color32, CornerRadius, FontFamily, FontId, Pos2, Rect, Stroke, Stroke
 use karakuri_layout::{Axis, Hit, NodeId};
 use karakuri_operation::gate::{Class, Open};
 use karakuri_operation::{
-    Authority, BeatSource, BlendMode, GridScale, LaneTarget, Layer, Operation, Recording,
-    Residency, StepMode, Sync, Tonemap, TransitionSetting, Undecided, WipeKind,
+    Authority, BeatSource, BlendMode, GridScale, LaneTarget, Layer, NodeAt, Operation, Output,
+    Recording, Residency, Revision, StepMode, Sync, Tonemap, TransitionSetting, Undecided,
+    WipeKind,
 };
 
 use crate::budget::{Declared, PANEL_PASS};
@@ -758,6 +765,31 @@ pub struct Head {
     pub grip: bool,
     /// The class this head opens, where it opens one — [`class_at`].
     pub class: Option<Class>,
+    /// **The bank pills, and which of the four is armed** — `None` for every
+    /// head but the Sequencer's, which is the one head in [`REGIONS`] whose
+    /// capsules are a *value* rather than a table entry.
+    ///
+    /// # Why the head machinery grew a field rather than the table growing a row
+    ///
+    /// [`Head::pills`] is `&'static [&'static str]`, which is every capsule
+    /// this console had until 2026-09-09: a word chosen when the region was
+    /// written. The Sequencer's `seq 1 … seq 4` are four words that are always
+    /// the same and **one mark that is not** — which bank the lanes are reading
+    /// — and [`view::sequencer`](sequencer)'s own note named that as the
+    /// missing piece: *"what is missing is a head that can say which pill is
+    /// armed"*.
+    ///
+    /// **It is [`mcp_pill`]'s arrangement and not a second one.** A class pill
+    /// carries a state into a head already; it does it by [`mcp_word`], because
+    /// its two states have two words. A bank's do not — `seq 2` reads `seq 2`
+    /// whether it is armed or not — so what a bank needs is the other half of
+    /// what the class pill already gets: [`HeadWords::armed`], which is where
+    /// *is this capsule lit* is answered for both of them now.
+    ///
+    /// **Every other head is `None` and its [`HeadWords`] is what it was**, to
+    /// the word and to the bit; `tests/head_words.rs` renders every region's
+    /// head before and after and compares.
+    pub banks: Option<usize>,
 }
 
 /// **The head a region draws**, or `None` where it has none.
@@ -783,6 +815,10 @@ pub fn head_of(region: &Region) -> Option<Head> {
         pills,
         grip: head_grip(region.kind),
         class: class_at(region.name),
+        // **No head is born with banks**, which is what keeps this table a
+        // table: the armed bank is a value the host writes per frame, so the
+        // one head that draws them asks for them — [`Head::with_banks`].
+        banks: None,
     })
 }
 
@@ -838,17 +874,25 @@ const fn grips() -> usize {
 }
 
 /// **How many capsules one bay head can hold**: the most any entry in
-/// [`REGIONS`] lists — the Program bay's `solo` — plus the class pill.
-const HEAD_PILLS: usize = 2;
+/// [`REGIONS`] lists — the Program bay's `solo` — plus the class pill, plus
+/// the bank pills the Sequencer's head draws off a value ([`Head::banks`]).
+///
+/// **The four are added rather than maxed**, which is deliberately the
+/// pessimistic reading: nothing says a head with banks may not also list a
+/// control and open a class, and a bound that assumed otherwise would drop a
+/// capsule off the end of [`HeadWords`] in silence the day one did — which is
+/// exactly what the `const` assertion below exists to stop.
+const HEAD_PILLS: usize = 2 + karakuri_pattern::BANKS;
 
-/// And every entry fits. A head listing one more control than this would lose
-/// its class pill off the end of [`HeadWords`] silently, which is a control
-/// that stops existing rather than a build that stops.
+/// And every entry fits **with everything a head can be handed beside it** —
+/// the class pill and the four bank pills. A head listing one more control than
+/// that would lose a capsule off the end of [`HeadWords`] silently, which is a
+/// control that stops existing rather than a build that stops.
 const _: () = {
     let mut at = 0;
     while at < REGIONS.len() {
         if let Kind::Bay { pills, .. } = REGIONS[at].kind {
-            assert!(pills.len() < HEAD_PILLS)
+            assert!(pills.len() + 1 + karakuri_pattern::BANKS <= HEAD_PILLS)
         }
         at += 1;
     }
@@ -868,6 +912,8 @@ const _: () = {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HeadWords {
     words: [&'static str; HEAD_PILLS],
+    /// **Which of them are lit**, in the same order — see [`HeadWords::armed`].
+    armed: [bool; HEAD_PILLS],
     len: usize,
 }
 
@@ -876,24 +922,69 @@ impl HeadWords {
     pub fn as_slice(&self) -> &[&'static str] {
         &self.words[..self.len]
     }
+
+    /// **Whether the capsule at `index` is drawn `.pill.armed`**, which is one
+    /// question with two answers behind it and used to be asked at the paint.
+    ///
+    /// [`bay_head`] read `words[index] == MCP_OPEN`, which works only while
+    /// *lit* and *this word* are the same fact. They are for a class pill,
+    /// whose two states are two words ([`mcp_word`]); they are not for a bank
+    /// pill, which reads `seq 2` armed and `seq 2` plain. So the bit is derived
+    /// where the word is, beside it, and the paint reads one answer instead of
+    /// re-deriving one of them.
+    ///
+    /// `false` past the end, which is a capsule that is not there.
+    pub fn armed(&self, index: usize) -> bool {
+        self.armed.get(index).copied().unwrap_or(false)
+    }
 }
 
 impl Head {
+    /// **This head with `armed` of its four bank pills lit** — the one door
+    /// into [`Head::banks`], so a head that draws banks is a head somebody
+    /// handed a value to.
+    pub fn with_banks(self, armed: usize) -> Head {
+        Head {
+            banks: Some(armed),
+            ..self
+        }
+    }
+
     /// This head's capsules under `open` — see [`HeadWords`].
     pub fn words(&self, open: Open) -> HeadWords {
         let mut words = [""; HEAD_PILLS];
+        let mut armed = [false; HEAD_PILLS];
         let mut len = 0;
         for pill in self.pills.iter().take(HEAD_PILLS) {
             words[len] = pill;
             len += 1;
         }
+        // **The banks sit between the table's controls and the class pill**,
+        // which keeps the class pill rightmost — the rule this type's own
+        // documentation states and reads off the mock.
+        if let Some(at) = self.banks {
+            for (bank, word) in BANK_PILLS.iter().enumerate() {
+                words[len] = word;
+                armed[len] = bank == at;
+                len += 1;
+            }
+        }
         if let Some(class) = self.class {
             words[len] = mcp_word(open.holds(class));
+            armed[len] = open.holds(class);
             len += 1;
         }
-        HeadWords { words, len }
+        HeadWords { words, armed, len }
     }
 }
+
+/// **The bank pills' words**, one per `karakuri_pattern::BANKS` — `seq 1` …
+/// `seq 4`, counting from one as everything an operator reads on this console
+/// does.
+///
+/// A `const` array sized off that crate's own count, so a fifth bank is a
+/// missing word here rather than a pill nobody draws.
+const BANK_PILLS: [&str; karakuri_pattern::BANKS] = ["seq 1", "seq 2", "seq 3", "seq 4"];
 
 /// **One capsule in a bay head, by the word in it** — [`head_pills`]'s answer,
 /// asked for one pill rather than for all of them.
@@ -919,6 +1010,46 @@ fn head_capsule(
         }
     });
     found.filter(|capsule| head_box(rect).contains_rect(*capsule))
+}
+
+/// **Where each of a head's bank pills is**, in bank order — [`head_capsule`]
+/// asked by position instead of by word, because four capsules are wanted and
+/// not one.
+///
+/// **By index and not by word**, which is the difference that matters: the four
+/// bank words are distinct today, and a control found by the word in it is a
+/// control that moves the day two capsules read the same thing. The class pill
+/// can be found by its word because [`mcp_word`]'s two are the state; a bank's
+/// is not ([`HeadWords::armed`]).
+///
+/// **Empty for a head that draws no banks, and empty for one that cannot hold
+/// all four** — a capsule half out of a head is not one to press
+/// ([`head_capsule`]'s own filter), and dropping the ones that fit would
+/// renumber the rest: the pills are laid out right to left, so the capsule that
+/// falls off is `seq 1` and every bank after it would answer for its neighbour.
+fn bank_capsules(ctx: &egui::Context, rect: Rect, head: &Head, open: Open) -> Vec<Rect> {
+    if head.banks.is_none() {
+        return Vec::new();
+    }
+    let words = head.words(open);
+    let slice = words.as_slice();
+    // Where the banks start: the table's own controls come first, and this
+    // head has none of them today — read off the same walk rather than
+    // assumed, so a Sequencer head that ever lists a control still finds them.
+    let first = head.pills.len().min(slice.len());
+    let box_of = head_box(rect);
+    let mut out = vec![None; karakuri_pattern::BANKS];
+    head_pills(ctx, rect, slice, head.grip, |index, capsule| {
+        if let Some(bank) = index.checked_sub(first) {
+            if let Some(slot) = out.get_mut(bank) {
+                *slot = Some(capsule).filter(|it| box_of.contains_rect(*it));
+            }
+        }
+    });
+    match out.iter().all(Option::is_some) {
+        true => out.into_iter().flatten().collect(),
+        false => Vec::new(),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -6288,6 +6419,81 @@ const OUTPUTS_LABEL: &str = "Outputs";
 /// row."*
 const PROGRAM_VIEW: &str = "program view";
 
+/// **The projector window's chip**, and the whole of its name.
+///
+/// The mock draws `projector · DELL U2720Q`, and the display half is not
+/// built: naming which screen a window is on wants a list of displays this
+/// program does not read, and a label that carries a monitor's model is a
+/// label that changes when the cable does — which is exactly why
+/// [`karakuri_operation::Output`] is a closed list and not a string. The chip
+/// says what it is; the manual's tooltip says which display it would name.
+const PROJECTOR: &str = "projector";
+
+/// **The two plugin sinks the mock draws, and what they say with no plugin
+/// loaded.**
+///
+/// `docs/plugins.md` specifies the process and the handshake and nothing
+/// implements them, so there is no manifest to read a sink out of and neither
+/// of these is switchable. They are drawn rather than omitted for the mock's
+/// own reason, which its `NDI · no plugin` chip already carried: *a control
+/// explaining that the thing it would switch is not installed* is a state, and
+/// a row that simply did not mention Syphon would leave an operator wondering
+/// whether this program has heard of it.
+const PLUGIN_SINKS: [&str; 2] = ["Syphon · no plugin", "NDI · no plugin"];
+
+/// **One chip in the Outputs row that is not the program view.**
+///
+/// The program view is not one of these and the asymmetry is the model rather
+/// than a shortcut: its on/off is [`Layout::visible`] on the picture's node —
+/// read, never stored ([`Outputs::on`]) — and no other output has a layout
+/// node at all. A uniform array would have needed an `Option<NodeId>` on every
+/// chip, which would say a projector window might have one.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SinkChip {
+    /// **What this chip names**, and what a press asks for by name — see
+    /// [`karakuri_operation::Output`], which is where the closed list is
+    /// argued.
+    pub output: Output,
+    /// The capsule, dot and name together: what a press has to land in, the
+    /// same whole-chip target the program view's is.
+    pub chip: Rect,
+    /// The `.dot` inside it.
+    pub dot: Rect,
+    /// Whether this output is on. **`false` until somebody says otherwise** —
+    /// this crate has no window and no plugin host, so [`Outputs::told`] is
+    /// how the answer arrives.
+    pub on: bool,
+    /// **Whether there is anything behind it at all.** `false` draws `.absent`
+    /// — dim, and not a control — which is the mock's own state for a sink
+    /// whose plugin is not loaded.
+    pub present: bool,
+    /// What is written in it.
+    pub name: &'static str,
+}
+
+impl SinkChip {
+    /// **What a press on this chip asks for**, or `None` where there is
+    /// nothing behind it to switch.
+    ///
+    /// The `on` it names is the state being *asked for* and not the state it
+    /// is in: an operation names a destination and never a toggle
+    /// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)),
+    /// and the chip's toggle is this method.
+    pub fn route(&self) -> Option<Operation> {
+        self.present.then_some(Operation::RouteFrame {
+            output: self.output,
+            on: !self.on,
+        })
+    }
+
+    /// Whether `p` is on this chip. Absent chips answer `false`: a control
+    /// that switches nothing does not take a press away from the row it sits
+    /// in.
+    pub fn hit(&self, p: karakuri_layout::Point) -> bool {
+        self.present && self.chip.contains(Pos2::new(p.x, p.y))
+    }
+}
+
 /// **The Outputs row, laid out**: where the word goes, where the console's one
 /// control is, and whether that control is lit.
 ///
@@ -6350,6 +6556,14 @@ pub struct Outputs {
     pub id: NodeId,
     /// Whether the picture is on screen — `layout.visible(id)`, read here.
     pub on: bool,
+    /// **The rest of the list**, left to right after the program view: the
+    /// projector window, then the two plugin sinks.
+    ///
+    /// See [`SinkChip`] for why they are not one array with the program view
+    /// in it. `on` is `false` on all three until [`Outputs::told`] says
+    /// otherwise, and the two plugin chips are `present: false` for as long as
+    /// there is no manifest to read them out of.
+    pub more: [SinkChip; 3],
 }
 
 impl Outputs {
@@ -6376,9 +6590,57 @@ impl Outputs {
         }
     }
 
-    /// Whether `p` is on the control.
+    /// **What a press on the program view's chip asks for**, in the
+    /// vocabulary every surface shares.
+    ///
+    /// [`Outputs::op`] above is how the console *performs* it and this is what
+    /// is *asked*, which is one fact and not two: the picture's on and off is
+    /// the fold, so the operation names the output and the fold is what
+    /// carries it out. Storing a second `on` beside the layout node is what
+    /// this refuses —
+    /// [ADR-0161](../../../docs/adr/0161-solo-remembers-which-region-because-it-cannot-be-derived.md)
+    /// stored `soloed` because it could not be derived; this can.
+    pub fn route(&self) -> Operation {
+        Operation::RouteFrame {
+            output: Output::Program,
+            on: !self.on,
+        }
+    }
+
+    /// **Say which of the outputs this crate cannot see are on.**
+    ///
+    /// The picture's state is a layout node and this row reads it; a projector
+    /// window is `crates/karakuri`'s and there is nothing in this crate that
+    /// could know ([ADR-0156](../../../docs/adr/0156-the-consoles-arrangement-is-a-tree-this-repository-owns.md)
+    /// — the console takes no device). So it arrives the way
+    /// [`View::picture`] does: written by whoever owns the window, beside the
+    /// frame that draws it.
+    ///
+    /// A builder rather than a fourth argument to [`outputs`], because the
+    /// answer is only needed to *paint* a chip and every caller that
+    /// hit-tests one has no opinion about it.
+    pub fn told(mut self, projector: bool) -> Outputs {
+        self.more[0].on = projector;
+        self
+    }
+
+    /// Whether `p` is on the program view's control.
     pub fn hit(&self, p: karakuri_layout::Point) -> bool {
         self.sink.contains(Pos2::new(p.x, p.y))
+    }
+
+    /// **Which chip `p` is on**, over the whole row — the program view and the
+    /// three beside it.
+    ///
+    /// `None` for a press on the row's ground, on the word, on the class pill
+    /// or on a chip with nothing behind it. [`Outputs::hit`] is the same
+    /// question asked of the first chip alone, and it stays because
+    /// [`crate::input`]'s claim rule is written against one control.
+    pub fn chip_at(&self, p: karakuri_layout::Point) -> Option<Output> {
+        if self.hit(p) {
+            return Some(Output::Program);
+        }
+        self.more.iter().find(|c| c.hit(p)).map(|c| c.output)
     }
 }
 
@@ -6451,23 +6713,48 @@ pub fn outputs(
     // not the same width.
     let opened = open.holds(Class::InputsAndOutputs);
     let pill = pill_width(ctx, mcp_word(opened));
-    let name = ctx.fonts_mut(|f| {
-        f.layout_no_wrap(
-            PROGRAM_VIEW.to_owned(),
-            FontId::new(size::BASE, FontFamily::Proportional),
-            Color32::PLACEHOLDER,
-        )
-        .size()
-        .x
+    // **Every chip's name is measured, not just the first.** A capsule is as
+    // wide as what is in it, so where the third starts depends on what the
+    // second says — the same rule the class pill above made this row take for
+    // its first chip, four times over.
+    let widths: [f32; 4] = std::array::from_fn(|i| {
+        let word = match i {
+            0 => PROGRAM_VIEW,
+            1 => PROJECTOR,
+            n => PLUGIN_SINKS[n - 2],
+        };
+        ctx.fonts_mut(|f| {
+            f.layout_no_wrap(
+                word.to_owned(),
+                FontId::new(size::BASE, FontFamily::Proportional),
+                Color32::PLACEHOLDER,
+            )
+            .size()
+            .x
+        })
     });
-    outputs_row(row, label, pill, name).map(|(label, mcp, sink, dot)| Outputs {
+    outputs_row(row, label, pill, widths).map(|OutputsRow { label, mcp, chips }| Outputs {
         label,
         mcp,
         open: opened,
-        sink,
-        dot,
+        sink: chips[0].0,
+        dot: chips[0].1,
         id,
         on: layout.visible(id),
+        more: std::array::from_fn(|i| SinkChip {
+            output: match i {
+                0 => Output::Projector(0),
+                n => Output::Plugin(n as u8 - 1),
+            },
+            chip: chips[i + 1].0,
+            dot: chips[i + 1].1,
+            on: false,
+            present: i == 0,
+            name: match i {
+                0 => PROJECTOR,
+                n => PLUGIN_SINKS[n - 1],
+            },
+        }),
     })
 }
 
@@ -6493,12 +6780,20 @@ pub fn outputs(
 /// the quarter pixel the CSS and the row disagree by is spent here rather than
 /// argued about: `align-items: center` is what the CSS says, and it is what
 /// leaves the two clearances equal.
-fn outputs_row(
-    row: Rect,
-    label_w: f32,
-    pill_w: f32,
-    name_w: f32,
-) -> Option<(Rect, Rect, Rect, Rect)> {
+/// **What [`outputs_row`] hands back**: the word, the class pill and the four
+/// chips, each with the dot inside it.
+///
+/// A named type rather than a tuple because the tuple grew a term per chip and
+/// stopped being readable at the call site — which is the same reason
+/// [`Outputs`] itself is a struct.
+struct OutputsRow {
+    label: Rect,
+    mcp: Rect,
+    /// The capsule and its dot, per chip, left to right.
+    chips: [(Rect, Rect); 4],
+}
+
+fn outputs_row(row: Rect, label_w: f32, pill_w: f32, name_w: [f32; 4]) -> Option<OutputsRow> {
     let mid = row.center().y;
     let label = Rect::from_min_size(
         Pos2::new(row.min.x + size::OUTPUTS_PAD_X, mid - size::HEAD_SIZE * 0.5),
@@ -6515,23 +6810,39 @@ fn outputs_row(
         Pos2::new(label.max.x + size::OUTPUTS_GAP, mid - size::PILL_H * 0.5),
         egui::vec2(pill_w, size::PILL_H),
     );
-    let sink = Rect::from_min_size(
-        Pos2::new(mcp.max.x + size::OUTPUTS_GAP, mid - size::SINK_H * 0.5),
-        egui::vec2(
-            size::SINK_PAD_X * 2.0 + size::SINK_DOT + size::SINK_GAP + name_w,
-            size::SINK_H,
-        ),
-    );
-    let dot = Rect::from_center_size(
-        Pos2::new(sink.min.x + size::SINK_PAD_X + size::SINK_DOT * 0.5, mid),
-        egui::vec2(size::SINK_DOT, size::SINK_DOT),
-    );
-    // The same rule [`picture_rect`] states, on the chip rather than on the
-    // row because the chip is what is drawn and clicked: a row folded away has
-    // a rectangle with no extent in it, and one too narrow for the chip has
-    // nowhere to put it. Either way there is no control.
-    match row.contains_rect(sink) {
-        true => Some((label, mcp, sink, dot)),
+    // **The chips, left to right from the pill, one `.outputs` gap apart.**
+    let mut x = mcp.max.x;
+    let chips: [(Rect, Rect); 4] = std::array::from_fn(|i| {
+        let chip = Rect::from_min_size(
+            Pos2::new(x + size::OUTPUTS_GAP, mid - size::SINK_H * 0.5),
+            egui::vec2(
+                size::SINK_PAD_X * 2.0 + size::SINK_DOT + size::SINK_GAP + name_w[i],
+                size::SINK_H,
+            ),
+        );
+        x = chip.max.x;
+        let dot = Rect::from_center_size(
+            Pos2::new(chip.min.x + size::SINK_PAD_X + size::SINK_DOT * 0.5, mid),
+            egui::vec2(size::SINK_DOT, size::SINK_DOT),
+        );
+        (chip, dot)
+    });
+    // The same rule [`picture_rect`] states, on the chips rather than on the
+    // row because a chip is what is drawn and clicked: a row folded away has
+    // a rectangle with no extent in it, and one too narrow for the chips has
+    // nowhere to put them. Either way there is no control.
+    //
+    // **It is the whole list or none of it, and the mock's `flex-wrap: wrap`
+    // is still a rule with nothing to apply to.** The row is one
+    // [`size::OUTPUTS_H`] tall in an arrangement that cannot grow it, so
+    // wrapping is not available; and the four chips, the word and the class
+    // pill come to well under the narrowest console this draws, so the case
+    // where they do not fit is the same case the row is folded away in.
+    // Dropping the tail silently would be the worse answer of the two — a
+    // control that is not drawn cannot say it is not drawn — and it is not
+    // reachable either.
+    match row.contains_rect(chips[3].0) {
+        true => Some(OutputsRow { label, mcp, chips }),
         false => None,
     }
 }
@@ -10437,6 +10748,78 @@ pub struct Sequenced {
     pub step: Option<usize>,
 }
 
+/// **One item of the `+ lane` chooser**: a target a lane may be pointed at, and
+/// the words drawn on it.
+///
+/// **The words are the lane label the pick will make, plus what it is.** A
+/// fader item reads `A ▮ fader` and a parameter item `B ∿ L2:0 twist`, so the
+/// row that appears after the press reads as the item that was picked — the
+/// deck's letter and [`lane_mark`], which is [`lane_label`]'s own derivation
+/// asked one control earlier.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LaneChoice {
+    /// What a pick points the lane at — the payload of
+    /// `Operation::PointLane`, whole.
+    pub target: LaneTarget,
+    /// The words on the item.
+    pub words: String,
+}
+
+/// **What the `+ lane` chooser offers this frame**, read off the [`View`] once
+/// and handed in — [`Target`]'s shape one bay along, and for its reason: the
+/// item that is painted and the item a press lands on are one derivation of one
+/// reading.
+///
+/// # What is in the list, and why it is one deck's parameters and every deck's fader
+///
+/// A lane's target is `Fader { deck }` or `Param { deck, param }`
+/// ([ADR-0321](../../../docs/adr/0321-a-lanes-target-is-an-operation-with-its-value-elided.md)),
+/// so the list is the faders of every deck the mixer draws a strip for —
+/// [`View::select`]'s own count read a fourth time — and the published controls
+/// of **one** deck: the Library bay's load pulldown's
+/// ([`View::target_deck`], ADR-0305).
+///
+/// **That mark and not a second one.** It is the console's one pointer meaning
+/// *a deck named without moving the keys*, which is exactly what pointing a
+/// lane wants — a lane on deck C while deck A is playing — and a chooser of its
+/// own in this bay would be a fourth pointer on a panel that already explains
+/// three (ADR-0305's counting argument). Listing every deck's keys instead
+/// would put the same key in the list once per deck, so the operator would pick
+/// a deck by reading a list four times as long rather than by a control.
+/// [ADR-0327](../../../docs/adr/0327-the-lane-chooser-lists-one-decks-keys-and-the-bank-pills-are-the-four-banks.md).
+///
+/// **What the console does not hold, it does not offer.** The parameters are
+/// [`View::inspector`]'s, which is written when a Set lands, and the inspector
+/// holds [`PANES`] panes — so a target deck no pane is pointed at contributes
+/// no parameters and the list is its faders alone. That is the reading's own
+/// limit rather than this control's, and it is written down in
+/// `docs/manual/console.html`'s `+ lane` tip.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Choices {
+    /// Every target on offer: the faders first, then the parameters.
+    pub items: Vec<LaneChoice>,
+    /// **How many of the leading items are faders**, which is where the card's
+    /// separator goes — [`RowMenu::rule`]'s band between the loads and the
+    /// send, reached by the same argument: two kinds of item, and the rule says
+    /// so.
+    pub faders: usize,
+    /// **Whether the card is down** — the console's own state, like
+    /// [`Target::open`]. See [`View::lane_open`].
+    pub open: bool,
+}
+
+impl Choices {
+    /// **Nothing to point at**, which is a console with no mixer and no pane —
+    /// every test in this crate that does not hand one in.
+    pub fn none() -> Choices {
+        Choices {
+            items: Vec::new(),
+            faders: 0,
+            open: false,
+        }
+    }
+}
+
 /// **One lane's row**: the label a press mutes it by, and the cells a press
 /// sets a step by.
 #[derive(Debug, Clone, PartialEq)]
@@ -10471,14 +10854,18 @@ pub struct SeqRow {
 /// [ADR-0200](../../../docs/adr/0200-a-bays-first-pass-draws-the-values-that-exist-and-omits-the-rest.md)
 /// is satisfied here for the first time in this bay, and ADR-0222 said why it
 /// could not be before: every part of the drawing now reads a value that
-/// exists, because a pattern exists. **Three things the mock draws are still
-/// not drawn**, each because the control behind it has nothing to act on yet:
-/// the bay head's `seq 1 · seq 2 · +` bank pills, the foot's `+ lane`, and the
-/// foot's sentence. The bank pills are the nearest: four banks exist and
-/// `Operation::SelectPattern` names one, and what is missing is a head that
-/// can say *which* pill is armed — [`Head::words`] carries `&'static str`s and
-/// a bank's arming is a value, so drawing them in the bay head is a change to
-/// the head machinery rather than to this bay.
+/// exists, because a pattern exists. **One thing the mock draws is still not
+/// drawn**: the foot's sentence, which is a readout and not a control.
+///
+/// The bank pills and the `+ lane` pill landed on 2026-09-09. The pills are
+/// [`Head::banks`] — the head machinery gained one field and every other head's
+/// [`HeadWords`] is what it was — and they are laid out here a second time
+/// rather than copied ([`bank_capsules`]), which is [`program_head`]'s
+/// arrangement: the capsule an operator sees and the capsule a press lands on
+/// are one derivation. **Four pills and no `+`**: with four fixed banks the
+/// mock's `+` is `Operation::SelectPattern` at an empty bank, which is what a
+/// press on `seq 3` already is
+/// ([ADR-0327](../../../docs/adr/0327-the-lane-chooser-lists-one-decks-keys-and-the-bank-pills-are-the-four-banks.md)).
 ///
 /// # The cells are the row divided by the count, and the count follows the mode
 ///
@@ -10491,6 +10878,7 @@ pub fn sequencer(
     ctx: &egui::Context,
     layout: &karakuri_layout::Layout,
     reading: Option<&Sequenced>,
+    choices: &Choices,
 ) -> Option<Sequencer> {
     let reading = reading?;
     // Fonts are not valid until `egui` has run a pass, exactly as in `mixer`,
@@ -10505,6 +10893,35 @@ pub fn sequencer(
         return None;
     }
     let mut y = region.min.y + size::HEAD_H + size::SEQ_PAD_TOP;
+
+    // -- the bay head's bank pills, laid out where they are painted ---------
+    // **The same head [`bay_head`] paints**, asked a second time rather than
+    // copied ([`head_capsule`]'s arrangement), so the capsule an operator
+    // presses is the capsule that was drawn.
+    //
+    // **`Open::CLOSED` and no opening threaded here**: this head opens no class
+    // — `class_at("sequencer")` is `None`, which
+    // `docs/manual/console.html` states of this bay in as many words — so
+    // nothing in it moves with an opening. `a_sequencer_head_opens_no_class`
+    // is what holds that rather than this comment.
+    let banks = crate::view::region("sequencer")
+        .and_then(head_of)
+        .map(|head| head.with_banks(reading.bank))
+        .map(|head| bank_capsules(ctx, region, &head, Open::CLOSED))
+        .unwrap_or_default();
+
+    // -- the foot's `+ lane`, measured before the rows so they clear it -----
+    // `.seq-foot` sits on the bottom edge of `.seq`, so the pill is against
+    // the bay's own padding at both the right and the bottom — the same two
+    // numbers the head and the rows are inset by.
+    let add_w = pill_width(ctx, ADD_LANE);
+    let add = Rect::from_min_size(
+        Pos2::new(right - add_w, region.max.y - size::SEQ_PAD_X - size::PILL_H),
+        egui::vec2(add_w, size::PILL_H),
+    );
+    if add.min.x < left {
+        return None;
+    }
 
     // -- the head: the mode pill, then the step readout ---------------------
     let mode = reading.pattern.mode();
@@ -10584,7 +11001,10 @@ pub fn sequencer(
         true => body_top,
         false => y - size::SEQ_BODY_GAP,
     };
-    if bottom > region.max.y - size::SEQ_PAD_X {
+    // **And the rows clear the foot**, which is the same refusal read against
+    // the pill instead of against the card's edge: the `+ lane` press is a
+    // control and a lane drawn over it is a control a hand cannot reach.
+    if bottom > add.min.y - size::SEQ_STACK_GAP {
         return None;
     }
     // **The playhead is one column over every row**, which is `.seq-play`'s
@@ -10610,6 +11030,79 @@ pub fn sequencer(
         playhead,
         rows,
         bank: reading.bank,
+        banks,
+        add,
+        card: lane_card(ctx, to_egui(layout.viewport()), add, choices),
+    })
+}
+
+/// **The `+ lane` chooser's card, or `None` while it is up** — and `None` for a
+/// chooser with nothing in it, which is a console the mixer draws no strip for.
+///
+/// # It hangs up off the pill, where a row's menu hangs down off a row
+///
+/// [`Load::list`]'s rule, and the same one: this pill is in the **foot** of a
+/// bay, so what is under it is the bay's own edge and the card stands on the
+/// pill's top edge, one [`size::PILL_GAP`] clear of it, over this bay's rows.
+/// It is held inside the viewport, so a Sequencer bay at the bottom of a short
+/// window draws the card over the bays above rather than off the top.
+///
+/// **The rows are not counted against the room**, which is that method's other
+/// clause: the list is at most [`DECKS`] faders and however many controls one
+/// deck published, and a window too short to hold it is a window with no
+/// transport row in it either.
+///
+/// **The items are as wide as the words in them**, which is `egui`'s to answer
+/// — [`View::menu`]'s reason one bay along, and why this takes the context.
+fn lane_card(
+    ctx: &egui::Context,
+    viewport: Rect,
+    add: Rect,
+    choices: &Choices,
+) -> Option<LaneCard> {
+    if !choices.open || choices.items.is_empty() {
+        return None;
+    }
+    let width = |text: &str| {
+        ctx.fonts_mut(|f| {
+            f.layout_no_wrap(
+                text.to_owned(),
+                FontId::new(size::BASE, FontFamily::Proportional),
+                Color32::PLACEHOLDER,
+            )
+            .size()
+            .x
+        })
+    };
+    let widest = choices
+        .items
+        .iter()
+        .map(|item| width(&item.words))
+        .fold(size::ROW_MENU_MIN_W, f32::max);
+    // **The rule is drawn only where it divides two things**, which is what
+    // makes it a separator rather than a line: a list of faders alone and a
+    // list of parameters alone each have one kind in them.
+    let ruled = choices.faders > 0 && choices.faders < choices.items.len();
+    let rule_h = match ruled {
+        true => size::ROW_MENU_RULE_H,
+        false => 0.0,
+    };
+    let height = size::LIB_LIST_PAD * 2.0 + size::LIB_ROW_H * choices.items.len() as f32 + rule_h;
+    // **Held inside the console**, which is the two Library cards' own rule:
+    // `held_inside` clamps the left edge, so a card wider than the room it
+    // stands in comes back into the window rather than off it.
+    let card = held_inside(
+        &viewport,
+        add.max.x - (widest + (size::LIB_ROW_PAD_X + size::LIB_LIST_PAD) * 2.0),
+        add.min.y - size::PILL_GAP - height,
+        widest + (size::LIB_ROW_PAD_X + size::LIB_LIST_PAD) * 2.0,
+        height,
+    );
+    Some(LaneCard {
+        card,
+        faders: choices.faders,
+        items: choices.items.len(),
+        ruled,
     })
 }
 
@@ -10660,18 +11153,130 @@ pub struct Sequencer {
     /// bank it acted on rather than implying the armed one
     /// (`Operation::SelectDeck`'s rule).
     pub bank: usize,
+    /// **The four bank pills in the bay head**, in bank order — the same
+    /// capsules [`bay_head`] paints, laid out a second time here
+    /// ([`bank_capsules`]).
+    ///
+    /// **Empty for a bay too short to hold its own head**, which is a head with
+    /// no capsule to press; short of four it never is, because renumbering the
+    /// ones that fit would put `seq 2`'s press on `seq 1`.
+    pub banks: Vec<Rect>,
+    /// **The foot's `+ lane` pill.** A press puts [`LaneCard`] down; it emits
+    /// nothing on its own, because what is being added is *what the lane
+    /// drives* and a lane with nothing to point at emits nothing.
+    pub add: Rect,
+    /// **The chooser's card, or `None` while it is up.**
+    pub card: Option<LaneCard>,
+}
+
+/// **The `+ lane` chooser's card, laid out** — [`RowMenu`]'s shape one bay
+/// along, and the same mechanism (ADR-0311): a card of items with a separator
+/// in it, hanging off the control that opened it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LaneCard {
+    /// The card itself.
+    pub card: Rect,
+    /// **How many of the items are faders**, which is where the rule goes.
+    pub faders: usize,
+    /// How many items there are altogether — [`Choices::items`]' length.
+    pub items: usize,
+    /// **Whether the separator is drawn**, which is whether there is anything
+    /// on both sides of it.
+    pub ruled: bool,
+}
+
+impl LaneCard {
+    /// **Where one item is**, from the top of the card — the faders stacked
+    /// with no gap, then the band, then the parameters. [`RowMenu::load`]'s own
+    /// reading, with the rule in the middle rather than at the end.
+    ///
+    /// Panics on an item this card has not got, which is that method's rule: a
+    /// caller has invented a target.
+    pub fn item(&self, index: usize) -> Rect {
+        assert!(
+            index < self.items,
+            "item {index} of a card of {}",
+            self.items
+        );
+        let band = match self.ruled && index >= self.faders {
+            true => size::ROW_MENU_RULE_H,
+            false => 0.0,
+        };
+        Rect::from_min_size(
+            Pos2::new(
+                self.card.min.x + size::LIB_LIST_PAD,
+                self.card.min.y + size::LIB_LIST_PAD + size::LIB_ROW_H * index as f32 + band,
+            ),
+            egui::vec2(
+                self.card.width() - size::LIB_LIST_PAD * 2.0,
+                size::LIB_ROW_H,
+            ),
+        )
+    }
+
+    /// **The separator's band**, or `None` where none is drawn — the air,
+    /// hairline and air [`RowMenu::rule`] draws, between the faders and the
+    /// parameters. It takes no press: a press inside it is the dismissal.
+    pub fn rule(&self) -> Option<Rect> {
+        self.ruled.then(|| {
+            Rect::from_min_size(
+                Pos2::new(
+                    self.card.min.x + size::LIB_LIST_PAD,
+                    self.card.min.y + size::LIB_LIST_PAD + size::LIB_ROW_H * self.faders as f32,
+                ),
+                egui::vec2(
+                    self.card.width() - size::LIB_LIST_PAD * 2.0,
+                    size::ROW_MENU_RULE_H,
+                ),
+            )
+        })
+    }
+
+    /// **Which item `p` is on**, or `None` for a point on the card's padding,
+    /// on the separator, or off the card altogether — [`RowMenu::picked`]'s
+    /// own answer.
+    pub fn picked(&self, p: karakuri_layout::Point) -> Option<usize> {
+        let at = Pos2::new(p.x, p.y);
+        (0..self.items).find(|index| self.item(*index).contains(at))
+    }
+}
+
+/// **What a press on the `+ lane` control asks for.**
+///
+/// [`Aim`]'s shape three bays along, and the same division: every arm is either
+/// this console's own state moving or one named operation, and never a lane
+/// appended here
+/// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
+#[derive(Debug, Clone, PartialEq)]
+pub enum Chose {
+    /// Put the card down — a press on `+ lane` with it up.
+    Open,
+    /// Take it away — a press on `+ lane` again, on the card's own ground, on
+    /// the separator, or anywhere else while it is down. **The press is spent
+    /// on the dismissal**, which is [`crate::input::claim`]'s rule 2 said in
+    /// the control.
+    Shut,
+    /// **The lane, named** — `Operation::PointLane { pattern, target }`, with
+    /// the bank off this bay's own reading and the target off the item.
+    Point(Operation),
 }
 
 impl Sequencer {
     /// **What a press at `p` asks for**, or `None` where there is nothing
     /// under it.
     ///
-    /// Three controls and one answer, in the order the mock draws them: a cell
-    /// sets a step, a label mutes a lane, and the pill chooses what a step is
-    /// worth. **The pill is asked last** and cannot overlap either of the
-    /// others, so the order is arbitrary rather than a precedence — it is
-    /// written down so that this file and the window that acts on it ask in
-    /// one order.
+    /// Four controls and one answer, in the order the mock draws them: a bank
+    /// pill chooses the pattern, a cell sets a step, a label mutes a lane, and
+    /// the pill chooses what a step is worth. **The mode pill is asked last**
+    /// and none of the four can overlap another, so the order is arbitrary
+    /// rather than a precedence — it is written down so that this file and the
+    /// window that acts on it ask in one order.
+    ///
+    /// **The `+ lane` control is not here**, because its press is not an
+    /// operation: it puts a card down, and what comes back from that card is
+    /// [`Sequencer::chose`]. That is [`LibraryBay::aim`]'s division one bay
+    /// along, and the same one: a control whose press moves the console's own
+    /// state answers an enum rather than an `Option<Operation>`.
     ///
     /// **Every arm names the bank**, which is why [`Sequencer::bank`] is
     /// carried: implying the armed one is the shape `Operation::SelectDeck`'s
@@ -10679,6 +11284,19 @@ impl Sequencer {
     /// would otherwise land on whichever pattern won.
     pub fn press(&self, p: karakuri_layout::Point) -> Option<Operation> {
         let at = Pos2::new(p.x, p.y);
+        // **The bank pills first, and they are in the bay head** — outside
+        // every rectangle below, so this is the order the mock reads in and
+        // not a precedence either.
+        //
+        // **A press asks for that bank and never for the next one**, which is
+        // the `+`'s whole argument turned round: with four fixed banks a press
+        // on `seq 3` *is* the choice landing on an empty pattern, so there is
+        // nothing left for a `+` to mean (ADR-0320, ADR-0327).
+        if let Some(bank) = self.banks.iter().position(|pill| pill.contains(at)) {
+            return Some(Operation::SelectPattern {
+                pattern: bank as u8,
+            });
+        }
         for (index, row) in self.rows.iter().enumerate() {
             if let Some(cell) = row.cells.iter().position(|cell| cell.contains(at)) {
                 return Some(Operation::SetStep {
@@ -10718,21 +11336,71 @@ impl Sequencer {
             })
     }
 
+    /// **What a press at `p` asks of the `+ lane` control**, or `None` where
+    /// the press was on nothing it owns.
+    ///
+    /// # Two questions, and which one it is depends on whether the card is down
+    ///
+    /// [`LibraryBay::menu_ask`]'s rule, and it is that method's word for word:
+    ///
+    /// - **With the card up** this is the pill alone — a press on it opens the
+    ///   card, and a press anywhere else answers `None` so the arms above can
+    ///   have it.
+    /// - **With one down** every press is the card's, which is
+    ///   [`crate::input::claim`]'s rule 2: on an item it picks, on the
+    ///   separator, on the card's padding or anywhere else on the console it
+    ///   dismisses. So this never answers `None` while the card is down.
+    ///
+    /// **A pick names the bank this bay is reading**, exactly as
+    /// [`Sequencer::press`]'s arms do: the lane lands in the pattern that was
+    /// drawn rather than in whichever is armed by the time it is performed.
+    pub fn chose(&self, p: karakuri_layout::Point, choices: &Choices) -> Option<Chose> {
+        let Some(card) = self.card else {
+            return self
+                .add
+                .contains(Pos2::new(p.x, p.y))
+                .then_some(Chose::Open);
+        };
+        Some(match card.picked(p) {
+            Some(item) => match choices.items.get(item) {
+                Some(choice) => Chose::Point(Operation::PointLane {
+                    pattern: self.bank as u8,
+                    target: choice.target.clone(),
+                }),
+                // **A card drawn from a longer list than the one handed in
+                // here** is a caller asking two questions of two readings, and
+                // the dismissal is the answer that invents nothing — the
+                // re-check `LibraryBay::menu_ask` does against its listing,
+                // for its reason.
+                None => Chose::Shut,
+            },
+            None => Chose::Shut,
+        })
+    }
+
     /// **Whether `p` is on anything here a press means something on**, which
     /// is what [`crate::input::claim`] asks. The ruler, the readout and the
     /// playhead are readouts and answer `false`.
+    ///
+    /// **The `+ lane` pill is one of them**, and the card is not: a card that
+    /// is down claims every press on the console under rule 2, which is
+    /// answered before rule 4 is reached and is why this is only ever asked
+    /// with the card up.
     pub fn owns(&self, p: karakuri_layout::Point) -> bool {
-        self.press(p).is_some()
+        self.press(p).is_some() || self.add.contains(Pos2::new(p.x, p.y))
     }
 
     /// **How many controls this bay draws**, which is what
     /// [`crate::input::PROBES`] registers: a cell per drawn step of every
-    /// lane, a label per lane, and the mode pill.
+    /// lane, a label per lane, the mode pill, the four bank pills and
+    /// `+ lane`.
     pub fn controls(&self) -> usize {
         self.rows
             .iter()
             .map(|row| row.cells.len() + 1)
             .sum::<usize>()
+            + 1
+            + self.banks.len()
             + 1
     }
 }
@@ -10858,7 +11526,64 @@ fn sequencer_into(ui: &Ui, pal: &Palette, bay: &Sequencer) {
             }
         }
     }
+    // **The foot's `+ lane`**, an ordinary `.pill`: it is an act and not a
+    // state, so it is never armed — the mock draws it plain beside a `.sep`.
+    pill_into(ui, pal, bay.add, ADD_LANE, false);
 }
+
+/// **The `+ lane` chooser's card, painted** — [`row_menu_into`]'s card term
+/// for term, because it is that card: the same panel fill, radius, hairline
+/// and item ink, and the same separator drawn as one rule inside its band.
+fn lane_card_into(ui: &Ui, pal: &Palette, card: &LaneCard, choices: &Choices) {
+    let painter = ui.painter();
+    painter.add(pal.shadow.as_shape(card.card, CornerRadius::same(8)));
+    painter.rect_filled(card.card, CornerRadius::same(8), pal.panel);
+    painter.rect_stroke(
+        card.card,
+        CornerRadius::same(8),
+        Stroke::new(size::HAIRLINE, pal.line),
+        StrokeKind::Inside,
+    );
+    // **Zipped against the reading rather than counted to `card.items`**, so a
+    // card laid out from a longer list than the one being painted draws the
+    // items that exist instead of panicking on the geometry.
+    for (index, choice) in choices.items.iter().enumerate().take(card.items) {
+        let at = card.item(index);
+        let galley = painter.layout_no_wrap(
+            choice.words.clone(),
+            FontId::new(size::BASE, FontFamily::Proportional),
+            pal.dim,
+        );
+        painter.galley(
+            Pos2::new(
+                at.min.x + size::LIB_ROW_PAD_X,
+                at.center().y - galley.size().y * 0.5,
+            ),
+            galley,
+            pal.dim,
+        );
+    }
+    if let Some(band) = card.rule() {
+        let rule = band.center().y;
+        painter.line_segment(
+            [
+                Pos2::new(band.min.x + size::LIB_ROW_PAD_X, rule),
+                Pos2::new(band.max.x - size::LIB_ROW_PAD_X, rule),
+            ],
+            Stroke::new(size::HAIRLINE, pal.hair),
+        );
+    }
+}
+
+/// **The word on the foot's pill**, the mock's own — `+ lane`.
+const ADD_LANE: &str = "+ lane";
+
+/// **What a fader item says it is**, after the lane label the pick will make:
+/// `A ▮ fader`.
+///
+/// A parameter item says the node and the published name instead — `B ∿ L2:0
+/// twist`, which is the mock's own way of naming the fourth lane's target.
+const FADER_ITEM: &str = "fader";
 
 /// **How many numbers the ruler draws**: four, which is the beats in a bar.
 ///
@@ -14251,8 +14976,11 @@ const STAGING_TITLE: &str = "Staging";
 /// the same four answers, so a second enum for the capsule would be
 /// `docs/contributing.md` §4's *a name meaning two things*. What differs is
 /// **which** verdict each is showing, not what a verdict is: a lane row is a
-/// slot whose verdict is still outstanding and leaves on `Accepted`, and the
-/// capsule is the last verdict there was and stands after the lane empties.
+/// node a build changed whose verdict is still outstanding, and it leaves on
+/// `Accepted` with the rest of its slot's; the capsule is the last verdict
+/// there was and stands after the lane empties. **One build's verdict can be
+/// on several rows at once**, which is a fact about how many nodes it changed
+/// and not about the verdict (ADR-0326).
 ///
 /// # One variant per `swap::Event` a verdict is outstanding on, and no fifth
 ///
@@ -14339,30 +15067,41 @@ impl Stage {
     }
 }
 
-/// **One candidate**, which is one deck slot whose newest build has a verdict
-/// outstanding or whose file no longer agrees with its picture.
+/// **One candidate**, which is one node a build changed and nobody has ruled
+/// on — or, where no node can be named, one deck slot whose file no longer
+/// agrees with its picture.
 ///
-/// # What is here is what a `swap::Event` carries, and that is the whole rule
+/// # A row is a changed node, and the caller is what knows which
 ///
-/// An event carries an `id` and a `label` and nothing else about *what* was
-/// built, because a `karakuri_engine::Request` restates every node of a slot —
-/// so a verdict is over a build rather than over a node. The label is what the
-/// build calls itself (every node's `proc` name, joined), and the slot is
-/// which `HotSwap` the verdict came out of. Those two and the verdict are
-/// three of the four fields here; see [`staging`] for the four things the
-/// mock's and the page's row have that are not.
+/// A `swap::Event` carries an `id` and a `label` and nothing else about *what*
+/// was built, because a `karakuri_engine::Request` restates every node of a
+/// slot — so a **verdict** is over a build rather than over a node. Which
+/// nodes that build actually *changed* is a diff of the hashes a build reports
+/// against the ones the slot was already playing, and the caller is where both
+/// lists are in one hand. So a build that changed two nodes is handed in as
+/// two of these, carrying one verdict each
+/// (`docs/adr/0326-a-staging-row-is-a-changed-node-and-the-row-is-the-keep.md`).
 ///
-/// **The fourth is [`said`](Self::said)**, and it is here on the same rule
-/// rather than against it: `Event::SourceRefused` carries the diagnostics, so
-/// they are a thing the wire has and not a thing this crate derives.
+/// **[`at`](Self::at) is `None` where no node can be named**, and that is a
+/// state rather than a gap: `Event::Rejected` and `Event::SourceRefused` are
+/// builds that did not happen, so there is no new node list to hold against
+/// the old one, and a rebuild that restated the stack without changing any of
+/// it has an empty diff. Such a row is the slot's, draws no address, and
+/// offers neither press — both name a node.
+///
+/// **[`said`](Self::said) is here on the same rule rather than against it**:
+/// `Event::SourceRefused` carries the diagnostics, so they are a thing the
+/// wire has and not a thing this crate derives.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Candidate {
     /// **Which deck slot the verdict is about**, drawn as
     /// [`DECK_LETTERS`]' letter.
     ///
-    /// **It is not the node the page's row addresses**, and it is not a
-    /// stand-in for one: the node is finer than anything on the wire (see
-    /// [`staging`]) and this is the address the verdict actually has.
+    /// **It is not the node**, and it is not a stand-in for one: the node is
+    /// [`at`](Self::at), and this is the address the *verdict* has. Both are
+    /// drawn, because a node address is per slot — two decks running one Set
+    /// have the same `L4:0` — and both are needed to spell the operation a
+    /// press on this row asks for.
     ///
     /// **It is drawn because a label does not say where.** The program this
     /// panel is drawn by runs every one of its [`DECKS`] slots from its
@@ -14391,9 +15130,37 @@ pub struct Candidate {
     /// the program rather than a property of the lane; the copies ended it, and
     /// the argument for the letter is the parked deck above.
     pub deck: usize,
-    /// **What the build calls itself** — `Request::label`, which is every
-    /// node's own `proc` name joined with ` + `, and the harness's word rather
-    /// than this crate's for [`Strip::name`]'s reason.
+    /// **Which node of that slot the build changed**, and `None` where no node
+    /// can be named — see the head of this type.
+    ///
+    /// **It is the payload half and [`addr`](Self::addr) is the drawn half**,
+    /// which is [`Param`]'s arrangement one bay over: `Param::name` is what
+    /// the row reads and `Param::param` is what a press asks with. Both are
+    /// written by whoever read the Set, in one place, so they are filled
+    /// together or not at all.
+    ///
+    /// **It is what both of this row's presses are addressed by.** `Keep a
+    /// candidate` settles this node and `Put a node's previous version back`
+    /// steps it back one version; neither can be spelled without it, so a row
+    /// where this is `None` offers neither.
+    pub at: Option<NodeAt>,
+    /// **The mock's `.addr` — `L4:0`** — and empty on a row that names no
+    /// node.
+    ///
+    /// **Written by whoever read the Set**, exactly as [`Node::addr`] is and
+    /// for its reason: the layer names are `karakuri-ir`'s `Kind` and this
+    /// crate depends on neither it nor the engine.
+    pub addr: String,
+    /// **What the node's procedure calls itself** — `Set::node_names`' entry
+    /// for [`at`](Self::at), which is the same name the Inspector writes on a
+    /// node head, and the harness's word rather than this crate's for
+    /// [`Strip::name`]'s reason.
+    ///
+    /// **On a row that names no node it is the build's own label** —
+    /// `Request::label`, every node's `proc` name joined with ` + ` — because
+    /// that is the finest thing such a verdict has. A checker's refusal is the
+    /// one that is finer than the build: it is about one file, and the label
+    /// it hands over is that file's name.
     ///
     /// Clipped rather than elided where it does not fit, which is the mock's
     /// own answer: `.cand` sets no `text-overflow` where `.strip-name` and
@@ -14433,30 +15200,32 @@ pub struct Candidate {
 /// **The Staging lane, laid out**: where the candidate rows go and how many of
 /// them there is room for.
 ///
-/// # What is drawn, and it is three of the seven things a row could be
+/// # What is drawn, and it is four of the six things a row could be
 ///
 /// `console.html` specifies a row as four things — the node, what the
 /// procedure calls itself, whether it is on screen, and when it arrived — and
-/// the mock draws a fifth with no value behind it. This draws **the deck, the
-/// name and the verdict**, and, on the one verdict that has produced nothing
-/// to look at, **what the checker said** ([`Candidate::said`]), and
+/// the mock draws two more with no value behind them. This draws **the deck,
+/// the node's address, the name and the verdict**, and, on the one verdict
+/// that has produced nothing to look at, **what the checker said**
+/// ([`Candidate::said`]);
 /// [ADR-0200](../../../docs/adr/0200-a-bays-first-pass-draws-the-values-that-exist-and-omits-the-rest.md)
 /// is why the rest is omitted outright rather than drawn hollow.
 ///
-/// - **The node — `L4:0`, the address the inspector writes on a node head.**
-///   `swap::Event` carries an `id` and a `label` and no node at all, because a
-///   `Request` restates every node of the slot and a verdict is therefore over
-///   a *build*. Which node of that build changed **is** derivable and nothing
-///   derives it: `karakuri_environment::watch::Built` carries
-///   `(layer, index, hash)` for the whole stack on every build, and
-///   consecutive builds differ where the hashes do. The one place in this
-///   workspace that computes that discrimination is
-///   `karakuri_environment::history::Snapshots::record`, which answers it on
-///   the worker thread — the path it wrote, or `None` for a source that did
-///   not change — and the watcher drops the answer. The per-node `proc` name
-///   never crosses the channel at all; only the `label`, which is every node's
-///   name joined. **Until something diffs consecutive builds, a node address
-///   here would be invented.**
+/// **The node arrived on 2026-09-09 and it is what a row now *is*.**
+/// `swap::Event` carries an `id` and a `label` and no node at all, because a
+/// `Request` restates every node of the slot and a verdict is therefore over a
+/// *build*; which node of that build **changed** is a diff, and the caller is
+/// where both lists are in one hand — `karakuri_environment::watch::Built`
+/// carries `(layer, index, hash)` for the whole stack on every build, and
+/// consecutive builds differ where the hashes do. So one build that changed
+/// two nodes is two rows here, each with the build's one verdict on it
+/// (`docs/adr/0326-a-staging-row-is-a-changed-node-and-the-row-is-the-keep.md`).
+/// A verdict with no diff behind it — a build that did not happen, or a
+/// rebuild that restated the stack unchanged — is one row with no address, and
+/// [`Candidate::at`] is where that is argued.
+///
+/// What is still omitted:
+///
 /// - **The coloured dot, and the `you` in `you, 14:41`** — who wrote it.
 ///   `origin` — the prompt, the model, the seed — is specified in
 ///   `docs/ir-spec.md` and produced by nothing (*"`origin` and `tag` have no
@@ -14479,21 +15248,38 @@ pub struct Candidate {
 /// - **The mock's third `.cand`,** *a rejected candidate costs nothing*. The
 ///   page says what that is: a note to whoever is reading the mock, and not a
 ///   thing the lane draws.
-/// - **`Keep a candidate` and `Put a node's previous version back`.** Both are
-///   controls and this pass adds none, and both are blocked under that on the
-///   derivation the first bullet is about: `karakuri_operation::Operation`
-///   spells each of them `{ deck, node }`, and the node is the thing nothing
-///   here can name. Their record questions are settled and are not what is
-///   missing — `KeepCandidate` is `Written::Silent(Silent::Surface)` and
-///   `RestoreProcedure` is `Written::Silent(Silent::OnLanding)`.
 ///
-/// # A row is a deck slot, and it leaves when nothing is outstanding
+/// # The two controls, and which part of the row each is
+///
+/// **The row is `Keep a candidate` and the capsule at its end is `Put a
+/// node's previous version back`** — [`StagingBay::keep`] and
+/// [`StagingBay::back`]. It is the Library's list one bay up, arranged the
+/// same way: a row that is itself a control with a smaller box inside it,
+/// asked first, which there is [`LibraryBay::starred`] and here is the
+/// capsule. What decided which act goes on which target is what each costs —
+/// keeping moves nothing, writes nothing and takes a line off a list, and a
+/// step back writes over the operator's working copy and rebuilds the slot, so
+/// the free one takes the large target and the one that writes takes the small
+/// one.
+///
+/// **Neither is offered on a row that names no node** ([`Candidate::at`]),
+/// because `karakuri_operation::Operation` spells both of them with one, and
+/// **keeping is not offered on [`Stage::Overloaded`]** either: a slot that has
+/// stopped is not a candidate an operator is choosing between, and settling it
+/// would take away the one row saying the slot is not running (ADR-0316). The
+/// capsule *is* offered there — landing an earlier version is one of the three
+/// ways out of a stopped slot. Their record questions were settled long before
+/// the controls were: `KeepCandidate` is `Written::Silent(Silent::Surface)`
+/// and `RestoreProcedure` is `Written::Silent(Silent::OnLanding)`.
+///
+/// # A row is a changed node, and it leaves when nothing is outstanding
 ///
 /// The rows are the caller's ([`View::staging`]), read off
-/// `karakuri_engine::deck::Deck`'s per-slot events: a slot gets a row when its
-/// newest event is `Swapped`, `Rejected`, `Overloaded` or `SourceRefused`, and
-/// loses it on `Accepted` — the watchdog saying the version held the budget,
-/// which is the one outcome that leaves the file and the picture agreeing.
+/// `karakuri_engine::deck::Deck`'s per-slot events and the per-node hashes the
+/// builds reported: a slot gets its rows when its newest event is `Swapped`,
+/// `Rejected`, `Overloaded` or `SourceRefused`, and loses all of them on
+/// `Accepted` — the watchdog saying the version held the budget, which is the
+/// one outcome that leaves the file and the picture agreeing.
 ///
 /// **What that stands in for is the operator's own verdict, and it is not the
 /// same judgement.** *Keeping* is taste and the watchdog's verdict is cost;
@@ -14573,7 +15359,150 @@ impl StagingBay {
             egui::vec2(self.list.width(), size::CAND_H),
         )
     }
+
+    /// **The `back` capsule of the `index`th row**, or `None` where that row
+    /// does not offer one and `None` where the row has no space for it.
+    ///
+    /// Laid out from the row's right-hand padding, back past the verdict and
+    /// one [`size::CAND_GAP`], which is where [`staging_into`] paints it —
+    /// **one derivation for the painted capsule and the pressed one**, which
+    /// is every other control on this console
+    /// ([`crate::input`]): the derivation that draws a control is asked a
+    /// second time rather than copied, so what an operator sees and what a
+    /// press lands on cannot come apart.
+    ///
+    /// **`None` where the row would be all capsule**, which is
+    /// [`keep_pill`]'s rule and [`look`]'s: *a control that does not fit in
+    /// the row it is drawn in is no control at all, rather than half of one*.
+    /// The words to its left are a readout and are clipped; this is a target
+    /// and is not drawn where it would be cut. What it has to leave room for
+    /// is the deck letter and the address, because a capsule sitting on top of
+    /// the address would be a press whose operand is underneath it.
+    ///
+    /// **Offered wherever the row names a node** ([`Candidate::at`]), the
+    /// overloaded row included — see [`staging`] for which press is offered
+    /// where, and why this one is offered on more rows than the keep is.
+    pub fn back_capsule(
+        &self,
+        ctx: &egui::Context,
+        candidates: &[Candidate],
+        index: usize,
+    ) -> Option<Rect> {
+        // Fonts are not valid until `egui` has run a pass, exactly as in
+        // [`keep_pill`] — and on the frame before the first one there is
+        // nothing drawn here to press.
+        if ctx.cumulative_pass_nr() == 0 || index >= self.rows {
+            return None;
+        }
+        let candidate = candidates.get(index)?;
+        candidate.at?;
+        let row = self.row(index);
+        let width = |text: &str, at: f32| {
+            ctx.fonts_mut(|f| {
+                f.layout_job(span_at(text, at, Color32::PLACEHOLDER))
+                    .size()
+                    .x
+            })
+        };
+        let verdict = width(candidate.stage.word(), size::CAND_WHO_SIZE);
+        let w = pill_width(ctx, BACK_LABEL);
+        let capsule = Rect::from_min_size(
+            Pos2::new(
+                row.max.x - size::CAND_PAD_X - verdict - size::CAND_GAP - w,
+                row.center().y - size::PILL_H * 0.5,
+            ),
+            egui::vec2(w, size::PILL_H),
+        );
+        // **Against what the row's left-hand end is already using**, which is
+        // the deck letter and the address: a capsule that reached back over
+        // the address would be drawn on top of the thing it is a control for,
+        // and a press would then be aimed by something it is covering.
+        let letter = DECK_LETTERS.get(candidate.deck).copied().unwrap_or("?");
+        let least = size::CAND_PAD_X
+            + width(letter, size::BASE)
+            + size::CAND_GAP
+            + width(&candidate.addr, size::BASE)
+            + size::CAND_GAP;
+        (capsule.min.x >= row.min.x + least).then_some(capsule)
+    }
+
+    /// **A press on the `back` capsule of a row**, as the operation it asks
+    /// for: this node's previous version, one step and never a cursor.
+    ///
+    /// **The listing goes in with the point**, exactly as it does for the
+    /// Library bay's rows and for its reason: what a row *is* is a value the
+    /// caller derived off a deck and handed over, and this crate holds none of
+    /// it between frames.
+    pub fn back(
+        &self,
+        ctx: &egui::Context,
+        candidates: &[Candidate],
+        p: karakuri_layout::Point,
+    ) -> Option<Operation> {
+        let at = egui::pos2(p.x, p.y);
+        (0..self.rows).find_map(|index| {
+            let capsule = self.back_capsule(ctx, candidates, index)?;
+            let node = candidates.get(index)?.at?;
+            capsule.contains(at).then(|| Operation::RestoreProcedure {
+                deck: candidates[index].deck as u8,
+                revision: Revision::Previous(node),
+            })
+        })
+    }
+
+    /// **A press on a candidate row**, as the operation it asks for: keep this
+    /// candidate, which settles the node and takes the row off the lane.
+    ///
+    /// **The capsule inside the row is not part of it**, and that is a refusal
+    /// here rather than an order at the call site: the row is asked after
+    /// [`StagingBay::back`] on every route, but a control that depended on
+    /// being asked second would be one press away from doing two things the
+    /// day somebody reordered a `match`. [`crate::input::claim`]'s rule 4 is
+    /// *a control claims what it acts on and no more*, and what this acts on
+    /// is the row less its capsule.
+    ///
+    /// **`None` on a row that offers no keep**, which is two cases and one
+    /// sentence each: a row with no node has nothing to settle, and a row on
+    /// [`Stage::Overloaded`] is a slot that has stopped rather than a
+    /// candidate anyone is choosing between (ADR-0316). A press on either is
+    /// nobody's, and [`crate::input::claim`] hands it to `egui` exactly as it
+    /// hands over a press on the list's own ground.
+    pub fn keep(
+        &self,
+        ctx: &egui::Context,
+        candidates: &[Candidate],
+        p: karakuri_layout::Point,
+    ) -> Option<Operation> {
+        let at = egui::pos2(p.x, p.y);
+        (0..self.rows).find_map(|index| {
+            let candidate = candidates.get(index)?;
+            let node = candidate.at?;
+            if candidate.stage == Stage::Overloaded || !self.row(index).contains(at) {
+                return None;
+            }
+            if self
+                .back_capsule(ctx, candidates, index)
+                .is_some_and(|capsule| capsule.contains(at))
+            {
+                return None;
+            }
+            Some(Operation::KeepCandidate {
+                deck: candidate.deck as u8,
+                node,
+            })
+        })
+    }
 }
+
+/// **The word in the capsule at the end of a candidate row**, and it is not
+/// `keep`: this console already spends that word on the Inspector pane head's
+/// capsule, where it names *Keep what a deck is playing* and writes a Set into
+/// the library. Two capsules reading `keep` and meaning two acts would be
+/// `docs/contributing.md` §4's *a name meaning two things*, and the more
+/// expensive misreading of the two is the one where a person presses this
+/// expecting a save. The row's own act needs no word at all, because the
+/// control is the row.
+const BACK_LABEL: &str = "back";
 
 /// The arithmetic of the lane, away from the layout it reads.
 ///
@@ -14638,9 +15567,17 @@ fn staging_box(region: Rect, total: usize) -> Option<StagingBay> {
 ///   the one row in this console that has a well behind it, and
 ///   `color: var(--c-dim)` for the type in it.
 /// - the deck's letter — `pal.faint`, in the place the mock puts its
-///   `.dot`: the row's first item, [`size::CAND_GAP`] before the name. It is
-///   the letter [`DECK_LETTERS`] gives and the same word the preview cells
+///   `.dot`: the row's first item, [`size::CAND_GAP`] before the address. It
+///   is the letter [`DECK_LETTERS`] gives and the same word the preview cells
 ///   carry, which the manual calls *"the only thing naming a deck"*.
+/// - `.addr` — `pal.lav` at [`size::BASE`], between the letter and the name,
+///   which is the mock's own colour for a node address and the one the
+///   Inspector's node heads are already drawn in. Empty on a row that names no
+///   node, which then draws nothing there and no gap either.
+/// - `.pill` — the `back` capsule, laid out by [`StagingBay::back_capsule`]
+///   and painted from that same derivation, so what is drawn and what a press
+///   lands on are one rectangle. Drawn only where that answers, which is a row
+///   with a node and room for it.
 /// - `.cand .who` — `pal.faint` at [`size::CAND_WHO_SIZE`], hard against the
 ///   far end of the row's padding box, which is what `.sep`'s `flex: 1` does
 ///   to it in the mock. The mock puts the producer there and this puts the
@@ -14675,6 +15612,27 @@ fn staging_into(ui: &Ui, pal: &Palette, bay: &StagingBay, candidates: &[Candidat
             deck,
             pal.faint,
         );
+
+        // **The node's address, in the lavender the mock gives `.addr`** — the
+        // same colour and the same spelling the Inspector writes on a node
+        // head, because it is the same address. A row that names no node draws
+        // nothing here and takes no gap for it: an empty galley is zero wide
+        // and the gap is added to what the address measured, so the name sits
+        // where it sat before this column existed.
+        let addr = painter.layout_job(span_at(&candidate.addr, size::BASE, pal.lav));
+        let addressed = addr.size().x;
+        painter.galley(
+            Pos2::new(
+                row.min.x + size::CAND_PAD_X + after + size::CAND_GAP,
+                row.center().y - addr.size().y * 0.5,
+            ),
+            addr,
+            pal.lav,
+        );
+        let after = match candidate.addr.is_empty() {
+            true => after,
+            false => after + size::CAND_GAP + addressed,
+        };
 
         let name = painter.layout_job(span_at(&candidate.name, size::BASE, pal.dim));
         let named = name.size().x;
@@ -14729,6 +15687,17 @@ fn staging_into(ui: &Ui, pal: &Palette, bay: &StagingBay, candidates: &[Candidat
             word,
             pal.faint,
         );
+
+        // **The `back` capsule, from the derivation a press is answered
+        // from** — [`StagingBay::back_capsule`], asked here rather than laid
+        // out a second time, so the capsule an operator sees and the capsule a
+        // press lands on are one rectangle. It is drawn last because it is the
+        // one thing in the row that is a target: a name long enough to reach
+        // it goes under it rather than over it, which is the rule the verdict
+        // above is already drawn under.
+        if let Some(capsule) = bay.back_capsule(ui.ctx(), candidates, index) {
+            pill_at(ui, pal, capsule, BACK_LABEL);
+        }
     }
 }
 
@@ -14767,7 +15736,13 @@ pub const PANE_NAMES: [&str; PANES] = ["inspector-1", "inspector-2"];
 /// level added to the vocabulary does not compile until it has a word here,
 /// and `every_authority_the_vocabulary_names_is_on_the_node_head` holds this
 /// array against that match.
-const AUTHORITIES: [Authority; 3] = [
+///
+/// **Public since the chips became controls**: `crate::input::PROBES` says how
+/// many controls a node head's chips are, and a `3` written there would be a
+/// second answer to a question this array already gives. The list is the
+/// console's and the count is one reading of it — [`PANE_NAMES`]' reason for
+/// being public, one list along.
+pub const AUTHORITIES: [Authority; 3] = [
     Authority::Manual,
     Authority::Suggesting,
     Authority::Automatic,
@@ -14975,12 +15950,36 @@ pub struct Node {
     /// renderer the Set has, so a chip on it would be one of *n* answers drawn
     /// as *the* answer. A Set with one renderer has one node under that head
     /// and the chip is drawn.
-    pub authority: Option<Authority>,
+    ///
+    /// **It carries the node's address beside the level, and it is one field
+    /// rather than two.** A press on a chip has to say which node it is
+    /// about, and the two are absent together — a head with no one answer has
+    /// no one node either — so a pair of `Option`s would be *present or absent
+    /// as a unit* held true by prose, which is `karakuri_store::record::NodeAt`'s
+    /// argument one crate along and `docs/contributing.md` §4's structural
+    /// tier.
+    pub authority: Option<NodeAuthority>,
     /// The mock's `.rend-row`: every renderer this Set has, and which of them
     /// is live. Empty on every group that is not the renderers'.
     pub renderers: Vec<Renderer>,
     /// The published controls that belong to this node.
     pub params: Vec<Param>,
+}
+
+/// **Which node a group's head is, and who may move it.**
+///
+/// The address is `karakuri_operation::NodeAt`, **carried over from whoever
+/// read the Set** and deliberately not parsed back out of [`Node::addr`]:
+/// that field is the mock's `L1:0`, a display string in the layer word
+/// `docs/ir-spec.md` owns, and reading an address back out of what is drawn is
+/// the shape *a statement is held true by the thing it describes* forbids
+/// ([ADR-0286](../../../docs/adr/0286-a-parameter-row-writes-the-control-it-draws-and-carries-the-range-rather-than-the-position.md)).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NodeAuthority {
+    pub at: NodeAt,
+    /// Who may move it — `manual` where nobody has spoken for it, which is
+    /// what a node nobody has spoken for **is** rather than a placeholder.
+    pub level: Authority,
 }
 
 /// **One renderer chip.**
@@ -15036,6 +16035,56 @@ pub struct Param {
     /// is what `karakuri-operation` exists to stop
     /// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
     pub param: karakuri_operation::ParamAt,
+    /// **What is holding this control**, or `None` for a row nothing is
+    /// driving — the mock's `.param.bound` and the `.sens` row under it.
+    ///
+    /// **Written by whoever read the Set**, off its bindings, and it is the
+    /// seventh reading the harness takes: `Set::bindings` was the one of them
+    /// this pane did not ask for, on ADR-0191's terms, because nothing bound
+    /// anything and a bound row was a state the program could not enter. What
+    /// changed is that a press can now attach one.
+    pub bound: Option<Source>,
+}
+
+/// **What is driving one parameter row** — the mock's `.pval.src` and the
+/// three readouts on the `.sens` row under it.
+///
+/// # It is the attachment's own answer and not a second derivation
+///
+/// The signal, the shape and the range are read off the binding the Set is
+/// holding and carried over unchanged, which is [`Param::param`]'s rule one
+/// field along: what a control *is* comes from whoever published it, and a
+/// surface that rebuilt any of it would be a second statement about one
+/// attachment.
+///
+/// **[`Source::range`] is not [`Param::range`], and the two are two facts.**
+/// The row's range is what the control was *published* over — the span the
+/// fader rides, which is the procedure's declaration narrowed — and this one
+/// is what the signal is *mapped onto*, which a `bind` may narrow again within
+/// it. Drawing one and writing the other is what a chip on this row would do
+/// if there were one range here, and the operator would see a mapping change
+/// under a press that only asked for a different curve.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Source {
+    /// The signal's own name, as the row's `.pval.src` reads it: `energy`,
+    /// `beat`, `band3`, `noise`, or `control:<name>` for a macro.
+    pub signal: String,
+    /// The shape the signal is put through, and the one chip on this row that
+    /// is a control.
+    pub curve: karakuri_operation::Curve,
+    /// What the signal is mapped onto, low then high — the attachment's, not
+    /// the row's. See the type's own note.
+    pub range: [f32; 2],
+    /// **Which attachment this is**, as the vocabulary addresses one.
+    ///
+    /// `karakuri_operation::BindAt` and not [`Param::param`]'s `ParamAt`,
+    /// carried over from the binding rather than derived from the row: an
+    /// attachment is one layer's, where a value's wildcard names no layer at
+    /// all, and the two are two facts rather than two spellings (see
+    /// `BindAt`). It is also what makes a row's *take back* remove the
+    /// attachment it is drawn from rather than one that happens to match by
+    /// name.
+    pub at: karakuri_operation::BindAt,
 }
 
 impl Param {
@@ -15073,8 +16122,33 @@ impl Param {
     /// on it is a handle with nowhere to go and every drag of it would ask for
     /// the value it already holds. The row is still **drawn** — the fill and
     /// the figure say what it is — and it is not taken hold of.
+    ///
+    /// # A bound row is drawn and is not taken hold of either
+    ///
+    /// **The number a hand would write is not the number the row is
+    /// showing.** A knob a hand moves writes the value a binding blends
+    /// *from*, and at a measurement's full confidence that value carries no
+    /// weight at all — so the handle would move under the hand and the picture
+    /// would not, which is the one thing
+    /// [ADR-0286](../../../docs/adr/0286-a-parameter-row-writes-the-control-it-draws-and-carries-the-range-rather-than-the-position.md)
+    /// refuses a track press for: *"a handle that jumped to the pointer would
+    /// be a lie about what a handle is"*, read on the value axis.
+    ///
+    /// **It is not a refusal of the write**, and that distinction is
+    /// [P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)'s:
+    /// `Operation::WriteParam` on a bound parameter is legal, lands, and
+    /// leaves the attachment where it is — a `--param` does exactly that
+    /// today. What this says is that *this row's fader* is not the affordance
+    /// for it while something else is holding the control, and the affordance
+    /// that is there is `take back`, one row down. After it the row is a
+    /// handle again.
+    ///
+    /// That is the question ADR-0286 left open — *"whether a hand may move a
+    /// knob a signal is holding is Take a parameter back's question"* — and
+    /// `docs/manual/console.html`'s *Who is holding a control* is where the
+    /// page says it.
     fn movable(&self) -> bool {
-        self.range[1] > self.range[0]
+        self.bound.is_none() && self.range[1] > self.range[0]
     }
 }
 
@@ -15128,20 +16202,23 @@ impl Param {
 /// landed with it — the whole of the deck head is [`deck_head`] now, and this
 /// type is the pane's three rows.
 ///
-/// **Two have no value in this workspace at all**, which is ADR-0191's rule —
-/// a panel drawing a state the engine never entered is a drawing of one.
+/// **Two had no value in this workspace at all until 2026-09-09**, which was
+/// ADR-0191's rule — a panel drawing a state the engine never entered is a
+/// drawing of one — **and both are drawn now**, because a press can attach a
+/// signal (ADR-0319).
 ///
 /// - **`.param.bound`'s `.pval.src`**, a bound parameter showing its source
-///   instead of a number. The value exists in the engine —
-///   `Set::bindings` hands back a `Binding` with the signal driving each param
-///   — and **nothing in `crates/karakuri` binds anything**: that binary takes
-///   two `.kir` paths and no `--bind`, so `Set::bindings` is empty in every
-///   run of it and a bound row is a state this program cannot enter. The
-///   mock's other two sources, `midi 21` and `seq 1`, are not bindings at all
-///   — no MIDI map and no sequencer lane exists to be one.
+///   instead of a number. [`Param::bound`] is the reading, off
+///   `Set::bindings`, and what made it enterable is `Deck::bind` rather than
+///   anything in this crate. **The mock's other two sources are still states
+///   this program cannot enter**: `midi 21` and `seq 1` are not bindings at
+///   all — no MIDI map reaches a Set's parameter, and a sequencer lane is a
+///   fifth route into the vocabulary rather than a signal on the bus
+///   (ADR-0222) — so a row drawn from either would be ADR-0191's drawing.
 /// - **The `.sens` row under a bound parameter** — the signal, the curve, the
-///   range and `take back`. It waits on the row above it, and `take back` is a
-///   control besides.
+///   range and `take back`, which is [`SensChip`]. Two of its four are
+///   controls and two are readouts, and the mock's `step` curve beside `seq 1`
+///   is not one of the four this vocabulary has.
 ///
 /// **Two are the shape of the mock disagreeing with the shape of a Set**, and
 /// they are the two things this pass found:
@@ -15365,6 +16442,96 @@ impl InspectorPane {
         })
     }
 
+    /// **What a press at `p` on a node head's `man / sug / auto` asks for**,
+    /// or `None` off every chip this pane drew.
+    ///
+    /// [`InspectorPane::select_renderer`]'s shape one row up, and the same
+    /// order of questions: the body, then the group's head, then the chips.
+    /// The head is the pane's own width, so the clip [`inspector_into`] paints
+    /// under is this row's `contains`.
+    ///
+    /// **A head with no chip is not a target**, which is `Node::authority`
+    /// being `None` — a head that folds more than one node has no one answer
+    /// to draw and so no destination to press. Everything else about the walk
+    /// is `select_renderer`'s.
+    pub fn set_authority(
+        &self,
+        ctx: &egui::Context,
+        pane: &Pane,
+        p: karakuri_layout::Point,
+    ) -> Option<Operation> {
+        // Fonts are not valid until `egui` has run a pass, and before the
+        // first one there is no chip drawn to press — `deck_head`'s guard.
+        if ctx.cumulative_pass_nr() == 0 {
+            return None;
+        }
+        let at = Pos2::new(p.x, p.y);
+        if !self.body.contains(at) {
+            return None;
+        }
+        self.drawn(&pane.nodes).find_map(|index| {
+            let node = pane.nodes.get(index)?;
+            let at_node = node.authority?.at;
+            let group = self.group(&pane.nodes, index);
+            let head = Rect::from_min_max(
+                group.min,
+                Pos2::new(group.max.x, group.min.y + size::NODE_HEAD_H),
+            );
+            if !head.contains(at) {
+                return None;
+            }
+            auth_chips(ctx, head)
+                .find(|(_, chip)| chip.contains(at))
+                .map(|(authority, _)| Operation::SetAuthority {
+                    deck: pane.deck as u8,
+                    node: at_node,
+                    authority,
+                })
+        })
+    }
+
+    /// **What a press at `p` on a sensitivity row's chips asks for**, or
+    /// `None` off every chip this pane drew and off the two that are readouts.
+    ///
+    /// [`InspectorPane::set_authority`]'s walk one level in: the body, the
+    /// row, then the chips. **A row nothing is holding has no sensitivity row
+    /// at all** — [`sens_rect`] answers `None` — so there is no case for a
+    /// press on one, which is the mock's own arrangement rather than a check.
+    ///
+    /// The two readouts answer `None` here rather than being left out of
+    /// [`sens_chips`], because they are **drawn** and a press has to be able to
+    /// land on them and do nothing: leaving them out would put the chips after
+    /// them in the wrong place.
+    pub fn sensitivity(
+        &self,
+        ctx: &egui::Context,
+        pane: &Pane,
+        p: karakuri_layout::Point,
+    ) -> Option<Operation> {
+        if ctx.cumulative_pass_nr() == 0 {
+            return None;
+        }
+        let at = Pos2::new(p.x, p.y);
+        if !self.body.contains(at) {
+            return None;
+        }
+        let deck = pane.deck as u8;
+        self.drawn(&pane.nodes).find_map(|index| {
+            let node = pane.nodes.get(index)?;
+            let group = self.group(&pane.nodes, index);
+            node.params.iter().enumerate().find_map(|(at_row, param)| {
+                let source = param.bound.as_ref()?;
+                let row = sens_rect(group, node, at_row)?;
+                if !row.contains(at) {
+                    return None;
+                }
+                sens_chips(ctx, row, source)
+                    .find(|(_, chip)| chip.contains(at))
+                    .and_then(|(chip, _)| chip.operation(deck, source))
+            })
+        })
+    }
+
     /// **What a press at `p` takes hold of in this pane**, or `None` where
     /// there is nothing under it a hand can move.
     ///
@@ -15550,7 +16717,24 @@ fn group_h(node: &Node) -> f32 {
             true => 0.0,
             false => size::REND_ROW_H,
         }
-        + size::PARAM_H * node.params.len() as f32
+        + node.params.iter().map(rows_h).sum::<f32>()
+}
+
+/// **How tall one parameter row and whatever is under it comes to**: a
+/// [`size::PARAM_H`] row, and a [`size::SENS_H`] sensitivity row where
+/// something is holding the control.
+///
+/// **One function because three callers must agree.** [`group_h`] sums it,
+/// [`param_rect`] walks it as an offset, and [`sens_rect`] steps off the end of
+/// one row — and a group as tall as *n* rows with a press resolved against a
+/// stride of *n* is a chip drawn where a hand cannot reach it. That is
+/// [`param_rect`]'s own argument about a running sum, one level down.
+fn rows_h(param: &Param) -> f32 {
+    size::PARAM_H
+        + match param.bound {
+            None => 0.0,
+            Some(_) => size::SENS_H,
+        }
 }
 
 /// **Where a node group's renderer row is**: `.rend-row` under `.node-head`,
@@ -15641,6 +16825,150 @@ pub fn rend_chips<'a>(
         x += chip.width() + size::REND_GAP;
         (index, chip)
     })
+}
+
+/// **The word in a sensitivity row's left-hand track**, `.sens`'s first
+/// column.
+pub const SENS_LABEL: &str = "sensitivity";
+
+/// **The word on a sensitivity row's last chip**, which is the second rule's
+/// other half.
+pub const TAKE_BACK: &str = "take back";
+
+/// **One chip on a sensitivity row**, and which of the four a press landed on.
+///
+/// # Two are controls and two are readouts, and that is the decision
+///
+/// The mock draws four pills and this crate claims two of them, which is
+/// [`InspectorPane::select_renderer`]'s arrangement on an inert renderer row:
+/// *a control claims what it acts on and no more*.
+///
+/// - **[`SensChip::Signal`] is a readout.** The signal bus is **open by
+///   design** — `SignalBus::sample` cannot fail and a name nobody provides
+///   comes back at confidence 0.0 — so there is no list of sources anywhere
+///   for a chooser to be built over, and a console inventing one would be the
+///   surface deciding what may be asked for, which is
+///   [P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)
+///   exactly inverted. A source is named where a source can be named: a Set
+///   file's `bind` line, or `--bind`.
+/// - **[`SensChip::Curve`] is the control**, and it is the blend chip's shape
+///   one bay along: four destinations, a cycle drawn over them here, and
+///   `Operation::AttachSignal` naming the one it arrives at. It re-attaches
+///   the same signal over the same range through the next shape.
+/// - **[`SensChip::Range`] is a readout**, because a range is the procedure's
+///   declaration and not an operator's to write —
+///   `karakuri_operation::ParamValue`'s own sentence — and there is no second
+///   number on this row for a confidence either: a value arrives with how well
+///   it is known.
+/// - **[`SensChip::TakeBack`] is the other control**, and it is the row this
+///   whole arrangement exists for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SensChip {
+    Signal,
+    Curve,
+    Range,
+    TakeBack,
+}
+
+impl SensChip {
+    /// The four, left to right, in the order the mock draws them.
+    pub const ALL: [SensChip; 4] = [
+        SensChip::Signal,
+        SensChip::Curve,
+        SensChip::Range,
+        SensChip::TakeBack,
+    ];
+
+    /// **What this chip reads**, off the attachment the row was drawn from.
+    ///
+    /// The range is written to two places, which is `.pval`'s figure and the
+    /// mock's own `0.10 – 2.40`; the en dash is the mock's `&ndash;`.
+    pub fn text(self, source: &Source) -> String {
+        match self {
+            SensChip::Signal => source.signal.clone(),
+            SensChip::Curve => source.curve.name().to_string(),
+            SensChip::Range => {
+                format!("{:.2} \u{2013} {:.2}", source.range[0], source.range[1])
+            }
+            SensChip::TakeBack => TAKE_BACK.to_string(),
+        }
+    }
+
+    /// **What a press on this chip asks for**, or `None` for the two that are
+    /// readouts — see the type's own note for why those two are not controls.
+    ///
+    /// **The curve chip restates the attachment.** An `AttachSignal` carries
+    /// the whole of what an attachment is, so changing one field means sending
+    /// the other three back unchanged — the source and the range come off
+    /// [`Source`] rather than being rebuilt, which is what stops a press for a
+    /// different shape from silently re-mapping the signal.
+    pub fn operation(self, deck: u8, source: &Source) -> Option<Operation> {
+        match self {
+            SensChip::Signal | SensChip::Range => None,
+            SensChip::Curve => Some(Operation::AttachSignal {
+                deck,
+                param: source.at.clone(),
+                signal: source.signal.clone(),
+                curve: next_curve(source.curve),
+                range: source.range,
+            }),
+            SensChip::TakeBack => Some(Operation::TakeParamBack {
+                deck,
+                param: source.at.clone(),
+            }),
+        }
+    }
+}
+
+/// **The next of the four shapes**, wrapping — the cycle the curve chip is,
+/// and it lives here rather than in the vocabulary for
+/// [`karakuri_operation::Curve::ALL`]'s stated reason: the list is the
+/// vocabulary's and the cycle is the surface's.
+fn next_curve(curve: karakuri_operation::Curve) -> karakuri_operation::Curve {
+    let all = karakuri_operation::Curve::ALL;
+    let at = all.iter().position(|c| *c == curve).unwrap_or(0);
+    all[(at + 1) % all.len()]
+}
+
+/// **Where each chip of a sensitivity row goes**, laid end to end from the
+/// row's left-hand track.
+///
+/// [`rend_chips`]' shape one row down and for its reason: the row is painted
+/// *and* pressed, and two copies of where a chip is would be a chip painted
+/// where a hand cannot reach it. A chip is as wide as the word in it, so this
+/// costs a galley lookup per chip.
+pub fn sens_chips<'a>(
+    ctx: &'a egui::Context,
+    row: Rect,
+    source: &'a Source,
+) -> impl Iterator<Item = (SensChip, Rect)> + 'a {
+    // `.sens`'s two tracks: the word, then the chips, with the grid's own gap
+    // between them.
+    let mut x = row.min.x + size::SENS_PAD_L + size::SENS_LABEL_W + size::SENS_GAP;
+    // One padding down from the top of the row, which is where `.sens` puts
+    // it: `padding: 2px 10px 6px 12px`, so a chip is not centred and the space
+    // under it is three times the space over it.
+    let top = row.min.y + size::SENS_PAD_T;
+    SensChip::ALL.into_iter().map(move |chip| {
+        let w = sens_width(ctx, &chip.text(source));
+        let rect = Rect::from_min_size(Pos2::new(x, top), egui::vec2(w, size::SENS_CHIP_H));
+        x += w + size::SENS_CHIP_GAP;
+        (chip, rect)
+    })
+}
+
+/// One sensitivity chip's width: the word at [`size::SENS_SIZE`] inside
+/// `.pill`'s padding.
+fn sens_width(ctx: &egui::Context, text: &str) -> f32 {
+    ctx.fonts_mut(|f| {
+        f.layout_no_wrap(
+            text.to_owned(),
+            FontId::new(size::SENS_SIZE, FontFamily::Proportional),
+            Color32::PLACEHOLDER,
+        )
+        .size()
+        .x
+    }) + size::SENS_CHIP_PAD_X * 2.0
 }
 
 /// **One pane of the Inspector, derived** — see [`InspectorPane`] for what is
@@ -17097,7 +18425,7 @@ fn node_into(painter: &egui::Painter, pal: &Palette, rect: Rect, node: &Node) {
         pal.dim,
     );
     if let Some(authority) = node.authority {
-        auth_into(painter, pal, head, authority);
+        auth_into(painter, pal, head, authority.level);
     }
 
     // **Where the renderer row is, asked rather than measured here**: a press
@@ -17111,6 +18439,12 @@ fn node_into(painter: &egui::Painter, pal: &Palette, rect: Rect, node: &Node) {
     // press had to be resolved to a row — see [`param_rect`].
     for (index, param) in node.params.iter().enumerate() {
         param_into(painter, pal, param_rect(rect, node, index), param);
+        // **Where the sensitivity row is, asked rather than measured here**,
+        // which is the renderer row's rule one level up: a press has to
+        // resolve to the same rectangle the chips were drawn in.
+        if let (Some(row), Some(source)) = (sens_rect(rect, node, index), param.bound.as_ref()) {
+            sens_into(painter, pal, row, source);
+        }
     }
 }
 
@@ -17119,30 +18453,25 @@ fn node_into(painter: &egui::Painter, pal: &Palette, rect: Rect, node: &Node) {
 /// wash of it, and the other two in `var(--c-faint)` with no box at all.
 ///
 /// **All three and not only the one**, which is the manual's own row: *"`man /
-/// sug / auto` on each node head, never a global mode."* The two that are not
-/// selected are the affordance and this pass does not claim a press on them —
-/// what is drawn is which of the three this node is on.
+/// sug / auto` on each node head, never a global mode."* What is drawn is
+/// which of the three this node is on, and **all three are claimed**: each
+/// names a destination, which is what an operation on this panel is
+/// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)),
+/// and pressing the one a node is already on asks for what it already has —
+/// the renderer row's rule one row down, and the anchor's two bays over. A
+/// chip that stopped being pressable the moment it lit would take the claim
+/// out from under a hand.
+///
+/// **A head that folds more than one node draws none**, which is `Node::authority`
+/// being `None`: authority is per node, so one chip over three renderers would
+/// be one of three answers drawn as *the* answer and a press on it would set
+/// three nodes at once.
 fn auth_into(painter: &egui::Painter, pal: &Palette, head: Rect, authority: Authority) {
-    let mut chips = Vec::with_capacity(AUTHORITIES.len());
-    let mut total = 0.0;
-    for (n, level) in AUTHORITIES.into_iter().enumerate() {
+    for (level, rect) in auth_chips(painter.ctx(), head) {
         let galley = painter.layout_no_wrap(
             auth_word(level).to_owned(),
             FontId::new(size::AUTH_SIZE, FontFamily::Proportional),
             pal.faint,
-        );
-        let w = galley.size().x + size::AUTH_PAD_X * 2.0;
-        total += w + match n {
-            0 => 0.0,
-            _ => size::AUTH_GAP,
-        };
-        chips.push((level, galley, w));
-    }
-    let mut x = head.max.x - size::NODE_HEAD_PAD_X - total;
-    for (level, galley, w) in chips {
-        let rect = Rect::from_min_size(
-            Pos2::new(x, head.center().y - size::AUTH_H * 0.5),
-            egui::vec2(w, size::AUTH_H),
         );
         let sel = level == authority;
         let colour = match sel {
@@ -17165,8 +18494,54 @@ fn auth_into(painter: &egui::Painter, pal: &Palette, head: Rect, authority: Auth
             galley,
             colour,
         );
-        x += w + size::AUTH_GAP;
     }
+}
+
+/// **Where each of the three authority chips goes on a node head**,
+/// right-aligned inside the head's own padding.
+///
+/// **One derivation, asked twice** — [`auth_into`] paints these and
+/// [`InspectorPane::set_authority`] hit-tests them, which is [`rend_chips`]'
+/// rule one row up: two copies of where a chip is would be a chip painted
+/// where a hand cannot press it. The three were drawn and unclaimed from
+/// 2026-08-29 until the writer existed, and the running sum inside the painter
+/// was exactly the shape a press had nowhere to ask about.
+///
+/// Right-aligned, so the whole row has to be measured before the first chip
+/// can be placed: `.node-head`'s `.sep` pushes `.auth` to the end of the flex
+/// row.
+pub fn auth_chips(ctx: &egui::Context, head: Rect) -> impl Iterator<Item = (Authority, Rect)> {
+    let widths: Vec<f32> = AUTHORITIES
+        .into_iter()
+        .map(|level| auth_width(ctx, level))
+        .collect();
+    let total: f32 = widths.iter().sum::<f32>() + size::AUTH_GAP * (AUTHORITIES.len() - 1) as f32;
+    let mut x = head.max.x - size::NODE_HEAD_PAD_X - total;
+    let top = head.center().y - size::AUTH_H * 0.5;
+    AUTHORITIES
+        .into_iter()
+        .zip(widths)
+        .map(move |(level, w)| {
+            let rect = Rect::from_min_size(Pos2::new(x, top), egui::vec2(w, size::AUTH_H));
+            x += w + size::AUTH_GAP;
+            (level, rect)
+        })
+        .collect::<Vec<_>>()
+        .into_iter()
+}
+
+/// One authority chip's width: its word at [`size::AUTH_SIZE`] inside
+/// `.auth span`'s `padding: 0 5px`.
+fn auth_width(ctx: &egui::Context, level: Authority) -> f32 {
+    ctx.fonts_mut(|f| {
+        f.layout_no_wrap(
+            auth_word(level).to_owned(),
+            FontId::new(size::AUTH_SIZE, FontFamily::Proportional),
+            Color32::PLACEHOLDER,
+        )
+        .size()
+        .x
+    }) + size::AUTH_PAD_X * 2.0
 }
 
 /// **The renderer chips**, one per renderer the Set has, from the left.
@@ -17274,21 +18649,99 @@ fn param_into(painter: &egui::Painter, pal: &Palette, row: Rect, param: &Param) 
         name,
         pal.dim,
     );
-    let value = painter.layout_job(span_at(
-        &format!("{:.2}", param.value),
-        size::BASE,
-        pal.text,
-    ));
+    // **A bound row shows its source instead of a number** — `.param.bound`'s
+    // `.pval.src`, and the readout the manual calls *where disagreeing with
+    // the system begins*. The mock draws it in the same right-aligned track
+    // the figure is in, so this is one galley either way, and it is the mint
+    // `.src` carries rather than `.pval`'s text colour.
+    let (text, colour) = match &param.bound {
+        None => (format!("{:.2}", param.value), pal.text),
+        Some(source) => (source.signal.clone(), pal.mint),
+    };
+    let value = painter.layout_job(span_at(&text, size::BASE, colour));
     painter.galley(
         Pos2::new(
             right - value.size().x,
             row.center().y - value.size().y * 0.5,
         ),
         value,
-        pal.text,
+        colour,
     );
     if let Some(fader) = param_fader(row, param) {
         fader_into(painter, pal, fader, false, None);
+    }
+}
+
+/// **One sensitivity row**: the word in `.sens`'s first track, then the chips
+/// that say what is holding the control and offer the two things a hand can do
+/// about it.
+///
+/// **Where each chip goes is [`sens_chips`]', so this paints and derives
+/// nothing** — [`rend_row_into`]'s rule one row down, and the reason a press
+/// has somewhere to ask what it landed on.
+///
+/// **Two of the four are drawn as readouts and two as controls**, and nothing
+/// in the paint says which: the mock gives the source pill `.pill.armed` and
+/// the other three a plain `.pill`, and *armed* here is the mint of something
+/// that is holding a control rather than of something that can be pressed.
+/// Which chips are claimed is [`SensChip::operation`]'s, and a panel that drew
+/// the difference would be drawing a rule the mock does not.
+fn sens_into(painter: &egui::Painter, pal: &Palette, row: Rect, source: &Source) {
+    let label = painter.layout_job(span_at(SENS_LABEL, size::SENS_SIZE, pal.faint));
+    painter.galley(
+        Pos2::new(
+            row.min.x + size::SENS_PAD_L,
+            row.min.y + size::SENS_PAD_T + (size::SENS_CHIP_H - label.size().y) * 0.5,
+        ),
+        label,
+        pal.faint,
+    );
+    let radius = CornerRadius::same((size::SENS_CHIP_H * 0.5) as u8);
+    for (chip, rect) in sens_chips(painter.ctx(), row, source) {
+        let armed = chip == SensChip::Signal;
+        match armed {
+            // `.pill.armed`: no border, a 14% wash of the mint and the same
+            // nine-pixel halo an armed pill carries everywhere else on this
+            // panel.
+            true => {
+                painter.add(
+                    egui::epaint::Shadow {
+                        offset: [0, 0],
+                        blur: size::TALLY_GLOW - 1,
+                        spread: 0,
+                        color: pal.glow,
+                    }
+                    .as_shape(rect, radius),
+                );
+                painter.rect_filled(rect, radius, tint(pal.mint, 14));
+            }
+            // `.pill`'s `border: 1px solid var(--c-line)`.
+            false => {
+                painter.rect_stroke(
+                    rect,
+                    radius,
+                    Stroke::new(size::HAIRLINE, pal.line),
+                    StrokeKind::Inside,
+                );
+            }
+        }
+        let colour = match armed {
+            true => pal.mint,
+            false => pal.dim,
+        };
+        let galley = painter.layout_no_wrap(
+            chip.text(source),
+            FontId::new(size::SENS_SIZE, FontFamily::Proportional),
+            colour,
+        );
+        painter.galley(
+            Pos2::new(
+                rect.min.x + size::SENS_CHIP_PAD_X,
+                rect.center().y - galley.size().y * 0.5,
+            ),
+            galley,
+            colour,
+        );
     }
 }
 
@@ -17356,17 +18809,54 @@ fn param_rect(group: Rect, node: &Node, index: usize) -> Rect {
             true => 0.0,
             false => size::REND_ROW_H,
         }
-        + size::PARAM_H * index as f32;
+        // **A walk and not a stride, because a row is as tall as what is under
+        // it.** A bound row carries a sensitivity row, so the rows above this
+        // one are not all [`size::PARAM_H`] — which is [`InspectorPane::group`]'s
+        // own reason for walking the groups instead of multiplying, one level in.
+        + node.params.iter().take(index).map(rows_h).sum::<f32>();
     Rect::from_min_max(
         Pos2::new(group.min.x, top),
         Pos2::new(group.max.x, top + size::PARAM_H),
     )
 }
 
+/// **Where the `index`th row's sensitivity row goes** — directly under the row
+/// itself, the full width of the group and [`size::SENS_H`] tall — or `None`
+/// where nothing is holding that control.
+///
+/// [`param_rect`] stepped off the end of the row it belongs to, which is the
+/// one place that relationship is written: the `.sens` row is not a row of its
+/// own in the mock's list, it is what a `.param.bound` grows.
+fn sens_rect(group: Rect, node: &Node, index: usize) -> Option<Rect> {
+    let param = node.params.get(index)?;
+    param.bound.as_ref()?;
+    let row = param_rect(group, node, index);
+    Some(Rect::from_min_max(
+        Pos2::new(row.min.x, row.max.y),
+        Pos2::new(row.max.x, row.max.y + size::SENS_H),
+    ))
+}
+
 /// The console's view: which room it is in, and the frame's plan, kept so a
 /// frame does not allocate one.
 pub struct View {
     pub room: Room,
+    /// **Whether the projector window is open**, which is the one output this
+    /// crate cannot read for itself.
+    ///
+    /// The picture's on and off is [`Layout::visible`] on its own node and the
+    /// Outputs row reads it there; a projector is a second window, a second
+    /// surface and a second [`karakuri_engine::frame::Sink`], and this crate
+    /// takes no device
+    /// ([ADR-0156](../../../docs/adr/0156-the-consoles-arrangement-is-a-tree-this-repository-owns.md)).
+    /// So it arrives the way [`View::picture`] does: written per frame by
+    /// whoever owns the window. `false` for every test in this crate, which is
+    /// a console with no engine behind it.
+    ///
+    /// **The two plugin chips have no field**, and that is not an omission:
+    /// there is no manifest to read them out of, so *not installed* is what
+    /// they are rather than something somebody could tell this crate.
+    pub projector: bool,
     /// **What to draw in the Program bay's picture this frame**, or `None` for
     /// a console with no engine behind it — which is every test in this crate
     /// and the whole of what `cargo test -p karakuri-console` sees.
@@ -17869,6 +19359,16 @@ pub struct View {
     /// and nothing to leave by, and `input::claim`'s rule 2 would give it
     /// every press on the console until a second one shut it.
     target_open: bool,
+    /// **Whether the `+ lane` chooser's card is down**, and it is the field
+    /// above one bay along — the console's own state rather than a reading, on
+    /// [`Arrangement::menu`]'s argument: what a *control* is doing is not
+    /// something the program can be the model of record for.
+    ///
+    /// **Private, with [`View::open_lane`] and [`View::shut_lane`] the only
+    /// ways in**, and `open_lane` refuses a chooser with nothing in it for
+    /// `open_target`'s reason: `input::claim`'s rule 2 would give an empty card
+    /// every press on the console until a second one shut it.
+    lane_open: bool,
     /// **Which row of the Library bay's list has its menu down**, or `None`
     /// for none — the console's own state, exactly as [`target_open`] beside
     /// it is, and not a fourth mark: a menu is a card that is there or is not,
@@ -18096,6 +19596,10 @@ impl View {
     pub fn new(room: Room) -> View {
         View {
             room,
+            // **A console with no engine behind it has no projector window**,
+            // which is every test in this crate and every frame before
+            // whoever owns the window has said otherwise.
+            projector: false,
             picture: None,
             previews: [None; DECKS],
             // Nothing is stopped on a console with no engine behind it, which
@@ -18191,6 +19695,9 @@ impl View {
             // **Shut**, which is not a fourth mark: a list is down or it is
             // not there, and the pulldown draws the same either way.
             target_open: false,
+            // **Shut**, for the reason the pulldown's list is: the `+ lane`
+            // pill draws the same whether its card is down or not.
+            lane_open: false,
             // **No menu**, which is not a mark either, for the reason above
             // it: a card is down on a row or there is no card.
             menu_row: None,
@@ -18339,6 +19846,85 @@ impl View {
     pub fn shut_target(&mut self) -> bool {
         let was = self.target_open;
         self.target_open = false;
+        was
+    }
+
+    /// **What the `+ lane` chooser offers this frame** — the one value
+    /// [`sequencer`] lays its card out from, and [`View::target`]'s shape one
+    /// bay along: read once for the frame and handed to the paint and to the
+    /// press, so the item that is drawn and the item a press lands on are one
+    /// derivation of one reading.
+    ///
+    /// **The faders are every strip the mixer draws**, which is
+    /// [`View::select`]'s count read again; **the parameters are one deck's**,
+    /// the load pulldown's ([`View::target_deck`]) — see [`Choices`], which
+    /// carries the argument.
+    pub fn lane_choices(&self) -> Choices {
+        let mut items: Vec<LaneChoice> = (0..self.mixer.len().min(DECKS))
+            .map(|deck| {
+                let target = LaneTarget::Fader { deck: deck as u8 };
+                LaneChoice {
+                    words: format!("{} {FADER_ITEM}", lane_label(&target)),
+                    target,
+                }
+            })
+            .collect();
+        let faders = items.len();
+        let deck = self.target_deck();
+        for pane in self
+            .inspector
+            .iter()
+            .filter(|pane| pane.deck == usize::from(deck))
+        {
+            for node in &pane.nodes {
+                for param in &node.params {
+                    let target = LaneTarget::Param {
+                        deck,
+                        param: param.param.clone(),
+                    };
+                    items.push(LaneChoice {
+                        // **The address and the published name**, which is the
+                        // mock's own way of naming this lane — *"L2:0 twist on
+                        // deck B"* — with the deck's letter and mark in front
+                        // of it so the item reads as the row it will make.
+                        words: format!("{} {} {}", lane_label(&target), node.addr, param.name),
+                        target,
+                    });
+                }
+            }
+        }
+        Choices {
+            items,
+            faders,
+            open: self.lane_open,
+        }
+    }
+
+    /// **Whether the `+ lane` chooser's card is down** — see
+    /// [`View::lane_open`] the field.
+    pub fn lane_open(&self) -> bool {
+        self.lane_open
+    }
+
+    /// **Put the card down**, and answer whether it went down.
+    ///
+    /// **Refused where there is nothing to point at**, which is
+    /// [`View::open_target`]'s rule: a card with no items offers nothing to
+    /// pick, and [`crate::input::claim`]'s rule 2 would give it every press on
+    /// the console until a second press shut it again.
+    pub fn open_lane(&mut self) -> bool {
+        if self.lane_open || self.lane_choices().items.is_empty() {
+            return false;
+        }
+        self.lane_open = true;
+        true
+    }
+
+    /// **Take the card away**, and answer whether there was one down —
+    /// [`View::shut_target`]'s shape and its reason.
+    pub fn shut_lane(&mut self) -> bool {
+        let was = self.lane_open;
+        self.lane_open = false;
         was
     }
 
@@ -19369,6 +20955,10 @@ impl View {
         // strips it sits under: `draw` takes `&mut self` and the loop below
         // borrows the fields a reading would be read off.
         let sequenced = self.sequencer.as_ref();
+        // **And what its `+ lane` chooser offers**, taken here for the same
+        // reason and read off three of this console's own values — the strips,
+        // the load pulldown's deck and that deck's published rows.
+        let choices = self.lane_choices();
         let panes = self.inspector.as_slice();
         // **The eighth pointer, read once for the frame beside the panes it is
         // about** — how far each of them is scrolled. It is `Copy` and two
@@ -19384,6 +20974,11 @@ impl View {
         // class lays its pills out against this one value, so no two capsules
         // on a frame can be placed against two different states.
         let opening = self.opening;
+        // **What this crate cannot see** — see `Outputs::told`. Copied out
+        // beside `opening` for the same reason: the loop below borrows the
+        // arrangement and the palette, and one `bool` read here is one place
+        // the answer comes from.
+        let projector = self.projector;
         let frame = egui::Frame::NONE.fill(pal.ground);
         egui::CentralPanel::default().frame(frame).show(ui, |ui| {
             for placed in &self.placed {
@@ -19447,7 +21042,9 @@ impl View {
                     // the chip that is painted is the chip that is clicked.
                     Kind::Outputs => {
                         card(ui, &pal, rect);
-                        if let Some(row) = outputs(ui.ctx(), panel.layout(), opening) {
+                        if let Some(row) =
+                            outputs(ui.ctx(), panel.layout(), opening).map(|r| r.told(projector))
+                        {
                             outputs_into(ui, &pal, &row);
                         }
                     }
@@ -19512,8 +21109,23 @@ impl View {
                     // that is painted is the cell a press lands on.
                     Kind::Sequencer => {
                         card(ui, &pal, rect);
-                        head_into(ui, &pal, rect, placed.region, opening);
-                        if let Some(bay) = sequencer(ui.ctx(), panel.layout(), sequenced) {
+                        // **The one head on this console that is handed a
+                        // value**: the bank pills say which of the four the
+                        // rows are reading, and that is the armed bank rather
+                        // than anything the region table could carry
+                        // ([`Head::banks`]). With no pattern behind the console
+                        // there is no armed bank either, and the head is every
+                        // other bay's.
+                        match sequenced.map(|reading| reading.bank) {
+                            Some(armed) => {
+                                if let Some(head) = head_of(placed.region) {
+                                    bay_head(ui, &pal, rect, &head.with_banks(armed), opening);
+                                }
+                            }
+                            None => head_into(ui, &pal, rect, placed.region, opening),
+                        }
+                        if let Some(bay) = sequencer(ui.ctx(), panel.layout(), sequenced, &choices)
+                        {
                             sequencer_into(ui, &pal, &bay);
                         }
                     }
@@ -19575,7 +21187,7 @@ impl View {
                     }
                     // **The fourth bay with something in its body**, and it is
                     // a bay in every other respect: the same card and the same
-                    // head, and then a row per deck slot with a verdict
+                    // head, and then a row per node a build changed and whose verdict is
                     // outstanding. With no engine behind the console there are
                     // none and the body is as empty as every other one in this
                     // pass — `staging`'s answer, not this pass's, so that
@@ -19732,6 +21344,19 @@ impl View {
                         bay.menu(ui.ctx(), to_egui(panel.layout().viewport()), menued)
                     {
                         row_menu_into(ui, &pal, &menu);
+                    }
+                }
+            }
+            // **And the Sequencer's `+ lane` chooser, a fifth card here for
+            // the four above it's reason** — it hangs out of that bay's foot
+            // and up over its own rows, so a card painted from inside the arm
+            // would go on before them and under whatever is drawn after that
+            // bay. It can never be down while any of the other four is, for
+            // their reason.
+            if choices.open {
+                if let Some(bay) = sequencer(ui.ctx(), panel.layout(), sequenced, &choices) {
+                    if let Some(card) = bay.card {
+                        lane_card_into(ui, &pal, &card, &choices);
                     }
                 }
             }
@@ -20292,41 +21917,52 @@ fn outputs_into(ui: &Ui, pal: &Palette, row: &Outputs) {
     // it in. See [`Outputs::mcp`].
     pill_into(ui, pal, row.mcp, mcp_word(row.open), row.open);
 
-    let (ink, fill, dot) = match row.on {
-        true => (pal.text, tint(pal.mint, 14), pal.mint),
-        false => (pal.dim, pal.well, pal.faint),
-    };
-    painter.rect_filled(
-        row.sink,
-        CornerRadius::same((size::SINK_H * 0.5) as u8),
-        fill,
-    );
-    if row.on {
-        painter.add(
-            egui::epaint::Shadow {
-                offset: [0, 0],
-                blur: 8,
-                spread: 0,
-                color: pal.glow,
-            }
-            .as_shape(row.dot, CornerRadius::same((size::SINK_DOT * 0.5) as u8)),
+    // **The program view first, then the three beside it**, all four through
+    // one closure: three states and one set of colours, so a chip cannot be
+    // painted one way here and another way one line down.
+    //
+    // `.sink` is `--c-well` with `--c-dim` type; `.sink.on` is the mint tint,
+    // `--c-text` and the dot's glow; and `.sink.absent` is the well with the
+    // faintest type there is and no glow, which is the mock's own state for a
+    // sink whose plugin is not loaded — dim enough to read as *not installed*
+    // rather than as *switched off*.
+    let chip_into = |chip: Rect, dot_at: Rect, name: &str, on: bool, present: bool| {
+        let (ink, fill, dot) = match (present, on) {
+            (false, _) => (pal.faint, pal.well, tint(pal.faint, 40)),
+            (true, true) => (pal.text, tint(pal.mint, 14), pal.mint),
+            (true, false) => (pal.dim, pal.well, pal.faint),
+        };
+        painter.rect_filled(chip, CornerRadius::same((size::SINK_H * 0.5) as u8), fill);
+        if on && present {
+            painter.add(
+                egui::epaint::Shadow {
+                    offset: [0, 0],
+                    blur: 8,
+                    spread: 0,
+                    color: pal.glow,
+                }
+                .as_shape(dot_at, CornerRadius::same((size::SINK_DOT * 0.5) as u8)),
+            );
+        }
+        painter.circle_filled(dot_at.center(), size::SINK_DOT * 0.5, dot);
+        let galley = painter.layout_no_wrap(
+            name.to_owned(),
+            FontId::new(size::BASE, FontFamily::Proportional),
+            ink,
         );
+        painter.galley(
+            Pos2::new(
+                dot_at.max.x + size::SINK_GAP,
+                chip.center().y - galley.size().y * 0.5,
+            ),
+            galley,
+            ink,
+        );
+    };
+    chip_into(row.sink, row.dot, PROGRAM_VIEW, row.on, true);
+    for c in &row.more {
+        chip_into(c.chip, c.dot, c.name, c.on, c.present);
     }
-    painter.circle_filled(row.dot.center(), size::SINK_DOT * 0.5, dot);
-
-    let galley = painter.layout_no_wrap(
-        PROGRAM_VIEW.to_owned(),
-        FontId::new(size::BASE, FontFamily::Proportional),
-        ink,
-    );
-    painter.galley(
-        Pos2::new(
-            row.dot.max.x + size::SINK_GAP,
-            row.sink.center().y - galley.size().y * 0.5,
-        ),
-        galley,
-        ink,
-    );
 }
 
 /// A bay's card: `.bay`'s panel fill, 11px radius and drop shadow.
@@ -20377,10 +22013,10 @@ pub fn bay_head(ui: &Ui, pal: &Palette, rect: Rect, head: &Head, open: Open) -> 
     // Program bay's `solo` cannot come apart from the control
     // [`program_head`] hands to a caller -- nor its class pill from the one
     // [`mcp_pill`] hands over.
-    let words = head.words(open);
-    let words = words.as_slice();
+    let armed = head.words(open);
+    let words = armed.as_slice();
     head_pills(ui.ctx(), rect, words, head.grip, |index, capsule| {
-        pill_into(ui, pal, capsule, words[index], words[index] == MCP_OPEN);
+        pill_into(ui, pal, capsule, words[index], armed.armed(index));
     });
 
     // `text-transform: uppercase` plus `letter-spacing: 0.16em`, at
@@ -20751,7 +22387,13 @@ mod tests {
             nodes: vec![Node {
                 addr: "L1:0".to_owned(),
                 name: "drift_shell".to_owned(),
-                authority: Some(Authority::Manual),
+                authority: Some(NodeAuthority {
+                    at: NodeAt {
+                        layer: Layer::L1,
+                        index: 0,
+                    },
+                    level: Authority::Manual,
+                }),
                 renderers: Vec::new(),
                 params: (0..params)
                     .map(|n| Param {
@@ -20763,6 +22405,7 @@ mod tests {
                             node: None,
                             key: format!("p{n}"),
                         },
+                        bound: None,
                     })
                     .collect(),
             }],

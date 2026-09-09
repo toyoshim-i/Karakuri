@@ -106,6 +106,13 @@ muting a lane is a control moving without anybody touching it, which is what rul
 - **And a test that the refused schedule writes no record**, which is the clause a replay depends
   on.
 
+**And the defect got wider on the same day** (2026-09-09,
+[ADR-0327](0327-the-lane-chooser-lists-one-decks-keys-and-the-bank-pills-are-the-four-banks.md)). The
+Sequencer bay's `+ lane` draws a target chooser, so a lane over *any* deck the mixer draws a strip
+for is two presses away — the pick, then the label that unmutes it — where before this it was one
+press on a lane the run seeds over deck A. **The lookup is still uncalled and the fade is still
+killed silently**; what has changed is how many decks it can happen on.
+
 **What is owed and is not this record's.** **A channel fader does not say who is holding it.** The
 mock draws `seq 1` as a source on a `.param` row's `.pval.src`, which covers the fourth lane, and
 draws nothing of the kind on a channel fader, which covers the first three; `view.rs`'s own note says

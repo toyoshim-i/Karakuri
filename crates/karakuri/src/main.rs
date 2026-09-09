@@ -325,9 +325,10 @@ use karakuri_console::view::{
     deck_head as deck_head_row, deck_name, inspector as inspector_pane, keep_pill,
     library as library_bay, look as look_row, master as master_row, mcp_pill, mixer as mixer_bay,
     outputs, picture_rect, preview_rects, program_bay, program_head, sequencer as sequencer_bay,
-    tracker_group, transition as transition_row, transport as transport_row, Aim, Ask, AudioAsk,
-    AudioIn, Basis, Budgeted, Chosen, Go, Kind, McpPill, Picked, Picture, Read, Reading, Scope,
-    Sequenced, Taken, Tracker, TransitionSettings, View, DECKS, DECK_LETTERS, REGIONS,
+    staging as staging_bay, tracker_group, transition as transition_row,
+    transport as transport_row, Aim, Ask, AudioAsk, AudioIn, Basis, Budgeted, Chose, Chosen, Go,
+    Kind, McpPill, Picked, Picture, Read, Reading, Scope, Sequenced, Taken, Tracker,
+    TransitionSettings, View, DECKS, DECK_LETTERS, REGIONS,
 };
 // **How many slots a deck can hold**, which is how many this one has — see
 // [`SLOTS`]. Not re-exported at the crate root, and asked of the module that
@@ -348,14 +349,16 @@ use karakuri_engine::transition::Selection;
 use karakuri_engine::transport::Sync as EngineSync;
 use karakuri_engine::{
     compose, Blend, Chain, Committed, Control, Cut, Deck, Event, Gpu, HotSwap, Look, Mask,
-    MaskKind, Present, Residency, Set, Sink, Skip, TonemapOp, DEFAULT_BUDGET_MS,
+    MaskKind, Present, Residency, Set, Sink, Skip, TonemapOp, WindowSink, DEFAULT_BUDGET_MS,
 };
 use karakuri_environment::clock::Clock;
 use karakuri_environment::{audio, history, mcp, mix, session, setfile, watch, Asked, Opening};
 use karakuri_ir::Kind as Layer;
 use karakuri_layout::{Axis, Hit, Layout, NodeId, Point};
 use karakuri_operation::gate::{Class, Open};
-use karakuri_operation::{BeatSource, BlendMode, GridScale, Operation, SetTransfer, Undecided};
+use karakuri_operation::{
+    BeatSource, BlendMode, GridScale, Operation, Output, SetTransfer, Undecided,
+};
 use karakuri_operation_record::{written, Current, Written};
 use karakuri_store::record::Record;
 use karakuri_store::store::Store;
@@ -1065,7 +1068,15 @@ impl Costs {
     /// was taken over is only known at run time — and is every slot's name in
     /// slot order rather than one. See [`Engine::capacity`],
     /// [`Sources::material`] and [`Gfx::material`].
-    fn say(&mut self, capacity: u32, material: &str, refresh_ms: Option<f32>) {
+    /// `at` is **what the frame was actually composited at** when the reading
+    /// was taken — `Present::size()`, which is the largest enabled output's
+    /// size and no longer a constant ([`render_size`]). A measurement names
+    /// which resolution it is about
+    /// ([ADR-0303](../../../docs/adr/0303-a-frames-cost-is-the-period-and-a-measurement-names-which-resolution-it-is-about.md),
+    /// [P-0095](../../../docs/principles/0095-an-instrument-that-cannot-measure-says-so-rather-than-reporting-a-number.md)),
+    /// and [`CANVAS`] would now be the wrong one on any run whose Program bay
+    /// is not exactly that size — which is every run.
+    fn say(&mut self, capacity: u32, material: &str, refresh_ms: Option<f32>, at: (u32, u32)) {
         if self.said {
             return;
         }
@@ -1429,12 +1440,15 @@ impl Costs {
                  rectangle. The workspace's reference workload is \
                  `examples/drift_cloud.kset` at 1280x720 (docs/contributing.md §1, \
                  ADR-0270) — a named Set rather than whatever this program opens on — \
-                 and this reading is comparable with the rest of this repository's \
-                 figures exactly as far as it is that material at that canvas, and \
+                 and the size above is this window's rather than that one: the mix is \
+                 composited at the largest enabled output and the only output here is the \
+                 Program bay's picture, so the number moves with the window and with every \
+                 divider (ADR-0247). This reading is comparable with the rest of this \
+                 repository's figures exactly as far as it is that material at that size, and \
                  never with a headless one: this is a deck of four stepped and drawn \
                  slots with a panel over it, and a headless figure is one Set. Host \
                  clock, {}.",
-                WINDOW.0, WINDOW.1, material, capacity, CANVAS.0, CANVAS.1, PROFILE
+                WINDOW.0, WINDOW.1, material, capacity, at.0, at.1, PROFILE
             );
             println!(
                 "  and every figure above is taken on a core that spends the vsync wait \
@@ -1633,8 +1647,11 @@ impl Costs {
                  this whole window at {:.0}x{:.0} logical, with the mix composited once at \
                  {}x{} and that one render resized into every rectangle it is drawn in \
                  (ADR-0247); a slot's own measurement is taken at its preview cell, which is \
-                 sized from the cell (ADR-0303). No figure here is taken at a third size.",
-                WINDOW.0, WINDOW.1, CANVAS.0, CANVAS.1
+                 sized from the cell (ADR-0303). No figure here is taken at a third size. \
+                 The mix's size is the largest enabled output's and is not a constant \
+                 (ADR-0247): it is the Program bay's picture here, and it follows a divider \
+                 drag and a projector window.",
+                WINDOW.0, WINDOW.1, at.0, at.1
             );
         }
         println!();
@@ -2459,6 +2476,53 @@ impl Readout {
                 if let Some(operation) = chosen {
                     return (claim, Acted::Emitted(Some(operation)));
                 }
+                // **The `man / sug / auto` chips on a node head**, and the
+                // pane is the whole derivation for the renderer chips' reason:
+                // which group and which chip are inside
+                // `InspectorPane::set_authority`. A head standing over more
+                // than one node draws no chip and answers `None` — drawn and
+                // not claimed, which is the renderer row's arrangement one row
+                // down.
+                let spoken = self
+                    .view
+                    .inspector
+                    .iter()
+                    .enumerate()
+                    .find_map(|(index, pane)| {
+                        let at_pane = inspector_pane(
+                            self.panel.layout(),
+                            index,
+                            pane,
+                            self.view.scroll_in(index),
+                        )?;
+                        at_pane.set_authority(ctx, pane, at)
+                    });
+                if let Some(operation) = spoken {
+                    return (claim, Acted::Emitted(Some(operation)));
+                }
+                // **The sensitivity row's chips under a bound parameter**, and
+                // two of its four are controls: the curve chip re-attaches the
+                // same signal through the next shape, and `take back` removes
+                // the attachment. The source and the range answer `None` —
+                // drawn and claimed by nothing, for the reason
+                // `view::SensChip` carries.
+                let sensed = self
+                    .view
+                    .inspector
+                    .iter()
+                    .enumerate()
+                    .find_map(|(index, pane)| {
+                        let at_pane = inspector_pane(
+                            self.panel.layout(),
+                            index,
+                            pane,
+                            self.view.scroll_in(index),
+                        )?;
+                        at_pane.sensitivity(ctx, pane, at)
+                    });
+                if let Some(operation) = sensed {
+                    return (claim, Acted::Emitted(Some(operation)));
+                }
                 // **The Program bay head's `solo`**, and it is the one
                 // control on this panel that acts on the console's own shape
                 // from inside a bay rather than from the Outputs row. What it
@@ -2667,6 +2731,38 @@ impl Readout {
                 {
                     return (claim, self.landed(operation));
                 }
+                // **The Staging lane's `back` capsule, asked before the row
+                // it sits in.** The capsule is inside the row, so this order
+                // is what makes a press on the capsule reach the capsule —
+                // `input::claim`'s rule 4, and the Library bay's star and its
+                // row two arms up, in the same order and for the same reason.
+                //
+                // **The candidates go in with the point**, exactly as the
+                // Library's listing does: what a row is — which node, which
+                // deck, which verdict — is a value this file derived off the
+                // deck and handed the console, and the console holds no store
+                // and no engine (ADR-0156).
+                //
+                // **It emits and performs nothing here**: what a landing does
+                // is write a file the store owns, and [`restored`] is where
+                // that is done, on the branch every emitted operation already
+                // takes.
+                if let Some(operation) = staging_bay(self.panel.layout(), &self.view.staging)
+                    .and_then(|bay| bay.back(ctx, &self.view.staging, at))
+                {
+                    return (claim, self.landed(operation));
+                }
+                // **And the row itself, which is the keep.** A press anywhere
+                // on a candidate row that the capsule did not take settles
+                // that node: the row leaves the lane, the picture does not
+                // move and no record is written. The bay is derived a second
+                // time rather than held across the two questions, which is the
+                // Library bay's rule one bay up.
+                if let Some(operation) = staging_bay(self.panel.layout(), &self.view.staging)
+                    .and_then(|bay| bay.keep(ctx, &self.view.staging, at))
+                {
+                    return (claim, self.kept(operation));
+                }
                 // **The transition row's four capsules, derived once for all
                 // of them**, exactly as `claim` does it: the three settings
                 // are laid end to end from the block's left padding and `go`
@@ -2720,14 +2816,53 @@ impl Readout {
                 // the operation: `Sequencer::press` carries `Sequencer::bank`
                 // so that a press cannot mean *whichever pattern is armed by
                 // the time this is performed*.
-                if let Some(operation) =
-                    sequencer_bay(ctx, self.panel.layout(), self.view.sequencer.as_ref())
-                        .and_then(|bay| bay.press(at))
-                {
+                let choices = self.view.lane_choices();
+                let seq = sequencer_bay(
+                    ctx,
+                    self.panel.layout(),
+                    self.view.sequencer.as_ref(),
+                    &choices,
+                );
+                // **With the chooser's card down, every press is the card's
+                // and this arm is asked first** — `input::claim`'s rule 2, and
+                // it has to be *here* rather than after the four controls
+                // below: the card hangs over this bay's own rows, so a press
+                // on a cell under it is part of the gesture the hand is in the
+                // middle of and not a step being set. That is the deck
+                // pulldown's `if self.view.target_open()` one bay along, and
+                // for its reason.
+                //
+                // **A pick emits and the two card moves do not**, which is that
+                // control's other half: putting a card down is the console's
+                // own state and no operation names it (P-0090).
+                if self.view.lane_open() {
+                    did = self.chosen(
+                        seq.as_ref()
+                            .and_then(|bay| bay.chose(at, &choices))
+                            .unwrap_or(Chose::Shut),
+                    );
+                    return (claim, did);
+                }
+                if let Some(operation) = seq.as_ref().and_then(|bay| bay.press(at)) {
                     return (claim, Acted::Emitted(Some(operation)));
                 }
-                let sink =
-                    outputs(ctx, self.panel.layout(), self.view.opening).filter(|row| row.hit(at));
+                // **The foot's `+ lane` with its card up**, asked after the
+                // four above it because the pill is outside every one of their
+                // rectangles, so the order is arbitrary rather than a
+                // precedence — written down so this file and `input::claim`
+                // ask in one order.
+                if let Some(chose) = seq.as_ref().and_then(|bay| bay.chose(at, &choices)) {
+                    did = self.chosen(chose);
+                    return (claim, did);
+                }
+                // **The whole row now, not the first chip.** `chip_at` asks
+                // every chip the row draws and answers with the output it
+                // names — which is the same question `input::claim` asks, off
+                // the same derivation, so a chip that lights under the pointer
+                // is a chip a press reaches.
+                let sink = outputs(ctx, self.panel.layout(), self.view.opening)
+                    .map(|row| row.told(self.view.projector))
+                    .and_then(|row| row.chip_at(at).map(|output| (row, output)));
                 let bay = mixer_bay(ctx, self.panel.layout(), &self.view.mixer);
                 // **The Master bay's out is a `Grab` like a strip's**, so it
                 // joins the knob rather than taking an arm of its own: what
@@ -2779,7 +2914,25 @@ impl Readout {
                 let tally = bay.as_ref().and_then(|bay| bay.tally(at));
                 let mask = bay.as_ref().and_then(|bay| bay.mask(at));
                 match (sink, knob, chip, tally, mask) {
-                    (Some(row), ..) => did = Acted::Operated(self.sink(row.op())),
+                    // **One press, two performers, and which is which is
+                    // the output.** The picture's on and off is a layout node,
+                    // so the console performs that one and reports an
+                    // `Outcome`; a projector is a window this file owns, so
+                    // that one leaves as the operation it is and is performed
+                    // where the event loop is (`routed`). Both *ask* for
+                    // `Operation::RouteFrame` and the row is what constructs
+                    // it — see `view::Outputs::route`.
+                    (Some((row, Output::Program)), ..) => {
+                        did = Acted::Operated(self.sink(row.route(), row.op()))
+                    }
+                    (Some((row, output)), ..) => {
+                        did = Acted::Emitted(
+                            row.more
+                                .iter()
+                                .find(|chip| chip.output == output)
+                                .and_then(view::SinkChip::route),
+                        )
+                    }
                     // **The value does not move on the press.** The grab keeps
                     // the offset it took hold at, so the first move continues
                     // from where the knob already was — and a press that was
@@ -3110,6 +3263,59 @@ impl Readout {
             Aim::NoSet => {
                 println!("load: nothing under the cursor — this library is listing no Sets");
                 Acted::Nothing
+            }
+        }
+    }
+
+    /// **A press on the Sequencer bay's `+ lane`, and what this program does
+    /// about it.**
+    ///
+    /// [`Readout::aimed`]'s shape one bay along, and the same division: the two
+    /// answers that are the *console's* own state are performed here, and the
+    /// one that is an operation leaves as one. Nothing appends a lane here —
+    /// `sequenced` is where `Operation::PointLane` lands, by the same road the
+    /// bay's other four take.
+    ///
+    /// **The card is put away before the operation is emitted**, which is
+    /// [`Readout::menued`]'s rule and its reason: a card left standing over a
+    /// lane that has already been asked for would claim the next press on the
+    /// console for a gesture the hand has finished.
+    ///
+    /// **Opening it says what it is for**, on `aimed`'s precedent: a card that
+    /// went up in silence is a control an operator has to guess the shape of.
+    fn chosen(&mut self, ask: Chose) -> Acted {
+        match ask {
+            Chose::Open => {
+                let choices = self.view.lane_choices();
+                println!(
+                    "lane: {} target{} — {} fader{} and {} published control{} on deck {}",
+                    choices.items.len(),
+                    match choices.items.len() == 1 {
+                        true => "",
+                        false => "s",
+                    },
+                    choices.faders,
+                    match choices.faders == 1 {
+                        true => "",
+                        false => "s",
+                    },
+                    choices.items.len() - choices.faders,
+                    match choices.items.len() - choices.faders == 1 {
+                        true => "",
+                        false => "s",
+                    },
+                    deck_letter(self.view.target_deck())
+                );
+                self.view.open_lane();
+                Acted::Nothing
+            }
+            Chose::Shut => {
+                self.view.shut_lane();
+                Acted::Nothing
+            }
+            Chose::Point(operation) => {
+                self.view.shut_lane();
+                Acted::Emitted(Some(operation))
             }
         }
     }
@@ -3538,6 +3744,50 @@ impl Readout {
                     deck,
                     revision: karakuri_operation::Revision::Picked(version),
                 } => format!("`{version}` put back on deck {}", deck_letter(*deck)),
+                // **The staging lane's arm, which names a node rather than a
+                // version.** Which version that is, is `restored`'s to work
+                // out — the one before the one running, out of the store's
+                // history — so this says the node and lets the performance
+                // say the file (ADR-0326).
+                Operation::RestoreProcedure {
+                    deck,
+                    revision: karakuri_operation::Revision::Previous(node),
+                } => format!(
+                    "{} on deck {} stepped back one version",
+                    node_addr(ir_layer(node.layer), node.index),
+                    deck_letter(*deck)
+                ),
+                other => format!("{other:?}"),
+            }
+        );
+        Acted::Emitted(Some(operation))
+    }
+
+    /// **A press on a candidate row**, which keeps that candidate.
+    ///
+    /// [`Readout::landed`]'s neighbour on the same row, and the two are what
+    /// the lane offers: the capsule steps a node back a version and the row
+    /// around it says *I have looked at this*. **The free act is on the large
+    /// target and the act that writes a file is on the small one**, which is
+    /// the whole of why they are arranged this way round (ADR-0326).
+    ///
+    /// **It emits and performs nothing here**, which is
+    /// [`Readout::asked_to_read`]'s division: what a keep changes is the lane,
+    /// and the lane is `View::staging`, which this readout owns but the window
+    /// writes — so [`kept`] is where the row is taken off, on the branch every
+    /// emitted operation already takes. `written` answers
+    /// `Silent(Silent::Surface)` for it, which is that division said in the
+    /// record vocabulary.
+    fn kept(&mut self, operation: Operation) -> Acted {
+        println!(
+            "press: {} — it settles the node and leaves the lane; the picture does not move \
+             and no record is written",
+            match &operation {
+                Operation::KeepCandidate { deck, node } => format!(
+                    "{} kept on deck {}",
+                    node_addr(ir_layer(node.layer), node.index),
+                    deck_letter(*deck)
+                ),
                 other => format!("{other:?}"),
             }
         );
@@ -3549,12 +3799,27 @@ impl Readout {
     /// now — because the whole point of the control is that it is the same
     /// fold `f` over the picture performs, reached from the other end of the
     /// panel.
-    fn sink(&mut self, op: Op) -> Outcome {
+    fn sink(&mut self, asked: Operation, op: Op) -> Outcome {
         // Two operations and no third, which is `Outputs::op`'s whole
         // argument: the toggle is the dot choosing between them, and what
         // arrives here is one of the two by name.
+        // **What was asked and what performs it, in one line.** The
+        // operation names the output — `RouteFrame { output: Program, on }` —
+        // and the fold is how this surface carries it out, which is one fact
+        // said once rather than a second stored `on` beside the layout node.
         println!(
-            "outputs: program view — {}",
+            "outputs: {} — {}",
+            match asked {
+                Operation::RouteFrame { output, on } => format!(
+                    "{} {}",
+                    output.name(),
+                    match on {
+                        true => "on",
+                        false => "off",
+                    }
+                ),
+                ref other => format!("{other:?}"),
+            },
             match op {
                 Op::Fold(_) =>
                     "the sink was on, so the picture folds away and the \
@@ -4082,11 +4347,11 @@ impl Readout {
                         (Some(out), None) => format!("bay, out {out:.2}, no chain behind it"),
                         (None, _) => "bay, no engine behind it".to_owned(),
                     },
-                    // A bay like the other five, and then a row per deck slot
-                    // with a verdict outstanding. **None at startup, which is
-                    // where this prints**: nothing has been rebuilt yet, and
-                    // empty is this lane's ordinary state — see
-                    // `view::staging`.
+                    // A bay like the other five, and then a row per node a
+                    // build changed whose verdict is outstanding. **None at
+                    // startup, which is where this prints**: nothing has been
+                    // rebuilt yet, and empty is this lane's ordinary state —
+                    // see `view::staging`.
                     Kind::Staging => match self.view.staging.len() {
                         0 => "bay, nothing waiting".to_owned(),
                         waiting => format!("bay, {waiting} waiting"),
@@ -4508,13 +4773,43 @@ fn knob_where(knob: &Knob) -> String {
 // The engine in the Program bay
 // ---------------------------------------------------------------------------
 
-/// The canvas: what the Set renders at, and what the deck is sized to.
+/// **The session canvas: the shape every output is fitted to, and the size the
+/// run starts at.**
+///
+/// **It is no longer what the Set renders at.** The render size belongs to an
+/// output ([ADR-0246](../../../docs/adr/0246-the-render-size-belongs-to-the-output-and-the-sessions-canvas-is-only-its-default.md))
+/// and the frame is composited once at the largest enabled one
+/// ([ADR-0247](../../../docs/adr/0247-one-frame-is-rendered-and-scaled-into-each-output.md)),
+/// which is [`render_size`]. This constant is what that derivation *starts*
+/// at, before any output has said anything, and what the picture's rectangle
+/// is fitted to. ADR-0246 called it *"wrong twice over"* — a session-wide
+/// constant where the size belongs to an output, and a measurement default
+/// standing in for an instrument's — and both halves are answered here: the
+/// size is an output's, and what is left is a shape and a starting value.
+///
+/// # Why the picture is still fitted to this rather than to what is rendered
+///
+/// `aims` hands this to `picture_rect` rather than `Present::size()`, and the
+/// difference is a loop. The picture's size *is* its rectangle now, and its
+/// rectangle is the canvas's shape fitted into the bay's box — so fitting it
+/// to what is rendered would fit it to itself, one frame late. The fixed point
+/// happens to be the same rectangle, which is exactly what makes the mistake
+/// invisible: the reason would be circular and the picture would have no shape
+/// of its own, only whatever rounding it converged on. The console page's
+/// sentence — *"It is the canvas's shape rather than the region's"* — is what
+/// this keeps true.
 ///
 /// **The reference workload's canvas**, 1280x720 (`docs/contributing.md` §1),
-/// and it is that on purpose rather than by default: this is the one place in
-/// the console where a number is about the engine rather than about the panel,
-/// and a figure taken at the reference workload can be put beside every other
-/// one in this repository.
+/// and it is that on purpose rather than by default: a figure taken at the
+/// reference workload can be put beside every other one in this repository.
+///
+/// **What that buys is smaller than it was, and the reading says so.** A run
+/// whose Program bay is 466 x 262 renders at 466 x 262 from its first frame,
+/// so a panel figure is at *whatever the window was* rather than at this
+/// number — which is P-0095's rule met by printing the size beside the
+/// figures rather than by pinning the size. The reference workload is a
+/// harness figure and was never a panel one (ADR-0270), and this constant was
+/// already carrying the caveat below.
 ///
 /// **The canvas is half of that workload and the material is the other half**,
 /// which is the distinction ADR-0270 drew and ADR-0271 made visible: the
@@ -4528,13 +4823,13 @@ fn knob_where(knob: &Knob) -> String {
 /// and is handed two rectangles of different sizes a frame, and which is what
 /// the manual means by *"it letterboxes into the width it has"*.
 ///
-/// **It is also the shape the picture is now given**, through
-/// [`aims`] and `picture_rect`: the console sizes the picture's rectangle to
-/// this rather than to whatever the region happens to be, so the two targets
-/// `Present::draw` is handed are both the canvas's shape and its fit into each
-/// is sub-texel. The number reaches `picture_rect` from `Present::size` rather
-/// than from this constant, so the shape the console draws and the canvas the
-/// engine renders cannot come from two places — see [`aims`].
+/// **It is also the shape the picture is given**, through [`aims`] and
+/// `picture_rect`: the console sizes the picture's rectangle to this rather
+/// than to whatever the region happens to be, so what surrounds the picture is
+/// the bay's own card rather than bars anything rendered. It reached
+/// `picture_rect` from `Present::size` until 2026-09-09, when that stopped
+/// being a second copy of this number and became the frame's own derived
+/// size — see this constant's own paragraph above, and [`aims`].
 const CANVAS: (u32, u32) = (1280, 720);
 
 /// **Which profile this binary was built with**, for the legend's own reading.
@@ -7321,8 +7616,13 @@ impl Engine {
         renderer: &mut egui_wgpu::Renderer,
         layout: &karakuri_layout::Layout,
         scale: f32,
+        // **The projector window's size, or `None` while it is closed.** The
+        // second output, and the second half of what [`render_size`] is a
+        // maximum over — handed in because the window is `Gfx`'s and this is
+        // the engine.
+        projector: Option<(u32, u32)>,
     ) -> (Option<Picture>, [Option<Picture>; DECKS]) {
-        let (picture_at, preview_ats) = aims(layout, self.present.size());
+        let (picture_at, preview_ats) = aims(layout, CANVAS);
         let picture = self
             .picture
             .aim(gpu, renderer, picture_at, scale, &mut self.freed);
@@ -7375,6 +7675,62 @@ impl Engine {
         if let Some(cell) = cell {
             self.deck.set_measure_size(cell);
         }
+
+        // **The frame's own size, derived from the outputs that are on** —
+        // ADR-0247, and [`render_size`] is where the rule is. It is taken here
+        // rather than anywhere else because this is the statement that has
+        // just decided the picture's rectangle, and the picture's rectangle
+        // *is* its size as an output.
+        //
+        // **A reallocation, so it is the frame's first act and not something
+        // done mid-pass**, which is [`Presented::fit`]'s sentence one level
+        // out: `aim` runs before `compose`, and P-0091 is about the render
+        // thread. What it costs was measured on 2026-09-09 rather than
+        // argued — **0.145 ms** for `Deck::resize` and `Present::resize`
+        // together on a four-slot deck, host clock, biased high, and within a
+        // few percent of the same at 466x262 and at 1920x1080 because what it
+        // pays for is nine objects rather than their texels. It is paid on the
+        // frames a size changed and on no others: every frame of a divider
+        // drag on the Program bay's height is one of them, and it is the same
+        // frame `Presented::fit` was already remaking the picture's texture
+        // on.
+        //
+        // **Both, always, and in one statement.** `Frame::render` checks its
+        // sizes and panics at the call site, so a deck resized without the
+        // present pass is a loud failure a frame later — which is the right
+        // failure and the wrong place to find out.
+        let outputs = [self.picture.aimed.then_some(self.picture.size), projector];
+        if let Some(at) = render_size(&outputs) {
+            if at != self.present.size() {
+                // **Nothing is printed here**, and that is the frame path
+                // rather than reticence: every frame of a divider drag on the
+                // Program bay's height changes this size, so a line would be
+                // sixty a second and sixty formats a second with it. What the
+                // frame is composited at is a *readout* — `Costs::say` prints
+                // it beside the numbers it is about, which is what P-0095 asks
+                // of a measurement, and the console page's own size pill is
+                // where an operator reads it.
+                self.present.resize(&gpu.device, at.0, at.1);
+                self.deck.resize(&gpu.device, at.0, at.1);
+                // **And every cell's bind group, because `Deck::resize`
+                // replaced the views they were made from.**
+                //
+                // A bind group holds its view alive, so a stale one samples a
+                // texture nothing draws into any more: the cells would go on
+                // showing the last frame at the old size, under letters
+                // saying their decks are running. That is the silent wrong
+                // picture P-0094 refuses, and it is exactly the symptom
+                // `Deck::resize`'s own comment names for the meters one line
+                // along. It was found by
+                // `every_cell_with_a_slot_behind_it_is_aimed_whatever_its_residency`
+                // the first time the deck was resized from here.
+                self.slot_bind_groups = std::array::from_fn(|slot| {
+                    self.deck
+                        .slot_view(slot)
+                        .map(|view| self.present.create_bind_group_for(&gpu.device, view))
+                });
+            }
+        }
         (picture, previews)
     }
 }
@@ -7385,6 +7741,58 @@ fn aims(
     canvas: (u32, u32),
 ) -> (Option<egui::Rect>, Option<[egui::Rect; DECKS]>) {
     (picture_rect(layout, canvas), preview_rects(layout, canvas))
+}
+
+/// **The one size the frame is composited at: the largest enabled output's.**
+///
+/// Each entry is one output — `Some(size)` for one that is on, `None` for one
+/// that is off — in the order the Outputs row draws them, which is the program
+/// view first. `None` back means **no output is enabled at all**, and the
+/// caller leaves the size where it is rather than picking one.
+///
+/// # Largest by area, and the answer is always some output's own size
+///
+/// [ADR-0247](../../../docs/adr/0247-one-frame-is-rendered-and-scaled-into-each-output.md)
+/// says *the largest enabled output's size*, so that every output is a
+/// downscale and none is ever upscaled. With two outputs of different shapes
+/// that needs a rule, and there are two candidates. **A componentwise maximum
+/// is refused**: 1920x1080 beside 1024x1280 would give 1920x1280, which is a
+/// size no output is and nobody asked for, and it upscales both of them in one
+/// axis while claiming to prevent upscaling. **Largest by pixel count wins**,
+/// and it hands back one output's own size — so the frame is always exactly
+/// right for at least one destination and a downscale for the rest. The tie
+/// goes to the earlier entry, which is the program view, because the picture
+/// is the output an operator is looking at while they decide.
+///
+/// # Every output off leaves the size where it was
+///
+/// **An output going off is not a statement about what the frame should be
+/// rendered at.** Turning the last one off stops the publishing and not the
+/// instrument
+/// ([ADR-0171](../../../docs/adr/0171-the-deck-advances-and-each-sink-either-gets-the-frame-or-misses-it.md)),
+/// and re-deriving a size there would reallocate every slot target, the mix
+/// and the master chain in order to change a picture nobody is looking at —
+/// and reallocate them again on the way back. So the fallback to
+/// [`CANVAS`] is the run's **starting** value rather than a re-derivation, and
+/// this function says *nothing to say* instead of guessing.
+///
+/// **The rejected reading is ADR-0247's own sentence taken literally** —
+/// *"the session's `canvas` record is what it falls back to when no output
+/// says anything"* — which is right about a run that has never had an output
+/// and wrong about one whose outputs are all momentarily off, and cannot tell
+/// the two apart from inside this function. The starting value is where that
+/// sentence is honoured; see [`Engine::aim`].
+fn render_size(outputs: &[Option<(u32, u32)>]) -> Option<(u32, u32)> {
+    // **A fold rather than `max_by_key`**, which returns the *last* of several
+    // equal maxima and would give the tie to whichever output happened to be
+    // drawn furthest right. `>` and not `>=` is the tie rule said once.
+    outputs.iter().flatten().copied().fold(None, |best, at| {
+        let area = |(w, h): (u32, u32)| (w as u64) * (h as u64);
+        match best {
+            Some(b) if area(b) >= area(at) => Some(b),
+            _ => Some(at),
+        }
+    })
 }
 
 /// **One tone-mapping pass per deck preview cell, off that slot's own target,
@@ -7424,6 +7832,116 @@ fn monitor(
     }
 }
 
+/// **Open or close the projector window**, and say what happened.
+///
+/// The one operation in this file that makes a *window*, which is why it takes
+/// an `&ActiveEventLoop` and why it is reached from `window_event` rather than
+/// from [`App::performed`]: `winit` will not create a window without one, and
+/// `performed` is handed a [`Gfx`] and no event loop.
+///
+/// # What each answer is
+///
+/// - **`Projector(0)` on** opens a window, makes a surface on the device the
+///   panel is already using, configures it and puts a [`WindowSink`] over it.
+///   The next frame's [`render_size`] sees a second output and the frame
+///   follows the larger of the two.
+/// - **`Projector(0)` off** drops the [`Projector`], which drops the surface
+///   and the last reference to the window — so the window closes and the sink
+///   leaves the slice on the same statement. Nothing is torn down in an order
+///   this file has to remember.
+/// - **`Program`** never arrives: the picture's on and off is the fold, and
+///   the console performs it where the arrangement is (`Readout::sink`). It is
+///   an arm here so that the match is exhaustive and says so.
+/// - **`Plugin(n)`** is refused with the sentence that names what is missing,
+///   which is [P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md):
+///   there is no manifest to read a plugin sink out of, and the console draws
+///   both plugin chips `no plugin` for that reason, so this is only reachable
+///   from a route that is not the panel.
+///
+/// # The surface has to be the format the present pass was built for
+///
+/// [`Present`]'s pipeline names one target format at construction, and that is
+/// [`PICTURE_FORMAT`] — the picture's texture, sRGB, so the encode is the
+/// hardware's and happens exactly once (P-0064). A surface in another format
+/// would need a second pipeline, which is a *second present pipeline* and is
+/// exactly what ADR-0247 says nothing needs. So this asks the surface for that
+/// format and **refuses to open the window when it is not offered**, naming
+/// both — a window that opened and drew nothing would be the silent wrong
+/// picture P-0094 refuses, and this is a refusal before the show rather than a
+/// fault during one.
+fn routed(gfx: &mut Gfx, event_loop: &ActiveEventLoop, output: Output, on: bool) -> Option<String> {
+    let n = match output {
+        // The console's, and it is already done by the time this is asked.
+        Output::Program => return None,
+        Output::Projector(n) => n,
+        Output::Plugin(n) => {
+            return Some(format!(
+                "outputs: plugin {n} is not loaded — there is no plugin manifest to read a                  sink out of, and `docs/plugins.md` is the specification nothing implements"
+            ))
+        }
+    };
+    if !on {
+        return Some(match gfx.projector.take() {
+            Some(_) => format!("outputs: projector {n} is off — the window is closed"),
+            None => format!("outputs: projector {n} was already off"),
+        });
+    }
+    if gfx.projector.is_some() {
+        return Some(format!("outputs: projector {n} is already on"));
+    }
+    let attrs = Window::default_attributes()
+        .with_title("Karakuri — projector")
+        // **The session canvas**, which is the size an output starts at when
+        // nothing else says (ADR-0246). The operator resizes it, or makes it
+        // fullscreen, and the frame follows.
+        .with_inner_size(winit::dpi::LogicalSize::new(CANVAS.0, CANVAS.1));
+    let window = match event_loop.create_window(attrs) {
+        Ok(window) => Arc::new(window),
+        // **Reported rather than panicked**, for `resumed`'s reason: a panic
+        // here is reached from a `winit` callback and cannot unwind across the
+        // Objective-C frame on macOS, so it aborts with no sentence anywhere.
+        Err(e) => return Some(format!("outputs: the projector window did not open: {e}")),
+    };
+    let surface = match Gpu::instance().create_surface(window.clone()) {
+        Ok(surface) => surface,
+        Err(e) => return Some(format!("outputs: the projector has no surface: {e}")),
+    };
+    let caps = surface.get_capabilities(&gfx.gpu.adapter);
+    if !caps.formats.contains(&PICTURE_FORMAT) {
+        return Some(format!(
+            "outputs: the projector window cannot be opened — the present pass draws              {PICTURE_FORMAT:?} and this surface offers {:?}. A second format would want a              second present pipeline, which is what one render scaled into every output              exists to avoid",
+            caps.formats
+        ));
+    }
+    let size = window.inner_size();
+    let size = (size.width.max(1), size.height.max(1));
+    let config = wgpu::SurfaceConfiguration {
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+        format: PICTURE_FORMAT,
+        color_space: wgpu::SurfaceColorSpace::Auto,
+        width: size.0,
+        height: size.1,
+        // **`Fifo`, like the panel's**, and the two are not a stall on each
+        // other: `compose` asks every sink for a target before it commits, and
+        // a projector that has none loses its own frame rather than the
+        // window's (ADR-0171).
+        present_mode: wgpu::PresentMode::Fifo,
+        alpha_mode: caps.alpha_modes[0],
+        view_formats: vec![],
+        desired_maximum_frame_latency: 2,
+    };
+    surface.configure(&gfx.gpu.device, &config);
+    gfx.projector = Some(Projector {
+        window,
+        sink: WindowSink::new(surface, config),
+        size,
+    });
+    Some(format!(
+        "outputs: projector {n} is on — a window at {} x {}, and the frame is composited at the          largest enabled output",
+        size.0, size.1
+    ))
+}
+
 /// **Is anything making texels this frame?** — which is the whole of what
 /// decides whether the loop asks for another frame.
 ///
@@ -7444,7 +7962,12 @@ fn monitor(
 /// test, so the part worth asserting is lifted out to where a test can reach
 /// it — see `anything_that_makes_texels_keeps_the_loop_awake`.
 fn live(view: &View) -> bool {
-    view.picture.is_some() || view.previews.iter().any(Option::is_some)
+    // **The projector is the third thing on the list**, and leaving it off is
+    // the bug this function's own paragraph describes, one output along: with
+    // the picture folded away and a projector on, the loop would stop asking
+    // for frames while a window on another display went on showing whatever
+    // was last presented into it — the show stopped, with nothing said.
+    view.picture.is_some() || view.previews.iter().any(Option::is_some) || view.projector
 }
 
 /// **What the transport row reads this frame**, out of the two things in this
@@ -9843,9 +10366,9 @@ fn mixer(deck: &Deck, names: &[String], out: &mut Vec<view::Strip>) {
     }
 }
 
-/// **The Staging lane's rows, off the deck's own verdicts** — one per slot
-/// whose newest build has a verdict outstanding, or whose file no longer
-/// agrees with its picture.
+/// **The Staging lane's rows, off the deck's own verdicts and the per-node
+/// hashes its builds reported** — one per node a build changed, or one on the
+/// slot where a verdict has no changed node behind it (ADR-0326).
 ///
 /// # It drains, because a `HotSwap`'s events are a caller's to take
 ///
@@ -9858,24 +10381,27 @@ fn mixer(deck: &Deck, names: &[String], out: &mut Vec<view::Strip>) {
 ///
 /// **So the lane's state is kept here rather than re-derived per frame**, and
 /// that is what a drain forces and is also what is wanted: the events are a
-/// stream of verdicts and a row is the newest of them per slot.
+/// stream of verdicts and a slot's rows are the newest of them.
 /// `view::View::staging` is written on the frames a build landed on and left
 /// alone on every other, which is the same budget `mixer`'s name is kept to
 /// (ADR-0164) with the frames-that-touch-it much rarer.
 ///
 /// # What each verdict does to a row
 ///
-/// - **`Swapped`, `Rejected`, `Overloaded`, `SourceRefused`** — the slot has a
-///   row, on `view::Stage`'s four words. Whether the build is on screen and
+/// - **`Swapped`, `Rejected`, `Overloaded`, `SourceRefused`** — the slot has
+///   rows, on `view::Stage`'s four words. Whether the build is on screen and
 ///   running is what separates the first three — `Overloaded` is on screen and
 ///   stopped — and the fourth is the one where there was no build: the checker
 ///   turned the source down, so the row carries what it said as well as the
-///   word (ADR-0310).
+///   word (ADR-0310). **How many rows is the diff**: `Swapped` and
+///   `Overloaded` draw one per node the build changed, and `Rejected` and
+///   `SourceRefused` draw one on the slot, because a build that did not happen
+///   has no node list to hold against the one before it.
 /// - **`Accepted`** — the watchdog says the version held the budget, so the
-///   file and the picture agree and the row leaves the lane. It is not the
-///   operator's verdict, which is *keep* and is taste rather than cost; with
-///   no control to keep with, a row that waited for one would never leave.
-///   See `view::staging`, where that substitution is argued.
+///   file and the picture agree and that slot's rows leave the lane. It is not
+///   the operator's verdict, which is *keep* and is taste rather than cost:
+///   the cost verdict is what clears a row an operator has not pressed, and
+///   `view::staging` is where that substitution is argued.
 /// - **`WorkerLost`** — the build worker panicked and nothing will be built
 ///   again this run. **No row changes**, and that is the reading rather than
 ///   an omission: every verdict already taken still stands, and there is no
@@ -9916,42 +10442,37 @@ fn mixer(deck: &Deck, names: &[String], out: &mut Vec<view::Strip>) {
 /// other stops it where it is — and the install that did replace it was
 /// reported by `Swapped` in the same drain.
 ///
-/// One `String` per row that appears, on the frame a build landed on — which
-/// is the frame that also installed a whole Set built on the worker. A row
-/// whose slot rebuilds again rewrites the same buffer, and a run in which
-/// nothing is saved allocates nothing here at all.
+/// # What it costs
+///
+/// **Nothing on a frame nothing was built on.** The event drain collects into
+/// a `Vec` that does not allocate when it is empty, and every allocation below
+/// that is inside the `for` over it.
+///
+/// **On the frame a build lands**, which is the frame that also installed a
+/// whole Set built on the worker: a `Vec` of the changed addresses, a `Changed`
+/// per one of them with its address and its name, and a `view::Candidate` per
+/// row. A slot's rows are replaced whole rather than rewritten in place — see
+/// [`settle`], where that is argued — so this is a handful of short strings
+/// against a Set build, and a run in which nobody saves pays for none of it.
 fn staging(
     deck: &mut Deck,
+    // **What each slot is playing, and the channel that says what a build was
+    // made of.** Here rather than taken up by the caller afterwards, because
+    // the rows *are* the diff: a build's per-node hashes against the ones the
+    // slot was already on is what says which nodes changed, and both lists are
+    // in one hand exactly once — at the moment the build is taken up
+    // (`docs/adr/0326-a-staging-row-is-a-changed-node-and-the-row-is-the-keep.md`).
+    // A second pass would be a second answer to *what changed*, and the first
+    // of the two lists is gone by then.
+    keeping: &mut Keeping,
+    // **Where each slot's watcher is pointed**, for the names a build's nodes
+    // are spelled with — see [`built_nodes`]. A field of `Engine` beside the
+    // deck rather than the whole of one, so the deck above can be borrowed
+    // mutably at the same call.
+    aims: &[Aiming],
     out: &mut Vec<view::Candidate>,
-    // **Where the same event goes when somebody who is not at the panel is
-    // watching**, and `None` for a run without `--mcp`. A model that wrote a
-    // procedure has no other way to learn that its slot was stopped for cost,
-    // and *it compiled* is not the same news as *it is on screen and running*.
-    //
-    // **A checker's refusal goes out here with every diagnostic it had**, which
-    // is the round trip `docs/principles/0083-…` is about: the reader at this
-    // end is a program writing the next attempt, and the row beside it has room
-    // for the first line only.
-    //
-    // **Reported from here rather than from a second drain.** `Deck::events`
-    // empties the channel, so a loop that read it again would read nothing at
-    // all: the lane and the server are told by one pass or one of them is told
-    // by none.
-    //
-    // The `String` is formed only when there is somebody to tell.
-    mcp: Option<&mcp::Reporter>,
-    // **Which slots took a build, and which build**, for the caller to take up
-    // once this borrow of the deck has ended — one entry per `Swapped`, which
-    // since ADR-0316 is the only event that changes what a slot is running.
-    // There used to be a second kind of entry, for a rollback, and it named no
-    // build because a rollback brought back a version nothing would name again;
-    // nothing is brought back now, so what a slot is playing after a verdict is
-    // what the swap put there.
-    // Collected rather than acted on here, because `Deck::events` borrows the
-    // deck for as long as it is being read.
-    took: &mut Vec<(usize, u64)>,
     // **What the transport row's health capsule reads**, off the same drain
-    // and for the same reason the reporter above is fed from here:
+    // and for the same reason the reporter is fed from here:
     // `Deck::events` empties the channel, so a second reader that came back
     // for it would find nothing.
     //
@@ -9965,12 +10486,44 @@ fn staging(
 ) -> bool {
     let mut landed = false;
     for slot in 0..deck.slot_count() {
-        for event in deck.events(slot) {
-            if let Some(mcp) = mcp {
+        // **Taken out of the channel before anything else is asked of the
+        // deck.** `Deck::events` borrows the deck for as long as it is being
+        // read, and what the rows need afterwards is the Set the swap in this
+        // same drain installed — `Set::node_names`, which is what a node is
+        // called. An empty drain collects into a `Vec` that allocates nothing,
+        // so a frame on which nothing was built pays for this in a branch.
+        let events: Vec<Event> = deck.events(slot).collect();
+        // **What the build that landed changed, kept across the drain**, so
+        // that the `Overloaded` following its `Swapped` draws the same rows:
+        // both are about one build and carry its id, and the diff is taken
+        // once. Empty on every frame nothing was built.
+        let mut diffed: Vec<(u64, Vec<Changed>)> = Vec::new();
+        for event in events {
+            // **Where the same event goes when somebody who is not at the
+            // panel is watching**, and nothing for a run without `--mcp`. A
+            // model that wrote a procedure has no other way to learn that its
+            // slot was stopped for cost, and *it compiled* is not the same
+            // news as *it is on screen and running*.
+            //
+            // **A checker's refusal goes out with every diagnostic it had**,
+            // which is the round trip `docs/principles/0083-…` is about: the
+            // reader at this end is a program writing the next attempt, and
+            // the row beside it has room for the first line only.
+            //
+            // **Reported from here rather than from a second drain.**
+            // `Deck::events` empties the channel, so a loop that read it again
+            // would read nothing at all: the lane and the server are told by
+            // one pass or one of them is told by none.
+            if let Some(mcp) = keeping.mcp.as_ref() {
                 mcp.swap(slot, &event.to_string());
             }
+            // **What a swap changed, taken up here.** A `Swapped` is the only
+            // event that changes what a slot is running (ADR-0316), so it is
+            // the only one that has a diff to take — and the rows it draws are
+            // that diff, one per node, named off the Set the swap installed.
             if let Event::Swapped { id, .. } = &event {
-                took.push((slot, *id));
+                let changed = keeping.took_up(aims, slot, *id);
+                diffed.push((*id, changed_rows(deck.slot(slot).set(), &changed)));
             }
             // **Whether the *live Set* changed**, which is a different
             // question from whether a row did and is why this is read here
@@ -9987,6 +10540,19 @@ fn staging(
                 Event::SourceRefused { said, .. } => said,
                 _ => &[],
             };
+            // **Which nodes this verdict is about**, and empty for every
+            // verdict that has none — a build that did not happen has no node
+            // list to hold against the one before it, and a rebuild whose
+            // stack came back identical has an empty diff. `settle` draws one
+            // row on the slot for both, which is the same row and the same
+            // reason (ADR-0326).
+            let changed: &[Changed] = match &event {
+                Event::Swapped { id, .. } | Event::Overloaded { id, .. } => diffed
+                    .iter()
+                    .find(|(built, _)| built == id)
+                    .map_or(&[][..], |(_, rows)| rows.as_slice()),
+                _ => &[],
+            };
             match verdict(&event) {
                 Verdict::Waiting(label, stage) => {
                     // **The newest verdict of the drain wins, whichever slot
@@ -9995,20 +10561,87 @@ fn staging(
                     // readout and gives it no deck letter — so what it can
                     // honestly say is *what the last write did*, and one save
                     // of the pair this program watches builds every slot.
-                    // Which slot each verdict was about is the lane's, one row
-                    // per deck, and that is why both are drawn.
+                    // Which slot each verdict was about is the lane's, and
+                    // which node of it, and that is why both are drawn.
                     *health = Some(stage);
-                    settle(out, slot, label, stage, said)
+                    settle(out, slot, label, stage, said, changed)
                 }
                 // Nothing is outstanding on this slot any more, so it has no
-                // row. `retain` rather than an index: the rows are as many as
-                // the deck has slots and at most one of them is this one.
+                // rows. `retain` rather than an index: a slot has as many rows
+                // as its last build changed nodes, and they go together.
                 Verdict::Settled => out.retain(|row| row.deck != slot),
                 Verdict::Nothing => {}
             }
         }
     }
     landed
+}
+
+/// **One node a build changed, as a lane row needs it** — the address a press
+/// is spelled with, the address the row draws, and what that node is called.
+///
+/// **Three fields and not one, because the row and the operation want
+/// different halves of the same fact.** `view::Candidate::at` is the payload
+/// and `view::Candidate::addr` is the string, which is `view::Param`'s
+/// arrangement one bay over; both are written here, in one place, so they are
+/// filled together or not at all.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Changed {
+    at: karakuri_operation::NodeAt,
+    addr: String,
+    name: String,
+}
+
+/// **The changed nodes of a build, turned into rows** — the addresses the
+/// watcher reported, resolved against the Set that swap installed.
+///
+/// **The name is `Set::node_names`' and not the build's label**, which is the
+/// whole of why this needs the Set at all: a label is every node's `proc` name
+/// joined with ` + `, and a row that is one node wants that node's own. It is
+/// the same name the Inspector writes on a node head — `Set::node_named` turns
+/// each one back into the `(layer, index)` this compares against — so the two
+/// bays call one node one thing.
+///
+/// **A node the Set does not name is passed over rather than drawn nameless.**
+/// The two lists are the same build's, so this cannot happen from a rebuild;
+/// what it would mean is that the Set and the report disagree about what the
+/// slot holds, and a row invented out of that disagreement would be a press
+/// aimed at an address nothing can resolve.
+fn changed_rows(set: &Set, changed: &[(&'static str, u32)]) -> Vec<Changed> {
+    if changed.is_empty() {
+        return Vec::new();
+    }
+    let mut rows = Vec::new();
+    for name in set.node_names() {
+        let Some((layer, index)) = set.node_named(name) else {
+            continue;
+        };
+        if !changed
+            .iter()
+            .any(|(at, of)| *at == setfile::kind_name(layer) && *of == index)
+        {
+            continue;
+        }
+        rows.push(Changed {
+            at: karakuri_operation::NodeAt {
+                layer: asked_layer(layer),
+                index,
+            },
+            addr: node_addr(layer, index),
+            name: name.clone(),
+        });
+    }
+    rows
+}
+
+/// **A node's address as the mock's `.addr` spells it** — `L1:0`, `L2:0`,
+/// `L4:0`.
+///
+/// [`layer_word`] is the layer half and this is the whole of it, written once
+/// because two bays draw it: the Inspector's node heads and, since 2026-09-09,
+/// the Staging lane's rows.
+fn node_addr(layer: Layer, index: u32) -> String {
+    format!("{}:{index}", layer_word(layer))
 }
 
 /// **Which of the four cells is showing a still**, in slot order —
@@ -10063,16 +10696,26 @@ fn verdict(event: &Event) -> Verdict<'_> {
     }
 }
 
-/// **One slot's row, written where it already is or put in slot order.**
+/// **One slot's rows, put where that slot's rows go.**
 ///
-/// The name is rewritten only when it differs, which is `mixer`'s rule for
-/// `view::Strip::name` and is what keeps a rebuild of the same files off the
-/// frame's allocation budget.
+/// **A slot's rows are replaced whole rather than rewritten in place**, and
+/// that is the change ADR-0326 made here. A row used to be one slot, so the
+/// slot's row could be found and its three fields overwritten; a row is now
+/// one node a build changed, so how many rows a slot has moves with every
+/// build — two on the save that touched two files, one on the next, none on a
+/// verdict with nothing to diff. Nothing is left behind: the newest verdict is
+/// the whole of what this slot has to say, and a row from the build before it
+/// would be a node reported as unsettled by a build that has been replaced.
 ///
 /// **Slot order, because that is the order the rows are read in** — the lane
-/// draws them top to bottom and the deck letters are `A` through `D`, so a row
-/// that appeared later must not sit above one that appeared first. The insert
-/// is over at most `deck::MAX_SLOTS` entries.
+/// draws them top to bottom and the deck letters are `A` through `D`, so a slot
+/// whose verdict arrived later must not sit above one whose arrived first. The
+/// splice is over at most `deck::MAX_SLOTS` slots' worth of rows.
+///
+/// **And node order within a slot**, which is the order `changed` is in and is
+/// the order the Set names its own nodes in — the geometries, the deformers,
+/// the cameras, the renderers, the fields. It is the Inspector's pane order
+/// read on one slot, so two bays list one slot's nodes the same way round.
 fn settle(
     out: &mut Vec<view::Candidate>,
     deck: usize,
@@ -10084,33 +10727,37 @@ fn settle(
     // it is a handful of short lines on the frame a refusal arrives, which is
     // a frame on which no Set was built.
     said: &[String],
+    // **The nodes this build changed**, and empty for a verdict that has none
+    // — see [`Changed`] and [`changed_rows`]. Empty draws **one** row on the
+    // slot with no address on it, which is the honest answer for a build that
+    // did not happen and for a rebuild that restated the stack unchanged: the
+    // verdict is about the slot and there is no node to pin it to.
+    changed: &[Changed],
 ) {
-    match out.iter_mut().find(|row| row.deck == deck) {
-        Some(row) => {
-            if row.name != label {
-                row.name.clear();
-                row.name.push_str(label);
-            }
-            row.stage = stage;
-            // Rewritten whatever it was: the row is the slot's *newest*
-            // verdict, so a build that lands after a refusal must not leave
-            // the refusal's diagnostics under it.
-            row.said.clear();
-            row.said.extend(said.iter().cloned());
-        }
-        None => {
-            let at = out.partition_point(|row| row.deck < deck);
-            out.insert(
-                at,
-                view::Candidate {
-                    deck,
-                    name: label.to_owned(),
-                    stage,
-                    said: said.to_vec(),
-                },
-            );
-        }
-    }
+    let at = out.partition_point(|row| row.deck < deck);
+    let end = at + out[at..].partition_point(|row| row.deck == deck);
+    let rows: Vec<view::Candidate> = match changed.is_empty() {
+        true => vec![view::Candidate {
+            deck,
+            at: None,
+            addr: String::new(),
+            name: label.to_owned(),
+            stage,
+            said: said.to_vec(),
+        }],
+        false => changed
+            .iter()
+            .map(|node| view::Candidate {
+                deck,
+                at: Some(node.at),
+                addr: node.addr.clone(),
+                name: node.name.clone(),
+                stage,
+                said: said.to_vec(),
+            })
+            .collect(),
+    };
+    out.splice(at..end, rows);
 }
 
 /// **The layer half of a node's address, as the mock's `.addr` spells it** —
@@ -10143,6 +10790,22 @@ fn asked_layer(layer: Layer) -> karakuri_operation::Layer {
         Layer::L3 => karakuri_operation::Layer::L3,
         Layer::L4 => karakuri_operation::Layer::L4,
         Layer::Field => karakuri_operation::Layer::Field,
+    }
+}
+
+/// **And back**, for the two things that want the compiler's own: spelling an
+/// address a press arrived with, and resolving one to the word the store files
+/// a version under. `karakuri_environment::mcp`'s `kind_of` is the other
+/// instance and is private to that crate; this is [`asked_layer`]'s inverse
+/// and a match for its reason, so a sixth layer stops the build in both
+/// directions rather than in one.
+fn ir_layer(layer: karakuri_operation::Layer) -> Layer {
+    match layer {
+        karakuri_operation::Layer::L1 => Layer::L1,
+        karakuri_operation::Layer::L2 => Layer::L2,
+        karakuri_operation::Layer::L3 => Layer::L3,
+        karakuri_operation::Layer::L4 => Layer::L4,
+        karakuri_operation::Layer::Field => Layer::Field,
     }
 }
 
@@ -10186,6 +10849,42 @@ fn node_of(set: &Set, control: &Published) -> Option<(Layer, u32)> {
     }
 }
 
+/// **What is driving one node's parameter**, or `None` where nothing is —
+/// the reading behind a `.param.bound` row and the `.sens` row under it.
+///
+/// # The first match, because that is what the engine writes
+///
+/// `Set::bindings` is a list and `karakuri_engine::set::effective` takes the
+/// **first** entry matching the layer, the key and the node, so a pane that
+/// took the last would draw a source that is not the one holding the control.
+/// This is that same `find`, and it is the one place in this file that reads a
+/// binding at all: the pane's seventh reading, which ADR-0191 kept out while
+/// nothing in this program could attach one.
+///
+/// **Addressed by the node the row was resolved to**, which is safe here for
+/// the reason it would not be safe for a *write*: every row this pane draws
+/// covers exactly one node — [`node_of`] drops the ones that do not — so
+/// asking which binding covers that node is asking about the row itself. The
+/// address the take-back and the re-attach carry is the **binding's** own, off
+/// the entry found, and not this pair (ADR-0286: the placement is where a row
+/// goes, the address is what a control is).
+fn source_of(set: &Set, layer: Layer, index: u32, key: &str) -> Option<view::Source> {
+    let binding = set
+        .bindings()
+        .iter()
+        .find(|b| b.layer == layer && b.key == key && b.covers(index as usize))?;
+    Some(view::Source {
+        signal: binding.signal.clone(),
+        curve: mix::curve(binding.curve),
+        range: binding.range,
+        at: karakuri_operation::BindAt {
+            layer: asked_layer(binding.layer),
+            index: binding.index,
+            key: binding.key.clone(),
+        },
+    })
+}
+
 /// **What the Inspector's panes read**: one pane per slot the deck has, up to
 /// the [`PANES`] the arrangement has, out of the seven things a `Set` will say
 /// about itself.
@@ -10212,22 +10911,28 @@ fn node_of(set: &Set, control: &Published) -> Option<(Layer, u32)> {
 ///   `Set::node_named` turns each one back into the `(layer, index)` the mock's
 ///   `.addr` is.
 /// - **`Set::authority`** is the `man / sug / auto` chip, through
-///   [`mix::authority`]. **Nothing writes one**: `Request::authorities` is
-///   empty in every run of every program in this workspace, and it will stay
-///   empty until a live-session writer exists, because `Record::Authority` is
-///   deliberately excluded from Set-file state in two places (ADR-0216). So
-///   the chip draws `man` on every node of every Set, forever, and that is the
-///   *default* being read rather than a placeholder being drawn — a node
-///   nobody has spoken for **is** manual.
+///   [`mix::authority`], and the node's own address goes across beside it
+///   because a press on a chip has to say which node it is about
+///   (`view::NodeAuthority`). **A press writes one now**: `Deck::set_authority`
+///   landed with ADR-0319, so the chips are three destinations rather than a
+///   drawing. What a run *starts* at is still the default on every node —
+///   `Request::authorities` is empty, because `Record::Authority` is
+///   deliberately excluded from Set-file state in two places (ADR-0216) — and
+///   that is the default being read rather than a placeholder being drawn: a
+///   node nobody has spoken for **is** manual.
 /// - **`Set::published`** is which controls appear and in what order, which is
 ///   what numbers the rows. It **allocates and says it is not for the frame
 ///   path**, which is why this is called once — see below.
 /// - **`Set::params`** is what resolves a wildcard control to a node — see
 ///   [`node_of`].
-/// - **`Set::bindings`** is the one of the seven this does **not** read, and
-///   the reason is that it cannot say anything here: nothing in this program
-///   binds a signal to anything, so it is empty in every run and a `.pval.src`
-///   drawn off it would be a state the engine never entered (ADR-0191).
+/// - **`Set::bindings`** is the seventh, and it was the one this did **not**
+///   read until 2026-09-09. The reason was ADR-0191's — nothing in this
+///   program bound a signal to anything, so it was empty in every run and a
+///   `.pval.src` drawn off it would have been a state the engine never
+///   entered — and what changed is that the sensitivity row's chips can attach
+///   one (ADR-0319). [`source_of`] is the read, at the node each row was
+///   resolved to, and it takes the **first** matching entry because that is
+///   what `karakuri_engine::set::effective` writes.
 ///
 /// # Read once, and that is the engine's instruction rather than a shortcut
 ///
@@ -10237,10 +10942,14 @@ fn node_of(set: &Set, control: &Published) -> Option<(Layer, u32)> {
 /// this is called at startup and again on the frame a build is installed —
 /// `staging` is what answers *did one land*, and it is the only thing in this
 /// program that knows. Between those
-/// frames almost every value above is constant: nothing writes a param,
-/// nothing binds one, and nothing grants an authority.
+/// frames almost every value above used to be constant. **Four things move
+/// one now**, and each is a press: a `ride`, a `source`, an `authority` and a
+/// `transport`. Every one of them re-reads the panes from
+/// [`Readout::performed`], off the *record* rather than off the operation, so
+/// a second operation writing one is caught by the same line — and none of
+/// them is on a frame.
 ///
-/// **The transport is the one that moves now, and it is why this is called a
+/// **The transport was the first that moved, and it is why this is called a
 /// second time.** It had no caller outside its own tests when this was written
 /// (ADR-0218); the deck head's scrub is that caller, so a press that writes a
 /// `Record::Transport` re-reads the panes in [`Readout::performed`] — on the
@@ -10250,8 +10959,9 @@ fn node_of(set: &Set, control: &Published) -> Option<(Layer, u32)> {
 /// *what is this pane showing*, and the reading that draws the anchor has to
 /// be the reading the deck holds.
 ///
-/// **What a re-read for the rest of it waits on is a writer**, and it is the
-/// same writer the authority chip waits on.
+/// **The other three arrived with ADR-0319 and ADR-0280**, which is what that
+/// sentence was waiting for: the writer the authority chip wanted is
+/// `Deck::set_authority`, and the parameter's is `Deck::write_param`.
 fn inspector(deck: &Deck, names: &[String], out: &mut Vec<view::Pane>) {
     out.clear();
     for slot in 0..deck.slot_count().min(view::PANES) {
@@ -10277,8 +10987,9 @@ fn inspector(deck: &Deck, names: &[String], out: &mut Vec<view::Pane>) {
             let value = set
                 .value_at(control.at, &control.key)
                 .unwrap_or(control.range[0]);
+            let node = node_of(set, control);
             rows.push((
-                node_of(set, control),
+                node,
                 view::Param {
                     ord: at + 1,
                     name: control.name.clone(),
@@ -10302,6 +11013,16 @@ fn inspector(deck: &Deck, names: &[String], out: &mut Vec<view::Pane>) {
                         }),
                         key: control.key.clone(),
                     },
+                    // **The seventh reading, and the one this pane used to
+                    // leave out.** It was omitted on ADR-0191's terms —
+                    // nothing in this program bound anything, so a bound row
+                    // was a state the engine could not enter — and what
+                    // changed is that a press can attach one now (ADR-0319).
+                    // Asked at the node the row was resolved to, which is the
+                    // node the row *is*: `node_of` drops a control covering
+                    // more than one.
+                    bound: node
+                        .and_then(|(layer, index)| source_of(set, layer, index, &control.key)),
                 },
             ));
         }
@@ -10314,7 +11035,19 @@ fn inspector(deck: &Deck, names: &[String], out: &mut Vec<view::Pane>) {
             let Some((layer, index)) = set.node_named(name) else {
                 continue;
             };
-            let authority = set.authority(layer, index).map(mix::authority);
+            // **The address goes with the level**, because a press on a chip
+            // has to say which node it is about and the two are absent
+            // together — `view::NodeAuthority`, which is why this is one field
+            // over there rather than two.
+            let authority = set
+                .authority(layer, index)
+                .map(|level| view::NodeAuthority {
+                    at: karakuri_operation::NodeAt {
+                        layer: asked_layer(layer),
+                        index,
+                    },
+                    level: mix::authority(level),
+                });
             let params = |layer: Layer, index: u32| {
                 rows.iter()
                     .filter(|(at, _)| *at == Some((layer, index)))
@@ -10346,7 +11079,7 @@ fn inspector(deck: &Deck, names: &[String], out: &mut Vec<view::Pane>) {
                 continue;
             }
             nodes.push(view::Node {
-                addr: format!("{}:{index}", layer_word(layer)),
+                addr: node_addr(layer, index),
                 name: name.clone(),
                 authority,
                 renderers: Vec::new(),
@@ -10822,6 +11555,88 @@ fn demonstration_banks() -> karakuri_pattern::Banks {
     banks
 }
 
+/// **A lane appended to the bank the press named**, and what to say about it —
+/// [`sequenced`]'s `PointLane` arm, lifted out because it is the one arm that
+/// reads something other than the pattern.
+///
+/// # Where the two levels come from, and why they are not in the payload
+///
+/// A lane carries an `on` and an `off`
+/// ([ADR-0320](../../docs/adr/0320-a-pattern-is-one-bar-of-sixteen-slots-a-lane-is-a-target-and-two-levels-and-a-cell-is-a-bit.md)),
+/// filled in **at the press** and never read back later, because a pattern
+/// outlives the Set it was written against. `Operation::PointLane` carries a
+/// bank and a target and nothing else (ADR-0321), so they are filled here —
+/// out of `View::inspector`, which is *the console's own published reading*
+/// and the very list the chooser drew its items from.
+///
+/// **That is one reading and not two.** Asking the deck again here would be a
+/// second derivation of the range, and the two could name different numbers
+/// the frame a Set lands; the operator saw the console's, and the lane gets
+/// the console's
+/// ([ADR-0327](../../docs/adr/0327-the-lane-chooser-lists-one-decks-keys-and-the-bank-pills-are-the-four-banks.md)).
+///
+/// **A fader's are 1.0 and 0.0**, which is a gate and is that record's own
+/// pair: a channel fader publishes no range, and `[0, 1]` is what the strip
+/// draws.
+///
+/// **A parameter the console holds no row for is refused and said**, rather
+/// than defaulted: a lane with invented levels would drive its target to two
+/// numbers nobody chose, and the refusal names what the next attempt needs
+/// ([P-0083](../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md)).
+fn pointed_lane(
+    banks: &mut karakuri_pattern::Banks,
+    view: &View,
+    pattern: u8,
+    target: &karakuri_operation::LaneTarget,
+) -> String {
+    let levels = match target {
+        karakuri_operation::LaneTarget::Fader { .. } => Some((1.0, 0.0)),
+        karakuri_operation::LaneTarget::Param { deck, param } => view
+            .inspector
+            .iter()
+            .filter(|pane| pane.deck == usize::from(*deck))
+            .flat_map(|pane| pane.nodes.iter())
+            .flat_map(|node| node.params.iter())
+            .find(|row| &row.param == param)
+            .map(|row| (row.range[1], row.range[0])),
+    };
+    let Some((on, off)) = levels else {
+        return format!(
+            "  lane: pattern {pattern} is not pointed — this console holds no published range \
+             for that control, and a lane's two levels are the range published to it at the \
+             press. Point the Library bay's load pulldown at the deck whose control it is and \
+             ask again"
+        );
+    };
+    let Some(bank) = banks.at_mut(usize::from(pattern)) else {
+        return format!("  lane: pattern {pattern} is not a bank this session holds");
+    };
+    // **It arrives muted, and that is not caution.** A lane arrives with every
+    // slot off, and an off step writes `off` rather than writing nothing — so
+    // an unmuted fader lane would hold its deck at zero from the press, which
+    // is `demonstration_banks`' argument reached from the other end: the deck
+    // would go dark and nothing on screen would say a sequencer had done it.
+    // The label is the unmute and it is one press, which is rule 02's take-back
+    // drawn where the lane is.
+    let mut lane = karakuri_pattern::Lane::new(target.clone(), on, off);
+    lane.set_muted(true);
+    bank.push(lane);
+    let lanes = bank.lanes().len();
+    format!(
+        "  lane: pattern {pattern} -> a {} lane, on {on} off {off} -> no record. {lanes} lane{} \
+         under the rows, muted: every slot is off and an off step writes {off}, so the label is \
+         the press that starts it",
+        match target {
+            karakuri_operation::LaneTarget::Fader { .. } => "fader",
+            karakuri_operation::LaneTarget::Param { .. } => "parameter",
+        },
+        match lanes == 1 {
+            true => "",
+            false => "s",
+        }
+    )
+}
+
 /// **A press in the Sequencer bay, applied to the pattern it names**, and what
 /// to say about it. `None` for every operation that is not one of the three.
 ///
@@ -10847,8 +11662,12 @@ fn demonstration_banks() -> karakuri_pattern::Banks {
 fn sequenced(
     banks: &mut karakuri_pattern::Banks,
     playhead: &mut karakuri_pattern::Playhead,
+    view: &View,
     operation: &Operation,
 ) -> Option<String> {
+    if let Operation::PointLane { pattern, target } = operation {
+        return Some(pointed_lane(banks, view, *pattern, target));
+    }
     match *operation {
         Operation::SetStep {
             pattern,
@@ -10989,6 +11808,58 @@ fn scheduled(view: &mut View, operation: &Operation) -> Option<String> {
         match at.length == 1.0 {
             true => "",
             false => "s",
+        }
+    ))
+}
+
+/// **A candidate kept, applied to the lane**, and what to say about it.
+/// `None` for every operation that is not it.
+///
+/// [`scheduled`]'s shape one bay over, and for its reason: `written` answers
+/// `Silent(Silent::Surface)` for `Operation::KeepCandidate`, so there is no
+/// record for [`apply`] to move a deck with and the surface that draws the row
+/// is what performs the press. What it changes is one line in one list.
+///
+/// **Nothing else moves, and that is the operation rather than a shortfall.**
+/// The version is where it was, the store holds every version it held, and the
+/// picture is the picture. What a keep says is that a person has looked at
+/// this node and is done with it — `console.html`'s *Accepting settles the
+/// node and changes nothing on screen*.
+///
+/// **A row that is not there is said rather than swallowed**, which is
+/// [`pointed`]'s rule: nothing this window emits can reach it — the control is
+/// the row and a row that is not drawn takes no press — so a line here is a
+/// mapped controller or an MCP call arriving at a node with no candidate on
+/// it, the day either reaches this row.
+fn kept(view: &mut View, operation: &Operation) -> Option<String> {
+    let Operation::KeepCandidate { deck, node } = operation else {
+        return None;
+    };
+    let slot = usize::from(*deck);
+    let addr = node_addr(ir_layer(node.layer), node.index);
+    let before = view.staging.len();
+    view.staging
+        .retain(|row| row.deck != slot || row.at != Some(*node));
+    let letter = deck_letter(*deck);
+    if view.staging.len() == before {
+        return Some(format!(
+            "  keep: deck {letter} {addr} has no candidate row — nothing was outstanding on \
+             that node, and the lane is as it was"
+        ));
+    }
+    Some(format!(
+        "  keep: deck {letter} {addr} -> KeepCandidate -> no record, and that is settled: the \
+         material already changed and its `procedure` record was written at the swap. The row \
+         leaves the lane and nothing else moves; {} still waiting",
+        match view.staging.len() {
+            0 => "nothing".to_owned(),
+            n => format!(
+                "{n} row{}",
+                match n {
+                    1 => "",
+                    _ => "s",
+                }
+            ),
         }
     ))
 }
@@ -11213,28 +12084,16 @@ fn restored(gfx: &Gfx, operation: &Operation) -> Option<String> {
     let Operation::RestoreProcedure { deck, revision } = operation else {
         return None;
     };
-    let picked = match revision {
-        karakuri_operation::Revision::Picked(name) => name,
-        // **The staging lane's one step back, and nothing on this panel asks
-        // for it.** Said rather than dropped: an arm that answered `None` here
-        // would be a press performed by nobody, and this program is where the
-        // page's `has` badge is checked.
-        karakuri_operation::Revision::Previous(node) => {
-            return Some(format!(
-                "  put back: a node's *previous* version is the staging lane's route and \
-                 nothing on this panel asks for it, so {:?}:{} on deck {} was not put back",
-                node.layer,
-                node.index,
-                deck_letter(*deck),
-            ));
-        }
-    };
+    // **What was asked for, in the words a refusal has to say it in.** Both
+    // arms name a version; one says which and one says where, and this is the
+    // only place in the sentence they differ.
+    let asked = asked_for(revision);
     let slot = usize::from(*deck);
     let letter = deck_letter(*deck);
     let count = gfx.engine.aimed.len();
     let Some(aiming) = gfx.engine.aimed.get(slot) else {
         return Some(format!(
-            "  put back: deck {letter} refused — this deck has {count} slot{}, so `{picked}` \
+            "  put back: deck {letter} refused — this deck has {count} slot{}, so {asked} \
              has nowhere to land",
             match count {
                 1 => "",
@@ -11245,7 +12104,7 @@ fn restored(gfx: &Gfx, operation: &Operation) -> Option<String> {
     let Some(id) = aiming.at.set.as_deref() else {
         return Some(format!(
             "  put back: deck {letter} is playing the pair this run was launched with rather \
-             than a Set, so it has no history to put `{picked}` back from — load a Set onto \
+             than a Set, so it has no history to put {asked} back from — load a Set onto \
              that deck first; nothing moved"
         ));
     };
@@ -11258,9 +12117,26 @@ fn restored(gfx: &Gfx, operation: &Operation) -> Option<String> {
         slot,
         letter,
         id,
-        picked,
+        revision,
         &gfx.engine.pointing,
     ))
+}
+
+/// **What a [`karakuri_operation::Revision`] asked for, as a refusal names
+/// it** — a version by the name it was filed under, or a node by its address.
+///
+/// One function because the two refusals about the *deck* are the same
+/// sentence whichever arm arrived: a slot the deck has not got and a deck
+/// playing no Set are answered before anything is read, and what they have to
+/// name is only what was asked for.
+fn asked_for(revision: &karakuri_operation::Revision) -> String {
+    match revision {
+        karakuri_operation::Revision::Picked(name) => format!("`{name}`"),
+        karakuri_operation::Revision::Previous(node) => format!(
+            "the version before {}'s",
+            node_addr(ir_layer(node.layer), node.index)
+        ),
+    }
 }
 
 /// **The half of [`restored`] that reaches a disk**, split out for the reason
@@ -11269,20 +12145,48 @@ fn restored(gfx: &Gfx, operation: &Operation) -> Option<String> {
 /// asserting — it writes over the file a deck is playing from.
 ///
 /// Everything it needs is an argument: the store to walk, the slot and its
-/// letter, the Set the slot is running, the row that was pressed, and where
-/// that slot's nodes are ([`karakuri_environment::mcp::Slots`], the run's one
-/// published layout, which the caller reads off [`Engine::pointing`]). The three refusals here are the three that are
-/// about **files** — a version that is not in the listing, a node this slot
-/// does not hold, and a file that will not be read or written — where the two
-/// about the *deck* are the caller's and are answered before this is reached.
+/// letter, the Set the slot is running, the revision that was asked for, and
+/// where that slot's nodes are ([`karakuri_environment::mcp::Slots`], the
+/// run's one published layout, which the caller reads off [`Engine::pointing`]).
+/// The refusals here are the ones that are about **files** — a version that is
+/// not in the listing, a node with nothing behind the one it is playing, a
+/// node this slot does not hold, and a file that will not be read or written —
+/// where the two about the *deck* are the caller's and are answered before
+/// this is reached.
+///
+/// # One function and two ways of naming the file
+///
+/// `karakuri_operation::Revision` has two arms because two surfaces can ask
+/// and each says the half it holds (ADR-0308), and what differs between them
+/// is **which row of this listing** — nothing after that. So the walk, the
+/// read, the address and the write are one path, and the arms are one `match`
+/// over the same `Vec<Version>`:
+///
+/// - `Picked` is a name the Library bay's `history` scope handed over, matched
+///   back against the listing that produced it by rebuilding each row's
+///   spelling — `SetTransfer::Take`'s own arrangement, and the reason no
+///   surface here spells a path.
+/// - `Previous` is a node the Staging lane's row handed over, and the version
+///   is **the one before the one running**: the listing is most recent first,
+///   the newest entry for that node is what the slot is playing — the history
+///   is gated on compiling and not on landing, so a version that was stopped
+///   for cost is filed too — and the entry after it is the step back
+///   (`docs/adr/0326-a-staging-row-is-a-changed-node-and-the-row-is-the-keep.md`).
+///   A node with exactly one version in the listing is refused naming what is
+///   in the way, which is `P-0083`: it says the node has nothing behind what
+///   it is playing rather than that the press failed.
+///
+/// **The narrowing to the Set is both arms'**, and it is the same narrowing
+/// for the same reason — a version filed under no Set is a version of nothing.
 fn put_back(
     store: &std::path::Path,
     slot: usize,
     letter: &str,
     id: &str,
-    picked: &str,
+    revision: &karakuri_operation::Revision,
     slots: &karakuri_environment::mcp::Slots,
 ) -> String {
+    let asked = asked_for(revision);
     let found = match karakuri_environment::history::list(store, HISTORY_MOST) {
         Ok(found) => found,
         Err(why) => {
@@ -11292,23 +12196,52 @@ fn put_back(
             );
         }
     };
-    let Some(version) = found
-        .versions
-        .iter()
-        // **`Some(id)` and never `None`**, which is [`walked`]'s filter said
-        // again where it decides what is written rather than what is drawn: a
-        // version filed under no Set is a version of nothing, and landing one
-        // because a `None` read as a wildcard would put another run's edit on
-        // a deck.
-        .filter(|version| version.set.as_deref() == Some(id))
-        .find(|version| version_row(version) == picked)
-    else {
-        return format!(
-            "  put back: `{picked}` is not one of `{id}`'s versions in the last {HISTORY_MOST} \
-             this store wrote — a day directory an operator deleted by hand is the ordinary \
-             way that happens, since `rm -rf history/YYYY/MM` is the whole of the retention \
-             policy; nothing moved, and deck {letter} is still playing `{id}`"
-        );
+    // **`Some(id)` and never `None`**, which is [`walked`]'s filter said again
+    // where it decides what is written rather than what is drawn: a version
+    // filed under no Set is a version of nothing, and landing one because a
+    // `None` read as a wildcard would put another run's edit on a deck.
+    let of_the_set = || {
+        found
+            .versions
+            .iter()
+            .filter(|version| version.set.as_deref() == Some(id))
+    };
+    let version = match revision {
+        karakuri_operation::Revision::Picked(picked) => {
+            let Some(version) = of_the_set().find(|version| version_row(version) == *picked) else {
+                return format!(
+                    "  put back: `{picked}` is not one of `{id}`'s versions in the last \
+                     {HISTORY_MOST} this store wrote — a day directory an operator deleted by \
+                     hand is the ordinary way that happens, since `rm -rf history/YYYY/MM` is \
+                     the whole of the retention policy; nothing moved, and deck {letter} is \
+                     still playing `{id}`"
+                );
+            };
+            version
+        }
+        karakuri_operation::Revision::Previous(node) => {
+            let layer = setfile::kind_name(ir_layer(node.layer));
+            let addr = node_addr(ir_layer(node.layer), node.index);
+            // **Most recent first is `history::list`'s own order**, kept
+            // rather than re-sorted here: the newest is what the slot is
+            // running and the one after it is the step back.
+            let mut chain = of_the_set()
+                .filter(|version| version.layer == layer && version.index == node.index as usize);
+            let running = chain.next();
+            let Some(version) = running.and(chain.next()) else {
+                return format!(
+                    "  put back: deck {letter} {addr} has {} in `{id}`'s history, so there is \
+                     nothing before what it is playing to step back to — the history keeps \
+                     every version that compiled, and this node has only ever had the one. \
+                     Nothing moved.",
+                    match running {
+                        Some(_) => "one version",
+                        None => "no version",
+                    }
+                );
+            };
+            version
+        }
     };
     let source = match std::fs::read(&version.file) {
         Ok(source) => source,
@@ -11324,7 +12257,7 @@ fn put_back(
         Ok(path) => path.clone(),
         Err(why) => {
             return format!(
-                "  put back: deck {letter} does not hold the node `{picked}` was a version \
+                "  put back: deck {letter} does not hold the node {asked} was a version \
                  of — {why}; `{id}` has been edited since, or this version came off another \
                  slot. Nothing moved."
             );
@@ -11332,11 +12265,12 @@ fn put_back(
     };
     match std::fs::write(&target, &source) {
         Ok(()) => format!(
-            "  put back: deck {letter} {}:{} <- `{picked}` -> written into {}; the worker \
+            "  put back: deck {letter} {}:{} <- `{}` -> written into {}; the worker \
              builds it and the budget judges it, and the version it replaces is kept because \
              the rebuild compiles it",
             version.layer,
             version.index,
+            version_row(version),
             target.display()
         ),
         Err(e) => format!(
@@ -11637,6 +12571,104 @@ fn apply(record: &Record, deck: &mut Deck, look: &mut Look, chain: &mut Chain) -
                         .join(", ")
                 )),
             }
+        }
+        // **What is driving a knob, and the taking of it back** — the other
+        // record that reaches inside a Set, and the one the Inspector's
+        // sensitivity row was blocked on. `Deck::bind` and `Deck::unbind` are
+        // the public roads and neither compiles anything: a binding is
+        // resolved by the next `Set::prepare`, so an attachment is riding on
+        // the next frame.
+        //
+        // **Decoded by `mix::change` rather than here**, which is the ride's
+        // reason one arm up: the three diagnostics a binding owes — a `bpm`
+        // source, an `octaves` without `fbm`, a generator on a binding that is
+        // not to `noise` — belong to `setfile::binding_from_record` and are
+        // said in its words on every route, so spelling them a second time
+        // here is the drift `karakuri-operation-record` exists to end.
+        Record::Source { .. } => {
+            let (slot, key, bound) = match karakuri_environment::mix::change(
+                record,
+                deck.slot_count(),
+            ) {
+                Ok(Some(karakuri_environment::mix::Change::Source {
+                    slot,
+                    layer,
+                    index,
+                    key,
+                    binding,
+                })) => match binding {
+                    Some(binding) => {
+                        let signal = binding.signal.clone();
+                        let curve = binding.curve.name();
+                        let range = binding.range;
+                        match deck.bind(slot, binding) {
+                                karakuri_engine::set::Bound::Yes => (
+                                    slot,
+                                    key,
+                                    format!(
+                                        "{signal} through {curve} onto [{:.2}, {:.2}]",
+                                        range[0], range[1]
+                                    ),
+                                ),
+                                karakuri_engine::set::Bound::NoSuchParam => {
+                                    return Some(format!(
+                                        "  {}",
+                                        karakuri_environment::no_such_param(slot, &key)
+                                    ))
+                                }
+                                karakuri_engine::set::Bound::NoSuchControl => {
+                                    return Some(format!(
+                                        "  slot {slot}: `{signal}` is not a control this Set                                          publishes"
+                                    ))
+                                }
+                            }
+                    }
+                    None => match deck.unbind(slot, layer, index, &key) {
+                        true => (slot, key, "nothing — taken back".to_string()),
+                        false => {
+                            return Some(format!("  slot {slot}: nothing was driving `{key}`"))
+                        }
+                    },
+                },
+                Ok(_) => return None,
+                Err(refused) => return Some(format!("  {refused}")),
+            };
+            Some(format!(
+                "  source: deck {} -> Record::Source -> `{key}` is driven by {bound}",
+                deck_letter(slot as u8)
+            ))
+        }
+        // **Who may move one node**, and the writer ADR-0211 said the engine
+        // owed. It is not enforcement: nothing writes a parameter on an
+        // agent's behalf here, so what a level reaches today is
+        // `Set::write_param`'s wildcard refusal — a bare-name control over
+        // nodes that no longer agree is refused whole from the next press.
+        Record::Authority { .. } => {
+            let (slot, level) = match karakuri_environment::mix::change(record, deck.slot_count()) {
+                Ok(Some(karakuri_environment::mix::Change::Authority {
+                    slot,
+                    layer,
+                    index,
+                    authority,
+                })) => match deck.set_authority(slot, layer, index, authority) {
+                    true => (slot, authority),
+                    false => {
+                        return Some(format!(
+                            "  slot {slot}: no node {}:{index} to speak for",
+                            karakuri_environment::setfile::layer_name(
+                                karakuri_environment::setfile::layer_of(layer)
+                            )
+                        ))
+                    }
+                },
+                Ok(_) => return None,
+                Err(refused) => return Some(format!("  {refused}")),
+            };
+            Some(format!(
+                "  authority: deck {} -> SetAuthority -> Record::Authority -> {}",
+                deck_letter(slot as u8),
+                level.name()
+            ))
         }
         Record::MasterOut { value } => {
             deck.set_out(value);
@@ -12235,8 +13267,55 @@ fn missed(outcome: &wgpu::CurrentSurfaceTexture) -> Option<Missed> {
     }
 }
 
+/// **The projector window: the second `Sink` this repository owns.**
+///
+/// A second `winit` window with a surface of its own and a
+/// [`WindowSink`] over it, opened on `RouteFrame { output: Projector(0), on:
+/// true }` and dropped on the same operation with `on: false`. It takes the
+/// composited frame beside the picture — `Present::draw` letterboxes the one
+/// canvas into each target, so a window and a picture of different shapes need
+/// one `Present` between them rather than one each
+/// ([ADR-0247](../../../docs/adr/0247-one-frame-is-rendered-and-scaled-into-each-output.md)).
+///
+/// **It never delays anything.** `compose` asks every sink to acquire before
+/// the frame is committed, draws into the ones that answered, and presents all
+/// of them before returning any error
+/// ([ADR-0171](../../../docs/adr/0171-the-deck-advances-and-each-sink-either-gets-the-frame-or-misses-it.md))
+/// — so a projector that is resizing, minimised or wedged loses its own frame
+/// and costs the picture nothing, which is what `docs/plugins.md` promises of
+/// a sink and what the console page's chip says.
+///
+/// **Its size is the window the operating system gave it**, which is
+/// [ADR-0246](../../../docs/adr/0246-the-render-size-belongs-to-the-output-and-the-sessions-canvas-is-only-its-default.md)'s
+/// *the destination window decides*: `WindowEvent::Resized` on this window
+/// reconfigures the swapchain and the next frame's [`render_size`] follows it.
+/// **Fullscreen on a chosen display is not built and is not one line** — the
+/// operator makes this window fullscreen the way they make any window
+/// fullscreen, which is the console page's *fullscreen is just what an
+/// application does*; naming *which* display wants a list of monitors this
+/// program does not read, and a chip that carried one would carry a label that
+/// changes when the cable does.
+struct Projector {
+    /// Held because the surface borrows it for `'static` and because the
+    /// window is what a close event and a resize arrive on. Read by
+    /// [`App::window_event`], which routes by [`WindowId`].
+    window: Arc<Window>,
+    sink: WindowSink,
+    /// Its inner size in physical pixels — **this output's size**, and the
+    /// second term [`render_size`] takes a maximum over.
+    ///
+    /// Kept here rather than asked of the window every frame: `Window::
+    /// inner_size` is a platform call on the frame path, and the answer only
+    /// changes on an event this program already handles.
+    size: (u32, u32),
+}
+
 struct Gfx {
     window: Arc<Window>,
+    /// **The projector window, while it is open.** `None` is the ordinary
+    /// state — a run with one output, the picture — and it is the state every
+    /// run starts in. See [`Projector`].
+    projector: Option<Projector>,
     gpu: Gpu,
     surface: wgpu::Surface<'static>,
     config: wgpu::SurfaceConfiguration,
@@ -12901,7 +13980,30 @@ impl Keeping {
     /// The `built` channel is drained here rather than per frame: it only has
     /// anything in it when a build has just been requested, and this runs when
     /// one has just landed.
-    fn took_up(&mut self, engine: &Engine, slot: usize, landed: u64) {
+    ///
+    /// # It answers which nodes changed, because this is the only place both
+    /// lists exist
+    ///
+    /// A build reports a hash per node and this list replaces the one the slot
+    /// was on, so the two are in one hand for exactly the length of this
+    /// function. **The diff is taken here or it is not taken at all** — a
+    /// caller coming back for it afterwards would find one list — and it is
+    /// what the Staging lane's rows are, one per changed node
+    /// (`docs/adr/0326-a-staging-row-is-a-changed-node-and-the-row-is-the-keep.md`).
+    ///
+    /// **Empty is three states and one answer**, which is deliberate: a build
+    /// whose sources the store would not take has no new list, a slot with no
+    /// baseline has no old one, and a rebuild that restated the stack
+    /// unchanged has a diff with nothing in it. In every one of them there is
+    /// no node this verdict can honestly be pinned to, and the lane draws one
+    /// row on the slot — see [`settle`]. The first two say so at the time, on
+    /// the watcher's own line.
+    ///
+    /// **A node the new list has and the old one does not counts as
+    /// changed**, and one the old list had and the new one does not is not
+    /// reported at all: a lane row is a version somebody has still to rule on,
+    /// and a node a rebuild removed has none.
+    fn took_up(&mut self, aims: &[Aiming], slot: usize, landed: u64) -> Vec<(&'static str, u32)> {
         let mut ready: Vec<watch::Built> = Vec::new();
         while let Ok(built) = self.built.try_recv() {
             ready.push(built);
@@ -12918,9 +14020,28 @@ impl Keeping {
         let built = at.map(|at| self.pending.remove(at));
         let nodes = built
             .as_ref()
-            .zip(engine.aimed.get(slot))
+            .zip(aims.get(slot))
             .map(|(built, aiming)| built_nodes(built, &aiming.at));
+        // **Against what the slot was on, before that is overwritten.** The
+        // hash is the whole of the comparison: `karakuri_store`'s address is
+        // the content, so two builds of one file differ here exactly when the
+        // bytes differ, which is what an operator means by *changed*.
+        let changed = match (self.playing.at(slot), nodes.as_ref()) {
+            (Some(was), Some(now)) => now
+                .iter()
+                .filter(|node| {
+                    !was.iter().any(|before| {
+                        before.layer == node.layer
+                            && before.index == node.index
+                            && before.hash == node.hash
+                    })
+                })
+                .map(|node| (node.layer, node.index))
+                .collect(),
+            _ => Vec::new(),
+        };
         self.playing.landed(slot, nodes);
+        changed
     }
 
     /// **Every save still being written, waited for — up to
@@ -13244,6 +14365,16 @@ impl App {
                     if let Some(line) = restored(gfx, operation) {
                         println!("{line}");
                     }
+                    // **A candidate kept, performed on the lane it is about.**
+                    // `written` answers `Silent(Silent::Surface)` for it, so
+                    // there is no record and nothing for `apply` to do: what
+                    // changes is one row of `View::staging`, which is this
+                    // readout's. It is here beside the put-back rather than
+                    // beside the arrangement because the two are the same
+                    // row's two presses. See [`kept`].
+                    if let Some(line) = kept(&mut readout.view, operation) {
+                        println!("{line}");
+                    }
                     // **The transition row's three settings, performed on the
                     // console's own pointer**, and it is here for the reason
                     // the selection is one line up: `Operation::SetTransition`
@@ -13261,9 +14392,12 @@ impl App {
                     // does is not this line — it comes back through this same
                     // function as an `Operation::SetOpacity`, which is the
                     // whole of ADR-0322. See [`sequenced`].
-                    if let Some(line) =
-                        sequenced(&mut readout.sequencer, &mut readout.playhead, operation)
-                    {
+                    if let Some(line) = sequenced(
+                        &mut readout.sequencer,
+                        &mut readout.playhead,
+                        &readout.view,
+                        operation,
+                    ) {
                         println!("{line}");
                     }
                     // **The reading is taken off the deck and off the console,
@@ -13354,10 +14488,25 @@ impl App {
                         // because what matters is that the deck's transport
                         // changed — the day a second operation writes one, it
                         // is caught by the same line.
-                        if records
-                            .iter()
-                            .any(|record| matches!(record, Record::Transport { .. }))
-                        {
+                        //
+                        // **Three more records move what a pane draws**, and
+                        // they are the Inspector's own three. A `ride` moves a
+                        // figure and a fader; a `source` turns a row bound or
+                        // unbound, which adds or removes a whole sensitivity
+                        // row and moves every row under it; an `authority`
+                        // moves a chip. Each is off the record for the reason
+                        // the transport is: what matters is that the deck
+                        // changed, so a second operation writing one is caught
+                        // by the same line.
+                        if records.iter().any(|record| {
+                            matches!(
+                                record,
+                                Record::Transport { .. }
+                                    | Record::Ride { .. }
+                                    | Record::Source { .. }
+                                    | Record::Authority { .. }
+                            )
+                        }) {
                             inspector(&gfx.engine.deck, &gfx.material, &mut readout.view.inspector);
                         }
                     }
@@ -13698,6 +14847,11 @@ impl ApplicationHandler for App {
             material,
             store: self.store.clone(),
             window,
+            // **A run opens with one output.** The projector is a window an
+            // operator asks for from the Outputs row; opening one nobody asked
+            // for would put a second window on their desk and raise what every
+            // frame costs before the first one is drawn.
+            projector: None,
             gpu,
             surface,
             config,
@@ -13741,7 +14895,12 @@ impl ApplicationHandler for App {
                 // waits apart.** A period sitting at the display's interval is
                 // a loop with headroom; one well past it is a loop at its
                 // limit, and a host clock cannot say which without it.
-                self.costs.say(capacity, &material, gfx.budget_ms);
+                // **The size the reading is about, read off the `Present`
+                // that took it** — the largest enabled output's, which is what
+                // the frame was composited at while these numbers were being
+                // measured.
+                let at = gfx.engine.present.size();
+                self.costs.say(capacity, &material, gfx.budget_ms, at);
             }
         }
         // **What a model asked for, taken on the wake it asked to be taken
@@ -13801,10 +14960,63 @@ impl ApplicationHandler for App {
         });
     }
 
-    fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
+    fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
         let Some(gfx) = self.gfx.as_mut() else {
             return;
         };
+        // **The projector's own events, and they are three.** This program had
+        // one window until 2026-09-09 and the id was `_id`; a second window
+        // means every arm below has to be about the panel, so the projector's
+        // are taken here and returned from rather than falling through into a
+        // handler that would resize the panel's swapchain from another
+        // window's size.
+        //
+        // - **`Resized`** is `docs/adr/0246-…` on this window: the destination
+        //   decides, so the swapchain follows and `Projector::size` with it —
+        //   and the next frame's `render_size` sees the new size. It is not a
+        //   redraw request, because this loop's frames are the panel's: the
+        //   panel asks for the frame and every sink in the slice gets it, so
+        //   what this owes is a frame *asked of the panel*.
+        // - **`CloseRequested`** turns this output off rather than quitting.
+        //   The window manager's close on a projector is *stop sending to the
+        //   projector*, and quitting the program because an operator shut a
+        //   second window would be the worst answer a live instrument could
+        //   give (P-0094).
+        // - **`RedrawRequested`** is answered by doing nothing. A frame for
+        //   this window is composed by the panel's own redraw, into the sink
+        //   in the slice; drawing here would be a second submission over the
+        //   deck's targets, which is exactly the race ADR-0166 is about.
+        if gfx.projector.as_ref().is_some_and(|p| p.window.id() == id) {
+            match event {
+                WindowEvent::Resized(size) => {
+                    let at = (size.width.max(1), size.height.max(1));
+                    if let Some(projector) = gfx.projector.as_mut() {
+                        projector.sink.resize(&gfx.gpu.device, at.0, at.1);
+                        projector.size = at;
+                    }
+                    App::wants(
+                        gfx,
+                        &mut self.egui_due,
+                        &mut self.costs,
+                        Change::Viewport.repaint(),
+                    );
+                }
+                WindowEvent::CloseRequested => {
+                    if let Some(line) = routed(gfx, event_loop, Output::Projector(0), false) {
+                        println!("{line}");
+                    }
+                    self.readout.view.projector = false;
+                    App::wants(
+                        gfx,
+                        &mut self.egui_due,
+                        &mut self.costs,
+                        Change::Viewport.repaint(),
+                    );
+                }
+                _ => {}
+            }
+            return;
+        }
         // **The stillness clock, and it is reset by everything except a frame
         // this loop asked for itself.** A frame drawn while this has not been
         // reset is a frame drawn on an untouched window, which is the number
@@ -13933,6 +15145,17 @@ impl ApplicationHandler for App {
                 // starred subset (ADR-0299), so a star taken off under that
                 // chip is a row that leaves. See [`favourite`], which answers
                 // `None` for every other operation and writes nothing else.
+                // **A chip in the Outputs row that is not the picture**, and
+                // it is taken here because this is where the event loop is:
+                // `winit` will not make a window without one, and
+                // `App::performed` below is handed a `Gfx` and no loop. See
+                // [`routed`], which is the whole of what a projector costs
+                // this file.
+                if let Acted::Emitted(Some(Operation::RouteFrame { output, on })) = acted {
+                    if let Some(line) = routed(gfx, event_loop, output, on) {
+                        println!("{line}");
+                    }
+                }
                 if let Acted::Emitted(Some(ref operation @ Operation::SetFavourite { .. })) = acted
                 {
                     // **`Asked::Operator`, because a hand on this panel is the
@@ -15126,18 +16349,26 @@ impl ApplicationHandler for App {
                 // -- the Program bay arranges itself -------------------
                 // **Before `aims`, because the four cells are in one of two
                 // places and this is what decides which.** The canvas is
-                // written in the same breath, off the `Present` that is about
-                // to render it, for the reason `aims` reads it there too: the
-                // shape the bay arranges itself for and the shape the texture
-                // is sized to are one number or they are a picture drawn for
-                // the other arrangement.
+                // written in the same breath, off the session canvas, for the
+                // reason `aims` reads it there too: the shape the bay arranges
+                // itself for and the shape the texture is sized to are one
+                // number or they are a picture drawn for the other
+                // arrangement.
+                //
+                // **It read `Present::size()` until 2026-09-09**, which was
+                // the same number by another route while the frame was
+                // composited at [`CANVAS`]. It is not any more — the frame
+                // follows the largest enabled output — and reading it there
+                // would make the bay arrange itself for the rectangle it had
+                // last frame, which is a loop with no shape of its own. See
+                // [`CANVAS`].
                 //
                 // `Change::Rearranged` is raised on **every** frame and says
                 // whether anything moved, which is the arm's own argument:
                 // this is the one change that is re-derived rather than
                 // reported, and one that answered *draw* regardless would ask
                 // for a frame on every frame.
-                self.readout.view.canvas = gfx.engine.present.size();
+                self.readout.view.canvas = CANVAS;
                 let moved = view::rearrange(&mut self.readout.panel, self.readout.view.canvas);
                 App::wants(
                     gfx,
@@ -15147,12 +16378,22 @@ impl ApplicationHandler for App {
                 );
 
                 let scale = self.scale as f32;
+                // **The projector's size read before the borrow**, which is
+                // the whole of why it is a `Copy` field on [`Projector`]
+                // rather than a call on the window: `aim` takes `&mut` of the
+                // engine and `Gfx` holds both.
+                let projector = gfx.projector.as_ref().map(|p| p.size);
                 let (picture, previews) = gfx.engine.aim(
                     &gfx.gpu,
                     &mut gfx.renderer,
                     self.readout.panel.layout(),
                     scale,
+                    projector,
                 );
+                // **What the console draws on the projector's chip**, written
+                // per frame beside the frame it is about, exactly as the
+                // picture's own registration is — see `view::View::projector`.
+                self.readout.view.projector = projector.is_some();
                 self.readout.view.picture = picture;
                 self.readout.view.previews = previews;
                 // **Which of those pictures is a still, and why** — the deck's
@@ -15359,12 +16600,11 @@ impl ApplicationHandler for App {
                 // slots were watched no Set ever landed after the first, so
                 // this read was a startup step and nothing else; it is still
                 // a startup step and now also a rebuild's.
-                let mut took: Vec<(usize, u64)> = Vec::new();
                 if staging(
                     &mut gfx.engine.deck,
+                    &mut self.keeping,
+                    &gfx.engine.aimed,
                     &mut self.readout.view.staging,
-                    self.keeping.mcp.as_ref(),
-                    &mut took,
                     &mut self.readout.health,
                 ) {
                     // **And the risk badges, because a Set that landed is a
@@ -15381,14 +16621,6 @@ impl ApplicationHandler for App {
                         &gfx.material,
                         &mut self.readout.view.inspector,
                     );
-                }
-                // **What each of those slots is now playing**, taken up once the
-                // drain above has let go of the deck. A slot whose material
-                // changed and was not taken up is a slot a save would write down
-                // the *previous* version of, which is the failure [`Playing`]
-                // exists to make impossible.
-                for (slot, landed) in took {
-                    self.keeping.took_up(&gfx.engine, slot, landed);
                 }
 
                 // **The one clock behind everything that moves on the panel,
@@ -15527,6 +16759,7 @@ impl ApplicationHandler for App {
                         gpu,
                         renderer,
                         engine,
+                        projector,
                         ..
                     } = &mut *gfx;
                     let gpu = &*gpu;
@@ -15548,12 +16781,32 @@ impl ApplicationHandler for App {
                     present.set_chain(&gpu.queue, *chain);
                     let textures_delta = &mut output.textures_delta;
                     let cost = &mut cost;
-                    let mut sinks: [&mut dyn Sink; 1] = [picture];
+                    // **The picture first, and the projector beside it
+                    // when there is one.** Two arrays rather than one of
+                    // `Option`s because `compose` takes a slice of live
+                    // references and a hole in it would be a sink that has to
+                    // be asked whether it is there — which is the
+                    // `Sink::acquired` this seam already refused
+                    // (ADR-0171). The order is the Outputs row's, which is
+                    // also `render_size`'s, so an index in the refusal below
+                    // means the same thing in all three.
+                    let mut one: [&mut dyn Sink; 1];
+                    let mut two: [&mut dyn Sink; 2];
+                    let sinks: &mut [&mut dyn Sink] = match projector {
+                        Some(p) => {
+                            two = [picture, &mut p.sink];
+                            &mut two
+                        }
+                        None => {
+                            one = [picture];
+                            &mut one
+                        }
+                    };
                     compose(
                         gpu,
                         deck,
                         present,
-                        &mut sinks,
+                        sinks,
                         &mut |_at, skip| {
                             if let Skip::Fault(why) = skip {
                                 println!("a sink stopped taking frames: {why}");
@@ -17494,17 +18747,22 @@ mod tests {
         );
 
         // And the same three through `settle`, which is what a drain does with
-        // them: one row per slot, in slot order, rewritten in place.
+        // them: a slot's rows in slot order, replaced whole.
         let mut lane: Vec<view::Candidate> = Vec::new();
-        settle(&mut lane, 1, "b + b", view::Stage::Landed, &[]);
-        settle(&mut lane, 0, "a + a", view::Stage::Landed, &[]);
+        settle(&mut lane, 1, "b + b", view::Stage::Landed, &[], &[]);
+        settle(&mut lane, 0, "a + a", view::Stage::Landed, &[], &[]);
         assert_eq!(
             lane.iter().map(|row| row.deck).collect::<Vec<_>>(),
             vec![0, 1],
             "the rows are not in the order the letters are drawn in"
         );
+        // **A verdict with no changed node draws one row with no address**,
+        // which is what a build that did not happen and a rebuild that changed
+        // nothing both come to — see `settle` and ADR-0326.
+        assert_eq!(lane[0].at, None, "a verdict with no diff invented a node");
+        assert!(lane[0].addr.is_empty(), "and drew an address for it");
 
-        settle(&mut lane, 0, "a + a", view::Stage::Overloaded, &[]);
+        settle(&mut lane, 0, "a + a", view::Stage::Overloaded, &[], &[]);
         assert_eq!(
             lane.len(),
             2,
@@ -17516,7 +18774,7 @@ mod tests {
             "the name was not left as it was found"
         );
 
-        settle(&mut lane, 0, "c + c", view::Stage::Landed, &[]);
+        settle(&mut lane, 0, "c + c", view::Stage::Landed, &[], &[]);
         assert_eq!(
             lane[0].name, "c + c",
             "a rebuild of other material kept the old name"
@@ -17537,12 +18795,13 @@ mod tests {
             "drift_shell.kir",
             view::Stage::NotCompiled,
             &said,
+            &[],
         );
         assert_eq!(
             lane[0].said, said,
             "the lane row was told what the checker said and did not keep it"
         );
-        settle(&mut lane, 0, "c + c", view::Stage::Landed, &[]);
+        settle(&mut lane, 0, "c + c", view::Stage::Landed, &[], &[]);
         assert!(
             lane[0].said.is_empty(),
             "a build landed on a row still carrying the refusal's diagnostics: {:?}",
@@ -17554,6 +18813,108 @@ mod tests {
             lane.iter().map(|row| row.deck).collect::<Vec<_>>(),
             vec![1],
             "clearing one slot's row took another slot's with it"
+        );
+    }
+
+    /// **One build that changed two nodes draws two rows, and one that
+    /// changed one draws one** — the maintainer's decision on 2026-09-09, and
+    /// [`settle`] is where it is carried out.
+    ///
+    /// > 変更ノードごとに 1 行
+    ///
+    /// **The verdict is repeated on each row rather than standing over
+    /// them**, which is the half of that decision a nested shape would have
+    /// spent: a row is a row, and both of these carry the same word. What
+    /// tells them apart is the address, which is why it is asserted here
+    /// beside the count — two rows drawn from one build with one address
+    /// between them would be two lines saying one thing.
+    ///
+    /// **And a slot's rows are replaced whole.** A build that changed two and
+    /// then a build that changed one leaves one row, not the first build's
+    /// second row standing under a verdict that has been superseded. That is
+    /// the property `settle` was rewritten for and the one a `find`-and-write
+    /// would have missed.
+    ///
+    /// A CPU test: a `Changed` is a value and nothing here takes a device.
+    #[test]
+    fn a_build_that_changed_two_nodes_draws_a_row_each() {
+        let node = |layer: karakuri_operation::Layer, index: u32, name: &str| Changed {
+            at: karakuri_operation::NodeAt { layer, index },
+            addr: node_addr(ir_layer(layer), index),
+            name: name.to_owned(),
+        };
+        let both = [
+            node(karakuri_operation::Layer::L1, 0, "drift_shell"),
+            node(karakuri_operation::Layer::L4, 0, "soft_points"),
+        ];
+        let mut lane: Vec<view::Candidate> = Vec::new();
+        settle(
+            &mut lane,
+            0,
+            "drift_shell + soft_points",
+            view::Stage::Landed,
+            &[],
+            &both,
+        );
+        assert_eq!(
+            lane.len(),
+            2,
+            "one build changed two nodes and the lane drew {} row(s)",
+            lane.len()
+        );
+        assert_eq!(
+            lane.iter().map(|row| row.addr.as_str()).collect::<Vec<_>>(),
+            vec!["L1:0", "L4:0"],
+            "the two rows do not name the two nodes"
+        );
+        assert_eq!(
+            lane.iter().map(|row| row.name.as_str()).collect::<Vec<_>>(),
+            vec!["drift_shell", "soft_points"],
+            "a row carries the build's label rather than its own node's name"
+        );
+        assert!(
+            lane.iter().all(|row| row.stage == view::Stage::Landed),
+            "the verdict is not on both rows"
+        );
+        assert_eq!(
+            lane.iter().map(|row| row.at).collect::<Vec<_>>(),
+            both.iter().map(|node| Some(node.at)).collect::<Vec<_>>(),
+            "a row's payload and its drawn address do not name the same node"
+        );
+
+        // **A second slot's rows go after the first's**, which is the order
+        // the letters are drawn in.
+        settle(
+            &mut lane,
+            1,
+            "drift_shell + soft_points",
+            view::Stage::Overloaded,
+            &[],
+            &both[1..],
+        );
+        assert_eq!(
+            lane.iter().map(|row| row.deck).collect::<Vec<_>>(),
+            vec![0, 0, 1],
+            "the rows are not in slot order"
+        );
+
+        // **And the next build on slot 0 replaces both of its rows.** A build
+        // that changed one node leaves one row on that slot, and the row the
+        // build before it drew does not survive its own verdict.
+        settle(
+            &mut lane,
+            0,
+            "drift_shell + soft_points",
+            view::Stage::Landed,
+            &[],
+            &both[..1],
+        );
+        assert_eq!(
+            lane.iter()
+                .map(|row| (row.deck, row.addr.as_str()))
+                .collect::<Vec<_>>(),
+            vec![(0, "L1:0"), (1, "L4:0")],
+            "a build that changed one node left the previous build's second row standing"
         );
     }
 
@@ -17742,7 +19103,14 @@ mod tests {
         );
         let picked = "20260908-143052-271_slot0_L4_soft_points";
 
-        let said = put_back(&root, 0, "A", "x", picked, &slots);
+        let said = put_back(
+            &root,
+            0,
+            "A",
+            "x",
+            &karakuri_operation::Revision::Picked(picked.to_owned()),
+            &slots,
+        );
         assert!(
             said.contains(&rest.display().to_string()),
             "the line does not name the file it wrote: {said}"
@@ -17762,7 +19130,14 @@ mod tests {
         // being used: the name is still in nothing this program keeps, so the
         // walk is re-asked and the row is simply not there.
         std::fs::remove_dir_all(root.join("history")).expect("the operator's own `rm -rf`");
-        let said = put_back(&root, 0, "A", "x", picked, &slots);
+        let said = put_back(
+            &root,
+            0,
+            "A",
+            "x",
+            &karakuri_operation::Revision::Picked(picked.to_owned()),
+            &slots,
+        );
         assert!(
             said.contains(picked) && said.contains("nothing moved"),
             "a landing on a version that is gone did not say so: {said}"
@@ -17774,6 +19149,237 @@ mod tests {
         );
 
         std::fs::remove_dir_all(&root).expect("clean up");
+    }
+
+    /// **A step back lands the version before the one the node is running, and
+    /// a node with only that one version is refused saying so.**
+    ///
+    /// The Staging lane's arm of `karakuri_operation::Revision`, and the whole
+    /// of what it adds over the Library bay's: the surface says the **node**,
+    /// and which version that is, is worked out here — the history walked for
+    /// that node of that Set, most recent first, with the entry after the
+    /// newest taken (ADR-0326). The newest is what the slot is running,
+    /// because the history is gated on **compiling** and not on landing, so a
+    /// version stopped for cost is filed too and is the one an operator most
+    /// wants to step away from.
+    ///
+    /// **Three versions and not two**, so that *the one before the one
+    /// running* is a different answer from *the oldest*: a resolver that took
+    /// the last row of the chain would pass a two-version fixture and land the
+    /// wrong file here.
+    ///
+    /// **And the chain is narrowed by the node as well as by the Set**, which
+    /// is the assertion the L1 version beside them makes: a version of another
+    /// node of the same Set is a newer row of the same listing, so a walk that
+    /// narrowed only by the Set would call it *the one running* and land the
+    /// L4's own newest as the step back.
+    ///
+    /// A CPU test: [`put_back`] takes a store, a slot and a `Slots`, and no
+    /// device.
+    #[test]
+    fn a_step_back_lands_the_version_before_the_one_running() {
+        let root = scratch_dir("history-step-back");
+        let scratch = root.join(karakuri_environment::scratch::DIR);
+        std::fs::create_dir_all(&scratch).expect("a scratch");
+        let head = scratch.join("A0-drift_shell.kir");
+        let rest = scratch.join("A1-soft_points.kir");
+        std::fs::write(&head, "kind L1\n// what is playing\n").expect("the head");
+        std::fs::write(&rest, "kind L4\n// the third\n").expect("the renderer");
+        let slots = karakuri_environment::mcp::Slots::of(vec![(head.clone(), vec![rest.clone()])]);
+
+        // Oldest first here so the file reads in the order the operator wrote
+        // them; `history::list` answers the other way round, which is the
+        // ordering this test is about.
+        for (at, body) in [
+            ("143050-100", "kind L4\n// the first\n"),
+            ("143051-100", "kind L4\n// the second\n"),
+            ("143052-100", "kind L4\n// the third\n"),
+        ] {
+            version_file(
+                &root,
+                "2026/09/09",
+                &format!("{at}_slot0_L4_soft_points@x.kir"),
+                body,
+            );
+        }
+        // **A newer version of another node of the same Set**, which is what
+        // says the walk narrows by the node.
+        version_file(
+            &root,
+            "2026/09/09",
+            "143053-100_slot0_L1_drift_shell@x.kir",
+            "kind L1\n// a newer edit of the geometry\n",
+        );
+
+        let renderer = karakuri_operation::NodeAt {
+            layer: karakuri_operation::Layer::L4,
+            index: 0,
+        };
+        let said = put_back(
+            &root,
+            0,
+            "A",
+            "x",
+            &karakuri_operation::Revision::Previous(renderer),
+            &slots,
+        );
+        assert!(
+            said.contains(&rest.display().to_string()),
+            "the line does not name the file it wrote: {said}"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&rest).expect("the renderer's working copy"),
+            "kind L4\n// the second\n",
+            "a step back landed something other than the version before the one running"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&head).expect("the head's working copy"),
+            "kind L1\n// what is playing\n",
+            "stepping the L4 back wrote over the L1 as well"
+        );
+
+        // **A node with one version has nothing before what it is playing**,
+        // which is an ordinary state rather than a fault — the first edit of a
+        // node files one version, and a step back at that point has nowhere to
+        // go. P-0083: the sentence names what is in the way.
+        let geometry = karakuri_operation::NodeAt {
+            layer: karakuri_operation::Layer::L1,
+            index: 0,
+        };
+        let said = put_back(
+            &root,
+            0,
+            "A",
+            "x",
+            &karakuri_operation::Revision::Previous(geometry),
+            &slots,
+        );
+        assert!(
+            said.contains("L1:0") && said.contains("one version"),
+            "a step back with nothing behind it did not say what is in the way: {said}"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&head).expect("the head's working copy"),
+            "kind L1\n// what is playing\n",
+            "a refused step back wrote something"
+        );
+
+        // **And a node the history has never heard of**, which is the same
+        // refusal one step further out: nothing is filed, so there is not even
+        // a version running.
+        let field = karakuri_operation::NodeAt {
+            layer: karakuri_operation::Layer::Field,
+            index: 0,
+        };
+        let said = put_back(
+            &root,
+            0,
+            "A",
+            "x",
+            &karakuri_operation::Revision::Previous(field),
+            &slots,
+        );
+        assert!(
+            said.contains("no version"),
+            "a step back on a node with nothing filed did not say so: {said}"
+        );
+
+        std::fs::remove_dir_all(&root).expect("clean up");
+    }
+
+    /// **A keep takes its own row off the lane and leaves every other row
+    /// standing.**
+    ///
+    /// The half of the press that is not the operation: [`kept`] is where a
+    /// `KeepCandidate` is performed, because `written` answers
+    /// `Silent(Silent::Surface)` for it and there is no record for `apply` to
+    /// move a deck with. What it changes is one line in one list.
+    ///
+    /// **Two rows of one slot is the case worth the test**, and it is what
+    /// ADR-0326 made possible: a build that changed two nodes draws two rows on
+    /// one deck, so a keep that retired by *slot* would take a node nobody
+    /// ruled on off the lane with the one they did.
+    ///
+    /// **And a keep on a node with no row says so** rather than reporting a
+    /// press that did nothing — no control on this panel can ask it, so the
+    /// line is for the day a map or a model reaches this row.
+    ///
+    /// A CPU test: a `View` takes no device.
+    #[test]
+    fn a_keep_takes_its_own_row_off_the_lane() {
+        let node = |layer: karakuri_operation::Layer, index: u32, name: &str| Changed {
+            at: karakuri_operation::NodeAt { layer, index },
+            addr: node_addr(ir_layer(layer), index),
+            name: name.to_owned(),
+        };
+        let mut view = View::new(karakuri_console::room::Room::Day);
+        let both = [
+            node(karakuri_operation::Layer::L1, 0, "drift_shell"),
+            node(karakuri_operation::Layer::L4, 0, "soft_points"),
+        ];
+        settle(
+            &mut view.staging,
+            0,
+            "drift_shell + soft_points",
+            view::Stage::Landed,
+            &[],
+            &both,
+        );
+        settle(
+            &mut view.staging,
+            1,
+            "drift_shell + soft_points",
+            view::Stage::Landed,
+            &[],
+            &both[..1],
+        );
+        assert_eq!(view.staging.len(), 3, "three rows over two slots");
+
+        let said = kept(
+            &mut view,
+            &Operation::KeepCandidate {
+                deck: 0,
+                node: both[0].at,
+            },
+        )
+        .expect("a keep is performed here");
+        assert!(
+            said.contains("L1:0") && said.contains("deck A"),
+            "the line does not say which row left: {said}"
+        );
+        assert_eq!(
+            view.staging
+                .iter()
+                .map(|row| (row.deck, row.addr.as_str()))
+                .collect::<Vec<_>>(),
+            vec![(0, "L4:0"), (1, "L1:0")],
+            "a keep took a row it was not addressed to"
+        );
+
+        // **A second keep on the same node has no row to take**, which is the
+        // negative control: a version that retired by slot, or one that
+        // ignored the node, would go on answering as though it had done
+        // something.
+        let said = kept(
+            &mut view,
+            &Operation::KeepCandidate {
+                deck: 0,
+                node: both[0].at,
+            },
+        )
+        .expect("a keep is performed here");
+        assert!(
+            said.contains("no candidate row"),
+            "a keep on a node with no row claimed to have kept one: {said}"
+        );
+        assert_eq!(view.staging.len(), 2, "the second keep took a row anyway");
+
+        // And an operation that is not a keep is not this function's.
+        assert_eq!(
+            kept(&mut view, &Operation::SelectDeck { deck: 1 }),
+            None,
+            "`kept` answered for an operation that is not a keep"
+        );
     }
 
     /// A temporary directory of this test's own, named after the test that
@@ -19747,6 +21353,7 @@ mod tests {
         assert!(sequenced(
             &mut banks,
             &mut playhead,
+            &View::new(Room::Day),
             &Operation::SetLaneMute {
                 pattern: 0,
                 lane: 0,
@@ -19760,6 +21367,7 @@ mod tests {
             assert!(sequenced(
                 &mut banks,
                 &mut playhead,
+                &View::new(Room::Day),
                 &Operation::SetStep {
                     pattern: 0,
                     lane: 0,
@@ -19780,6 +21388,7 @@ mod tests {
         assert!(sequenced(
             &mut banks,
             &mut playhead,
+            &View::new(Room::Day),
             &Operation::SetStep {
                 pattern: 0,
                 lane: 0,
@@ -19796,6 +21405,7 @@ mod tests {
         assert!(sequenced(
             &mut banks,
             &mut playhead,
+            &View::new(Room::Day),
             &Operation::SetPatternGrid {
                 pattern: 0,
                 grid: karakuri_operation::StepMode::Eighth,
@@ -19817,6 +21427,7 @@ mod tests {
         assert!(sequenced(
             &mut banks,
             &mut playhead,
+            &View::new(Room::Day),
             &Operation::SelectPattern { pattern: 3 }
         )
         .is_some());
@@ -19828,11 +21439,122 @@ mod tests {
         let refused = sequenced(
             &mut banks,
             &mut playhead,
+            &View::new(Room::Day),
             &Operation::SelectPattern { pattern: 9 },
         )
         .expect("a press this session cannot perform says so rather than going quiet");
         assert!(refused.contains("there is no bank 9"));
         assert_eq!(banks.armed(), 3, "and a refused press moves nothing");
+    }
+
+    /// **A lane arrives with its two levels filled in from the range the
+    /// console was published**, and it arrives muted.
+    ///
+    /// This is the half of `+ lane` no test in `karakuri-console` can see: that
+    /// bay hands back `Operation::PointLane { pattern, target }` and appends
+    /// nothing, and the payload carries no levels — a fader's are 1.0 and 0.0
+    /// and a parameter's are the range `View::inspector` holds, which is the
+    /// same reading the chooser drew its items from (ADR-0320, ADR-0327).
+    #[test]
+    fn a_pointed_lane_takes_its_levels_from_the_published_range() {
+        let mut banks = karakuri_pattern::Banks::default();
+        let mut playhead = karakuri_pattern::Playhead::default();
+        let param = karakuri_operation::ParamAt {
+            node: Some(karakuri_operation::NodeAt {
+                layer: karakuri_operation::Layer::L2,
+                index: 0,
+            }),
+            key: "twist".to_owned(),
+        };
+        let mut view = View::new(Room::Day);
+        view.inspector = vec![view::Pane {
+            deck: 1,
+            material: "lattice_veil".to_owned(),
+            sync: karakuri_operation::Sync::Free,
+            allows: [true; view::SYNCS.len()],
+            anchor_bpm: 128.0,
+            scrub_beats: 0.0,
+            composite: false,
+            nodes: vec![view::Node {
+                addr: "L2:0".to_owned(),
+                name: "warp".to_owned(),
+                authority: None,
+                renderers: Vec::new(),
+                params: vec![view::Param {
+                    ord: 1,
+                    name: "twist".to_owned(),
+                    value: 1.0,
+                    // **Not `[0, 1]`**, so a range that was read and a pair
+                    // that was assumed cannot look alike.
+                    range: [0.25, 4.0],
+                    param: param.clone(),
+                    bound: None,
+                }],
+            }],
+        }];
+
+        // A fader's pair is the gate, and no reading is consulted for it.
+        let line = sequenced(
+            &mut banks,
+            &mut playhead,
+            &view,
+            &Operation::PointLane {
+                pattern: 0,
+                target: karakuri_operation::LaneTarget::Fader { deck: 0 },
+            },
+        )
+        .expect("a lane press says what it did");
+        assert!(line.contains("on 1 off 0"), "a fader's gate: {line}");
+        let lane = &banks.pattern().lanes()[0];
+        assert_eq!((lane.on(), lane.off()), (1.0, 0.0));
+        assert!(
+            lane.muted(),
+            "a lane arrives with every slot off, and an off step writes `off` — so an unmuted \
+             fader lane would hold its deck at zero from the press"
+        );
+
+        // A parameter's pair is the published range, top then bottom.
+        assert!(sequenced(
+            &mut banks,
+            &mut playhead,
+            &view,
+            &Operation::PointLane {
+                pattern: 0,
+                target: karakuri_operation::LaneTarget::Param {
+                    deck: 1,
+                    param: param.clone(),
+                },
+            }
+        )
+        .is_some());
+        let lane = &banks.pattern().lanes()[1];
+        assert_eq!(
+            (lane.on(), lane.off()),
+            (4.0, 0.25),
+            "an on step writes the top of the published range and an off step the bottom"
+        );
+
+        // **A control this console holds no row for is refused and said**,
+        // rather than defaulted into two numbers nobody chose.
+        let refused = sequenced(
+            &mut banks,
+            &mut playhead,
+            &view,
+            &Operation::PointLane {
+                pattern: 0,
+                target: karakuri_operation::LaneTarget::Param {
+                    deck: 3,
+                    param: param.clone(),
+                },
+            },
+        )
+        .expect("a press this window cannot perform says so rather than going quiet");
+        assert!(refused.contains("no published range"), "{refused}");
+        assert_eq!(
+            banks.pattern().lanes().len(),
+            2,
+            "and a refused press appends nothing"
+        );
     }
 
     /// **A finished name is one operation of the vocabulary**, and the card is
@@ -20342,7 +22064,13 @@ mod tests {
                 .map(|node| view::Node {
                     addr: format!("L1:{node}"),
                     name: format!("node_{node}"),
-                    authority: Some(karakuri_operation::Authority::Manual),
+                    authority: Some(view::NodeAuthority {
+                        at: karakuri_operation::NodeAt {
+                            layer: karakuri_operation::Layer::L1,
+                            index: node as u32,
+                        },
+                        level: karakuri_operation::Authority::Manual,
+                    }),
                     renderers: Vec::new(),
                     params: (0..6)
                         .map(|at| view::Param {
@@ -20357,6 +22085,7 @@ mod tests {
                                 }),
                                 key: format!("n{node}p{at}"),
                             },
+                            bound: None,
                         })
                         .collect(),
                 })
@@ -24384,6 +26113,84 @@ mod key_column {
 }
 
 #[cfg(test)]
+mod outputs_row {
+    //! **What the frame is composited at, and what a chip in the Outputs row
+    //! asks for.** Both are decisions rather than device work, so both are
+    //! here rather than under `mod gpu` — `render_size` is arithmetic over
+    //! sizes, and an operation is a value.
+
+    use super::*;
+
+    /// **One output, and the frame is that output's size.** The ordinary run:
+    /// the program view is the only sink and the frame follows the Program
+    /// bay's rectangle.
+    #[test]
+    fn the_frame_is_the_one_enabled_outputs_size() {
+        assert_eq!(render_size(&[Some((466, 262))]), Some((466, 262)));
+    }
+
+    /// **Two outputs, and the frame is the larger** — ADR-0247, so that every
+    /// output is a downscale and none is ever upscaled. Asserted both ways
+    /// round, because a `max` written the wrong way is right half the time.
+    #[test]
+    fn the_frame_is_the_largest_enabled_output() {
+        let picture = Some((466, 262));
+        let projector = Some((3840, 2160));
+        assert_eq!(render_size(&[picture, projector]), projector);
+        assert_eq!(render_size(&[projector, picture]), projector);
+    }
+
+    /// **An output that is off is not in the maximum.** The case an operator
+    /// makes on purpose: the picture folded away and a projector on, which the
+    /// manual says leaves the inspector the height.
+    #[test]
+    fn an_output_that_is_off_does_not_raise_the_frame() {
+        assert_eq!(render_size(&[None, Some((1920, 1080))]), Some((1920, 1080)));
+        assert_eq!(render_size(&[Some((640, 360)), None]), Some((640, 360)));
+    }
+
+    /// **Every output off says nothing rather than picking a size**, which is
+    /// what lets the caller leave the frame where it is: turning the last sink
+    /// off stops the publishing and not the instrument (ADR-0171), and
+    /// reallocating every target to change a picture nobody is looking at is
+    /// the cost this answer exists to refuse.
+    #[test]
+    fn every_output_off_says_nothing() {
+        assert_eq!(render_size(&[None, None]), None);
+        assert_eq!(render_size(&[]), None);
+    }
+
+    /// **The tie goes to the earlier entry**, which is the program view — the
+    /// output an operator is looking at while they decide. `max_by_key` hands
+    /// back the *last* of several equal maxima, so this is the test that says
+    /// the fold was written for a reason.
+    #[test]
+    fn a_tie_goes_to_the_program_view() {
+        let a = Some((1280, 720));
+        let b = Some((960, 960));
+        // 921600 either way.
+        assert_eq!(render_size(&[a, b]), a);
+        assert_eq!(render_size(&[b, a]), b);
+    }
+
+    /// **The maximum is by pixel count and never componentwise.** 1920x1080
+    /// beside 1024x1280 must not give 1920x1280, which is a size no output is
+    /// and which upscales both of them in one axis.
+    #[test]
+    fn the_answer_is_always_some_outputs_own_size() {
+        let wide = (1920, 1080);
+        let tall = (1024, 1280);
+        let at = render_size(&[Some(wide), Some(tall)]).expect("two outputs are on");
+        assert!(
+            at == wide || at == tall,
+            "the frame is {at:?}, which is neither {wide:?} nor {tall:?} — a componentwise \
+             maximum invents a size no output has and upscales both of them"
+        );
+        assert_eq!(at, wide);
+    }
+}
+
+#[cfg(test)]
 mod press_handler {
     //! **Every control `karakuri-console` claims, against the presses this
     //! window answers.**
@@ -24577,13 +26384,22 @@ mod press_handler {
     /// and `input::claim` has to keep a press on them off `egui`
     /// ([ADR-0273](../../../docs/adr/0273-the-carry-lands-on-two-sets-of-rectangles-and-wears-a-face.md)).
     const ASKED: [(&str, &str, &[&str]); PROBES.len()] = [
-        // **The Outputs row's sink**, and the two calls are one control: the
-        // row answers whether the point is on the dot, and then which of the
-        // two operations that press is.
+        // **The Outputs row's sinks**, and the two calls are one control: the
+        // row answers which chip the point is on, and then how this surface
+        // carries out what that chip asked for.
+        //
+        // **`row.hit(` was the first of the two until 2026-09-09**, when the
+        // row stopped drawing one sink and started drawing the list it has
+        // (ADR-0324). `chip_at` is the same question over every chip, and it
+        // is what `input::claim` asks as well — one derivation, so a chip that
+        // lights under the pointer is a chip a press reaches. `row.op(` stays
+        // because the program view's on and off is still the fold: the
+        // operation names the output and the fold is how the console performs
+        // it, which is one fact rather than two.
         (
-            "the Outputs row's sink",
+            "the Outputs row's sinks",
             "outputs(",
-            &["row.hit(", "row.op("],
+            &["row.chip_at(", "row.op("],
         ),
         // **The two cards, and they are the only two whose order matters**:
         // each draws over the bays, so while one is down a press inside it
@@ -24728,6 +26544,24 @@ mod press_handler {
             "inspector_pane(",
             &["at_pane.grab("],
         ),
+        // **A node head's three `man / sug / auto` chips**, and the pane is
+        // the whole derivation for the renderer chips' reason two rows up:
+        // which group, which head and which chip are inside
+        // `InspectorPane::set_authority`.
+        (
+            "a node head's three authority chips",
+            "inspector_pane(",
+            &["at_pane.set_authority("],
+        ),
+        // **The sensitivity row's curve chip and `take back`**, the two of its
+        // four chips that are controls — the other two are readouts and answer
+        // `None`, which is `view::SensChip`'s decision and not this file's.
+        // One derivation for both, as the authority chips' row above is.
+        (
+            "a sensitivity row's curve and take back",
+            "inspector_pane(",
+            &["at_pane.sensitivity("],
+        ),
         // **The Program bay head's `solo`**, and the two calls are the Outputs
         // sink's arrangement one bay over: the head answers whether the point
         // is on the capsule, and then which of the two operations it is.
@@ -24820,17 +26654,34 @@ mod press_handler {
         // in four different regions and cannot be one laid-out box, but they
         // are one type and one question.
         ("the class pills", "mcp_pill(", &["pill.hit("]),
-        // **The Sequencer bay's three, one derivation and one call**: a cell,
-        // a label and the mode pill are three questions about one laid-out
-        // bay, and `Sequencer::press` is the one that answers all three —
-        // which of them it was is inside the operation it hands back, and the
-        // line `sequenced` prints says so. The same shape the transport row's
-        // `rec` pill is in, at three controls instead of one.
+        // **The Sequencer bay's, one derivation and two calls**: a cell, a
+        // label, the mode pill and a bank pill are four questions about one
+        // laid-out bay, and `Sequencer::press` answers all four — which of them
+        // it was is inside the operation it hands back, and the line
+        // `sequenced` prints says so.
+        //
+        // **`bay.chose(` is the second call for the same reason `bay.aim(` is
+        // one entry for the pulldown's four**: the `+ lane` pill's press is not
+        // an operation but a card going down, so it answers an enum, and the
+        // card's own picks and dismissals come back through the same method.
         (
-            "the Sequencer bay's cells, labels and mode pill",
+            "the Sequencer bay's cells, labels, mode pill, bank pills and + lane",
             "sequencer_bay(",
-            &["bay.press("],
+            &["bay.press(", "bay.chose("],
         ),
+        // **The Staging lane's two, and they are the Library bay's star and
+        // its row one bay up**: a row that is itself a control, with a smaller
+        // box inside it asked first. The lane is derived once per question
+        // rather than held across both, which is that bay's rule for its
+        // reason, so the two entries name one derivation and are told apart by
+        // the call — `bay.back(` is the capsule and `bay.keep(` is the row it
+        // sits in (ADR-0326).
+        (
+            "the Staging lane's back capsules",
+            "staging_bay(",
+            &["bay.back("],
+        ),
+        ("the Staging lane's rows", "staging_bay(", &["bay.keep("]),
     ];
 
     /// A line's code, `panel_column.rs`'s second cut: whatever trails a `//`
@@ -25565,24 +27416,28 @@ mod gpu {
         // quiet before it builds, then compiles; the swap lands at a frame
         // boundary, which is `begin_frame`.
         let mut rows: Vec<view::Candidate> = Vec::new();
-        let mut took: Vec<(usize, u64)> = Vec::new();
         // The transport's health capsule, off the same drain, so this test
         // reads both halves of what one verdict writes.
         let mut health: Option<view::Stage> = None;
+        // **`staging` answers whether a build landed**, and since ADR-0326 it
+        // takes the build up as well — the diff that makes the rows is the
+        // same read that replaces what the slot is playing, so there is no
+        // second pass here to do it in.
+        let mut landed = false;
         let deadline = Instant::now() + Duration::from_secs(30);
-        while took.is_empty() && Instant::now() < deadline {
+        while !landed && Instant::now() < deadline {
             std::thread::sleep(Duration::from_millis(50));
             drop(engine.deck.begin_frame(&gpu.device, &gpu.queue));
-            staging(
+            landed |= staging(
                 &mut engine.deck,
+                &mut keeping,
+                &engine.aimed,
                 &mut rows,
-                keeping.mcp.as_ref(),
-                &mut took,
                 &mut health,
             );
         }
         assert!(
-            !took.is_empty(),
+            landed,
             "nothing was built in 30s — the watcher never saw the edit"
         );
         // **What the verdict was, read off the deck** — not off any of the
@@ -25686,15 +27541,31 @@ mod gpu {
             "the cells do not say what the deck says about which slot is stopped"
         );
 
-        // And the slot is playing the new bytes, so a save would write them.
-        for (slot, landed) in took {
-            keeping.took_up(&engine, slot, landed);
-        }
+        // And the slot is playing the new bytes, so a save would write them —
+        // taken up inside `staging`, where the diff that made the rows above
+        // was taken.
         let now = keeping.playing.at(ON_AIR).expect("still addressable")[0].hash;
         assert_ne!(
             was, now,
             "the build landed and the slot is still addressed as what it launched with"
         );
+        // **And the row names the node the edit was of.** The edit was to the
+        // slot's L1 and to nothing else, so a build that reported the whole
+        // stack and a diff that compared it against what was playing come to
+        // one changed node — which is the whole of ADR-0326 asserted against a
+        // real watcher rather than against a `Changed` this file built.
+        if let Some(row) = rows.iter().find(|row| row.deck == ON_AIR) {
+            assert_eq!(
+                row.addr, "L1:0",
+                "the edit was to the L1 and the row says `{}`",
+                row.addr
+            );
+            assert_eq!(
+                rows.iter().filter(|row| row.deck == ON_AIR).count(),
+                1,
+                "one file changed and the lane drew a row for every node of the stack"
+            );
+        }
 
         std::fs::remove_dir_all(&root).expect("clean up");
     }
@@ -25774,9 +27645,18 @@ mod gpu {
         // file chose.
         for node in &pane.nodes {
             assert_eq!(
-                node.authority,
+                node.authority.map(|a| a.level),
                 Some(karakuri_operation::Authority::Manual),
                 "{} reads something other than the default nobody has changed",
+                node.addr
+            );
+            // **And the chip carries the node it is about**, because a press
+            // on one has to say which node — the address is `Set::node_named`'s
+            // and not `Node::addr` read back, which is a display string
+            // (ADR-0286).
+            assert!(
+                node.authority.is_some(),
+                "{} draws a chip with no node behind it",
                 node.addr
             );
         }
@@ -25898,7 +27778,7 @@ mod gpu {
         // drives one of them, because what it is about is the ordering of the
         // engine's pass against the panel's rather than the row.
         let mut view = View::new(ROOM);
-        (view.picture, view.previews) = engine.aim(&gpu, &mut renderer, panel.layout(), 1.0);
+        (view.picture, view.previews) = engine.aim(&gpu, &mut renderer, panel.layout(), 1.0, None);
         assert_eq!(
             view.picture.expect("the picture was not aimed").rect,
             rect,
@@ -26272,6 +28152,122 @@ mod gpu {
         );
     }
 
+    /// **The frame is composited at the picture's rectangle, and a projector
+    /// raises it** — ADR-0325, on a real device rather than on `render_size`'s
+    /// arithmetic.
+    ///
+    /// # Why this is not `render_size`'s test said twice
+    ///
+    /// `render_size` is a maximum over sizes and is tested on the CPU. What
+    /// this asserts is the *wiring*: that the picture's size is what reaches
+    /// that maximum, that both the deck and the present pass followed the
+    /// answer, and that they followed it **together** — which is the one thing
+    /// a caller can get wrong here and be told about a frame later, by
+    /// `Frame::render`'s size check panicking at the call site. Injecting a
+    /// resize of one and not the other passes every CPU test in this file.
+    ///
+    /// The projector's size is handed in rather than a window opened, because
+    /// no test in this workspace can open one: `ActiveEventLoop::create_window`
+    /// needs a live event loop and `mod gpu` has none. That is the seam
+    /// `Engine::aim`'s `projector` argument is on, and it is exactly why the
+    /// argument is a size rather than a `&Projector`.
+    #[test]
+    fn the_frame_is_composited_at_the_largest_enabled_output() {
+        const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
+        const W: u32 = 1440;
+        const H: u32 = 900;
+
+        let gpu = Gpu::headless().expect("no GPU");
+        let mut renderer =
+            egui_wgpu::Renderer::new(&gpu.device, FORMAT, egui_wgpu::RendererOptions::default());
+
+        let mut panel = Panel::new(W as f32, H as f32);
+        view::rearrange(&mut panel, CANVAS);
+        let picture = physical(
+            picture_rect(panel.layout(), CANVAS).expect("on screen"),
+            1.0,
+        );
+        let mut engine = Engine::new(
+            &gpu,
+            &mut renderer,
+            &shipped_slots(),
+            panel.layout(),
+            1.0,
+            None,
+            None,
+            mcp::Slots::unpointed(),
+        );
+
+        // **The picture alone**, which is every run this program opens on.
+        engine.aim(&gpu, &mut renderer, panel.layout(), 1.0, None);
+        assert_eq!(
+            engine.present.size(),
+            picture,
+            "the frame is composited at {:?} while the only output on is the picture at \
+             {picture:?} — every output is a downscale of the one render, so a frame larger \
+             than its only destination is a render nobody asked for and a frame smaller is \
+             an upscale",
+            engine.present.size()
+        );
+        assert_ne!(
+            picture, CANVAS,
+            "this window's picture happens to be exactly the session canvas, so the \
+             assertion above cannot tell the derivation from the constant it replaced"
+        );
+
+        // **A projector on, and it is larger**, so the frame follows it and
+        // the picture becomes a downscale of one render.
+        let projector = (3840, 2160);
+        engine.aim(&gpu, &mut renderer, panel.layout(), 1.0, Some(projector));
+        assert_eq!(
+            engine.present.size(),
+            projector,
+            "a projector larger than the picture did not raise the frame, so it would be \
+             shown an upscale of the picture's size"
+        );
+
+        // **And the deck followed the present pass.** Composing is what says
+        // so: `Frame::render` checks the size it is handed against the deck's
+        // and panics at the call site, so a deck left at the old size is a
+        // panic here rather than a black frame later.
+        let Engine {
+            deck,
+            present,
+            picture: into,
+            look,
+            ..
+        } = &mut engine;
+        let mut sinks: [&mut dyn Sink; 1] = [into];
+        compose(
+            &gpu,
+            deck,
+            present,
+            &mut sinks,
+            &mut |_, _| {},
+            |_| Committed {
+                steps: STEPS_A_FRAME,
+                look: *look,
+            },
+            |_| {},
+        )
+        .expect("the frame composes at the derived size");
+
+        // **The projector off again, and the frame comes back down.** The
+        // picture is still on, so the maximum is over one output and it is the
+        // picture's — which is the half of the rule that costs: turning a
+        // larger sink on raises what every frame costs and turning it off
+        // lowers it again, visibly and by the operator's own act. The other
+        // half, where *every* output is off and the size stands, is
+        // `render_size`'s `None` and is asserted on the CPU.
+        engine.aim(&gpu, &mut renderer, panel.layout(), 1.0, None);
+        assert_eq!(
+            engine.present.size(),
+            picture,
+            "with the projector gone the picture is the only output left and the frame is \
+             its size again"
+        );
+    }
+
     /// **A wider window remakes no texture at all, and a drag on the program's
     /// height remakes one and frees the registration it replaces.**
     ///
@@ -26338,7 +28334,7 @@ mod gpu {
             "a wider window changed the picture's texture, so the picture is still the \
              width of its region and every frame of a horizontal drag reallocates"
         );
-        engine.aim(&gpu, &mut renderer, panel.layout(), 1.0);
+        engine.aim(&gpu, &mut renderer, panel.layout(), 1.0, None);
         assert_eq!(
             engine.freed, 0,
             "a wider window freed a registration, so it remade the texture"
@@ -26378,7 +28374,7 @@ mod gpu {
              {want:?}"
         );
 
-        engine.aim(&gpu, &mut renderer, panel.layout(), 1.0);
+        engine.aim(&gpu, &mut renderer, panel.layout(), 1.0, None);
         assert_eq!(engine.picture.size, taller);
         assert_eq!(
             (
@@ -26398,7 +28394,7 @@ mod gpu {
 
         // And a second aim with nothing moved remakes nothing, which is what
         // keeps all of the above on the resize path instead of on every frame.
-        engine.aim(&gpu, &mut renderer, panel.layout(), 1.0);
+        engine.aim(&gpu, &mut renderer, panel.layout(), 1.0, None);
         assert_eq!(engine.freed, 1);
         assert!(renderer.texture(&engine.picture.id).is_some());
     }
@@ -26474,7 +28470,7 @@ mod gpu {
         for slot in 0..DECKS {
             engine.deck.set_residency(slot, Residency::Live);
         }
-        engine.aim(&gpu, &mut renderer, panel.layout(), 1.0);
+        engine.aim(&gpu, &mut renderer, panel.layout(), 1.0, None);
         for _ in 0..4 {
             let Engine {
                 deck,
@@ -26516,7 +28512,7 @@ mod gpu {
             for (slot, residency) in residencies.into_iter().enumerate() {
                 engine.deck.set_residency(slot, residency);
             }
-            let (_, previews) = engine.aim(&gpu, &mut renderer, panel.layout(), 1.0);
+            let (_, previews) = engine.aim(&gpu, &mut renderer, panel.layout(), 1.0, None);
             for (slot, aimed) in previews.into_iter().enumerate() {
                 let aimed = aimed.unwrap_or_else(|| {
                     panic!(
@@ -28500,7 +30496,7 @@ mod gpu {
         );
         let rect = picture_rect(panel.layout(), CANVAS).expect("the picture is on screen");
         let cell = preview_rects(panel.layout(), CANVAS).expect("the preview row is on screen")[0];
-        let (picture, previews) = engine.aim(&gpu, &mut renderer, panel.layout(), SCALE);
+        let (picture, previews) = engine.aim(&gpu, &mut renderer, panel.layout(), SCALE, None);
 
         // **Each texture is the size of its own rectangle, at this scale.**
         assert_eq!(
@@ -28599,7 +30595,7 @@ mod gpu {
             "the picture is folded and the row is still set aside, so the Program bay \
              claims nothing and has gone from the panel"
         );
-        let (picture, previews) = engine.aim(&gpu, &mut renderer, panel.layout(), SCALE);
+        let (picture, previews) = engine.aim(&gpu, &mut renderer, panel.layout(), SCALE, None);
         assert!(
             picture.is_none(),
             "the picture is folded away and the frame still gave the console one to draw"

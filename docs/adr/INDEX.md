@@ -344,10 +344,15 @@ number; new records continue from the end.
 | [ADR-0316](0316-an-over-budget-candidate-stays-in-the-slot-and-the-slot-stops-updating.md) | An over-budget candidate stays in the slot, and the slot stops updating | 2026-09-09 | accepted |
 | [ADR-0317](0317-the-master-chain-is-three-fixed-passes-and-feedback-reads-either-cut.md) | The master chain is three fixed passes, and feedback reads either cut | 2026-09-09 | accepted |
 | [ADR-0318](0318-the-built-in-cameras-three-placement-numbers-are-parameter-rows.md) | The built-in camera's three placement numbers are parameter rows | 2026-09-09 | accepted |
+| [ADR-0319](0319-an-attachment-is-a-session-record-and-taking-a-parameter-back-removes-it.md) | An attachment is a session record, taking a parameter back removes it, and an authority chip is a destination | 2026-09-09 | accepted |
 | [ADR-0320](0320-a-pattern-is-one-bar-of-sixteen-slots-a-lane-is-a-target-and-two-levels-and-a-cell-is-a-bit.md) | A pattern is one bar of sixteen slots, a lane is a target and two levels, and a cell is a bit | 2026-09-09 | accepted |
 | [ADR-0321](0321-a-lanes-target-is-an-operation-with-its-value-elided.md) | A lane's target is an operation with its value elided | 2026-09-09 | accepted |
 | [ADR-0322](0322-the-sequencer-is-polled-like-a-transition-live-only-and-its-writes-are-its-record.md) | The sequencer is polled like a transition, live only, and its writes are its record | 2026-09-09 | accepted |
 | [ADR-0323](0323-a-scheduled-move-is-refused-on-a-control-a-lane-holds.md) | A scheduled move is refused on a control a lane holds | 2026-09-09 | accepted |
+| [ADR-0324](0324-an-output-is-a-named-destination-with-a-size-and-an-on-off.md) | An output is a named destination with a size and an on/off | 2026-09-09 | accepted |
+| [ADR-0325](0325-the-frame-follows-the-largest-enabled-output-and-a-resize-costs-0-145-ms.md) | The frame follows the largest enabled output, and a resize costs 0.145 ms | 2026-09-09 | accepted |
+| [ADR-0326](0326-a-staging-row-is-a-changed-node-and-the-row-is-the-keep.md) | A staging row is a changed node, and the row is the keep | 2026-09-09 | accepted |
+| [ADR-0327](0327-the-lane-chooser-lists-one-decks-keys-and-the-bank-pills-are-the-four-banks.md) | The lane chooser lists one deck's keys, the bank pills are the four banks, and the levels stay out of the payload | 2026-09-09 | accepted |
 
 ## Retired numbers
 

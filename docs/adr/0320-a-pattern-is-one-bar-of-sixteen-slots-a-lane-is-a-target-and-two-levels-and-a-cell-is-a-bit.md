@@ -219,3 +219,24 @@ is a head that can say *which* pill is armed — `view::Head::words` carries `&'
 arming is a change to the head machinery rather than to this bay. The foot's `+ lane`, which needs a
 target chooser nobody has drawn and a bay body the arena can grow. The `Param` lane arm, the store
 directory, the file format and saving.
+
+**Both of those landed later the same day** (2026-09-09,
+[ADR-0327](0327-the-lane-chooser-lists-one-decks-keys-and-the-bank-pills-are-the-four-banks.md)),
+and three clauses of this record read differently afterwards.
+
+- **The head machinery change was one field and one bit**: `view::Head` gained `banks` and
+  `view::HeadWords` gained an `armed` flag per capsule, because a bank pill's arming is not a word
+  where a class pill's is. **There are four pills and no `+`**: with the count fixed at four here, a
+  press on `seq 3` *is* the `+`'s *"same choice landing on an empty one"*, so the `+` would have been
+  a second door to a press already on the head, and `docs/manual/console.html` draws four now.
+- **`+ lane` never needed a bay body the arena can grow**, and that clause was wrong when it was
+  written. A lane is a row drawn from `Pattern::lanes` inside a rectangle the arena already holds —
+  which is what the slice this record describes was already doing — so appending one is a `Vec` push
+  and no arena insert. The mock's tip said otherwise and has been rewritten (ADR-0031).
+- ***"The console fills them in at the press"* is met without the payload carrying them.** The
+  levels are filled where the lane is appended, out of `View::inspector` — the console's own
+  published reading and the list the chooser drew its items from — so `PointLane` stays
+  `{ pattern, target }` and there is still only one range in the program to read. **And the lane
+  arrives muted**: it arrives with every slot off and an off step writes `off`, so an unmuted fader
+  lane would hold its deck at zero from the press, which is this record's own argument for muting the
+  seeded lane reached from the other end.

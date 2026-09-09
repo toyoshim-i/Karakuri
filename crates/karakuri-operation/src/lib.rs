@@ -287,6 +287,47 @@ pub struct ParamAt {
     pub key: String,
 }
 
+/// Which parameter of a deck's Set, as an **attachment** addresses one: a
+/// layer, a node of it or all of them, and the key.
+///
+/// # It is not [`ParamAt`], and the difference is a fact about a binding
+///
+/// A binding is resolved through the nodes of **one layer** —
+/// `karakuri_engine::binding::Binding` carries a required layer and an
+/// optional index, and `Set::bind` walks `nodes_of(layer)` — so *every node of
+/// every layer that declares this key*, which is exactly what a [`ParamAt`]
+/// with no node means, is a set no attachment has ever been able to name. An
+/// operation whose address could ask for it would be an operation refused at
+/// the far end for a reason the vocabulary already knew, and
+/// `karakuri_operation_record::written` would have to invent a layer to write
+/// the record with — the placeholder `Record::Param`'s `layer` is and is stuck
+/// being (ADR-0280 §1).
+///
+/// **So the two addresses are two facts and not two spellings.** A value has a
+/// wildcard that names no layer, because a value lands wherever the name is
+/// declared; an attachment's wildcard is a layer's, because the signal is
+/// written into that layer's uniform buffer. `index` absent is *every node of
+/// this layer declaring `key`*, which is `Record::Bind`'s rule and `--bind
+/// L4:exposure=…`'s meaning.
+///
+/// **A wildcard here meets no authority refusal**, unlike [`ParamAt`]'s: an
+/// authority governs who may **write** a node's params, and attaching a signal
+/// is not a write of a value — it says what the value blends towards. What
+/// stops one is the take-back, which is a control on the same row
+/// (`docs/adr/0319-an-attachment-is-a-session-record-and-taking-a-parameter-back-removes-it.md`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BindAt {
+    pub layer: Layer,
+    /// Which node of that layer, or **every node of it declaring `key`**.
+    /// Present or absent as a unit with nothing — the layer is always said.
+    pub index: Option<u32>,
+    /// The param's own name inside the node, and a **component key** where the
+    /// parameter is a vector: `glow.x` and never `glow`, because a binding
+    /// resolves to one number and a `vec3` has three places to put it
+    /// (ADR-0268).
+    pub key: String,
+}
+
 /// A parameter's value. The three widths a `.kir` can declare, on
 /// `karakuri_store::record::Value`'s terms — a value and never a range, since
 /// a range is the procedure's declaration and not an operator's to write.
@@ -550,6 +591,104 @@ impl Residency {
     }
 }
 
+/// **Where a composited frame goes, by name.**
+///
+/// An output is a destination, a size and an on/off
+/// ([ADR-0324](../../../docs/adr/0324-an-output-is-a-named-destination-with-a-size-and-an-on-off.md)).
+/// This is the destination half — the only half a *vocabulary* can carry,
+/// because the other two are answers rather than names: the size is the
+/// window manager's or the Program bay's, and whether it is on is read where
+/// it is kept.
+///
+/// # It is a closed list and not a string
+///
+/// **A label moves and an identity may not.** The console's projector chip
+/// carries the display it is on — `projector · DELL U2720Q` in the mock — and
+/// that string changes when the cable does, when the display is renamed, and
+/// when the same window is dragged to the other screen. A name a map line or
+/// an MCP call held would then name nothing, and there would be nothing to
+/// refuse it with: a string parses whatever it is given, so *there is no such
+/// output* would be a sentence somebody had to remember to write at every
+/// route in, where a variant is a compile error at the one that mistyped it.
+///
+/// **This crate owns the enumerations a destination is drawn from rather than
+/// passing strings**, which is
+/// [P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)
+/// and the reason [`Residency`], [`BlendMode`], [`WipeKind`] and the rest are
+/// here at all. An output is the same kind of thing they are: a word from a
+/// closed list, which is exactly what `karakuri-midi`'s map file can name and
+/// what an MCP argument can be validated against.
+///
+/// **And a string would allocate.** This crate has no `[dependencies]` and
+/// every payload in it is a number or a word; a `String` on the one operation
+/// a sink press emits would put an allocation on the path a frame's
+/// publishing is switched from.
+///
+/// # Why the picture is a variant and a preview cell is not
+///
+/// [ADR-0243](../../../docs/adr/0243-the-program-picture-is-an-output-and-the-four-cells-are-monitors.md)
+/// settled it: the picture in the Program bay is in the set that needs naming
+/// and the four cells are not. A cell is welded to the deck letter under it,
+/// nothing routes one, and a control that names an output can never name one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Output {
+    /// **The picture in the Program bay**, and the first row of the list.
+    ///
+    /// Its size is the rectangle the bay gives it and its on/off is the
+    /// picture's own fold — read where the arrangement keeps it rather than
+    /// stored a second time here, which is
+    /// [ADR-0161](../../../docs/adr/0161-solo-remembers-which-region-because-it-cannot-be-derived.md)'s
+    /// rule read on a sink: a second copy is a copy that drifts.
+    Program,
+    /// **A window this program opens**, numbered from zero in the order the
+    /// list draws them.
+    ///
+    /// One is built. The number is here rather than deferred because a second
+    /// projector is a list entry and not a new kind of thing, and a variant
+    /// that has to be widened later is a compile error at every construction
+    /// site — which is the cost this payload was `Undecided` to avoid paying
+    /// twice.
+    Projector(u8),
+    /// **A sink a plugin brings**, by its place in the manifest that loaded
+    /// it.
+    ///
+    /// **Nothing constructs one**, and that is a statement about the manifest
+    /// rather than about this variant: `docs/plugins.md` specifies the process
+    /// and the handshake, nothing implements them, and the console draws
+    /// Syphon and NDI as `no plugin`. The index is the manifest's own order
+    /// for the same reason [`Output::Projector`] carries one — a plugin's
+    /// *name* is a label it chose, and a label is not an identity.
+    Plugin(u8),
+}
+
+impl Output {
+    /// **Every output this program can name today**, which is the program
+    /// view and one projector window.
+    ///
+    /// **It is not every variant**, and the difference is the point: a
+    /// [`Output::Plugin`] exists in the type so that the day a manifest is
+    /// read the list grows rather than the vocabulary changing, and a surface
+    /// drawing this list would draw a chip for a plugin that is not there.
+    /// A surface that wants the absent ones draws them from what it knows is
+    /// missing, which is what `karakuri-console` does.
+    pub const ALL: [Output; 2] = [Output::Program, Output::Projector(0)];
+
+    /// **The lower-case word for this destination**, for a caller that prints
+    /// one. A projector and a plugin carry their index, because two of either
+    /// are two outputs and a reader has to be able to tell them apart.
+    ///
+    /// A `String` rather than a `&'static str` for exactly that reason, and it
+    /// is the one thing in this crate that allocates — off the frame path, in
+    /// a line somebody reads.
+    pub fn name(self) -> String {
+        match self {
+            Output::Program => "program view".to_owned(),
+            Output::Projector(n) => format!("projector {n}"),
+            Output::Plugin(n) => format!("plugin {n}"),
+        }
+    }
+}
+
 /// How a deck meets the ones under it in the fold.
 ///
 /// **Named `BlendMode` rather than `Blend` on purpose.** `Blend` already means
@@ -745,16 +884,30 @@ pub enum Curve {
 }
 
 impl Curve {
+    /// **Every shape there is, in the order the specification documents
+    /// them** — the identity, the peak-weighted, its floor-weighted
+    /// complement, and the one eased at both ends.
+    ///
+    /// **A list is not a cycle**, on [`Authority::ALL`]'s and
+    /// `karakuri_engine::deck::Blend::ALL`'s terms: the sensitivity row's
+    /// curve chip is an affordance built over these four, the cycle belongs to
+    /// whoever draws it, and what crosses this seam is
+    /// [`Operation::AttachSignal`] naming a destination
+    /// (`docs/principles/0090-a-surface-offers-it-never-decides.md`).
+    pub const ALL: [Curve; 4] = [Curve::Lin, Curve::Pow2, Curve::Sqrt, Curve::Smooth];
+
     /// **The lower-case word a record spells**, which is what
     /// `karakuri_store::record::Record::Transition`'s `curve` carries and what
     /// a `bind` record has always carried.
     ///
     /// It arrived later than [`BlendMode::name`] and its neighbours because
     /// nothing needed it: the one operation carrying a curve —
-    /// [`Operation::AttachSignal`] — writes no session record, so this list
-    /// had no wire to reach. A scheduled move does: the shape a fade takes is
-    /// part of what a replay reconstructs it from, and
-    /// `karakuri-operation-record` is where a curve now becomes a name.
+    /// [`Operation::AttachSignal`] — wrote no session record, so this list had
+    /// no wire to reach. A scheduled move does: the shape a fade takes is part
+    /// of what a replay reconstructs it from, and `karakuri-operation-record`
+    /// is where a curve becomes a name. **`AttachSignal` writes one now too**,
+    /// and it is `Record::Source`'s `curve` — the same spelling, so a fade's
+    /// shape and an attachment's cannot drift apart on the wire.
     ///
     /// A match rather than a table, for [`BlendMode::name`]'s reason: a curve
     /// added to the enum does not compile until somebody has spelled it.
@@ -1525,6 +1678,16 @@ operations! {
     /// because a control was drawn for the second. **Removing a lane has no
     /// control, no row and no operation**, and that is a gap the console page
     /// carries a note for rather than an invention here.
+    ///
+    /// **The two levels are not here, and that is a decision** taken when the
+    /// chooser was drawn
+    /// (`docs/adr/0327-the-lane-chooser-lists-one-decks-keys-and-the-bank-pills-are-the-four-banks.md`).
+    /// A lane carries an `on` and an `off`, filled in *at the press* from the
+    /// range the surface was published, because a pattern outlives the Set it
+    /// was written against — and the surface that appends the lane is where
+    /// that reading already is, so carrying them here would put two floats in
+    /// a payload only one caller could supply meaningfully. A map line and a
+    /// model can name neither, which is ADR-0192's rule read the other way.
     PointLane { pattern: u8, target: LaneTarget } => "Point a lane at what it drives",
 
     /// **A mode with two values** — a sixteenth or an eighth — drawn as one
@@ -1574,6 +1737,16 @@ operations! {
     /// identity anywhere"* — a bank is the identity a *session* gives one, and
     /// ADR-0227's name is the one a *store* gives it.
     ///
+    /// **The console draws four pills and no `+`**, which is the paragraph
+    /// above carried to its end rather than a departure from it: once the
+    /// count is fixed at four every bank has a pill, so *this choice landing
+    /// on an empty one* is a press on `seq 3`, and a `+` beside it would be a
+    /// second door to a press already on the head
+    /// (`docs/adr/0327-the-lane-chooser-lists-one-decks-keys-and-the-bank-pills-are-the-four-banks.md`).
+    /// **A press names a bank and never a direction**, so asking for the one
+    /// already armed is allowed and moves nothing — the cell's own rule one
+    /// control down.
+    ///
     /// **Keeping a pattern and putting a saved one back are not rows on the
     /// page**, so they are not variants here either: the console draws no
     /// control that saves one. They will arrive the way
@@ -1612,24 +1785,65 @@ operations! {
     /// The noise generator's own parameters, which `--bind` also takes,
     /// describe the *source* rather than the attachment and are not carried
     /// here.
+    ///
+    /// **There is no confidence here and there is nowhere for one to go.** A
+    /// value arrives with how well it is known and the blend is
+    /// `lerp(the param's own value, the mapped signal, confidence)`, so a
+    /// confidence an operator could write would be a caller telling the system
+    /// how much to trust a measurement it took —
+    /// `docs/principles/0084-a-confident-wrong-automatic-judgement-is-worse-than-not-judging.md`
+    /// exactly inverted. It comes off the sample and off nothing else.
+    ///
+    /// **`range` is the range the control was *published* over.** A surface
+    /// sending this has it in hand — it is what the fader on the same row is
+    /// drawn against — and it is not a second thing for an operator to choose:
+    /// `ParamValue` says a range *"is the procedure's declaration and not an
+    /// operator's to write"*, and a published range narrows it without
+    /// redefining it. So the field states which of a parameter's declared span
+    /// the signal is mapped onto, and the answer a console gives is *all of
+    /// what it published* (ADR-0286, ADR-0319).
     AttachSignal {
         deck: u8,
-        param: ParamAt,
+        /// **A [`BindAt`] and not a [`ParamAt`]**, because an attachment is one
+        /// layer's — see [`BindAt`].
+        param: BindAt,
         signal: String,
         curve: Curve,
         /// What the signal is mapped onto, low then high.
         range: [f32; 2],
     } => "Attach a signal to a parameter",
 
-    /// Stop a signal driving a knob without losing the binding. **Nothing does
-    /// this today**; it is the second rule's other half.
+    /// Take a knob back from whatever is driving it. It is the second rule's
+    /// other half — *you can always see who is holding a control, and always
+    /// take it back*.
+    ///
+    /// **It removes the attachment rather than suspending it**, and that is a
+    /// decision rather than an economy. This documentation said *"without
+    /// losing the binding"* until 2026-09-09 and nothing anywhere could have
+    /// done that: `karakuri_engine::binding::Binding` carries no suspended
+    /// state, and a fourth thing for an attachment to be — attached, absent,
+    /// suspended, and blended at a low confidence — would have to be drawn,
+    /// recorded and restated on every rebuild, where *not driving this
+    /// parameter* is already written and is the absence. What is given up is
+    /// *hand it back* in one press; what replaces it is that the session
+    /// stream carries the source, the curve and the range on the record that
+    /// attached it, so re-attaching is a thing a stream can say. See
+    /// `docs/adr/0319-an-attachment-is-a-session-record-and-taking-a-parameter-back-removes-it.md`.
+    ///
+    /// **A hand on the value is not this**, and the two are deliberately
+    /// different presses. Writing a bound parameter with
+    /// [`Operation::WriteParam`] moves the value a binding blends *from* and
+    /// leaves the attachment where it is — order-independent by construction,
+    /// which is what a blend on confidence buys — so nothing an operator does
+    /// to a knob can detach a signal by accident. This operation is the only
+    /// thing that detaches one.
     ///
     /// **And it is not the sequencer's lane mute**, which ADR-0222's
     /// consequences say it already is: this names a parameter inside one
     /// deck's Set and three of the four lanes the console draws are deck
     /// faders, which are no Set's. [`Operation::SetLaneMute`] is that row, and
     /// carries the argument.
-    TakeParamBack { deck: u8, param: ParamAt } => "Take a parameter back",
+    TakeParamBack { deck: u8, param: BindAt } => "Take a parameter back",
 
     /// **The one operation addressed by name at both ends**, which is
     /// `Record::Edge`'s decision and its reason: a position moves when the
@@ -1698,6 +1912,18 @@ operations! {
     /// does not exist waits for it"*. Reaching it means [`Layer`] growing an
     /// arm, which is a change to what a `.kir` may declare and not a question
     /// about authority.
+    ///
+    /// # What it does today, said rather than implied
+    ///
+    /// **Nothing writes a parameter on an agent's behalf in this workspace**,
+    /// so no addressed write is refused *because of* a level. The record is
+    /// kept so that one can be when something does, which is M6's, and the
+    /// level is not decoration in the meantime: a **bare-name** write over
+    /// nodes that are not all under one authority is refused whole
+    /// (`docs/adr/0223-a-wildcard-write-is-refused-where-the-nodes-it-lands-on-disagree.md`),
+    /// so granting one renderer and keeping another narrows what one knob may
+    /// do from the next press. A surface drawing this must not word it as more
+    /// than that.
     SetAuthority {
         deck: u8,
         node: NodeAt,
@@ -1875,6 +2101,18 @@ operations! {
     /// [`Operation::WalkHistory`], which is still undecided for want of the
     /// address this row is able to do without.
     ///
+    /// **And the surface that says a node is the staging lane, since
+    /// 2026-09-09.** A lane row is one node a build changed rather than one
+    /// slot — a save touching two files draws two rows, each carrying its own
+    /// address, with the build's one verdict written on both
+    /// (`docs/adr/0326-a-staging-row-is-a-changed-node-and-the-row-is-the-keep.md`).
+    /// The control is the row itself, and the smaller box inside it is the
+    /// capsule that asks for [`Operation::RestoreProcedure`]: the free act
+    /// takes the large target and the act that writes a file takes the small
+    /// one. **A row that names no node offers neither** — a build that failed,
+    /// a source the checker turned down, and a rebuild that changed nothing
+    /// are verdicts about a slot, and there is nothing for a keep to settle.
+    ///
     /// **Silent, and that is its shape rather than an omission.** The material
     /// already changed and `karakuri_store::record::Record::Procedure` was
     /// written where the swap landed. What this changes is the lane: the node
@@ -1896,6 +2134,17 @@ operations! {
     /// of the Library bay's `history` scope names the version itself, and that
     /// name carries the node with it. Walking the versions is
     /// [`Operation::WalkHistory`], which is the listing this picks out of.
+    ///
+    /// **Both arms are asked by the panel since 2026-09-09**, and neither
+    /// resolves a file: a performer turns the arm it was given into a version
+    /// and writes that version's bytes over the node's working copy. What
+    /// [`Revision::Previous`] resolves to is the history walked for **that
+    /// node of that Set**, most recent first, with the entry *after* the
+    /// newest taken — the newest is the version the slot is running, whether
+    /// it is stepping or stopped, because the history is gated on compiling
+    /// and not on landing. A node whose only version is the one it is playing
+    /// is refused in a sentence that says so
+    /// (`docs/adr/0326-a-staging-row-is-a-changed-node-and-the-row-is-the-keep.md`).
     ///
     /// **Not [`Operation::WriteProcedure`] carrying that file's text, and the
     /// reason is the surface.** A write takes a `source: String` because
@@ -2047,8 +2296,26 @@ operations! {
 
     // ----- Output and recording -----------------------------------------
 
-    /// The window is a preview and has no say in what is drawn: the canvas is
-    /// fixed for the run, and the window fits it with the leftover black.
+    /// **A window drag sets an output's size**, which is what this row means
+    /// since 2026-09-09. The render size belongs to an output and not to the
+    /// session
+    /// ([ADR-0246](../../../docs/adr/0246-the-render-size-belongs-to-the-output-and-the-sessions-canvas-is-only-its-default.md)),
+    /// so dragging the projector window sizes that output and dragging the
+    /// console's own window — or a divider inside it — sizes the program
+    /// view, whose size is the rectangle the Program bay gives the picture.
+    /// The frame is composited once at the largest enabled output's size and
+    /// scaled into each
+    /// ([ADR-0247](../../../docs/adr/0247-one-frame-is-rendered-and-scaled-into-each-output.md)),
+    /// so a drag moves what a frame costs. *The window is a preview and has no
+    /// say in what is drawn* is what this said while ADR-0077 stood, and its
+    /// premise was removed rather than argued with.
+    ///
+    /// **No control on this console sizes a window and none is planned.** The
+    /// window manager draws the frame a hand drags, on every platform this
+    /// program runs on, and `crates/karakuri` answers `WindowEvent::Resized` —
+    /// which is [`Quit`](Operation::Quit)'s argument one row along, and why
+    /// the page's panel column is a `gap` and the badge that says the route is
+    /// real is in the fifth cell.
     ///
     /// **`karakuri-cli`'s `a` is a translation that asks for the canvas's own
     /// size, and it is that program's keyboard rather than the instrument's**
@@ -2063,19 +2330,28 @@ operations! {
     /// see the report.
     SizeWindow { width: u32, height: u32 } => "Size the window",
 
-    /// **Undecided because no output has an identity anywhere in this
-    /// workspace.**
+    /// **One output, named, and whether it is on** — see [`Output`], which is
+    /// where the closed list is argued.
     ///
-    /// The row describes one switchable list — the picture in the Program bay,
-    /// a projector window, the plugin sinks — with the program view a row in
-    /// it like any other. But `karakuri_engine::frame::Sink` is a trait with
-    /// no name and no id; the projector window and the plugin sinks do not
-    /// exist; and the console's Outputs row reaches its one sink by folding a
-    /// *layout region*, so the only route that exists today is spelled as
-    /// [`Operation::FoldBay`]'s target and not as an output at all. Giving
-    /// this a payload means deciding what names an output, which is the row's
-    /// whole content.
-    RouteFrame { output: Undecided } => "Choose where the frame goes",
+    /// **It was [`Undecided`] until 2026-09-09** because no output had an
+    /// identity anywhere in this workspace: `karakuri_engine::frame::Sink` is
+    /// a trait with no name and no id, the projector window and the plugin
+    /// sinks did not exist, and the console's Outputs row reached its one sink
+    /// by folding a *layout region*, so the only route was spelled as a fold's
+    /// target and not as an output at all.
+    ///
+    /// **The fold is still where the picture's state is kept**, and that is
+    /// deliberate: `RouteFrame { output: Output::Program, on }` is what a
+    /// press *asks for*, and `crates/karakuri` performs it by folding the
+    /// picture's node — so there is one stored answer to *is the picture on*
+    /// and this operation names it rather than duplicating it.
+    ///
+    /// **`on` and not a toggle.** A surface that can only switch has no way to
+    /// arrive, and two surfaces switching one sink disagree about where they
+    /// are —
+    /// [P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md).
+    /// The chip's toggle is the console's affordance over the two states.
+    RouteFrame { output: Output, on: bool } => "Choose where the frame goes",
 
     /// The timeline as it happens, replayable frame for frame.
     RecordSession { recording: Recording } => "Record the session",

@@ -144,6 +144,19 @@ scope rather than a gap: `PointLane`'s row stays `plan` because the bay draws no
   both**, and its panel badge stays `plan`.
 - **The fourth lane's tip stops calling this the bay's hardest question.**
 
+**A surface presses it now** (2026-09-09,
+[ADR-0327](0327-the-lane-chooser-lists-one-decks-keys-and-the-bank-pills-are-the-four-banks.md)),
+and the payload above is unchanged by it. The Sequencer bay's `+ lane` puts a card down listing a
+`Fader { deck }` per mixer strip and a `Param { deck, param }` per published control of the deck the
+Library bay's load pulldown names, and a pick emits `PointLane { pattern, target }` — so *"the one
+thing here nothing presses yet"* is pressed, and the row's panel badge is `has`. **The two levels
+stayed out of it**: they are filled where the lane is appended, from `View::inspector`, which is the
+one published reading this program holds; widening the payload with two floats only this surface
+could supply is the alternative that record rejects. **The `+ lane` tip kept its arena-insert gap
+here and has since lost it**, because a lane row is not a region — the bay draws its rows from
+`Pattern::lanes` inside a rectangle the arena already holds, so that gap is drawn in four places and
+never was in five.
+
 **What it does not decide.** M5.12's learn spelling, which is a different question with a different
 constraint — a map line names a slot, a range or a word from a closed list — and is read beside this
 record rather than settled by it. Removing a lane, which has no control, no row and no operation, and

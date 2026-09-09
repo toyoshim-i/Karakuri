@@ -1356,6 +1356,93 @@ impl Deck {
         self.slots[slot].swap.live_mut().write_param(write)
     }
 
+    /// **Attach a signal to one parameter of the Set a slot is playing, now.**
+    ///
+    /// [`Deck::write_param`]'s road, one writer along, and its argument about
+    /// `live_mut` holds unchanged: nothing here renders and nothing here
+    /// replaces, so *which Sets is this frame made of* has the answer it had
+    /// before the call. What is different is that this one **allocates** —
+    /// `Set::bind` pushes into a `Vec` and asks `Set::published`, which
+    /// allocates too — so it belongs where a press is handled and not inside
+    /// `Frame::render`. A binding is applied on the next `Set::prepare` and
+    /// compiles nothing, exactly as a parameter write does.
+    ///
+    /// **The two ways to fail are carried out rather than collapsed**, which
+    /// is `Set::bind`'s own rule: a misspelt *control* and a misspelt
+    /// *parameter* send whoever reads the message to different halves of what
+    /// they asked for.
+    ///
+    /// **What a rebuild does with it is not settled here**, on
+    /// [`Deck::write_param`]'s terms and with the same shape:
+    /// `swap::Request::bindings` is restated from `Watch::bindings`, which
+    /// only a re-point writes, so an attachment made live is walked back on
+    /// the next save of any `.kir` in that slot. `Set::carry_moved_from` is
+    /// where the answer would go — see
+    /// `docs/adr/0319-an-attachment-is-a-session-record-and-taking-a-parameter-back-removes-it.md`.
+    pub fn bind(&mut self, slot: usize, binding: crate::binding::Binding) -> crate::set::Bound {
+        self.slots[slot].swap.live_mut().bind(binding)
+    }
+
+    /// **Take one parameter of the Set a slot is playing back**, and say
+    /// whether anything was holding it.
+    ///
+    /// [`crate::set::Set::unbind`] through the deck, which is where the
+    /// removal-rather-than-suspension argument is written. `false` is the
+    /// caller's cue to say so: a take-back on a knob nobody is holding is a
+    /// press that changes nothing, not a fault.
+    ///
+    /// **It cancels nothing else.** [`Deck::cancel`] stops a scheduled
+    /// [`crate::transition::Transition`] on a deck *control*, and a parameter
+    /// is not one — there is no fade that reaches a Set's params, so there is
+    /// nothing beside the binding for a hand to win against.
+    pub fn unbind(
+        &mut self,
+        slot: usize,
+        layer: karakuri_ir::Kind,
+        index: Option<u32>,
+        key: &str,
+    ) -> bool {
+        self.slots[slot].swap.live_mut().unbind(layer, index, key)
+    }
+
+    /// **Say who may move one node of the Set a slot is playing**, and answer
+    /// `false` where that slot's Set has no such node.
+    ///
+    /// The writer `Record::Authority` has been waiting for since ADR-0211 —
+    /// which recorded the vocabulary and the record and said the engine work
+    /// was owed. `swap::Request::authorities` is the half that landed then:
+    /// what an operator granted survives a rebuild, so a grant is worth making
+    /// at all.
+    ///
+    /// **A destination and never a step**
+    /// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)):
+    /// the console's `man / sug / auto` chips are three destinations and the
+    /// cycle, where there is one, is the surface's.
+    ///
+    /// # It changes what is refused and not yet what is enforced
+    ///
+    /// **Nothing writes a parameter on an agent's behalf in this workspace**,
+    /// so no write is refused *because of* a level today. What the level does
+    /// reach is `Set::write_param`'s wildcard refusal
+    /// ([`crate::set::CrossesAuthority`], ADR-0223): a bare-name write over
+    /// nodes that are not under one authority is refused whole, so granting
+    /// one renderer to an agent and keeping the other **narrows what one knob
+    /// may do, immediately**. That is the whole of the enforcement there is,
+    /// and the record is kept so that an agent's addressed write can be
+    /// refused against it when something writes one.
+    pub fn set_authority(
+        &mut self,
+        slot: usize,
+        layer: karakuri_ir::Kind,
+        index: u32,
+        authority: crate::set::Authority,
+    ) -> bool {
+        self.slots[slot]
+            .swap
+            .live_mut()
+            .set_authority(layer, index, authority)
+    }
+
     /// The linear HDR render target for one slot.
     pub fn slot_view(&self, slot: usize) -> Option<&wgpu::TextureView> {
         self.slots.get(slot).map(|s| &s.view)

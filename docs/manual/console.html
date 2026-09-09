@@ -151,8 +151,8 @@
             <div class="bay">
               <div class="bay-head"><span>Staging</span><span>2 waiting</span></div>
               <div class="stage-list">
-                <div class="cand"><span class="dot" style="background:var(--c-lav)"></span><span>veil_02</span><span class="sep"></span><span class="who">you, 14:41</span></div>
-                <div class="cand" data-tip="One candidate, which is one deck slot whose newest build has a verdict outstanding. What the row ends in is that verdict, and it is one of four words. `landed` is on screen and was kept: the build reached a frame boundary and held the budget in the same frame it landed on. `overloaded` is the version costing more than one frame may: it stays in the slot, and the slot stops updating &mdash; the picture holds the last frame it drew and the deck goes on mixing it, so nothing is taken away from you and nothing is put back behind your back. The file on disk is the version you saved, which is the version that is in the slot; the row says the slot is not running it. `refused` is a build that failed: the files checked, and the Set they were assembled into would not build. `did not compile` is the checker turning the source down before anything was built &mdash; no Set, no version, nothing in the edit history, and the picture is whatever was already playing. That last row carries the first diagnostic with the line and column it is at, and says how many more there are; every one of them goes to standard output and to the MCP surface as well, because the author of the next attempt may be a program in a loop and a refusal has to carry what that attempt needs. The row is addressed by the deck letter and not by the node: a verdict is over a build, and a rebuild restates every node of the slot. Nothing in it takes a press. &#8853; MIDI: unassigned &mdash; a row is a readout, and a map line names a slot, a range or a word from a closed list."><span class="dot" style="background:var(--c-sun)"></span><span>drift_night&nbsp;b</span><span class="sep"></span><span class="who">agent</span></div>
+                <div class="cand"><span class="dot" style="background:var(--c-lav)"></span><span class="addr">L1:0</span><span>veil_02</span><span class="sep"></span><span class="pill">back</span><span class="who">landed</span></div>
+                <div class="cand" data-tip="One candidate, which is one node a build changed and has not been ruled on. A rebuild restates every node of a slot, so what tells one row from the next is not the build but the diff: one save that touched two files is one build, two changed nodes and therefore two rows, with the verdict repeated on each of them rather than standing as a heading over both &mdash; a row is a row, and a nested shape would buy nothing but a second thing to read. The row is addressed by the deck letter and by the node, `L1:0`, which is the address the inspector writes on a node head, and beside it is what that node's procedure calls itself. What the row ends in is that verdict, and it is one of four words. `landed` is on screen and running: the build reached a frame boundary and held the budget in the same frame it landed on. `overloaded` is the version costing more than one frame may: it stays in the slot, and the slot stops updating &mdash; the picture holds the last frame it drew and the deck goes on mixing it, so nothing is taken away from you and nothing is put back behind your back. The file on disk is the version you saved, which is the version that is in the slot; the row says the slot is not running it. `refused` is a build that failed: the files checked, and the Set they were assembled into would not build. `did not compile` is the checker turning the source down before anything was built &mdash; no Set, no version, nothing in the edit history, and the picture is whatever was already playing. That last row carries the first diagnostic with the line and column it is at, and says how many more there are; every one of them goes to standard output and to the MCP surface as well, because the author of the next attempt may be a program in a loop and a refusal has to carry what that attempt needs. The last two of the four name no node and cannot: nothing was built, so there is no new list of nodes to hold against the old one, and those rows are the whole slot's &mdash; drawn with no address and offering no press. A build that restated the stack and changed nothing in it is the same kind of row for the same reason. &#8853; Pressing the row keeps that candidate: it settles the node, the row leaves the lane, the picture does not move and no record is written. It is not offered on an overloaded row &mdash; a slot that has stopped is not a candidate you are choosing between &mdash; nor on the two that name no node. &#8853; The `back` capsule puts that node's previous version back: one step and never a cursor, read out of the store's edit history and written over the node's working copy, where it is built, judged against the budget and swapped at a frame boundary like any other build. It is offered wherever the row names a node, the overloaded row included &mdash; landing an earlier version is one of the three ways out of a stopped slot. &#8853; MIDI: unassigned &mdash; a map line names a slot, a range or a word from a closed list, and a node address is none of the three."><span class="dot" style="background:var(--c-sun)"></span><span class="addr">L4:0</span><span>drift_night&nbsp;b</span><span class="sep"></span><span class="pill">back</span><span class="who">overloaded</span></div>
                 <div class="cand" style="justify-content:center;color:var(--c-faint)">a rejected candidate costs nothing</div>
               </div>
             </div>
@@ -253,9 +253,9 @@
                     <div class="sens">
                       <span>sensitivity</span>
                       <span class="chips">
-                        <span class="pill armed">energy</span><span class="pill">pow2</span>
-                        <span class="pill">0.10 &ndash; 2.40</span>
-                        <span class="pill" data-tip="Take the knob back from the signal holding it. The binding is kept and stops driving, so you can hand it back.">take back</span>
+                        <span class="pill armed" data-tip="What is holding this knob. A readout and not a chooser: the signal bus is open by design &mdash; a name nobody provides is not an error, it is a confidence of zero &mdash; so there is no list of sources for a chooser to be built over, and the console inventing one would be the panel deciding what may be asked for. A source is named where a source can be named: a Set file&#39;s bind line, or --bind.">energy</span><span class="pill" data-tip="The shape the signal is put through on its way to the range. Press it for the next of the four &mdash; lin, pow2, sqrt, smooth &mdash; which re-attaches the same signal through that shape. Four because they are four distinct shapes of a rising map from nothing to everything: flat, peak-weighted, floor-weighted, and eased at both ends. A fifth would be one of these under another name.">pow2</span>
+                        <span class="pill" data-tip="What the signal is mapped onto, low then high. A readout: it is the range this control was published over, which is the range the fader above already rides, and a range is the procedure&#39;s declaration rather than yours to write. There is no confidence here either &mdash; a value arrives with how well it is known, and a number you could set would be telling the system how much to trust its own measurement.">0.10 &ndash; 2.40</span>
+                        <span class="pill" data-tip="Take the knob back from the signal holding it. The attachment is removed, not paused: the parameter is left at its own value, which is what it was blending from all along, and the fader above becomes a handle again. Re-attaching means naming the source and the shape again &mdash; there is no suspended state anywhere for this to hand back, and a fourth thing for an attachment to be would have to be drawn, recorded and restated on every rebuild. Moving the fader is not this: it moves the value the signal blends from and leaves the attachment where it is, so nothing you do to a knob detaches a signal by accident.">take back</span>
                       </span>
                     </div>
                   </div>
@@ -486,8 +486,7 @@
               <div class="bay-head">
                 <span>Sequencer</span>
                 <span style="display:flex;gap:4px;align-items:center">
-                  <span class="pill armed" data-tip="Pattern seq 1, and it is armed because the four rows below are reading it. A pattern is the whole of what those rows are &mdash; the lanes, what each one drives, the steps in each and which of them are muted &mdash; so this is one press that changes every row at once rather than a filter over one set of lanes. Click and the press asks for that pattern; these pills choose among patterns and never switch the sequencer on. What a pattern is is answered: one bar, a mode &mdash; a sixteenth or an eighth &mdash; and a list of lanes, each carrying what it drives, sixteen slots, an on level, an off level and whether it is muted. Where one is kept was already settled &mdash; under the store, under a name you typed, one path component, bytes the store never parses, exactly as an arrangement is &mdash; and what the file holds is still left to whoever has something to serialise, which is the row that saves one rather than this pill. This pill names a bank and not a name: four of them, fixed, and a bank is a position in the session the way a deck slot is. Nor is where a pattern is browsed from settled: the library's presets scope reads Sets and a pattern is not one, so the shelf next door is a resemblance rather than the answer. This bay's head carries no mcp pill and that is not a gap in the drawing &mdash; all five of its operations are shut to a model in a group that is none of the four classes a bay head opens. The operations page used to mark their MCP route as designed, and which of the two gives way is settled: the column did. All five read gap there now, on the sentence twelve other rows already carry &mdash; a model has no window, and editing a pattern is a thing done at a surface the way keeping an arrangement is. The class stays shut, and the day a model is handed a view of this console is the day both are asked again. &#8853; MIDI: unassigned &mdash; a map line names a slot, a range or a word from a closed list, and a pattern named by whatever an operator typed is none of the three.">seq 1</span><span class="pill" data-tip="Pattern seq 2, and nothing is reading it: the pill is plain because seq 1 is the one the lanes are on. It is a second pattern and not a second sequencer &mdash; one set of rows, one pattern at a time &mdash; so what a bank buys is the pattern you are not playing being ready rather than being mixed in. Click and the four rows below become this pattern's lanes; what was on them is seq 1's and is not lost. How a pattern gets onto this pill at all is a question the head does not answer, and what is left of it is narrow: where a saved pattern lives is decided, a bank and a saved name are decided to be two different things &mdash; this pill is a position in the session and a name is what a save files a pattern under, as different as a deck slot and a Set's id &mdash; and no control in this bay saves one yet, which is the row that would introduce the name. &#8853; MIDI: unassigned &mdash; a map line names a slot, a range or a word from a closed list, and a pattern's name is none of the three.">seq 2</span><span class="pill" data-tip="A pattern with nothing in it, and the press is the same choice the two pills beside it are, landing on an empty one rather than being an operation of its own &mdash; the transport's arrangement pill is built the same way, and it is why putting a saved arrangement back is that choice's special case and not a control standing next to it. Click and the rows below are the empty pattern's, which is no rows at all: a lane arrives with what it drives, from the foot, so an empty pattern has nothing to draw and nothing to mute. How many patterns this row holds is decided: four, fixed, on the deck's precedent, because a bank list that grows is a control nobody drew. So this press means the next empty one, and when all four are full it is disabled and says so rather than going quiet. An empty bank needs no name, which is what lets the press stay the choice beside it instead of a dialog asking for one. &#8853; MIDI: unassigned &mdash; it is the choice beside it reached at an empty pattern rather than an operation of its own, so it has that row's gap: a line names a slot, a range or a word from a closed list, and a pattern is none of the three.">+</span>
-                </span>
+                  <span class="pill armed" data-tip="Pattern seq 1, and it is armed because the four rows below are reading it. A pattern is the whole of what those rows are &mdash; the lanes, what each one drives, the steps in each and which of them are muted &mdash; so this is one press that changes every row at once rather than a filter over one set of lanes. Click and the press asks for that pattern; these pills choose among patterns and never switch the sequencer on, and a press names the bank it landed on rather than a direction, so pressing the one already armed is allowed and does nothing. What a pattern is is answered: one bar, a mode &mdash; a sixteenth or an eighth &mdash; and a list of lanes, each carrying what it drives, sixteen slots, an on level, an off level and whether it is muted. Where one is kept was already settled &mdash; under the store, under a name you typed, one path component, bytes the store never parses, exactly as an arrangement is &mdash; and what the file holds is still left to whoever has something to serialise, which is the row that saves one rather than this pill. This pill names a bank and not a name: four of them, fixed, and a bank is a position in the session the way a deck slot is. <b>There are four pills here and no plus, and that is the count being fixed rather than a control being dropped.</b> The row drew seq 1, seq 2 and a plus while how many banks there are was open; with four, fixed, the plus is this same choice landing on an empty one &mdash; which is what a press on seq 3 already is &mdash; so a plus beside them would be a second door to a press already on the head. Nor is where a pattern is browsed from settled: the library's presets scope reads Sets and a pattern is not one, so the shelf next door is a resemblance rather than the answer. This bay's head carries no mcp pill and that is not a gap in the drawing &mdash; all five of its operations are shut to a model in a group that is none of the four classes a bay head opens. The operations page used to mark their MCP route as designed, and which of the two gives way is settled: the column did. All five read gap there now, on the sentence twelve other rows already carry &mdash; a model has no window, and editing a pattern is a thing done at a surface the way keeping an arrangement is. The class stays shut, and the day a model is handed a view of this console is the day both are asked again. The panel draws these four pills and a press reaches them; the operations page's panel badge says so. &#8853; MIDI: unassigned &mdash; a map line names a slot, a range or a word from a closed list, and a pattern named by whatever an operator typed is none of the three.">seq 1</span><span class="pill" data-tip="Pattern seq 2, and nothing is reading it: the pill is plain because seq 1 is the one the lanes are on. It is a second pattern and not a second sequencer &mdash; one set of rows, one pattern at a time &mdash; so what a bank buys is the pattern you are not playing being ready rather than being mixed in. Click and the rows below become this pattern's lanes; what was on them is seq 1's and is not lost. How a pattern gets onto this pill at all is a question the head does not answer, and what is left of it is narrow: where a saved pattern lives is decided, a bank and a saved name are decided to be two different things &mdash; this pill is a position in the session and a name is what a save files a pattern under, as different as a deck slot and a Set's id &mdash; and no control in this bay saves one yet, which is the row that would introduce the name. &#8853; MIDI: unassigned &mdash; a map line names a slot, a range or a word from a closed list, and a pattern's name is none of the three.">seq 2</span><span class="pill" data-tip="Pattern seq 3, and there is nothing in it. <b>This is where the plus went.</b> The press is the same choice the pills beside it are, landing on an empty pattern rather than being an operation of its own &mdash; the transport's arrangement pill is built the same way, and it is why putting a saved arrangement back is that choice's special case and not a control standing next to it. Click and the rows below are the empty pattern's, which is no rows at all: a lane arrives with what it drives, from the foot, so an empty pattern has nothing to draw and nothing to mute. How many patterns this row holds is decided: four, fixed, on the deck's precedent, because a bank list that grows is a control nobody drew &mdash; and once the count is four every bank has a pill, so a plus meaning <i>the next empty one</i> would be a second way to press one of these and there is no state in which all four are full and it has to say so. An empty bank needs no name, which is what let the plus stay the choice beside it instead of a dialog asking for one, and it is what lets this pill be that choice outright. &#8853; MIDI: unassigned &mdash; a map line names a slot, a range or a word from a closed list, and a pattern is none of the three.">seq 3</span><span class="pill" data-tip="Pattern seq 4, and there is nothing in it. <b>This is where the plus went.</b> The press is the same choice the pills beside it are, landing on an empty pattern rather than being an operation of its own &mdash; the transport's arrangement pill is built the same way, and it is why putting a saved arrangement back is that choice's special case and not a control standing next to it. Click and the rows below are the empty pattern's, which is no rows at all: a lane arrives with what it drives, from the foot, so an empty pattern has nothing to draw and nothing to mute. How many patterns this row holds is decided: four, fixed, on the deck's precedent, because a bank list that grows is a control nobody drew &mdash; and once the count is four every bank has a pill, so a plus meaning <i>the next empty one</i> would be a second way to press one of these and there is no state in which all four are full and it has to say so. An empty bank needs no name, which is what let the plus stay the choice beside it instead of a dialog asking for one, and it is what lets this pill be that choice outright. &#8853; MIDI: unassigned &mdash; a map line names a slot, a range or a word from a closed list, and a pattern is none of the three.">seq 4</span></span>
               </div>
               <div class="seq">
                 <div class="seq-head">
@@ -523,7 +522,7 @@
                 </div>
                 <div class="seq-foot">
                   <span>a lane is a fifth route &middot; label mutes</span>
-                  <span class="sep"></span><span class="pill" data-tip="Add a lane, and what is being added is what it drives: a lane with nothing to point at emits nothing, so there is no moment at which a lane exists and its target does not. That is why this is one press and not two, and it is why the bay draws no control for re-pointing a lane that already has a target &mdash; this is where a target is chosen, and if it ever becomes two operations it will be because somebody drew the second control. What a target may be is answered already: anything in the vocabulary a lane can emit, which is why three deck faders and a Set parameter sit side by side below and all four are lanes. What a target is spelled as is answered, and it was the sharpest of this bay's open questions: a target is an operation of this vocabulary with its value left out, so a fader lane is a deck and a parameter lane is a deck and a parameter within its Set, and a lane emits that operation at whatever the step is worth. That reaches all four rows below, where a slot number reaches three of them and a node address reaches one. Two things on the vocabulary are not targets, for one reason: a residency and a blend mode take a word from a closed list rather than a level, and a step is a level, so a lane pointed at one would have to invent the word. The press also fills the lane's two levels in &mdash; a fader's are one and zero, a parameter's are the bottom and top of the range published to this console now &mdash; and taking them here rather than later is deliberate, because a pattern outlives the Set it was written against. Removing a lane has no control here, no row on the operations page and no operation, and that is a gap rather than a decision. Nothing lands here even once that is taken: the panel cannot grow a bay's body while it is running, because the arena the regions live in has no insert and no remove. That is one gap drawn in five places &mdash; here, the Master bay's + add, the Outputs row's + add output, the library's + on the scope list and the inspector's 2 up. &#8853; MIDI: unassigned &mdash; a map line names a slot, a range or a word from a closed list, and a target that has no spelling is none of the three.">+ lane</span>
+                  <span class="sep"></span><span class="pill" data-tip="Add a lane, and what is being added is what it drives: a lane with nothing to point at emits nothing, so there is no moment at which a lane exists and its target does not. That is why this is one press and not two, and it is why the bay draws no control for re-pointing a lane that already has a target &mdash; this is where a target is chosen, and if it ever becomes two operations it will be because somebody drew the second control. What a target may be is answered already: anything in the vocabulary a lane can emit, which is why three deck faders and a Set parameter sit side by side above and all four are lanes. What a target is spelled as is answered, and it was the sharpest of this bay's open questions: a target is an operation of this vocabulary with its value left out, so a fader lane is a deck and a parameter lane is a deck and a parameter within its Set, and a lane emits that operation at whatever the step is worth. That reaches all four rows above, where a slot number reaches three of them and a node address reaches one. Two things on the vocabulary are not targets, for one reason: a residency and a blend mode take a word from a closed list rather than a level, and a step is a level, so a lane pointed at one would have to invent the word. <b>The press puts a card down, and what is on it is a channel fader for every deck the mixer draws a strip for, a separator, and the published controls of one deck.</b> Which deck: the one the library's load pulldown names, which is this console's one mark meaning <i>a deck named without moving the keys</i> &mdash; exactly what pointing a lane at deck C while deck A is playing wants, and a chooser of its own here would be a fourth pointer on a panel that already explains three. Listing every deck's keys instead would put the same key in the list once per deck, so you would pick a deck by reading a list four times as long rather than by a control. What the console has not been handed it does not offer: the published rows come from the inspector, which is pointed at two decks, so a target deck no pane is showing offers its fader and no parameters. The press also fills the lane's two levels in &mdash; a fader's are one and zero, a parameter's are the bottom and top of the range published to this console now &mdash; and taking them here rather than later is deliberate, because a pattern outlives the Set it was written against. <b>A lane arrives muted, and that is not caution.</b> It arrives with every slot off, and an off step writes the off level rather than writing nothing, so an unmuted fader lane would hold its deck at zero from the press with nothing on screen saying a sequencer had done it. The label is the unmute and it is one press. Removing a lane has no control here, no row on the operations page and no operation, and that is a gap rather than a decision. <b>The arena has nothing to do with this row, and this tip said it did until 2026&#8209;09&#8209;09.</b> A lane is a row inside a bay that is already there &mdash; the rows are drawn from the pattern's own list &mdash; so adding one adds no region and asks the arena for no insert. The gap is real and is drawn in four places rather than five: the Master bay's + add, the Outputs row's + add output, the library's + on the scope list and the inspector's 2 up, each of which would add a region while the panel is running. Those four still say five, which is a sentence they owe rather than a control this one is waiting on. &#8853; MIDI: unassigned &mdash; a map line names a slot, a range or a word from a closed list, and one lane's target is none of the three.">+ lane</span>
                 </div>
               </div>
             </div>
@@ -536,10 +535,10 @@
           <div class="outputs">
             <span style="color:var(--c-faint);font-family:var(--f-round);font-size:10px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase">Outputs</span>
             <span class="pill" data-tip="Whether a model may reach the show's plumbing, and it is shut. While it reads shut, three things are refused when a model asks for them: where a frame goes, which is this row's sinks enabled and disabled; what drives the beat grid, which is the transport's audio-in pill and is this class drawn a row away; and starting or stopping a recording. Not one of the three has a bounded worst case and all three are the show's plumbing rather than its picture, which is exactly why they are the easy ones to forget. It was four: choosing whether the output showed the mix or one deck auditioned was in this class until that operation was retired &mdash; the picture is the mix and the deck previews audition every slot with material in it, of their own accord and whatever its residency. Refused rather than hidden: the call arrives and fails, and the sentence it fails with names this row. Click to open the class; click again to shut it. This row has no bay head to put an indicator in &mdash; it is headless, like the transport &mdash; so the pill sits beside the word that stands in for one. Whether one press covers the class or one operation of it, and whether an opening survives a restart, are open. &#8853; MIDI: unassigned &mdash; this is a setting of the map every surface reaches the vocabulary through rather than an operation, so there is no target for a map line to name; the &#8853; in every other tooltip on this page is that same layer reached one control at a time.">mcp &middot; shut</span>
-            <span class="sink on" data-tip="The picture in the Program bay. Turn it off and that picture goes, giving its height to the inspector &mdash; which is what you want when the projector is fullscreen on another display and this one is costing you a pass and the space. The deck previews under it are auditions of their own and keep running."><i class="dot"></i>program view</span>
-            <span class="sink on" data-tip="A second window on the DELL, fullscreen. It is an ordinary window that an ordinary operating system made fullscreen, not an output mode of its own. Click to disable."><i class="dot"></i>projector &middot; DELL U2720Q</span>
-            <span class="sink" data-tip="Syphon, publishing as `karakuri`. Off. Click to enable &mdash; a slow sink has its frame dropped and never delays the window."><i class="dot"></i>Syphon</span>
-            <span class="sink absent tip-right" data-tip="NDI. No plugin is loaded, so there is nothing to enable. Install the plugin and it appears here as a sink."><i class="dot"></i>NDI &middot; no plugin</span>
+            <span class="sink on" data-tip="The picture in the Program bay, and the first output. Turn it off and that picture goes, giving its height to the inspector &mdash; which is what you want when the projector is fullscreen on another display and this one is costing you a pass and the space. The deck previews under it are monitors of their own and keep running. Its state is not stored twice: the picture is on screen exactly when this sink is on, so the dot reads the picture&#39;s own fold and a press asks for this output on or off by name. Its size is the rectangle the Program bay gives it, so dragging this window or a divider inside it sizes this output &mdash; and while it is the largest enabled one, that is what the frame is composited at. Click to switch it. &#8853; MIDI: unassigned."><i class="dot"></i>program view</span>
+            <span class="sink on" data-tip="A second window this program opens, fullscreen on another display if you put it there. It is an ordinary window that an ordinary operating system made fullscreen, not an output mode of its own &mdash; so its size is the size the window manager gave it, and dragging it sizes this output. Turning it on opens the window and turning it off closes it; the window&#39;s own close is the same act, and it turns the chip off rather than quitting. While it is the largest enabled output the frame is composited at its size and every other output is a downscale of that one render, so turning it on raises what every frame costs &mdash; visibly, and by your own hand. A wedged output has its frame dropped and never delays the others. What is not built is the display in the chip: naming which screen this window is on wants a list of displays this program does not read, so the chip says projector and the tooltip says which. Click to switch it. &#8853; MIDI: unassigned."><i class="dot"></i>projector</span>
+            <span class="sink absent" data-tip="Syphon, which would publish this frame to other applications on the same machine. No plugin is loaded, so there is nothing to enable. A plugin sink is named by its place in the manifest that loads it, and there is no manifest to read: docs/plugins.md specifies the process and the handshake and nothing implements it. Install the plugin and it appears here as a sink."><i class="dot"></i>Syphon &middot; no plugin</span>
+            <span class="sink absent tip-right" data-tip="NDI, which would publish this frame to the network. No plugin is loaded, so there is nothing to enable. Install the plugin and it appears here as a sink."><i class="dot"></i>NDI &middot; no plugin</span>
             <span class="sep"></span>
             <span class="pill lav tip-right" data-tip="A fifth place for a frame to go, and the one control in this row that is not a switch over something already there. It adds a region while the panel is running, which the arena the regions live in cannot do &mdash; it has no insert and no remove &mdash; and that is one gap drawn in five places: here, the Master bay's + add, the sequencer's + lane, the library's + on the scope list and the inspector's 2 up. It arrives with the operations that add and remove a region rather than with this row, so not one of the sinks beside it is waiting on it. What it would offer is open as well: what names an output, and what tells a sink this repository owns from one a plugin brings, is the question the four chips beside it are drawn against. &#8853; MIDI: unassigned &mdash; this names no operation and carries no row on the operations page, so there is nothing for a map line to name.">+ add output</span>
           </div>
@@ -1056,6 +1055,28 @@
           cannot see being moved is one you cannot take back &mdash; and
           <em>take back</em> sits right beside it.
         </p>
+        <p>
+          <strong>The fader on a bound row is drawn and is not a handle.</strong>
+          It shows where the signal has the parameter, which moves under its own
+          steam, and a handle that could be dragged there would ask for a
+          number the row is not showing: a knob a hand moves writes the value
+          the signal <em>blends from</em>, and at a measurement&#39;s full
+          confidence that value carries no weight at all. So the row would move
+          under the hand and the picture would not, which is the one thing a
+          handle must never do. The hand&#39;s way into a bound control is
+          <em>take back</em>, one row down, and after it the fader is a handle
+          again.
+        </p>
+        <p>
+          <strong>Taking it back removes the attachment rather than pausing
+          it</strong>, and this note promised the other thing until
+          2026&#8209;09&#8209;09. Nothing anywhere could have done it: not
+          driving a parameter is already written and it is the absence, so a
+          paused binding would be a fourth state to draw, record and carry
+          across every rebuild for the sake of one press. What you give up is
+          handing it straight back; what you keep is that the session carries
+          the source, the shape and the range on the line that attached it.
+        </p>
       </div>
 
       <div class="note">
@@ -1167,6 +1188,28 @@
           A node nobody has spoken for is <strong>manual</strong>, which is not
           a placeholder but the only default that is not that global mode thrown
           for every node by nobody.
+        </p>
+        <p>
+          <strong>Press one of the three and that node is on it.</strong> Three
+          words, three destinations, and the press names the one it lands on
+          rather than stepping to the next &mdash; so two people looking at the
+          same head agree about where it is, and pressing the word a node is
+          already on asks for what it already has. It survives a rebuild: a
+          node you granted comes up granted after the next save of a
+          <code>.kir</code> in that deck, which is what makes granting one
+          worth doing at all.
+        </p>
+        <p>
+          <strong>What it does today, said rather than implied.</strong>
+          Nothing in this instrument writes a parameter on an agent&#39;s behalf
+          yet, so nothing is refused <em>because of</em> a level, and the record
+          is kept so that an agent&#39;s write can be refused against it when
+          one exists. What a level does reach now is the bare&#8209;name
+          refusal: a control published under a bare name writes every node that
+          declares it, so granting one renderer and keeping the other stops
+          that one knob from moving either of them, out loud and naming both.
+          Setting a level narrows what one knob may do from the next press. It
+          hands nothing to anybody that can act on it, because there is nobody.
         </p>
         <p>
           <strong>Every node takes one, including the ones that look like they
@@ -1725,6 +1768,19 @@
           one press on that lane's label away.
         </p>
         <p>
+          <strong>A lane arrives from the foot, muted, with every slot
+          off.</strong> That is the one thing about <code>+ lane</code> worth
+          knowing before you press it, and it follows from the paragraph above:
+          an off step writes the off level, so a fader lane that arrived driving
+          would hold its deck at zero from the press. The lane is there, its row
+          is drawn, and the label is the press that starts it &mdash; the same
+          mute that is its take-back, used the other way round. What the card
+          offers is one channel fader per strip the mixer draws and the published
+          controls of the deck the library's load pulldown names; a deck no
+          inspector pane is showing publishes nothing this console has been
+          handed, so it offers its fader alone.
+        </p>
+        <p>
           <strong>Two things here are gaps rather than decisions</strong>, and
           they are written down so that they cannot be read as either. <strong>A
           channel fader does not say who is holding it.</strong> A bound
@@ -1788,60 +1844,52 @@
           and nothing more romantic.
         </p>
         <p>
-          <strong>A candidate row is four things, and the mock draws a fifth
-          that has no value behind it.</strong> The <em>node</em> it is for
-          &mdash; <code>L4:0</code>, the address the inspector already writes
-          on a node head. What the procedure <em>calls itself</em>, which is
-          its own <code>proc</code> name, and the artifact's short hash where a
-          file declares no name. Whether it is <em>on screen</em>: landed,
-          overloaded for costing more than one frame may, refused, or did not compile, which
-          is <em>find out
-          what a write did</em> read against one node &mdash; a candidate you
-          cannot see is not one you can judge. And <em>when</em> it arrived,
-          formatted by the host and handed in, the way every other derived
-          value in this panel is.
+          <strong>A candidate row is a node a build changed, and that is what
+          one build changing two nodes comes to.</strong> The row carries the
+          <em>node</em> it is for &mdash; <code>L4:0</code>, the address the
+          inspector already writes on a node head, under the letter of the deck
+          it is on. What that node's procedure <em>calls itself</em>, which is
+          its own <code>proc</code> name. And whether it is <em>on screen</em>:
+          landed, overloaded for costing more than one frame may, refused, or
+          did not compile, which is <em>find out what a write did</em> read
+          against one node &mdash; a candidate you cannot see is not one you
+          can judge. The mock draws a fifth thing, <em>when</em> it arrived, and
+          a sixth, who wrote it; neither is drawn here and the two paragraphs
+          below say why.
         </p>
         <p>
-          <strong>What the lane draws today is three of those four, and the
-          third of the three is not the node.</strong> A verdict arrives from
-          the engine as a <em>swap event</em>, and a swap event is about a
-          <em>build</em>: a rebuild restates every node of a slot, so what the
-          engine can say is <em>this slot's new material landed</em> and never
-          <em>this node's did</em>. So the row is addressed by the deck it
-          landed on &mdash; the same <code>A</code> to <code>D</code> the
-          preview cells carry, and the only thing naming a deck &mdash; and
-          what it carries beside that is the build's own name and the verdict.
-          <strong>The node is omitted rather than approximated</strong>, and
-          the letter is not standing in for it: the address a verdict has is
-          the slot, and the finer one is a derivation nobody has written. It
-          <em>is</em> derivable, and nearer to hand than that sounds &mdash;
-          a build reports a hash per node, and consecutive builds differ where
-          the hashes do. <strong>Both halves of that are this program's
-          already.</strong> Every watcher is handed the store it puts its
-          sources in, and says what it put: a build's report is every node of
+          <strong>The verdict is repeated on each row rather than standing over
+          them.</strong> A verdict arrives from the engine as a <em>swap
+          event</em>, and a swap event is about a <em>build</em>: a rebuild
+          restates every node of a slot, so one save that touched two files is
+          one build with one verdict on it. That verdict is written on both
+          rows. The shape it was chosen over is a row per slot with the changed
+          nodes nested under it, which is truer to where the verdict comes from
+          and costs a second kind of thing to read in a lane whose whole job is
+          to be read at a glance mid&#8209;set; a row is a row, and the
+          repetition is the price of that.
+          <strong>Which nodes changed is a diff and the diff is taken
+          here.</strong> A build reports a hash per node &mdash; every node of
           the restated slot with its layer, its index and the address its
-          source went in under &mdash; the whole stack rather than the one file
-          that changed, because a rebuild restates the slot. The channel that
-          carries it is neither silent nor unread; it is drained where a build
-          lands, and what comes off it is written down as what that slot is
-          playing. <strong>Both lists are in one hand at that moment</strong>
-          &mdash; the one being replaced and the one replacing it &mdash; which
-          is where a diff would be taken. What is no longer <em>kept</em> is the
-          displaced one: nothing puts a version back on its own any more, so a
-          second list held against that had nothing left to be for. It is not
-          lost, either: every version that compiled is in the store, and the
-          library's fifth scope is what walks them.
-          <strong>What is missing is the diff itself, and it is one thing
-          rather than two</strong>: nothing compares them and nothing carries
-          the answer to a row. That is a derivation nobody has written rather
-          than a channel nobody opened, and the command-line player is standing
-          in the same place rather than a step ahead of this one. Until
-          something diffs consecutive builds, a node written on this row would
-          be invented &mdash; and a rebuild that moved three of them would
-          still be one verdict on one row, so what the diff answers is
-          <em>which</em> moved and not which one the row is for.
-          The two operations that address a node wait on the same derivation,
-          which is why neither is offered on a row yet.
+          source went in under, the whole stack rather than the one file that
+          changed &mdash; and consecutive builds differ where the hashes do.
+          Both lists are in one hand at the moment a build is taken up: the one
+          being replaced and the one replacing it. That is where the comparison
+          is made, and the rows are what comes out of it.
+        </p>
+        <p>
+          <strong>Two of the four verdicts name no node, and they cannot.</strong>
+          <em>Refused</em> and <em>did not compile</em> are builds that did not
+          happen, so there is no new list of nodes to hold against the old one
+          and nothing to diff: those rows are the whole slot's, drawn with the
+          deck letter and no address. <strong>A build that changed nothing is
+          the same row for the same reason</strong> &mdash; a press that
+          re&#8209;aims a slot rebuilds it from files nobody edited, so the
+          stack comes back identical and the verdict is about a slot rather
+          than about any node in it. It still draws a row, because a re&#8209;aim
+          that stops the slot for cost is exactly the thing this lane exists to
+          say. What such a row does not carry is either press: both name a node,
+          and there is not one.
         </p>
         <p>
           <strong>What is omitted with it is who wrote it, and when.</strong>
@@ -1852,7 +1900,8 @@
           with the model that answered it and the seed it ran at &mdash; has no
           producer anywhere. The coloured dot goes with it, because the colour
           is the producer. <strong>And the <em>when</em> is not drawn either,
-          which is the one of the four that has a value.</strong> What it has
+          which is the one thing the mock's row has that this one could
+          fill.</strong> What it has
           not got is a spelling: three exist in this workspace and none of them
           is the mock's <code>14:41</code>, so a fourth written for this column
           would be a second answer to a question the Library's own time column
@@ -1879,12 +1928,22 @@
           the one to keep is a judgement about taste that nothing in this
           instrument can take. Keeping writes no record &mdash; the procedure
           change was recorded where the swap landed &mdash; and the row leaves
-          the lane. <strong>There is no control for it yet</strong>, so what
-          takes a row off the lane today is the watchdog's own verdict in
-          favour: a version that held the budget leaves the file and the
+          the lane. <strong>The control is the row itself</strong>: a press
+          anywhere on a candidate row that is not on the capsule at its end
+          keeps that candidate. It is the Library's list one bay up, arranged
+          the same way &mdash; a row that is a control, with a smaller box
+          inside it asked first, which there is the star and here is
+          <em>back</em> &mdash; and the two ends of that arrangement are what
+          decided it: the act that is free goes on the large target and the act
+          that writes a file goes on the small one. Keeping is free in the
+          strict sense: the version stays exactly where it is, the store still
+          holds every version it held, and what leaves is a line in a list.
+          <strong>The other thing that takes a row off this lane is the
+          watchdog's own verdict in favour</strong>, and it is not the same
+          judgement: a version that held the budget leaves the file and the
           picture agreeing, which is the whole of what the lane is there to
-          show a disagreement in. That is the cost judgement standing in for
-          the taste one, and it is honest about which of the two it is.
+          show a disagreement in. That is the cost judgement standing where the
+          taste one is, and the lane is honest about which of the two it is.
         </p>
         <p>
           <strong>What the substitution does not do is empty the lane, and
@@ -1934,7 +1993,7 @@
           that on a deck nobody is looking at it does not answer at all. The
           only thing that can take such a row off the lane is a person saying
           they are done with it &mdash; or putting that deck on air &mdash; and
-          the first of those has no control yet.
+          the first of those is the press on the row.
         </p>
         <p>
           <strong>An overloaded candidate is the row this lane most needs to
@@ -1954,12 +2013,16 @@
           pull that deck's fader to zero, which takes it out of the mix; put an
           earlier version back through the library's fifth scope, which is a
           build like any other; or save something that fits, because the freeze
-          belongs to the version in the slot and the next build clears it. What
-          this row cannot yet offer is the second of those as a press &mdash;
-          <em>put a node's previous version back</em> names a node, and a node
-          is what a swap event has not got. <strong>Keep would not be offered
-          on that row either</strong>, nor on one that was refused: there is
-          nothing up there to keep.
+          belongs to the version in the slot and the next build clears it.
+          <strong>The second of those is the capsule at the end of this
+          row.</strong> <em>Put a node's previous version back</em> names a
+          node, and an overloaded row has one: the build that stopped the slot
+          changed it, which is why the row is drawn at all. So the way out is
+          on the thing that reported the fault, one press from the word that
+          says it. <strong>Keep is not offered on that row</strong>, nor on one
+          that was refused: a slot that has stopped is not a candidate you are
+          choosing between, and keeping it would settle the one row whose whole
+          job is to say the slot is not running.
         </p>
         <p>
           <strong>A source the checker turns down is the fourth word, and it
@@ -2013,23 +2076,27 @@
           check, the same worker and the same frame boundary, which means a
           version that was fine a minute ago can come back over budget on a
           fuller deck and say so. One step, and never a cursor: choosing among
-          older versions is <em>walk the edit history</em>, which is on the
-          operations page with no address anybody has settled &mdash; and this
-          lane is the surface that row has been waiting for.
+          older versions is the library's fifth scope, which walks the same
+          history and lands a version an operator picked out of it. The two are
+          one operation asked two ways, and each surface says the half it holds
+          &mdash; a lane row holds a node and no listing, a walk's row holds a
+          name that carries the node with it.
         </p>
         <p>
-          <strong>And the version it puts back has to exist, which in this
-          program it does not.</strong> What a restore reads is the store's
-          edit history &mdash; every version that <em>compiled</em>, kept
-          whether or not it landed, which is why a real attempt thrown out for
-          cost is exactly the one still there. That history is written by a
-          run that was told to keep one, and <strong>the program that draws
-          this panel keeps none</strong>: nothing is put under a content
-          address and no version is filed, so a restore here would have
-          nothing to restore from. The operations page says this of the same
-          act and this page did not. It is the second half of what the control
-          waits on, the first being the node address above, and neither half
-          is a drawing.
+          <strong>And the version it puts back has to exist.</strong> What a
+          restore reads is the store's edit history &mdash; every version that
+          <em>compiled</em>, kept whether or not it landed, which is why a real
+          attempt thrown out for cost is exactly the one still there. The
+          program that draws this panel writes that history: every build's
+          sources go under a content address and every version that compiles is
+          filed, and the material the run opened with is filed before the
+          window is, so the <em>first</em> edit of a node has something behind
+          it and not only the second. <strong>The one before the one running is
+          what <em>back</em> lands</strong>, found by walking that history for
+          this node of this Set and taking the entry after the newest. Where
+          there is no such entry the press is refused in a sentence that says
+          so &mdash; a node with one version in the history is a node whose only
+          version is the one it is playing.
         </p>
         <p>
           <strong>Empty, the lane draws nothing at all.</strong> No row, no
@@ -3342,6 +3409,21 @@
           first row.
         </p>
         <p>
+          <strong>An output is a destination, a size, and whether it is
+          on.</strong> The name is a word from a closed list &mdash; the program
+          view, a projector window, a plugin sink by its place in the manifest
+          that loaded it &mdash; and never the label on the chip, because a
+          projector&rsquo;s label carries the display it is on and that changes
+          when the cable does. The size is the output&rsquo;s own: the window
+          manager&rsquo;s for a window, and the rectangle the Program bay gives
+          the picture for the program view. <strong>One frame is composited at
+          the largest enabled output&rsquo;s size and scaled into every
+          one</strong>, so nothing is ever upscaled and nobody with several
+          outputs pays for several renders &mdash; and turning a larger sink on
+          raises what every frame costs, which is your own act and is what the
+          Program bay&rsquo;s size pill reads.
+        </p>
+        <p>
           <strong>All of them may be off, and that is a state worth having.</strong>
           The deck previews are monitors rather than outputs &mdash; nothing
           routes one and each is fixed to its own deck &mdash; so with every sink
@@ -3451,8 +3533,8 @@
     A layout, not a specification &mdash; it is what the implementation is
     checked against. The mechanisms behind the mixer, the inspector, the library
     and the outputs are built, and so are the Master bay's out, its three
-    effects and the staging lane's row; the sequencer, the two
-    acts a candidate row would offer, authority and the panel itself are not.
+    effects and the staging lane's row with the two acts it offers; the
+    sequencer, authority and the panel itself are not.
     <a href="index.html">The seven rules</a> are what all of this obeys.
   </footer>
 

@@ -33,7 +33,7 @@ use common::{drawn_once, near, PLAUSIBLE, SMALLEST};
 use karakuri_console::input::{claim, Claim};
 use karakuri_console::room::{size, Room};
 use karakuri_console::view::{
-    count_text, inspector, pane_count, InspectorPane, Node, Pane, Param, View, SYNCS,
+    count_text, inspector, pane_count, InspectorPane, Node, NodeAuthority, Pane, Param, View, SYNCS,
 };
 use karakuri_layout::{Point, Rect};
 use karakuri_operation::{Authority, Layer, NodeAt, ParamAt, Sync};
@@ -55,6 +55,7 @@ fn row(ord: usize, name: &str) -> Param {
             }),
             key: name.to_owned(),
         },
+        bound: None,
     }
 }
 
@@ -63,7 +64,13 @@ fn node(index: usize, params: usize) -> Node {
     Node {
         addr: format!("L1:{index}"),
         name: format!("node_{index}"),
-        authority: Some(Authority::Manual),
+        authority: Some(NodeAuthority {
+            at: NodeAt {
+                layer: Layer::L1,
+                index: 0,
+            },
+            level: Authority::Manual,
+        }),
         renderers: Vec::new(),
         params: (0..params)
             .map(|at| row(at + 1, &format!("n{index}p{at}")))

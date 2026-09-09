@@ -35,10 +35,10 @@ use common::{drawn_once, near, rect_of, PLAUSIBLE, SMALLEST};
 use karakuri_console::panel::{Panel, GRAB};
 use karakuri_console::room::size;
 use karakuri_console::view::{
-    inspector, rend_chips, InspectorPane, Node, Pane, Renderer, PANE_NAMES, SYNCS,
+    inspector, rend_chips, InspectorPane, Node, NodeAuthority, Pane, Renderer, PANE_NAMES, SYNCS,
 };
 use karakuri_layout::{Point, Rect};
-use karakuri_operation::{Authority, Operation, Sync};
+use karakuri_operation::{Authority, Layer, NodeAt, Operation, Sync};
 
 /// **The mock's own `L4 renderers` group**: three renderers folded under one
 /// head, the first of them live, and no authority chip — a head standing over
@@ -68,7 +68,13 @@ fn shell() -> Node {
     Node {
         addr: "L1:0".to_owned(),
         name: "drift_shell".to_owned(),
-        authority: Some(Authority::Manual),
+        authority: Some(NodeAuthority {
+            at: NodeAt {
+                layer: Layer::L1,
+                index: 0,
+            },
+            level: Authority::Manual,
+        }),
         renderers: Vec::new(),
         params: Vec::new(),
     }
