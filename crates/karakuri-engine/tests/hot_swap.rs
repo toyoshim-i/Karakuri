@@ -31,7 +31,7 @@ mod gpu {
     use std::time::{Duration, Instant};
 
     use karakuri_engine::swap::{Event, HotSwap, Polled, Refusal, Request, Source};
-    use karakuri_engine::{Binding, Curve, Gpu, Present, Set, Signals, VideoSource};
+    use karakuri_engine::{Basis, Binding, Curve, Gpu, Present, Set, Signals, VideoSource};
     use karakuri_ir::typed::Checked;
 
     /// Deliberately small for the structural tests: what they check does not
@@ -686,10 +686,6 @@ proc wide_points {
             frames_before + elapsed,
             "the running Set's clock did not advance normally through the rejection"
         );
-        assert!(
-            !h.swap.on_trial(),
-            "a failed build started a watchdog trial over nothing"
-        );
 
         let rejection = seen
             .iter()
@@ -781,20 +777,30 @@ proc wide_points {
         assert!(events.is_empty(), "something happened: {events:?}");
         assert_eq!(h.swap.set().capacity(), FIRST);
         assert_eq!(steps_taken(h.swap.set()), 60);
-        assert!(!h.swap.on_trial());
     }
 
     /// Rollback, forced with an absurd budget rather than with a slow shader — a
     /// procedure heavy enough to miss the budget on one machine is comfortable on
     /// another, and a test that depends on which is which is not a test.
+    /// [`a_candidate_is_rolled_back_on_a_budget_derived_from_its_own_measurement`]
+    /// is the same claim against a threshold taken from a second measurement
+    /// rather than from a constant, which is the other half of
+    /// `docs/contributing.md` §1.
     ///
     /// The assertion that matters is not that the rollback *fired*; it is that
-    /// what came back is the **same Set**, still holding the state it was parked
+    /// what came back is the **same Set**, still holding the state it was left
     /// with. `t` is the sharpest available witness of that: simulation time only
-    /// advances through `prepare`, nothing called `prepare` on the outgoing Set
-    /// while the candidate was on trial, so a restored Set must resume at exactly
-    /// the `t` it stopped at. A Set that had been rebuilt, or reset, or kept
-    /// stepping in the background would all show up here.
+    /// advances through `prepare`, and a Set that had been rebuilt, reset, or
+    /// kept stepping in the background would all show up here.
+    ///
+    /// **The swap and its verdict are one drain now** (ADR-0313), so this reads
+    /// both out of the same `events()` call. There used to be a trial — the
+    /// candidate was drawn for eight warmup and thirty judged frames before
+    /// anything decided — and this test asserted `frames > 8` to pin it. The
+    /// number the verdict is reached on was taken on the worker before the Set
+    /// was ever handed over, so there was nothing for those frames to settle:
+    /// what they bought was half a second of material on screen that was already
+    /// going to be thrown out.
     #[test]
     fn the_watchdog_rolls_back_and_restores_the_previous_set_where_it_was_parked() {
         // Nothing is faster than zero milliseconds, so every candidate fails.
@@ -806,9 +812,11 @@ proc wide_points {
         tx.send(request(L4, SECOND, "second"))
             .expect("worker alive");
 
-        // Where the outgoing Set was parked: its step count at the top of the
-        // frame the swap landed on, which is the last moment anything stepped it.
+        // Where the outgoing Set was left: its step count at the top of the frame
+        // the swap landed on, which is the last moment anything stepped it.
         let mut parked = None;
+        let mut seen: Vec<String> = Vec::new();
+        let mut verdict = None;
         let started = Instant::now();
         while parked.is_none() {
             let before = steps_taken(h.swap.set());
@@ -817,16 +825,17 @@ proc wide_points {
                 if is_swapped(&event) {
                     parked = Some(before);
                 }
+                if let Event::RolledBack { cost_ms, basis, .. } = &event {
+                    verdict = Some((*cost_ms, *basis));
+                }
+                seen.push(event.to_string());
             }
             assert!(started.elapsed() < PATIENCE, "the swap never happened");
         }
         let parked = parked.expect("just set");
-        assert_eq!(h.swap.set().capacity(), SECOND, "the candidate is live");
-        assert!(h.swap.on_trial(), "the candidate is not being watched");
 
-        let (frames, seen) =
-            h.frames_until(|e| matches!(e, Event::RolledBack { .. }), "the rollback");
-
+        let (cost_ms, basis) = verdict
+            .unwrap_or_else(|| panic!("the swap landed and no verdict came with it: {seen:?}"));
         assert_eq!(
             h.swap.set().capacity(),
             FIRST,
@@ -835,7 +844,7 @@ proc wide_points {
         // `parked + 1`, not `parked`: the frame the rollback landed on stepped the
         // restored Set once on its way past, exactly as it would have stepped any
         // other live Set. The claim is that it resumed from where it stopped and
-        // not from zero, and not from somewhere it drifted to while parked.
+        // not from zero, and not from somewhere it drifted to while it waited.
         assert_eq!(
             steps_taken(h.swap.set()),
             parked + 1,
@@ -843,16 +852,24 @@ proc wide_points {
          and came back at {}",
             steps_taken(h.swap.set())
         );
+        // **The number is the candidate's own frame and not an interval.** A
+        // frame interval on this harness is milliseconds of a real submit and a
+        // real poll; what this has to be is the probe's reading of the Set that
+        // just arrived, which is a positive finite number the worker took.
         assert!(
-            !h.swap.on_trial(),
-            "the trial did not end when the verdict came in"
+            cost_ms > 0.0 && cost_ms.is_finite(),
+            "the rollback decided on {cost_ms}, which is not a cost"
         );
-        // The verdict waited for a window rather than firing on the first frame —
-        // a watchdog that judged frame one would roll back every candidate that
-        // ever existed, because a cold Set's first frame pays for its own upload.
-        assert!(
-            frames > 8,
-            "the verdict came after {frames} frames, which is inside the warmup"
+        // **And it says which of the two numbers it was** (ADR-0298's
+        // `Decision::basis`, reached through the one rule in
+        // `governor::budgeted`). A candidate arrives unestimated — the worker
+        // cannot estimate, because an estimate is taken at the output's size and
+        // the worker does not know it — so the measurement is what answers here,
+        // and `Unbudgetable` is unreachable from a rollback by construction.
+        assert_eq!(
+            basis,
+            Basis::Measured,
+            "the verdict does not carry which number it was reached on"
         );
 
         let rollback = seen
@@ -862,6 +879,92 @@ proc wide_points {
         assert!(
             rollback.contains("host clock"),
             "the rollback message does not say what kind of number it decided on: {rollback}"
+        );
+        assert!(
+            rollback.contains("its own frame"),
+            "the rollback message still describes the number as a frame interval: {rollback}"
+        );
+    }
+
+    /// **The gate is the candidate's own cost, held against a threshold taken
+    /// from a second measurement rather than from a constant.**
+    ///
+    /// `docs/contributing.md` §1: *check a number against a second measurement
+    /// whose bias direction you know rather than against a constant*. The test
+    /// above forces a rollback with a budget of zero, which proves the branch is
+    /// reachable and proves nothing about *what* is being compared — a watchdog
+    /// still reading frame intervals would pass it. This one measures the
+    /// candidate first, then rebuilds the same candidate against half its own
+    /// measured cost, so the only way to fail is on a number that actually
+    /// belongs to that Set.
+    ///
+    /// The two runs are two harnesses because a `HotSwap`'s budget is what a
+    /// candidate is judged against at the moment it lands, and the first run has
+    /// to be allowed to keep its candidate in order to be asked what it cost.
+    #[test]
+    fn a_candidate_is_rolled_back_on_a_budget_derived_from_its_own_measurement() {
+        let (mut h, tx) = Harness::channel_driven(GENEROUS_MS);
+        for _ in 0..5 {
+            h.frame();
+        }
+        tx.send(request(L4, SECOND, "measured"))
+            .expect("worker alive");
+        h.frames_until(is_swapped, "the swap");
+        let measured = h
+            .swap
+            .measured_cost()
+            .expect("the worker measures what it builds")
+            .ms;
+        assert!(
+            measured > 0.0 && measured.is_finite(),
+            "the candidate arrived with {measured} ms, which is not a cost"
+        );
+        assert_eq!(
+            h.swap.set().capacity(),
+            SECOND,
+            "a generous budget threw the candidate out anyway"
+        );
+
+        // Half of what this machine just said the Set costs. Not a constant, and
+        // not a shader chosen for being slow: whatever this adapter's host clock
+        // reads, the same Set cannot fit in half of it.
+        let (mut tight, tx) = Harness::channel_driven(measured / 2.0);
+        for _ in 0..5 {
+            tight.frame();
+        }
+        tx.send(request(L4, SECOND, "over")).expect("worker alive");
+
+        let mut verdict = None;
+        let mut seen: Vec<String> = Vec::new();
+        let started = Instant::now();
+        while verdict.is_none() {
+            tight.frame();
+            for event in tight.swap.events() {
+                if let Event::RolledBack { cost_ms, .. } = &event {
+                    verdict = Some(*cost_ms);
+                }
+                seen.push(event.to_string());
+            }
+            assert!(
+                started.elapsed() < PATIENCE,
+                "no verdict on a candidate that cannot fit half its own cost: {seen:?}"
+            );
+        }
+        let rolled_at = verdict.expect("just set");
+        assert_eq!(
+            tight.swap.set().capacity(),
+            FIRST,
+            "the candidate was kept against a budget below its own measured cost"
+        );
+        // Two measurements of the same Set on the same adapter, so the second is
+        // the first within whatever the host clock's noise is — asserted as a
+        // band and not as equality, because a host clock is not a repeatable
+        // instrument (`P-0095`). What it rules out is the number being something
+        // else entirely, which is what a frame interval would be.
+        assert!(
+            rolled_at > measured / 4.0 && rolled_at < measured * 4.0,
+            "the verdict decided on {rolled_at} ms where the same Set measured \
+             {measured} ms a moment earlier — that is not this Set's own cost"
         );
     }
 
@@ -877,15 +980,40 @@ proc wide_points {
         }
         tx.send(request(L4, SECOND, "second"))
             .expect("worker alive");
-        h.frames_until(is_swapped, "the swap");
-        let (_, seen) = h.frames_until(|e| matches!(e, Event::Accepted { .. }), "the verdict");
+
+        // The swap and its verdict arrive in one drain (ADR-0313), so they are
+        // read out of one loop — asking `frames_until` for the second after it
+        // has already consumed the first would wait for ever.
+        let mut verdict = None;
+        let mut seen: Vec<String> = Vec::new();
+        let started = Instant::now();
+        while verdict.is_none() {
+            h.frame();
+            for event in h.swap.events() {
+                if let Event::Accepted { cost_ms, basis, .. } = &event {
+                    verdict = Some((*cost_ms, *basis));
+                }
+                seen.push(event.to_string());
+            }
+            assert!(started.elapsed() < PATIENCE, "no verdict: {seen:?}");
+        }
+        let (cost_ms, basis) = verdict.expect("just set");
 
         assert_eq!(h.swap.set().capacity(), SECOND, "the candidate was kept");
-        assert!(!h.swap.on_trial());
         assert!(
             seen.iter().any(|s| s.contains("held the budget")),
             "no acceptance message: {seen:?}"
         );
+        // **The verdict's number is the Set's own measurement**, and this is the
+        // one place the two can be compared bit for bit: the candidate was kept,
+        // so the measurement that travelled with it is the one the slot is
+        // holding now. A frame interval would not be equal to it by accident.
+        assert_eq!(
+            cost_ms,
+            h.swap.measured_cost().map(|c| c.ms),
+            "the verdict was reached on a number that is not this Set's own cost"
+        );
+        assert_eq!(basis, Basis::Measured);
     }
 
     /// **A rebuild can change how many renderers a Set has**, not only which ones.
@@ -908,8 +1036,14 @@ proc wide_points {
         }
         tx.send(request_many(&[L4, L4_WIDE], SECOND, "two renderers"))
             .expect("worker alive");
-        h.frames_until(is_swapped, "the swap");
-        h.frames_until(|e| matches!(e, Event::Accepted { .. }), "the verdict");
+        // One wait, not two: the swap and its verdict are one drain (ADR-0313),
+        // so asking for the verdict after the swap has been consumed waits for
+        // an event that has already gone past.
+        let (_, seen) = h.frames_until(|e| matches!(e, Event::Accepted { .. }), "the verdict");
+        assert!(
+            seen.iter().any(|s| s.contains("swapped in")),
+            "the verdict arrived without the swap that produced it: {seen:?}"
+        );
 
         let set = h.swap.set();
         assert_eq!(set.capacity(), SECOND, "the candidate was not kept");
@@ -926,15 +1060,18 @@ proc wide_points {
         );
     }
 
-    /// Two saves during one judging window leave two finished builds behind it, and
-    /// the channel is FIFO. Installing the front of that queue would put a
-    /// superseded Set on screen for a whole window — thirty-eight frames of a `.kir`
-    /// the operator has already replaced — before reaching the current one. The
-    /// verdict frame has to drain to the newest.
+    /// Two saves finishing between two frames leave two builds in the channel,
+    /// and the channel is FIFO. Installing the front of that queue would put a
+    /// superseded Set on screen — a `.kir` the operator has already replaced —
+    /// before reaching the current one. The frame that installs has to drain to
+    /// the newest.
     ///
-    /// No frames are rendered while `b` and `c` build, so nothing can be installed
-    /// and the trial over `a` cannot end: both results are guaranteed to be waiting
-    /// when the window finally closes.
+    /// **The window this used to be about is gone** (ADR-0313): a candidate was
+    /// judged for thirty-eight frames, and two saves landing behind that window
+    /// was the ordinary case rather than a contrived one. What replaces it here
+    /// is the same guarantee reached the same way — no frames are rendered while
+    /// `b` and `c` build, so both results are certainly waiting when the next
+    /// one is.
     #[test]
     fn the_build_installed_after_a_verdict_is_the_newest_one() {
         const THIRD: u32 = 12_288;
@@ -946,7 +1083,7 @@ proc wide_points {
         }
         tx.send(request(L4, SECOND, "a")).expect("worker alive");
         h.frames_until(is_swapped, "the first swap");
-        assert!(h.swap.on_trial(), "`a` is not being watched");
+        assert_eq!(h.swap.set().capacity(), SECOND, "`a` did not land");
 
         tx.send(request(L4, THIRD, "b")).expect("worker alive");
         tx.send(request(L4, FOURTH, "c")).expect("worker alive");
@@ -1006,7 +1143,6 @@ proc wide_points {
             "the dead worker was reported {lost} times, not once"
         );
         assert_eq!(h.swap.set().capacity(), FIRST, "the live Set was disturbed");
-        assert!(!h.swap.on_trial());
     }
 
     /// **A source that refused reaches the render thread, and nothing else
@@ -1093,14 +1229,9 @@ proc wide_points {
             "the diagnostics did not survive the channel"
         );
 
-        // **Nothing was built, so nothing is on trial and nothing was
-        // replaced.** The capacity is what says which Set is live — see
-        // `FIRST` and `SECOND` — and a refusal that had reached
-        // `install_if_ready` as a candidate would be a swap.
-        assert!(
-            !h.swap.on_trial(),
-            "a refusal started a trial, and there is no Set to try"
-        );
+        // **Nothing was built, so nothing was replaced.** The capacity is what
+        // says which Set is live — see `FIRST` and `SECOND` — and a refusal
+        // that had reached `install_if_ready` as a candidate would be a swap.
         assert_eq!(
             h.swap.set().capacity(),
             FIRST,

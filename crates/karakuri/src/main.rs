@@ -5477,10 +5477,10 @@ struct Engine {
     /// which is what the budget watchdog is attached to."* So nothing here
     /// builds a Set: [`loading`] writes the library Set's procedures into the
     /// scratch and sends an aim, and the same worker that watches for a save
-    /// picks it up. The swap lands at a frame boundary, is judged against the
-    /// budget for thirty frames, and rolls back on its own if it costs too
-    /// much — none of which had to be written for the library, because a load
-    /// is now literally an edit this program made.
+    /// picks it up. The swap lands at a frame boundary, is judged there on what
+    /// one frame of that Set costs, and rolls back on its own if that is over
+    /// the budget — none of which had to be written for the library, because a
+    /// load is now literally an edit this program made.
     ///
     /// **In slot order, so the index is the deck letter**: `aimed[0]` is deck
     /// A's, and it is the same index `Deck::events`, the strips and the
@@ -6717,6 +6717,13 @@ fn watched(
         // with room, and it is what makes a rollback reachable in this program
         // at all — `HotSwap::fixed` judged against infinity, so no candidate
         // could ever be thrown out for cost.
+        //
+        // **And it is the opening value rather than the final one.** A
+        // `HotSwap` is built here, from the launch pair, before there is a
+        // window to ask what the display's interval is; `App::resumed` reads
+        // `budget_ms(&window)` the moment there is one and narrows every slot
+        // through `Deck::set_frame_budget_ms`. The constant is what stands where
+        // the platform names no refresh rate (ADR-0313).
         DEFAULT_BUDGET_MS,
         Box::new(watching),
     );
@@ -8956,8 +8963,9 @@ fn bundled(root: &std::path::Path, id: &str) -> Result<String, String> {
 /// writes every procedure in it into the scratch, and tells that slot's
 /// watcher to look there instead. **Everything after this line is the path a
 /// save already takes** — the worker compiles off the render thread, the swap
-/// lands at a frame boundary, and the governor judges it for thirty frames
-/// against the budget and rolls it back on its own if it costs too much. The
+/// lands at a frame boundary, and the watchdog judges it there on what one
+/// frame of that Set costs and rolls it back on its own if that is over the
+/// budget. The
 /// library gets all of that for nothing, and no second route into a slot is
 /// opened.
 ///
@@ -12982,6 +12990,29 @@ impl ApplicationHandler for App {
         );
 
         let budget = budget_ms(&window);
+        // **And the same interval is what a candidate Set is judged against.**
+        // The two used to be different numbers with the same word on them: this
+        // row's budget was the display's real interval and the swap watchdog's
+        // was `DEFAULT_BUDGET_MS`, 20, transcribed in [`watched`] because a
+        // `HotSwap` is built before there is a window to ask. They are the same
+        // question now — *how long may one frame take* — because ADR-0313 made
+        // the watchdog compare one frame of one Set rather than a median of the
+        // deck's intervals, so the honest right-hand side is the deadline the
+        // display actually imposes.
+        //
+        // **Where `winit` will not say, the constant stands**, which is what
+        // `set_frame_budget_ms` does with a `None` here: a monitor it cannot
+        // name or a mode with no refresh rate is not a licence to invent a
+        // plausible 16.6
+        // (`docs/principles/0095-an-instrument-that-cannot-measure-says-so-rather-than-reporting-a-number.md`).
+        //
+        // **Read once, when the window opens**, on [`budget_ms`]'s own terms —
+        // a window dragged onto a 120 Hz display keeps the interval it opened
+        // on, and the watchdog now inherits that limitation exactly as the row
+        // above it has it.
+        if let Some(budget) = budget {
+            engine.deck.set_frame_budget_ms(budget);
+        }
         // **The strips before the legend**, because the legend says how many
         // there are and the answer is the deck's rather than a guess. It is
         // written again on every frame; this is the first one.
@@ -16697,16 +16728,23 @@ mod tests {
             label: label.into(),
             error: karakuri_engine::set::SetError::NoCapacity("drift_shell".to_owned()),
         };
+        // **The candidate's own cost and not a frame interval**, since
+        // ADR-0313: 24 ms is what one frame of that Set was measured at, held
+        // against one frame of the display. The lane does not read the number
+        // — it reads which verdict it was — but a value that named the wrong
+        // quantity here would be a test teaching the wrong sentence.
         let rolled = |label: &str| Event::RolledBack {
             id: 3,
             label: label.into(),
-            median_ms: 24.0,
+            cost_ms: 24.0,
+            basis: karakuri_engine::Basis::Measured,
             budget_ms: 20.0,
         };
         let accepted = Event::Accepted {
             id: 4,
             label: "drift_shell + soft_points".into(),
-            median_ms: 9.0,
+            cost_ms: Some(9.0),
+            basis: karakuri_engine::Basis::Measured,
             budget_ms: 20.0,
         };
 

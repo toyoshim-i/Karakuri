@@ -850,6 +850,18 @@ pub struct Deck {
     /// The compute budget priming is decided against. Holds no per-slot state;
     /// [`Deck::govern`] is a pure function of the slots plus this.
     governor: Governor,
+    /// **What one frame of the display this deck is drawn on may cost**, in
+    /// milliseconds — see [`Deck::set_frame_budget_ms`], which is the only
+    /// writer and forwards the same number to every slot's watchdog.
+    ///
+    /// Held here as well as on the slots because it is one fact about one
+    /// display, and a slot is where it is *spent*: each `HotSwap` needs it to
+    /// judge the candidate that lands on it, and the deck needs it to say
+    /// whether the deck's own frames are inside it
+    /// ([`Report::deck_over_period`]). Reading it back off slot zero would make
+    /// a [`HotSwap::fixed`] slot — whose budget is infinity, because nothing can
+    /// ever land on it — answer for the deck.
+    frame_budget_ms: f32,
     /// Scheduled moves, at most one per `(slot, control)` — see
     /// [`Deck::schedule`]. A `Vec` rather than a map because there are eight
     /// possible entries on a deck of four and a linear scan of eight is not
@@ -926,6 +938,9 @@ impl Deck {
             meters: None,
             signals: Signals::default(),
             governor: Governor::default(),
+            // The engine's constant until a caller that can ask the platform
+            // says otherwise, which is `set_frame_budget_ms` (ADR-0313).
+            frame_budget_ms: crate::swap::DEFAULT_BUDGET_MS,
             // At its bound from the start: at most one per `(slot, control)`,
             // so this never grows and `schedule` never allocates. That matters
             // on the replay path, where a scheduled move arrives inside the
@@ -1082,17 +1097,21 @@ impl Deck {
     /// encoder, and hands both out together behind a guard.
     ///
     /// Every slot gets its frame boundary here — Allocated ones included, so
-    /// that a build landing on an off-air slot still installs, and so that
-    /// retired Sets keep being handed back to the worker to be freed. What an
-    /// off-air slot does *not* get is a watchdog sample: this frame's interval
-    /// is one number for the whole deck, so judging a candidate against it
-    /// would accept or reject it on its neighbours' cost.
-    /// `HotSwap::begin_frame_parked` freezes the trial instead, and the verdict
-    /// waits until the slot is Live. What is still not separated
-    /// is one Live slot's cost from its neighbours' — that needs a per-Set
-    /// measurement, which [`crate::probe`] takes at build time and
-    /// [`crate::governor`] budgets from, and which this watchdog does not
-    /// read.
+    /// that a build landing on an off-air slot still installs, so that its
+    /// candidate is judged, and so that retired Sets keep being handed back to
+    /// the worker to be freed. **Every slot gets the same work**, because a
+    /// candidate's verdict is its own measured cost and that is the same number
+    /// whatever the slot's residency (ADR-0313).
+    ///
+    /// **It used to differ, and the difference was a symptom.** An off-air
+    /// slot's trial was frozen — no watchdog sample, the verdict waiting until
+    /// the slot was Live — because the number being judged was this frame's
+    /// interval, which is one number for the whole deck. That kept a candidate
+    /// nobody was drawing from being judged on its neighbours' cost, and did
+    /// nothing at all for a candidate on a *Live* slot, which was judged on
+    /// exactly that. The interval is still measured here and is still one number
+    /// for the deck; what reads it is [`Deck::frame_period_ms`], and it judges
+    /// no slot.
     ///
     /// Allocates nothing, compiles nothing, blocks on nothing: everything
     /// under here is `try_recv` and `try_lock`, and creating a command encoder
@@ -1484,10 +1503,11 @@ impl Deck {
     /// The compute budget priming is decided against, in milliseconds of
     /// measured per-Set cost.
     ///
-    /// **Not the watchdog's `--budget-ms`**, which is a frame interval on a
-    /// host clock; see [`crate::governor::DEFAULT_COMPUTE_BUDGET_MS`] for why
-    /// the two are not comparable. Spelled `compute_budget_ms` rather than
-    /// `budget_ms` for exactly that reason: every slot on this deck carries a
+    /// **Not the watchdog's `--budget-ms`**, which bounds *one* Set's frame
+    /// where this bounds the sum of what the deck is carrying; see
+    /// [`crate::governor::DEFAULT_COMPUTE_BUDGET_MS`] for why the two are not
+    /// comparable. Spelled `compute_budget_ms` rather than `budget_ms` for
+    /// exactly that reason: every slot on this deck carries a
     /// [`HotSwap::budget_ms`] of the other kind, and `deck.budget_ms()` sitting
     /// beside `deck.slot(i).budget_ms()` is an invitation to pass one where the
     /// other belongs. Two quantities that share a unit and nothing else should
@@ -1498,6 +1518,67 @@ impl Deck {
 
     pub fn set_compute_budget_ms(&mut self, budget_ms: f32) {
         self.governor.set_budget_ms(budget_ms);
+    }
+
+    /// **Say what one frame of the display this deck is drawn on may cost**, to
+    /// every slot's swap watchdog at once.
+    ///
+    /// The other budget, and the one `compute_budget_ms` above is named apart
+    /// from: this is what a *candidate* Set's own frame is held against when a
+    /// build lands on any slot. Every slot gets the same number because they are
+    /// all drawn into the same frame on the same display.
+    ///
+    /// **The caller is whoever can ask the platform.** A deck is built before
+    /// there is a window on the paths that have one at all, so the slots start
+    /// on [`crate::swap::DEFAULT_BUDGET_MS`] and this narrows them once
+    /// `winit` will name a refresh rate — `karakuri`'s window does it when it
+    /// opens. A display the platform cannot describe leaves the constant
+    /// standing, which is `P-0095`'s shape: not knowing is not a licence to
+    /// invent (ADR-0313).
+    ///
+    /// **A [`HotSwap::fixed`] slot is written too and does not notice.** Its
+    /// budget is infinity, which is a statement that it has no worker and
+    /// nothing to judge rather than a threshold anything reads — nothing can
+    /// land on it, so nothing consults it. Skipping such a slot would mean this
+    /// call's effect depended on which slots happened to have workers, and the
+    /// deck's own answer is on the field above either way.
+    pub fn set_frame_budget_ms(&mut self, budget_ms: f32) {
+        if !budget_ms.is_finite() || budget_ms <= 0.0 {
+            return;
+        }
+        self.frame_budget_ms = budget_ms;
+        for slot in &mut self.slots {
+            slot.swap.set_budget_ms(budget_ms);
+        }
+    }
+
+    /// What [`Deck::set_frame_budget_ms`] last said, or
+    /// [`crate::swap::DEFAULT_BUDGET_MS`] where nothing has.
+    pub fn frame_budget_ms(&self) -> f32 {
+        self.frame_budget_ms
+    }
+
+    /// **How long this deck's frames are actually taking**, as a median over
+    /// the last thirty on a host clock, or [`None`] until that window has
+    /// filled.
+    ///
+    /// **One number for the whole deck, and it cannot be divided.** Every slot
+    /// is given its frame boundary inside [`Deck::begin_frame`], so every slot's
+    /// [`HotSwap::frame_period_ms`] is a reading of the same intervals; the
+    /// first slot's is the deck's, and a deck always has at least one. Taking a
+    /// second measurement here would be a second answer to a question that
+    /// already has one.
+    ///
+    /// **What it is entitled to say** is that the deck as a whole is or is not
+    /// keeping up — [`Report::deck_over_period`], which is where this reaches a
+    /// caller with the budget beside it. What it may never say is anything
+    /// about a *slot*: the interval covers every slot's step and draw, the
+    /// composite, the cell presents, the picture and whatever the caller draws
+    /// over the top, so attributing it to one of them is the defect ADR-0313
+    /// took off the per-candidate path. A slot's own number is
+    /// [`Decision::budgeted_ms`](crate::governor::Decision::budgeted_ms).
+    pub fn frame_period_ms(&self) -> Option<f32> {
+        self.slots.first()?.swap.frame_period_ms()
     }
 
     /// **Measure every slot nothing has measured yet.** Returns how many it
@@ -1711,7 +1792,14 @@ impl Deck {
                 closed_form: s.swap.set().is_closed_form(),
             })
             .collect();
-        let report = self.governor.decide(&states);
+        let mut report = self.governor.decide(&states);
+        // **The deck-level fact, stamped on by the only thing that measured
+        // one.** `Governor::decide` reads no clock — that is what keeps a
+        // governor pass inside the determinism invariant — so the frame period
+        // arrives here rather than there. It decides nothing in the report it
+        // is attached to; see `Report::deck_over_period`.
+        report.frame_period_ms = self.frame_period_ms();
+        report.frame_budget_ms = Some(self.frame_budget_ms);
         for decision in &report.decisions {
             // Through `set_effective`, not around it: that is where a meter is
             // retired and where the priming phase is reset, and a governor that

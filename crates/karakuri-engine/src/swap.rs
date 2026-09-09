@@ -7,7 +7,9 @@
 //!
 //! - **Never allocate on the render thread. Never compile shaders on it.**
 //! - Pipelines are double-buffered; swaps happen only on frame boundaries.
-//! - If a new pipeline exceeds the frame budget, roll back automatically.
+//! - If a new pipeline exceeds the frame budget, roll back automatically —
+//!   where *the frame budget* is what one frame of **that Set** may cost, and
+//!   not what the deck's frames happen to be taking (ADR-0313).
 //!
 //! ## Compiling somewhere else
 //!
@@ -69,51 +71,77 @@
 //! where it was parked, which is the same property
 //! [`Allocated`](crate::deck::Residency::Allocated) residency has.
 //!
-//! ## The watchdog measures a host clock, and says so
+//! ## A candidate is judged on the candidate's own cost
 //!
-//! What is measured is the interval between successive `begin_frame` calls:
-//! how often frames are actually coming out. Not the GPU cost of the render
-//! pass — `crates/karakuri-engine/src/probe.rs` explains at length why GPU
-//! timestamps are advertised, enabled, and unreliable on this crate's
-//! development machine, and a watchdog steering on a number that reads 0.0 ms
-//! for a genuinely heavy workload is worse than no watchdog at all. A host
-//! clock cannot separate shader cost from vsync, from the compositor, or from
-//! whatever else the machine is doing. It can tell that frames stopped
-//! arriving on time, which is the thing "exceeds the frame budget" means on
-//! stage, and it is honest about being that and nothing more.
+//! What the verdict compares is **what one frame of this Set costs**, measured
+//! on the worker at build time (or estimated at the output's size, where
+//! anything has estimated it), against **one frame of the display** — the
+//! refresh interval where the caller knew one, [`DEFAULT_BUDGET_MS`] where it
+//! did not. Nothing about the other slots is on either side.
 //!
-//! Two consequences of it being a frame *interval*: under vsync it quantises
-//! to multiples of the refresh period, so the budget has to sit between one
-//! period and two ([`DEFAULT_BUDGET_MS`]); and the verdict is a **median**
-//! over a window rather than a worst case, because on a host clock a single
-//! sample carries whatever else the OS scheduler was doing. `Probe` makes the
-//! same choice for the same reason. One hitch is not a reason to throw away
-//! generated material; thirty frames that all miss is.
+//! **It used to be the deck's frame interval, and that was the defect**
+//! ([ADR-0313](../../../docs/adr/0313-a-candidate-is-judged-on-its-own-cost-and-the-decks-period-is-a-deck-level-alarm.md)).
+//! The interval between two `begin_frame` calls is one number for the whole
+//! deck: since ADR-0269 it contains every slot's step and draw whatever its
+//! residency, the composite, the cell presents, the picture, the `egui` pass
+//! and the vsync wait. Judging a candidate on it means judging one slot's
+//! material on the other three slots' cost plus the console's, and under Fifo
+//! it is quantised to the display period, so one dropped vsync in the median
+//! rolls a candidate back. Measured headless at 1280x720 on an M4 Pro, on the
+//! host clock and biased high: the panel's default four slots 4.3 ms, the
+//! reference Set in one of four slots 11.3 ms, the reference Set in all four
+//! with A live 23.2 ms, all four live 69.9 ms — and on the panel each cell
+//! present adds about 1.5 ms on top. So loading the reference Set into one slot
+//! of four was about 18 ms of work against a 16.7 ms vsync, landed at 33 ms,
+//! and rolled back a Set whose own frame costs about 9 ms.
 //!
-//! ## The window, and why it does not start at frame one
+//! The maintainer's ruling on which quantity is wanted is quoted at
+//! `HotSwap::judge`, where the comparison is: **the verdict on a candidate is
+//! independent of what the other slots are carrying.** A share of the budget
+//! divided by the slot count, or a share taken beside what the neighbours are
+//! committed to, would both be the neighbours' load back on the left-hand side
+//! by another route.
 //!
-//! A cold Set's first frames pay for things no steady-state frame pays for:
-//! the driver's first use of each freshly created pipeline, first touch of
-//! freshly allocated buffers, and — the big one — the whole-capacity element
-//! and alive buffer upload `Set::build` leaves staged on the queue, which at
-//! 262144 elements is megabytes. A budget check that fired on frame one would
-//! reject every candidate that ever existed, forever, and the symptom would be
-//! a hot-swap feature that appears to work and never keeps anything.
+//! **The number is a host-clock reading and says so.** `probe.rs` explains at
+//! length why GPU timestamps are advertised, enabled and unreliable on this
+//! crate's machines; the fallback brackets a submit-and-wait the GPU never
+//! spent and reads biased high, which is what [`DEFAULT_BUDGET_MS`]'s slack is
+//! now for. [`Measurement::method`] is which clock answered, and
+//! [`crate::governor::Basis`] rides on the verdict so that a reader can see
+//! which of the two numbers it was.
 //!
-//! So [`WARMUP_FRAMES`] are discarded before [`JUDGE_FRAMES`] are measured.
-//! The worker also flushes and waits for that upload on its own thread before
-//! handing the Set over, which removes most of the cost from the window rather
-//! than merely hiding it inside the warmup.
+//! ## The frame period is the deck's, and it is an alarm
 //!
-//! ## The worker also measures what it built
+//! The interval between frames is still measured — [`HotSwap::frame_period_ms`],
+//! a rolling median over [`PERIOD_FRAMES`] on a host clock. It can tell that
+//! frames stopped arriving on time, which is the thing "the deck is not keeping
+//! up" means on stage, and it is honest about being that and nothing more: it
+//! **cannot be divided among the slots that produced it**, so nothing may read
+//! it as a statement about any one of them.
 //!
-//! The watchdog above is a *frame interval*, and a frame interval cannot be
-//! divided among the slots that produced it — every Live slot in a deck is
-//! judged against the whole deck's, so a budget that fits one Set rolls back
-//! every candidate in a deck of four. That defect is fatal for a governor,
-//! which has to add up what several Sets cost and decide, so the governor does
-//! not use it. It uses a **per-Set measurement taken here**, on the worker
-//! thread, as part of building the Set.
+//! What it reaches is [`Deck::frame_period_ms`](crate::deck::Deck::frame_period_ms)
+//! and [`Report::deck_over_period`](crate::governor::Report::deck_over_period),
+//! a deck-level fact that **warns and does not act** — the same order
+//! [`crate::governor`] takes with [`Report::over_budget`](crate::governor::Report::over_budget)
+//! and this repository takes with the level meter: show the number first, and
+//! decide later whether anything should move by itself. Whether the deck's
+//! total should become what `over_budget` is about is `roadmap.md` M5.14 item 3
+//! and is the maintainer's; this is the measurement that item needs.
+//!
+//! A **median** rather than a worst case, because on a host clock a single
+//! sample carries whatever else the OS scheduler was doing — `Probe` makes the
+//! same choice for the same reason. One hitch is not a reason to say the deck
+//! has stopped keeping up; thirty frames that all miss is.
+//!
+//! ## The worker measures what it built
+//!
+//! The number the verdict above is reached on, and the number
+//! [`crate::governor`] budgets from, is a **per-Set measurement taken here**, on
+//! the worker thread, as part of building the Set. A governor has to add up what
+//! several Sets cost and decide, so it needs per-slot numbers by construction —
+//! and since ADR-0313 the watchdog needs exactly the same thing for exactly the
+//! same reason, so the two read one number through one rule
+//! ([`crate::governor::budgeted`]).
 //!
 //! This is the right place for three reasons and they are all already written
 //! down in this repository:
@@ -180,6 +208,18 @@
 //! spawn accumulator back to what `Set::build` left. That is another
 //! whole-capacity upload on the worker thread, next to the one that was already
 //! there.
+//!
+//! **The worker also flushes and waits for that upload before handing the Set
+//! over.** A cold Set's first frames otherwise pay for the driver's first use of
+//! each freshly created pipeline, first touch of freshly allocated buffers, and
+//! — the big one — the whole-capacity element and alive buffer upload
+//! `Set::build` leaves staged on the queue, megabytes at 262144 elements. Left
+//! there, they would be flushed by whatever the render thread submitted next,
+//! putting the upload inside the very frame the swap was supposed to be
+//! invisible to. There used to be a `WARMUP_FRAMES` on this side as well,
+//! discarding the first eight frames of a trial so that those costs could not
+//! decide a verdict; it went with the trial (ADR-0313), because the verdict is
+//! no longer taken from frames at all.
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
@@ -192,40 +232,64 @@ use karakuri_ir::Kind;
 
 use crate::binding::{Binding, Signals};
 use crate::estimate::{estimate, Estimate};
+use crate::governor::{self, Basis, Estimated};
 use crate::probe::{Measurement, Probe};
 use crate::set::{Authority, Set, SetError};
 
-/// Frames discarded after a swap, before the watchdog starts measuring. See
-/// "The window" in the module doc: the alternative is rolling everything back.
-const WARMUP_FRAMES: u32 = 8;
-
-/// Frames the watchdog measures before deciding. Half a second at 60 Hz —
-/// long enough that the verdict is not one sample's opinion on a host clock,
-/// short enough that a Set which cannot hold the budget is not on screen for
-/// long. Both halves of that matter: a shorter window makes the watchdog fire
-/// on noise, a longer one is half a phrase of a track spent looking wrong.
-const JUDGE_FRAMES: usize = 30;
-
-/// The default frame budget, in milliseconds: one 60 Hz frame plus slack.
+/// Frames the deck's period is taken over, as a rolling window. Half a second
+/// at 60 Hz — long enough that the reading is not one sample's opinion on a
+/// host clock, short enough that a deck which has stopped keeping up says so
+/// within half a second.
 ///
-/// Deliberately not 16.7. What the watchdog measures is the interval between
-/// frames on a host clock, and under vsync a *healthy* frame sits right at the
-/// refresh period — a budget set there would roll back every candidate on
-/// rounding. A frame that misses vsync lands at the next period, because there
-/// is nothing in between. 60 Hz is the rate the simulation itself runs at
-/// (`dt` is 1/60), so "below 60 fps" is the condition worth testing and 20 ms
-/// is the threshold that tests it.
+/// **It used to be `JUDGE_FRAMES`, and it judges nothing now** (ADR-0313).
+/// There was a `WARMUP_FRAMES` beside it, eight frames discarded after a swap
+/// so that a cold Set's first frames — the driver's first use of each fresh
+/// pipeline, first touch of fresh buffers, and the whole-capacity upload
+/// `Set::build` leaves staged — did not decide a verdict. Both existed because
+/// the verdict was a *frame interval*, which had to settle before it meant
+/// anything. The verdict is now the candidate's own cost, taken on the worker
+/// before the Set was ever handed over, and a number that was finished before
+/// the first frame has nothing to settle: **the warmup is deleted rather than
+/// kept for a reason it no longer has**. This window survives it because a
+/// rolling median over a deck's frames is what the *alarm* is, and it is
+/// rolling rather than restarted, so a swap's expensive frames are absorbed by
+/// the window instead of being discarded by a count.
 ///
-/// **This does not generalise to a faster display, and the development machine
-/// is one.** On a 120 Hz panel a healthy frame is 8.3 ms and a frame rate cut
-/// in half reads as 16.7 ms — under this budget, so the watchdog would keep a
-/// candidate that halved the frame rate. `karakuri-cli`'s `--budget-ms` is the
-/// operator's answer to that. The real answer is a budget derived from the
-/// display rather than from a constant, which belongs with the budget governor
-/// — [`crate::governor`]: that is where per-Set measurement and the decision
-/// about whether GPU timestamps can be trusted on the performing machine both
-/// live, and picking a second, worse answer here would be one to remove
-/// later.
+/// **Public because a caller reading [`HotSwap::frame_period_ms`] has to know
+/// how many frames it waits for a first answer**, and because a test that
+/// transcribed the number instead would get weaker rather than louder if this
+/// moved.
+pub const PERIOD_FRAMES: usize = 30;
+
+/// The frame budget a candidate is judged against where nothing better is
+/// known, in milliseconds: one 60 Hz frame plus slack.
+///
+/// **A fallback rather than the answer.** Since
+/// [ADR-0313](../../../docs/adr/0313-a-candidate-is-judged-on-its-own-cost-and-the-decks-period-is-a-deck-level-alarm.md)
+/// what a candidate is held against is *one frame of the display it is going
+/// to be shown on*, and where the platform will say what that interval is the
+/// caller passes it: `karakuri`'s window reads `refresh_rate_millihertz` and
+/// hands it down, so a 120 Hz panel judges against 8.3 ms and a 60 Hz one
+/// against 16.6. This is what is left when the platform names no monitor or no
+/// refresh rate — a headless run, or a display `winit` cannot describe —
+/// which is `P-0095`'s shape: an instrument that cannot say is not a licence to
+/// invent a number, and the conservative reading of an unknown display is the
+/// rate the simulation itself runs at.
+///
+/// **Why 20 and not 16.7, now that the quantisation argument is gone.** It used
+/// to be a frame *interval* on a host clock, which under vsync quantises to
+/// multiples of the refresh period, so the budget had to sit between one period
+/// and two or a healthy frame would round its way into a rollback. That
+/// argument died with the quantity: what is compared now is a probe reading of
+/// one Set, taken offscreen, which is not quantised by anything. What replaces
+/// it is the other half of the same instrument — on this crate's machines the
+/// probe falls back to [`MeasurementMethod::HostWallClock`](crate::probe::MeasurementMethod),
+/// which brackets a submit-and-wait the GPU never spent and **reads biased
+/// high** (`docs/contributing.md` §1). A biased-high number against an exact
+/// 16.7 ms line rolls back candidates that would have fitted, which is the
+/// false-reject direction this whole gate exists to stop doing. The slack is
+/// now for the bias rather than for vsync, and it is the same three
+/// milliseconds.
 pub const DEFAULT_BUDGET_MS: f32 = 20.0;
 
 /// Simulation steps per measured frame. One, because that is what a `tick`
@@ -580,8 +644,14 @@ impl Source for Receiver<Request> {
 /// user reads.
 #[derive(Debug)]
 pub enum Event {
-    /// A build finished and is now the live Set. It is on trial until the
-    /// watchdog reports on it.
+    /// A build finished and is now the live Set.
+    ///
+    /// **The verdict follows in the same drain**, since ADR-0313: the number
+    /// the watchdog decides on was taken on the worker before this Set was
+    /// handed over, so there is nothing to wait for and no window in which a
+    /// candidate is "on trial". A caller reading events in order sees this and
+    /// then either [`Event::Accepted`] or [`Event::RolledBack`] about the same
+    /// `id`.
     Swapped { id: u64, label: Arc<str> },
     /// A build failed. **Nothing changed**: the running Set is still running,
     /// with its `t` and its live count untouched.
@@ -600,23 +670,55 @@ pub enum Event {
     /// **No `id`**, unlike every variant around it: nothing was requested, so
     /// there is nothing for a caller to match it back to.
     SourceRefused { label: Arc<str>, said: Vec<String> },
-    /// The watchdog's verdict, in favour. The previous Set is released.
+    /// **The candidate stays.** The outgoing Set is released.
+    ///
+    /// Two ways to arrive here and [`Event::Accepted::cost_ms`] tells them
+    /// apart: the candidate's own cost fitted the budget, or **nothing could
+    /// measure the candidate at all**, in which case it was not judged. See
+    /// that field.
     Accepted {
         id: u64,
         label: Arc<str>,
-        median_ms: f32,
+        /// **What one frame of this candidate costs**, and the number the
+        /// verdict was reached on — not a frame interval and not this frame.
+        ///
+        /// [`None`] is the case `P-0084` is about: the probe run on the worker
+        /// panicked or was never taken, nothing estimated the Set either, and
+        /// there is no number. A candidate is **not rolled back on a number it
+        /// does not have** — an instrument that declined to answer has not said
+        /// the answer is large, any more than it has said it is small
+        /// (`P-0095`) — so the operator's material stays and this says the
+        /// verdict was not reached rather than that it was passed.
+        /// [`Event::Accepted::basis`] is [`Basis::Unbudgetable`] there.
+        cost_ms: Option<f32>,
+        /// **Which of the candidate's two numbers that was**, on
+        /// [`Decision::basis`](crate::governor::Decision::basis)'s terms and
+        /// through the same [`governor::budgeted`] rule the governor decides
+        /// on.
+        basis: Basis,
         /// Reported alongside, because "held the budget" is not a useful
-        /// thing to read without the number it held against — the default is
-        /// derived from 60 Hz and a display running faster than that can halve
-        /// its frame rate and still come in under it.
+        /// thing to read without the number it held against — see
+        /// [`DEFAULT_BUDGET_MS`], and note that a caller may have passed the
+        /// display's own interval instead.
         budget_ms: f32,
     },
-    /// The watchdog's verdict, against. The previous Set is live again, at the
+    /// The watchdog's verdict, against. The outgoing Set is live again, at the
     /// `t` it was parked at, and the candidate is released.
     RolledBack {
         id: u64,
         label: Arc<str>,
-        median_ms: f32,
+        /// **The candidate's own cost**, which exceeded `budget_ms`.
+        ///
+        /// **An `f32` and not an `Option<f32>`, unlike [`Event::Accepted`]'s**,
+        /// and that asymmetry is the rule in the type: a rollback can only ever
+        /// be reached *through* a number, so there is no rollback without one to
+        /// print. Making both optional would let a future edit throw a
+        /// candidate out for a cost nobody measured, which is the defect
+        /// ADR-0313 exists to end in its second form.
+        cost_ms: f32,
+        /// Which of the two it was — never [`Basis::Unbudgetable`], for the
+        /// reason on `cost_ms`.
+        basis: Basis,
         budget_ms: f32,
     },
     /// The build worker is gone — it can only leave by panicking — so nothing
@@ -643,26 +745,45 @@ impl std::fmt::Display for Event {
                 "`{label}` did not compile, nothing was built:\n{}",
                 said.join("\n")
             ),
+            // **Two sentences and not one with a hole in it.** A candidate
+            // that held the budget and a candidate nothing could measure are
+            // different facts, and a line reading "held the budget: none ms"
+            // would be the second pretending to be the first.
             Event::Accepted {
                 label,
                 id: _,
-                median_ms,
+                cost_ms: Some(cost_ms),
+                basis,
                 budget_ms,
             } => write!(
                 f,
-                "`{label}` held the budget: {median_ms:.2} ms median frame interval \
-                 against {budget_ms:.2} ms (host clock)"
+                "`{label}` held the budget: {cost_ms:.2} ms for its own frame \
+                 against {budget_ms:.2} ms ({})",
+                said(*basis)
+            ),
+            Event::Accepted {
+                label,
+                id: _,
+                cost_ms: None,
+                basis: _,
+                budget_ms,
+            } => write!(
+                f,
+                "`{label}` was not judged and stays: nothing measured it and nothing \
+                 estimated it, so there is no number to hold against {budget_ms:.2} ms \
+                 (see docs/principles/0084-…)"
             ),
             Event::RolledBack {
                 label,
                 id: _,
-                median_ms,
+                cost_ms,
+                basis,
                 budget_ms,
             } => write!(
                 f,
-                "rolled back `{label}`: {median_ms:.2} ms median frame interval over \
-                 {JUDGE_FRAMES} frames exceeds the {budget_ms:.2} ms budget \
-                 (host clock — see docs/contributing.md, working style)"
+                "rolled back `{label}`: {cost_ms:.2} ms for its own frame exceeds the \
+                 {budget_ms:.2} ms budget ({} — see docs/contributing.md, working style)",
+                said(*basis)
             ),
             Event::WorkerLost => write!(
                 f,
@@ -670,6 +791,20 @@ impl std::fmt::Display for Event {
                  (the live Set is unaffected)"
             ),
         }
+    }
+}
+
+/// **What kind of number a verdict was reached on, in words.** `P-0095`: a
+/// figure a reader cannot check the provenance of is a figure they have to
+/// take on trust, and these two are taken at different sizes (ADR-0303).
+fn said(basis: Basis) -> &'static str {
+    match basis {
+        Basis::Measured => "one draw at the size the caller named, host clock",
+        Basis::Estimated => "a two-draw fit at the output's size",
+        // Unreachable from `RolledBack` by construction and printed by the
+        // `Accepted` arm above instead; here so that a third basis added later
+        // fails at a `match` rather than being passed over.
+        Basis::Unbudgetable => "no number",
     }
 }
 
@@ -703,12 +838,92 @@ struct Built {
     cost: Option<Measurement>,
 }
 
-/// The candidate currently being watched.
-struct Trial {
-    id: u64,
-    label: Arc<str>,
-    /// Frame intervals attributed to this Set so far, warmup included.
-    seen: u32,
+/// **How long the frames this `HotSwap` is being driven through are taking**,
+/// as a rolling median of the interval between successive boundaries on a host
+/// clock.
+///
+/// **It is the deck's number and it judges nothing** — see "The frame period is
+/// the deck's, and it is an alarm" in the module doc. One interval covers every
+/// slot's step and draw, the composite, the cell presents, the picture, the
+/// `egui` pass and the vsync wait, so it cannot be divided among the slots that
+/// produced it. What it can say is that the deck as a whole is not keeping up.
+///
+/// **Rolling rather than windowed from a start.** There is no event this
+/// restarts at: a swap's expensive frames are absorbed by a thirty-frame median
+/// rather than discarded by a warmup count, which is why `WARMUP_FRAMES` could
+/// go with the verdict it was serving.
+///
+/// A fixed array and not a `Vec`, so that `mark` on the frame path writes one
+/// `f32` into a slot that already exists and `median_ms` sorts on the stack.
+struct Period {
+    samples: [f32; PERIOD_FRAMES],
+    /// Where the next interval goes. Wrapping to zero is what fills the ring.
+    next: usize,
+    filled: bool,
+    /// The previous boundary, or [`None`] before there has been one.
+    last: Option<Instant>,
+}
+
+/// **The Set a swap displaced, with its numbers**, held across exactly one
+/// call — [`HotSwap::install_if_ready`] hands it to [`HotSwap::judge`], which
+/// either releases it or puts it back.
+///
+/// **It used to be three fields on [`HotSwap`]** (`previous`, `previous_cost`,
+/// `previous_estimate`) because a rollback target had to survive a
+/// thirty-eight-frame trial. A verdict is reached in the same call now
+/// (ADR-0313), so the rollback target is a local: it cannot be resized under,
+/// cannot be stepped, and cannot be left behind by a code path that forgot to
+/// clear it. `HotSwap::previous` existing *only* inside the trial window is
+/// what ADR-0071 and `P-0084` rest on when they refuse a panic key; there is
+/// now no window at all, which is the same argument with nothing left to
+/// qualify.
+struct Parked {
+    set: Set,
+    /// Restored with the Set on a rollback, or the governor would go on
+    /// budgeting for the candidate that is no longer there.
+    cost: Option<Measurement>,
+    /// Likewise. The incoming Set arrives unestimated — the worker cannot
+    /// estimate, because an estimate is taken against the output's size and the
+    /// worker does not know it — so this is the only estimate either Set has.
+    estimate: Option<Estimate>,
+}
+
+impl Period {
+    fn new() -> Period {
+        Period {
+            samples: [0.0; PERIOD_FRAMES],
+            next: 0,
+            filled: false,
+            last: None,
+        }
+    }
+
+    /// One frame boundary. The interval that just ended is the *previous*
+    /// frame's duration, so this reading is always one frame behind — it has to
+    /// be: a frame's cost is not known until the next one starts.
+    fn mark(&mut self, now: Instant) {
+        if let Some(last) = self.last.replace(now) {
+            self.samples[self.next] = now.duration_since(last).as_secs_f32() * 1_000.0;
+            self.next = (self.next + 1) % PERIOD_FRAMES;
+            self.filled |= self.next == 0;
+        }
+    }
+
+    /// The median of the window, or [`None`] until it has filled.
+    ///
+    /// **A median rather than a worst case**, for the reason `probe.rs` gives:
+    /// on a host clock a single sample carries whatever else the OS scheduler
+    /// was doing. **And `None` rather than a median of fewer samples**, because
+    /// a partly filled window has not established that the deck is keeping up
+    /// (`P-0095`).
+    fn median_ms(&self) -> Option<f32> {
+        if !self.filled {
+            return None;
+        }
+        let mut sorted = self.samples;
+        sorted.sort_by(|a, b| a.partial_cmp(b).expect("frame intervals are finite"));
+        Some(sorted[PERIOD_FRAMES / 2])
+    }
 }
 
 /// A live Set, a worker building the next one, and a watchdog over the swap.
@@ -722,13 +937,6 @@ pub struct HotSwap {
     /// for a Set no worker built — [`HotSwap::fixed`]'s, and the one `new` was
     /// constructed with — until [`HotSwap::set_measured_cost`] supplies one.
     cost: Option<Measurement>,
-    /// The Set that was live before the current one, held so that a rollback
-    /// is a move rather than a rebuild. Not stepped while parked; see "What a
-    /// swap does not do" in the module doc.
-    previous: Option<Set>,
-    /// Its measurement, parked with it. A rollback restores both, or the
-    /// governor would go on budgeting for a Set that is no longer there.
-    previous_cost: Option<Measurement>,
     /// **What two small draws say this Set would cost at the output's size**,
     /// if anything estimated it — [`HotSwap::estimate_live`], and
     /// [`Deck::estimate_slots`](crate::deck::Deck::estimate_slots) deck-wide.
@@ -749,17 +957,15 @@ pub struct HotSwap {
     /// estimate on the worker's side to replace it with, because the worker
     /// does not know the output's size.
     estimate: Option<Estimate>,
-    /// The parked Set's estimate, held with `previous_cost` and restored by the
-    /// same rollback, for the same reason.
-    previous_estimate: Option<Estimate>,
-    trial: Option<Trial>,
-    /// Frame intervals in the current judging window. Capacity is fixed at
-    /// [`JUDGE_FRAMES`] here so that `push` on the render thread never grows
-    /// it.
-    samples: Vec<f32>,
+    /// **What a candidate's own cost is held against**, in milliseconds of one
+    /// frame — the display's own refresh interval where the caller knew one,
+    /// [`DEFAULT_BUDGET_MS`] where it did not. Written by
+    /// [`HotSwap::set_budget_ms`].
     budget_ms: f32,
     viewport: (u32, u32),
-    last_frame: Option<Instant>,
+    /// **The deck's frames, measured and never used as a verdict** — see
+    /// [`Period`] and [`HotSwap::frame_period_ms`].
+    period: Period,
     frames: u64,
     /// Sized for the most that can accumulate between two drains, and every
     /// `Event` owns its strings already, so pushing one allocates nothing. A
@@ -844,15 +1050,10 @@ impl HotSwap {
         HotSwap {
             live,
             cost: None,
-            previous: None,
-            previous_cost: None,
             estimate: None,
-            previous_estimate: None,
-            trial: None,
-            samples: Vec::with_capacity(JUDGE_FRAMES),
             budget_ms,
             viewport: (1, 1),
-            last_frame: None,
+            period: Period::new(),
             frames: 0,
             events: Vec::with_capacity(EVENT_CAPACITY),
             done: done_rx,
@@ -883,16 +1084,11 @@ impl HotSwap {
         let outgoing = std::mem::replace(&mut self.live, set);
         self.retire(outgoing);
         self.cost = None;
-        self.previous = None;
-        self.previous_cost = None;
         // The estimate went with the Set it was taken of. Nothing carries one
         // across a replaced Set: it is a fit through two draws of *that*
         // material, and the incoming Set is unestimated exactly as it is
         // unmeasured.
         self.estimate = None;
-        self.previous_estimate = None;
-        self.trial = None;
-        self.samples.clear();
     }
 
     /// One Set and no worker, for `--render`, `--seq`, and a window run
@@ -907,15 +1103,10 @@ impl HotSwap {
         HotSwap {
             live,
             cost: None,
-            previous: None,
-            previous_cost: None,
             estimate: None,
-            previous_estimate: None,
-            trial: None,
-            samples: Vec::new(),
             budget_ms: f32::INFINITY,
             viewport: (1, 1),
-            last_frame: None,
+            period: Period::new(),
             frames: 0,
             events: Vec::with_capacity(EVENT_CAPACITY),
             done: done_rx,
@@ -948,51 +1139,41 @@ impl HotSwap {
     /// Allocates nothing, compiles nothing, and never blocks: the channel is
     /// polled with `try_recv` and the graveyard with `try_lock`.
     pub fn begin_frame(&mut self, device: &wgpu::Device) -> &mut Set {
-        self.frame_boundary(device, true);
+        self.frame_boundary(device);
         &mut self.live
     }
 
-    /// The same frame boundary for a slot that is **not on air**: a finished
-    /// build is still installed and retired Sets are still handed back to the
-    /// worker, but the frame interval is not fed to the watchdog.
+    /// The same frame boundary for a slot that is **not on air**, and since
+    /// ADR-0313 it is the same work: builds install, retired Sets go back to
+    /// the worker, the candidate is judged, and the deck's frame period is
+    /// marked. The only difference left is that no `&mut Set` comes back,
+    /// because an off-air slot's Set is reached through
+    /// [`crate::deck::Frame`] instead.
     ///
-    /// A candidate in an off-air slot renders nothing, so the frame interval
-    /// the caller is producing is entirely other slots' cost. Judging against
-    /// it accepts a candidate on a budget it never spent — and, with a tight
-    /// budget and busy neighbours, rolls one back for cost it never caused.
-    /// So the trial is *frozen* instead: `seen` does not advance, no sample is
-    /// taken, and the verdict waits until the slot is Live and has actually
-    /// paid for [`JUDGE_FRAMES`] frames of its own.
+    /// **The two used to differ, and the difference was a symptom.** An off-air
+    /// slot's trial was *frozen* here — no sample taken, `seen` not advanced,
+    /// the verdict waiting until the slot was Live — because the number being
+    /// judged was the whole deck's frame interval, and judging a candidate
+    /// nobody was drawing against work its neighbours were doing accepts it on
+    /// a budget it never spent and rolls it back for cost it never caused. That
+    /// was as far as an interval-based watchdog could get, and it did not reach
+    /// the case that mattered: a *Live* slot's candidate was still judged
+    /// against its neighbours' cost.
     ///
-    /// That is the same reasoning that parks an outgoing Set's `t` across a
-    /// window — a Set that is not running is not measured either — and it is
-    /// as far as an interval-based watchdog can get. What it still cannot do
-    /// is separate one Live slot's cost from its neighbours': every Live slot
-    /// in a deck is judged against the whole deck's frame interval, so a
-    /// budget that fits one Set rolls back every candidate in a deck of four.
-    /// Fixing *that* needs a per-Set measurement, which [`crate::probe`] takes
-    /// at build time and [`crate::governor`] budgets from — this watchdog does
-    /// not read it.
+    /// The verdict is now the candidate's own measured cost, which is the same
+    /// number whether the slot is on air or not, so there is nothing left to
+    /// freeze — and a candidate on an off-air slot no longer waits an unbounded
+    /// time for a verdict it could have had at the install.
     pub(crate) fn begin_frame_parked(&mut self, device: &wgpu::Device) {
-        self.frame_boundary(device, false);
+        self.frame_boundary(device);
     }
 
-    fn frame_boundary(&mut self, device: &wgpu::Device, on_air: bool) {
-        let now = Instant::now();
-        let last = self.last_frame.replace(now);
-        if on_air {
-            // The interval that just ended is the *previous* frame's duration,
-            // so the watchdog is always one frame behind. It has to be: a
-            // frame's cost is not known until the next one starts.
-            if let Some(last) = last {
-                self.record(now.duration_since(last).as_secs_f32() * 1_000.0);
-            }
-        } else {
-            // Not a sample, and not the left-hand end of one either: the first
-            // frame back on air would otherwise be measured as however long
-            // the slot spent off it.
-            self.last_frame = None;
-        }
+    fn frame_boundary(&mut self, device: &wgpu::Device) {
+        // **Marked whatever this slot's residency is**, because what it
+        // measures is not this slot: it is the interval between the caller's
+        // frames, which in a deck is one number for four slots and is the
+        // deck's. See [`Period`].
+        self.period.mark(Instant::now());
         self.frames += 1;
         self.hand_over_retired();
         self.install_if_ready(device);
@@ -1032,9 +1213,53 @@ impl HotSwap {
         self.frames
     }
 
-    /// The budget the watchdog is holding candidates to, in milliseconds.
+    /// The budget the watchdog is holding candidates to, in milliseconds of
+    /// **one frame of one candidate** — see [`DEFAULT_BUDGET_MS`].
     pub fn budget_ms(&self) -> f32 {
         self.budget_ms
+    }
+
+    /// **Say what one frame of the display this is being shown on may cost.**
+    ///
+    /// A `HotSwap` is constructed before there is a window on many paths — the
+    /// deck is built from the launch pair and the surface is created after it —
+    /// so the budget starts at whatever the constructor was given and is
+    /// narrowed here once the platform will say. `karakuri`'s window does that
+    /// once, when it opens, through
+    /// [`Deck::set_frame_budget_ms`](crate::deck::Deck::set_frame_budget_ms).
+    ///
+    /// **It changes no verdict already reported.** A verdict is reached in the
+    /// call the swap lands in, so there is no candidate part-way through a
+    /// window whose budget could move underneath it (ADR-0313).
+    ///
+    /// A non-finite or non-positive budget is refused rather than stored: it
+    /// would make every candidate fail or every candidate pass without saying
+    /// so, which is the silent shape `P-0095` rules out. [`HotSwap::fixed`]'s
+    /// infinity is set by the constructor and is a statement that there is no
+    /// worker and nothing to judge, not a budget a caller passed.
+    pub fn set_budget_ms(&mut self, budget_ms: f32) {
+        if budget_ms.is_finite() && budget_ms > 0.0 {
+            self.budget_ms = budget_ms;
+        }
+    }
+
+    /// **How long the frames this is being driven through are taking**, as a
+    /// median over the last [`PERIOD_FRAMES`] of them on a host clock, or
+    /// [`None`] until that window has filled.
+    ///
+    /// **It is the caller's frame and not this slot's**, and in a deck that
+    /// means it is the same number on every slot: one interval covers every
+    /// slot's step and draw, the composite, the cell presents, the picture, the
+    /// `egui` pass and the vsync wait. **Nothing may divide it among the slots
+    /// that produced it**, which is why it is no longer a candidate's verdict
+    /// (ADR-0313) and why the only thing entitled to read it is a deck-level
+    /// alarm: [`Deck::frame_period_ms`](crate::deck::Deck::frame_period_ms) and
+    /// [`Report::deck_over_period`](crate::governor::Report::deck_over_period).
+    ///
+    /// Under vsync it quantises to multiples of the refresh period, because a
+    /// frame that misses one lands at the next and there is nothing in between.
+    pub fn frame_period_ms(&self) -> Option<f32> {
+        self.period.median_ms()
     }
 
     /// **What one frame of the live Set costs**, as measured when it was built
@@ -1175,12 +1400,6 @@ impl HotSwap {
         self.estimate = Some(estimate);
     }
 
-    /// Whether a candidate is currently on trial. While one is, incoming
-    /// builds are left in the channel — see [`HotSwap::install_if_ready`].
-    pub fn on_trial(&self) -> bool {
-        self.trial.is_some()
-    }
-
     /// Everything that has happened since this was last called.
     pub fn events(&mut self) -> std::vec::Drain<'_, Event> {
         self.events.drain(..)
@@ -1201,14 +1420,16 @@ impl HotSwap {
     }
 
     /// Remembered as well as forwarded: a Set built while the window was one
-    /// size must not arrive on screen still believing it, and the parked Set
-    /// must not come back through a rollback with a stale aspect ratio.
+    /// size must not arrive on screen still believing it.
+    ///
+    /// **There is no parked Set to resize any more.** A rollback target used to
+    /// live here across a thirty-frame trial and had to be resized with the
+    /// live one; the verdict is reached in the same call the swap lands in
+    /// since ADR-0313, so an outgoing Set is either released or back on air
+    /// before this can be called again.
     pub fn resize(&mut self, device: &wgpu::Device, width: u32, height: u32) {
         self.viewport = (width, height);
         self.live.resize(device, width, height);
-        if let Some(previous) = &mut self.previous {
-            previous.resize(device, width, height);
-        }
         // **An estimate is a number *at a target*, and the target just
         // moved.** `Estimate::target` says which size it answered for, so a
         // kept one would be a right number about a frame nobody is drawing any
@@ -1216,7 +1437,6 @@ impl HotSwap {
         // back on its measurement until something estimates it again, which is
         // the fallback the whole wiring is built around.
         self.estimate = None;
-        self.previous_estimate = None;
     }
 
     /// **Name the size the next measurement is taken at.**
@@ -1252,83 +1472,117 @@ impl HotSwap {
         unpacked(self.measure_at.load(Ordering::Relaxed))
     }
 
-    /// Feed the watchdog one frame interval, and act on it if the window is
-    /// full.
-    fn record(&mut self, ms: f32) {
-        let Some(trial) = &mut self.trial else {
-            return;
+    /// **Judge the candidate that has just been installed, on the candidate's
+    /// own number**, and put the outgoing Set back if it does not fit.
+    ///
+    /// # What is compared, and what is deliberately not
+    ///
+    /// The left-hand side is what one frame of *this* Set costs — the estimate
+    /// where one answers, the probe measurement the worker took where it does
+    /// not, through [`governor::budgeted`], which is the same rule
+    /// [`Governor::decide`](crate::governor::Governor::decide) sums the
+    /// committed cost with and admits priming slots on. One rule and not two,
+    /// so a Set cannot be rolled back here on one reading and admitted there on
+    /// another (`P-0085`).
+    ///
+    /// The right-hand side is [`HotSwap::budget_ms`]: one frame of the display,
+    /// where the caller knew what that is.
+    ///
+    /// **Nothing about the other slots appears on either side**, and that is
+    /// the decision rather than a simplification. *"判定は他のスロットのロードとは
+    /// 独立にあるべきだね"* — the verdict on a candidate must be independent of
+    /// what the other slots are carrying. A budget divided by the live slot
+    /// count, or a share taken beside what the neighbours are committed to,
+    /// would both put a heavy neighbour back on the left-hand side by another
+    /// route: the same candidate would be kept on an empty deck and thrown out
+    /// on a busy one, which is what this is repairing. What the deck's total
+    /// costs is a deck-level question and has a deck-level answer —
+    /// [`Report::deck_over_period`](crate::governor::Report::deck_over_period),
+    /// which warns and never acts, on
+    /// [`crate::governor`]'s "What it does not touch" terms.
+    ///
+    /// # The candidate with no number
+    ///
+    /// The probe run on the worker is caught rather than propagated, so a build
+    /// can arrive with `cost: None`; nothing has estimated an incoming Set
+    /// either. A candidate in that state is **kept and reported as not
+    /// judged**. It is not rolled back, because rolling it back would be
+    /// deciding it is over a budget on a number it does not have, which is
+    /// `P-0084`'s confident wrong judgement exactly — and `P-0095`'s: an
+    /// instrument that declined to answer has not said the answer is large.
+    ///
+    /// **That is the opposite direction from [`crate::governor`]'s**, which
+    /// parks an unmeasured slot with
+    /// [`Reason::Unmeasured`](crate::governor::Reason::Unmeasured), and the two
+    /// are not in conflict because they are answering different questions. The
+    /// governor is deciding whether to *spend* budget nobody asked it to spend,
+    /// where refusing costs a warm-up. This is deciding whether to take away
+    /// material the operator asked for, where refusing costs the thing they
+    /// asked for — and `P-0094` will not buy safety with the operator's
+    /// authority. The deck alarm still fires if the frames actually stop
+    /// arriving.
+    fn judge(&mut self, id: u64, label: Arc<str>, outgoing: Parked) {
+        let (basis, budgeted) =
+            governor::budgeted(self.cost, self.estimate.as_ref().map(Estimated::from));
+        // **A number that is not a number is not a number.** `is_nan` is
+        // checked rather than left to fall out of the comparison below, which
+        // would answer `false` for a NaN and keep the candidate anyway — the
+        // same outcome, silently and by accident. Here it is the *unjudged*
+        // outcome and says so, which is a different fact from having fitted.
+        let judged = budgeted.filter(|ms| ms.is_finite());
+        let basis = match judged {
+            Some(_) => basis,
+            None => Basis::Unbudgetable,
         };
-        trial.seen += 1;
-        if trial.seen <= WARMUP_FRAMES {
-            return;
-        }
-        self.samples.push(ms);
-        if self.samples.len() < JUDGE_FRAMES {
-            return;
-        }
-
-        self.samples
-            .sort_by(|a, b| a.partial_cmp(b).expect("frame intervals are finite"));
-        let median_ms = self.samples[self.samples.len() / 2];
-        let trial = self.trial.take().expect("checked above");
-        let previous = self
-            .previous
-            .take()
-            .expect("a trial is only ever started with a rollback target in hand");
-
-        if median_ms > self.budget_ms {
-            // The candidate goes, the parked Set comes back. It resumes at the
-            // `t` it stopped at, because nothing stepped it while it waited —
-            // and its measurement comes back with it, or the governor would go
-            // on budgeting for the candidate that is no longer there.
-            let candidate = std::mem::replace(&mut self.live, previous);
-            self.cost = self.previous_cost.take();
-            self.estimate = self.previous_estimate.take();
-            self.retire(candidate);
-            self.events.push(Event::RolledBack {
-                id: trial.id,
-                label: trial.label,
-                median_ms,
-                budget_ms: self.budget_ms,
-            });
-        } else {
-            self.previous_cost = None;
-            self.previous_estimate = None;
-            self.retire(previous);
-            self.events.push(Event::Accepted {
-                id: trial.id,
-                label: trial.label,
-                median_ms,
-                budget_ms: self.budget_ms,
-            });
+        match judged {
+            Some(cost_ms) if cost_ms > self.budget_ms => {
+                // The candidate goes, the outgoing Set comes back. It resumes
+                // at the `t` it stopped at, because nothing stepped it in
+                // between — the verdict is in the same call the swap was — and
+                // its measurement comes back with it, or the governor would go
+                // on budgeting for the candidate that is no longer there.
+                let candidate = std::mem::replace(&mut self.live, outgoing.set);
+                self.cost = outgoing.cost;
+                self.estimate = outgoing.estimate;
+                self.retire(candidate);
+                self.events.push(Event::RolledBack {
+                    id,
+                    label,
+                    cost_ms,
+                    basis,
+                    budget_ms: self.budget_ms,
+                });
+            }
+            _ => {
+                self.retire(outgoing.set);
+                self.events.push(Event::Accepted {
+                    id,
+                    label,
+                    cost_ms: judged,
+                    basis,
+                    budget_ms: self.budget_ms,
+                });
+            }
         }
     }
 
-    /// Install a finished build, if one is waiting and there is room for it.
+    /// Install a finished build, if one is waiting, and judge it.
+    ///
+    /// **There is no longer a gate at the top of this.** A candidate on trial
+    /// used to hold the channel shut, because `previous` was the one rollback
+    /// target and admitting a second candidate would have lost the only Set
+    /// known to work; a build that finished during a trial waited in the
+    /// channel, and so did a *refusal* behind it — thirty-eight frames of
+    /// latency on a drawn slot and, on a parked one whose trial was frozen,
+    /// however long the slot stayed off air. ADR-0313 removed the trial, so a
+    /// build and a refusal are both reported on the first boundary after they
+    /// arrive, and the rollback target lives for one call inside [`Parked`].
     fn install_if_ready(&mut self, device: &wgpu::Device) {
-        // Not while something is on trial: `previous` is the rollback target
-        // and there is exactly one of it, so accepting a second candidate
-        // would mean losing the only Set known to work. A build that finishes
-        // during a trial stays in the channel until the verdict is in.
-        //
-        // **And so does a refusal, which is a cost rather than a decision.**
-        // Nothing is installed for one, so it could be reported here — but an
-        // `mpsc` cannot be read past and a `Built` taken out during a trial
-        // has nowhere to wait, so reporting the refusal early would mean
-        // holding the build in a field of this struct. What that buys is a
-        // judging window of latency on a slot that is being drawn, and on a
-        // *parked* slot, whose trial is frozen, it is however long the slot
-        // stays off air. That is the same wait that slot's own verdicts are
-        // already under (`begin_frame_parked`), which is what makes it a
-        // consistent silence rather than a new one.
-        if self.trial.is_some() {
-            return;
-        }
         // `try_recv`, never `recv`, and drained to the *newest* result rather
-        // than stopping at the first. An `mpsc` channel is FIFO and a judging
-        // window is long enough for two saves to finish behind it, so taking
-        // the front of the queue would put a superseded Set on screen for a
-        // whole window before reaching the one the operator is waiting for.
+        // than stopping at the first. An `mpsc` channel is FIFO and two saves
+        // can finish between two frames, so taking the front of the queue would
+        // put a superseded Set on screen for a frame before reaching the one
+        // the operator is waiting for.
         // A superseded error is still reported — a diagnostic is the point of
         // an error, superseded or not — and a superseded Set is retired to the
         // worker rather than dropped here.
@@ -1403,24 +1657,24 @@ impl HotSwap {
                 // per key it carries, once per swap rather than once per frame.
                 // A swap is already the frame that resizes render targets.
                 candidate.carry_moved_from(&self.live);
-                let outgoing = std::mem::replace(&mut self.live, candidate);
-                self.previous = Some(outgoing);
-                self.previous_cost = std::mem::replace(&mut self.cost, built.cost);
-                // The worker measures what it built and cannot estimate it —
-                // an estimate is taken against the output's size, which the
-                // worker does not know. So the incoming Set arrives with none
-                // and the outgoing one's is parked for a rollback.
-                self.previous_estimate = self.estimate.take();
-                self.samples.clear();
-                self.trial = Some(Trial {
-                    id: built.id,
-                    label: Arc::clone(&built.label),
-                    seen: 0,
-                });
+                let outgoing = Parked {
+                    set: std::mem::replace(&mut self.live, candidate),
+                    cost: std::mem::replace(&mut self.cost, built.cost),
+                    // The worker measures what it built and cannot estimate it
+                    // — an estimate is taken against the output's size, which
+                    // the worker does not know. So the incoming Set arrives
+                    // with none and the outgoing one's is held for a rollback.
+                    estimate: self.estimate.take(),
+                };
                 self.events.push(Event::Swapped {
                     id: built.id,
-                    label: built.label,
+                    label: Arc::clone(&built.label),
                 });
+                // **The verdict, in the same call.** The number it is reached
+                // on was taken on the worker before this Set was handed over,
+                // so there is nothing to wait for; a caller draining events
+                // sees the swap and then its verdict, in that order.
+                self.judge(built.id, built.label, outgoing);
             }
         }
     }
@@ -1457,13 +1711,15 @@ impl Drop for HotSwap {
 }
 
 /// How many Sets the handover between the render thread and the worker is
-/// sized for. At most one Set is retired per verdict and verdicts are
-/// `JUDGE_FRAMES` apart, so two is already slack; the capacity exists so that
-/// the render thread's `push` and `append` never have to grow anything.
+/// sized for. A frame retires at most the superseded builds it drained plus one
+/// verdict's Set, and the graveyard is emptied by the worker every poll; four is
+/// slack, and the capacity exists so that the render thread's `push` and
+/// `append` never have to grow anything.
 const GRAVEYARD_CAPACITY: usize = 4;
 
-/// Likewise for events: at most one install and one verdict can happen in a
-/// frame, and they are mutually exclusive.
+/// Likewise for events. A frame can now emit a swap *and* its verdict, which
+/// are no longer mutually exclusive (ADR-0313), plus a refusal that arrived
+/// beside them.
 const EVENT_CAPACITY: usize = 4;
 
 /// Measure one frame of `set` and leave it exactly as it was found.

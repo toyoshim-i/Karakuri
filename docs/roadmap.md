@@ -1039,6 +1039,10 @@ count, each named at the code and none of them a row on the page.
 `Event::RolledBack` the watchdog puts the previous *Set* back on screen and **does not put the
 previous file back**, while the watcher re-reads every file on every rebuild — so the picture is
 the old version, the disk is the over-budget one, and the next unrelated save swaps it in again.
+**Rarer since 2026-09-09 and not fixed by it**: a candidate is judged on its own measured cost
+rather than on the deck's frame interval, so far fewer versions are thrown out at all
+([ADR-0313](adr/0313-a-candidate-is-judged-on-its-own-cost-and-the-decks-period-is-a-deck-level-alarm.md))
+— and every one that still is leaves the same disagreement between the picture and the disk.
 **The rollback itself is said in two places now** — the lane draws a `rolled back` row and the
 transport's health capsule draws the same word — so what is unsaid is narrower than this used to
 claim: that the *file* still holds the version that was refused, and that the next save of anything
@@ -1053,9 +1057,11 @@ other verdicts, and the lane draws a row on a fourth word — `did not compile`,
 diagnostic and a count of the rest, with the whole set still going to stderr and to a model over
 `--mcp`. The transport's health capsule says it too, and
 [ADR-0310](adr/0310-a-source-can-say-it-refused-and-the-lane-draws-it.md) is the record, with the
-two things it deliberately leaves: the *node* the refusal is about is still not on the row, which
-is item 4 above, and a refusal arriving while that slot has a candidate on trial waits for the
-verdict.
+two things it deliberately left: the *node* the refusal is about is still not on the row, which
+is item 4 above; the second — a refusal arriving while that slot has a candidate on trial waiting
+for the verdict — is gone with the trial itself
+([ADR-0313](adr/0313-a-candidate-is-judged-on-its-own-cost-and-the-decks-period-is-a-deck-level-alarm.md)),
+and a refusal now reaches the lane on the first frame boundary after the worker sends it.
 
 **The first is an item in the list above rather than prose, and it is a *Live safety* item as
 well.** It has no row, so this bay's exit — the two rows' badges — can be met with it still true,
@@ -1510,6 +1516,16 @@ under a closed milestone is never picked up.
    this file: a four-slot frame is 21 ms warm and was 209 ms cold, and **it registers as no violation
    at all**. Making `committed_ms` the deck's total would leave `over_budget` permanently on for any
    four-slot deck of heavy material, so what `over_budget` should then say is part of the item.
+
+   **The measurement it needs now exists and the ruling is still open.**
+   [ADR-0313](adr/0313-a-candidate-is-judged-on-its-own-cost-and-the-decks-period-is-a-deck-level-alarm.md)
+   put the deck's frame period on `Report::frame_period_ms` with `Report::deck_over_period` beside
+   it, deliberately as a **second** flag rather than as an answer to what `over_budget` says: one is
+   a measured frame of the whole deck against one frame's deadline, the other a sum of per-Set costs
+   against the compute budget. The same record also makes the *per-candidate* half of this question
+   answerable, because a slot's own number is now what decides its verdict — so a deck can be over
+   its period with every candidate on it having been kept on its own merits, which is the panel's
+   four-slot case and is the state this item has to say something about.
 4. **`estimate` wired to `Deck::govern` — done on 2026-09-08**
    ([ADR-0296](adr/0296-the-governor-budgets-on-the-estimate-where-it-answers-and-on-the-measurement-where-it-does-not.md)).
    It was built on 2026-09-06 and exported to no caller. The governor spends the estimate where it
@@ -2022,7 +2038,14 @@ Not milestones. These degrade silently if not defended at every step.
   asserted by proxy**, where the audio thread has a counting global allocator behind it: the
   render path's claim rests on where allocation is *possible*, not on a harness that would
   catch it
-- Watchdog on new pipelines with automatic rollback
+- Watchdog on new pipelines with automatic rollback. **What it judges was wrong until 2026-09-09**:
+  it compared the deck's whole frame interval — every slot's step and draw, the composite, the cell
+  presents, the picture, the `egui` pass and the vsync wait — so one slot's candidate was thrown out
+  for the other three slots' cost plus the console's, and a Set whose own frame costs 9.58 ms was
+  rolled back on a number that read 33 ms. A candidate is judged on **its own** measured cost now,
+  against one frame of the display, with nothing about the other slots on either side; the deck's
+  period is still measured and is a deck-level alarm that warns and never acts
+  ([ADR-0313](adr/0313-a-candidate-is-judged-on-its-own-cost-and-the-decks-period-is-a-deck-level-alarm.md))
 - The show continues when the generation API is unavailable. This becomes meaningful once
   there is a pool to fall back on, so it is a promise from M4 onward rather than from M1
 - Graceful degradation for every input source, with confidence driving how conservative
@@ -2058,9 +2081,21 @@ belongs to whoever is playing.
 is one slot's Set measured on its own. Nothing measures the composite, the present passes or the
 panel, so the number the governor decides on is not the number the frame costs.
 
+**The frame *is* measured now, and it is a reading rather than a budget.**
+[ADR-0313](adr/0313-a-candidate-is-judged-on-its-own-cost-and-the-decks-period-is-a-deck-level-alarm.md)
+took the deck's frame period off the swap watchdog's verdict — where it had been judging individual
+candidates on their neighbours' cost — and put it on `Deck::frame_period_ms` and
+`Report::deck_over_period`, a rolling median on a host clock that says the deck as a whole is or is
+not keeping up and acts on nothing. **That does not close this item.** The period is one number for
+four slots and cannot be divided among them, which is exactly what this heading asks for; what it
+supplies is the measurement M5.14 item 3 needs and an alarm where there was silence.
+
 **The failure is silence rather than slowness.** Four slots at 262144 elements measured about 10 ms
 a frame and registered as no violation at all. The maintainer's point: the problem is not that it is
-slow, it is that it is not detected.
+slow, it is that it is not detected. **Half of that is answered**: the deck's own period is measured
+and `Report::deck_over_period` says when it is over, so the silence is gone from the *deck*. What is
+still not detected is which slot, because a frame interval cannot be divided — that is the per-slot
+question and it is `committed_ms`'s, below.
 
 **What must not be done about an over-budget slot.** Forcing it to keep drawing, or lowering the
 frame rate to fit it, confuses the means with the end — the frame rate is what the show is played at,
@@ -2080,7 +2115,11 @@ in `Report::committed_ms`, which sums the **Live** slots. That field says what i
 admission decision needs exactly it; what nothing computes is the deck's total, which is the
 per-slot `Decision::cost_ms` summed. Making `committed_ms` that total would leave `over_budget` — the
 governor's one warning — permanently on for any four-slot deck of heavy material, which is why it was
-not done in passing. **The same change also measured the thing this item is about**: the four-slot
+not done in passing. **There is a second warning beside it since 2026-09-09** and it is deliberately
+not the same flag: `Report::deck_over_period` is one measured frame of the whole deck against one
+frame's deadline, where `over_budget` is a sum of per-Set costs against the compute budget
+([ADR-0313](adr/0313-a-candidate-is-judged-on-its-own-cost-and-the-decks-period-is-a-deck-level-alarm.md),
+which supplies that measurement and takes none of this ruling). **The same change also measured the thing this item is about**: the four-slot
 frame that *"measured about 10 ms and registered as no violation at all"* is 21 ms with every slot
 warm and was 209 ms with three of them cold, and it still registers as no violation at all.
 

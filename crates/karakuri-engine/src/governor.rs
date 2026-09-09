@@ -23,12 +23,15 @@
 //!    [`MeasurementMethod`](crate::probe::MeasurementMethod). Using it is how
 //!    this module gets an answer to that open question instead of assuming one.
 //! 2. **A frame interval cannot be divided among the slots that produced it.**
-//!    That is not a hypothetical either — it is the defect a review already
-//!    found in the swap watchdog and `swap.rs` records verbatim: "every Live
-//!    slot in a deck is judged against the whole deck's frame interval, so a
-//!    budget that fits one Set rolls back every candidate in a deck of four."
-//!    A governor deciding *which* slots may prime needs per-slot numbers by
-//!    construction.
+//!    That is not a hypothetical either — it was the defect a review found in
+//!    the swap watchdog, which judged every candidate against the whole deck's
+//!    interval, so that a budget one Set fitted comfortably rolled back every
+//!    candidate in a deck of four. A governor deciding *which* slots may prime
+//!    needs per-slot numbers by construction, so this module never had it.
+//!    **The watchdog does not have it either since ADR-0313**: a candidate is
+//!    judged on the candidate's own number, through the same
+//!    [`budgeted`] rule this module decides on, and the deck's interval is a
+//!    deck-level alarm ([`Report::deck_over_period`]) that judges nothing.
 //! 3. **There is already somewhere to measure that is not the render thread.**
 //!    `swap.rs`'s worker does a submit-and-wait before handing a Set over. The
 //!    probe's method is submit-and-wait; it fits there and nowhere else.
@@ -568,6 +571,33 @@ pub struct Report {
     /// not move with the target, so it lands in the fit's invariant term and is
     /// added to the answer once. See [`Estimate::biased_high`].
     pub host_clock: bool,
+    /// **How long the deck's frames are actually taking**, as a rolling median
+    /// of the interval between `Deck::begin_frame` calls on a host clock —
+    /// [`crate::swap::HotSwap::frame_period_ms`], stamped on here by
+    /// [`Deck::govern`](crate::deck::Deck::govern).
+    ///
+    /// **It is a deck-level fact and it judges nothing.** Until ADR-0313 this
+    /// number was the swap watchdog's verdict on individual candidates, which
+    /// is the defect that record repairs: one interval covers every slot's step
+    /// and draw, the composite, the cell presents, the picture, the `egui` pass
+    /// and the vsync wait, so it cannot be divided among the slots that
+    /// produced it. What it *can* say is that the deck as a whole is not
+    /// keeping up, which is what [`Report::deck_over_period`] says and is the
+    /// only thing anything is entitled to read off it.
+    ///
+    /// [`None`] before the window has filled, and on a report from
+    /// [`Governor::decide`] called with no deck behind it — a governor pass is
+    /// a pure function of slot states and does not measure time.
+    pub frame_period_ms: Option<f32>,
+    /// **The interval the period above is held against**, which is the budget
+    /// each slot's [`HotSwap`](crate::swap::HotSwap) was constructed with — the
+    /// display's own refresh interval where the platform says one, and
+    /// [`crate::swap::DEFAULT_BUDGET_MS`] where it does not (ADR-0313).
+    ///
+    /// **Not [`Report::budget_ms`]**, and the two must not be run together:
+    /// that one bounds a *sum of per-Set costs* and this one bounds *one frame
+    /// of the whole deck*. See [`DEFAULT_COMPUTE_BUDGET_MS`].
+    pub frame_budget_ms: Option<f32>,
 }
 
 impl Report {
@@ -642,6 +672,28 @@ impl Report {
         self.decisions
             .iter()
             .filter_map(|d| d.estimate.and_then(|e| e.fit.err()).map(|u| (d.slot, u)))
+    }
+
+    /// **Whether the deck is over its frame period** — the alarm, and the whole
+    /// of what the period is entitled to say.
+    ///
+    /// [`None`] where either number is missing, which is the honest answer
+    /// rather than `false`: a window that has not filled has not said the deck
+    /// is keeping up (`P-0095`).
+    ///
+    /// **It does not say which slot**, and nothing here can: a frame interval
+    /// cannot be divided among the slots that produced it, which is the whole
+    /// reason ADR-0313 took it off the per-candidate path. What a *slot* is
+    /// judged on is [`Decision::budgeted_ms`].
+    ///
+    /// **And it is deliberately not [`Report::over_budget`].** That flag is the
+    /// Live slots' summed per-Set cost against [`Report::budget_ms`]; this is
+    /// one measured frame against one frame's deadline. Whether the deck total
+    /// should become `over_budget`'s subject is `roadmap.md` M5.14 item 3 and is
+    /// the maintainer's — this field is the measurement that item needs and not
+    /// an answer to it.
+    pub fn deck_over_period(&self) -> Option<bool> {
+        Some(self.frame_period_ms? > self.frame_budget_ms?)
     }
 
     /// The size every estimate in this report answered for, or [`None`] where
@@ -732,6 +784,18 @@ impl std::fmt::Display for Report {
                  is unmeasured, priming suspended"
             )?;
         }
+        // **The deck's own frames, said last and said separately.** It is a
+        // different quantity from everything above it — one measured frame of
+        // the whole deck against one frame's deadline, rather than a sum of
+        // per-Set costs against a compute budget — so it gets its own clause
+        // and never joins that sentence. It names no slot because it cannot:
+        // see `Report::deck_over_period`.
+        if let (Some(period), Some(budget)) = (self.frame_period_ms, self.frame_budget_ms) {
+            write!(f, " — the deck's frames: {period:.2} / {budget:.2} ms")?;
+            if period > budget {
+                write!(f, ", OVER its period")?;
+            }
+        }
         Ok(())
     }
 }
@@ -762,21 +826,38 @@ pub struct SlotState {
 }
 
 impl SlotState {
-    /// **The number to budget this slot at, and where it came from.**
-    ///
-    /// One rule, used by the committed sum and by the admission test alike,
-    /// so the two cannot disagree about which number a slot is being judged
-    /// on. The estimate wins where it answers; a refusal, or no estimate at
-    /// all, falls back to the measurement; neither is
-    /// [`Basis::Unbudgetable`] — **not zero**.
+    /// **The number to budget this slot at, and where it came from** — see
+    /// [`budgeted`], which is the rule and is not restated here.
     pub fn budgeted(&self) -> (Basis, Option<f32>) {
-        if let Some(ms) = self.estimate.and_then(|e| e.ms()) {
-            return (Basis::Estimated, Some(ms));
-        }
-        match self.cost {
-            Some(cost) => (Basis::Measured, Some(cost.ms)),
-            None => (Basis::Unbudgetable, None),
-        }
+        budgeted(self.cost, self.estimate)
+    }
+}
+
+/// **The number to budget one Set at, and where it came from.**
+///
+/// One rule, and the only one: the estimate wins where it answers, a refusal
+/// or no estimate at all falls back to the measurement, and neither is
+/// [`Basis::Unbudgetable`] — **not zero**. ADR-0296 is where that is argued,
+/// and the argument is in "Two numbers, and which one is budgeted on" in this
+/// module's documentation.
+///
+/// **It is a free function because it has three callers and only two of them
+/// hold a [`SlotState`].** [`Governor::decide`]'s committed sum and the
+/// admission test inside it were the first two. The third is the swap
+/// watchdog: since
+/// [ADR-0313](../../../docs/adr/0313-a-candidate-is-judged-on-its-own-cost-and-the-decks-period-is-a-deck-level-alarm.md)
+/// a candidate's verdict is *this* rule applied to the candidate's own
+/// measurement and estimate, so a Set cannot be rolled back on one reading and
+/// then admitted on another. A `SlotState` there would mean inventing a
+/// residency and a closed-form flag for a Set that has neither yet, which is
+/// two facts made up to reach one number.
+pub fn budgeted(cost: Option<Measurement>, estimate: Option<Estimated>) -> (Basis, Option<f32>) {
+    if let Some(ms) = estimate.and_then(|e| e.ms()) {
+        return (Basis::Estimated, Some(ms));
+    }
+    match cost {
+        Some(cost) => (Basis::Measured, Some(cost.ms)),
+        None => (Basis::Unbudgetable, None),
     }
 }
 
@@ -908,6 +989,12 @@ impl Governor {
             unmeasured_live,
             over_budget,
             host_clock,
+            // **Not measured here.** A governor pass reads no clock — see
+            // "Determinism" in the module doc — so the deck's frame period is
+            // stamped on by `Deck::govern`, which is the only caller that has
+            // a deck to have measured one.
+            frame_period_ms: None,
+            frame_budget_ms: None,
         }
     }
 
