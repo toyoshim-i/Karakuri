@@ -165,9 +165,7 @@ pill opens a class the server reads on the next call rather than one only the pa
 switches still do not cover every closed row: the clock's, the sequencer's, `Quit`, *Select a deck*
 and rule 06's authority belong to no class.
 
-**Five operations are named and left `Undecided`**: moving a boundary, choosing where the frame
-goes, walking the edit history, *edit the file instead*, and the camera. Where each sits in the
-split is under *The estimate is retired rather than re-cut*, below.
+**Some operations are named and left `Undecided`**, and the list has shrunk: choosing where the frame goes is decided (ADR-0324), walking the edit history is built (ADR-0308), and the camera's numbers are parameter rows (ADR-0318), so what is left `Undecided` is *moving a boundary* and *edit the file instead*. Where each sits in the split is under *The estimate is retired rather than re-cut*, below.
 
 #### How the work below is split
 
@@ -198,6 +196,14 @@ being held open by four key badges naming letters the record had just retired. *
 M5.9 close and the two sections *Rows the manual has not given a home* and *The console's own
 shape* close with them — named rather than placed, because M5.14 now sits after both and *at the end
 of this list* stopped locating them.
+
+**What is still open, as of 2026-09-09.** Of the bays, **M5.5 — Inspector alone**: M5.1 to M5.4 and
+M5.6 to M5.9 have closed, and so have M5.14 and *The console's own shape*. What is left beside the
+Inspector is the cross-cutting run — **M5.10 MCP, M5.11 hover tooltips, M5.12 MIDI and M5.13 the
+keyboard** — each of which is a column of [every operation](manual/operations.html) rather than a
+bay, and none of which the panel column's grep reads. Each closed entry above is a stub naming what
+it decided, when its exit was met and where every owed item went;
+[history/m5.md](history/m5.md) keeps them whole.
 
 ##### Every bay ends by rewriting its own prose as tooltips
 
@@ -246,16 +252,18 @@ place, the two operations and the transport row's arrangement pill all exist.
 **The ~10–14 week range does not survive the split and is withdrawn**: it was taken against the
 seven *Adds* items, which ADR-0226 has since refused as this milestone's finish line, and every
 assumption it carried now sits in the sub-milestone that owns it, stated as a blocker rather than
-as weeks. When a range is wanted it is taken from the twelve blocker lists below and from the
+as weeks. When a range is wanted it is taken from the blocker lists still open below and from the
 panel column, both of which move on their own.
 
 What the range assumed and excluded went to the sub-milestones that own it: the two bays undrawn
-when it was taken to M5.8, which has since closed, and to M5.9; the pointer decision to M5.11; M4's
-thumbnail judgement to M5.3, which closed without taking it, so it is under *Mx — TODO*; a second
-`Sink` to M5.6; and the sequencer's producer to M5.9. Of the five `Undecided` operations, *choosing
-where the frame goes* is M5.6's and *the camera* is M5.5's; *walking the edit history* is M5.3's, is
-built, and left the no-home section; and *moving a boundary* and *"edit the file instead"* carry no
-`plan` badge in either column and are in no sub-milestone. The arena's insert and remove is above.
+when it was taken to M5.8 and M5.9, both of which have since closed; the pointer decision to M5.11;
+M4's thumbnail judgement to M5.3, which closed without taking it, so it is under *Mx — TODO*; a
+second `Sink` to M5.6, which built it; and the sequencer's producer to M5.9, which placed it. Of the
+five operations that were left `Undecided`, *choosing where the frame goes* is not one any more —
+ADR-0324 gives `RouteFrame` a destination from a closed list and an on/off, and M5.6 closed on it;
+*the camera* is M5.5's; *walking the edit history* is M5.3's, is built, and left the no-home section;
+and *moving a boundary* and *"edit the file instead"* carry no `plan` badge in either column and are
+in no sub-milestone. The arena's insert and remove is above.
 
 #### M5.1 — Program — **closed**
 
@@ -855,9 +863,7 @@ it, somebody writing the compositing down, after which this chain becomes three 
 `examples/` and nothing in the vocabulary or the record moves. **The bay's `+ add` is the arena's gap
 and is already under *What no sub-milestone owns***, as the arena half of *Adding or removing a node*
 and as *The mock's six body controls*: the panel cannot grow a bay's body while it runs, and
-[the console page](manual/console.html) calls it one gap drawn in five places — this row, the Outputs
-row's `+ add output`, the sequencer's `+ lane`, the library's `+` on the scope list and the
-inspector's `2 up`. What that row owed was the note, and the note is written. **What a master chain
+[the console page](manual/console.html) calls it one gap drawn wherever a control would add a region — this row, the Outputs row's `+ add output`, the library's `+` on the scope list and the inspector's `2 up`; the sequencer's `+ lane` left that list on 2026-09-09, a lane being a row from `Pattern::lanes` and not a region. What that row owed was the note, and the note is written. **What a master chain
 saved under a name looks like — ADR-0227's library tier, which ADR-0317 leaves untouched — is under
 *Mx — TODO***, having no row on the operations page and so never having been in this exit. **The
 *decisions nobody has taken* entry on the feedback cut has left that list by being decided**, which
@@ -867,142 +873,42 @@ ADR-0317 and closed a stream this program wrote and could not reproduce, and the
 which `71419c2` found delivered rather than owed and ADR-0317's pass rewrote again to say what a
 press does.
 
-#### M5.9 — Sequencer
+#### M5.9 — Sequencer — **closed**
 
-**Rows.** All five of the bay's rows carry a `plan` panel badge: *Toggle a step*, *Mute a lane*,
-*Point a lane at what it drives*, *Choose what a step is worth*, *Choose which pattern the
-sequencer plays*.
+A pattern is one bar, a mode and a list of lanes — sixteen slots in both modes, a cell a bit, the
+two levels the lane's, and four fixed banks that are not saved names
+([ADR-0320](adr/0320-a-pattern-is-one-bar-of-sixteen-slots-a-lane-is-a-target-and-two-levels-and-a-cell-is-a-bit.md));
+a lane's target is an operation of the vocabulary with its value elided, which is what lets a fader
+lane and a parameter lane sit in the same list
+([ADR-0321](adr/0321-a-lanes-target-is-an-operation-with-its-value-elided.md)); the producer is the
+render thread, polled against `beats` like a transition one row finer, live only, emitting through
+the same `operate` a hand does, so its writes are its record
+([ADR-0322](adr/0322-the-sequencer-is-polled-like-a-transition-live-only-and-its-writes-are-its-record.md));
+a scheduled move is refused on a control a lane holds, and the refusal names the lane
+([ADR-0323](adr/0323-a-scheduled-move-is-refused-on-a-control-a-lane-holds.md)); the `+ lane` card
+lists one deck's published keys and the bank pills are the banks themselves, so there is no `+`
+([ADR-0327](adr/0327-the-lane-chooser-lists-one-decks-keys-and-the-bank-pills-are-the-four-banks.md));
+and the grid head is one pill because the bar is one bar and the count follows the mode
+([ADR-0306](adr/0306-the-grid-head-is-one-pill-because-the-bar-is-one-bar-and-the-count-follows-the-mode.md)).
+[history/m5.md](history/m5.md).
 
-**Exit.** No `plan` badge in the panel column of this bay's rows on
-[every operation](manual/operations.html).
+**Exit, met on 2026-09-09**: no `plan` badge in the panel column of this bay's rows on
+[every operation](manual/operations.html). Two slices the same day moved every row of the bay — the
+grid, the lane label and the mode pill first, then the `+ lane` card and the bank pills — from a bay
+that drew nothing but its head.
 
-**Blocked on.** All five, on one thing: a pattern and a step grid, neither of which anything in this
-workspace holds. **All five payloads are `Undecided` for the same reason**, and `written` answers
-`Owed(Undecided)` for every one of them — this said *Toggle a step*'s alone, which read as one row
-of five rather than the row. Where a pattern is
-*kept* once it exists is settled
-([ADR-0227](adr/0227-a-pattern-and-a-master-chain-setting-are-library-data-in-two-tiers.md)) and is
-not the machinery. The bay draws nothing but its head.
-
-**The design is taken, on 2026-09-09, and four records carry it.** What was blocking is answered and
-what is left is building it.
-
-- [ADR-0320](adr/0320-a-pattern-is-one-bar-of-sixteen-slots-a-lane-is-a-target-and-two-levels-and-a-cell-is-a-bit.md)
-  — a pattern is one bar, a mode and a list of lanes; sixteen slots in both modes with the eighth
-  reading `2k`, so a mode press changes a reading and never the pattern; a cell is a bit and the
-  lane carries an `on` and an `off`; four fixed banks, and a bank is not a saved name.
-- [ADR-0321](adr/0321-a-lanes-target-is-an-operation-with-its-value-elided.md) — **the bay's
-  sharpest question**: a lane's target is an operation of the vocabulary with its value elided, so
-  `Fader { deck }` and `Param { deck, param }` reach all four lanes where a slot number or a node
-  address reaches one kind and not the other.
-- [ADR-0322](adr/0322-the-sequencer-is-polled-like-a-transition-live-only-and-its-writes-are-its-record.md)
-  — **the producer, which is the item excluded from the estimate**: polled on the render thread per
-  frame against `beats`, like a transition one row finer; a skipped step is dropped; it emits
-  through the same `operate` a hand does, so `Record::Opacity` and `Record::Ride` are its record; it
-  does not run on replay; the five `written` answers become `Silent(Surface)` on the arrangement
-  family's precedent.
-- [ADR-0323](adr/0323-a-scheduled-move-is-refused-on-a-control-a-lane-holds.md) — a lane reaches
-  `Deck::set_opacity`, which cancels, so a live lane would silently kill a fade onto the deck it
-  drives; the schedule is refused instead and the refusal names the lane. Engine-facing, and it may
-  land after the first slice.
-
-**The first slice landed on 2026-09-09**, and **three of the five badges are `has`**: *Toggle a
-step* (`lane cell`), *Mute a lane* (`lane label`) and *Choose what a step is worth*
-(`grid mode pill`). What it is: a new crate `crates/karakuri-pattern` with `Pattern`, `Lane`,
-`Banks` and `Playhead` and no serialiser; `LaneTarget` and `StepMode` in `karakuri-operation` and
-the five payloads with them; `view::Sequencer` — the mode pill, the `step n of m` readout, the
-ruler, the playhead and a row per lane — with the cells, the labels and the pill as one probe; the
-per-frame poll in `crates/karakuri/src/main.rs`; the bay's declaration (ADR-0283, the first whose
-deadline is a beat subdivision); and **one lane over deck A's fader**, seeded muted, so unmuting it
-is the demonstration and the window does not hold deck A at zero from the moment it opens.
-
-**And the five `written` answers moved to `Silent(Surface)`**, which took the MCP column with them:
-all five read `gap` there under ADR-0315's sentence, and `gate.rs` is unchanged. That answers the
-bay head's open question — the column gave way and the class stays shut.
-
-**The second slice landed the same day, and the last two badges are `has`**: *Point a lane at what
-it drives* (`+ lane`) and *Choose which pattern the sequencer plays* (`bank pills`). What it is: four
-bank pills in the bay head, the armed one marked, off one new field on `view::Head` and one bit on
-`view::HeadWords` — and **no `+`**, because with four fixed banks a press on `seq 3` is the `+`'s own
-*"same choice landing on an empty one"*; a `+ lane` pill in the bay foot putting a card down over the
-rows, listing a channel fader per mixer strip and the published controls of the deck the Library
-bay's load pulldown names; and a `PointLane` arm in `crates/karakuri` that fills the lane's two
-levels from `View::inspector` and appends it **muted**, because a lane arrives with every slot off
-and an off step writes `off`.
-[ADR-0327](adr/0327-the-lane-chooser-lists-one-decks-keys-and-the-bank-pills-are-the-four-banks.md)
-carries the four decisions in it and the alternative each beat.
-
-**The exit condition is met.** No `plan` badge in the panel column of this bay's five rows:
-
-```sh
-grep -A 8 'Toggle a step\|Mute a lane\|Point a lane at what it drives\|Choose what a step is worth\|Choose which pattern the sequencer plays' docs/manual/operations.html | grep 'rt plan">panel'
-```
-
-**What stays owed**, and none of it is a badge: the `Param` lane arm reaches only the two decks the
-Inspector holds a pane for, so a target deck no pane is showing offers its fader and no parameters;
-the store directory and the file format with saving; and ADR-0323's refusal — whose lookup is built
-and whose caller is not, so **a live lane on a deck's fader still cancels a fade onto that deck**,
-now on any deck the mixer draws rather than only the one the run seeds.
-
-**And one sentence on four other tips is now wrong.** `+ lane`'s tip said the panel cannot grow a
-bay's body while it is running and named itself as one of *one gap drawn in five places*. A lane row
-is not a region — the bay draws its rows from `Pattern::lanes`, inside a rectangle the arena already
-holds — so the gap is drawn in **four**: the Master bay's `+ add`, the Outputs row's `+ add output`,
-the library's `+` on the scope list and the inspector's `2 up`. **Two of those tips carry the
-sentence and both still say five** — the Master bay's `+ add` and the Outputs row's `+ add output`,
-each naming `the sequencer's + lane` among the places. Correcting them is one clause each, in two
-other bays' tips, with no code behind it.
-
-**And one item this entry did not name.** **A channel fader does not say who is holding it** — the
-mock draws `seq 1` as a source on a parameter row and nothing of the kind on a strip, so three lanes
-in four would drive a control that says nothing about what is driving it, which is rule 02. It is
-M5.9's because M5.2 is closed, and the console page carries a purposeful note until the readout is
-drawn. **Removing a lane** has no control, no row and no operation, and carries a note beside it.
-
-**The mock's grid head has been internally inconsistent since it was written, and the maintainer
-has said which side is wrong.** The three pills read `16`, `1/8`, `2 bars`; two lines below, the
-ruler draws four numbers over sixteen cells, which is a beat every four cells — sixteenths, one bar.
-Both were in the mock's first commit (`5311dc7`, 2026-08-23), and `Operation::SetPatternGrid`'s doc
-later rationalised **the pills** — *"sixteen steps of an eighth apiece is two bars, so any two of the
-three fix the third"* — which is arithmetic taken from the wrong two.
-
-**The design is a mode.** Eighths or sixteenths, **both one bar**, the cell width halving in the
-finer one. So the length is fixed and the step count follows the mode: `2 bars` has nothing to say
-and `16` is not independently chosen, which leaves one control where the mock draws three. The
-ruler and the cells are already the sixteenth mode drawn correctly.
-
-**What that moves.** The row's heading on [every operation](manual/operations.html) was *Choose a
-pattern's steps and what a step is worth*, and it stops choosing steps. `SetPatternGrid`'s payload
-gets easier rather than harder: its `Undecided` was argued partly on a subdivision being *"a list
-this crate has to own, on `Curve`'s terms, that nothing anywhere holds yet"*, and a two-valued mode
-is exactly that list. And ADR-0222 and ADR-0255 both take **an eighth at 128 BPM, 234 ms** as the
-example against the beat clock's 0.5–4 s band; a sixteenth is 117 ms, so the finer mode is the worse
-case and neither record has it. **Both of the questions that were left are answered**, on
-2026-09-08 and in
-[ADR-0306](adr/0306-the-grid-head-is-one-pill-because-the-bar-is-one-bar-and-the-count-follows-the-mode.md):
-one pill replaces the three, reading the ruler's own mode, and the row is called *Choose what a
-step is worth*. The head, the row, the vocabulary's title and `SetPatternGrid`'s doc are drawn and
-written to that; the payload stays `Undecided`, because the panel draws nothing of this bay but its
-head and so no surface can say either value.
-
-This is the estimate's excluded item — the sequencer's producer — and it is why this bay is last
-rather than because of its weight on the page. **The producer is placed as of 2026-09-09**
-([ADR-0322](adr/0322-the-sequencer-is-polled-like-a-transition-live-only-and-its-writes-are-its-record.md)):
-it is the frame loop, polled against `beats`, and it costs the engine nothing new — no record, no
-setter, no scheduler and no store directory.
-
-**The bay's prose, as tooltips.** One note, *Sequencer*: a row per lane under the mixer strip it
-drives, a lane as a fifth route into the vocabulary rather than a binding, and the step grid as the
-beat clock subdivided rather than a fourth clock, and — since 2026-09-09 — the lane's two levels,
-the mute as the take-back, the refusal of a scheduled move on a control a lane holds, and the two
-gaps this bay owes a note rather than a fix. **The sentence that said the mock tips the four lane
-labels and nothing else has stopped being true**: every control in the bay carries a `data-tip`
-today — the three bank pills, the mode pill, the step readout, the ruler, the four lanes and
-`+ lane` — and what the item is left holding is the note itself, which the four records above have
-just made longer rather than shorter. It was **not** the thinnest prose of the nine when that was
-counted — the *Outputs* note was 168 words to this one's 311, and M5.6 says so of itself — and the
-item stands for the reason it always did: most of what this bay ends up drawing was authored here
-rather than condensed from a note that already existed.
+What M5.9 left owed is rescheduled. **ADR-0323's refusal is still uncalled** — the lookup is built
+and the caller is not, so a live lane on a deck's fader kills a fade onto that deck, on any deck the
+mixer draws — and it is an engine item rather than a badge, under *Mx — TODO*. **A channel fader
+does not say who is holding it**, which rule 02 asks for and which no row carries, and **removing a
+lane** has no control, no row and no operation: both are under *Mx — TODO*, with the console page's
+purposeful notes standing until they are drawn. **What a pattern saved under a name looks like —
+ADR-0227's pattern tier — is under *Mx — TODO* beside the master chain's half of the same record**,
+neither having a row on [every operation](manual/operations.html). And **the `Param` lane arm
+reaches only the decks the Inspector holds a pane for**, so a target deck no pane is showing offers
+its fader and no parameters, which is under *Mx — TODO* as well. The bay's five MCP badges are `gap`
+rather than debt on ADR-0315's sentence; what reopens them is a model handed a view of this console,
+which that record leaves to the day it happens and which is **M6 — Autonomy**'s.
 
 #### M5.10 — MCP
 
@@ -1578,13 +1484,72 @@ have.
   concentration as well as coverage. That section pointed it at M5.14, which closed without it ever
   having been one of that sub-milestone's items. From M5.14.
 
-- **What a master chain saved under a name looks like.**
-  [ADR-0227](adr/0227-a-pattern-and-a-master-chain-setting-are-library-data-in-two-tiers.md) puts a
-  pattern and a master chain setting in the library as two tiers, and ADR-0317 built the chain
-  without touching that half: no store directory is added, and the shape of a saved chain is for the
-  record that has something to serialise — which it now has. It carries no row on
-  [every operation](manual/operations.html), so no exit condition in this file reads it, and M5.9
-  names that record only for the pattern tier. From M5.8.
+- **What a pattern or a master chain saved under a name looks like.**
+  [ADR-0227](adr/0227-a-pattern-and-a-master-chain-setting-are-library-data-in-two-tiers.md) puts
+  the two in the library as two tiers, and both were built without touching that half: ADR-0317 adds
+  no store directory for the chain, and `crates/karakuri-pattern` ships with no serialiser, ADR-0320
+  fixing banks that are positions in the session rather than saved names. Neither tier carries a row
+  on [every operation](manual/operations.html), so no exit condition in this file reads either, and
+  the shape of a saved one is for the record that has something to serialise — which both now have.
+  From M5.8 and M5.9.
+
+- **Fullscreen on a chosen display.** The projector window is a second `winit` window with a surface
+  and a `WindowSink`, and it is neither made fullscreen nor put on a named monitor: that is one line
+  of `winit` and one list of monitors this program does not read, and a fullscreen with no way to say
+  *where* is worse than none. It closes no badge — the row it belongs to reads `has` — so nothing
+  reads it. From M5.6.
+
+- **[`docs/manual.md`](manual.md)'s *The canvas is fixed for a run* is false for the panel.** The
+  render size belongs to the output and the frame follows the largest enabled one (ADR-0325), so the
+  sentence holds only for `karakuri-cli`, whose `--canvas` is untouched. ADR-0246 predicted it would
+  go false the day this was built and ADR-0325 names it without closing it. It is a page change on
+  the CLI's own page. From M5.6.
+
+- **A slot's estimate is dropped on every frame of a drag**, because `HotSwap::resize` drops it and
+  the frame is re-derived per changed output size. Nothing sets an estimate today —
+  `set_estimated_cost` has no caller — so it costs nothing now, and whoever wires the estimate meets
+  it here rather than finding it later. From M5.6.
+
+- **The watcher's other two dead ends go unreported.** `Source::poll` can answer *I refused* and the
+  Staging lane draws it, but only for the checker's refusal: the two other paths in `Watch::rebuild`
+  that answer nothing — a file that will not read, and a stack that will not sort into a Set — still
+  print and return `None`.
+  [ADR-0310](adr/0310-a-source-can-say-it-refused-and-the-lane-draws-it.md) names them and declines
+  to give them a word, because `did not compile` is the wrong one for either and naming them is a
+  further decision. Neither has a row on [every operation](manual/operations.html). From M5.7.
+
+- **The Staging lane omits `origin`, the timestamp and the head's count.** Each is named at the code
+  and none of them is a row on the page. The first has no producer anywhere; the second waits on the
+  spelling the Library bay's own time column waits on, which is one decision that bay declined to
+  take twice. From M5.7.
+
+- **ADR-0323's refusal is built and uncalled, so a live lane still kills a fade onto its deck.** A
+  lane reaches `Deck::set_opacity`, which cancels, and
+  [ADR-0323](adr/0323-a-scheduled-move-is-refused-on-a-control-a-lane-holds.md) decides that the
+  schedule is refused instead and that the refusal names the lane. The lookup exists and the caller
+  does not, on any deck the mixer draws rather than only the one the run seeds. It is engine-facing
+  rather than a badge, which is why no exit condition reads it. From M5.9.
+
+- **A channel fader does not say who is holding it.** The mock draws `seq 1` as a source on a
+  parameter row and nothing of the kind on a strip, so a fader lane drives a control that says
+  nothing about what is driving it, which is rule 02 of [the seven](manual/index.html). It has no row
+  of its own, and [the console page](manual/console.html) carries a purposeful note until the readout
+  is drawn. From M5.9.
+
+- **Removing a lane has no control, no row and no operation.** `+ lane` adds one and nothing takes
+  one away; the tip beside it says so rather than the bay pretending otherwise. From M5.9.
+
+- **The `Param` lane arm reaches only the decks the Inspector holds a pane for.** The published rows
+  come from `View::inspector`, which is pointed at two decks, so a target deck no pane is showing
+  offers its fader and no parameters. What the console has not been handed it does not offer, which
+  is the right behaviour and the wrong reach. From M5.9.
+
+- **The window's minimum is a measurement, and a bay that grows a control invalidates it.**
+  `MINIMUM_VIEWPORT` is the declared minima summed along each axis (ADR-0272), a test recomputes it
+  from the tree, and what the test cannot check is whether a region's *declared* minimum is still a
+  reading of its content. `centre`'s first number was a CSS track rather than a reading, and at it
+  the parameter faders were not drawn (ADR-0279) — so every bay still growing controls, M5.5 above
+  all, owes that reading again. From *The console's own shape*.
 
 ---
 
@@ -1596,10 +1561,12 @@ what nobody has decided. Everything else is in the sub-milestone above, in the c
 ### Where to start: M5.5 — Inspector
 
 **The work starts at M5.5 — Inspector.** The order is this file's own, top to bottom, and the
-Inspector is the first sub-milestone above still open; the bays under it, and then *The console's
-own shape*, follow in the order they are written. Each entry names its rows, its exit condition and
-what it is blocked on, and is the one place those are written down; what a closed sub-milestone
-left owed is under *Mx — TODO* and in [history/m5.md](history/m5.md).
+Inspector is the first sub-milestone above still open — **and the only bay still open**, every one
+below it having closed on or before 2026-09-09, *The console's own shape* with them. What follows it
+is the cross-cutting run, M5.10 to M5.13, which is a column of [every
+operation](manual/operations.html) apiece rather than a bay. Each entry names its rows, its exit
+condition and what it is blocked on, and is the one place those are written down; what a closed
+sub-milestone left owed is under *Mx — TODO* and in [history/m5.md](history/m5.md).
 
 **The panel is a program.** `cargo run -p karakuri` opens the console over a real deck: the
 picture, four deck previews, the transport, the mixer, the Library bay, the Inspector, the
@@ -1704,11 +1671,13 @@ name; the four cells are monitors and are not outputs at all. Both are M5.1's, a
 moves its features to the panel, rather than delete it; ADR-0242 says deleting it is out of that
 record's scope.
 
-**The order after M5.1 is the sub-milestone list above.** Work them top to bottom; each one names
-its own rows, its exit condition and its blockers. Run the fourth command beside them: a `plan`
-badge does not distinguish a drawing that is owed from a machine that is missing, and a row has
-already been picked up as the first while being the second. **Master and Sequencer stay last for
-machinery rather than for drawing.**
+**The order is the sub-milestone list above.** Work them top to bottom; each one names its own
+rows, its exit condition and its blockers. Run the fourth command beside them: a `plan` badge does
+not distinguish a drawing that is owed from a machine that is missing, and a row has already been
+picked up as the first while being the second. **Master and Sequencer were last for machinery rather
+than for drawing, and both have closed** — the chain is three fixed passes in the engine (ADR-0317)
+and the sequencer's producer is the frame loop polled against `beats` (ADR-0322), which is what that
+ordering was waiting on.
 
 ### Built: a sub-pixel primitive is floored at one pixel and compensated in the alpha
 
@@ -1764,18 +1733,22 @@ depended on the render size — which `point_rate` and the sub-pixel floor remov
 gives the size to the output,
 [ADR-0247](adr/0247-one-frame-is-rendered-and-scaled-into-each-output.md) says one render scaled into
 each, and [P-0086](principles/0086-a-procedure-knows-only-what-it-declares.md) is the rule that
-keeps both safe. What was left of it — **what names an output** — blocks only M5.6 and is an
-implementation item of that bay rather than a standing question. So the risk badge's five bands and
-the whole-frame budget below are not waiting on anybody's decision; they are waiting on an output to
-have a size.
+keeps both safe. What was left of it — **what names an output** — was M5.6's implementation item
+rather than a standing question, and it is answered:
+[ADR-0324](adr/0324-an-output-is-a-named-destination-with-a-size-and-an-on-off.md) names one with a
+word from a closed list and never a label, and that bay closed on 2026-09-09. So the risk badge's
+bands and the whole-frame budget below are not waiting on anybody's decision, and an output has a
+size.
 
-**`crates/karakuri/src/main.rs` still renders at `const CANVAS: (u32, u32) = (1280, 720)`** with no
-flag, and **every cost figure in this file was measured at that constant**. That is a measuring
-harness's default standing in for an instrument's, and what replaces it is the largest enabled
-output's size, with whoever wants the reference workload typing it. **This is not a question and it
-is not this section's** — ADR-0247 decided it and ADR-0246 names M5.6 as the owner of implementing
-it — so it is written up there and stays here only as the reason every number below carries the same
-caveat. This paragraph also said the constant's *"own doc says why: it is the workspace's reference
+**`crates/karakuri/src/main.rs` no longer composites at `const CANVAS`**, and **every cost figure in
+this file was measured while it did**. That constant was a measuring harness's default standing in
+for an instrument's; what replaced it is the largest enabled output's size
+([ADR-0325](adr/0325-the-frame-follows-the-largest-enabled-output-and-a-resize-costs-0-145-ms.md)),
+leaving `CANVAS` the shape every output is fitted to and the size a run starts at. **This was never
+a question and it was never this section's** — ADR-0247 decided it and ADR-0246 named M5.6 as the
+owner of implementing it, which that bay has done — so it stays here only as the reason every number
+below carries the same caveat, each having been taken at a fixed pair rather than at whatever an
+output now asks for. This paragraph also said the constant's *"own doc says why: it is the workspace's reference
 workload"*; that doc was rewritten under ADR-0270 and now disclaims the material half outright. **What the reference workload now is** — `examples/drift_cloud.kset` at 1280x720, named
 rather than taken from whatever the default pair happens to be — is
 [ADR-0270](adr/0270-the-reference-workload-is-a-named-set-rather-than-whatever-the-default-pair-is.md),
@@ -1795,11 +1768,17 @@ every other number in this repository holds only against other panel numbers.
   collapsed flags any later `expand` may contradict, and the next `unsolo` restores its snapshot
   and throws the expand away with nothing said. Nothing reaches that state today.
 
-Three more questions are named where they are met rather than here: what the Staging lane draws
-when one build changes two nodes (M5.7's item 4), who owns the pointer (M5.11), and whether an
-addressed write by an agent onto a node the operator kept is refused, which cannot be decided
-until something writes a parameter on an agent's behalf (M5.5). **What an agent is one *of*** is
-M6's and is open there.
+**A question this clause carried has left it by being decided.** *What the Staging lane draws when
+one build changes two nodes* was M5.7's item 4, and the maintainer took it on 2026-09-09 — 変更ノー
+ドごとに 1 行, one row per changed node, so a row is a node a build changed and the build's one
+verdict is repeated on each of its rows
+([ADR-0326](adr/0326-a-staging-row-is-a-changed-node-and-the-row-is-the-keep.md)). The account of it
+is in [history/m5.md](history/m5.md) under M5.7.
+
+Two more questions are named where they are met rather than here: who owns the pointer (M5.11), and
+whether an addressed write by an agent onto a node the operator kept is refused, which cannot be
+decided until something writes a parameter on an agent's behalf (M5.5). **What an agent is one *of***
+is M6's and is open there.
 
 ---
 
