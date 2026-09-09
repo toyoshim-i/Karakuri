@@ -30,7 +30,7 @@
 //! [`Record::Slot`] is **a node of a Set** — a procedure at a `(layer, index)` address,
 //! optionally with a name. The `slot: u8` field on [`Record::Gain`], [`Record::Opacity`],
 //! [`Record::Blend`], [`Record::Residency`], [`Record::Procedure`], [`Record::Authority`],
-//! [`Record::Ride`], [`Record::Mask`],
+//! [`Record::Ride`], [`Record::Source`], [`Record::Mask`],
 //! [`Record::Transition`], [`Record::Select`], [`Record::Transport`]
 //! and [`Record::Save`] is **a member of the deck** — an index into the mixer, and nothing
 //! about the Set in it. [`Record::Edge`]'s `slot: String` is the third: **an input a node
@@ -201,6 +201,39 @@ impl Default for BindNoise {
             octaves: default_noise_octaves(),
         }
     }
+}
+
+/// **What drives one parameter**, as [`Record::Source`] carries it: the four
+/// fields [`Record::Bind`] carries beside its address.
+///
+/// **A struct rather than four fields on the record**, because it is present
+/// or absent as a unit — an attachment names all four or there is no
+/// attachment — which is [`NodeAt`]'s argument one record along and
+/// `docs/contributing.md` §4's structural tier. A take-back spelled as four
+/// absent fields would be a record that could be written half detached.
+///
+/// **Its four are [`Record::Bind`]'s four, restated and not shared.** One
+/// `#[serde(flatten)]`ed struct across both would make a Set file's record and
+/// a session's one shape, which is exactly what
+/// `docs/adr/0280-a-parameter-written-to-a-live-set-is-a-session-record.md`
+/// refused for `param` and `ride`: two files, two records, and the projection
+/// is what makes them two facts. The semantics are shared where they belong
+/// instead — `karakuri_environment::setfile::binding_from_record` is the one
+/// decoder, and the session record is turned into a `bind` on the way into it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Source {
+    /// A name on the bus — `energy`, `beat`, `band3`, `noise` — or
+    /// `control:<name>` for a published control of the same Set.
+    pub signal: String,
+    /// `lin`, `pow2`, `sqrt` or `smooth`. A `String` for [`Record::Bind`]'s
+    /// reason: what a curve is allowed to be is the engine's to say.
+    pub curve: String,
+    /// What the signal is mapped onto, low then high.
+    pub range: [f32; 2],
+    /// Only a `signal` of `"noise"` reads this — see [`Record::Bind`], whose
+    /// field this is field for field.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub noise: Option<BindNoise>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -909,6 +942,63 @@ pub enum Record {
         key: String,
         value: Value,
     },
+    /// **What is driving one parameter of a deck slot that is playing, or
+    /// nothing** — an attachment made during a performance, and the taking of
+    /// one back.
+    ///
+    /// **The session's twin of [`Record::Bind`], and the fourth record in this
+    /// vocabulary to name a node of the Set a deck slot is playing.**
+    /// [`Record::Procedure`], [`Record::Authority`] and [`Record::Ride`] are
+    /// the first three, and the reason is the same one all four times: a `bind`
+    /// says what a Set *is* and carries no `slot`, because what a Set is does
+    /// not depend on which deck slot it is playing in. This says what an
+    /// operator *did*, to one deck slot, at one instant.
+    ///
+    /// **One record for the attachment and the take-back**, and `source`
+    /// present or absent is which. They are one fact — *what is driving this
+    /// parameter* — and two records would be two `t`s that the projection
+    /// dropped for one reason and that the applier had to keep in step by
+    /// care. An absent `source` is the removal and not a suspension: there is
+    /// no suspended state anywhere in the engine to record, and the value a
+    /// parameter is left at is its own, which is what a binding blends *from*
+    /// at every confidence
+    /// ([P-0084](../../../docs/principles/0084-a-confident-wrong-automatic-judgement-is-worse-than-not-judging.md)).
+    ///
+    /// **The address is [`Record::Bind`]'s and not [`Record::Ride`]'s**, and
+    /// the difference is not a drift. A `ride` writes a value, and a value has
+    /// a wildcard that names no layer — every node declaring the key, across
+    /// every layer — which is why its address is one `Option<NodeAt>`. A
+    /// binding is a layer's: `karakuri_engine::binding::Binding` carries a
+    /// required `layer` and an optional `index`, `Set::bind` resolves the
+    /// nodes through it, and there has never been a binding that meant *every
+    /// layer*. So `layer` here is load-bearing, which is the one thing
+    /// [`Record::Param`]'s never was.
+    ///
+    /// ```ndjson
+    /// {"t":"source","slot":0,"layer":"L1","key":"turbulence","source":{"signal":"energy","curve":"pow2","range":[0.1,2.4]}}
+    /// {"t":"source","slot":0,"layer":"L1","key":"turbulence"}
+    /// ```
+    ///
+    /// **A hand on a bound parameter's value does not appear here.** A `ride`
+    /// writes the parameter's own value and the attachment goes on blending
+    /// from it, so the two records never race: only this one attaches and only
+    /// this one detaches. Decided in
+    /// `docs/adr/0319-an-attachment-is-a-session-record-and-taking-a-parameter-back-removes-it.md`.
+    Source {
+        /// The deck slot whose Set is being written — on [`Record::Ride`]'s
+        /// terms.
+        slot: u8,
+        /// Which layer declares the `param`, and it is read.
+        layer: Layer,
+        /// Which node of that layer, or every node declaring `key` — see
+        /// [`Record::Bind`], which this follows exactly.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        index: Option<u32>,
+        key: String,
+        /// **What drives it, or nothing.** Absent is *Take a parameter back*.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        source: Option<Source>,
+    },
     /// **What size the session renders at**, in texels — the canvas every
     /// `VideoSource` draws into and every deck slot is sized to match.
     ///
@@ -1379,7 +1469,7 @@ impl Record {
     ///   particular moment's microphone reading is part of what a Set is.
     /// - [`Record::Gain`], [`Record::Opacity`], [`Record::Blend`],
     ///   [`Record::Residency`], [`Record::Look`], [`Record::Canvas`],
-    ///   [`Record::Procedure`], [`Record::Authority`],
+    ///   [`Record::Procedure`], [`Record::Authority`], [`Record::Source`],
     ///   [`Record::Transport`],
     ///   [`Record::Mask`], [`Record::Transition`] and
     ///   [`Record::Select`] are
@@ -1520,6 +1610,7 @@ impl Record {
             | Record::Procedure { .. }
             | Record::Authority { .. }
             | Record::Ride { .. }
+            | Record::Source { .. }
             | Record::Transport { .. }
             | Record::Transition { .. }
             | Record::Select { .. }
@@ -2022,6 +2113,85 @@ mod tests {
             panic!("not a procedure");
         };
         assert_eq!((slot, index), (2, 1), "the second renderer of slot 2");
+    }
+
+    /// **A `source` round-trips both ways round**, bytes and all — with an
+    /// attachment and without one — and it is the session's rather than any
+    /// Set's.
+    ///
+    /// `round_trip_verbatim` rather than `round_trip`, on
+    /// [`Record::Authority`]'s terms: `index` is absent for a wildcard and
+    /// `source` is absent for a take-back, and a field appearing where nothing
+    /// wrote one is exactly the failure this catches — a `"source":null` on
+    /// the take-back line would round-trip by value and be a different line on
+    /// the wire.
+    ///
+    /// The `is_set_state` assertion is what this record exists to make: a Set
+    /// file carrying one would attach a signal wherever that file was next
+    /// loaded, and into whatever deck slot it landed in.
+    #[test]
+    fn a_source_round_trips_with_an_attachment_and_without_one() {
+        let attached = r#"{"t":"source","slot":0,"layer":"L1","key":"turbulence","source":{"signal":"energy","curve":"pow2","range":[0.1,2.4]}}"#;
+        let rec = round_trip_verbatim(attached);
+        assert_eq!(
+            rec,
+            Record::Source {
+                slot: 0,
+                layer: Layer::L1,
+                index: None,
+                key: "turbulence".to_string(),
+                source: Some(Source {
+                    signal: "energy".to_string(),
+                    curve: "pow2".to_string(),
+                    range: [0.1, 2.4],
+                    noise: None,
+                }),
+            },
+            "an absent index is every node of that layer declaring the key, which is \
+             `Record::Bind`'s rule and not `Record::Slot`'s"
+        );
+        assert!(
+            !rec.is_set_state(),
+            "a `source` is the session's: it names a deck slot, and a Set file carrying \
+             one would attach a signal wherever it was next loaded"
+        );
+        assert!(!rec.is_metadata());
+
+        // **The take-back, and the absence is on the wire.** A `"source"`
+        // written as `null` would be a second spelling of nothing.
+        let taken = r#"{"t":"source","slot":2,"layer":"L4","index":1,"key":"exposure"}"#;
+        assert_eq!(
+            round_trip_verbatim(taken),
+            Record::Source {
+                slot: 2,
+                layer: Layer::L4,
+                index: Some(1),
+                key: "exposure".to_string(),
+                source: None,
+            },
+            "a take-back is this record with its attachment absent"
+        );
+
+        // **A generator rides on the attachment**, field for field with
+        // `Record::Bind`'s — `stream` is written even at 0, which is that
+        // record's own shape and is why it is on the line here.
+        let noisy = r#"{"t":"source","slot":1,"layer":"L1","key":"spawn_rate","source":{"signal":"noise","curve":"lin","range":[0.0,600.0],"noise":{"kind":"fbm","rate":0.5,"stream":0,"octaves":3}}}"#;
+        let Record::Source {
+            source: Some(source),
+            ..
+        } = round_trip_verbatim(noisy)
+        else {
+            panic!("not an attachment");
+        };
+        assert_eq!(
+            source.noise,
+            Some(BindNoise {
+                kind: "fbm".to_string(),
+                rate: 0.5,
+                stream: 0,
+                octaves: 3,
+            })
+        );
     }
 
     /// **An authority round-trips through its wire name**, bytes and all, and

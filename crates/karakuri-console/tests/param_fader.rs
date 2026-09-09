@@ -48,7 +48,7 @@ mod common;
 use common::{drawn_once, near, PLAUSIBLE};
 use karakuri_console::room::{size, Room};
 use karakuri_console::view::{
-    inspector, InspectorPane, Node, Pane, Param, Renderer, View, PANES, SYNCS,
+    inspector, InspectorPane, Node, NodeAuthority, Pane, Param, Renderer, View, PANES, SYNCS,
 };
 use karakuri_layout::{Point, Rect};
 use karakuri_operation::{Authority, Layer, NodeAt, ParamAt, Sync};
@@ -64,6 +64,7 @@ fn row(ord: usize, name: &str, at: Option<(Layer, u32)>, range: [f32; 2], value:
             node: at.map(|(layer, index)| NodeAt { layer, index }),
             key: name.to_owned(),
         },
+        bound: None,
     }
 }
 
@@ -91,7 +92,13 @@ fn mock() -> Pane {
             Node {
                 addr: "L1:0".to_owned(),
                 name: "drift_shell".to_owned(),
-                authority: Some(Authority::Manual),
+                authority: Some(NodeAuthority {
+                    at: NodeAt {
+                        layer: Layer::L1,
+                        index: 0,
+                    },
+                    level: Authority::Manual,
+                }),
                 renderers: Vec::new(),
                 params: vec![
                     row(1, "radius", Some((Layer::L1, 0)), [0.0, 4.0], 2.4),

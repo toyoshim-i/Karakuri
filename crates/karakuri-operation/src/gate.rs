@@ -560,8 +560,8 @@ mod tests {
     use super::*;
     use crate::{
         Authority, BeatSource, BlendMode, Bloom, Control, Curve, Feedback, GridScale, LaneTarget,
-        Layer, NodeAt, ParamAt, ParamValue, Property, Recording, Residency, RgbShift, SetTransfer,
-        StepMode, Sync, Tonemap, TransitionSetting, Undecided, WipeKind,
+        Layer, NodeAt, Output, ParamAt, ParamValue, Property, Recording, Residency, RgbShift,
+        SetTransfer, StepMode, Sync, Tonemap, TransitionSetting, Undecided, WipeKind,
     };
 
     fn node() -> NodeAt {
@@ -574,6 +574,16 @@ mod tests {
     fn param() -> ParamAt {
         ParamAt {
             node: Some(node()),
+            key: "radius".into(),
+        }
+    }
+
+    /// The same parameter, as an attachment addresses one — see
+    /// [`crate::BindAt`].
+    fn bind_at() -> crate::BindAt {
+        crate::BindAt {
+            layer: Layer::L1,
+            index: Some(0),
             key: "radius".into(),
         }
     }
@@ -685,14 +695,14 @@ mod tests {
             },
             Operation::AttachSignal {
                 deck: 0,
-                param: param(),
+                param: bind_at(),
                 signal: "rms".into(),
                 curve: Curve::Lin,
                 range: [0.0, 1.0],
             },
             Operation::TakeParamBack {
                 deck: 0,
-                param: param(),
+                param: bind_at(),
             },
             Operation::WireInput {
                 deck: 0,
@@ -775,7 +785,10 @@ mod tests {
                 width: 1280,
                 height: 720,
             },
-            Operation::RouteFrame { output: Undecided },
+            Operation::RouteFrame {
+                output: Output::Program,
+                on: true,
+            },
             Operation::RecordSession {
                 recording: Recording::Stop,
             },

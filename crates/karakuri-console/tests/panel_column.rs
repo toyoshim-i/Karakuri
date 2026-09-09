@@ -436,15 +436,30 @@ fn sample(variant: &str) -> Operation {
         // pulldown's. The value is any picked revision, because what the badge
         // claims is that an operator reaches the row.
         //
-        // **The other arm of `Revision` has no producer here**, and that is
-        // not a gap in this inventory: the staging lane's one-step-back is the
-        // route that would fill it, and that lane draws no control yet. This
-        // file counts operations rather than arms.
+        // **Both arms of `Revision` have a producer since 2026-09-09**, and
+        // the one here is either: the Staging lane's `back` capsule asks for
+        // `Previous` and a `history` row asks for `Picked`, and what the badge
+        // claims is that an operator reaches the *row*. This file counts
+        // operations rather than arms, so the value is the one that was here
+        // before the second producer landed (ADR-0326).
         "RestoreProcedure" => Operation::RestoreProcedure {
             deck: 0,
             revision: karakuri_operation::Revision::Picked(
                 "20260908-143052-271_slot0_L4_beat_strokes".to_owned(),
             ),
+        },
+        // **A press on a Staging lane row**, which is the whole of that
+        // control: the row is the keep and the capsule at its end is the
+        // put-back above (ADR-0326). It is addressed by the node the row is
+        // for, because a lane row is one node a build changed rather than one
+        // slot; the value is any node, because what the badge claims is that
+        // an operator reaches the row.
+        "KeepCandidate" => Operation::KeepCandidate {
+            deck: 0,
+            node: karakuri_operation::NodeAt {
+                layer: karakuri_operation::Layer::L1,
+                index: 0,
+            },
         },
         // **The `keep` capsule in each Inspector pane's head**, and the `id`
         // is `None` because the capsule types no name: this console's one
@@ -567,11 +582,77 @@ fn sample(variant: &str) -> Operation {
             pattern: 0,
             grid: karakuri_operation::StepMode::Eighth,
         },
+        // **The `+ lane` chooser's items**, and the value is a fader because
+        // the faders are the half of the list every console has: a parameter
+        // item needs a deck the Inspector holds a pane for, and what the badge
+        // claims is that an operator reaches the row.
+        "PointLane" => Operation::PointLane {
+            pattern: 0,
+            target: karakuri_operation::LaneTarget::Fader { deck: 0 },
+        },
+        // **A bank pill in the bay head**, naming a bank and never a
+        // direction: with four fixed banks a press on an empty one is the
+        // mock's `+`, which is why there is no second operation for it
+        // (ADR-0320, ADR-0327).
+        "SelectPattern" => Operation::SelectPattern { pattern: 0 },
+        // **The Inspector's three, and the two addresses are the two facts.**
+        // A node head's chip names a `NodeAt`, a sensitivity chip names a
+        // `BindAt` — a layer, one node of it or all of them, and a key —
+        // because an attachment is one layer's where a value's wildcard names
+        // no layer at all (ADR-0319).
+        //
+        // **`SetAuthority` names a destination and never a step**: the press
+        // asks for the level it lands on, which is `SetStep`'s arrangement
+        // above and P-0090's requirement.
+        "SetAuthority" => Operation::SetAuthority {
+            deck: 0,
+            node: karakuri_operation::NodeAt {
+                layer: karakuri_operation::Layer::L1,
+                index: 0,
+            },
+            authority: karakuri_operation::Authority::Suggesting,
+        },
+        // **The curve chip restates the attachment**, so the value here is a
+        // whole one: a source, a shape and the range it is mapped onto. A
+        // press changes the shape and sends the other two back unchanged,
+        // which is what stops a press for a different curve re-mapping the
+        // signal.
+        "AttachSignal" => Operation::AttachSignal {
+            deck: 0,
+            param: bind_at(),
+            signal: "energy".to_owned(),
+            curve: karakuri_operation::Curve::Sqrt,
+            range: [0.1, 2.4],
+        },
+        // **The chip beside it**, and it removes the attachment rather than
+        // suspending it — there is no suspended state anywhere for it to
+        // leave behind (ADR-0319).
+        "TakeParamBack" => Operation::TakeParamBack {
+            deck: 0,
+            param: bind_at(),
+        },
+        // **The Outputs row's chips**, which name an output by a word from a
+        // closed list and say whether it is on (ADR-0324). `Projector(0)` is
+        // the one this repository owns; the program view's is the same
+        // operation naming a different destination.
+        "RouteFrame" => Operation::RouteFrame {
+            output: karakuri_operation::Output::Projector(0),
+            on: true,
+        },
         other => panic!(
             "`{SRC}` constructs `Operation::{other}` and this file has no value for it — a \
              control started emitting an operation nobody accounted for. Add an arm here, and \
              then decide whether that row's panel badge in {PAGE} is now `has`"
         ),
+    }
+}
+
+/// The address an attachment carries — a layer, a node of it, and a key.
+fn bind_at() -> karakuri_operation::BindAt {
+    karakuri_operation::BindAt {
+        layer: karakuri_operation::Layer::L1,
+        index: Some(0),
+        key: "turbulence".to_owned(),
     }
 }
 

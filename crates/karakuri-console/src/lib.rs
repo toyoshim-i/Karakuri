@@ -675,10 +675,21 @@ fn right_pane() -> Spec {
             // Bay head 27, `.seq` (7 + 9 padding, four 5px gaps, head 18.5,
             // ruler 13.5, four 15px lanes with three 3px gaps = 69, foot 18.5).
             //
-            // Minimum: the same with one lane and no foot — 27 + 16 + 18.5 +
-            // 5 + 13.5 + 5 + 15. A sequencer showing the ruler and one lane is
+            // Minimum: the same with one lane — 27 + 16 + 18.5 + 5 + 9.5 + 5 +
+            // 15 + 5 + 18.5. A sequencer showing the ruler and one lane is
             // still one; showing the ruler alone is not.
-            Spec::view("sequencer").fixed(178.0).min(100.0),
+            //
+            // **The foot is in that sum and was not until 2026-09-09**, when
+            // `+ lane` was drawn. The minimum read 100.0 — *"the same with one
+            // lane and no foot"* — and `view::sequencer` clips rather than half
+            // draws, so a region squeezed to that would have drawn **nothing at
+            // all** rather than a bay with no `+ lane` in it. The ruler is 9.5
+            // rather than the 13.5 that sum used to carry, which is
+            // `size::SEQ_RULER_SIZE` at `size::LINE` and is why the number rose
+            // by 19.5 and not by 23.5;
+            // `the_reserved_minimum_holds_one_lane_and_the_foot` is what
+            // measures it rather than this comment.
+            Spec::view("sequencer").fixed(178.0).min(119.5),
         ],
     )
     .named("right-pane")

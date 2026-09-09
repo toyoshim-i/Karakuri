@@ -1151,6 +1151,44 @@ pub mod size {
     /// stated one row along.
     pub const REND_ROW_H: f32 = REND_ROW_PAD_T + REND_H + REND_ROW_PAD_B;
 
+    /// `.sens`'s `padding: 2px 10px 6px 12px` — the sensitivity row stands on
+    /// the same 12 and 10 the parameter row above it does, tight under it and
+    /// with the group's own breathing room below.
+    pub const SENS_PAD_L: f32 = 12.0;
+    pub const SENS_PAD_R: f32 = 10.0;
+    pub const SENS_PAD_T: f32 = 2.0;
+    pub const SENS_PAD_B: f32 = 6.0;
+
+    /// `.sens`'s `grid-template-columns: 111px 1fr` and its `gap: 8px`: the
+    /// word *sensitivity*, then the chips.
+    pub const SENS_LABEL_W: f32 = 111.0;
+    pub const SENS_GAP: f32 = 8.0;
+
+    /// `.sens .chips`'s `gap: 5px`, between two chips.
+    pub const SENS_CHIP_GAP: f32 = 5.0;
+
+    /// `.sens`'s `font-size: 10px`, which the pills inside it inherit — so a
+    /// chip here is smaller than a renderer chip and larger than an authority
+    /// one, and none of the three is [`BASE`].
+    pub const SENS_SIZE: f32 = 10.0;
+
+    /// A sensitivity chip's box: [`SENS_SIZE`] at [`LINE`] inside a pill's
+    /// `border: 1px solid var(--c-line)` — **17**. [`REND_H`]'s shape written
+    /// at this row's own type size, and the border counts for [`REND_H`]'s
+    /// reason: a pill's is a real border where a mini's is a wash.
+    pub const SENS_CHIP_H: f32 = SENS_SIZE * LINE + HAIRLINE * 2.0;
+
+    /// The sensitivity row's box: one chip inside [`SENS_PAD_T`] and
+    /// [`SENS_PAD_B`] — **25**. One row and not a wrap, which is
+    /// [`REND_ROW_H`]'s rule: `.sens .chips` carries `flex-wrap: wrap` and the
+    /// console draws the chips that fit.
+    pub const SENS_H: f32 = SENS_PAD_T + SENS_CHIP_H + SENS_PAD_B;
+
+    /// `.pill`'s `padding: 0 8px` is [`PILL_PAD_X`]; this is the same number
+    /// named for this row, so a change to one is not silently a change to the
+    /// other. The mock gives `.sens`'s pills no padding of their own.
+    pub const SENS_CHIP_PAD_X: f32 = PILL_PAD_X;
+
     // -- the sequencer bay --------------------------------------------------
 
     /// `.seq`'s `padding: 7px 9px 9px`: the ring of card the bay's rows sit

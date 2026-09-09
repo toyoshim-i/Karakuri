@@ -581,7 +581,7 @@ use karakuri_operation::gate::Class;
 use crate::panel::{Panel, GRAB};
 use crate::view::{
     arrangement, audio_in, bay_grip, deck_head, deck_name, inspector, keep_pill, library, look,
-    master, mcp_pill, mixer, outputs, program_bay, program_head, sequencer, tracker_group,
+    master, mcp_pill, mixer, outputs, program_bay, program_head, sequencer, staging, tracker_group,
     transition, transport, Field, Scope, View, BAY_GRIPS, DECKS, REGIONS,
 };
 
@@ -595,8 +595,9 @@ use crate::view::{
 /// Program bay head's `solo`, the four deck preview cells,
 /// the Library bay's scope chips, its two filter fields, the `params` chip in
 /// its foot, the `load` button and deck pulldown beside it, the list above
-/// them, the four class pills, and the Sequencer bay's cells, labels and mode
-/// pill.
+/// them, the four class pills, the Sequencer bay's cells, labels, mode pill,
+/// bank pills and `+ lane`, and the Staging lane's `back` capsules and its
+/// rows.
 ///
 /// **One probe per derivation, cheapest answer first**, and [`on_mcp`] is last
 /// because it is the dearest probe here — each class lays out its bay's whole
@@ -714,9 +715,9 @@ use crate::view::{
 /// answering a different question. So the **list** is the control and which row
 /// is inside [`crate::view::LibraryBay::take`], which is the `params` chip's
 /// row read the other way round.
-pub const PROBES: [Probe; 26] = [
+pub const PROBES: [Probe; 30] = [
     Probe {
-        name: "the Outputs row's sink",
+        name: "the Outputs row's sinks",
         claims: 1,
         ask: on_sink,
     },
@@ -791,6 +792,16 @@ pub const PROBES: [Probe; 26] = [
         ask: on_param,
     },
     Probe {
+        name: "a node head's three authority chips",
+        claims: crate::view::AUTHORITIES.len(),
+        ask: on_auth,
+    },
+    Probe {
+        name: "a sensitivity row's curve and take back",
+        claims: 2,
+        ask: on_sens,
+    },
+    Probe {
         name: "the Program bay head's solo",
         claims: 1,
         ask: on_solo,
@@ -841,9 +852,19 @@ pub const PROBES: [Probe; 26] = [
         ask: on_mcp,
     },
     Probe {
-        name: "the Sequencer bay's cells, labels and mode pill",
+        name: "the Sequencer bay's cells, labels, mode pill, bank pills and + lane",
         claims: SEQ_CONTROLS,
         ask: on_step,
+    },
+    Probe {
+        name: "the Staging lane's back capsules",
+        claims: 1,
+        ask: on_back,
+    },
+    Probe {
+        name: "the Staging lane's rows",
+        claims: 1,
+        ask: on_candidate,
     },
 ];
 
@@ -879,7 +900,12 @@ pub struct Probe {
 }
 
 /// **How many controls the Sequencer bay claims**: a cell per drawn step of
-/// every lane, a label per lane, and the mode pill.
+/// every lane, a label per lane, the mode pill, the four bank pills in the bay
+/// head and the foot's `+ lane`.
+///
+/// **The chooser's card is not counted**, exactly as the Library's two are
+/// not: a card that is down claims every press on the console under rule 2,
+/// which is answered before this table is walked.
 ///
 /// **A count of what a *full* pattern draws rather than of what is on screen**,
 /// which is [`BAY_GRIPS`]' shape asked of a bay whose rows are data: this is a
@@ -892,7 +918,7 @@ pub struct Probe {
 ///
 /// `karakuri_console::view::Sequencer::controls` is what a drawn bay answers,
 /// and it is the number this bounds.
-const SEQ_CONTROLS: usize = DECKS * (karakuri_pattern::SLOTS + 1) + 1;
+const SEQ_CONTROLS: usize = DECKS * (karakuri_pattern::SLOTS + 1) + 1 + karakuri_pattern::BANKS + 1;
 
 /// **How many controls rule 4 hit-tests**, summed over [`PROBES`].
 ///
@@ -932,15 +958,69 @@ pub enum Claim {
 /// **A console with no pattern behind it pays one branch** — [`sequencer`]'s
 /// first line is the reading, and `None` is a bay that draws nothing.
 fn on_step(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
-    sequencer(ctx, panel.layout(), view.sequencer.as_ref()).is_some_and(|bay| bay.owns(p))
+    sequencer(
+        ctx,
+        panel.layout(),
+        view.sequencer.as_ref(),
+        &view.lane_choices(),
+    )
+    .is_some_and(|bay| bay.owns(p))
 }
 
-/// **The Outputs row's one sink**, and the first control this console drew —
-/// the rule above is measured against it and `tests/outputs.rs` is where the
+/// **The `back` capsule at the end of a candidate row**, asked before the row
+/// it sits in: the capsule is *inside* the row, so the order here is what
+/// makes a press on the capsule reach the capsule — rule 4's *a control claims
+/// what it acts on and no more*, which is the Library bay's star and its row
+/// one bay up.
+///
+/// **The lane is derived twice rather than once for both**, which is the
+/// Library bay's arrangement rather than a mixer strip's: a value held across
+/// both questions would outlive the question it answers, and [`staging`] is a
+/// rectangle and a count rather than a walk of anything.
+///
+/// **The candidates go in with the point**, exactly as the Library's listing
+/// does: what a row *is* — which node, which deck, which verdict — is a value
+/// the host derived off a deck and handed over, and this crate holds none of
+/// it. A lane with nothing outstanding is `None` and pays one branch.
+fn on_back(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    staging(panel.layout(), &view.staging)
+        .is_some_and(|bay| bay.back(ctx, &view.staging, p).is_some())
+}
+
+/// **The rows of the Staging lane, and the row is the control** — a press on
+/// one keeps that candidate, which is the Library bay's list read the other
+/// way round: there a row press takes a Set in hand and asks for nothing, and
+/// here it names an operation outright.
+///
+/// **Its count is one for the list's reason one bay up**: a press lands on one
+/// of however many rows the bay drew, and how many that is moves when a
+/// divider moves — [`CONTROLS`] is what the pointer *may* have to hit-test,
+/// and a figure that moved with the arrangement would answer a different
+/// question.
+///
+/// **It answers `false` for a row that offers no keep**, which is not the same
+/// as a row that is not there: a row on `overloaded` and a row that names no
+/// node are readouts, and a press on either is `egui`'s. The rule is
+/// [`crate::view::StagingBay::keep`]'s and it is asked rather than restated.
+fn on_candidate(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    staging(panel.layout(), &view.staging)
+        .is_some_and(|bay| bay.keep(ctx, &view.staging, p).is_some())
+}
+
+/// **The Outputs row's sinks**, and the first control this console drew — the
+/// rule above is measured against it and `tests/outputs.rs` is where the
 /// arithmetic is. Before the first frame there are no fonts and no drawn
 /// control at all, which [`outputs`] answers `None` to.
+///
+/// **It was the one sink until 2026-09-09.** The row draws the list it has —
+/// the program view, a projector window and the two plugin chips — and
+/// [`crate::view::Outputs::chip_at`] is the whole row asked at once, off the
+/// same derivation that paints them. The two plugin chips answer `false`: a
+/// control that switches nothing does not take a press away from the row it
+/// sits in, so a press there falls through to whatever is under it exactly as
+/// a press on the row's ground does.
 fn on_sink(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
-    outputs(ctx, panel.layout(), view.opening).is_some_and(|row| row.hit(p))
+    outputs(ctx, panel.layout(), view.opening).is_some_and(|row| row.chip_at(p).is_some())
 }
 
 /// **The two pills that are not in a bay**, and the only two asked
@@ -1154,6 +1234,35 @@ fn on_rend(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
     view.inspector.iter().enumerate().any(|(index, pane)| {
         inspector(panel.layout(), index, pane, view.scroll_in(index))
             .is_some_and(|at| at.select_renderer(ctx, pane, p).is_some())
+    })
+}
+
+/// **The `man / sug / auto` chips on a node head**, and the count is
+/// **three** for the tracker group's reason and not the renderer row's: the
+/// three levels are a closed list this console owns
+/// ([`crate::view::AUTHORITIES`]), where how many renderer chips are drawn is
+/// a property of the Set in the slot. How many *heads* draw them is data and
+/// is not counted, exactly as how many renderer rows there are is not.
+///
+/// They were drawn and claimed by nothing from 2026-08-29 until the engine had
+/// a writer for them (ADR-0319).
+fn on_auth(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    view.inspector.iter().enumerate().any(|(index, pane)| {
+        inspector(panel.layout(), index, pane, view.scroll_in(index))
+            .is_some_and(|at| at.set_authority(ctx, pane, p).is_some())
+    })
+}
+
+/// **The sensitivity row's chips under a bound parameter**, and the count is
+/// **two** because two of the four are controls: the curve chip and
+/// `take back`. The source and the range are drawn and claimed by nothing —
+/// [`crate::view::SensChip`] carries why — which is this file's own rule that
+/// a control claims what it acts on and no more, and it is why this number is
+/// not four.
+fn on_sens(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    view.inspector.iter().enumerate().any(|(index, pane)| {
+        inspector(panel.layout(), index, pane, view.scroll_in(index))
+            .is_some_and(|at| at.sensitivity(ctx, pane, p).is_some())
     })
 }
 
@@ -1509,6 +1618,13 @@ pub fn claim(panel: &mut Panel, ctx: &egui::Context, view: &View, p: Point) -> C
         // what put it there, so a press of either button while it is down is
         // the card's.
         || view.menu_open()
+        // **And the Sequencer bay's `+ lane` chooser, which is a fifth.** It
+        // hangs up off a pill in that bay's foot and stands over its own rows,
+        // so while it is down a press inside it belongs to the card and a
+        // press anywhere else is the dismissal — the deck list's clause one
+        // bay along, and it can never be down while any of the four above it
+        // is for their reason.
+        || view.lane_open()
     {
         return Claim::Panel;
     }

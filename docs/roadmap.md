@@ -411,8 +411,31 @@ no letter here to bind.
 rows are the first use of that: the exit asks that no row of this bay is still *waiting* on a
 control, and a row saying the panel is not a way in is not waiting on one.
 
-**Blocked on. Three rows, and one mechanism covers all three.** It was five until 2026-09-08 and
-four until 2026-09-09. *Write a parameter* landed with the parameter row's fader, on the route
+**Blocked on. One row, and it is not this list's shape any more.** It was five until 2026-09-08,
+four and then three on 2026-09-09, and it is one now: *Element capacity, seeds, the camera*, which
+is a control nobody has specified rather than a mechanism nobody has built.
+[ADR-0319](adr/0319-an-attachment-is-a-session-record-and-taking-a-parameter-back-removes-it.md)
+took the last three together, because the sentence below said they were one decision and they were:
+**what each records**. *Attach a signal to a parameter* records `Record::Source` — `Record::Bind`'s
+session twin, on the terms `Record::Ride` is `Record::Param`'s — and *Take a parameter back* is the
+same record with its attachment absent, which is what made the third row's *nothing to call* stop
+being true: `Set::unbind` is `Set::bind`'s inverse and a take-back **removes** the attachment,
+because there was never any suspended state for it to leave behind. *Set a node's authority* needed
+no new record at all; what it needed was `Deck::set_authority`, and the three chips have been drawn
+and unclaimed since 2026-08-29. All three are `has` on the panel.
+
+**Two questions the rows had left open were answered on the way, and both are on the page.** A hand
+on a bound parameter's fader **writes and the attachment stays** — order-independent by
+construction, which is what a blend on confidence buys — so a knob cannot detach a signal by
+accident; what the console does instead is draw the fader and not take hold of it, because at full
+confidence the number a hand would write carries no weight and a handle that moved without moving
+the picture is the one thing a handle must not be. And **an authority enforces nothing yet, which
+the row says rather than implies**: nothing writes a parameter on an agent's behalf, so what a level
+reaches today is the bare-name refusal — granting one renderer and keeping the other narrows what
+one knob may do from the next press — and the record is kept so an agent's write can be refused
+against it later.
+
+*Write a parameter* landed with the parameter row's fader, on the route
 ADR-0280 and ADR-0282 had already laid through the engine
 ([ADR-0286](adr/0286-a-parameter-row-writes-the-control-it-draws-and-carries-the-range-rather-than-the-position.md)),
 and it is what the sentence below about the writer was written for. Then *Composite a deck's
@@ -443,13 +466,22 @@ writers all exist and are all reachable only at a build: `Set::write_param`, `Se
 [ADR-0280](adr/0280-a-parameter-written-to-a-live-set-is-a-session-record.md) put `Deck::write_param`
 over it and `Record::Ride` under it, so *Write a parameter* had a route through the engine and what
 the panel owed was the control. **The control is built**, so this bay is no longer the bay where an
-operator turns a knob and the bay with no way to turn one. The hole still stops *Attach a signal to
-a parameter* and *Set a node's authority*, both the same one-line shape once somebody decides what
-each records.
+operator turns a knob and the bay with no way to turn one. **And the hole is closed for the other
+two**: `Deck::bind`, `Deck::unbind` and `Deck::set_authority` reach `live_mut` by the same road and
+for the same argument — nothing renders and nothing replaces, so *which Sets is this frame made of*
+has the answer it had before the call — and each was the one line ADR-0280 predicted once the record
+was decided (ADR-0319). `Set::set_published` is the writer nothing has needed yet, and *Narrow the
+published interface* is in *Rows the manual has not given a home* rather than here.
 
-- ***Take a parameter back* has nothing to call even once that route exists**: `Set::bind` has no
-  inverse anywhere in the workspace and `Binding` carries no suspended state. The row's own tip
-  already says it — *"Nothing does this today; it is the second rule's other half."*
+- ***Take a parameter back* had nothing to call, and the reason was the answer.** `Set::bind` had
+  no inverse anywhere and `Binding` carried no suspended state — and the second half of that is why
+  the row's own tip promised something nothing could do (*"the binding is kept and stops driving, so
+  you can hand it back"*). `Set::unbind` is the inverse; there is no suspension, because *not
+  driving this parameter* is already written and it is the absence — P-0084's blend writes the
+  param's own value at confidence 0.0. What is given up is handing it back in one press; what
+  replaces it is that the stream carries the source, the curve and the range on the line that
+  attached it. Panel badge `has`, the control is the `.sens` row's last chip, and the page's promise
+  is corrected rather than left standing (ADR-0319).
 - ***Composite a deck's renderers* is built**, and it is the demonstration of the paragraph above
   rather than an item in this list. The mock had drawn the chip all along; what was missing was the
   press. `DeckHead::compositing` names the layering the deck is *not* in, `composited` in
@@ -515,6 +547,15 @@ and the pane's scroll, both below — so what is owed here is one, and it is an 
   a removal shifts every id anything holds. That is an engine item, and naming it here is not the
   same as this bay carrying it.
 
+**Six of the ten are built now.** Three waited on nothing and landed on 2026-09-08; the three the
+list above was written for landed on 2026-09-09 with ADR-0319 — *Attach a signal to a parameter* is
+the sensitivity row's curve chip, *Take a parameter back* is the chip beside it, and *Set a node's
+authority* is the three words on a node head that had been drawn and unclaimed for eleven days.
+*Composite a deck's renderers* and *Choose which renderer of a deck is live* are the other two of
+the six. **What is left is one row and it is `plan`**: *Element capacity, seeds, the camera*, two
+thirds of one thing — a capacity control and a seed control, both waiting on a decision about the
+affordance rather than on anything in the engine.
+
 **Three of the ten waited on nothing, and all three are built, on 2026-09-08.** *Write a parameter*
 is the pane's fader; *Choose which renderer of a deck is live* is a claim on the chips and the
 `Record::Select` arm in `apply`; *Keep what a deck is playing* is the capsule in the pane head,
@@ -579,84 +620,97 @@ renderer row and *take back* each carry one, and the parameter rows and their fa
 
 #### M5.6 — Outputs
 
-**Rows.** One carries a `plan` panel badge: *Choose where the frame goes*.
+**Rows.** One carried a `plan` panel badge: *Choose where the frame goes*. It reads `has`.
 
 **Exit.** No `plan` badge in the panel column of this bay's rows on
+[every operation](manual/operations.html). **Met.**
+
+**What an output is, which was this bay's to build, and is built.**
+[ADR-0324](adr/0324-an-output-is-a-named-destination-with-a-size-and-an-on-off.md): an output is a
+destination, a size and an on/off, and each of the three is answered somewhere different.
+`Operation::RouteFrame { output: Output, on: bool }` names one — a word from a closed list
+(`Program`, `Projector(n)`, `Plugin(n)`) and never a label, because a projector's label carries the
+display it is on and that changes when the cable does. The picture's on and off is still
+`Layout::visible` on the picture's node, which is ADR-0243's reconciliation taken the other way
+round: the sink and the layout node do not stop being one thing, the *vocabulary* stops being one of
+the two ways of saying it. What it writes is nothing, and `karakuri-operation-record` gained a fifth
+`Silent` variant to say why — **publishing is not the performance**, which also answers the last of
+ADR-0246's three open questions: a replay whose outputs are gone draws at the canvas.
+
+**The one derivation this bay owed is built**, and it took a measurement rather than an argument.
+[ADR-0325](adr/0325-the-frame-follows-the-largest-enabled-output-and-a-resize-costs-0-145-ms.md):
+the frame is composited at the largest enabled output's size, the program view's size is the
+rectangle the Program bay gives the picture, and a divider drag therefore moves what the frame is
+rendered at. That is a `Deck::resize` and a `Present::resize` per changed frame, and it is **0.145 ms**
+— measured on 2026-09-09, host clock, biased high, and within noise of the same figure at 466x262
+and at 1920x1080, because what it pays for is nine objects rather than their texels. The alternative
+that would have cost nothing — hold the picture at the session canvas and letterbox it — was
+rejected on the one case the manual names: soloed for a capture on a 4K display, it would upscale.
+`CANVAS` keeps a smaller job, the shape every output is fitted to and the size a run starts at, which
+is both halves of what ADR-0246 called *wrong twice over*.
+
+**A second `Sink` is in the slice**, which is what
+[ADR-0171](adr/0171-the-deck-advances-and-each-sink-either-gets-the-frame-or-misses-it.md) said was
+owed: `crates/karakuri`'s `Projector` is a second `winit` window with a surface and a `WindowSink`,
+opened on `RouteFrame { Projector(0), on: true }` and dropped on `on: false`. Its close is the output
+going off rather than the program quitting; its resize is the destination deciding its own size
+(ADR-0246), and the next frame's derivation follows it. It is not made fullscreen and not put on a
+chosen display: that is one line of `winit` and one list of monitors this program does not read, and
+a fullscreen with no way to say *where* is worse than none.
+
+**The bay draws the list it has.** Four `.sink` chips — `program view`, `projector`, `Syphon · no
+plugin`, `NDI · no plugin` — each hit-testing the whole chip rather than the dot, and the two plugin
+chips drawn `.absent` and claiming no press. The mock moved first in two places, which is
+`docs/contributing.md` §5 step 3: `projector · DELL U2720Q` became `projector`, and `Syphon` became
+`Syphon · no plugin`.
+
+**What is still owed, and none of it blocks this bay's exit.**
+
+- **The plugin sinks.** `Output::Plugin(n)` exists and nothing constructs one; `docs/plugins.md` is
+  the specification and nothing implements it. The chips say so rather than the row omitting them.
+- **`+ add output`** is the arena's insert, which is
+  **one gap drawn five times** (`+ lane`, `+ add`, `+ add output`, `+` on the scope list, and the
+  inspector's `2 up`). It arrives with the arena operations and not with this row.
+- **Fullscreen on a named display**, above.
+- **The MCP route.** *Choose where the frame goes* reads `plan` for MCP and the class it is in —
+  *inputs and outputs* — is closed until the operator opens it. MIDI is `gap`: no chip on the console
+  page carries a target, and the closed list this operation now takes is what a map line would name
+  the day one is drawn.
+- **`docs/manual.md`'s *The canvas is fixed for a run*** is now false for the panel and still true
+  for `karakuri-cli`, whose `--canvas` is untouched. ADR-0246 predicted the sentence would go false
+  when this was built; ADR-0325 names it and does not close it.
+- **A slot's estimate is dropped on every frame of a drag**, because `HotSwap::resize` drops it.
+  Nothing sets an estimate today — `set_estimated_cost` has no caller — so it costs nothing now, and
+  whoever wires the estimate meets it here.
+
+**The bay's prose, as tooltips.** One note, *Outputs*, which grew a second paragraph for what an
+output is. The four sinks and the `mcp` pill are tipped; `+ add output` carries the note about the
+arena.
+
+#### M5.7 — Staging — **closed**
+
+**Rows. Two, and both are met.** *Keep a candidate* is a press on a candidate row and *Put a node's
+previous version back* is the `back` capsule at the end of one, and both badges read `has` for a
+route that is this bay's own
+([ADR-0326](adr/0326-a-staging-row-is-a-changed-node-and-the-row-is-the-keep.md)).
+
+**The exit rule's second defect is closed with them.** This said *Put a node's previous version
+back*'s `has` came from another bay — a press on a row of the Library bay's `history` scope,
+ADR-0308 — and that **a badge is one string and a row can have two homes**, so the grep below passed
+over a lane that drew nothing for it. The lane draws it now and the badge names both controls, which
+is the *load button, row menu → load to slot, or library → deck* spelling one bay up. The reading is
+worth keeping, because M5.3 still carries the same shape in the other direction: *Keep what a deck
+is playing* is that bay's row and the Inspector's control.
+
+**Exit. Met.** No `plan` badge in the panel column of this bay's rows on
 [every operation](manual/operations.html).
 
-**What an output is, which is this bay's to build.** `RouteFrame { output: Undecided }`, and no
-output has an identity anywhere in this workspace. It was in *The decisions nobody has taken* and it
-is here instead: it blocks nothing but this bay, so it is an implementation item of it rather than a
-standing question. Three constraints are on record and the rest is this bay's work.
-
-- **The picture is in the set that needs naming and a preview cell is not**
-  ([ADR-0243](adr/0243-the-program-picture-is-an-output-and-the-four-cells-are-monitors.md)).
-- **An output holds the size it is rendered at**, which the operator or the destination window sets
-  ([ADR-0246](adr/0246-the-render-size-belongs-to-the-output-and-the-sessions-canvas-is-only-its-default.md)).
-- **One render, scaled into each output**, at the largest enabled output's size, so no output is
-  ever upscaled ([ADR-0247](adr/0247-one-frame-is-rendered-and-scaled-into-each-output.md)). There
-  is no second `Deck`, no second mix and no second present pipeline to design.
-
-What is left to decide is the identity itself — the destination, and what tells a sink this
-repository owns from one a plugin brings. The mock already draws four of them: *program view*,
-*projector · DELL U2720Q*, *Syphon*, *NDI · no plugin*.
-
-**Blocked on.** Not quite nothing outside this bay, and the sentence describing what is drawn was
-wrong twice. **The bay draws one sink, not its sinks** — `view.rs` says so itself, *"the mock draws
-four `.sink`s and a `+ add output` pill. One of them exists"* — and it hit-tests the **whole chip,
-not the dot**, because a seven-pixel dot is not a target a hand finds. What it owes is the
-switchable list.
-
-**Two things it waits on are not this bay's drawing.**
-[ADR-0243](adr/0243-the-program-picture-is-an-output-and-the-four-cells-are-monitors.md) hands this milestone a model to
-reconcile and not only a name: the picture's on and off is `Layout::visible` on a layout node, read
-and never stored so that there is no second copy to drift, and naming an output means a sink and a
-layout node stop being one thing read two ways. And the same `Undecided` holds a badge in M5.10's
-column on the same row, so this question does not block only this bay.
-
-**And the one derivation this bay owes is not named anywhere in it.**
-[ADR-0247](adr/0247-one-frame-is-rendered-and-scaled-into-each-output.md) decided *the frame's
-single size is a derived number now, not a setting*, and
-[ADR-0246](adr/0246-the-render-size-belongs-to-the-output-and-the-sessions-canvas-is-only-its-default.md)
-names **M5.6** as the owner of implementing it. `crates/karakuri/src/main.rs` still renders at a
-`CANVAS` constant with no flag. That sentence lives under *The decisions nobody has taken*, whose
-own preamble says the question left that list — so the thing this bay owes sits under a heading
-saying it is not owed. It is this bay's, and it is here.
-
-**A second `Sink`, and it is an item rather than an aside.** The fan-out is built
-([ADR-0171](adr/0171-the-deck-advances-and-each-sink-either-gets-the-frame-or-misses-it.md)) and
-nothing has been written to put in the slice, so *Choose where the frame goes* is a control over a
-list of one. A projector window is the one this repository owns. It carries no row on the
-operations page, which is how it sat in *Also here* while this bay's exit — one badge — could be
-met without it.
-
-**The bay's prose, as tooltips.** One note, *Outputs*: every place a frame goes as one switchable
-list, which sinks live in this repository and which appear only with a plugin, that the Program
-picture is the first row of the list, and that all of them may be off. The mock tips the four sinks
-and the `mcp` pill, and `+ add output` carries none — and the note for that gap is already written
-in `view.rs`, which says what `+ add` would do and why the arena cannot. One short note is all the
-prose this bay has,
-so this is the smallest of the nine items.
-
-#### M5.7 — Staging
-
-**Rows.** One carries a `plan` panel badge: *Keep a candidate*. **The other is *Put a node's
-previous version back*, and its badge reads `has` for a route that is not this bay's** — a press on
-a row of the Library bay's `history` scope, ADR-0308. That is this exit rule's second defect and it
-is the same one M5.3 already carries in the other direction, where *Keep what a deck is playing* is
-that bay's row and the Inspector's control: **a badge is one string and a row can have two homes**,
-so the grep below passes over a lane that still draws nothing for it. What this bay owes for that
-row is items 4 and 7, unchanged, and the exit condition is worth reading against them rather than
-against the badge.
-
-**Exit.** No `plan` badge in the panel column of this bay's rows on
-[every operation](manual/operations.html).
-
-**Blocked on.** Both rows, and this list said six items when three of them were already answered.
-Two were built on 2026-08-30, nine days before this section was last rewritten, and one belongs to
-another milestone. What is left is one decision, one dependency somebody else owns, and one item
-this list never named at all. **A second unnamed one has since been built and is item 8**, which
-is what the *Two findings* paragraph below was carrying instead of this list.
+**Blocked on. Nothing.** This list said six items when three of them were already answered, and
+then eight when the two it had never named were written into it. **The last two were items 4 and 7
+and both landed on 2026-09-09** —
+[ADR-0326](adr/0326-a-staging-row-is-a-changed-node-and-the-row-is-the-keep.md). The list is kept
+because each entry says what it cost and what it turned out to be, which is what a reader arriving
+at this bay is looking for.
 
 1. **A store the build path can write — built.** This said `watched()` *"calls neither
    `Watch::storing_to` nor `Watch::snapshotting_to`, which its own documentation says outright"*.
@@ -670,14 +724,16 @@ is what the *Two findings* paragraph below was carrying instead of this list.
    node from the engine's placed sources before the first frame, so nothing reads as *every node
    changed*. The **snapshot** baseline is `history::seed`, which this program calls in `main` before
    the window opens, so the first edit has a version to be walked back to and not only the second.
-4. **An undecided answer: what the lane draws when one build changes two nodes.** A rebuild
-   restates the whole stack, so a save touching two files is one `Built` with two changed hashes
-   and one `swap::Event`. One row cannot name two nodes, and two rows means the lane's row model
-   stops being one-per-slot — which is what `staging()` and `view::Candidate` are built on. **A
-   decision and not an implementation, and it is the only one left in this list.** What has changed
-   under it is the material: the changed-node set is now derivable at one point, where the old and
-   new node lists for a slot are both in hand, so *computing* the diff is no longer part of the
-   question. *What the lane draws with it* still is.
+4. **What the lane draws when one build changes two nodes — decided, and it is two rows.** A
+   rebuild restates the whole stack, so a save touching two files is one `Built` with two changed
+   hashes and one `swap::Event`; one row cannot name two nodes, and two rows means the lane's row
+   model stops being one-per-slot. The maintainer took it on 2026-09-09 — *変更ノードごとに 1 行*,
+   one row per changed node — and that is what the model is now: **a row is a node a build
+   changed**, with the build's one verdict repeated on each of its rows, and a verdict with no
+   changed node behind it drawing one row on the slot with no address on it. The alternative that
+   lost was a row per slot with the nodes nested under it, declined for simplicity
+   ([ADR-0326](adr/0326-a-staging-row-is-a-changed-node-and-the-row-is-the-keep.md)). The diff is
+   taken at the one point both node lists are in hand, which is where a build is taken up.
 5. **A reader for the edit history — built, and it is M5.3's now.** `history::list` answers
    *what versions has this had*, most recent first, and ADR-0276 puts the Set a version belongs to
    in its name. The row it serves is *Walk the edit history*, which left *Rows the manual has not
@@ -688,11 +744,14 @@ is what the *Two findings* paragraph below was carrying instead of this list.
    compiled, and both programs hand a watcher one now. This file says twice elsewhere that the
    writing belonged to M5.10 — *"it belongs here rather than in the bay that would read them"* —
    and this list counted it as something this bay waits on. It no longer waits on it.
-7. **Nothing can press a candidate row, and no item said so.** `StagingBay::row` exists and the
-   painter and the tests use it, but `input::PROBES` has no staging entry and `press_handler::ASKED`
-   has none either. *"Nothing in the list is a drawing — the row is already painted"* was true about
-   paint and false about reach: with item 4 decided, both controls still owe a probe, a table entry
-   and an arm in the press handler.
+7. **Nothing could press a candidate row, and no item said so — built.** `StagingBay::row`
+   existed and the painter and the tests used it, but `input::PROBES` had no staging entry and
+   `press_handler::ASKED` had none either. *"Nothing in the list is a drawing — the row is already
+   painted"* was true about paint and false about reach. Both controls have a probe, a table entry
+   and an arm now, and which part of the row each is came with item 4: **the row is the keep and a
+   `back` capsule at its end is the put-back**, which is the Library's list and its star arranged
+   the same way — the act that writes nothing on the large target and the act that writes a file on
+   the small one (ADR-0326).
 8. **A source the checker turned down had nowhere to say so — built.** `Source::poll` answered
    `Option<Request>`, so a watcher that refused a `.kir` printed its diagnostics and returned the
    same answer a poll that saw no edit returns; the lane drew nothing. It answers `Option<Polled>`
@@ -701,18 +760,21 @@ is what the *Two findings* paragraph below was carrying instead of this list.
    ([ADR-0310](adr/0310-a-source-can-say-it-refused-and-the-lane-draws-it.md)). It was never in
    this list, which is why it is here and why the paragraph below it says what is left.
 
-*Keep a candidate* waits on item 4 and item 7 and has no hazard — it writes nothing, and what it
-changes is the lane. *Put a node's previous version back* waits on 7; item 6 is built, and **the
-operation itself is reached from another bay now** — the Library's `history` rows land a version an
-operator picked, which is `Revision::Picked`, where this lane's route is `Revision::Previous` and
-means *the one this replaced* (ADR-0308). Where it writes was already answered, because
+*Keep a candidate* has no hazard and never had one — it writes nothing, and what it changes is the
+lane; the row is its control. *Put a node's previous version back* is reached from **two** bays now:
+the Library's `history` rows land a version an operator picked, which is `Revision::Picked`, and
+this lane's capsule asks for `Revision::Previous` and means *the one this replaced* (ADR-0308),
+which the host resolves by walking the history for that node of that Set and taking the entry after
+the newest. Where it writes was already answered, because
 `working_copies()` materialises one scratch copy per slot before the window opens, so a restore
 moves the deck and the operator's editor names the same file; ADR-0308's `put_back` is that write,
 and this lane's control would reach it with the other arm.
 
-**Also here.** The **staging lane**. The bay draws a row per slot and the producer it was gated on
-is wired. What the lane still omits is the node address, `origin`, the timestamp and the head's
-count, each named at the code and none of them a row on the page.
+**Also here.** The **staging lane**. The bay draws a row per node a build changed, on the deck it
+landed on, with the build's verdict on each and the two presses that row offers. What the lane still
+omits is `origin`, the timestamp and the head's count, each named at the code and none of them a row
+on the page — the first has no producer anywhere and the second waits on the spelling the Library's
+own time column waits on, which is one decision this bay does not take twice.
 
 **Two findings this lane exists for, and both have rows now.** The first was the budget's verdict:
 after `Event::RolledBack` the watchdog put the previous *Set* back on screen and **did not put the
@@ -729,8 +791,9 @@ which is the normal case rather than a hidden one, and what needs saying is that
 running it*. **Four surfaces say that** — this lane's `overloaded` row, the transport's health
 capsule, that deck's preview caption under the still, and the CLI's status line — and the caption is
 the one this bay does not own and could not do without: a held frame of good material looks like
-material. What is left unsaid here is the same thing the other rows leave unsaid, the *node*, which
-is item 4. And **a checker refusal reached no row at all** until 2026-09-08: a `.kir` the checker
+material. **The node is said now** — an overloaded row names the node the build that stopped the
+slot changed, and the `back` capsule at the end of that row is the way out of the freeze the lane
+could not offer before (ADR-0326). And **a checker refusal reached no row at all** until 2026-09-08: a `.kir` the checker
 turned down produced no `Request`, so the disagreement an operator most wants to see was said on
 stderr. Closing it was the engine change this said it was — `Source::poll` having no way to say
 *I refused*.
@@ -741,9 +804,10 @@ other verdicts, and the lane draws a row on a fourth word — `did not compile`,
 diagnostic and a count of the rest, with the whole set still going to stderr and to a model over
 `--mcp`. The transport's health capsule says it too, and
 [ADR-0310](adr/0310-a-source-can-say-it-refused-and-the-lane-draws-it.md) is the record, with the
-two things it deliberately left: the *node* the refusal is about is still not on the row, which
-is item 4 above; the second — a refusal arriving while that slot has a candidate on trial waiting
-for the verdict — is gone with the trial itself
+two things it deliberately left: the *node* the refusal is about is still not on the row, and that
+one is a state rather than a gap — nothing was built, so there is no node list to diff and the row
+is the slot's, which is item 4's own answer for it (ADR-0326); the second — a refusal arriving while
+that slot has a candidate on trial waiting for the verdict — is gone with the trial itself
 ([ADR-0313](adr/0313-a-candidate-is-judged-on-its-own-cost-and-the-decks-period-is-a-deck-level-alarm.md)),
 and a refusal now reaches the lane on the first frame boundary after the worker sends it.
 
@@ -759,8 +823,10 @@ things and it says both.
 **The bay's prose, as tooltips.** The staging half of *Library, and staging under it* — a candidate
 waits whether it came from you or from an agent, and a rejected one costs nothing — and *The staging
 lane, and the sense in which a candidate waits*, which is the longest note on the page and is where
-the absence of a *regenerate* is argued. The mock draws the lane with no `data-tip` anywhere in it,
-so every tip in this bay is written from nothing.
+the absence of a *regenerate* is argued. **The mock drew the lane with no `data-tip` anywhere in it
+until 2026-09-08**, so every tip in this bay was written from nothing; the `.cand` row has one now,
+and it carries the four verdicts, the row's address and what each of the two presses does
+(ADR-0310, ADR-0326).
 
 #### M5.8 — Master — **closed**
 
@@ -854,11 +920,38 @@ is the demonstration and the window does not hold deck A at zero from the moment
 all five read `gap` there under ADR-0315's sentence, and `gate.rs` is unchanged. That answers the
 bay head's open question — the column gave way and the class stays shut.
 
-**What stays owed**, each with a control nobody has drawn yet: *Point a lane at what it drives* (a
-target chooser, and a bay body the arena can grow), *Choose which pattern the sequencer plays* (bank
-pills in the bay head, which need a head that can say which pill is armed), the `Param` lane arm,
-the store directory and the file format with saving, and ADR-0323's refusal — whose lookup is built
-and whose caller is not, so **a live lane on deck A's fader still cancels a fade onto deck A**.
+**The second slice landed the same day, and the last two badges are `has`**: *Point a lane at what
+it drives* (`+ lane`) and *Choose which pattern the sequencer plays* (`bank pills`). What it is: four
+bank pills in the bay head, the armed one marked, off one new field on `view::Head` and one bit on
+`view::HeadWords` — and **no `+`**, because with four fixed banks a press on `seq 3` is the `+`'s own
+*"same choice landing on an empty one"*; a `+ lane` pill in the bay foot putting a card down over the
+rows, listing a channel fader per mixer strip and the published controls of the deck the Library
+bay's load pulldown names; and a `PointLane` arm in `crates/karakuri` that fills the lane's two
+levels from `View::inspector` and appends it **muted**, because a lane arrives with every slot off
+and an off step writes `off`.
+[ADR-0327](adr/0327-the-lane-chooser-lists-one-decks-keys-and-the-bank-pills-are-the-four-banks.md)
+carries the four decisions in it and the alternative each beat.
+
+**The exit condition is met.** No `plan` badge in the panel column of this bay's five rows:
+
+```sh
+grep -A 8 'Toggle a step\|Mute a lane\|Point a lane at what it drives\|Choose what a step is worth\|Choose which pattern the sequencer plays' docs/manual/operations.html | grep 'rt plan">panel'
+```
+
+**What stays owed**, and none of it is a badge: the `Param` lane arm reaches only the two decks the
+Inspector holds a pane for, so a target deck no pane is showing offers its fader and no parameters;
+the store directory and the file format with saving; and ADR-0323's refusal — whose lookup is built
+and whose caller is not, so **a live lane on a deck's fader still cancels a fade onto that deck**,
+now on any deck the mixer draws rather than only the one the run seeds.
+
+**And one sentence on four other tips is now wrong.** `+ lane`'s tip said the panel cannot grow a
+bay's body while it is running and named itself as one of *one gap drawn in five places*. A lane row
+is not a region — the bay draws its rows from `Pattern::lanes`, inside a rectangle the arena already
+holds — so the gap is drawn in **four**: the Master bay's `+ add`, the Outputs row's `+ add output`,
+the library's `+` on the scope list and the inspector's `2 up`. **Two of those tips carry the
+sentence and both still say five** — the Master bay's `+ add` and the Outputs row's `+ add output`,
+each naming `the sequencer's + lane` among the places. Correcting them is one clause each, in two
+other bays' tips, with no code behind it.
 
 **And one item this entry did not name.** **A channel fader does not say who is holding it** — the
 mock draws `seq 1` as a source on a parameter row and nothing of the kind on a strip, so three lanes
@@ -1236,12 +1329,27 @@ marks `gap` is finished because the page has already said the panel cannot reach
 states one and this file says each names its rows, its exit and what it is blocked on; this is that
 sentence said, which is what makes it checkable.
 
-**Three of the four meet it and the exit is not met.** *Fold a bay away* reads `has` at the bay head,
-*Fold a pane away* `has` at the pane edge, *Quit* `gap` — the window's close is not a console
-control, and the fifth cell carries it. **The one left is *Size the window*, at `plan` on a drag**,
-and what it waits on is neither of the two things ADR-0315 answered: the row's own tip says the
-window is not refused a say, and that the output which would hold a size of its own is unbuilt. So
-this section closes when a window drag sets an output's size, and on nothing else.
+**All four meet it, and the last one was met by M5.6 rather than by this section.** *Fold a bay
+away* reads `has` at the bay head, *Fold a pane away* `has` at the pane edge, *Quit* `gap` — the
+window's close is not a console control, and the fifth cell carries it. **And *Size the window* is
+`gap` in the panel column with `window drag` in its fifth cell**, which is *Quit*'s answer one row
+along: no control on this console sizes a window and none is planned, the window manager draws the
+frame a hand drags on every platform this program runs on, and `crates/karakuri` answers
+`WindowEvent::Resized`.
+
+**What that badge waited on has happened.** This section said it closes *"when a window drag sets an
+output's size, and on nothing else"*, and
+[ADR-0325](adr/0325-the-frame-follows-the-largest-enabled-output-and-a-resize-costs-0-145-ms.md) is
+that: dragging the projector window sets the projector output's size, and dragging this window — or
+a divider inside it — sets the program view's, which is the rectangle the Program bay gives the
+picture. **The badge did not become `has`, and the reason is mechanical rather than a
+disappointment.** `panel_column.rs` demands that a `has` in that column be met by a line of
+`karakuri-console/src` constructing the operation, and the roadmap's fourth instrumentation command
+already returns *sizing the window and quitting* as the two the whole workspace never constructs,
+because both are `winit` events. So `has` there would have been the lie that file's header names, and
+the fifth cell is where ADR-0315 had already put the same answer for *Quit*. The `--size, --canvas`
+that cell used to carry are named in the row's tip instead: they are `karakuri-cli`'s own window and
+its session canvas, and the fifth cell can only hold one way in.
 
 #### M5.14 — The frame's cost — **closed**
 

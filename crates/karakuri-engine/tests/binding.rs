@@ -417,6 +417,141 @@ fn measuring_something_does_not_disturb_a_signal_nobody_measures() {
 mod gpu {
     use super::*;
 
+    /// **An attachment made through the deck rides, and taking it back leaves
+    /// the parameter at its own value** — the two writers *Attach a signal to
+    /// a parameter* and *Take a parameter back* land on, both reaching the
+    /// live `Set` by `Deck::write_param`'s road
+    /// (`docs/adr/0319-an-attachment-is-a-session-record-and-taking-a-parameter-back-removes-it.md`).
+    ///
+    /// **Asserted at the texel**, on `a_bound_param_reaches_the_shader_by_the_same_path_a_param_override_takes`'s
+    /// terms and for its reason: a binding table that is right and a slot
+    /// still writing what it was built with are indistinguishable anywhere
+    /// else. Three decks, each stepped the same number of frames from cold, so
+    /// the pictures are comparable — a bound one, a taken-back one, and one
+    /// that was never bound at all.
+    ///
+    /// **The take-back is asserted as *the manual picture* and not as an empty
+    /// table.** That is the whole of the decision: there is no suspended state
+    /// for a binding to be in, so what *not driving this parameter* means is
+    /// the parameter's own value, exactly — the same arithmetic the blend
+    /// already does at confidence 0.0 (P-0084) rather than a case added for
+    /// it. A `retain` that left the last written value behind would pass an
+    /// assertion about the table and fail this one.
+    #[test]
+    fn an_attachment_through_the_deck_rides_and_a_take_back_returns_the_manual_value() {
+        let gpu = Gpu::headless().expect("no GPU");
+
+        // A steady spawn rate so there is material on screen, and a constant
+        // range so the value written does not depend on the phase the frame
+        // was taken at — the neighbouring test's two guards.
+        const RATE: f32 = 20_000.0;
+        const MANUAL: f32 = 2.5;
+        const DRIVEN: f32 = 4.5;
+        let material = || {
+            let mut set = build(&gpu);
+            assert_eq!(
+                set.set_param("spawn_rate", RATE),
+                1,
+                "the param must be declared for the write to mean anything"
+            );
+            assert_eq!(
+                set.set_param("radius", MANUAL),
+                1,
+                "the param must be declared for the write to mean anything"
+            );
+            set
+        };
+        let driven = || Binding::new(Kind::L1, "radius", "beat", Curve::Lin, [DRIVEN, DRIVEN]);
+        let rendered = |attach: &dyn Fn(&mut Deck)| {
+            let (mut deck, present) = deck_of(&gpu, vec![material()], 6);
+            attach(&mut deck);
+            for _ in 0..4 {
+                frame(&gpu, &mut deck, &present, 1);
+            }
+            readback(&gpu, present.hdr_texture())
+        };
+
+        let untouched = rendered(&|_deck| {});
+        let attached = rendered(&|deck| {
+            assert!(
+                deck.bind(0, driven()).attached(),
+                "`radius` is a declared L1 param"
+            );
+        });
+        let taken_back = rendered(&|deck| {
+            assert!(deck.bind(0, driven()).attached());
+            assert!(
+                deck.unbind(0, Kind::L1, None, "radius"),
+                "there was an attachment at that address to remove"
+            );
+        });
+
+        assert_ne!(
+            attached, untouched,
+            "an attachment made through the deck changed nothing on screen"
+        );
+        assert_eq!(
+            taken_back, untouched,
+            "a parameter taken back is not at its own value: the attachment is still \
+             driving it, or the value it last wrote was left behind"
+        );
+
+        // **And a take-back on a knob nobody is holding says so rather than
+        // failing**, which is the caller's cue and not an error: a rebuild may
+        // no longer declare the name.
+        let (mut deck, _present) = deck_of(&gpu, vec![material()], 6);
+        assert!(!deck.unbind(0, Kind::L1, None, "radius"));
+        assert!(deck.bind(0, driven()).attached());
+        assert!(deck.unbind(0, Kind::L1, None, "radius"));
+        assert!(
+            !deck.unbind(0, Kind::L1, None, "radius"),
+            "a second take-back claimed to remove something"
+        );
+        // **And it is addressed**: the attachment above is the layer's, so a
+        // take-back naming one node of it is a different address and removes
+        // nothing.
+        assert!(deck.bind(0, driven()).attached());
+        assert!(
+            !deck.unbind(0, Kind::L1, Some(0), "radius"),
+            "an addressed take-back removed the layer's attachment"
+        );
+    }
+
+    /// **An authority set through the deck is the level the node is under**,
+    /// which is the writer ADR-0211 said the engine owed.
+    ///
+    /// It changes nothing on screen and is not meant to: nothing writes a
+    /// parameter on an agent's behalf, so what is asserted is that the level
+    /// lands at the node it names and that a node this Set has not got is said
+    /// rather than silently taken.
+    #[test]
+    fn an_authority_set_through_the_deck_lands_on_the_node_it_names() {
+        let gpu = Gpu::headless().expect("no GPU");
+        let (mut deck, _present) = deck_of(&gpu, vec![build(&gpu)], 1);
+
+        assert_eq!(
+            deck.slot(0).set().authority(Kind::L1, 0),
+            Some(karakuri_engine::set::Authority::Manual),
+            "a node nobody has spoken for is manual"
+        );
+        assert!(deck.set_authority(0, Kind::L1, 0, karakuri_engine::set::Authority::Automatic));
+        assert_eq!(
+            deck.slot(0).set().authority(Kind::L1, 0),
+            Some(karakuri_engine::set::Authority::Automatic),
+            "the level did not land on the node it named"
+        );
+        // The L4 beside it is untouched, which is what *per node* means.
+        assert_eq!(
+            deck.slot(0).set().authority(Kind::L4, 0),
+            Some(karakuri_engine::set::Authority::Manual),
+            "setting one node's authority moved another node's"
+        );
+        assert!(
+            !deck.set_authority(0, Kind::L1, 7, karakuri_engine::set::Authority::Manual),
+            "a node this Set has not got was taken rather than reported"
+        );
+    }
+
     /// A binding reaches the parameter, through a real frame, and moves it with
     /// the session oscillator's phase rather than merely over time.
     #[test]

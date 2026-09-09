@@ -200,6 +200,16 @@ fn key_for(record: &Record, ordinal: usize) -> Option<Key> {
         // When a session record says which deck slot the head was played in,
         // this arm becomes a fold onto `Key::Param`.
         | Record::Ride { .. }
+        // **A `bind`'s address exactly, and still dropped**, which is the
+        // `ride` above read one field along. A `source` names a layer, an
+        // index and a key, so `Key::Bind` would take it — and it also names a
+        // *deck slot*, and nothing in a stream says which deck slot the Set at
+        // the head of it was played in. Folding one in would attach a signal
+        // to the Set being folded because somebody attached it to whatever was
+        // in slot 3. Nothing is lost by the path an operator saves through:
+        // `Live::save_set` reads the live `Set`, which already holds its
+        // bindings, and `setfile::save` writes them as `bind` records.
+        | Record::Source { .. }
         | Record::Transport { .. }
         | Record::Transition { .. }
         // **An event, like the `transition` above it, and still dropped — but

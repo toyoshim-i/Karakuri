@@ -2455,8 +2455,17 @@ consequences are meant to be followed rather than softened:
 A param's own value is the **base** of the blend and is never overwritten. So a param that
 is both bound and given a `param` record has one answer, and it does not depend on which of
 the two was written last: the record moves the base, the binding blends from it every
-frame. There is at most one binding per (`layer`, `key`); a second replaces the first,
-because two would be resolved in some order and the order would decide the value.
+frame. There is at most one binding per (`layer`, `index`, `key`); a second replaces the
+first, because two would be resolved in some order and the order would decide the value.
+
+**A binding can be removed while the Set is playing, and removing it is the whole of
+handing a knob back.** *Take a parameter back* is the operation, `source` with no attachment
+is the record, and what the param is left at is its own value — which is what step 4 already
+writes at confidence 0.0, so there is no fourth state for a binding to be in and nothing
+suspended for anything to carry. A hand on the *value* of a bound param is not that: it
+moves the base the binding blends from and leaves the attachment where it is, which is what
+makes the pair order-independent above. See
+[ADR-0319](adr/0319-an-attachment-is-a-session-record-and-taking-a-parameter-back-removes-it.md).
 
 **Curves.** Four, which is the number of distinct shapes a monotone `[0,1] -> [0,1]` map
 has. A fifth would be a re-parameterisation of one of these, and a vocabulary an LLM
@@ -2637,11 +2646,11 @@ session tempo, which **v0.2 had no record for**.
 Neither is state, so neither appears in a Set file: both are what a frame *saw* or
 *decided*, and the tempo belongs to the session rather than to any one Set.
 
-### The mix in the stream — `gain`, `opacity`, `blend`, `mask`, `transition`, `select`, `residency`, `look`, `master_out`, `canvas`, `procedure`, `authority`, `ride` and `transport`
+### The mix in the stream — `gain`, `opacity`, `blend`, `mask`, `transition`, `select`, `residency`, `look`, `master_out`, `canvas`, `procedure`, `authority`, `ride`, `source` and `transport`
 
 A session that carried the material and not the performance would replay the same Sets, on
 the same beat, all at whatever gain they happened to start at, with nothing ever going on
-or off air. Fourteen records carry what an operator moves — twelve states and two events:
+or off air. Fifteen records carry what an operator moves — thirteen states and two events:
 
 ```ndjson
 {"t":"gain","slot":0,"value":0.75}
@@ -2920,10 +2929,22 @@ is no `layer` value that names it, and nothing on it can be moved by anybody tod
 The level is carried as a word and not interpreted here, on `residency`'s terms: what a level
 is allowed to be is the engine's to say.
 
-**Nothing writes one yet.** The vocabulary can say it and a deck rebuild does not carry it,
-so a node's authority would not survive the next swap — see
-[ADR-0211](adr/0211-authority-is-set-per-node-and-the-record-is-the-sessions.md), which names
-that as owed.
+**A rebuild carries it and the console writes it.** `swap::Request::authorities` is restated
+on every rebuild, so a node an operator granted to an agent — or took back from one — comes
+up granted after the next save of any `.kir`; the `man / sug / auto` chips on a node head are
+the three destinations a press names. **What it does not yet do is refuse anything on its
+own**: nothing in this system writes a parameter on an agent's behalf, so a level is not
+consulted at an addressed write. What it does reach is the wildcard refusal — a bare `key`
+over nodes that are no longer all under one authority is refused whole from the next press —
+and the record is kept so that an agent's write can be refused against it when something
+writes one. See
+[ADR-0211](adr/0211-authority-is-set-per-node-and-the-record-is-the-sessions.md) and
+[ADR-0319](adr/0319-an-attachment-is-a-session-record-and-taking-a-parameter-back-removes-it.md).
+
+**What a live grant does not survive is a re-point.** A rebuild restates what the *watcher*
+was handed, and a grant made during a run is not written back into it, so re-pointing a slot
+starts it with no grants — which is what loading material is. It is in the stream as an
+`authority` record either way.
 
 **`ride` is a parameter an operator moved on a deck slot that is playing**, and it is the
 third record here to name a node of the Set in a slot.
@@ -2973,12 +2994,62 @@ replay one — a replay meets `procedure` records and then these, in that order,
 they happened — and ADR-0280 records why closing it is a decision about what a rebuild *is*
 rather than about where a value is kept.
 
+**`source` is what is driving one parameter of a deck slot that is playing, or nothing**,
+and it is the fourth record here to name a node of the Set in a slot.
+
+```ndjson
+{"t":"source","slot":0,"layer":"L1","key":"turbulence","source":{"signal":"energy","curve":"pow2","range":[0.1,2.4]}}
+{"t":"source","slot":2,"layer":"L4","index":1,"key":"exposure","source":{"signal":"noise","curve":"lin","range":[0.8,1.6],"noise":{"kind":"perlin","rate":0.5}}}
+{"t":"source","slot":0,"layer":"L1","key":"turbulence"}
+```
+
+**It is the session's twin of `bind`**, on exactly the terms `ride` is `param`'s: a `bind`
+says what a Set *is* and carries no deck slot, and this says what an operator *did*, to one
+deck slot, at one instant.
+
+**One record for the attachment and for taking it back**, and `source` present or absent is
+which. The third line above is *Take a parameter back*. They are one fact — what is driving
+this parameter — so two records would be two things a reader has to keep in step by care;
+present or absent as a unit is a thing nothing can write down half detached, which is the
+argument `ride`'s `at` field carries one record along.
+
+**Taking a parameter back removes the attachment rather than suspending it.** There is no
+suspended state anywhere for a record to carry: *not driving this parameter* is already
+written, and it is the absence — the blend under *What a binding does* writes the param's own
+value when nothing is attached. What is given up is handing it back in one press, and what
+replaces it is this record: the signal, the curve and the range are in the stream on the line
+that attached it.
+
+**The address is `bind`'s and not `ride`'s, and the difference is not a drift.** A value
+lands wherever the name is declared, so `ride`'s wildcard names no layer; a binding is
+resolved through the nodes of **one** layer, so `layer` here is always said and is read, and
+`index` absent is *every node of that layer declaring `key`*. There has never been a binding
+that meant every layer, so an address that could ask for one would be an address the engine
+refuses for a reason the format already knew.
+
+**A hand on the value does not appear here.** Writing a bound parameter moves the value the
+binding blends *from* and leaves the attachment where it is — order-independent by
+construction, which is what blending on confidence buys — so nothing an operator does to a
+knob detaches a signal by accident. Only this record attaches one and only this record
+detaches one.
+
+**It goes in a session stream and never in a Set file**, for `ride`'s reason read one field
+along: a `source` names a layer, an index and a key, so a fold could key it, and it also
+names a deck slot, which nothing in a stream can attribute. The attachments a Set ends up
+with reach a Set file the other way, through `save`, which reads the live Set and writes
+`bind` records.
+
+**What no reader does yet is put it back after a rebuild**, which is `ride`'s open question
+in the same words: a rebuild restates the bindings its request carries and an attachment made
+live is not one of them, so a save of any `.kir` walks it back. Decided in
+[ADR-0319](adr/0319-an-attachment-is-a-session-record-and-taking-a-parameter-back-removes-it.md).
+
 **One thing it cannot carry.** A rollback restores the outgoing Set at the `t` it was parked
 at; a reader meeting these records builds afresh, so `t` restarts there. A swap *in* is
 defined to start cold and therefore replays exactly — only a rollback differs, and a
 rollback means the candidate was over budget, which is an exceptional frame already.
 
-**These fourteen stay out of a Set file**, twelve because they are state that is the
+**These fifteen stay out of a Set file**, thirteen because they are state that is the
 session's rather than any Set's and `transition` and `select` because they are not state at
 all.  `select` is out for a second reason of its own, and it is no longer that a Set file
 cannot say whether a slot composites its renderers — the `merge` record says exactly that,

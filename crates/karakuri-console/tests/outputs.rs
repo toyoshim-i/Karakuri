@@ -27,6 +27,7 @@ use karakuri_console::room::size;
 use karakuri_console::view::outputs;
 use karakuri_layout::{Axis, Layout, Point, Rect};
 use karakuri_operation::gate::Open;
+use karakuri_operation::{Operation, Output};
 
 /// A panel at a viewport, solved, with a context that has drawn once — the
 /// pair every test here starts from.
@@ -248,14 +249,39 @@ fn only_the_control_is_claimed_out_of_the_outputs_row() {
         Claim::Panel,
         "the class pill in the Outputs row is not being claimed"
     );
-    // Past the right of the chip, where the mock draws three more sinks and an
-    // add-a-region pill and this console draws none of them.
+    // **The projector chip is a control and the two plugin chips are not**,
+    // which is where this test parts company with the one it used to be: the
+    // row drew one sink and this probe was *"past the right of the chip, where
+    // the mock draws three more sinks and this console draws none of them"*.
+    // It draws all four now (ADR-0324), so the empty half starts past the last
+    // of them.
     assert_eq!(
         claim(
             &mut panel,
             &ctx,
             &showing(&[]),
-            Point::new(sink.sink.max.x + 20.0, sink.sink.center().y)
+            at(sink.more[0].chip.center())
+        ),
+        Claim::Panel,
+        "the projector chip is a control and is not being claimed"
+    );
+    for chip in &sink.more[1..] {
+        assert_eq!(
+            claim(&mut panel, &ctx, &showing(&[]), at(chip.chip.center())),
+            Claim::Egui,
+            "`{}` is claimed, and a control that switches nothing must not take a press \
+             away from the row it sits in",
+            chip.name
+        );
+    }
+    // Past the right of the last chip, where the mock draws an add-a-region
+    // pill and this console draws none.
+    assert_eq!(
+        claim(
+            &mut panel,
+            &ctx,
+            &showing(&[]),
+            Point::new(sink.more[2].chip.max.x + 20.0, sink.sink.center().y)
         ),
         Claim::Egui,
         "the empty half of the outputs row is being claimed"
@@ -722,4 +748,142 @@ fn a_solo_hiding_the_picture_is_dropped_and_one_that_is_not_is_kept() {
         panel.layout().is_soloed(),
         "an unfold of something already on screen dropped a solo it had no quarrel with"
     );
+}
+
+// ---------------------------------------------------------------------------
+// What a chip asks for
+// ---------------------------------------------------------------------------
+
+/// **Every chip in the row asks for `RouteFrame` naming its own output**, which
+/// is the panel column's `has` on *Choose where the frame goes* and is what
+/// `panel_column.rs` reads this crate's source for.
+///
+/// **`on` is the state being asked for and not the state it is in.** A press on
+/// a lit chip asks for it off and a press on a dark one asks for it on, which
+/// is P-0090 — an operation names a destination, never a toggle, so two
+/// surfaces switching one sink cannot disagree about where they are. The toggle
+/// is the chip.
+#[test]
+fn a_chip_asks_for_the_output_it_names() {
+    let (panel, ctx) = console(PLAUSIBLE);
+    let row = outputs(&ctx, panel.layout(), Open::CLOSED).expect("the row draws its sinks");
+
+    // The picture is on at the default arrangement, so its chip asks for off.
+    assert!(
+        row.on,
+        "the picture is on screen at the default arrangement"
+    );
+    assert_eq!(
+        row.route(),
+        Operation::RouteFrame {
+            output: Output::Program,
+            on: false
+        }
+    );
+
+    // The projector is off until somebody says otherwise, so its chip asks for
+    // on — and told it is on, it asks for off.
+    let projector = row.more[0];
+    assert_eq!(projector.output, Output::Projector(0));
+    assert!(projector.present, "a projector window is this repository's");
+    assert!(
+        !projector.on,
+        "a console with no window behind it has none open"
+    );
+    assert_eq!(
+        projector.route(),
+        Some(Operation::RouteFrame {
+            output: Output::Projector(0),
+            on: true
+        })
+    );
+    assert_eq!(
+        row.told(true).more[0].route(),
+        Some(Operation::RouteFrame {
+            output: Output::Projector(0),
+            on: false
+        })
+    );
+
+    // **A plugin chip asks for nothing and takes no press**, which is what
+    // `no plugin` means: there is no manifest to read a sink out of, so the
+    // chip explains rather than switches.
+    for chip in &row.more[1..] {
+        assert!(!chip.present, "{} is drawn as an absent sink", chip.name);
+        assert_eq!(chip.route(), None);
+        assert!(
+            chip.name.contains("no plugin"),
+            "an absent sink says so in the chip: `{}`",
+            chip.name
+        );
+        assert!(
+            !chip.hit(at(chip.chip.center())),
+            "`{}` claimed a press on itself, so a press meant for the row's ground is \
+             swallowed by a control that switches nothing",
+            chip.name
+        );
+    }
+}
+
+/// **`chip_at` answers for the whole row and for nothing beside it.**
+///
+/// The claim rule and the press are one derivation
+/// ([`crate::input`]'s rule), so this is the question `input::claim` asks: a
+/// point on a chip names its output, and a point on the row's ground names
+/// nothing.
+#[test]
+fn the_row_names_the_chip_under_the_pointer_and_nothing_else() {
+    let (panel, ctx) = console(PLAUSIBLE);
+    let row = outputs(&ctx, panel.layout(), Open::CLOSED).expect("the row draws its sinks");
+
+    assert_eq!(row.chip_at(at(row.sink.center())), Some(Output::Program));
+    assert_eq!(
+        row.chip_at(at(row.more[0].chip.center())),
+        Some(Output::Projector(0))
+    );
+    // The word is not a control, and neither is the class pill beside it.
+    assert_eq!(row.chip_at(at(row.label.center())), None);
+    assert_eq!(row.chip_at(at(row.mcp.center())), None);
+    // Nor is the ground past the last chip.
+    let past = egui::pos2(row.more[2].chip.max.x + 20.0, row.sink.center().y);
+    assert_eq!(row.chip_at(at(past)), None);
+}
+
+/// **The chips are laid out left to right with one `.outputs` gap between
+/// them**, and every one of them is inside the row.
+///
+/// The mock's `.outputs` is `display: flex; gap: 8px`, and a capsule is as wide
+/// as what is in it — so where the third chip starts depends on what the second
+/// says, which is the rule the class pill made this row take for its first chip
+/// and which now applies four times over.
+#[test]
+fn the_four_chips_are_one_gap_apart_and_all_inside_the_row() {
+    let (panel, ctx) = console(PLAUSIBLE);
+    let region = rect_of(panel.layout(), "outputs");
+    let row = outputs(&ctx, panel.layout(), Open::CLOSED).expect("the row draws its sinks");
+    let box_of = egui::Rect::from_min_size(
+        egui::pos2(region.x, region.y),
+        egui::vec2(region.w, region.h),
+    );
+
+    let mut previous = row.sink;
+    assert!(box_of.contains_rect(previous));
+    for chip in &row.more {
+        assert!(
+            near(chip.chip.min.x, previous.max.x + size::OUTPUTS_GAP),
+            "`{}` starts {} after the chip before it, and `.outputs` says {}",
+            chip.name,
+            chip.chip.min.x - previous.max.x,
+            size::OUTPUTS_GAP
+        );
+        assert!(near(chip.chip.height(), size::SINK_H));
+        assert!(near(chip.chip.center().y, row.sink.center().y));
+        assert!(
+            box_of.contains_rect(chip.chip),
+            "`{}` is drawn outside the row it belongs to: {:?} in {box_of:?}",
+            chip.name,
+            chip.chip
+        );
+        previous = chip.chip;
+    }
 }

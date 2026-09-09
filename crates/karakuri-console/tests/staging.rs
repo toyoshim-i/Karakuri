@@ -1,13 +1,16 @@
-//! **The Staging lane: a card, a head, and a row per deck slot with a verdict
-//! outstanding — and, with nothing outstanding, a card and a head and nothing
-//! else.**
+//! **The Staging lane: a card, a head, and a row per node a build changed —
+//! and, with nothing outstanding, a card and a head and nothing else.**
 //!
-//! The lane's first pass under
-//! [ADR-0200](../../../docs/adr/0200-a-bays-first-pass-draws-the-values-that-exist-and-omits-the-rest.md)
-//! draws three of the seven things a candidate row could carry — the deck,
-//! what the build calls itself, and whether it is on screen — and the argument
-//! for the four it omits is written out in `view`'s module documentation and
-//! at `view::staging`.
+//! The lane draws four of the six things a candidate row could carry — the
+//! deck, the node's address, what that node's procedure calls itself, and
+//! whether it is on screen — and the argument for the two it omits is written
+//! out in `view`'s module documentation and at `view::staging`. A row per
+//! **changed node** rather than per slot is
+//! [ADR-0326](../../../docs/adr/0326-a-staging-row-is-a-changed-node-and-the-row-is-the-keep.md),
+//! and it is what gives the row its two presses: the row is *keep a candidate*
+//! and the `back` capsule at its end is *put a node's previous version back*.
+//! ADR-0200 is why what has no value is omitted outright rather than drawn
+//! hollow.
 //!
 //! **The empty case is still the case this file leads with**, because it is
 //! still this lane's ordinary state: *"a staging lane with nothing in it is
@@ -39,12 +42,17 @@
 //! 5. **The head is untouched by any of it**, asserted with the lane full as
 //!    well as empty: the mock's `2 waiting` is a readout and a bay head's
 //!    pills are its controls.
-//! 6. **Nothing in it is a control**, asked of a full lane as well as an empty
-//!    one — a row is a readout, and *keep* and *put a node's previous version
-//!    back* are the two controls this pass does not add.
+//! 6. **What in it is a control and what is not**, asked of a full lane as
+//!    well as an empty one: the bay's own ground is `egui`'s, a row that
+//!    offers a keep is the panel's, and the `back` capsule inside it is asked
+//!    first because it is the smaller box.
 //! 7. **A row the checker turned down carries what it said**, which is the
 //!    one row that draws a sentence: nothing was built for it, so the word
 //!    alone says a save did not take and nothing about why (ADR-0310).
+//! 8. **Each press asks for the operation its row is addressed by**, and the
+//!    rows that offer neither say so: an overloaded row has nothing to keep
+//!    and a row that names no node has nothing to keep and nothing to step
+//!    back.
 //!
 //! And the four words a row can end in are the manual's own, which is
 //! ADR-0159 asked of this bay: *"whether it is on screen: landed, overloaded
@@ -100,10 +108,27 @@ fn strip(name: &str) -> Strip {
     }
 }
 
-/// One candidate: a build that landed on a deck slot and has not been judged.
+/// One candidate: a node one build changed on a deck slot, not yet ruled on.
+///
+/// `L1:0` on every one of them unless a test says otherwise — which node it is
+/// only matters where the operation a press asks for is being read, and those
+/// tests build their own.
 fn candidate(deck: usize, name: &str, stage: Stage) -> Candidate {
+    at_node(deck, karakuri_operation::Layer::L1, 0, name, stage)
+}
+
+/// The same, addressed.
+fn at_node(
+    deck: usize,
+    layer: karakuri_operation::Layer,
+    index: u32,
+    name: &str,
+    stage: Stage,
+) -> Candidate {
     Candidate {
         deck,
+        at: Some(karakuri_operation::NodeAt { layer, index }),
+        addr: format!("{}:{index}", layer_word(layer)),
         name: name.to_owned(),
         stage,
         // **Empty, because every verdict but one is about a build.** The row
@@ -113,7 +138,36 @@ fn candidate(deck: usize, name: &str, stage: Stage) -> Candidate {
     }
 }
 
+/// **A row that names no node** — a build that did not happen, or a rebuild
+/// that restated the stack and changed nothing in it. It is the slot's row and
+/// offers neither press.
+fn slot_row(deck: usize, name: &str, stage: Stage) -> Candidate {
+    Candidate {
+        deck,
+        at: None,
+        addr: String::new(),
+        name: name.to_owned(),
+        stage,
+        said: Vec::new(),
+    }
+}
+
+/// The mock's `.addr` spelling, which the host writes and this file restates
+/// because it is building the value the host would hand in.
+fn layer_word(layer: karakuri_operation::Layer) -> &'static str {
+    match layer {
+        karakuri_operation::Layer::L1 => "L1",
+        karakuri_operation::Layer::L2 => "L2",
+        karakuri_operation::Layer::L3 => "L3",
+        karakuri_operation::Layer::L4 => "L4",
+        karakuri_operation::Layer::Field => "F",
+    }
+}
+
 /// One candidate the checker turned down, with what it said.
+///
+/// **It names no node and cannot**: nothing was built, so there is no list of
+/// nodes to hold against the one before it (`view::Candidate::at`).
 ///
 /// `karakuri_engine::swap::Refusal` carries one line per diagnostic, formatted
 /// on the build worker; these are the shape those lines have — where, which
@@ -121,6 +175,8 @@ fn candidate(deck: usize, name: &str, stage: Stage) -> Candidate {
 fn refused_candidate(deck: usize, name: &str, said: &[&str]) -> Candidate {
     Candidate {
         deck,
+        at: None,
+        addr: String::new(),
         name: name.to_owned(),
         stage: Stage::NotCompiled,
         said: said.iter().map(|line| (*line).to_owned()).collect(),
@@ -451,27 +507,48 @@ fn each_candidate_adds_shapes_and_the_fourth_adds_none() {
     );
 }
 
-/// **A row is a well and three things in it: the deck it landed on, what the
-/// build calls itself, and the verdict.**
+/// **A row is a well and four things in it: the deck it landed on, the node's
+/// address, what that node's procedure calls itself, and the verdict.**
 ///
 /// The deck is what tells two rows apart in the program this panel is drawn
 /// by: it plays one pair of files in **four** slots, each from its own copy, so
 /// one save produces four builds whose names are the same string. (This said
 /// *both its slots* until 2026-09-08, from a two-slot deck that is long gone.)
+/// The address is what tells two rows of **one** build apart, and it arrived
+/// with ADR-0326.
 ///
 /// **Counted rather than read**, because a galley's text is not something a
-/// shape carries: every row is four shapes wholly inside its own rectangle —
-/// `.cand`'s well, which is exactly the row, and one galley each — and a row
-/// handed an empty name is three, which is what says the name is one of the
-/// three and the deck and the verdict are the other two. A row that stopped
-/// saying which deck it landed on would be three and two.
+/// shape carries: a row that names a node is five shapes wholly inside its own
+/// rectangle — `.cand`'s well, which is exactly the row, and one galley each —
+/// and the two subtractions below are what say which shape is which. A row
+/// handed an empty name is four, and a row that names no node is four with the
+/// name back, so a row that stopped drawing either would be caught by the
+/// count it did not fall to.
+///
+/// **The `back` capsule is two of the seven**, a stroked capsule and the word
+/// in it, and it is drawn on every row that names a node and has room — which
+/// at `PLAUSIBLE`'s width is both of the rows below. What it is *not* drawn on
+/// is the row that names none, which is the third subtraction here and the
+/// one that says the capsule follows `Candidate::at` rather than the verdict.
 #[test]
-fn a_row_is_a_well_and_three_things_in_it() {
+fn a_row_is_a_well_and_four_things_in_it() {
     let mut panel = console(PLAUSIBLE);
     let mut view = View::new(Room::Day);
     view.staging = vec![
-        candidate(0, "drift_shell + soft_points", Stage::Overloaded),
-        candidate(1, "drift_shell + soft_points", Stage::Landed),
+        at_node(
+            0,
+            karakuri_operation::Layer::L4,
+            0,
+            "soft_points",
+            Stage::Overloaded,
+        ),
+        at_node(
+            1,
+            karakuri_operation::Layer::L1,
+            0,
+            "drift_shell",
+            Stage::Landed,
+        ),
     ];
     let lane = staging(panel.layout(), &view.staging).expect("two candidates and a lane");
     assert_eq!(lane.rows, 2, "two candidates and {} rows", lane.rows);
@@ -480,22 +557,41 @@ fn a_row_is_a_well_and_three_things_in_it() {
     for index in 0..lane.rows {
         let drawn = shapes_inside(&mut view, &mut panel, lane.row(index));
         assert_eq!(
-            drawn, 4,
-            "row {index} draws {drawn} shapes and a candidate row is a well, a deck, a name \
-             and a verdict"
+            drawn, 7,
+            "row {index} draws {drawn} shapes and a candidate row is a well, a deck, an \
+             address, a name, a verdict and a `back` capsule of two"
         );
         asked += 1;
     }
     assert_eq!(asked, 2, "not every row was asked");
 
-    // **The name is one of the four**, so the two beside the well and the name
-    // are the deck's letter and the verdict — neither of which an empty name
-    // takes with it.
-    view.staging = vec![candidate(0, "", Stage::Overloaded)];
+    // **The name is one of the seven**, so the six beside it are the well, the
+    // deck's letter, the address, the verdict and the capsule's two — none of
+    // which an empty name takes with it.
+    view.staging = vec![at_node(
+        0,
+        karakuri_operation::Layer::L4,
+        0,
+        "",
+        Stage::Overloaded,
+    )];
     let bare = shapes_inside(&mut view, &mut panel, lane.row(0));
     assert_eq!(
-        bare, 3,
+        bare, 6,
         "a row with no name draws {bare} shapes, so the name is not the one shape that went"
+    );
+
+    // **And a row that names no node loses three of the seven**: the address,
+    // and the capsule's two. It is what says both follow `Candidate::at` — the
+    // address is drawn from `Candidate::addr` rather than off the deck letter
+    // beside it, and the capsule is offered by the node rather than by the
+    // verdict.
+    view.staging = vec![slot_row(0, "drift_shell + soft_points", Stage::Refused)];
+    let unaddressed = shapes_inside(&mut view, &mut panel, lane.row(0));
+    assert_eq!(
+        unaddressed, 4,
+        "a row that names no node draws {unaddressed} shapes, and it should be a well, a \
+         deck, a name and a verdict"
     );
 }
 
@@ -652,24 +748,25 @@ fn the_verdicts_are_the_manuals_words() {
 }
 
 // ---------------------------------------------------------------------------
-// Nothing in it is a control
+// What in it is a control, and what is not
 // ---------------------------------------------------------------------------
 
-/// **Nothing in the Staging bay takes a press, with the lane full as well as
-/// empty**, stated rather than inferred from the absence of a hit test.
+/// **The Staging bay's own ground takes no press, with the lane full as well
+/// as empty**, stated rather than inferred from the absence of a hit test.
 ///
 /// `library.rs`'s test one bay up, and the inset is its inset for its reason:
 /// a boundary is claimed for a drag from `GRAB` either side of it, and that is
 /// the panel taking a *divider* rather than anything in the bay.
 ///
-/// **The full lane is the half that is not trivial now.** A row is a readout
-/// and the two controls the page draws on one — *keep a candidate* and *put a
-/// node's previous version back* — are not added by this pass: both address a
-/// node, and the node is the thing nothing here can name (`view::staging`). So
-/// a press anywhere on a row is `egui`'s, and a lane that had grown a control
-/// would say so at exactly the points a row is drawn at.
+/// **The rows here are `Stage::Overloaded` on purpose**, and that is the half
+/// of this test that is about the lane rather than about the card: an
+/// overloaded row offers no keep — a slot that has stopped is not a candidate
+/// anyone is choosing between (ADR-0316) — so a press on one is `egui`'s, and
+/// this is where that is held. The row that *does* take a press is
+/// `a_press_on_a_candidate_row_asks_to_keep_it`, and the capsule inside it is
+/// `the_back_capsule_is_the_smaller_box_inside_the_row`.
 #[test]
-fn nothing_in_the_staging_lane_is_a_control() {
+fn the_staging_bays_ground_is_not_a_control() {
     let mut panel = console(PLAUSIBLE);
     let ctx = drawn_once();
     let region = to_egui(rect_of(panel.layout(), "staging"));
@@ -723,7 +820,8 @@ fn nothing_in_the_staging_lane_is_a_control() {
             assert_eq!(
                 claim(&mut panel, &ctx, &full(), Point::new(p.x, p.y)),
                 Claim::Egui,
-                "the console took the pointer at {p:?}, which is on candidate row {index}"
+                "the console took the pointer at {p:?}, which is on overloaded candidate row \
+                 {index} — a stopped slot offers no keep"
             );
         }
         rows += 1;
@@ -752,5 +850,229 @@ fn nothing_in_the_staging_lane_is_a_control() {
         Claim::Panel,
         "the boundary over the Staging bay is not the panel's, so `claim` is answering \
          `Egui` for every point it is asked"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// The two presses a row offers
+// ---------------------------------------------------------------------------
+
+/// **A press on a candidate row asks to keep that candidate**, addressed by
+/// the node the row is for.
+///
+/// The row *is* the control — `console.html`'s *The control is the row
+/// itself* — which is the Library bay's list one bay up read the other way
+/// round: there a row press takes a Set in hand and names no operation, and
+/// here it names one outright. What decided that this act is the large target
+/// is what it costs: keeping moves nothing, writes nothing, and takes a line
+/// off a list (ADR-0326).
+///
+/// **Both halves are asserted**, because they fail differently: `claim` says
+/// the console took the press at all, and `StagingBay::keep` says what it
+/// asked for. A row that was claimed and handed back the wrong node would pass
+/// the first alone.
+#[test]
+fn a_press_on_a_candidate_row_asks_to_keep_it() {
+    let mut panel = console(PLAUSIBLE);
+    let ctx = drawn_once();
+    let strips = Vec::new();
+    let rows = || {
+        vec![
+            at_node(
+                0,
+                karakuri_operation::Layer::L1,
+                0,
+                "drift_shell",
+                Stage::Landed,
+            ),
+            at_node(
+                0,
+                karakuri_operation::Layer::L4,
+                1,
+                "soft_points",
+                Stage::Landed,
+            ),
+        ]
+    };
+    let mut view = showing(&strips);
+    view.staging = rows();
+    let lane = staging(panel.layout(), &view.staging).expect("two candidates and a lane");
+    assert_eq!(lane.rows, 2, "two candidates and {} rows", lane.rows);
+
+    // The left-hand end of each row, which is over the address and never over
+    // the capsule at the other end.
+    let mut asked = 0;
+    for (index, want) in [
+        (0, karakuri_operation::Layer::L1, 0u32),
+        (1, karakuri_operation::Layer::L4, 1u32),
+    ]
+    .map(|(index, layer, at)| (index, karakuri_operation::NodeAt { layer, index: at }))
+    {
+        let row = lane.row(index);
+        let p = Point::new(row.min.x + 2.0, row.center().y);
+        assert_eq!(
+            claim(&mut panel, &ctx, &view, p),
+            Claim::Panel,
+            "the console handed row {index} to `egui`, and the row is the keep"
+        );
+        assert_eq!(
+            lane.keep(&ctx, &view.staging, p),
+            Some(karakuri_operation::Operation::KeepCandidate {
+                deck: 0,
+                node: want
+            }),
+            "row {index} asked for the wrong candidate"
+        );
+        asked += 1;
+    }
+    assert_eq!(asked, 2, "not every row was asked");
+
+    // **The negative control, and it is the division the page draws.** A row
+    // on `overloaded` is a slot that has stopped rather than a candidate
+    // anyone is choosing between, and a row that names no node has nothing to
+    // settle — neither takes this press, and a `keep` that answered off the
+    // rectangle alone would hand back an operation for both.
+    let mut view = showing(&strips);
+    view.staging = vec![
+        at_node(
+            0,
+            karakuri_operation::Layer::L1,
+            0,
+            "drift_shell",
+            Stage::Overloaded,
+        ),
+        slot_row(1, "drift_shell + soft_points", Stage::Refused),
+    ];
+    let lane = staging(panel.layout(), &view.staging).expect("two candidates and a lane");
+    for (index, why) in [(0, "an overloaded row"), (1, "a row that names no node")] {
+        let row = lane.row(index);
+        let p = Point::new(row.min.x + 2.0, row.center().y);
+        assert_eq!(
+            lane.keep(&ctx, &view.staging, p),
+            None,
+            "{why} answered a keep"
+        );
+        assert_eq!(
+            claim(&mut panel, &ctx, &view, p),
+            Claim::Egui,
+            "the console took a press on {why}"
+        );
+    }
+}
+
+/// **The `back` capsule is the smaller box inside the row, and it asks for the
+/// node's previous version.**
+///
+/// It is the Library bay's star and its row: the capsule is asked before the
+/// row it sits in, so a press on it reaches the capsule and not the keep
+/// underneath — `input::claim`'s rule 4, *a control claims what it acts on and
+/// no more*. The act that writes a file is the small target and the act that
+/// writes nothing is the large one, which is the whole of why they are this
+/// way round (ADR-0326).
+///
+/// **The overloaded row is the one that matters**, and it is why the capsule
+/// is offered on more rows than the keep is: landing an earlier version is one
+/// of the three ways out of a stopped slot, and it is the only one of the
+/// three this bay can offer.
+#[test]
+fn the_back_capsule_is_the_smaller_box_inside_the_row() {
+    let mut panel = console(PLAUSIBLE);
+    let ctx = drawn_once();
+    let strips = Vec::new();
+    let mut view = showing(&strips);
+    view.staging = vec![
+        at_node(
+            2,
+            karakuri_operation::Layer::L4,
+            1,
+            "soft_points",
+            Stage::Overloaded,
+        ),
+        at_node(
+            3,
+            karakuri_operation::Layer::L2,
+            0,
+            "curl_drift",
+            Stage::Landed,
+        ),
+    ];
+    let lane = staging(panel.layout(), &view.staging).expect("two candidates and a lane");
+
+    let mut asked = 0;
+    for (index, deck, want) in [
+        (
+            0,
+            2u8,
+            karakuri_operation::NodeAt {
+                layer: karakuri_operation::Layer::L4,
+                index: 1,
+            },
+        ),
+        (
+            1,
+            3u8,
+            karakuri_operation::NodeAt {
+                layer: karakuri_operation::Layer::L2,
+                index: 0,
+            },
+        ),
+    ] {
+        let capsule = lane
+            .back_capsule(&ctx, &view.staging, index)
+            .unwrap_or_else(|| panic!("row {index} draws no `back` capsule"));
+        assert!(
+            lane.row(index).contains(capsule.center()),
+            "row {index}'s capsule is not inside the row"
+        );
+        let p = Point::new(capsule.center().x, capsule.center().y);
+        assert_eq!(
+            claim(&mut panel, &ctx, &view, p),
+            Claim::Panel,
+            "the console handed row {index}'s capsule to `egui`"
+        );
+        assert_eq!(
+            lane.back(&ctx, &view.staging, p),
+            Some(karakuri_operation::Operation::RestoreProcedure {
+                deck,
+                revision: karakuri_operation::Revision::Previous(want),
+            }),
+            "row {index}'s capsule asked for the wrong version"
+        );
+        // **And the keep does not answer for the same point**, which is
+        // structural rather than an ordering: `StagingBay::keep` refuses a
+        // point its own capsule claims, so a press on the capsule cannot also
+        // be a keep whatever order a caller asks the two in.
+        assert_eq!(
+            lane.keep(&ctx, &view.staging, p),
+            None,
+            "row {index}'s capsule is also a keep, so a press on it does two things"
+        );
+        asked += 1;
+    }
+    assert_eq!(asked, 2, "not every capsule was asked");
+
+    // **The negative control**: a row that names no node draws no capsule and
+    // answers no press, because both operations are spelled with a node.
+    let mut view = showing(&strips);
+    view.staging = vec![refused_candidate(
+        0,
+        "drift_shell.kir",
+        &["3:5: parse: expected `}`"],
+    )];
+    let lane = staging(panel.layout(), &view.staging).expect("one candidate and a lane");
+    assert_eq!(
+        lane.back_capsule(&ctx, &view.staging, 0),
+        None,
+        "a row that names no node drew a `back` capsule"
+    );
+    let row = lane.row(0);
+    assert_eq!(
+        lane.back(
+            &ctx,
+            &view.staging,
+            Point::new(row.max.x - 60.0, row.center().y)
+        ),
+        None,
+        "a row that names no node answered a press where a capsule would have been"
     );
 }

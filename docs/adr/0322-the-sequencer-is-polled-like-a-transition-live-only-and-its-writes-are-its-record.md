@@ -192,6 +192,19 @@ word — one refusal per mistake, worded once (ADR-0131). That answers the bay h
 two gives way is not decided"*: the page did, and `gate.rs` is unchanged — the five stay
 `ClosedUnclassed(Unclassed::Lanes)`, in a group no bay head opens.
 
+**Two more of the bay's controls reach that poll now** (2026-09-09,
+[ADR-0327](0327-the-lane-chooser-lists-one-decks-keys-and-the-bank-pills-are-the-four-banks.md)), and
+neither changes anything here. A bank press is `SelectPattern` and resets the playhead, so the next
+frame is a boundary in the new pattern; `+ lane` appends a **muted** lane, which the poll skips, so a
+lane added mid-performance emits nothing until the label is pressed. **The take-back is still the
+mute** and this is the same rule met at the other end: a lane arrives with every slot off, and an
+unmuted one would write `off` at the next boundary — 117 ms — which is exactly the silent write this
+record measured the volume of.
+
+**And the refusal this decision owes is still owed.** ADR-0323's lookup is built and nothing calls
+it, so a live lane on a deck's fader still kills a fade onto that deck — and `+ lane` makes that
+reachable in two presses rather than one, on any deck the mixer draws.
+
 **M6's agents may reopen it, and this is where a reader should start.** The badge says what is true
 while a model cannot see the console; an agent that *programs* a lane is asking for a route into a
 pattern rather than into a window, and nothing here forecloses one. What it would have to answer

@@ -3166,8 +3166,12 @@ impl Set {
     /// this design refuses everywhere else.
     ///
     /// Allocates, so not on the render thread. A binding arrives with a Set
-    /// (from a Set file, from `--bind`, or from a rebuild's `Request`), and
-    /// all three are off the frame path.
+    /// (from a Set file, from `--bind`, or from a rebuild's `Request`) or
+    /// **from a press on a live slot** through [`crate::deck::Deck::bind`],
+    /// and all four are off the frame path — the fourth is where a record is
+    /// applied, which is not inside `Frame::render`.
+    ///
+    /// [`Set::unbind`] is the inverse, and it removes rather than suspends.
     ///
     /// **The two ways to fail are different mistakes**, which is why this
     /// answers with a reason rather than a `bool`. A caller that collapses
@@ -3232,6 +3236,47 @@ impl Set {
         });
         self.bindings.push(binding);
         Bound::Yes
+    }
+
+    /// **Take a parameter back from whatever was driving it.** `false` where
+    /// nothing was attached at that address, which is the caller's cue to say
+    /// so rather than an error: a rebuild may no longer declare the key, and a
+    /// take-back on a knob nobody is holding is a press that changes nothing.
+    ///
+    /// [`Set::bind`]'s inverse, and addressed by exactly the triple that
+    /// method keys *at most one binding per (layer, index, param)* on — so a
+    /// wildcard binding and an addressed one on the same name are two
+    /// attachments and this removes the one it names. Anything else would make
+    /// a take-back on `L4:1 exposure` silently take the Set's `exposure` away
+    /// from every renderer.
+    ///
+    /// # It removes rather than suspends, and that is the decision
+    ///
+    /// [`Binding`](crate::binding::Binding) carries no suspended state and
+    /// gains none. **A suspended binding is a fourth thing to be**, beside
+    /// attached, absent and blended-at-low-confidence, and it would have to be
+    /// drawn, recorded, restated on a rebuild and reasoned about at every
+    /// confidence — where the arithmetic for *not driving this parameter* is
+    /// already written and is the absence:
+    /// [P-0084](../../../docs/principles/0084-a-confident-wrong-automatic-judgement-is-worse-than-not-judging.md)'s
+    /// blend writes the param's own value when nothing is attached, which is
+    /// what a hand asking for its knob back is asking for.
+    ///
+    /// What is given up is *hand it back*, which the console's tip used to
+    /// promise: re-attaching means naming the source and the curve again. The
+    /// source, the curve and the range are all in the session stream on the
+    /// `source` record that attached it, so nothing is lost that a stream
+    /// cannot say — see
+    /// `docs/adr/0319-an-attachment-is-a-session-record-and-taking-a-parameter-back-removes-it.md`.
+    ///
+    /// Allocates nothing and frees one entry, so unlike [`Set::bind`] it is
+    /// safe anywhere; it is off the frame path all the same, because the
+    /// operation that reaches it is a press.
+    pub fn unbind(&mut self, layer: Kind, index: Option<u32>, key: &str) -> bool {
+        let before = self.bindings.len();
+        self.bindings
+            .retain(|b| b.layer != layer || b.key != key || b.index != index);
+        self.bindings.len() != before
     }
 
     /// **What every node of this Set allocated to hold elements**, one entry
