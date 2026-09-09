@@ -1020,7 +1020,11 @@ letter that was already spent. His instruction: *global shortcuts get thought ab
 anything doubtful comes off in the meantime.*
 
 **The letters still promised and still free**, checked against that match on the same day: `y`,
-`x`, `c`, `t`, `-`, `=`, the backtick, and `a`.
+`x`, `c`, `t`, `-`, `=`, the backtick, and `a`. **The page stopped promising any of them on
+2026-09-09**, when the key column was re-spelled under item 1 below: the five rows that named a free
+letter name a bay and a grammar key instead, and no `plan` badge anywhere in the column reserves a
+letter now. The list stays because it is what is free to bind, which is still the question a global
+key asks.
 
 **What it is.**
 [ADR-0259](adr/0259-the-keyboard-is-addressed-to-the-bay-that-has-focus-and-a-global-letter-is-a-convenience-or-the-operators-own.md):
@@ -1038,11 +1042,36 @@ invariant a test holds.
 
 **What it owes beyond the badges**, and none of it is drawing:
 
-1. **The manual.** ADR-0259 edits none of it on purpose. `operations.html`'s key column stops naming
-   letters and needs a spelling that says what it does name; `console.html` gains a mark for a
-   folded bay holding focus, and its *Two focuses, and they do not look alike* note is rewritten by
-   item 2; `concepts.html` has never mentioned focus and a reader needs it before the panel makes
-   sense. `index.html`'s seven rules are capped and this fits inside rule 01 rather than adding one.
+1. **The manual, and it is done.** ADR-0259 edited none of it on purpose; the three pages were
+   written on 2026-09-08 and 2026-09-09. **`operations.html`'s key column is spelled two ways now,
+   and its head says which is which**: a `has` badge names the letter this instrument binds today,
+   because the keyboard it has is still one letter per operation, and a `plan` badge names a key of
+   the grammar and the bay it is addressed in — `space · in the Mixer` — because a press goes to the
+   bay that has focus and a key named on its own does not say what it lands on. Twenty-nine rows
+   were re-spelled. **Ten were already `plan`** — the five that still promised a free letter (`y`,
+   `x`, `c`, `t`, `- = \``) and the four cells taken off the page on 2026-09-08, plus the star —
+   and **nineteen moved from `gap`**, which is the record's own reading of the page: they were `gap`
+   for want of a route and the grammar is one. *Set a deck's mask position* is the twentieth the
+   record names and it did **not** move, because the record's condition is that a row is `plan`
+   *"only once its bay draws the control the key hangs on"* and that row's panel column reads `gap`.
+   **No badge moved between `has` and `plan` in either direction**, so nothing about what is built
+   changed and `key_column`'s six tests are green untouched — they read a `has` badge as
+   whitespace-separated key names and never look at a `plan` one, which is why a bay could be
+   written into the designed spelling and not into the built one. **That is what item 4 is for**:
+   until both directions of the badge check are replaced, a built badge cannot carry a bay, so
+   *Bring back what is folded* keeps a bare `z` with no focus spelling beside it and *Quit* keeps a
+   bare `esc` the record retires. **The exit gets larger, on purpose**: nineteen rows that read
+   `gap` now read `plan`, and the count is still the `grep` above rather than a number here.
+   **`console.html` has the mark for a folded bay holding focus** — the head alone with the dashed
+   ring on it, since a folded region has no rectangle — drawn beside its *Two focuses, and they do
+   not look alike* note rather than inside the panel, because the panel draws every bay open and a
+   second dashed ring in it would put focus in two places. That note now reads focus as *the bay a
+   key press is addressed to* and the deck selection as *the Mixer bay's remembered address*, word
+   for word with `concepts.html`, which is item 2 arriving in the prose before the code.
+   **`concepts.html` gained *Focus* in `cdedcad`** and needed no sentence changed by any of this.
+   `index.html`'s seven rules are capped and this fits inside rule 01 rather than adding one; rule
+   03's reword — *when you point at it or land on it* — is still owed.
+   [ADR-0331](adr/0331-the-key-column-is-spelled-two-ways-and-a-built-badge-keeps-its-bare-letter.md).
 2. **The three pointers collapse.** `View::selection`, `View::cursor_row` and `View::scope` become
    instances of one mechanism — a bay's remembered address — which is the record's strongest
    structural result and the reason the deck selection persisting *"while your hands are in the

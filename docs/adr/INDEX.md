@@ -353,6 +353,7 @@ number; new records continue from the end.
 | [ADR-0325](0325-the-frame-follows-the-largest-enabled-output-and-a-resize-costs-0-145-ms.md) | The frame follows the largest enabled output, and a resize costs 0.145 ms | 2026-09-09 | accepted |
 | [ADR-0326](0326-a-staging-row-is-a-changed-node-and-the-row-is-the-keep.md) | A staging row is a changed node, and the row is the keep | 2026-09-09 | accepted |
 | [ADR-0327](0327-the-lane-chooser-lists-one-decks-keys-and-the-bank-pills-are-the-four-banks.md) | The lane chooser lists one deck's keys, the bank pills are the four banks, and the levels stay out of the payload | 2026-09-09 | accepted |
+| [ADR-0331](0331-the-key-column-is-spelled-two-ways-and-a-built-badge-keeps-its-bare-letter.md) | The key column is spelled two ways, and a built badge keeps its bare letter | 2026-09-09 | accepted |
 
 ## Retired numbers
 
