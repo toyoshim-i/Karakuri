@@ -103,9 +103,10 @@ The goal sentence — *finding the right thing among two thousand artifacts is f
 generating a new one* — cannot be checked, because there are no two thousand artifacts and
 nothing generates one. What closed is the machinery, tested at the scale that exists.
 
-What M4 left owed is rescheduled: `parent` and a deck-slot variant pool are M6's, what a
-thumbnail is *of* is M5.3's to judge, and `perf`, dual embeddings, search and grouping are under
-*Mx — TODO*.
+What M4 left owed is rescheduled: `parent` and a deck-slot variant pool are M6's; what a
+thumbnail is *of* went to M5.3 to judge and that bay closed without judging it, so it sits under
+*Mx — TODO* beside the drawing it waits on; and `perf`, dual embeddings, search and grouping are
+under *Mx — TODO* as well.
 
 ---
 
@@ -231,8 +232,9 @@ real work, none of it closes a badge, and no exit condition above measures it.
   anything is holding.
 - **The mock's six body controls**, of which `2 up` names a region of the arrangement and the other
   five add something a bay draws inside its own body. None is an operation and none has a row.
-- **Thumbnails and live previews in the Set browser.** The drawing is M5.3's; what a thumbnail is
-  *of* is M4's undecided question, handed here to judge. Neither has a row.
+- **Thumbnails and live previews in the Set browser.** The drawing was M5.3's and what a thumbnail
+  is *of* was M4's undecided question, handed to that bay to judge; it closed without judging
+  either, so both are under *Mx — TODO*. Neither has a row.
 - **Reaching a MIDI map while running.** A map is a file saved and recalled per controller. The file
   exists; no row says it can be loaded while the instrument runs.
 
@@ -247,10 +249,11 @@ assumption it carried now sits in the sub-milestone that owns it, stated as a bl
 as weeks. When a range is wanted it is taken from the twelve blocker lists below and from the
 panel column, both of which move on their own.
 
-What the range assumed and excluded went to the sub-milestones that own it: the two undrawn bays
-to M5.8 and M5.9, the pointer decision to M5.11, M4's thumbnail judgement to M5.3, a second `Sink`
-to M5.6, and the sequencer's producer to M5.9. Of the five `Undecided` operations, *choosing where
-the frame goes* is M5.6's and *the camera* is M5.5's; *walking the edit history* is M5.3's, is
+What the range assumed and excluded went to the sub-milestones that own it: the two bays undrawn
+when it was taken to M5.8, which has since closed, and to M5.9; the pointer decision to M5.11; M4's
+thumbnail judgement to M5.3, which closed without taking it, so it is under *Mx — TODO*; a second
+`Sink` to M5.6; and the sequencer's producer to M5.9. Of the five `Undecided` operations, *choosing
+where the frame goes* is M5.6's and *the camera* is M5.5's; *walking the edit history* is M5.3's, is
 built, and left the no-home section; and *moving a boundary* and *"edit the file instead"* carry no
 `plan` badge in either column and are in no sub-milestone. The arena's insert and remove is above.
 
@@ -270,7 +273,7 @@ which M5.14 exists to name and has since drawn.
 What M5.1 left owed is rescheduled: the rejected build's cell — black, or the sentence saying what
 went wrong — is
 [ADR-0258](adr/0258-the-look-comes-before-the-fader-so-a-cell-draws-every-slot-and-says-which-nothing-it-is.md)'s
-and is stated under *Where to start: M5.1 — Program*, below.
+and is stated under *Where to start*, below.
 
 #### M5.2 — Mixer — **closed**
 
@@ -1054,6 +1057,23 @@ invariant a test holds.
    focus a digit reaches a different row in every bay. The check reads this file's own `match` arms
    as text, so a keyboard that becomes a per-bay dispatch table is invisible to it — which is the
    thing to solve rather than to discover.
+5. **The routes closed bays have rescheduled onto it, none of which is a letter.** The Library bay
+   closed owing these: the split `load` button and its pulldown
+   ([ADR-0305](adr/0305-the-library-bays-load-is-a-button-and-a-pulldown-and-the-deck-it-names-is-not-the-selection.md)),
+   a row's own menu
+   ([ADR-0311](adr/0311-a-row-menu-loads-a-set-onto-a-named-deck-and-saves-it-through-the-systems-own-dialog.md)),
+   the landing on a `history` row
+   ([ADR-0308](adr/0308-the-library-bays-fifth-chip-walks-one-sets-history-and-a-row-lands-that-version-on-a-node.md)),
+   and a key that moves that bay's scroll window
+   ([ADR-0312](adr/0312-the-params-pill-is-a-toggle-and-the-library-bay-scrolls.md)) — all of them
+   rescheduled here when that bay closed, and ADR-0305, ADR-0311 and ADR-0312 name this
+   sub-milestone themselves. The sequencer's first slice drew the grid's cells, the lane labels and
+   the mode pill and named a route for none of them
+   ([ADR-0320](adr/0320-a-pattern-is-one-bar-of-sixteen-slots-a-lane-is-a-target-and-two-levels-and-a-cell-is-a-bit.md)
+   to
+   [ADR-0323](adr/0323-a-scheduled-move-is-refused-on-a-control-a-lane-holds.md)), so the arrows'
+   walk of a bay's items has to reach a cell of the grid and a lane. All of it is ADR-0259's focus
+   grammar rather than a letter each bay picked, which is why the rows carry no letter to keep.
 
 **And it takes `z` with it.** *Bring back what is folded* unfolds everything rather than one region
 because *"a region a pointer cannot reach is a region a key has no way to name either"*, and focus
@@ -1084,8 +1104,9 @@ which the Library bay already does — so the row became M5.3's. **What it neede
 `karakuri_environment::history::list`. **What it needed next was a history to read, and a panel run
 writes one** — one `Snapshots` for the run, seeded before the window and handed to every slot's
 watcher, with the Set a version is filed under moved by a library load. That was M5.10's, and
-neither M5.3's task 2 nor this paragraph said the walk depended on it. **A blocker that names a
-milestone rather than a mechanism is a blocker nobody can check**: this one survived two readings of
+neither the Library bay's task 2 — now in [history/m5.md](history/m5.md), that sub-milestone having
+closed — nor this paragraph said the walk depended on it. **A blocker that names a milestone rather
+than a mechanism is a blocker nobody can check**: this one survived two readings of
 this file before the question *what actually stops it* was asked of it, and naming the mechanism is
 what got it built. **The page then named the control and the bay drew it**, which is the whole of
 the distance between *homeless* and *built* and took three records to cross.
@@ -1441,6 +1462,22 @@ have.
   measured one, so what is open is what mark the page gains, and that is the maintainer's. From
   M5.14.
 
+- **The extrapolation is wrong on a concentrated Set.** `estimate` measures how much coverage a Set
+  has and not how concentrated it is, so it is right at the sizes it measures and wrong
+  extrapolating a concentrated Set to full size. The case is *What a machine's size is allowed to
+  decide*'s, which names it and adds no limit for it, so what is owed here is what the estimate says
+  about a Set it cannot extrapolate: a refusal on ADR-0266's terms, or a fit that reads
+  concentration as well as coverage. That section pointed it at M5.14, which closed without it ever
+  having been one of that sub-milestone's items. From M5.14.
+
+- **What a master chain saved under a name looks like.**
+  [ADR-0227](adr/0227-a-pattern-and-a-master-chain-setting-are-library-data-in-two-tiers.md) puts a
+  pattern and a master chain setting in the library as two tiers, and ADR-0317 built the chain
+  without touching that half: no store directory is added, and the shape of a saved chain is for the
+  record that has something to serialise — which it now has. It carries no row on
+  [every operation](manual/operations.html), so no exit condition in this file reads it, and M5.9
+  names that record only for the pattern tier. From M5.8.
+
 ---
 
 ## The handover
@@ -1448,7 +1485,13 @@ have.
 **Read this if you are picking the work up.** It says where to start, what that piece needs, and
 what nobody has decided. Everything else is in the sub-milestone above, in the code, or in a record.
 
-### Where to start: M5.1 — Program
+### Where to start: M5.5 — Inspector
+
+**The work starts at M5.5 — Inspector.** The order is this file's own, top to bottom, and the
+Inspector is the first sub-milestone above still open; the bays under it, and then *The console's
+own shape*, follow in the order they are written. Each entry names its rows, its exit condition and
+what it is blocked on, and is the one place those are written down; what a closed sub-milestone
+left owed is under *Mx — TODO* and in [history/m5.md](history/m5.md).
 
 **The panel is a program.** `cargo run -p karakuri` opens the console over a real deck: the
 picture, four deck previews, the transport, the mixer, the Library bay, the Inspector, the
@@ -1459,8 +1502,9 @@ own since ADR-0214; what it needs that is not a surface is
 data lives, and with neither given a four-candidate search runs (ADR-0230). `examples/` ships the
 `.kset` files a fresh clone opens on; `my sets` is empty until something is saved.
 
-**M5.1 is the current sub-milestone and it is nearly closed.** The Program bay carries no `plan`
-panel or key badges on [every operation](manual/operations.html). The preview sizing and arrangement
+**M5.1 was the current sub-milestone until it closed on 2026-09-03, and what it settled is below.**
+The Program bay carries no `plan` panel or key badges on
+[every operation](manual/operations.html). The preview sizing and arrangement
 was settled by ADR-0239 (preserving operator preview size across arrangements, pure area comparison
 at crossover 706px, and widening outer panes to 340px / 400px so standard windows open in Below
 placement). The two remaining key badges were resolved: *Put a deck on air* retired its shortcut
@@ -1492,19 +1536,26 @@ written for the person playing the instrument does not reach it. **The prose tha
 preview cells are off at a time* paragraph is gone, the doc on `ON_AIR` reads *"every cell draws its
 own slot whatever its residency"*, and the deck's fullness doc says each resting slot is *"still
 drawn into its own cell"*. `docs/contributing.md` §4 is met here, and this paragraph said otherwise until 2026-09-03.
-**One clause is still owed, and
+**The clause
 [ADR-0258](adr/0258-the-look-comes-before-the-fader-so-a-cell-draws-every-slot-and-says-which-nothing-it-is.md)
-carries it**: the rejected build's cell — black, or the sentence saying what went wrong. [The console
-page](manual/console.html) specifies it under *What a deck preview cell shows, and when* and says of
-it *"neither can happen yet, so nothing draws either word"*. **Half of that reason is wrong and the
-conclusion is not.** The panel watches every slot's `.kir` pair, so a build can be refused while a
-slot is running and the Staging lane draws that verdict; what cannot happen is the *cell* the page
-describes, because a refused build installs nothing — a failed compile makes no `Request` and a
-rolled-back candidate leaves the previous Set running — so the honest picture after a rejection is the
-material that is still there. `crates/karakuri-engine/tests/deck.rs`'s
-`a_rejected_build_shows_what_is_still_running` asserts it.
-**What is owed is the page's sentence**, and the open question under it is whether a cell ever
-carries a diagnostic or whether saying what went wrong stays the Staging lane's.
+left owed is written.** It was the rejected build's cell — black, or the sentence saying what went
+wrong — which [the console page](manual/console.html) specified under *What a deck preview cell
+shows, and when* and said of *"neither can happen yet, so nothing draws either word"*. **Half of
+that reason was wrong and the conclusion was not.** The panel watches every slot's `.kir` pair, so a
+build can be refused while a slot is running and the Staging lane draws that verdict — on the word
+`did not compile`, carrying the first diagnostic
+([ADR-0310](adr/0310-a-source-can-say-it-refused-and-the-lane-draws-it.md)). What cannot happen is
+the *cell* that page described: a refused build installs nothing, a failed compile makes no
+`Request`, and the honest picture after a rejection is the material that is still there, which
+`crates/karakuri-engine/tests/deck.rs`'s `a_rejected_build_shows_what_is_still_running` asserts.
+**What a cell does say is `overloaded`**, and that is the state that arrived in place of the one the
+page described: an over-budget candidate stays in the slot and the slot stops updating, so the image
+is the last frame it drew and the caption marks it, because a still nothing marks is a preview that
+lies
+([ADR-0316](adr/0316-an-over-budget-candidate-stays-in-the-slot-and-the-slot-stops-updating.md)).
+The page is written to that, and the state it still names as unable to happen is `empty`. **The
+question under the owed sentence went the way ADR-0258 offered**: a cell carries no diagnostic, and
+saying what went wrong stays the Staging lane's.
 
 **A cell now shows material *running*, which is the other half of the same requirement and was
 missing until 2026-09-07.** Every slot was drawn and only some were stepped, so a cell for an
@@ -1584,9 +1635,18 @@ how large its target is, so the same Set at two sizes is one picture at two reso
 
 ### The decisions nobody has taken
 
-Three, each with what it blocks. Every one was found by building the thing next to it.
+Each is listed with what it blocks, and every one was found by building the thing next to it.
 
-**Two have left this list since it was written, and neither by being decided here.** *What the deck A
+**Which cut of the previous frame a feedback effect reads has left this list by being decided.**
+[ADR-0317](adr/0317-the-master-chain-is-three-fixed-passes-and-feedback-reads-either-cut.md) takes
+it, on the maintainer's ruling: the master chain is fixed built-in passes rather than a writable
+L5, and feedback reads either cut — `mix`, the frame as the mixer wrote it, or `exit`, this chain's
+own output — with the parameter choosing and **only the chosen cut retained**, which is the holding
+cost this entry argued, honoured rather than dodged. What it blocked was M5.8 and M5 itself, and
+M5.8 has closed with the chain ADR-0317 specifies built — the account of it is in
+[history/m5.md](history/m5.md).
+
+**Others left this list before it, and none of those by being decided here.** *What the deck A
 preview cell is showing* is answered in the M5.1 paragraph above. *The instrument has no resolution
 model* was not a decision at all: the model was
 [ADR-0077](adr/0077-the-canvas-belongs-to-the-session-and-the-window-gets-no-vote.md)'s, four weeks
@@ -1614,18 +1674,6 @@ rather than taken from whatever the default pair happens to be — is
 which also says what it leaves undone here: a panel figure is a deck of four stepped and drawn
 slots and a headless figure is one Set, so the sentence above about a panel number sitting beside
 every other number in this repository holds only against other panel numbers.
-
-- **Which cut of the previous frame a feedback effect reads, and what holding it costs.** The
-  previous frame is not one thing. It could be a Set's output, the raw frame the mix wrote before
-  anything downstream touched it, or the frame as it stands after some effect in the chain, so a
-  feedback procedure has to name which cut it reads and the vocabulary cannot say that. A cut that
-  is read has to be held, which is a frame-sized target and a copy per frame, so holding all of
-  them against the chance that something reads one is the cost nobody would pay. The shape this
-  points at is that **the selection recomposes the pipeline**: a cut nothing reads is not retained,
-  and a `.kir` that names one adds the retention to the graph the way an edge adds a pass. Nothing
-  in `karakuri-engine` does that — the render graph is built from a Set's nodes and the fold is
-  fixed. **What it blocks is M5.8, and M5 itself**: the operations page carries a `plan` row for
-  `feedback`, so M5 cannot close without either taking this or changing the manual.
 
 - **Whether loading a shipped preset should write into the operator's own library.** ADR-0229
   makes a load a packaging step that stores the bundle, so opening a shipped Set adds an entry to
@@ -1753,7 +1801,9 @@ Not milestones. These degrade silently if not defended at every step.
   own; the three ways out are the operator's fader, an earlier version landed out of the history, and
   the next build
   ([ADR-0316](adr/0316-an-over-budget-candidate-stays-in-the-slot-and-the-slot-stops-updating.md)).
-  This is `P-0094`'s *be loud* in place of its *undo*, taken because the undo was not one
+  This is `P-0094`'s *be loud* in place of its *undo*, taken because the undo was not one — and
+  **that principle's own delete-and-re-record pass is owed and is the maintainer's**, its *Undo*
+  example being `swap.rs`, which no longer rolls anything back; ADR-0313 left a pass owed on it too
 - The show continues when the generation API is unavailable. This becomes meaningful once
   there is a pool to fall back on, so it is a promise from M4 onward rather than from M1
 - Graceful degradation for every input source, with confidence driving how conservative
@@ -1796,7 +1846,8 @@ candidates on their neighbours' cost — and put it on `Deck::frame_period_ms` a
 `Report::deck_over_period`, a rolling median on a host clock that says the deck as a whole is or is
 not keeping up and acts on nothing. **That does not close this item.** The period is one number for
 four slots and cannot be divided among them, which is exactly what this heading asks for; what it
-supplies is the measurement M5.14 item 3 needs and an alarm where there was silence.
+supplies is the measurement *What `over_budget` says once `committed_ms` is the deck's total*
+needs — the *Mx — TODO* entry that item became — and an alarm where there was silence.
 
 **The failure is silence rather than slowness.** Four slots at 262144 elements measured about 10 ms
 a frame and registered as no violation at all. The maintainer's point: the problem is not that it is
@@ -1951,7 +2002,9 @@ wrong, an operator can reach it with a picture anybody would write, and **no lim
 somebody with the hardware who wants that picture is allowed it (ADR-0269). What it does break is
 the extrapolation, which measures how much coverage there is and not how concentrated — so
 `estimate` is right at the sizes it measures and wrong extrapolating a concentrated Set to full
-size. That belongs to M5.14 rather than to a limit here.
+size. This file pointed that at M5.14, which closed without it ever being one of that
+sub-milestone's items; it is under *Mx — TODO*, and it is a gap in the extrapolation rather than a
+limit here.
 
 **What is not allowed is waste that a bigger machine merely hides.** The two are easy to
 confuse and the test between them is simple: *does spending it buy anything?* Capacity buys
