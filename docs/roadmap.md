@@ -626,215 +626,68 @@ this bay's; the selection half is the mixer's, above. This is the largest body o
 and the bay the mock has tipped most: the deck head, the wildcard group, the authority chips, the
 renderer row and *take back* each carry one, and the parameter rows and their faders do not.
 
-#### M5.6 — Outputs
+#### M5.6 — Outputs — **closed**
 
-**Rows.** One carried a `plan` panel badge: *Choose where the frame goes*. It reads `has`.
-
-**Exit.** No `plan` badge in the panel column of this bay's rows on
-[every operation](manual/operations.html). **Met.**
-
-**What an output is, which was this bay's to build, and is built.**
-[ADR-0324](adr/0324-an-output-is-a-named-destination-with-a-size-and-an-on-off.md): an output is a
-destination, a size and an on/off, and each of the three is answered somewhere different.
-`Operation::RouteFrame { output: Output, on: bool }` names one — a word from a closed list
-(`Program`, `Projector(n)`, `Plugin(n)`) and never a label, because a projector's label carries the
-display it is on and that changes when the cable does. The picture's on and off is still
-`Layout::visible` on the picture's node, which is ADR-0243's reconciliation taken the other way
-round: the sink and the layout node do not stop being one thing, the *vocabulary* stops being one of
-the two ways of saying it. What it writes is nothing, and `karakuri-operation-record` gained a fifth
-`Silent` variant to say why — **publishing is not the performance**, which also answers the last of
-ADR-0246's three open questions: a replay whose outputs are gone draws at the canvas.
-
-**The one derivation this bay owed is built**, and it took a measurement rather than an argument.
-[ADR-0325](adr/0325-the-frame-follows-the-largest-enabled-output-and-a-resize-costs-0-145-ms.md):
-the frame is composited at the largest enabled output's size, the program view's size is the
-rectangle the Program bay gives the picture, and a divider drag therefore moves what the frame is
-rendered at. That is a `Deck::resize` and a `Present::resize` per changed frame, and it is **0.145 ms**
-— measured on 2026-09-09, host clock, biased high, and within noise of the same figure at 466x262
-and at 1920x1080, because what it pays for is nine objects rather than their texels. The alternative
-that would have cost nothing — hold the picture at the session canvas and letterbox it — was
-rejected on the one case the manual names: soloed for a capture on a 4K display, it would upscale.
-`CANVAS` keeps a smaller job, the shape every output is fitted to and the size a run starts at, which
-is both halves of what ADR-0246 called *wrong twice over*.
-
-**A second `Sink` is in the slice**, which is what
+An output is a named destination with a size and an on/off, and the three are answered in three
+different places
+([ADR-0324](adr/0324-an-output-is-a-named-destination-with-a-size-and-an-on-off.md)):
+`Operation::RouteFrame` names one with a word from a closed list and never a label, because a
+projector's label carries the display it is on; what it writes is nothing, on a fifth `Silent`
+variant saying that publishing is not the performance. The frame is composited at the largest
+enabled output's size and the program view's is the rectangle the Program bay gives the picture, so
+a divider drag moves what the frame is rendered at — a derivation settled by measuring the resize
+rather than by arguing it
+([ADR-0325](adr/0325-the-frame-follows-the-largest-enabled-output-and-a-resize-costs-0-145-ms.md)),
+which leaves `CANVAS` the smaller job of the shape every output is fitted to and the size a run
+starts at. The projector window is the second `Sink`
 [ADR-0171](adr/0171-the-deck-advances-and-each-sink-either-gets-the-frame-or-misses-it.md) said was
-owed: `crates/karakuri`'s `Projector` is a second `winit` window with a surface and a `WindowSink`,
-opened on `RouteFrame { Projector(0), on: true }` and dropped on `on: false`. Its close is the output
-going off rather than the program quitting; its resize is the destination deciding its own size
-(ADR-0246), and the next frame's derivation follows it. It is not made fullscreen and not put on a
-chosen display: that is one line of `winit` and one list of monitors this program does not read, and
-a fullscreen with no way to say *where* is worse than none.
+owed, opened and dropped by the route operation itself. [history/m5.md](history/m5.md).
 
-**The bay draws the list it has.** Four `.sink` chips — `program view`, `projector`, `Syphon · no
-plugin`, `NDI · no plugin` — each hit-testing the whole chip rather than the dot, and the two plugin
-chips drawn `.absent` and claiming no press. The mock moved first in two places, which is
-`docs/contributing.md` §5 step 3: `projector · DELL U2720Q` became `projector`, and `Syphon` became
-`Syphon · no plugin`.
+**Exit, met on 2026-09-09**: no `plan` badge in the panel column of this bay's rows on
+[every operation](manual/operations.html). *Choose where the frame goes* was the one row that
+carried it, and ADR-0324 and ADR-0325 between them moved it.
 
-**What is still owed, and none of it blocks this bay's exit.**
-
-- **The plugin sinks.** `Output::Plugin(n)` exists and nothing constructs one; `docs/plugins.md` is
-  the specification and nothing implements it. The chips say so rather than the row omitting them.
-- **`+ add output`** is the arena's insert, which is
-  **one gap drawn five times** (`+ lane`, `+ add`, `+ add output`, `+` on the scope list, and the
-  inspector's `2 up`). It arrives with the arena operations and not with this row.
-- **Fullscreen on a named display**, above.
-- **The MCP route.** *Choose where the frame goes* reads `plan` for MCP and the class it is in —
-  *inputs and outputs* — is closed until the operator opens it. MIDI is `gap`: no chip on the console
-  page carries a target, and the closed list this operation now takes is what a map line would name
-  the day one is drawn.
-- **`docs/manual.md`'s *The canvas is fixed for a run*** is now false for the panel and still true
-  for `karakuri-cli`, whose `--canvas` is untouched. ADR-0246 predicted the sentence would go false
-  when this was built; ADR-0325 names it and does not close it.
-- **A slot's estimate is dropped on every frame of a drag**, because `HotSwap::resize` drops it.
-  Nothing sets an estimate today — `set_estimated_cost` has no caller — so it costs nothing now, and
-  whoever wires the estimate meets it here.
-
-**The bay's prose, as tooltips.** One note, *Outputs*, which grew a second paragraph for what an
-output is. The four sinks and the `mcp` pill are tipped; `+ add output` carries the note about the
-arena.
+What M5.6 left owed is rescheduled. **The `+ add output` chip is the arena's insert and is already
+under *What no sub-milestone owns***, as the arena half of *Adding or removing a node*: the panel
+cannot grow a bay's body while it runs, and what the chip owed was the note, which is written.
+**The plugin sinks are [`docs/plugins.md`](plugins.md)'s** — `Output::Plugin(n)` exists, nothing
+constructs one, and that page already says of itself that the distribution machinery is a design
+rather than a description; the chips say so rather than the row omitting them. **Fullscreen on a
+chosen display**, **[`docs/manual.md`](manual.md)'s *The canvas is fixed for a run*, now false for
+the panel and still true for `karakuri-cli`'s `--canvas`**, and **the estimate a slot drops on every
+frame of a drag**, which nothing sets today and which whoever wires the estimate meets, are under
+*Mx — TODO*. The MCP route is M5.10's column and MIDI reads `gap` on the page — no chip carries a
+target — so neither is a debt this bay leaves.
 
 #### M5.7 — Staging — **closed**
 
-**Rows. Two, and both are met.** *Keep a candidate* is a press on a candidate row and *Put a node's
-previous version back* is the `back` capsule at the end of one, and both badges read `has` for a
-route that is this bay's own
-([ADR-0326](adr/0326-a-staging-row-is-a-changed-node-and-the-row-is-the-keep.md)).
+A staging row is a node a build changed rather than a slot, so a save touching two files draws a row
+each with the build's one verdict repeated on them; the row itself is the keep, and a `back` capsule
+at its end is the put-back
+([ADR-0326](adr/0326-a-staging-row-is-a-changed-node-and-the-row-is-the-keep.md)). A source can say
+it refused, which is what let the lane draw the disagreement an operator most wants to see instead of
+printing it to stderr
+([ADR-0310](adr/0310-a-source-can-say-it-refused-and-the-lane-draws-it.md)), and an over-budget
+candidate now stays in the slot with the slot stopping rather than anything being put back
+([ADR-0316](adr/0316-an-over-budget-candidate-stays-in-the-slot-and-the-slot-stops-updating.md)) —
+so the disagreement between the picture and the disk that this lane was built to show cannot arise,
+and what the lane says instead is which slot stopped and why. [history/m5.md](history/m5.md).
 
-**The exit rule's second defect is closed with them.** This said *Put a node's previous version
-back*'s `has` came from another bay — a press on a row of the Library bay's `history` scope,
-ADR-0308 — and that **a badge is one string and a row can have two homes**, so the grep below passed
-over a lane that drew nothing for it. The lane draws it now and the badge names both controls, which
-is the *load button, row menu → load to slot, or library → deck* spelling one bay up. The reading is
-worth keeping, because M5.3 still carries the same shape in the other direction: *Keep what a deck
-is playing* is that bay's row and the Inspector's control.
+**Exit, met on 2026-09-09**: no `plan` badge in the panel column of this bay's rows on
+[every operation](manual/operations.html). Both rows read `has`, and **the exit rule's second defect
+closed with them**: *Put a node's previous version back* names two controls in one badge — this
+lane's capsule and the Library bay's `history` row — which is the shape M5.3 still carries in the
+other direction.
 
-**Exit. Met.** No `plan` badge in the panel column of this bay's rows on
-[every operation](manual/operations.html).
-
-**Blocked on. Nothing.** This list said six items when three of them were already answered, and
-then eight when the two it had never named were written into it. **The last two were items 4 and 7
-and both landed on 2026-09-09** —
-[ADR-0326](adr/0326-a-staging-row-is-a-changed-node-and-the-row-is-the-keep.md). The list is kept
-because each entry says what it cost and what it turned out to be, which is what a reader arriving
-at this bay is looking for.
-
-1. **A store the build path can write — built.** This said `watched()` *"calls neither
-   `Watch::storing_to` nor `Watch::snapshotting_to`, which its own documentation says outright"*.
-   It called `storing_to` and said the **opposite** in as many words, and it calls both now — the
-   snapshot half is item 6 and has landed with it.
-2. **A `Built` receiver on the render thread — built.** This said `crates/karakuri` *"creates no
-   such channel, so the per-node hashes have no reader"*. The channel is made, every watcher is
-   handed the sender, and the receiver is drained every frame, parked, matched to its swap and
-   turned into node addresses.
-3. **A baseline — answered, both halves.** `Playing::at_launch` seeds every slot with a hash per
-   node from the engine's placed sources before the first frame, so nothing reads as *every node
-   changed*. The **snapshot** baseline is `history::seed`, which this program calls in `main` before
-   the window opens, so the first edit has a version to be walked back to and not only the second.
-4. **What the lane draws when one build changes two nodes — decided, and it is two rows.** A
-   rebuild restates the whole stack, so a save touching two files is one `Built` with two changed
-   hashes and one `swap::Event`; one row cannot name two nodes, and two rows means the lane's row
-   model stops being one-per-slot. The maintainer took it on 2026-09-09 — *変更ノードごとに 1 行*,
-   one row per changed node — and that is what the model is now: **a row is a node a build
-   changed**, with the build's one verdict repeated on each of its rows, and a verdict with no
-   changed node behind it drawing one row on the slot with no address on it. The alternative that
-   lost was a row per slot with the nodes nested under it, declined for simplicity
-   ([ADR-0326](adr/0326-a-staging-row-is-a-changed-node-and-the-row-is-the-keep.md)). The diff is
-   taken at the one point both node lists are in hand, which is where a build is taken up.
-5. **A reader for the edit history — built, and it is M5.3's now.** `history::list` answers
-   *what versions has this had*, most recent first, and ADR-0276 puts the Set a version belongs to
-   in its name. The row it serves is *Walk the edit history*, which left *Rows the manual has not
-   given a home* because it is a listing and a load rather than undo — and which the Library bay
-   draws now (ADR-0308).
-6. **A history to read at all — it was M5.10's, not this bay's, and it is written.** `storing_to`
-   puts a build's sources under a content address; `snapshotting_to` keeps every version that
-   compiled, and both programs hand a watcher one now. This file says twice elsewhere that the
-   writing belonged to M5.10 — *"it belongs here rather than in the bay that would read them"* —
-   and this list counted it as something this bay waits on. It no longer waits on it.
-7. **Nothing could press a candidate row, and no item said so — built.** `StagingBay::row`
-   existed and the painter and the tests used it, but `input::PROBES` had no staging entry and
-   `press_handler::ASKED` had none either. *"Nothing in the list is a drawing — the row is already
-   painted"* was true about paint and false about reach. Both controls have a probe, a table entry
-   and an arm now, and which part of the row each is came with item 4: **the row is the keep and a
-   `back` capsule at its end is the put-back**, which is the Library's list and its star arranged
-   the same way — the act that writes nothing on the large target and the act that writes a file on
-   the small one (ADR-0326).
-8. **A source the checker turned down had nowhere to say so — built.** `Source::poll` answered
-   `Option<Request>`, so a watcher that refused a `.kir` printed its diagnostics and returned the
-   same answer a poll that saw no edit returns; the lane drew nothing. It answers `Option<Polled>`
-   now, `swap::Event::SourceRefused` is the outcome, and the lane and the health capsule both say
-   `did not compile`
-   ([ADR-0310](adr/0310-a-source-can-say-it-refused-and-the-lane-draws-it.md)). It was never in
-   this list, which is why it is here and why the paragraph below it says what is left.
-
-*Keep a candidate* has no hazard and never had one — it writes nothing, and what it changes is the
-lane; the row is its control. *Put a node's previous version back* is reached from **two** bays now:
-the Library's `history` rows land a version an operator picked, which is `Revision::Picked`, and
-this lane's capsule asks for `Revision::Previous` and means *the one this replaced* (ADR-0308),
-which the host resolves by walking the history for that node of that Set and taking the entry after
-the newest. Where it writes was already answered, because
-`working_copies()` materialises one scratch copy per slot before the window opens, so a restore
-moves the deck and the operator's editor names the same file; ADR-0308's `put_back` is that write,
-and this lane's control would reach it with the other arm.
-
-**Also here.** The **staging lane**. The bay draws a row per node a build changed, on the deck it
-landed on, with the build's verdict on each and the two presses that row offers. What the lane still
-omits is `origin`, the timestamp and the head's count, each named at the code and none of them a row
-on the page — the first has no producer anywhere and the second waits on the spelling the Library's
-own time column waits on, which is one decision this bay does not take twice.
-
-**Two findings this lane exists for, and both have rows now.** The first was the budget's verdict:
-after `Event::RolledBack` the watchdog put the previous *Set* back on screen and **did not put the
-previous file back**, while the watcher re-reads every file on every rebuild — so the picture was
-the old version, the disk was the over-budget one, and the next unrelated save swapped it in again.
-**That is no longer the shape of it, and the change was made because the old shape was
-unreadable.** The maintainer, 2026-09-09: *"rolled backが分かりにくい。事情を知らないとバグってるように
-しか見えない"*. A candidate over the budget now **stays in the slot and the slot stops updating** —
-`Event::Overloaded`, no step and no draw, the target holding the last frame it made — and nothing is
-put back
-([ADR-0316](adr/0316-an-over-budget-candidate-stays-in-the-slot-and-the-slot-stops-updating.md)).
-**So the disagreement this half was about is gone**: the file holds the version that is in the slot,
-which is the normal case rather than a hidden one, and what needs saying is that the slot is *not
-running it*. **Four surfaces say that** — this lane's `overloaded` row, the transport's health
-capsule, that deck's preview caption under the still, and the CLI's status line — and the caption is
-the one this bay does not own and could not do without: a held frame of good material looks like
-material. **The node is said now** — an overloaded row names the node the build that stopped the
-slot changed, and the `back` capsule at the end of that row is the way out of the freeze the lane
-could not offer before (ADR-0326). And **a checker refusal reached no row at all** until 2026-09-08: a `.kir` the checker
-turned down produced no `Request`, so the disagreement an operator most wants to see was said on
-stderr. Closing it was the engine change this said it was — `Source::poll` having no way to say
-*I refused*.
-
-**The second of the two is closed.** `Source::poll` answers `Polled::Build` or
-`Polled::Refused`, the deck reports the second as `swap::Event::SourceRefused` beside its four
-other verdicts, and the lane draws a row on a fourth word — `did not compile`, carrying the first
-diagnostic and a count of the rest, with the whole set still going to stderr and to a model over
-`--mcp`. The transport's health capsule says it too, and
-[ADR-0310](adr/0310-a-source-can-say-it-refused-and-the-lane-draws-it.md) is the record, with the
-two things it deliberately left: the *node* the refusal is about is still not on the row, and that
-one is a state rather than a gap — nothing was built, so there is no node list to diff and the row
-is the slot's, which is item 4's own answer for it (ADR-0326); the second — a refusal arriving while
-that slot has a candidate on trial waiting for the verdict — is gone with the trial itself
-([ADR-0313](adr/0313-a-candidate-is-judged-on-its-own-cost-and-the-decks-period-is-a-deck-level-alarm.md)),
-and a refusal now reaches the lane on the first frame boundary after the worker sends it.
-
-**The first is closed too, and it closed by the mechanism changing rather than by a row.** This
-said *both* and *blockers 7 and 8* until 2026-09-08, and *one of them* until 2026-09-09: the
-disagreement it named — the picture on the old version and the disk on the refused one, with nothing
-saying so — cannot arise any more, because nothing puts a version back
-([ADR-0316](adr/0316-an-over-budget-candidate-stays-in-the-slot-and-the-slot-stops-updating.md)).
-What replaces it as a *Live safety* item is narrower and is met: a slot that has stopped is a picture
-that is not moving, and four surfaces say which slot and why. The lane exists to say both of these
-things and it says both.
-
-**The bay's prose, as tooltips.** The staging half of *Library, and staging under it* — a candidate
-waits whether it came from you or from an agent, and a rejected one costs nothing — and *The staging
-lane, and the sense in which a candidate waits*, which is the longest note on the page and is where
-the absence of a *regenerate* is argued. **The mock drew the lane with no `data-tip` anywhere in it
-until 2026-09-08**, so every tip in this bay was written from nothing; the `.cand` row has one now,
-and it carries the four verdicts, the row's address and what each of the two presses does
-(ADR-0310, ADR-0326).
+What M5.7 left owed is rescheduled, and it is under *Mx — TODO*: **the watcher's other two dead ends
+go unreported** — a file that will not read and a stack that will not sort into a Set both still
+print and return nothing, ADR-0310 having declined to give either a word because `did not compile`
+is the wrong one; and **the lane omits `origin`, the timestamp and the head's count**, the first
+having no producer anywhere and the second waiting on the spelling the Library bay's own time column
+waits on. **ADR-0310's other consequence — a refusal arriving while a candidate is on trial waits
+for the verdict — is moot rather than owed**: ADR-0313 deleted the trial and states that the
+sentence is false in both halves, and a refusal reaches the lane on the first frame boundary after
+the worker sends it.
 
 #### M5.8 — Master — **closed**
 
@@ -1139,152 +992,42 @@ this file before the question *what actually stops it* was asked of it, and nami
 what got it built. **The page then named the control and the bay drew it**, which is the whole of
 the distance between *homeless* and *built* and took three records to cross.
 
-#### The console's own shape
+#### The console's own shape — **closed**
 
-Four rows have a panel home that is not a bay: *Fold a bay away* at the bay head, *Fold a pane away*
-at the pane edge, *Size the window* at a drag, and *Quit* at the window's own close. They are the
-panel's own chrome, so no M5.x above owns them, and ADR-0226 does not close without them.
+Four rows have a panel home that is not a bay — *Fold a bay away* at the bay head, *Fold a pane
+away* at the pane edge, *Size the window* at a drag and *Quit* at the window's own close — so no
+M5.x above owns them and ADR-0226 does not close without them. A pane folds by dragging its boundary
+out and comes back by dragging it in, which is why that row needed no probe, no claim and no press
+arm
+([ADR-0300](adr/0300-a-pane-folds-by-dragging-its-boundary-out-and-comes-back-by-dragging-it-in.md)),
+while a bay's grip was painted and never hit-tested and now is. A model has no window, so the
+surface rows' MCP badges are `gap` rather than debt, *Quit*'s route is the window's own close with no
+`close` control drawn on the panel, and `a` is bound to nothing so *Size the window*'s key badge is
+`gap` too
+([ADR-0315](adr/0315-a-model-has-no-window-so-the-twelve-surface-rows-mcp-badges-are-gap.md)). The
+window declares a minimum, the declared minima summed along each axis
+([ADR-0272](adr/0272-the-window-has-a-minimum-and-only-one-of-adr-0250s-three-cases-is-real.md)),
+with the centre's term set by what a pane needs before its fader has any width
+([ADR-0279](adr/0279-the-centre-is-two-parameter-rows-wide-because-a-pane-that-cannot-draw-a-fader-is-not-a-minimum.md)).
+[history/m5.md](history/m5.md).
 
-**The three questions this section carried are answered**, on 2026-09-09, in
-[ADR-0315](adr/0315-a-model-has-no-window-so-the-twelve-surface-rows-mcp-badges-are-gap.md): the
-loosening is not taken and the twelve MCP badges are `gap` rather than debt, *Quit*'s route is the
-window's own close and no `close` control is drawn on the console, and `a` is not bound so *Size the
-window*'s key badge is `gap`. What each of them was, and what it cost to answer, is below.
+**Exit, met on 2026-09-09**: ADR-0226's grep read over this section's four rows — no `plan` badge in
+the panel column of *Fold a bay away*, *Fold a pane away*, *Size the window* and *Quit* on
+[every operation](manual/operations.html). The first two read `has` at the bay head and the pane
+edge; the last two read `gap`, which is finished because the page has already said the panel cannot
+reach them. ***Size the window* was met by M5.6 rather than by this section**: a window drag sets an
+output's size (ADR-0325), and the fifth cell carries `window drag` the way *Quit*'s carries `window
+close`.
 
-**Three of the four sat inside a question ADR-0281 names and does not take**, and it decided how much
-of this section is work. That record loosened rule 01 to *every route reaches every write* and named
-a second, larger loosening it declined: *a write is what a replay has to reconstruct*. Under it the
-twelve operations `karakuri-operation-record` files as `Silent::Surface` — *a surface's own state*,
-which is the folds, the solo, the three arrangement rows, `SelectDeck`, `SelectScope`,
-`SetTransition`, `SizeWindow` and `KeepCandidate` — stop being writes, and **eighteen `plan` badges
-stop being debt**, twelve of them MCP's.
-
-**Three things decide it, and none of them is in this file.** P-0082 names *a divider dragged, a pane
-folded* as its examples of an explicit operation that **changes stored state**, so the proposed
-sentence contradicts a principle by name — and by ADR-0249's gate it is a principle deciding a
-question it does mention. The sentence also cuts wider than the list: read literally it takes
-`Silent::NoRecord`'s twelve as well, and blesses the hole `karakuri-environment`'s MCP tests pin
-rather than bless. And **rule 07 holds the panel and the keyboard regardless** — *"every divider
-drags, the program view can take the whole panel"* — so nothing here becomes unreachable by hand
-whatever rule 01 says; what would be freed is MIDI, which cannot address any of it and is already
-`gap` on all twelve, and MCP, which offers none of them today.
-
-**It is refused, and the twelve MCP badges are `gap` anyway.** They stay writes, rule 01 goes on
-asking all four routes of a write, and what moved is one column's answer on twelve rows: a model has
-no window, so a route into a surface's own state is a route into a window the model is not looking
-at. The distinction is the whole of the difference between a debt and a decision — `gap` is the
-page's own word for *this surface cannot reach it at all*, and it is now said twelve times with one
-sentence rather than left as twelve promises nobody was going to keep. Only MCP moves; the panel and
-the keyboard are untouched, which is what the paragraph above already predicted.
-
-*Move a boundary* is a thirteenth row waiting on the same answer: the record crate says a divider
-position is as plainly a surface's own state as the folds beside it, and files it elsewhere only
-because its payload is `Undecided`. **ADR-0315 leaves its MCP badge at `plan`**, and the reason is
-that it took the twelve off `written`'s own `Silent::Surface` arm rather than off a description of
-them — a row filed under `Owed(Undecided)` is not in that arm, whatever the comment beside it says.
-Its badge is the day somebody settles the payload, and the sentence is already written.
-
-Two are the console's and two are the host's. **The folds want a hit test**, and the two of them no
-longer want the same one. Both reach the console as `karakuri_console::panel::Op::Fold` rather than
-through the operation vocabulary — which is why `tests/vocabulary.rs` rather than `panel_column.rs`
-is what checks them.
-
-**A pane no longer wants one at all.**
-[ADR-0300](adr/0300-a-pane-folds-by-dragging-its-boundary-out-and-comes-back-by-dragging-it-in.md)
-makes *Fold a pane away* a **drag**: a pane's boundary pulled `GRAB` past that pane's own minimum
-closes it, and the pane keeps its outer edge — zero width, its divider still drawn at the window's
-edge — so a drag inward brings it back at its minimum. A boundary is claimed by `input`'s rule 3
-before any control is asked, and the window loop already routes a boundary drag into `Panel`, so
-**the row needed no probe, no claim and no press arm** — its badge is `has`, `console.html`'s lede
-says how a pane folds, and `crates/karakuri`'s own drag test carries the sufficient half, which
-`karakuri-console` cannot. That record supersedes the half of
-[ADR-0295](adr/0295-the-grip-is-the-fold-and-a-panes-outer-edge-is-the-other-one.md) which gave the
-pane a band on its outer edge; the band overlapped every Library row by three pixels, which is why it
-was never registered.
-
-**A bay wanted one and has it.** The grip in a bay head was painted and never hit-tested, so the
-only route into *Fold a bay away* was a key; it is now a row of `karakuri_console::input::PROBES`,
-an arm in `crates/karakuri/src/main.rs`'s press handler, and a fifth pass in `tests/vocabulary.rs`
-that claims, derives, performs and reads the console's shape back. Both fold rows are `has`.
-**Four of the seven headed regions carry a grip** — the mixer, the staging lane and the sequencer
-do not, so those three fold from the keyboard alone, and whether that is the exit met or a page
-that has to change is not this file's to say.
-
-**So two of this section's four rows are met, and the two that are left are the host's.** **Sizing and quitting are
-the host's**: `crates/karakuri` answers `WindowEvent::Resized` and `WindowEvent::CloseRequested`
-itself, and `esc` reaches the second. What was owed there was the `a` binding, which is bound to
-nothing, and the `close` control on the panel.
-
-**Neither is owed any more, and neither was built.** ADR-0315 answers both by saying the console does
-not draw them. *Quit* names the window's own close, which is a control the window manager already
-draws and the host already answers — so the panel column is `gap`, the badge that says the route is
-real moves to the fifth cell as `window close`, and `esc` keeps its `has` until ADR-0259 takes it.
-`a` is bound to nothing in `crates/karakuri`, is not going to be, and *Size the window*'s key badge
-is `gap` for *Move a boundary*'s reason: a size is a pair of viewport pixels and a key press cannot
-mean one. `karakuri-cli`'s `a` is the one that looks like a counter-example and is not — it asks for
-the canvas's size rather than naming a size, and that keyboard is its own (ADR-0220).
-
-**Sizing has a third owed item, and it is one line.** The window has no minimum inner size, so it
-can be dragged under the arrangement's own minima — where the solve scales everything down together
-(ADR-0250) and the Mixer stops drawing strips while the deck previews carry on, so the pointer loses
-the deck selection and the keys keep it.
-[ADR-0272](adr/0272-the-window-has-a-minimum-and-only-one-of-adr-0250s-three-cases-is-real.md) takes
-the decision — that the window declares a minimum at all, and that it is the declared minima summed
-along each axis — and
-[ADR-0279](adr/0279-the-centre-is-two-parameter-rows-wide-because-a-pane-that-cannot-draw-a-fader-is-not-a-minimum.md)
-is what put the number where it is. `karakuri-console` publishes it as `MINIMUM_VIEWPORT` —
-**777 x 658.5**, not the 692 x 658.5 ADR-0272 states, because 0279 changed the centre's term on one
-axis. A test recomputes both from the tree, and
-`crates/karakuri/src/main.rs`'s window attributes set it — so the constant is enforced rather than
-claimed.
-
-**And it left one thing undone that a window minimum could not reach, which is now done**:
-`centre`'s declared minimum of 340 was `.body-grid`'s CSS track rather than a reading of its
-content, and the inspector's `.param` grid wants 207 in a pane before its fader has any width — so
-at a 340 centre the parameter faders were not drawn, and a divider drag reaches that centre at *any*
-window width.
-[ADR-0279](adr/0279-the-centre-is-two-parameter-rows-wide-because-a-pane-that-cannot-draw-a-fader-is-not-a-minimum.md)
-moved the arrangement instead of the window: a pane declares 208, the centre 2 x 208 + 9 = 425, and
-`MINIMUM_VIEWPORT` is **777 x 658.5**. The 423 and 775 this paragraph used to name are one pixel per
-pane short — the fader is the leftover track and wants *more* than the row's 207, where the mixer's
-threshold is met *at* its 172 — and the record carries both measurements.
-
-**Two of the four were blocked, and this section used to end by saying none was.** The bay-head and
-pane-edge hit tests waited on nothing — `Op::Fold` and `Op::FoldEnclosing` already perform, and the
-pointer is already tracked on every event for exactly this. *Size the window* and *Quit* were the two
-that waited: the second loosening above decided whether either was owed at all, `Quit`'s `panel
-close` named a control **the mock does not draw**, so under `docs/contributing.md` §5 step 3 that was
-a page gap before it was code, and `a`'s payload had to say what a key press means where the page's
-own *Move a boundary* tip says a key press cannot mean a viewport pixel. **All three are answered and
-one row is left**, which is the next paragraph.
-
-**The exit is ADR-0226's grep read over this section's four rows** — no `plan` badge in the panel
-column of *Fold a bay away*, *Fold a pane away*, *Size the window* and *Quit*, where a row the page
-marks `gap` is finished because the page has already said the panel cannot reach it. Every M5.x above
-states one and this file says each names its rows, its exit and what it is blocked on; this is that
-sentence said, which is what makes it checkable.
-
-**All four meet it, and the last one was met by M5.6 rather than by this section.** *Fold a bay
-away* reads `has` at the bay head, *Fold a pane away* `has` at the pane edge, *Quit* `gap` — the
-window's close is not a console control, and the fifth cell carries it. **And *Size the window* is
-`gap` in the panel column with `window drag` in its fifth cell**, which is *Quit*'s answer one row
-along: no control on this console sizes a window and none is planned, the window manager draws the
-frame a hand drags on every platform this program runs on, and `crates/karakuri` answers
-`WindowEvent::Resized`.
-
-**What that badge waited on has happened.** This section said it closes *"when a window drag sets an
-output's size, and on nothing else"*, and
-[ADR-0325](adr/0325-the-frame-follows-the-largest-enabled-output-and-a-resize-costs-0-145-ms.md) is
-that: dragging the projector window sets the projector output's size, and dragging this window — or
-a divider inside it — sets the program view's, which is the rectangle the Program bay gives the
-picture. **The badge did not become `has`, and the reason is mechanical rather than a
-disappointment.** `panel_column.rs` demands that a `has` in that column be met by a line of
-`karakuri-console/src` constructing the operation, and the roadmap's fourth instrumentation command
-already returns *sizing the window and quitting* as the two the whole workspace never constructs,
-because both are `winit` events. So `has` there would have been the lie that file's header names, and
-the fifth cell is where ADR-0315 had already put the same answer for *Quit*. The `--size, --canvas`
-that cell used to carry are named in the row's tip instead: they are `karakuri-cli`'s own window and
-its session canvas, and the fifth cell can only hold one way in.
+What this section left owed is rescheduled. **`esc` still quits, and what a global letter is under
+ADR-0259's grammar is M5.13's** — that row's key badge reads `has` and stays there until the one
+pass over the keyboard takes it. **The window minimum is a measurement a bay growing a control
+invalidates**: a region's declared minimum is a reading of its content, and `centre`'s first number
+was a CSS track rather than a reading, which is the warning; it is under *Mx — TODO*. **Three of the
+seven headed regions carry no grip**, so the mixer, the staging lane and the sequencer fold from the
+keyboard alone, and whether that is the exit met or a page that has to change is not this file's to
+say. ***Move a boundary*'s MCP badge stays `plan`**, because a row filed under `Owed(Undecided)` is
+not in the arm ADR-0315 took the twelve off, and it moves the day somebody settles the payload.
 
 #### M5.14 — The frame's cost — **closed**
 
