@@ -316,7 +316,7 @@ use std::time::{Duration, Instant};
 use karakuri_console::{egui, egui_wgpu, egui_winit};
 
 use karakuri_console::budget::PANEL_PASS;
-use karakuri_console::input::{claim, wheeled, Claim, CONTROLS};
+use karakuri_console::input::{claim, wheeled, Claim, Turned, CONTROLS};
 use karakuri_console::panel::{Dragged, InHand, Knob, Op, Outcome, Panel, Pressed, Released};
 use karakuri_console::repaint::{Change, Repaint};
 use karakuri_console::room::Room;
@@ -2111,6 +2111,7 @@ impl Readout {
                         &self.view.library,
                         self.view.opened(),
                         self.view.pointed(),
+                        self.view.library_scroll(),
                     )
                     .and_then(|bay| {
                         bay.menu_ask(
@@ -2207,6 +2208,7 @@ impl Readout {
                     &self.view.library,
                     self.view.opened(),
                     self.view.pointed(),
+                    self.view.library_scroll(),
                 )
                 .and_then(|bay| {
                     bay.aim(
@@ -2310,19 +2312,25 @@ impl Readout {
                 if let Some(operation) = tempo {
                     return (claim, Acted::Emitted(Some(operation)));
                 }
-                // **The deck head's three, one pane at a time.** Each pane is
-                // derived once and asked for all three, exactly as the mixer
+                // **The deck head's four, one pane at a time.** Each pane is
+                // derived once and asked for all four, exactly as the mixer
                 // bay is asked for its four: the anchor's place is measured
                 // from the mode chip's and the arrows' from the anchor's, so
-                // they are three questions about one laid-out pane. Nothing
+                // they are four questions about one laid-out pane. Nothing
                 // else on the panel overlaps a pane — the Inspector's card is
                 // its own bay — so the order against the mixer below is
                 // arbitrary.
                 //
-                // **The three are asked in the order they sit in the row**,
+                // **The four are asked in the order they sit in the row**,
                 // and no two of them can answer for one point:
-                // `DeckHead::owns` is the union of exactly these three, and
+                // `DeckHead::owns` is the union of exactly these four, and
                 // `tests/deck_head.rs` asserts a press is one of them or none.
+                //
+                // **The fold is the fourth and it is not a mix control**: it
+                // asks the slot to composite or to overdraw, and `composited`
+                // below is what turns that into a re-aim. It is asked here
+                // with the other three because it is the same laid-out row and
+                // the same derivation, not because it goes to the same place.
                 let deck_head = self
                     .view
                     .inspector
@@ -2339,6 +2347,7 @@ impl Readout {
                         head.sync(at)
                             .or_else(|| head.reanchor(at))
                             .or_else(|| head.scrub(at))
+                            .or_else(|| head.compositing(at))
                     });
                 if let Some(operation) = deck_head {
                     return (claim, Acted::Emitted(Some(operation)));
@@ -2400,7 +2409,7 @@ impl Readout {
                 }
                 // **The renderer chips, one pane at a time**, and the pane is
                 // the whole derivation: which group and which chip are inside
-                // `InspectorPane::select_renderer`, which is the `read` chip's
+                // `InspectorPane::select_renderer`, which is the `params` chip's
                 // arrangement in the Library bay. A press on an overdrawn
                 // deck's chips, or on the one chip of a Set with one renderer,
                 // answers `None` — drawn and not claimed.
@@ -2478,6 +2487,7 @@ impl Readout {
                     &self.view.library,
                     self.view.opened(),
                     self.view.pointed(),
+                    self.view.library_scroll(),
                 )
                 .and_then(|bay| bay.chip(ctx, &self.view.scopes, at))
                 {
@@ -2504,12 +2514,13 @@ impl Readout {
                     &self.view.library,
                     self.view.opened(),
                     self.view.pointed(),
+                    self.view.library_scroll(),
                 )
                 .and_then(|bay| bay.filter(&self.view.holds, self.view.filters(), at))
                 {
                     return (claim, self.narrowed(operation));
                 }
-                // **The `read` chip in the Library bay's foot**, and the bay
+                // **The `params` chip in the Library bay's foot**, and the bay
                 // is derived a third time for the reason `claim` derives it a
                 // third time: each of these is a question about one laid-out
                 // bay and a value held across all three would outlive the
@@ -2526,6 +2537,7 @@ impl Readout {
                     &self.view.library,
                     self.view.opened(),
                     self.view.pointed(),
+                    self.view.library_scroll(),
                 )
                 .and_then(|bay| {
                     bay.read(
@@ -2554,7 +2566,7 @@ impl Readout {
                 // outlive the question it answers.
                 //
                 // **The listing and the marks go in with the point**, exactly
-                // as the listing does for the `read` chip: a star names a Set
+                // as the listing does for the `params` chip: a star names a Set
                 // this program read out of the store, and which rows are
                 // already starred is this side's answer too (ADR-0156). The
                 // write itself is not here — it is a disk write, which is the
@@ -2566,8 +2578,9 @@ impl Readout {
                     &self.view.library,
                     self.view.opened(),
                     self.view.pointed(),
+                    self.view.library_scroll(),
                 )
-                // **The Sets, for the `read` chip's reason one control up**: a star is
+                // **The Sets, for the `params` chip's reason one control up**: a star is
                 // a control over a Set this store holds, and a `history` row is
                 // not one.
                 .and_then(|bay| bay.starred(self.view.sets(), &self.view.starred, at))
@@ -2589,7 +2602,7 @@ impl Readout {
                 // outlive the question it answers.
                 //
                 // **The listing goes in with the point**, exactly as it does
-                // for the `read` chip above: what a row means is a name this
+                // for the `params` chip above: what a row means is a name this
                 // program read out of the store and handed over, and the
                 // console reads no store (ADR-0156).
                 if let Some(taken) = library_bay(
@@ -2598,6 +2611,7 @@ impl Readout {
                     &self.view.library,
                     self.view.opened(),
                     self.view.pointed(),
+                    self.view.library_scroll(),
                 )
                 .and_then(|bay| bay.take(self.view.sets(), at))
                 {
@@ -2618,6 +2632,7 @@ impl Readout {
                     &self.view.library,
                     self.view.opened(),
                     self.view.pointed(),
+                    self.view.library_scroll(),
                 )
                 .and_then(|bay| bay.land(self.view.versions(), self.view.target(), at))
                 {
@@ -2800,16 +2815,27 @@ impl Readout {
             // is a *second* answer to who the event belongs to and it can only
             // widen the first: `claim` gives a wheel to the panel while a drag
             // is in hand, `wheeled` gives it to the panel while the pointer is
-            // over a pane, and neither takes one away.
+            // over a pane or over the Library bay, and neither takes one away.
+            //
+            // **Two regions scroll and `wheeled` is the one place that says
+            // which** — an Inspector pane by index, and the Library bay, which
+            // is the only one of itself (ADR-0312). Each arm calls that
+            // region's own `scroll`; nothing here decides which region a point
+            // is in, for `input`'s own reason: the derivation that draws it is
+            // what answers.
             //
             // **`Acted::Pointed` and not `Acted::Nothing`**, for the reason
             // that variant exists: a console pointer moved and no operation
             // was named. It is what tells `window_event` a frame is owed —
             // a wheel spun against the top of a list is `Nothing` and earns
-            // none.
+            // none, whichever of the two it was over.
             (Pointer::Wheel(by), _) => {
-                if let Some(pane) = wheeled(&mut self.panel, &self.view, at) {
-                    if self.view.scroll_by(pane, by) {
+                if let Some(turned) = wheeled(&mut self.panel, &self.view, at) {
+                    let moved = match turned {
+                        Turned::Pane(pane) => self.view.scroll_by(pane, by),
+                        Turned::Library => self.view.scroll_library_by(by),
+                    };
+                    if moved {
                         did = Acted::Pointed;
                     }
                     claim = Claim::Panel;
@@ -2842,6 +2868,7 @@ impl Readout {
                     &self.view.library,
                     self.view.opened(),
                     self.view.pointed(),
+                    self.view.library_scroll(),
                 )
                 .and_then(|bay| {
                     bay.menu_ask(
@@ -3312,7 +3339,7 @@ impl Readout {
         Acted::Emitted(Some(operation))
     }
 
-    /// **A press on the Library bay's `read` chip**, and it is
+    /// **A press on the Library bay's `params` chip**, and it is
     /// [`Readout::narrowed`]'s shape one row down with one difference: only
     /// one of the two things a press on this chip can mean is an operation.
     ///
@@ -3953,6 +3980,7 @@ impl Readout {
                             &self.view.library,
                             self.view.opened(),
                             self.view.pointed(),
+                            self.view.library_scroll(),
                         ) {
                             Some(bay) => format!(
                                 "bay, {}, {} listed",
@@ -5604,21 +5632,58 @@ impl Aiming {
         self.pointing.re_point(self.slot, &self.at);
     }
 
-    /// **Point the watcher at what it is already looking at, with `edges`
-    /// instead**, and answer whether it is still there to be pointed.
+    /// **Point the watcher at what it is already looking at, with one field
+    /// changed**, and answer whether it is still there to be pointed.
+    ///
+    /// # This is the whole of what a control over a slot's shape is
+    ///
+    /// A [`watch::Aim`] is every field of what a slot *is* — its files, how it
+    /// layers its renderers, which one is folded to, its capacity, its seed and
+    /// its salts, its camera, its wiring, its grants and the Set it is filed
+    /// under. Anything that changes one of them changes what the slot runs, and
+    /// there is exactly one way to say so: restate the rest and send the aim.
+    /// The worker rebuilds off the render thread, the build lands at a frame
+    /// boundary and the watchdog judges it there, on what one frame of that Set
+    /// was measured to cost, like every other build (ADR-0228, ADR-0313,
+    /// ADR-0314). **Nothing is installed and
+    /// nothing on the render thread allocates**, and the values somebody moved
+    /// cross the swap (ADR-0282).
+    ///
+    /// So a *setter on the engine* is not what a control over one of these
+    /// fields waits on, and reading `Set::merge`'s or `Set::source_salts`'
+    /// absent writer as a blocker is reading the wrong half of the sentence:
+    /// the mechanism that exists is the one this instrument already changes
+    /// material with
+    /// ([P-0085](../../../docs/principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md)).
+    ///
+    /// `change` takes the aim rather than the caller building one, because
+    /// [`restated`] is what makes a re-aim safe and it reads `self.at`: a
+    /// caller that assembled its own would be the fourteen-field restatement
+    /// written a second time, which is exactly the mistake `Watch::repointed`
+    /// destructures with no `..` to stop.
     ///
     /// `Err` is a build worker that has ended — the receiver is gone — which is
-    /// a run shutting down. It is reported rather than swallowed: the edge is in
-    /// the run's wiring either way, and *nothing will rebuild* is a different
-    /// fact from *the slot is recompiling*.
-    fn re_aim(&mut self, edges: Vec<karakuri_engine::set::Edge>) -> Result<(), ()> {
-        self.at.edges = edges;
+    /// a run shutting down. It is reported rather than swallowed: the change is
+    /// in this program's aim either way, and *nothing will rebuild* is a
+    /// different fact from *the slot is recompiling*.
+    fn changed(&mut self, change: impl FnOnce(&mut watch::Aim)) -> Result<(), ()> {
+        change(&mut self.at);
         // **Said again although a rewiring moves no file**, which is the point
         // of putting it here rather than at the one call that does: this is one
         // of the two places an aim leaves this program, and a publication that
         // covered only the other would be a rule somebody has to remember.
         self.publish();
         self.aim.send(restated(&self.at)).map_err(|_| ())
+    }
+
+    /// **The run's wiring, said again**, which is [`changed`](Self::changed)
+    /// with the one field a `wire_procedure` moves.
+    ///
+    /// A method rather than the closure at the call site because `rewired` maps
+    /// over slots and a named field is what the reader of that map wants to
+    /// see.
+    fn re_aim(&mut self, edges: Vec<karakuri_engine::set::Edge>) -> Result<(), ()> {
+        self.changed(|at| at.edges = edges)
     }
 
     /// **Point it at something else entirely**, keeping the aim that was sent.
@@ -7636,7 +7701,7 @@ fn spelled(min: &str, max: &str, default: Option<String>) -> String {
 /// reason: reading a Set file and the cards behind it is a disk read, this is
 /// the side of the seam that owns the store, and `karakuri-console` takes none
 /// of the three (ADR-0156). **On the press and never on a frame** (P-0091) —
-/// which is the press on the `read` chip, and the key that moves the cursor
+/// which is the press on the `params` chip, and the key that moves the cursor
 /// while a reading is open, because the reading follows the cursor.
 fn read_reading(view: &mut View, store: &std::path::Path) -> String {
     // **The Sets, which is empty under `history`**: a reading is what a Set
@@ -10707,6 +10772,86 @@ fn played(gfx: &mut Gfx, operation: &Operation) -> Option<String> {
     }
 }
 
+/// **A deck's renderers folded or overdrawn, performed** — the Inspector deck
+/// head's fold pressed, and `None` for every operation that is not one.
+///
+/// # It is [`played`]'s shape with one field instead of every field
+///
+/// A library load re-points a slot at a different Set's files; this re-points a
+/// slot at *the files it is already on*, with the layering changed. Both are
+/// one `Aiming::changed`, both are judged by the same watchdog, and neither
+/// touches the deck — see [`Aiming::changed`], where the argument is, and
+/// `docs/adr/0314-…`, which is the record.
+///
+/// **`written` answers `Silent(NoRecord)`**, exactly as it does for
+/// `Operation::LoadSet`, so the surface that names it is the surface that
+/// performs it and there is nothing for [`apply`] to do. What a session stream
+/// has for a layering is `Record::Merge`, which is a **Set file's** statement
+/// about a Set and carries no slot; nothing in the vocabulary says *the Set in
+/// slot 3 composites*, and inventing a record here would be inventing the
+/// record stream (ADR-0046's rule, met from the panel).
+///
+/// # A press that asks for the state the slot is in is refused rather than sent
+///
+/// Not because asking twice is wrong — [`DeckHead::compositing`] names a
+/// destination, and naming the one you are on is how the anchor beside it
+/// re-anchors — but because *here* it would buy a recompile of the whole slot
+/// and change nothing about the picture, which is a cost paid for nothing
+/// ([P-0091](../../../docs/principles/0091-cost-is-known-before-it-is-paid.md)).
+/// The chip cannot produce one, since it reads the state the frame drew; MIDI,
+/// a key or a model can, the day any of them names this operation.
+///
+/// Every failure is a sentence and none of them moves anything: a slot the deck
+/// has not got, or a build worker that has gone.
+///
+/// **A free function over the aims and not over [`Gfx`]**, which is [`rewired`]'s
+/// arrangement and its reason: the whole of what this decides is the field, the
+/// refusal and the sentence, and none of the three needs a window, a device or
+/// a `Deck` to check. [`played`] beside it takes the program because a load
+/// reads a store and writes the strip's name; this one touches nothing but the
+/// aim.
+fn composited(aims: &mut [Aiming], operation: &Operation) -> Option<String> {
+    let Operation::SetCompositing { deck, compositing } = operation else {
+        return None;
+    };
+    let slot = usize::from(*deck);
+    let letter = deck_letter(*deck);
+    let count = aims.len();
+    let Some(aim) = aims.get_mut(slot) else {
+        return Some(format!(
+            "  composite: {}, and nothing was re-aimed",
+            karakuri_environment::no_such_slot(slot, count)
+        ));
+    };
+    let want = match compositing {
+        true => karakuri_engine::set::Layering::Composite,
+        false => karakuri_engine::set::Layering::Overdraw,
+    };
+    let word = match compositing {
+        true => "composite",
+        false => "overdraw",
+    };
+    if aim.at.layering == want {
+        return Some(format!(
+            "  composite: deck {letter} is already set to {word} its renderers — nothing was \
+             sent, because a re-aim rebuilds the whole slot and this one would land on the same \
+             picture"
+        ));
+    }
+    match aim.changed(|at| at.layering = want) {
+        Ok(()) => Some(format!(
+            "  composite: deck {letter} re-aimed to {word} its renderers — the slot is \
+             recompiling on the worker, and the staging lane says whether the build landed, was \
+             rolled back for cost or did not compile"
+        )),
+        Err(()) => Some(format!(
+            "  composite: deck {letter} will {word} its renderers from the next build on, but \
+             this slot's build worker has ended, so nothing will rebuild and what is on that \
+             deck is still running"
+        )),
+    }
+}
+
 /// **A version put back** — a row of the Library bay's `history` scope landed
 /// on the node it was a version of, and `None` for every operation that is not
 /// one.
@@ -12698,6 +12843,15 @@ impl App {
                     if let Some(line) = played(gfx, operation) {
                         println!("{line}");
                     }
+                    // **The deck head's fold, performed where the load beside
+                    // it is**, and it is the same act: a re-point of a slot's
+                    // watcher, with the layering changed instead of the files.
+                    // `written` answers `Silent(NoRecord)` for it as it does
+                    // for the load, so the surface that names it performs it,
+                    // and nothing here touches the deck. See [`composited`].
+                    if let Some(line) = composited(&mut gfx.engine.aimed, operation) {
+                        println!("{line}");
+                    }
                     // **A version put back, performed where the load beside it
                     // is.** `written` answers `Silent(OnLanding)` for it — the
                     // `Record::Procedure` is written at the swap, by the same
@@ -13870,15 +14024,22 @@ impl ApplicationHandler for App {
                             _ => 1,
                         };
                         self.readout.panel.solve();
-                        let listed = karakuri_console::view::library(
+                        // **Which rows the bay is drawing**, and it is a
+                        // range rather than a count now: the bay scrolls, so
+                        // the rows on screen are a window into the listing
+                        // rather than its first `n` (ADR-0312). The cursor is
+                        // held inside that window — `View::walk` — and the
+                        // wheel is what moves the window.
+                        let drawn = karakuri_console::view::library(
                             self.readout.panel.layout(),
                             &self.readout.view.scopes,
                             &self.readout.view.library,
                             self.readout.view.opened(),
                             self.readout.view.pointed(),
+                            self.readout.view.library_scroll(),
                         )
-                        .map_or(0, |bay| bay.rows);
-                        let moved = self.readout.view.walk(step, listed);
+                        .map_or(0..0, |bay| bay.drawn());
+                        let moved = self.readout.view.walk(step, drawn);
                         // **The reading follows the cursor**, which is
                         // `console.html`'s own rule: *"the arrow keys move the
                         // cursor and the reading moves with it"*, and *"one
@@ -13892,7 +14053,7 @@ impl ApplicationHandler for App {
                         // **And this key still names no operation**, which is
                         // `key_column`'s `("up", &[])` and is the page's to
                         // change rather than this file's (ADR-0198, ADR-0220):
-                        // the asking was the press on the `read` chip and what
+                        // the asking was the press on the `params` chip and what
                         // this moves is that question's *operand*. The
                         // operations page names no key for that row —
                         // `console.html` calls it *"a gap and not a
@@ -19923,7 +20084,10 @@ mod tests {
         let mut view = View::new(Room::Day);
         view.scopes = Scope::ALL.to_vec();
         view.library = vec!["night01".to_owned(), "morph01".to_owned()];
-        assert!(view.walk(1, 2), "the cursor did not move off the first row");
+        assert!(
+            view.walk(1, 0..2),
+            "the cursor did not move off the first row"
+        );
 
         let said = read_reading(&mut view, &root);
         assert!(
@@ -19955,7 +20119,7 @@ mod tests {
         std::fs::remove_dir_all(&root).expect("clean up");
     }
 
-    /// **A press on the `read` chip asks for the Set under the cursor, and a
+    /// **A press on the `params` chip asks for the Set under the cursor, and a
     /// second press puts the reading away.**
     ///
     /// The seam, driven the way an operator drives it: the pointer arrives,
@@ -19973,7 +20137,7 @@ mod tests {
     ///
     /// A CPU test: a `Readout` takes no device.
     #[test]
-    fn a_press_on_the_read_chip_asks_for_the_set_under_the_cursor() {
+    fn a_press_on_the_params_chip_asks_for_the_set_under_the_cursor() {
         let ctx = drawn_once();
         let mut readout = Readout::new(1440.0, 900.0);
         readout.panel.solve();
@@ -19991,9 +20155,10 @@ mod tests {
                 &readout.view.library,
                 readout.view.opened(),
                 readout.view.pointed(),
+                readout.view.library_scroll(),
             )
             .expect("the bay lists its rows")
-            .read_chip(&ctx, readout.view.target());
+            .params_chip(&ctx, readout.view.target());
             Point::new(at.min.x + 2.0, at.center().y)
         };
 
@@ -20087,6 +20252,7 @@ mod tests {
                 &readout.view.library,
                 readout.view.opened(),
                 readout.view.pointed(),
+                readout.view.library_scroll(),
             )
             .expect("the bay lists its rows")
             .row(1);
@@ -20136,6 +20302,7 @@ mod tests {
             &readout.view.library,
             readout.view.opened(),
             readout.view.pointed(),
+            readout.view.library_scroll(),
         )
         .expect("the bay draws its foot")
         .load(&ctx, readout.view.target())
@@ -20171,6 +20338,7 @@ mod tests {
             &readout.view.library,
             readout.view.opened(),
             readout.view.pointed(),
+            readout.view.library_scroll(),
         )
         .expect("the bay lists its rows");
         let menu = bay
@@ -20438,6 +20606,7 @@ mod tests {
                 &readout.view.library,
                 readout.view.opened(),
                 readout.view.pointed(),
+                readout.view.library_scroll(),
             )
             .expect("the bay lists its rows");
             let (_, at) = bay
@@ -20451,7 +20620,7 @@ mod tests {
 
         // **The cursor is somewhere other than the top**, so that the move
         // back to it is a move and not the state it was already in.
-        assert!(readout.view.walk(1, 2), "the cursor did not move");
+        assert!(readout.view.walk(1, 0..2), "the cursor did not move");
         assert_eq!(readout.view.cursor_row(), 1);
 
         let at = chip(&mut readout, Scope::Presets);
@@ -20537,6 +20706,7 @@ mod tests {
                 &readout.view.library,
                 readout.view.opened(),
                 readout.view.pointed(),
+                readout.view.library_scroll(),
             )
             .expect("the bay lists its rows")
             .star(index);
@@ -20588,6 +20758,7 @@ mod tests {
             &readout.view.library,
             readout.view.opened(),
             readout.view.pointed(),
+            readout.view.library_scroll(),
         )
         .expect("the bay lists its rows")
         .row(1);
@@ -20647,7 +20818,7 @@ mod tests {
         assert!(readout.view.select_scope(Scope::MySets));
         // **The cursor is somewhere other than the top**, so that the move back
         // to it is a move and not the state it was already in.
-        assert!(readout.view.walk(1, 2), "the cursor did not move");
+        assert!(readout.view.walk(1, 0..2), "the cursor did not move");
 
         // The box, asked of the derivation that draws it rather than
         // remembered — the rule the whole of `input` is written to.
@@ -20659,6 +20830,7 @@ mod tests {
                 &readout.view.library,
                 readout.view.opened(),
                 readout.view.pointed(),
+                readout.view.library_scroll(),
             )
             .expect("the bay lists its rows")
             .field(which)
@@ -20892,6 +21064,7 @@ mod tests {
                 &readout.view.library,
                 readout.view.opened(),
                 readout.view.pointed(),
+                readout.view.library_scroll(),
             )
             .expect("the bay lists its rows")
             .row(index);
@@ -21029,6 +21202,7 @@ mod tests {
                 &readout.view.library,
                 readout.view.opened(),
                 readout.view.pointed(),
+                readout.view.library_scroll(),
             )
             .expect("the bay lists its rows")
             .row(index);
@@ -21144,6 +21318,7 @@ mod tests {
                 &readout.view.library,
                 readout.view.opened(),
                 readout.view.pointed(),
+                readout.view.library_scroll(),
             )
             .expect("the bay lists its rows")
             .row(index);
@@ -22255,6 +22430,165 @@ mod tests {
             rx.try_recv().is_err(),
             "a refused request re-aimed a watcher"
         );
+    }
+
+    /// **A press on the Inspector deck head's fold re-aims the slot, and the
+    /// rest of that watcher's aim is restated with it.**
+    ///
+    /// The test above one operation along, and it is the same property for the
+    /// same reason: a `watch::Aim` is every field of a slot's identity, so an
+    /// arm that changed the layering and left the rest behind would come back
+    /// with the outgoing slot's fold, capacity, salts, camera and Set — on the
+    /// *next* build rather than on the press, which is the hardest version of
+    /// it to see (ADR-0228, ADR-0314).
+    ///
+    /// **`Aiming::at` is what the second half asserts against.** A press that
+    /// sent an aim and left `at` behind would leave the next re-aim restating
+    /// the layering the run launched with, so the third assertion here is that
+    /// a *second* press comes back to where the first one put it rather than to
+    /// where the run started.
+    ///
+    /// No window, no device and no `Deck` — `composited` is a free function
+    /// over the aims for exactly this.
+    #[test]
+    fn a_composite_press_re_aims_the_slot_and_restates_the_rest_of_its_aim() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let mut aims = vec![Aiming::new(
+            tx,
+            watch::Aim {
+                head: karakuri_environment::compile::Named {
+                    name: Some("grid".into()),
+                    path: std::path::PathBuf::from("A0-grid.kir"),
+                },
+                rest: vec![karakuri_environment::compile::Named::bare("A1-points.kir")],
+                // **Overdrawing**, so the press below asks for the other one
+                // and the assertion is about a field that moved.
+                layering: Layering::Overdraw,
+                live: Some(2),
+                capacity: Some(2048),
+                seed_salt: 9,
+                salts: vec![9],
+                // **A camera nobody's default produces**, so the assertion
+                // below is about a value that was carried rather than one that
+                // happens to coincide with `Orbit::default()`.
+                camera: karakuri_engine::camera::Orbit {
+                    radius: 3.5,
+                    ..karakuri_engine::camera::Orbit::default()
+                },
+                overrides: Vec::new(),
+                published: Vec::new(),
+                bindings: Vec::new(),
+                edges: vec![karakuri_engine::set::Edge {
+                    node: "warp".to_string(),
+                    slot: "shape".to_string(),
+                    to: "field".to_string(),
+                }],
+                authorities: Vec::new(),
+                set: Some("night01".to_owned()),
+            },
+            karakuri_environment::mcp::Slots::unpointed(),
+            0,
+        )];
+
+        let line = composited(
+            &mut aims,
+            &Operation::SetCompositing {
+                deck: 0,
+                compositing: true,
+            },
+        )
+        .expect("the arm answered nothing for the operation it is for");
+        assert!(
+            line.contains("composite") && line.contains("recompiling"),
+            "the answer does not say what was asked for or that the slot rebuilds: {line}"
+        );
+
+        let aim = rx.try_recv().expect("the watcher was not re-aimed at all");
+        assert_eq!(
+            aim.layering,
+            Layering::Composite,
+            "the press did not move the one field it is about"
+        );
+        // **The thirteen that did not move.** Each of these is a symptom
+        // somebody would meet on the next save rather than on this press.
+        assert_eq!(aim.head.name.as_deref(), Some("grid"));
+        assert_eq!(aim.rest.len(), 1);
+        assert_eq!(aim.live, Some(2), "the fold was silently un-selected");
+        assert_eq!(aim.capacity, Some(2048), "the capacity came back as none");
+        assert_eq!(aim.seed_salt, 9);
+        assert_eq!(aim.salts, vec![9], "the salts would repaint every element");
+        // `Orbit` is not `PartialEq`, so the field the camera's own loss shows
+        // in is what this reads — `Watch::camera`'s symptom is a slot back at
+        // `Orbit::default()`, and a radius nobody could have written is what
+        // tells the two apart.
+        assert_eq!(
+            aim.camera.radius, 3.5,
+            "the camera came back at its default"
+        );
+        assert_eq!(aim.edges.len(), 1, "the run's wiring was dropped");
+        assert_eq!(
+            aim.set.as_deref(),
+            Some("night01"),
+            "the press dropped the Set the slot is running, so every version written after it \
+             would be filed under none"
+        );
+        assert_eq!(aims[0].at.layering, Layering::Composite);
+
+        // **Asking for the layering the slot is now in sends nothing**, because
+        // a re-aim rebuilds the whole slot and this one would land on the same
+        // picture (P-0091).
+        let line = composited(
+            &mut aims,
+            &Operation::SetCompositing {
+                deck: 0,
+                compositing: true,
+            },
+        )
+        .expect("the arm answered nothing");
+        assert!(
+            line.contains("already"),
+            "the answer does not say the slot is already set that way: {line}"
+        );
+        assert!(
+            rx.try_recv().is_err(),
+            "a press asking for the state the slot is in recompiled it"
+        );
+
+        // **And the second press restates what the first one left**, which is
+        // what keeping `Aiming::at` buys: back to overdraw, with the layering
+        // read off the aim this program is holding rather than off the launch
+        // pair.
+        composited(
+            &mut aims,
+            &Operation::SetCompositing {
+                deck: 0,
+                compositing: false,
+            },
+        )
+        .expect("the arm answered nothing");
+        let aim = rx.try_recv().expect("the second press re-aimed nothing");
+        assert_eq!(aim.layering, Layering::Overdraw);
+        assert_eq!(aim.set.as_deref(), Some("night01"));
+
+        // A slot this deck has not got, in the one sentence every surface
+        // refuses one in.
+        let why = composited(
+            &mut aims,
+            &Operation::SetCompositing {
+                deck: 3,
+                compositing: true,
+            },
+        )
+        .expect("a slot the deck has not got answered nothing");
+        assert!(
+            why.contains(&karakuri_environment::no_such_slot(3, 1)),
+            "the refusal is not the one every other surface gives: {why}"
+        );
+        assert!(rx.try_recv().is_err(), "a refused press re-aimed a watcher");
+
+        // And it answers `None` for everything that is not its operation, so
+        // the dispatch above can call it on every press.
+        assert!(composited(&mut aims, &Operation::Quit).is_none());
     }
 
     /// **The two flags say where this program's data is, and either may sit on
@@ -23675,12 +24009,6 @@ mod press_handler {
         // different type bound to a different local — which is why the local
         // is part of what is written down and the method alone is not.
         ("the Master bay's out", "master_row(", &["row.grab("]),
-        // **The deck head's three, one Inspector pane at a time.** The pane is
-        // derived per index and the head from the pane, so the derivation
-        // named here is the inner one: `inspector_pane` answers a rectangle
-        // and `deck_head_row` answers the control. The fourth control the row
-        // counts is the scrub's second arrow, which `scrub` answers for both
-        // of.
         // **The Inspector pane heads' name**, and it is the capsule's
         // arrangement at the other end of the same row: the pane is derived
         // per index and the run from the pane, so the derivation named here is
@@ -23702,14 +24030,28 @@ mod press_handler {
             "keep_pill(",
             &["pill.keep("],
         ),
+        // **The deck head's five, one Inspector pane at a time.** The pane is
+        // derived per index and the head from the pane, so the derivation
+        // named here is the inner one: `inspector_pane` answers a rectangle
+        // and `deck_head_row` answers the control. **Five controls and four
+        // calls**: the scrub's two arrows are two of the five and `scrub`
+        // answers for both of them. The fold is the fifth and `compositing` is
+        // its call — a press on it re-aims the slot rather than moving the
+        // mix, which is why the arm that acts on it is beside the library
+        // load's and not beside the sync chip's (ADR-0314).
         (
-            "a deck head's four",
+            "a deck head's five",
             "deck_head_row(",
-            &["head.sync(", "head.reanchor(", "head.scrub("],
+            &[
+                "head.sync(",
+                "head.reanchor(",
+                "head.scrub(",
+                "head.compositing(",
+            ],
         ),
         // **The renderer chips**, and the pane is the whole derivation: which
         // group and which chip are inside `select_renderer`, which is the
-        // `read` chip's arrangement in the Library bay. So the derivation
+        // `params` chip's arrangement in the Library bay. So the derivation
         // named here is the *outer* one, unlike the two rows above it.
         (
             "the renderer chips",
@@ -23765,7 +24107,7 @@ mod press_handler {
             &["bay.filter("],
         ),
         (
-            "the read chip in the Library bay's foot",
+            "the params chip in the Library bay's foot",
             "library_bay(",
             &["bay.read("],
         ),

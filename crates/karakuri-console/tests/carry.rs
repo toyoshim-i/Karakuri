@@ -103,6 +103,7 @@ fn bay(panel: &Panel, view: &View) -> LibraryBay {
         &view.library,
         view.opened(),
         None,
+        0.0,
     )
     .expect("the library bay lists its rows")
 }
@@ -185,8 +186,8 @@ fn a_press_on_a_row_takes_that_rows_set_in_hand() {
     // press there must reach neither. This is the half the listing's own
     // length cannot answer, because there *is* a Set at that index.
     let long: Vec<String> = (0..80).map(|n| format!("set{n:02}")).collect();
-    let tall =
-        library(panel.layout(), &view.scopes, &long, None, None).expect("a bay with rows in it");
+    let tall = library(panel.layout(), &view.scopes, &long, None, None, 0.0)
+        .expect("a bay with rows in it");
     assert!(
         tall.rows < long.len(),
         "the bay drew all {} rows, so there is no undrawn row to ask about",

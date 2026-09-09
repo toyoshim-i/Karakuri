@@ -22,8 +22,16 @@
   them find a row by the op-head div and read its title out of a bare h3
   element, so both are left exactly as they were, spelled the way they always
   were. The tip hangs on the op-name cell around them rather than on either,
-  and the CLI cell of a row with no flag is an empty rt-none span, which is
-  not a badge and is counted as none.
+  and the fifth cell of a row with nothing to put there is an empty rt-none
+  span, which is not a badge and is counted as none.
+
+  The fifth cell is the way in that is none of the four, and on every row but
+  one that is the command line. Quit's is the window's own close: the host
+  answers it, no control on this console draws it, and the four commands read
+  a column by name, so a badge there is counted by none of them. That is the
+  cell being used rather than a sixth column being invented - the key column
+  could not carry a platform accelerator and this is one control on every
+  platform, which is the difference.
 -->
 
 <div class="topbar">
@@ -172,7 +180,7 @@
     <h2>Decks</h2>
     <div class="opgroup">
       <div class="op">
-        <div class="op-name" tabindex="0" data-tip="Which deck the keys are addressed to. A console pointer &mdash; it writes no record, and it is not keyboard focus. The panel draws it as the solid ring round a mixer strip, and `l` over the Library bay is what reads it &mdash; the load button in that bay's foot has a pulldown of its own and is free to be aimed at another deck, which is that bay's mark rather than this one. The four keys are the command line's four, because a deck is a slot number and nothing had to be translated.">
+        <div class="op-name" tabindex="0" data-tip="Which deck the keys are addressed to. A console pointer &mdash; it writes no record, and it is not keyboard focus. The panel draws it as the solid ring round a mixer strip, and `l` over the Library bay is what reads it &mdash; the load button in that bay's foot has a pulldown of its own and is free to be aimed at another deck, which is that bay's mark rather than this one. The four keys are the command line's four, because a deck is a slot number and nothing had to be translated. The MCP badge is empty because a model has no window: this is a surface&#39;s own state, and a route into a surface&#39;s own state is a route into a window the model is not looking at.">
           <div class="op-head"><h3>Select a deck</h3></div>
         </div>
         <span class="op-when">immediate</span>
@@ -180,7 +188,7 @@
           <span class="rt has">panel <b>click a strip</b></span>
           <span class="rt has">key <b>0 1 2 3</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
-          <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
           <span class="rt-none"></span>
         </div>
       </div>
@@ -211,12 +219,12 @@
         </div>
       </div>
       <div class="op">
-        <div class="op-name" tabindex="0" data-tip="Rather than overdrawing them. The flag can only turn it on; a saved Set brings its own answer.">
+        <div class="op-name" tabindex="0" data-tip="Rather than overdrawing them. The flag can only turn it on; a saved Set brings its own answer. &#8853; A press on the deck head re&#8209;aims the slot: the layering is one field of what a watcher is pointed at, so the press restates the other thirteen and sends the aim, and the worker rebuilds the slot off the render thread. It lands at a frame boundary and is judged there, on what one frame of that Set was measured to cost, like an edit or a library load &mdash; and a build whose own frame costs more than one frame may is rolled back on its own. Nothing is installed and nothing allocates on the render thread, and the values somebody moved survive the rebuild. The Staging lane says which of the three happened, on the deck it happened to.">
           <div class="op-head"><h3>Composite a deck's renderers</h3></div>
         </div>
-        <span class="op-when launch">launch</span>
+        <span class="op-when">on a worker</span>
         <div class="rts">
-          <span class="rt plan">panel <b>deck head</b></span>
+          <span class="rt has">panel <b>deck head</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt plan">MCP <b>&mdash;</b></span>
@@ -334,7 +342,7 @@
         </div>
       </div>
       <div class="op">
-        <div class="op-name" tabindex="0" data-tip="These change nothing you can see and write nothing to the stream. They decide what the next fade, crossfade or wipe means.">
+        <div class="op-name" tabindex="0" data-tip="These change nothing you can see and write nothing to the stream. They decide what the next fade, crossfade or wipe means. The MCP badge is empty because a model has no window: this is a surface&#39;s own state, and a route into a surface&#39;s own state is a route into a window the model is not looking at.">
           <div class="op-head"><h3>Choose the wipe shape, the quantum, the length</h3></div>
         </div>
         <span class="op-when">immediate</span>
@@ -342,7 +350,7 @@
           <span class="rt has">panel <b>transition row</b></span>
           <span class="rt plan">key <b>&mdash;</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
-          <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
           <span class="rt-none"></span>
         </div>
       </div>
@@ -580,7 +588,7 @@
         </div>
       </div>
       <div class="op">
-        <div class="op-name" tabindex="0" data-tip="Each comes from a Set file or a declared default. There is no flag for a seed and none for a camera.">
+        <div class="op-name" tabindex="0" data-tip="Each comes from a Set file or a declared default. There is no flag for a seed and none for a camera. &#8853; One row and three operations, and the three are in three different states. &#8853; The engine is no longer what stands in the way of the first two: a capacity and the salts are fields of what a slot&#39;s watcher is pointed at, so a control that changed one would re&#8209;aim the slot and the worker would rebuild it, exactly as the deck head&#39;s composite chip does and exactly as a library load does. Nothing has to be written into a live Set and nothing allocates on the render thread. &#8853; What is left for the capacity and the seeds is the control, and it is not drawn: the console page&#39;s Inspector has no capacity row and no seed row anywhere on it, and a panel that drew one the page does not would be a control with no specification behind it. Two things have to be decided before one is drawn. A capacity is a number in a declared range, which is a parameter row&#39;s track &mdash; and a track dragged is a rebuild a frame, where a parameter row&#39;s is a uniform write, so the obvious affordance is the one thing this instrument refuses to pay. And an aim carries one capacity for the whole slot where this operation addresses a node, so a row drawn under one geometry of a Set that holds two would say something the aim cannot carry. &#8853; The camera is the third and is undecided outright: the vocabulary carries it as `Camera(Undecided)` because there are two live answers &mdash; the built&#8209;in orbit, which a camera record describes and which declares nothing, or an L3 procedure whose params are written like any other node&#39;s &mdash; and no flag and no key on either side to read the answer off.">
           <div class="op-head"><h3>Element capacity, seeds, the camera</h3></div>
         </div>
         <span class="op-when launch">launch</span>
@@ -638,7 +646,7 @@
         </div>
       </div>
       <div class="op">
-        <div class="op-name" tabindex="0" data-tip="One operation, and the scope is what it names &mdash; not a row for each chip, because a scope is added while the program is running and a vocabulary carrying one operation per scope would go short the moment an operator points the bay at a directory. The key steps to the next scope and wraps, which says which by showing you. A folder dragged off the desktop and let go over the panel&#39;s window asks this row too, naming `folder`, and the directory it sets is the bay&#39;s own state rather than a second operation: no map line, no model and no key could ever carry a path, so a row for choosing a directory would be three columns that can never be filled. The console page settles it under `How a folder is chosen, and why the drop is the window&#39;s`. MIDI is empty because this list is the one thing about the library that is not closed.">
+        <div class="op-name" tabindex="0" data-tip="One operation, and the scope is what it names &mdash; not a row for each chip, because a scope is added while the program is running and a vocabulary carrying one operation per scope would go short the moment an operator points the bay at a directory. The key steps to the next scope and wraps, which says which by showing you. A folder dragged off the desktop and let go over the panel&#39;s window asks this row too, naming `folder`, and the directory it sets is the bay&#39;s own state rather than a second operation: no map line, no model and no key could ever carry a path, so a row for choosing a directory would be three columns that can never be filled. The console page settles it under `How a folder is chosen, and why the drop is the window&#39;s`. MIDI is empty because this list is the one thing about the library that is not closed. The MCP badge is empty because a model has no window: this is a surface&#39;s own state, and a route into a surface&#39;s own state is a route into a window the model is not looking at.">
           <div class="op-head"><h3>Choose which scope the library shows</h3></div>
         </div>
         <span class="op-when">immediate</span>
@@ -646,7 +654,7 @@
           <span class="rt has">panel <b>library scopes</b></span>
           <span class="rt has">key <b>e</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
-          <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
           <span class="rt-none"></span>
         </div>
       </div>
@@ -664,12 +672,12 @@
         </div>
       </div>
       <div class="op">
-        <div class="op-name" tabindex="0" data-tip="Every knob with its range and default, the element count, the attributes emitted &mdash; each read off the artifact's own card, so those three fetch no source and compile nothing. What a node's element storage comes to is the figure that is not a card's: it needs every source in the Set fetched and checked before anything can be sized, and it pays for that. The panel draws the three that cost nothing; a model asking over MCP is offered the fourth as well.">
+        <div class="op-name" tabindex="0" data-tip="Every knob with its range and default, the element count, the attributes emitted &mdash; each read off the artifact's own card, so those three fetch no source and compile nothing. What a node's element storage comes to is the figure that is not a card's: it needs every source in the Set fetched and checked before anything can be sized, and it pays for that. The panel draws the three that cost nothing; a model asking over MCP is offered the fourth as well. The panel&#39;s way in is the `params` pill in the Library bay&#39;s foot &mdash; called `read` until 2026&#8209;09&#8209;09, which named what the press does to the file rather than what appears. It is a toggle and is drawn as one, lit while the block is open, and only the opening asks: closing emits nothing and a cursor move re-reads without asking again, so the number of times this row is reached is the number of times somebody asked.">
           <div class="op-head"><h3>Read what one Set holds and declares</h3><span class="op-kind">read</span></div>
         </div>
         <span class="op-when">immediate</span>
         <div class="rts">
-          <span class="rt has">panel <b>library read</b></span>
+          <span class="rt has">panel <b>library params</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt has">MCP <b>read_set</b></span>
@@ -709,12 +717,12 @@
     <h2>Procedures</h2>
     <div class="opgroup">
       <div class="op">
-        <div class="op-name" tabindex="0" data-tip="Addressed by deck, layer and index. Read before writing: the edit is usually small, and what is there is the best guide to the language.">
+        <div class="op-name" tabindex="0" data-tip="Addressed by deck, layer and index. Read before writing: the edit is usually small, and what is there is the best guide to the language. &#8853; Model&#8209;only, and that is a decision rather than an omission: this row and the one under it are not this console&#39;s. A source is only worth reading on a panel next to somewhere to write it, and a source editor is a third letter&#8209;taking flow on a console that has two &mdash; an arrangement&#39;s name, and a Set&#39;s id typed into an Inspector pane head &mdash; each bounded to one path component. A procedure is unbounded, so it is a different flow rather than the same one again, and what the bound was protecting is exactly the difference. The operator&#39;s editor is the file: `--watch` and this panel&#39;s own watchers pick up a save and rebuild the slot on a worker, which is the row two below. MCP has both halves and is where a model does this.">
           <div class="op-head"><h3>Read one node's source</h3><span class="op-kind">read</span></div>
         </div>
         <span class="op-when">immediate</span>
         <div class="rts">
-          <span class="rt plan">panel <b>inspector</b></span>
+          <span class="rt gap">panel <b>&mdash;</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt has">MCP <b>read_procedure</b></span>
@@ -722,12 +730,12 @@
         </div>
       </div>
       <div class="op">
-        <div class="op-name" tabindex="0" data-tip="Checked as you write it; built on a worker and swapped at a frame boundary. If it does not compile, what comes back is the checker's diagnostics against the source.">
+        <div class="op-name" tabindex="0" data-tip="Checked as you write it; built on a worker and swapped at a frame boundary. If it does not compile, what comes back is the checker's diagnostics against the source. &#8853; Model&#8209;only, on the row above&#39;s decision and taken with it: a source editor is a third letter&#8209;taking flow and an unbounded one, and the two this console has are each one path component. The operator writes a procedure in their own editor and the file&#39;s own watcher does the rest &mdash; the same check, the same worker and the same frame boundary this row describes, reached from the row two below rather than from a pane. What the panel does owe is what a write leaves behind, and it has it: the Staging lane says whether the build landed, was rolled back for cost or did not compile, and the Library bay&#39;s history walks the versions back.">
           <div class="op-head"><h3>Check and write one node's source</h3></div>
         </div>
         <span class="op-when">on a worker</span>
         <div class="rts">
-          <span class="rt plan">panel <b>inspector</b></span>
+          <span class="rt gap">panel <b>&mdash;</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt has">MCP <b>write_procedure</b></span>
@@ -761,7 +769,7 @@
         </div>
       </div>
       <div class="op">
-        <div class="op-name" tabindex="0" data-tip="The operator's verdict on a version, and not the watchdog's: a version is on screen because it compiled and held the frame budget, which is a judgement about cost, and whether it is the one to keep is a judgement about taste. It settles the node and clears its row from the staging lane, changes nothing about the picture, and writes no record. The lane's row is addressed by a deck and this names a node, which is why it is not on it.">
+        <div class="op-name" tabindex="0" data-tip="The operator's verdict on a version, and not the watchdog's: a version is on screen because it compiled and held the frame budget, which is a judgement about cost, and whether it is the one to keep is a judgement about taste. It settles the node and clears its row from the staging lane, changes nothing about the picture, and writes no record. The lane's row is addressed by a deck and this names a node, which is why it is not on it. The MCP badge is empty because a model has no window: this is a surface&#39;s own state, and a route into a surface&#39;s own state is a route into a window the model is not looking at.">
           <div class="op-head"><h3>Keep a candidate</h3></div>
         </div>
         <span class="op-when">immediate</span>
@@ -769,12 +777,12 @@
           <span class="rt plan">panel <b>staging</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
-          <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
           <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-name" tabindex="0" data-tip="Every version that compiled is kept under the store's edit history &mdash; gated on compiling rather than on landing &mdash; and this puts one of them back through the same check, build and frame-boundary swap any other write takes. It names a node and not a source, and it does write a record, at the swap. &#8853; Two ways of saying <em>which version</em>, because two surfaces can ask and each can say a different half. The staging lane names a node and means the version its source replaced: one step, never a cursor, and a lane row holds no listing to pick out of. A row of the Library bay&#39;s `history` scope names the version itself, by the name the store filed it under &mdash; which carries the moment and the node together, because that is how a version is filed. &#8853; The panel reaches the second of those. Landing on a row writes that snapshot&#39;s bytes over the node&#39;s working copy under `&lt;store&gt;/scratch/` for the deck the load pulldown names, and the watcher builds it off the render thread, judges it against the budget for thirty frames and rolls it back on its own if it costs too much &mdash; exactly as an edit is judged, and nothing is installed. The version it replaces is kept by the same act, because the rebuild compiles it and compiling is the gate. &#8853; It is refused, naming what is in the way and where the deck is still pointed, on four counts: a deck playing a pair somebody typed rather than a Set, a version that is not one of that Set&#39;s, a node that deck does not hold, and a file that is gone &mdash; `rm -rf history/2026/07` is the whole of the retention policy, so a row whose file an operator deleted by hand is an ordinary state rather than a damaged one. &#8853; Both players keep a history to put back from: a run of either writes every version that compiles under `&lt;store&gt;/history/`, and the panel is where MCP is served from.">
+        <div class="op-name" tabindex="0" data-tip="Every version that compiled is kept under the store's edit history &mdash; gated on compiling rather than on landing &mdash; and this puts one of them back through the same check, build and frame-boundary swap any other write takes. It names a node and not a source, and it does write a record, at the swap. &#8853; Two ways of saying <em>which version</em>, because two surfaces can ask and each can say a different half. The staging lane names a node and means the version its source replaced: one step, never a cursor, and a lane row holds no listing to pick out of. A row of the Library bay&#39;s `history` scope names the version itself, by the name the store filed it under &mdash; which carries the moment and the node together, because that is how a version is filed. &#8853; The panel reaches the second of those. Landing on a row writes that snapshot&#39;s bytes over the node&#39;s working copy under `&lt;store&gt;/scratch/` for the deck the load pulldown names, and the watcher builds it off the render thread, judges it against the budget on what one frame of that Set costs and rolls it back on its own if it costs too much &mdash; exactly as an edit is judged, and nothing is installed. The version it replaces is kept by the same act, because the rebuild compiles it and compiling is the gate. &#8853; It is refused, naming what is in the way and where the deck is still pointed, on four counts: a deck playing a pair somebody typed rather than a Set, a version that is not one of that Set&#39;s, a node that deck does not hold, and a file that is gone &mdash; `rm -rf history/2026/07` is the whole of the retention policy, so a row whose file an operator deleted by hand is an ordinary state rather than a damaged one. &#8853; Both players keep a history to put back from: a run of either writes every version that compiles under `&lt;store&gt;/history/`, and the panel is where MCP is served from.">
           <div class="op-head"><h3>Put a node's previous version back</h3></div>
         </div>
         <span class="op-when">on a worker</span>
@@ -806,7 +814,7 @@
         </div>
       </div>
       <div class="op">
-        <div class="op-name" tabindex="0" data-tip="A folded bay takes no space at all and no divider is drawn beside it; what it had goes to the bay that takes height back in that pane. Its size is remembered, so bringing it back puts it where it was.">
+        <div class="op-name" tabindex="0" data-tip="A folded bay takes no space at all and no divider is drawn beside it; what it had goes to the bay that takes height back in that pane. Its size is remembered, so bringing it back puts it where it was. The MCP badge is empty because a model has no window: this is a surface&#39;s own state, and a route into a surface&#39;s own state is a route into a window the model is not looking at.">
           <div class="op-head"><h3>Fold a bay away</h3></div>
         </div>
         <span class="op-when">immediate</span>
@@ -814,12 +822,12 @@
           <span class="rt has">panel <b>bay head</b></span>
           <span class="rt has">key <b>f g</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
-          <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
           <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-name" tabindex="0" data-tip="The whole left or right pane, with everything in it, and the centre takes the width. Drag the pane&#39;s boundary out past the narrowest the pane goes and it closes; it keeps its outer edge, so the gutter left at the window&#39;s edge is what you drag back in to bring it back &mdash; at its narrowest, whatever it was before. <code>z</code> brings it back at the width it had. The centre is not a third pane and does not fold &mdash; what you want there is <em>solo</em>.">
+        <div class="op-name" tabindex="0" data-tip="The whole left or right pane, with everything in it, and the centre takes the width. Drag the pane&#39;s boundary out past the narrowest the pane goes and it closes; it keeps its outer edge, so the gutter left at the window&#39;s edge is what you drag back in to bring it back &mdash; at its narrowest, whatever it was before. <code>z</code> brings it back at the width it had. The centre is not a third pane and does not fold &mdash; what you want there is <em>solo</em>. The MCP badge is empty because a model has no window: this is a surface&#39;s own state, and a route into a surface&#39;s own state is a route into a window the model is not looking at.">
           <div class="op-head"><h3>Fold a pane away</h3></div>
         </div>
         <span class="op-when">immediate</span>
@@ -827,12 +835,12 @@
           <span class="rt has">panel <b>pane edge</b></span>
           <span class="rt has">key <b>f g</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
-          <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
           <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-name" tabindex="0" data-tip="A folded region has no rectangle, so a pointer cannot reach it, which makes this the one operation here a mouse cannot be the only way into &mdash; except a pane, which keeps its outer edge and is dragged back in. The key brings back everything folded rather than one region, because a region a pointer cannot reach is a region a key has no way to name either.">
+        <div class="op-name" tabindex="0" data-tip="A folded region has no rectangle, so a pointer cannot reach it, which makes this the one operation here a mouse cannot be the only way into &mdash; except a pane, which keeps its outer edge and is dragged back in. The key brings back everything folded rather than one region, because a region a pointer cannot reach is a region a key has no way to name either. The MCP badge is empty because a model has no window: this is a surface&#39;s own state, and a route into a surface&#39;s own state is a route into a window the model is not looking at.">
           <div class="op-head"><h3>Bring back what is folded</h3></div>
         </div>
         <span class="op-when">immediate</span>
@@ -840,12 +848,12 @@
           <span class="rt gap">panel <b>&mdash;</b></span>
           <span class="rt has">key <b>z</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
-          <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
           <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-name" tabindex="0" data-tip="Everything that is not this region, on the way to it, or inside it folds away, and it holds the window. On the program that is the panel folding away and only the picture left, which is also how you capture this window. Undoing it restores what was folded before, including whatever was already folded. The pill names the picture rather than the pointer, and a press with a solo in force undoes it.">
+        <div class="op-name" tabindex="0" data-tip="Everything that is not this region, on the way to it, or inside it folds away, and it holds the window. On the program that is the panel folding away and only the picture left, which is also how you capture this window. Undoing it restores what was folded before, including whatever was already folded. The pill names the picture rather than the pointer, and a press with a solo in force undoes it. The MCP badge is empty because a model has no window: this is a surface&#39;s own state, and a route into a surface&#39;s own state is a route into a window the model is not looking at.">
           <div class="op-head"><h3>Solo a region</h3></div>
         </div>
         <span class="op-when">immediate</span>
@@ -853,12 +861,12 @@
           <span class="rt has">panel <b>solo</b></span>
           <span class="rt has">key <b>s u</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
-          <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
           <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-name" tabindex="0" data-tip="The default arrangement back, in the window you already have. It is the one operation here that forgets, and what it forgets is what the rest of this section keeps: every fold, every boundary you have dragged, the solo and the remembered sizes. It is the special case of putting a saved arrangement back, and the default reaches code rather than a file, so nothing you save can shadow it. A pad could name it, since it addresses nothing.">
+        <div class="op-name" tabindex="0" data-tip="The default arrangement back, in the window you already have. It is the one operation here that forgets, and what it forgets is what the rest of this section keeps: every fold, every boundary you have dragged, the solo and the remembered sizes. It is the special case of putting a saved arrangement back, and the default reaches code rather than a file, so nothing you save can shadow it. A pad could name it, since it addresses nothing. The MCP badge is empty because a model has no window: this is a surface&#39;s own state, and a route into a surface&#39;s own state is a route into a window the model is not looking at.">
           <div class="op-head"><h3>Reset the arrangement</h3></div>
         </div>
         <span class="op-when">immediate</span>
@@ -866,12 +874,12 @@
           <span class="rt has">panel <b>transport</b></span>
           <span class="rt has">key <b>r</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
-          <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
           <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-name" tabindex="0" data-tip="The console as it stands &mdash; every fold, every boundary you have dragged, the solo and both sets of remembered sizes &mdash; filed under a name you pick, and saving over that name again is what you mean by saving it again. The name is the whole of the handle, which is why you type one: a slot moves when you delete the slot above it, and a name does not. A key press cannot type a name and a map line carries none.">
+        <div class="op-name" tabindex="0" data-tip="The console as it stands &mdash; every fold, every boundary you have dragged, the solo and both sets of remembered sizes &mdash; filed under a name you pick, and saving over that name again is what you mean by saving it again. The name is the whole of the handle, which is why you type one: a slot moves when you delete the slot above it, and a name does not. A key press cannot type a name and a map line carries none. The MCP badge is empty because a model has no window: this is a surface&#39;s own state, and a route into a surface&#39;s own state is a route into a window the model is not looking at.">
           <div class="op-head"><h3>Save the arrangement</h3></div>
         </div>
         <span class="op-when">immediate</span>
@@ -879,12 +887,12 @@
           <span class="rt has">panel <b>transport</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
-          <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
           <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-name" tabindex="0" data-tip="The arrangement you kept under that name, in the window you already have. The window is not restored: an arrangement carries the viewport it was saved at and comes back at the one you are looking at now. Two things are refused rather than guessed: a name nothing is filed under, and an arrangement that disagrees with itself, which is refused whole rather than repaired. Nothing at a key press says which one, and a map line carries no name.">
+        <div class="op-name" tabindex="0" data-tip="The arrangement you kept under that name, in the window you already have. The window is not restored: an arrangement carries the viewport it was saved at and comes back at the one you are looking at now. Two things are refused rather than guessed: a name nothing is filed under, and an arrangement that disagrees with itself, which is refused whole rather than repaired. Nothing at a key press says which one, and a map line carries no name. The MCP badge is empty because a model has no window: this is a surface&#39;s own state, and a route into a surface&#39;s own state is a route into a window the model is not looking at.">
           <div class="op-head"><h3>Put a saved arrangement back</h3></div>
         </div>
         <span class="op-when">immediate</span>
@@ -892,7 +900,7 @@
           <span class="rt has">panel <b>transport</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
-          <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
           <span class="rt-none"></span>
         </div>
       </div>
@@ -903,15 +911,15 @@
     <h2>Output and recording</h2>
     <div class="opgroup">
       <div class="op">
-        <div class="op-name" tabindex="0" data-tip="The window is a preview and fits what is drawn into it with the leftover black, and that half has not moved. What has is who decides the size being fitted, and it is decided rather than built. The rule is that a render size belongs to an <em>output</em> and not to the session: every output holds the size it is rendered at, set by you or by the window it goes to, one frame is composited at the largest of the enabled ones and scaled into each so that nothing is ever upscaled, and the session&#39;s canvas degrades to what an output starts at when nothing else says. That is what the Program bay&#39;s size pill reads on the console page. What runs today is still the older rule underneath it: one canvas for the whole run &mdash; a constant in the panel program that no flag reaches, and `--canvas` on the command line, fixed for the run. So resizing this window still moves nothing but the letterbox, and the reason has changed rather than gone: it is that the output which would hold a size of its own is unbuilt, not that a window is refused a say.">
+        <div class="op-name" tabindex="0" data-tip="The window is a preview and fits what is drawn into it with the leftover black, and that half has not moved. What has is who decides the size being fitted, and it is decided rather than built. The rule is that a render size belongs to an <em>output</em> and not to the session: every output holds the size it is rendered at, set by you or by the window it goes to, one frame is composited at the largest of the enabled ones and scaled into each so that nothing is ever upscaled, and the session&#39;s canvas degrades to what an output starts at when nothing else says. That is what the Program bay&#39;s size pill reads on the console page. What runs today is still the older rule underneath it: one canvas for the whole run &mdash; a constant in the panel program that no flag reaches, and `--canvas` on the command line, fixed for the run. So resizing this window still moves nothing but the letterbox, and the reason has changed rather than gone: it is that the output which would hold a size of its own is unbuilt, not that a window is refused a say. The MCP badge is empty because a model has no window: this is a surface&#39;s own state, and a route into a surface&#39;s own state is a route into a window the model is not looking at. &#8853; The key column is empty for <em>Move a boundary</em>&#39;s reason: a size is a pair of viewport pixels and a key press cannot mean one. <code>a</code> was the key this row was designed for and it is not bound here &mdash; the <code>a</code> at the engine&#39;s own window asks for the canvas&#39;s size rather than naming a size, and that keyboard is not this one.">
           <div class="op-head"><h3>Size the window</h3></div>
         </div>
         <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt plan">panel <b>drag</b></span>
-          <span class="rt plan">key <b>a</b></span>
+          <span class="rt gap">key <b>&mdash;</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
-          <span class="rt plan">MCP <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
           <span class="rt has">CLI <b>--size, --canvas</b></span>
         </div>
       </div>
@@ -942,16 +950,16 @@
         </div>
       </div>
       <div class="op">
-        <div class="op-name" tabindex="0" data-tip="Waits up to five seconds for a save still being written, then says how many it left behind rather than letting a hung disk hold the quit.">
+        <div class="op-name" tabindex="0" data-tip="Waits up to five seconds for a save still being written, then says how many it left behind rather than letting a hung disk hold the quit. &#8853; The way out is the window&#39;s own close, and the panel column is empty because this console draws no <code>close</code> control and is not going to: the window manager already has one and the host answers it, which is what the last badge names. &#8853; <code>esc</code> quits today and is going to stop: a ladder of <code>esc</code> presses ends in something irreversible in front of an audience, so quitting becomes the window&#39;s and <code>esc</code> goes back to meaning one step out of whatever has the keyboard.">
           <div class="op-head"><h3>Quit</h3></div>
         </div>
         <span class="op-when">immediate</span>
         <div class="rts">
-          <span class="rt plan">panel <b>close</b></span>
+          <span class="rt gap">panel <b>&mdash;</b></span>
           <span class="rt has">key <b>esc</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt plan">MCP <b>&mdash;</b></span>
-          <span class="rt-none"></span>
+          <span class="rt has">window <b>close</b></span>
         </div>
       </div>
     </div>

@@ -458,6 +458,22 @@ fn sample(variant: &str) -> Operation {
         "RecordSession" => Operation::RecordSession {
             recording: karakuri_operation::Recording::Stop,
         },
+        // **The fold at the right of an Inspector pane's deck head**, and the
+        // one emission in this list whose press is a *rebuild*: the layering
+        // is a field of the aim a slot's watcher is pointed at, so the window
+        // restates the rest of that aim and the worker recompiles the slot off
+        // the render thread, judged against the budget like an edit or a
+        // library load (ADR-0314). None of that is visible from this crate,
+        // which names a destination and a deck and no more.
+        //
+        // **A destination and not a step**, which is the value's own argument:
+        // the chip reads what the deck is doing and asks for the other, so
+        // either payload names the row and this one is the press on a deck
+        // that overdraws.
+        "SetCompositing" => Operation::SetCompositing {
+            deck: 0,
+            compositing: true,
+        },
         // **The renderer chips in the Inspector's node groups**, and one
         // operation is one row however many chips name it — the same
         // arrangement `SetSync` and `SetTransition` are in. A press on a deck

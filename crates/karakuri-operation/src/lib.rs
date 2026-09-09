@@ -1710,7 +1710,15 @@ operations! {
     /// The window is a preview and has no say in what is drawn: the canvas is
     /// fixed for the run, and the window fits it with the leftover black.
     ///
-    /// The `a` key is a translation that asks for the canvas's own size.
+    /// **`karakuri-cli`'s `a` is a translation that asks for the canvas's own
+    /// size, and it is that program's keyboard rather than the instrument's**
+    /// (ADR-0220). The instrument binds no key here and the row's key column
+    /// is a `gap`: a size is a pair of viewport pixels, and a key press cannot
+    /// mean one — which is [`MoveBoundary`](Operation::MoveBoundary)'s
+    /// sentence read at the window instead of at a divider. `a` naming the
+    /// canvas rather than a size is the way round that, and it is a *fit*
+    /// rather than a size somebody said.
+    ///
     /// **`--canvas` is on this row's CLI badge and is not this operation** —
     /// see the report.
     SizeWindow { width: u32, height: u32 } => "Size the window",

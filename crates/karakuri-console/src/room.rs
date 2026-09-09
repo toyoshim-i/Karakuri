@@ -872,7 +872,7 @@ pub mod size {
     /// neither while this row and that one were undrawn.
     pub const LIB_FOOT_H: f32 = LIB_FOOT_PAD_Y * 2.0 + LIB_FOOT_SIZE * LINE + HAIRLINE;
 
-    /// `.lib-foot`'s `gap: 8px`, between the count, the `read` chip and the
+    /// `.lib-foot`'s `gap: 8px`, between the count, the `params` chip and the
     /// `load` pill. It is the row's only spacing that is not padding: `.sep`
     /// takes whatever is left over, so this is what separates the two capsules
     /// at the right-hand end of the row and nothing else.

@@ -337,7 +337,10 @@ number; new records continue from the end.
 | [ADR-0309](0309-a-slots-files-are-published-where-its-aim-is-sent-and-the-server-reads-them-live.md) | A slot's files are published where its aim is sent, and the server reads them live | 2026-09-08 | accepted |
 | [ADR-0310](0310-a-source-can-say-it-refused-and-the-lane-draws-it.md) | A source can say it refused, and the lane draws it | 2026-09-08 | accepted |
 | [ADR-0311](0311-a-row-menu-loads-a-set-onto-a-named-deck-and-saves-it-through-the-systems-own-dialog.md) | A row menu loads a Set onto a named deck, and saves it through the system's own dialog | 2026-09-09 | accepted |
+| [ADR-0312](0312-the-params-pill-is-a-toggle-and-the-library-bay-scrolls.md) | The `params` pill is a toggle, and the Library bay scrolls | 2026-09-09 | accepted |
 | [ADR-0313](0313-a-candidate-is-judged-on-its-own-cost-and-the-decks-period-is-a-deck-level-alarm.md) | A candidate is judged on its own cost, and the deck's period is a deck-level alarm | 2026-09-09 | accepted |
+| [ADR-0314](0314-a-control-that-moves-a-field-of-the-aim-re-aims-the-slot-and-the-rebuild-is-the-write.md) | A control that moves a field of the aim re-aims the slot, and the rebuild is the write | 2026-09-09 | accepted |
+| [ADR-0315](0315-a-model-has-no-window-so-the-twelve-surface-rows-mcp-badges-are-gap.md) | A model has no window, so the twelve surface rows' MCP badges are gap | 2026-09-09 | accepted |
 
 ## Retired numbers
 
