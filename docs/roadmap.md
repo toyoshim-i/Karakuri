@@ -417,6 +417,10 @@ renderers* landed and *Element capacity, seeds, the camera* stopped being blocke
 reason that is worth reading before anything else here: **two of the bullets below were wrong, and
 they were wrong in the same way**
 ([ADR-0314](adr/0314-a-control-that-moves-a-field-of-the-aim-re-aims-the-slot-and-the-rebuild-is-the-write.md)).
+Then that row's remaining undecided third was answered and turned out to be no operation at all
+([ADR-0318](adr/0318-the-built-in-cameras-three-placement-numbers-are-parameter-rows.md)): the
+built-in camera's three placement numbers are parameters of its node, so the Inspector draws them
+as parameter rows and the vocabulary lost an arm rather than gaining a payload.
 
 **A layering, a capacity, a seed and the salts are not writes and never wanted a setter.** They are
 fields of `watch::Aim` — the description a slot's watcher is pointed at — so a control that moves
@@ -458,10 +462,16 @@ each records.
   the obvious affordance is the one thing P-0091 refuses. And `Aim::capacity` is one `Option<u32>`
   for the whole slot where `Property::Capacity` addresses a node, which is ADR-0228's own recorded
   limit, so a row drawn under one geometry of a pairing Set would say something the aim cannot
-  carry. The camera is the third and is undecided outright: `Property::Camera(Undecided)`, because
-  the vocabulary has no numbers for a control to send and nobody has asked the maintainer which of
-  the two live answers it is. The row keeps its `plan` badge and its tip now names all three states,
-  because one row cannot carry a badge that is two-thirds anything.
+  carry. **The camera is no longer the third**, and it is not this row's any more
+  ([ADR-0318](adr/0318-the-built-in-cameras-three-placement-numbers-are-parameter-rows.md),
+  2026-09-09, on the maintainer's 「Orbit の 3 値をパラメータ行として」). The two live answers were
+  never two: the built-in orbit's `radius`, `speed` and `height` are parameters of the camera node,
+  the engine declaring them where a `.kir` would, so *Write a parameter* is the operation, the
+  Inspector draws three faders under the `orbit` group, a knob is learned against their positions,
+  a `bind` drives one, a `Record::Ride` replays one and a rebuild carries one — **and not a line of
+  `karakuri-console` changed**, because the pane is built from `Set::published`. `Property::Camera`
+  is deleted. The row keeps its `plan` badge, which is now two-thirds of one thing rather than
+  three-thirds of three: what it waits on is the capacity control and the seed control, both above.
 
 **Three more this bay owes, and none of them is a row.** They were recorded, verified and left in
 prose, which is how a bay's exit — a grep over one column — could be met while its pane drew
@@ -558,7 +568,8 @@ and the two key badges that were the remainder of it left with the two rows abov
 **The bay's prose, as tooltips.** Eight notes: *Inspector*, *A control that names no one node*,
 *The deck head, and why it is in the inspector*, *Who is holding a control*, *A knob is bound to a
 deck, not to a Set*, *Two focuses, and they do not look alike*, *Authority is per node*, and *The
-camera is a node, and it is the one with nothing to turn*. Only the focus half of *Two focuses* is
+camera is a node, and three of its six numbers are rows* — retitled with ADR-0318, which is what
+put the rows there. Only the focus half of *Two focuses* is
 this bay's; the selection half is the mixer's, above. This is the largest body of prose on the page
 and the bay the mock has tipped most: the deck head, the wildcard group, the authority chips, the
 renderer row and *take back* each carry one, and the parameter rows and their faders do not.
@@ -700,21 +711,26 @@ and this lane's control would reach it with the other arm.
 is wired. What the lane still omits is the node address, `origin`, the timestamp and the head's
 count, each named at the code and none of them a row on the page.
 
-**Two findings this lane exists for, and one of them has a row now.** After
-`Event::RolledBack` the watchdog puts the previous *Set* back on screen and **does not put the
-previous file back**, while the watcher re-reads every file on every rebuild — so the picture is
-the old version, the disk is the over-budget one, and the next unrelated save swaps it in again.
-**Rarer since 2026-09-09 and not fixed by it**: a candidate is judged on its own measured cost
-rather than on the deck's frame interval, so far fewer versions are thrown out at all
-([ADR-0313](adr/0313-a-candidate-is-judged-on-its-own-cost-and-the-decks-period-is-a-deck-level-alarm.md))
-— and every one that still is leaves the same disagreement between the picture and the disk.
-**The rollback itself is said in two places now** — the lane draws a `rolled back` row and the
-transport's health capsule draws the same word — so what is unsaid is narrower than this used to
-claim: that the *file* still holds the version that was refused, and that the next save of anything
-in that slot brings it back. And **a checker refusal reached no row at all** until 2026-09-08: a
-`.kir` the checker turned down produced no `Request`, so the disagreement an operator most wants
-to see was said on stderr. Closing it was the engine change this said it was — `Source::poll`
-having no way to say *I refused*.
+**Two findings this lane exists for, and both have rows now.** The first was the budget's verdict:
+after `Event::RolledBack` the watchdog put the previous *Set* back on screen and **did not put the
+previous file back**, while the watcher re-reads every file on every rebuild — so the picture was
+the old version, the disk was the over-budget one, and the next unrelated save swapped it in again.
+**That is no longer the shape of it, and the change was made because the old shape was
+unreadable.** The maintainer, 2026-09-09: *"rolled backが分かりにくい。事情を知らないとバグってるように
+しか見えない"*. A candidate over the budget now **stays in the slot and the slot stops updating** —
+`Event::Overloaded`, no step and no draw, the target holding the last frame it made — and nothing is
+put back
+([ADR-0316](adr/0316-an-over-budget-candidate-stays-in-the-slot-and-the-slot-stops-updating.md)).
+**So the disagreement this half was about is gone**: the file holds the version that is in the slot,
+which is the normal case rather than a hidden one, and what needs saying is that the slot is *not
+running it*. **Four surfaces say that** — this lane's `overloaded` row, the transport's health
+capsule, that deck's preview caption under the still, and the CLI's status line — and the caption is
+the one this bay does not own and could not do without: a held frame of good material looks like
+material. What is left unsaid here is the same thing the other rows leave unsaid, the *node*, which
+is item 4. And **a checker refusal reached no row at all** until 2026-09-08: a `.kir` the checker
+turned down produced no `Request`, so the disagreement an operator most wants to see was said on
+stderr. Closing it was the engine change this said it was — `Source::poll` having no way to say
+*I refused*.
 
 **The second of the two is closed.** `Source::poll` answers `Polled::Build` or
 `Polled::Refused`, the deck reports the second as `swap::Event::SourceRefused` beside its four
@@ -728,11 +744,14 @@ for the verdict — is gone with the trial itself
 ([ADR-0313](adr/0313-a-candidate-is-judged-on-its-own-cost-and-the-decks-period-is-a-deck-level-alarm.md)),
 and a refusal now reaches the lane on the first frame boundary after the worker sends it.
 
-**The first is an item in the list above rather than prose, and it is a *Live safety* item as
-well.** It has no row, so this bay's exit — the two rows' badges — can be met with it still true,
-and a picture that disagrees with the disk while nothing says so is the one thing that section
-refuses. This said *both* and *blockers 7 and 8* until 2026-09-08. The lane exists to say both of
-these things and it now says one of them.
+**The first is closed too, and it closed by the mechanism changing rather than by a row.** This
+said *both* and *blockers 7 and 8* until 2026-09-08, and *one of them* until 2026-09-09: the
+disagreement it named — the picture on the old version and the disk on the refused one, with nothing
+saying so — cannot arise any more, because nothing puts a version back
+([ADR-0316](adr/0316-an-over-budget-candidate-stays-in-the-slot-and-the-slot-stops-updating.md)).
+What replaces it as a *Live safety* item is narrower and is met: a slot that has stopped is a picture
+that is not moving, and four surfaces say which slot and why. The lane exists to say both of these
+things and it says both.
 
 **The bay's prose, as tooltips.** The staging half of *Library, and staging under it* — a candidate
 waits whether it came from you or from an agent, and a rejected one costs nothing — and *The staging
@@ -742,57 +761,60 @@ so every tip in this bay is written from nothing.
 
 #### M5.8 — Master
 
-**Rows. Four, and one of them is met.** *Master out* carries a `has` panel badge; *Feedback*,
-*Bloom* and *RGB shift* carry `plan`. This said three, which is the count of what is left rather
-than of what the bay holds, and it hid that the exit is three of four rather than three of three.
+**Rows. Four, and all four are met.** *Master out*, *Feedback*, *Bloom* and *RGB shift* each carry
+a `has` panel badge. This item said three rows and then four; the count that matters now is that
+none of them is `plan`.
 
-**Exit.** No `plan` badge in the panel column of this bay's rows on
+**Exit. Met.** No `plan` badge in the panel column of this bay's rows on
 [every operation](manual/operations.html).
 
-**Blocked on. All three, on a decision nobody has taken — and this file named a different thing.**
-It said *"an L5 kind the IR does not have"*. The fact is true and it is not the blocker: three
-sources say the master chain is **fixed built-in presets** rather than written procedures — the
-operations page (*"the chain is fixed: the master chain is presets, all of them loaded, in the order
-feedback, bloom, rgb shift"*), the vocabulary, and the mock's own dash for an effect nobody has
-given a value. And `docs/ir-spec.md` says outright why `L5` is absent, as **a condition rather than
-a principle**: a `kind` says what a procedure *lowers to*, the compositing is fixed, so the one L5
-that exists has no code to lower and `crate::node::Merge` is the node. *"Admitting frame effects is
-giving L5 a writable form, and a written form is code to lower. The day one is written this
-paragraph's condition fails and `L5` is a kind."*
+**Blocked on. Nothing — the decision was taken on 2026-09-09 and it is
+[ADR-0317](adr/0317-the-master-chain-is-three-fixed-passes-and-feedback-reads-either-cut.md).**
+The blocker was *which of two things the chain is*: three fixed passes in the engine, or a writable
+L5. **It is three fixed passes** — feedback, then bloom, then rgb shift, between the mix's write and
+the present pass's read, each with parameters the vocabulary names, no `kind L5`, no language
+change. `crates/karakuri-engine/src/master.rs` and `shaders/master.wgsl` are the whole of it, on
+`crate::node::Merge`'s pattern. `docs/ir-spec.md`'s paragraph on why `L5` is absent is annotated
+rather than overturned: its condition — a `kind` says what a procedure *lowers to*, and these passes
+declare nothing and lower nothing — still holds, and a writable L5 is deferred rather than refused.
 
-**So the blocker is which of those two the chain is**, and nothing in the repository takes it. Three
-fixed passes between the composite's write and the present pass would need no language change at
-all — an engine change on the pattern `crate::node::Merge` and the built-in orbit camera already
-set. A writable L5 buys operator-written frame effects and closes this bay's `+ add` as well.
-ADR-0227 declines to name a chain's contents until one exists, and `ir-spec.md` treats the mixer and
-a master effect being L5s as **the proposal**, closing *"nothing of that is built, and this section
-is not a plan for it."* **A blocker that dissolves on a reading rather than on any work is one
-nobody can check**, which is what this entry was.
+***Feedback*'s second question is answered the same way, and it was the sharper one.** Which cut of
+the previous frame it reads is **both, selectable**: the frame as the mix wrote it, or the chain's
+own exit, chosen by a parameter of the pass. That is the *decisions nobody has taken* entry
+**Which cut of the previous frame a feedback effect reads, and what holding it costs** — taken, and
+its cost argument honoured rather than dodged: a cut that is read has to be held, so exactly one
+frame-sized target is retained and the cut nothing reads is not copied. What that entry predicted —
+that the selection *recomposes the pipeline* — is what it turned out to be, at the size of one
+`copy_texture_to_texture` at a different point in the frame rather than a graph the language builds.
+The entry is answered and the section that holds it is not this item's to edit.
 
-***Feedback* waits on a second thing either way** — which cut of the previous frame this one reads,
-which is in *The decisions nobody has taken* with its cost argument, and which `ir-spec.md` says a
-writable L5 would not answer: *"feedback is the one effect that does not follow."* *Bloom* and *RGB
-shift* carry `params: Undecided`, and so does *Feedback* — this said only the two, which reads as
-though the third had knobs.
+**What the bay is now.** The `out` fader, and three effect rows under it: each a dot that is lit
+when the pass is in the frame, the word, a track and a figure, with a `mix` / `exit` chip on the
+feedback row. `karakuri_console::view::master` derives all four and `input::PROBES` claims five
+controls here. **An amount of zero records no pass at all**, so the row goes dim, the pass costs
+nothing, and with all three at zero the frame is bit for bit the frame this program drew before the
+chain existed — `tests/master.rs`'s `a_chain_at_zero_is_the_frame_with_no_chain` holds it.
 
-The bay is an `out` fader, a head and the `mcp` class pill the head now carries. The fader is built
-end to end, and the chain the bay is named for is these three rows. **The far end of that chain is
-drawn and is another bay's**: the tone mapper's `exposure` is a control in the transport row, which
-is ADR-0224's consequence honoured to the letter, and a reader of this section alone would not learn
-it.
+**What it costs, because a change to the frame path names a number.** Four frame-sized
+`Rgba16Float` targets, allocated at build and at resize and never when a parameter moves: 28.1 MB at
+1280x720, which is what a full deck of four slots costs. Per output texel and only for a pass that
+runs: feedback 2 loads and a multiply-add; bloom 19 fetches over two passes; rgb shift 1 load and 2
+samples; and one frame-sized copy when feedback is on. **Measured** by
+`examples/master_cost.rs` on this machine (Metal, Apple M4 Pro, 2026-09-09), over an empty
+submission's own 0.087 ms: feedback 0.38 ms at the mix cut and 0.41 ms at the exit cut, bloom
+0.80 ms, rgb shift 0.34 ms, all three together 1.14 ms — 6.8% of a 60 Hz frame.
 
-**The bay's prose, as tooltips.** *Master, and the two levels that are not one level* — **four
-paragraphs, not one**: what `out` is the level of, what `exposure` is the level of, that the chain
-between them is what makes them two and that with nothing in it they are today the same number; then
-that a hand moves this fader now and it is the only route it has; then why `out` is a handled fader
-and `exposure` a handleless track. The mock tips the `out` fader and the `mcp` pill. **This item is
-delivered.** It said the three chain rows, `+ add` and the footnote carried no tip; every one of
-them does. What was actually wrong was inside the three chain rows' tips, and `71419c2` corrected
-it: they described a chain that runs — *"Feedback, at 0.34"*, *"what a control on this row moves"*,
-*"it runs with the two above it"* — where nothing of the chain is built (ADR-0227). Each now says
-the figure is the mock's, the parameters are undecided, a press does nothing today, and what a press
-would be for. The footnote and the `out`, `mcp` and `+ add` tips were already right and are
-untouched. Their prose is on the operations page, one row each, and none of it waited on the chain.
+**The far end of that chain is drawn and is another bay's**: the tone mapper's `exposure` is a
+control in the transport row, which is ADR-0224's consequence honoured to the letter, and a reader
+of this section alone would not learn it.
+
+**The bay's prose, as tooltips.** *Master, and the two levels that are not one level* — **seven
+paragraphs, not four**: what `out` is the level of and what `exposure` is; that the cost of saying
+so before the chain existed has been paid off; what the chain is, said once; that feedback is the
+one pass that reads a frame instead of a value; that a hand moves the fader and it is the only route
+it has; that the three rows below it end in one record where the fader ends in another; and why
+`out` is a handled fader and `exposure` a handleless track. The three chain rows' tips were corrected in `71419c2` to say the chain was not
+built and are rewritten again to say what a press does. **This item is delivered.**
 
 #### M5.9 — Sequencer
 
@@ -833,15 +855,25 @@ what is left is building it.
   drives; the schedule is refused instead and the refusal names the lane. Engine-facing, and it may
   land after the first slice.
 
-**What the first slice builds**: a new crate `crates/karakuri-pattern` with `Pattern`, `Lane` and
-`StepMode` and no serialiser; `LaneTarget` and `StepMode` in `karakuri-operation` and the five
-payloads with them; `view::Sequencer` with the ruler, the playhead, the rows and the head's pills;
-the cell press and the mute as probes; the poll in `crates/karakuri/src/main.rs`; and **one lane
-driving deck A's fader**, which is what turns *Toggle a step* and *Mute a lane* `has`.
+**The first slice landed on 2026-09-09**, and **three of the five badges are `has`**: *Toggle a
+step* (`lane cell`), *Mute a lane* (`lane label`) and *Choose what a step is worth*
+(`grid mode pill`). What it is: a new crate `crates/karakuri-pattern` with `Pattern`, `Lane`,
+`Banks` and `Playhead` and no serialiser; `LaneTarget` and `StepMode` in `karakuri-operation` and
+the five payloads with them; `view::Sequencer` — the mode pill, the `step n of m` readout, the
+ruler, the playhead and a row per lane — with the cells, the labels and the pill as one probe; the
+per-frame poll in `crates/karakuri/src/main.rs`; the bay's declaration (ADR-0283, the first whose
+deadline is a beat subdivision); and **one lane over deck A's fader**, seeded muted, so unmuting it
+is the demonstration and the window does not hold deck A at zero from the moment it opens.
 
-**What stays owed after it**, each with a control nobody has drawn yet: `PointLane` (a target
-chooser), `SetPatternGrid` (the eighth-mode drawing), `SelectPattern` (more than one bank), the
-`Param` lane arm, the store directory and the file format with saving, and ADR-0323's refusal.
+**And the five `written` answers moved to `Silent(Surface)`**, which took the MCP column with them:
+all five read `gap` there under ADR-0315's sentence, and `gate.rs` is unchanged. That answers the
+bay head's open question — the column gave way and the class stays shut.
+
+**What stays owed**, each with a control nobody has drawn yet: *Point a lane at what it drives* (a
+target chooser, and a bay body the arena can grow), *Choose which pattern the sequencer plays* (bank
+pills in the bay head, which need a head that can say which pill is armed), the `Param` lane arm,
+the store directory and the file format with saving, and ADR-0323's refusal — whose lookup is built
+and whose caller is not, so **a live lane on deck A's fader still cancels a fade onto deck A**.
 
 **And one item this entry did not name.** **A channel fader does not say who is holding it** — the
 mock draws `seq 1` as a source on a parameter row and nothing of the kind on a strip, so three lanes
@@ -1721,14 +1753,25 @@ Not milestones. These degrade silently if not defended at every step.
   asserted by proxy**, where the audio thread has a counting global allocator behind it: the
   render path's claim rests on where allocation is *possible*, not on a harness that would
   catch it
-- Watchdog on new pipelines with automatic rollback. **What it judges was wrong until 2026-09-09**:
-  it compared the deck's whole frame interval — every slot's step and draw, the composite, the cell
-  presents, the picture, the `egui` pass and the vsync wait — so one slot's candidate was thrown out
-  for the other three slots' cost plus the console's, and a Set whose own frame costs 9.58 ms was
-  rolled back on a number that read 33 ms. A candidate is judged on **its own** measured cost now,
-  against one frame of the display, with nothing about the other slots on either side; the deck's
-  period is still measured and is a deck-level alarm that warns and never acts
-  ([ADR-0313](adr/0313-a-candidate-is-judged-on-its-own-cost-and-the-decks-period-is-a-deck-level-alarm.md))
+- Watchdog on new pipelines, which **stops the slot rather than rolling back**. Both halves of it
+  moved on 2026-09-09. **What it judges was wrong**: it compared the deck's whole frame interval —
+  every slot's step and draw, the composite, the cell presents, the picture, the `egui` pass and the
+  vsync wait — so one slot's candidate was thrown out for the other three slots' cost plus the
+  console's, and a Set whose own frame costs 9.58 ms was rolled back on a number that read 33 ms. A
+  candidate is judged on **its own** measured cost now, against one frame of the display, with
+  nothing about the other slots on either side; the deck's period is still measured and is a
+  deck-level alarm that warns and never acts
+  ([ADR-0313](adr/0313-a-candidate-is-judged-on-its-own-cost-and-the-decks-period-is-a-deck-level-alarm.md)).
+  **And what it does about it was unreadable**: a rollback restored the previous *Set* and could not
+  restore the previous *file*, so the disk went on holding the refused version and the next
+  unrelated save reinstalled it — *"事情を知らないとバグってるようにしか見えない"*. The verdict against
+  is now `overloaded`: the version stays in the slot, the slot stops updating — no step, no draw, its
+  target holding the last frame it made — and the lane, the health capsule, that deck's cell caption,
+  the CLI status line and `swap_outcome` all say so. Nothing is put back and nothing ends it on its
+  own; the three ways out are the operator's fader, an earlier version landed out of the history, and
+  the next build
+  ([ADR-0316](adr/0316-an-over-budget-candidate-stays-in-the-slot-and-the-slot-stops-updating.md)).
+  This is `P-0094`'s *be loud* in place of its *undo*, taken because the undo was not one
 - The show continues when the generation API is unavailable. This becomes meaningful once
   there is a pool to fall back on, so it is a promise from M4 onward rather than from M1
 - Graceful degradation for every input source, with confidence driving how conservative

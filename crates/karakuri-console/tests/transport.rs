@@ -1038,7 +1038,7 @@ fn the_health_capsule_draws_the_verdict_and_nothing_where_there_is_none() {
 
     for (stage, word) in [
         (Stage::Landed, "landed"),
-        (Stage::RolledBack, "rolled back"),
+        (Stage::Overloaded, "overloaded"),
         (Stage::Refused, "refused"),
         (Stage::NotCompiled, "did not compile"),
     ] {
@@ -1053,7 +1053,7 @@ fn the_health_capsule_draws_the_verdict_and_nothing_where_there_is_none() {
         );
         // And exactly that one of the three, which is what says the match is
         // a mapping rather than a constant that happens to be right once.
-        for other in ["landed", "rolled back", "refused", "did not compile"] {
+        for other in ["landed", "overloaded", "refused", "did not compile"] {
             assert_eq!(
                 other == word,
                 drawn.iter().any(|line| line == other),
@@ -1068,7 +1068,7 @@ fn the_health_capsule_draws_the_verdict_and_nothing_where_there_is_none() {
         ..mock()
     });
     let quiet = words(&mut view, &mut panel);
-    for word in ["landed", "rolled back", "refused", "did not compile"] {
+    for word in ["landed", "overloaded", "refused", "did not compile"] {
         assert!(
             !quiet.iter().any(|line| line == word),
             "nothing has been written and the row says `{word}`: {quiet:?}"
@@ -1094,7 +1094,7 @@ fn the_health_capsule_draws_the_verdict_and_nothing_where_there_is_none() {
 /// this console's *live in the good sense* — the wash the audio-in pill wears
 /// with an input open. A rollback wearing it would say the opposite of what it
 /// means, and nothing about the *word* would be wrong, which is why this is
-/// asserted on the fill and not on the text: `landed` and `rolled back` are
+/// asserted on the fill and not on the text: `landed` and `overloaded` are
 /// both spelled correctly by a version that washes both.
 #[test]
 fn the_capsule_is_washed_only_where_the_build_is_on_screen() {
@@ -1105,7 +1105,7 @@ fn the_capsule_is_washed_only_where_the_build_is_on_screen() {
 
     for (stage, washed) in [
         (Stage::Landed, true),
-        (Stage::RolledBack, false),
+        (Stage::Overloaded, false),
         (Stage::Refused, false),
         // The checker turned the source down, so nothing was built and the
         // picture did not move — which is as far from *this is working* as a

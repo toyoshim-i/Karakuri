@@ -1,19 +1,30 @@
 ---
 id: 0256
 title: A swap lands on a frame boundary, and an over-budget Set rolls back without being asked
-status: accepted
+status: superseded
 date: 2026-09-05
 supersedes: []
-superseded_by: []
+superseded_by: [0316]
 principles: [0094]
 tags: [engine, live]
 ---
 
 # A swap lands on a frame boundary, and an over-budget Set rolls back without being asked
 
-> **Annotated 2026-09-09: the swap still lands on a frame boundary and an over-budget Set still
-> rolls back on its own; what "over budget" is measured with has changed, and three paragraphs
-> below describe a mechanism that no longer exists.**
+> **Superseded 2026-09-09 by
+> [ADR-0316](0316-an-over-budget-candidate-stays-in-the-slot-and-the-slot-stops-updating.md): an
+> over-budget candidate is no longer rolled back at all.** It stays in the slot the operator put it
+> in and the slot stops updating — no step, no draw, its target holding the last frame it made — and
+> the displaced Set is retired rather than parked. **The half of the title that survives is the
+> first**: a swap still lands only on a frame boundary, and pipelines are still double-buffered and
+> exchanged between frames. Everything below about *taking a candidate back out* and about a
+> *parked* outgoing Set is history. The reason is that the undo was never one: a rollback restored
+> the picture and not the file, so the disk went on holding the refused version and the next
+> unrelated save reinstalled it, with nothing saying so — *"事情を知らないとバグってるようにしか見えな
+> い"*.
+>
+> **Annotated 2026-09-09: what "over budget" is measured with had already changed, and three
+> paragraphs below describe a mechanism that no longer exists.**
 > [ADR-0313](0313-a-candidate-is-judged-on-its-own-cost-and-the-decks-period-is-a-deck-level-alarm.md)
 > is the record. The decision above is intact — the two clauses this record is named for are what it
 > keeps.

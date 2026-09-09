@@ -56,8 +56,13 @@ per-slot file names are printed at startup**, not the files you named on the com
 writes to those; see [Where your work lives](#where-your-work-lives). The new procedure is
 compiled on a worker thread and swapped in between two frames. Then it is **judged**, in the same
 frame it landed on: the worker measured what one frame of that Set costs while it was building it,
-and if that number is over the budget the candidate is dropped and the outgoing Set is live again at
-exactly the `t` it was parked at. A file that does not compile prints its diagnostics and never
+and if that number is over the budget the candidate **stays in the slot and the slot stops
+updating**: it takes no step and draws no frame, so its target holds the last image it made and the
+deck goes on mixing that. The word for it is `overloaded`, and it is said in three places — the
+status line, the staging lane and that deck's own caption. **Nothing puts anything back for you.**
+Three things end it, and all three are yours: pull that slot's fader to zero, land an earlier
+version out of the history, or save something that fits — the freeze belongs to the version in the
+slot, so the next build clears it. A file that does not compile prints its diagnostics and never
 becomes a candidate at all.
 
 **It is judged on its own cost and on nothing else** — not on how long the deck's frames are taking,
@@ -157,8 +162,8 @@ edit to a declarative file, and hot-swapping that file is what `--watch` already
 Seven tools. `read_procedure` gives you the source; `write_procedure` checks it and, if it
 compiles, writes it — **and if it does not compile, what comes back is the checker's
 diagnostics, against the source**, which is what lets a model fix its own mistake;
-`swap_outcome` says whether the result landed, was rolled back for costing too much, or
-failed to build. A write returning cleanly means it compiled, not that it is on screen, so
+`swap_outcome` says whether the result landed, was `overloaded` — it is in the slot and the slot
+has stopped updating, because one frame of it costs more than a frame may — or failed to build. A write returning cleanly means it compiled, not that it is on screen, so
 the third tool is where the loop closes.
 
 `wire_input` is the fourth, and it is the other half of a write. A procedure declares each
@@ -263,8 +268,9 @@ Six things worth knowing before you rely on it:
   not; the tool says so, but it is easier to just pass it.
 - **A model that writes something too expensive is caught by the same machinery that catches
   you** — the worker measures what one frame of the new Set costs while it is building it, and if
-  that is over the budget the previous procedure comes back at the time it was parked at, in the
-  same frame the new one landed on.
+  that is over the budget the slot stops updating with that procedure still in it, in the
+  same frame it landed on. `swap_outcome` says `overloaded`, and nothing the model writes puts
+  anything back on its own: the way out is another write that fits, or an operator's hand.
 - **A write cannot reach the files you named.** It reaches the scratch copy of **the slot
   it was addressed to**, and every version that compiles is kept under `<store>/history/` —
   including the one the run started with. Slots have their own copies, so a write to slot 0
@@ -616,6 +622,7 @@ is up and an absent blend means `add`.
 |---|---|
 | `>` | the focused slot |
 | `LIVE` `prim` `park` `off` | effective residency — what the engine is doing, not what was asked. `park` is a prime request the governor is holding for want of budget, reconsidered every pass |
+| `overloaded` | the version in that slot costs more than one frame may, so the slot has stopped updating and holds the frame it last drew. Printed only while it is true. It is not a residency: a stopped slot that is Live is still mixed, and taking it off air and putting it back leaves it stopped. A fader to zero, an earlier version landed, or a build that fits is what ends it |
 | `g` | gain. `g>0.25` means a scheduled move is running to that value; `o>` and `w>` are the same for the fader and a wipe |
 | `r>1` | a renderer selection is armed and lands on the grid, on the same terms as `g>` |
 | `t` | that slot's simulation time, which is its own and not the session's |
@@ -776,9 +783,10 @@ Including the version the run started with, whether or not it compiles — that 
 is snapshotted before anything is parsed, so the first edit is undoable and not
 only the second, and a run started from a broken file can still be walked back
 to it. Its layer is read off the file, so an L2's starting version is filed as an
-L2 and joins the same chain its later versions land in. Including versions that compiled and were then rolled back
-for costing too much — those are the ones a session recording does *not* have,
-because it only records what reached the screen.
+L2 and joins the same chain its later versions land in. Including versions that compiled and cost
+too much to run: the gate is compiling, so an `overloaded` version is filed like any other — and
+this list is where you land the one before it, which is the way out of a stopped slot that does not
+need a new idea.
 
 A procedure that did not change is not written again, so a day's directory is
 the edits and not the rebuilds.
@@ -1181,6 +1189,16 @@ right under. An L3 replaces it for that slot: `beat_jump` cuts to a new angle on
 keeps facing the centre. It needs no state to do that — the angle is a hash of the beat
 number, so the camera is *seekable*, and scrubbing the transport puts it exactly where it
 would have been.
+
+**That orbit takes three parameters, and they are addressed like any node's** —
+`--param L3:0:radius=12`, `--param L3:0:speed=0.4`, `--param L3:0:height=-3`. It is a node with
+no procedure behind it, so the engine declares the three where a `.kir` would:
+`radius : float [1.0, 40.0]`, `speed : float [0.0, 2.0]` and `height : float [-40.0, 40.0]`.
+**Addressed and never bare**: seven of the examples declare a `radius` of their own, so a
+`--param radius=3.0` moves the geometry that declared it and leaves the camera where it is.
+The other three of the orbit's six — the field of view and the two clipping distances — are the
+lens rather than the place, and are not parameters; a hand that wants them writes an L3.
+[ADR-0318](adr/0318-the-built-in-cameras-three-placement-numbers-are-parameter-rows.md).
 
 ### Two cameras at once
 

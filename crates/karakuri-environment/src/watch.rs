@@ -399,9 +399,11 @@ pub struct Watch {
     ///
     /// **Separate from `stored`, and not folded into it.** That one keeps what
     /// reached the *screen*; this keeps what reached the *compiler*, and the
-    /// difference is the whole value — a build that was rolled back for costing
-    /// too much never becomes a `Record::Procedure`, never reaches a save, and
-    /// is exactly the version an operator wants back.
+    /// difference is the whole value — a build that compiled and never reached
+    /// a slot, because a newer one superseded it before the boundary, becomes
+    /// no `Record::Procedure` and reaches no save, and the version *before* the
+    /// one that stopped a slot for cost is exactly what an operator goes
+    /// looking for (ADR-0316).
     ///
     /// **The id is inside the pair rather than a field beside it**, because
     /// this is its only reader: a slot keeping no history has nothing to file
@@ -538,16 +540,16 @@ impl Watch {
     /// by editing a file and letting the worker build it, which is what the
     /// budget watchdog is attached to."* A surface that built a Set and handed
     /// it over would be putting material on air that **nothing measured**, in
-    /// a slot with no previous Set parked to roll back to — the two things
-    /// `HotSwap` exists to guarantee.
+    /// a slot the watchdog never got to judge — the two things `HotSwap` exists
+    /// to guarantee.
     ///
     /// So a load says *look at these files instead* and lets go. Everything
     /// after that is the path an edit already takes: compiled on this thread,
     /// offered on the same channel, swapped at a frame boundary (P-0094),
-    /// judged for `JUDGE_FRAMES` against the budget, and rolled back on its
-    /// own if it costs too much — with the deck resuming the Set it was
-    /// playing at the `t` it was parked at. **The library gets the watchdog
-    /// for nothing**, and no second route into a slot is opened.
+    /// judged on that Set's own measured frame against the budget (ADR-0313),
+    /// and left in the slot with the slot stopped if it costs too much
+    /// (ADR-0316). **The library gets the watchdog for nothing**, and no second
+    /// route into a slot is opened.
     ///
     /// # What the sender owes
     ///

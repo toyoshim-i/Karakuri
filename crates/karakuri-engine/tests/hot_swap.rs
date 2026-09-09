@@ -5,8 +5,8 @@
 //! split. What is *asserted* here is structural and deterministic: that a swap
 //! lands on a frame boundary and not inside one, that frames keep being
 //! produced while a build is in flight, that a build which fails changes
-//! nothing at all, and that a rollback restores the previous Set rather than
-//! merely stopping the new one. What is *measured* is printed rather than
+//! nothing at all, and that a candidate over the budget stays in the slot with
+//! the slot marked stopped rather than being taken back out (ADR-0316). What is *measured* is printed rather than
 //! asserted — see `frame_times_across_a_swap_are_measured_and_reported` at the
 //! bottom, and the numbers it prints.
 //!
@@ -627,7 +627,7 @@ proc wide_points {
             (o.radius, o.speed, o.height, o.fov_y, o.near, o.far)
         };
         assert_ne!(
-            six(&h.swap.set().camera),
+            six(&h.swap.set().orbit()),
             six(&aimed),
             "the live Set was already aimed there, so this asserts nothing"
         );
@@ -642,7 +642,7 @@ proc wide_points {
         let set = h.swap.set();
         assert_eq!(set.capacity(), SECOND, "the swap did not land");
         assert_eq!(
-            six(&set.camera),
+            six(&set.orbit()),
             six(&aimed),
             "the swapped-in Set was aimed somewhere the request did not ask for"
         );
@@ -779,30 +779,30 @@ proc wide_points {
         assert_eq!(steps_taken(h.swap.set()), 60);
     }
 
-    /// Rollback, forced with an absurd budget rather than with a slow shader — a
-    /// procedure heavy enough to miss the budget on one machine is comfortable on
-    /// another, and a test that depends on which is which is not a test.
-    /// [`a_candidate_is_rolled_back_on_a_budget_derived_from_its_own_measurement`]
+    /// **An over-budget candidate stays in the slot, and the slot is marked
+    /// stopped** — ADR-0316, and the verdict this file used to assert the
+    /// opposite of.
+    ///
+    /// Forced with an absurd budget rather than with a slow shader: a procedure
+    /// heavy enough to miss the budget on one machine is comfortable on another,
+    /// and a test that depends on which is which is not a test.
+    /// [`an_over_budget_candidate_is_stopped_on_a_budget_derived_from_its_own_measurement`]
     /// is the same claim against a threshold taken from a second measurement
     /// rather than from a constant, which is the other half of
     /// `docs/contributing.md` §1.
     ///
-    /// The assertion that matters is not that the rollback *fired*; it is that
-    /// what came back is the **same Set**, still holding the state it was left
-    /// with. `t` is the sharpest available witness of that: simulation time only
-    /// advances through `prepare`, and a Set that had been rebuilt, reset, or
-    /// kept stepping in the background would all show up here.
+    /// **What is asserted is that nothing was put back.** The Set the operator
+    /// asked for is the live one, at the capacity that names it; the Set it
+    /// displaced is gone, not parked; and [`HotSwap::overloaded`] is what says
+    /// the slot is not to be stepped. *Not stepped* is the deck's half of it and
+    /// is asserted in `tests/deck.rs` — a `HotSwap` driven directly, as this
+    /// harness drives it, has no branch to skip, which is exactly why the flag
+    /// is public.
     ///
-    /// **The swap and its verdict are one drain now** (ADR-0313), so this reads
-    /// both out of the same `events()` call. There used to be a trial — the
-    /// candidate was drawn for eight warmup and thirty judged frames before
-    /// anything decided — and this test asserted `frames > 8` to pin it. The
-    /// number the verdict is reached on was taken on the worker before the Set
-    /// was ever handed over, so there was nothing for those frames to settle:
-    /// what they bought was half a second of material on screen that was already
-    /// going to be thrown out.
+    /// **The swap and its verdict are one drain** (ADR-0313), so this reads
+    /// both out of the same `events()` call.
     #[test]
-    fn the_watchdog_rolls_back_and_restores_the_previous_set_where_it_was_parked() {
+    fn an_over_budget_candidate_stays_and_the_slot_is_marked_stopped() {
         // Nothing is faster than zero milliseconds, so every candidate fails.
         let (mut h, tx) = Harness::channel_driven(0.0);
 
@@ -812,45 +812,43 @@ proc wide_points {
         tx.send(request(L4, SECOND, "second"))
             .expect("worker alive");
 
-        // Where the outgoing Set was left: its step count at the top of the frame
-        // the swap landed on, which is the last moment anything stepped it.
-        let mut parked = None;
+        assert!(
+            !h.swap.overloaded(),
+            "a slot with nothing judged in it reports itself stopped"
+        );
+
+        let mut swapped = false;
         let mut seen: Vec<String> = Vec::new();
         let mut verdict = None;
         let started = Instant::now();
-        while parked.is_none() {
-            let before = steps_taken(h.swap.set());
+        while !swapped {
             h.frame();
             for event in h.swap.events() {
                 if is_swapped(&event) {
-                    parked = Some(before);
+                    swapped = true;
                 }
-                if let Event::RolledBack { cost_ms, basis, .. } = &event {
+                if let Event::Overloaded { cost_ms, basis, .. } = &event {
                     verdict = Some((*cost_ms, *basis));
                 }
                 seen.push(event.to_string());
             }
             assert!(started.elapsed() < PATIENCE, "the swap never happened");
         }
-        let parked = parked.expect("just set");
 
         let (cost_ms, basis) = verdict
             .unwrap_or_else(|| panic!("the swap landed and no verdict came with it: {seen:?}"));
+        // **The candidate is what is in the slot.** `FIRST` here would be the
+        // old behaviour exactly: a Set the operator did not ask for, put back
+        // by the engine, with the file on disk still holding the one they did.
         assert_eq!(
             h.swap.set().capacity(),
-            FIRST,
-            "the rollback fired but did not restore the previous Set"
+            SECOND,
+            "the verdict took the operator's material out of the slot"
         );
-        // `parked + 1`, not `parked`: the frame the rollback landed on stepped the
-        // restored Set once on its way past, exactly as it would have stepped any
-        // other live Set. The claim is that it resumed from where it stopped and
-        // not from zero, and not from somewhere it drifted to while it waited.
-        assert_eq!(
-            steps_taken(h.swap.set()),
-            parked + 1,
-            "the restored Set is not the one that was parked: it was left at {parked} steps \
-         and came back at {}",
-            steps_taken(h.swap.set())
+        assert!(
+            h.swap.overloaded(),
+            "a candidate over the budget left the slot unmarked, so nothing \
+             downstream can know to stop stepping it"
         );
         // **The number is the candidate's own frame and not an interval.** A
         // frame interval on this harness is milliseconds of a real submit and a
@@ -858,31 +856,57 @@ proc wide_points {
         // just arrived, which is a positive finite number the worker took.
         assert!(
             cost_ms > 0.0 && cost_ms.is_finite(),
-            "the rollback decided on {cost_ms}, which is not a cost"
+            "the verdict decided on {cost_ms}, which is not a cost"
         );
         // **And it says which of the two numbers it was** (ADR-0298's
         // `Decision::basis`, reached through the one rule in
         // `governor::budgeted`). A candidate arrives unestimated — the worker
         // cannot estimate, because an estimate is taken at the output's size and
         // the worker does not know it — so the measurement is what answers here,
-        // and `Unbudgetable` is unreachable from a rollback by construction.
+        // and `Unbudgetable` is unreachable from this verdict by construction.
         assert_eq!(
             basis,
             Basis::Measured,
             "the verdict does not carry which number it was reached on"
         );
 
-        let rollback = seen
+        let said = seen
             .iter()
-            .find(|s| s.contains("rolled back"))
-            .unwrap_or_else(|| panic!("no rollback message: {seen:?}"));
+            .find(|s| s.contains("overloaded"))
+            .unwrap_or_else(|| panic!("no overloaded message: {seen:?}"));
         assert!(
-            rollback.contains("host clock"),
-            "the rollback message does not say what kind of number it decided on: {rollback}"
+            said.contains("host clock"),
+            "the message does not say what kind of number it decided on: {said}"
         );
         assert!(
-            rollback.contains("its own frame"),
-            "the rollback message still describes the number as a frame interval: {rollback}"
+            said.contains("its own frame"),
+            "the message still describes the number as a frame interval: {said}"
+        );
+        // **The sentence says the state and not an action taken.** A reader of
+        // this line has a slot to attend to, so the words that have to be in it
+        // are the ones that say the material is still there and stopped.
+        assert!(
+            said.contains("still in the slot") && said.contains("stopped updating"),
+            "the message does not say what happened to the slot: {said}"
+        );
+
+        // **A build that fits clears the freeze**, which is the third way out
+        // and the only one the engine takes by itself. The budget is what makes
+        // the same machinery answer differently, so it is the budget that moves.
+        h.swap.set_budget_ms(GENEROUS_MS);
+        tx.send(request(L4, FIRST, "third")).expect("worker alive");
+        h.frames_until(
+            |e| matches!(e, Event::Accepted { .. }),
+            "a candidate that fits",
+        );
+        assert!(
+            !h.swap.overloaded(),
+            "the slot is still marked stopped after a build that held the budget"
+        );
+        assert_eq!(
+            h.swap.set().capacity(),
+            FIRST,
+            "the build that cleared the freeze is not the live Set"
         );
     }
 
@@ -891,7 +915,7 @@ proc wide_points {
     ///
     /// `docs/contributing.md` §1: *check a number against a second measurement
     /// whose bias direction you know rather than against a constant*. The test
-    /// above forces a rollback with a budget of zero, which proves the branch is
+    /// above forces the verdict with a budget of zero, which proves the branch is
     /// reachable and proves nothing about *what* is being compared — a watchdog
     /// still reading frame intervals would pass it. This one measures the
     /// candidate first, then rebuilds the same candidate against half its own
@@ -902,7 +926,7 @@ proc wide_points {
     /// candidate is judged against at the moment it lands, and the first run has
     /// to be allowed to keep its candidate in order to be asked what it cost.
     #[test]
-    fn a_candidate_is_rolled_back_on_a_budget_derived_from_its_own_measurement() {
+    fn an_over_budget_candidate_is_stopped_on_a_budget_derived_from_its_own_measurement() {
         let (mut h, tx) = Harness::channel_driven(GENEROUS_MS);
         for _ in 0..5 {
             h.frame();
@@ -940,7 +964,7 @@ proc wide_points {
         while verdict.is_none() {
             tight.frame();
             for event in tight.swap.events() {
-                if let Event::RolledBack { cost_ms, .. } = &event {
+                if let Event::Overloaded { cost_ms, .. } = &event {
                     verdict = Some(*cost_ms);
                 }
                 seen.push(event.to_string());
@@ -950,11 +974,18 @@ proc wide_points {
                 "no verdict on a candidate that cannot fit half its own cost: {seen:?}"
             );
         }
-        let rolled_at = verdict.expect("just set");
+        let stopped_at = verdict.expect("just set");
+        // **Kept, and stopped.** The candidate is the live Set — a budget below
+        // its own cost takes nothing away — and the flag is what says the slot
+        // is not to be stepped.
         assert_eq!(
             tight.swap.set().capacity(),
-            FIRST,
-            "the candidate was kept against a budget below its own measured cost"
+            SECOND,
+            "a budget below the candidate's own measured cost took it out of the slot"
+        );
+        assert!(
+            tight.swap.overloaded(),
+            "a candidate that cannot fit half its own measured cost left the slot unmarked"
         );
         // Two measurements of the same Set on the same adapter, so the second is
         // the first within whatever the host clock's noise is — asserted as a
@@ -962,15 +993,16 @@ proc wide_points {
         // instrument (`P-0095`). What it rules out is the number being something
         // else entirely, which is what a frame interval would be.
         assert!(
-            rolled_at > measured / 4.0 && rolled_at < measured * 4.0,
-            "the verdict decided on {rolled_at} ms where the same Set measured \
+            stopped_at > measured / 4.0 && stopped_at < measured * 4.0,
+            "the verdict decided on {stopped_at} ms where the same Set measured \
              {measured} ms a moment earlier — that is not this Set's own cost"
         );
     }
 
-    /// A candidate that fits is kept, and the old Set is released — the other
-    /// branch of the same verdict, and the one that has to work for a hot swap to
-    /// be useful rather than merely safe.
+    /// A candidate that fits is kept **and runs** — the other branch of the same
+    /// verdict, and the one that has to work for a hot swap to be useful rather
+    /// than merely safe. Since ADR-0316 both branches keep the candidate, so
+    /// what separates them is [`HotSwap::overloaded`] and nothing else.
     #[test]
     fn a_candidate_that_holds_the_budget_is_kept() {
         let (mut h, tx) = Harness::channel_driven(GENEROUS_MS);

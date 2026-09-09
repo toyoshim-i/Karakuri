@@ -34,9 +34,9 @@ use common::{drawn_once, near, rect_of, PLAUSIBLE, SMALLEST};
 use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::{Dragged, Knob, Panel, Released, GRAB};
 use karakuri_console::room::{size, Room};
-use karakuri_console::view::{master, MasterRow, View};
+use karakuri_console::view::{master, Chain, Fx, MasterRow, View};
 use karakuri_layout::{Point, Rect};
-use karakuri_operation::Operation;
+use karakuri_operation::{Cut, Feedback, Operation};
 
 /// **The mock's own level**: `out 1.00`, which is what
 /// `docs/manual/console.html`'s Master bay draws and what
@@ -48,8 +48,20 @@ const MOCK: f32 = 1.0;
 fn view(out: f32) -> View {
     let mut view = View::new(Room::Day);
     view.master_out = Some(out);
+    view.master_chain = Some(MOCK_CHAIN);
     view
 }
+
+/// **The mock's own chain**: `feedback 0.34 · mix`, `bloom 0.60`,
+/// `rgb shift 0.00`, which is what `docs/manual/console.html` draws under the
+/// out row. The rgb shift is the one at zero on purpose — it is the row the
+/// page draws dim, and dim here means *this pass is not recorded at all*.
+const MOCK_CHAIN: Chain = Chain {
+    feedback: 0.34,
+    cut: Cut::Mix,
+    bloom: 0.60,
+    rgb_shift: 0.0,
+};
 
 /// A panel at a viewport, solved, with a context that has drawn once — the
 /// pair every test here starts from, and `look.rs`'s own opening.
@@ -61,7 +73,8 @@ fn console(viewport: Rect) -> (Panel, egui::Context) {
 
 /// The laid-out row at that level, on a solved console.
 fn row(panel: &Panel, ctx: &egui::Context, out: f32) -> MasterRow {
-    master(ctx, panel.layout(), Some(out)).expect("the Master bay draws its out row")
+    master(ctx, panel.layout(), Some(out), Some(MOCK_CHAIN))
+        .expect("the Master bay draws its out row")
 }
 
 /// A `karakuri_layout` point, from `egui`'s.
@@ -402,7 +415,7 @@ fn no_level_behind_the_console_is_no_row_at_all() {
     let (mut panel, ctx) = console(PLAUSIBLE);
     let it = row(&panel, &ctx, MOCK);
     assert!(
-        master(&ctx, panel.layout(), None).is_none(),
+        master(&ctx, panel.layout(), None, Some(MOCK_CHAIN)).is_none(),
         "the Master bay drew an out row for a console with no engine behind it"
     );
     assert_eq!(
@@ -432,7 +445,7 @@ fn the_route_a_window_takes_is_claim_then_derivation_then_operation() {
     let press = at(it.fader.knob.center());
 
     assert_eq!(claim(&mut panel, &ctx, &view, press), Claim::Panel);
-    let grab = master(&ctx, panel.layout(), view.master_out)
+    let grab = master(&ctx, panel.layout(), view.master_out, view.master_chain)
         .and_then(|row| row.grab(press))
         .expect("the derivation that drew the knob says what a press on it takes hold of");
     panel.grab(press, grab);
@@ -447,5 +460,151 @@ fn the_route_a_window_takes_is_claim_then_derivation_then_operation() {
     assert_eq!(
         panel.released(None),
         Some(Released::Let { knob: Knob::Out })
+    );
+}
+
+// ---------------------------------------------------------------------------
+// The master chain's three rows
+// ---------------------------------------------------------------------------
+
+/// **The three rows are drawn, in the chain's order**, and each reads the
+/// value the chain handed in — which is the mock's, row for row.
+#[test]
+fn the_bay_draws_the_chains_three_passes_in_order() {
+    let (panel, ctx) = console(PLAUSIBLE);
+    let it = row(&panel, &ctx, MOCK);
+    let drawn: Vec<Fx> = it.fx.iter().flatten().map(|row| row.fx).collect();
+    assert_eq!(
+        drawn,
+        Fx::ALL.to_vec(),
+        "the Master bay drew the chain in an order the engine does not run it in"
+    );
+    let amounts: Vec<f32> = it.fx.iter().flatten().map(|row| row.amount).collect();
+    assert_eq!(amounts, vec![0.34, 0.60, 0.0]);
+    // **Under the out row and not over it**, which is the chain's own
+    // direction: the level enters at the top and the passes are downstream of
+    // it (ADR-0224).
+    let first = it.fx[0].expect("the feedback row").well;
+    assert!(
+        first.min.y >= it.fader.track.max.y,
+        "an effect row was drawn over the out fader"
+    );
+}
+
+/// **The dot and the dim say whether a pass is recorded at all.** An amount of
+/// zero is not a pass multiplying by nothing — no pass is recorded — so the
+/// row that reads 0.00 is the row that is out.
+#[test]
+fn a_pass_at_zero_is_the_row_that_is_out() {
+    let (panel, ctx) = console(PLAUSIBLE);
+    let it = row(&panel, &ctx, MOCK);
+    let runs: Vec<bool> = it.fx.iter().flatten().map(|row| row.runs).collect();
+    assert_eq!(
+        runs,
+        vec![true, true, false],
+        "the rgb shift row reads 0.00 and did not say the pass is not in the frame"
+    );
+}
+
+/// **The cut chip is on the feedback row and on neither of the others**, which
+/// is the shape that keeps a press on the bloom row from reaching a parameter
+/// bloom has not got.
+#[test]
+fn only_the_feedback_row_carries_a_cut_chip() {
+    let (panel, ctx) = console(PLAUSIBLE);
+    let it = row(&panel, &ctx, MOCK);
+    let chips: Vec<bool> = it
+        .fx
+        .iter()
+        .flatten()
+        .map(|row| row.cut.is_some())
+        .collect();
+    assert_eq!(chips, vec![true, false, false]);
+}
+
+/// **Each row's knob asks for its own pass, at the value the track is at**, and
+/// the feedback row's carries the cut beside the amount — because the amount
+/// alone is not a picture.
+///
+/// The far end of each track is asked for, because that is the reading a drag
+/// can produce that the row was not already at.
+#[test]
+fn each_row_emits_its_own_operation_with_the_value_in_range() {
+    let (mut panel, ctx) = console(PLAUSIBLE);
+    let view = view(MOCK);
+    let it = row(&panel, &ctx, MOCK);
+    let expected: [Operation; 3] = [
+        Operation::SetFeedback {
+            params: Feedback {
+                amount: Feedback::MAX,
+                cut: Cut::Mix,
+            },
+        },
+        Operation::SetBloom {
+            params: karakuri_operation::Bloom { amount: 1.0 },
+        },
+        Operation::SetRgbShift {
+            params: karakuri_operation::RgbShift { amount: 1.0 },
+        },
+    ];
+    for (fx, want) in it.fx.iter().flatten().zip(expected) {
+        let press = at(fx.fader.knob.center());
+        assert_eq!(
+            claim(&mut panel, &ctx, &view, press),
+            Claim::Panel,
+            "the panel did not claim a press on the {} row's knob",
+            fx.fx.name()
+        );
+        let grab = master(&ctx, panel.layout(), view.master_out, view.master_chain)
+            .and_then(|row| row.grab(press))
+            .expect("the derivation that drew the knob says what a press takes hold of");
+        panel.grab(press, grab);
+        let to = Point::new(fx.fader.track.max.x, press.y);
+        assert_eq!(
+            panel.moved(to),
+            Some(Dragged::Fader(want)),
+            "the {} row's track dragged to its far end asked for the wrong thing",
+            fx.fx.name()
+        );
+        panel.released(None);
+    }
+}
+
+/// **A press on the cut chip asks for the other cut, and for nothing else.**
+/// The cycle is this crate's arithmetic over a closed list of two — the blend
+/// chip's arrangement — and what it emits is where the pass is going rather
+/// than a step.
+#[test]
+fn the_cut_chip_asks_for_the_other_cut_and_keeps_the_amount() {
+    let (panel, ctx) = console(PLAUSIBLE);
+    let it = row(&panel, &ctx, MOCK);
+    let feedback = it.fx[0].expect("the feedback row");
+    let chip = feedback.cut.expect("the feedback row draws a cut chip");
+    assert_eq!(
+        it.chip(at(chip.center())),
+        Some(Operation::SetFeedback {
+            params: Feedback {
+                amount: 0.34 * Feedback::MAX,
+                cut: Cut::Exit,
+            },
+        }),
+        "the chip on a row reading the mix cut did not ask for the exit cut at the same amount"
+    );
+    // And nowhere else on the bay is a chip.
+    assert_eq!(it.chip(at(feedback.fader.knob.center())), None);
+    assert_eq!(it.chip(at(it.fader.knob.center())), None);
+}
+
+/// **A console with a level and no chain draws the out row and nothing under
+/// it**, which is what a harness that has not written the chain yet gets — and
+/// it is not the same as no bay at all.
+#[test]
+fn no_chain_behind_the_console_is_the_out_row_alone() {
+    let (panel, ctx) = console(PLAUSIBLE);
+    let it = master(&ctx, panel.layout(), Some(MOCK), None)
+        .expect("the out row draws without a chain behind it");
+    assert!(
+        it.fx.iter().all(Option::is_none),
+        "the Master bay drew effect rows for a console with no chain behind it"
     );
 }

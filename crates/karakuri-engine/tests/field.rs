@@ -192,12 +192,12 @@ proc lens {
             },
         )?;
         set.resize(&gpu.device, W, H);
-        set.camera = karakuri_engine::camera::Orbit {
+        set.aim_camera(karakuri_engine::camera::Orbit {
             radius: 5.0,
             speed: 0.0,
             height: 0.0,
             ..Default::default()
-        };
+        });
         Ok(set)
     }
 
@@ -506,12 +506,12 @@ proc lens {
         )
         .expect("two renderers over one field");
         both.resize(&gpu.device, W, H);
-        both.camera = karakuri_engine::camera::Orbit {
+        both.aim_camera(karakuri_engine::camera::Orbit {
             radius: 5.0,
             speed: 0.0,
             height: 0.0,
             ..Default::default()
-        };
+        });
         assert!(both.set_param_at(karakuri_ir::Kind::Field, 0, "radius", 2.0));
 
         let mut one = build(&gpu, Some(BALL), LENS).expect("one renderer");

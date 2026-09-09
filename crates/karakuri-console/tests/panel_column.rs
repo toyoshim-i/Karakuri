@@ -260,6 +260,20 @@ fn sample(variant: &str) -> Operation {
         // slot for `Knob::Trim`'s and `Knob::Fader`'s to be filled in from
         // (ADR-0224).
         "SetMasterOut" => Operation::SetMasterOut { out: 1.0 },
+        // The Master bay's other three, and they name no deck for the master
+        // out's reason: the chain reads what the fold produced. Each is one
+        // row of *Mixing and output* and each is emitted by one effect row —
+        // the feedback row twice, from its track and from its cut chip, which
+        // is `dedup_by_key`'s case again (ADR-0317).
+        "SetFeedback" => Operation::SetFeedback {
+            params: karakuri_operation::Feedback::default(),
+        },
+        "SetBloom" => Operation::SetBloom {
+            params: karakuri_operation::Bloom::default(),
+        },
+        "SetRgbShift" => Operation::SetRgbShift {
+            params: karakuri_operation::RgbShift::default(),
+        },
         // The two the Inspector's deck head emits. `SetSync` comes from two
         // controls in that row — the chip that cycles and the anchor that
         // re-asks for the mode the deck is in (ADR-0218) — and one operation
@@ -518,6 +532,41 @@ fn sample(variant: &str) -> Operation {
                 id: "night01".to_owned(),
             },
         },
+        // **The Sequencer bay's three, and every one of them names the bank it
+        // acts on**: implying the armed one is the shape `SelectDeck`'s rule
+        // refuses, so the pattern travels *in* the payload where
+        // `SelectScope`'s chip travels beside it.
+        //
+        // **A cell's `step` is a stored slot and not a drawn step.** A pattern
+        // holds sixteen slots in both modes and an eighth reads slot `2k`, so
+        // the console sends the even ones in the finer reading and a step
+        // press cannot race a mode press into an address that means two things
+        // (ADR-0320). The value here is any cell, because what the badge
+        // claims is that an operator reaches the row.
+        //
+        // **Both `on` and `muted` are states read off what the control is
+        // showing**, which is `SetFavourite`'s arrangement two rows up: the
+        // press asks for the state the cell or the lane is *not* in, so either
+        // value names the row and there are no toggles in this vocabulary.
+        "SetStep" => Operation::SetStep {
+            pattern: 0,
+            lane: 0,
+            step: 4,
+            on: true,
+        },
+        "SetLaneMute" => Operation::SetLaneMute {
+            pattern: 0,
+            lane: 0,
+            muted: true,
+        },
+        // **The mode pill at the head of that bay**, and the one emission in
+        // this list whose payload is what the *pattern* is rather than what a
+        // hand prefers: the press asks for the other of the two by naming it,
+        // and the count follows the mode (ADR-0306).
+        "SetPatternGrid" => Operation::SetPatternGrid {
+            pattern: 0,
+            grid: karakuri_operation::StepMode::Eighth,
+        },
         other => panic!(
             "`{SRC}` constructs `Operation::{other}` and this file has no value for it — a \
              control started emitting an operation nobody accounted for. Add an arm here, and \
@@ -697,7 +746,7 @@ fn elsewhere() -> BTreeSet<String> {
 /// cannot see `crates/karakuri`. That half is the window's own test, named
 /// beside each entry.
 const DRAWN: [(&str, &str); 1] = [
-    // **The transport row's health capsule** — `landed`, `rolled back` or
+    // **The transport row's health capsule** — `landed`, `overloaded` or
     // `failed`, taken off the one drain that writes the Staging lane. The
     // drawing is `tests/transport.rs`'s; the seam is `crates/karakuri`'s
     // `the_swap_report_says_what_the_lane_says`, which takes a device because

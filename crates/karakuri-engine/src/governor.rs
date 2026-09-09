@@ -847,7 +847,7 @@ impl SlotState {
 /// watchdog: since
 /// [ADR-0313](../../../docs/adr/0313-a-candidate-is-judged-on-its-own-cost-and-the-decks-period-is-a-deck-level-alarm.md)
 /// a candidate's verdict is *this* rule applied to the candidate's own
-/// measurement and estimate, so a Set cannot be rolled back on one reading and
+/// measurement and estimate, so a slot cannot be stopped on one reading and
 /// then admitted on another. A `SlotState` there would mean inventing a
 /// residency and a closed-form flag for a Set that has neither yet, which is
 /// two facts made up to reach one number.

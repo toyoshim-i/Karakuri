@@ -90,15 +90,21 @@ muting a lane is a control moving without anybody touching it, which is what rul
 
 ## Consequences
 
-**Nothing is built by this record**, and it may land after the first slice: until a lane can be
-pointed at a deck fader there is nothing to refuse.
+**The refusal is not built and the lookup it needs is** (2026-09-09).
 
-**What phase 2 or a pass after it builds** (2026-09-09):
-
-- **`karakuri-pattern` answers *which lane holds this control*** for an armed pattern, as a pure
-  function, and the three scheduling operations ask it before writing a record.
-- **One refusal sentence**, named once, carrying the lane.
-- **A test that the refused schedule writes no record**, which is the clause a replay depends on.
+- **`karakuri_pattern::Pattern::holder_of_fader` answers *which lane holds this deck's fader*** as a
+  pure function of the armed pattern, and `a_muted_lane_holds_no_fader` is what holds its one
+  subtlety: **a muted lane holds nothing**, because it drives nothing — so muting is how an operator
+  gets their fade back, which is the same take-back rule 02 draws on the lane label.
+- **Nothing calls it yet.** The three scheduling operations still schedule, so a live lane on
+  deck A's fader still kills a fade onto deck A within one step — the defect this record is about is
+  present and written down rather than fixed. **It is reachable today**: the first slice seeds one
+  lane over deck A's fader, and unmuting it is one press.
+- **What is owed is the refusal itself**: taken where the operation becomes records — before
+  `Record::Transition` is written, for the determinism reason above — carrying one sentence that
+  names the lane.
+- **And a test that the refused schedule writes no record**, which is the clause a replay depends
+  on.
 
 **What is owed and is not this record's.** **A channel fader does not say who is holding it.** The
 mock draws `seq 1` as a source on a `.param` row's `.pval.src`, which covers the fourth lane, and

@@ -148,8 +148,11 @@
 //! every frame now, so it comes back at the `t` the room reached — which is
 //! what a cell showing it has been drawing the whole time. Nothing on the frame
 //! path relied on the old behaviour; what relies on a Set standing still is
-//! `swap.rs`, and that is a Set it holds **outside the deck** while a candidate
-//! is on trial, which no slot draws and no residency reaches.
+//! `swap.rs`, and it is now a Set **in a slot**: a slot the watchdog stopped
+//! for costing more than one frame may is skipped by both branches below, so
+//! it takes no step and draws no frame and its target holds the image it
+//! stopped at (ADR-0316). That is a state of the version rather than a
+//! residency, and [`Deck::overloaded`] is where a surface reads it.
 //!
 //! ## Every off-air slot runs, and a preview is what it is for
 //!
@@ -265,12 +268,15 @@
 //! [`Deck::slot_view`] gets that; a surface that samples the mix does not.
 //!
 //! **The bill, stated rather than argued.** Three extra draws a frame on a full
-//! deck are not in the compute budget and fall inside the window `swap.rs`'s
-//! watchdog judges candidates on, so a heavy off-air slot can roll back an
-//! unrelated slot's build (ADR-0072). It is the case
+//! deck are not in the compute budget, and they no longer reach any verdict:
+//! `swap.rs` judges a candidate on that candidate's own measured cost, so a
+//! heavy off-air slot cannot stop an unrelated slot's build (ADR-0313). What
+//! the three draws still do is cost the deck frames it has not budgeted, which
+//! `Report::deck_over_period` warns about and nothing acts on. The clause
 //! `docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md`
-//! loses, and it loses for the reason written there: a rule protecting a
-//! performance may not be used to remove what the performance is played with.
+//! loses on is narrower than it was for the same reason, and the rule under it
+//! is unchanged: a rule protecting a performance may not be used to remove
+//! what the performance is played with.
 //!
 //! **ADR-0269 adds three steps a frame to that bill and does not add a
 //! refusal.** The sentence that used to bound the bill — a draw is a raster
@@ -419,8 +425,11 @@
 //! Three things retire a slot's reading, and they are one thing: the meter
 //! stops being able to vouch that what it measured is what the slot is
 //! contributing. Going off air, a resize, and **a build landing on the slot** —
-//! a swap installs a cold Set and a rollback restores a parked one, and either
-//! way the next frame's image has nothing to do with the last one's. Each is
+//! a swap installs a cold Set, so the next frame's image has nothing to do with
+//! the last one's. A verdict against is not a fourth: it stops the slot with
+//! the Set the swap installed, whose reading the swap retired in the same
+//! drain, and what the meter then measures is a held image that really is what
+//! the slot is contributing. Each is
 //! handled where it happens: [`Deck::set_residency`], [`Deck::resize`] and
 //! [`Deck::begin_frame`]. There was a fourth, either end of an audition, and it
 //! went with the chooser: nothing starts or stops a slot being drawn any more,
@@ -1179,39 +1188,43 @@ impl Deck {
                 Residency::Live => {
                     let _ = slot.swap.begin_frame(device);
                 }
-                // Installs and retirement, but no watchdog sample: this frame
-                // is not this slot's to be judged by.
+                // **The same frame boundary, and since ADR-0313 the same
+                // work**: installs, retirement, the verdict on whatever
+                // landed, and the deck's period marked.
                 //
-                // **The reason is attribution and no longer absence.** An
-                // off-air slot draws (ADR-0258) and steps (ADR-0269), so it is
-                // paying into the interval this frame produces — the argument
-                // that used to sit here, that it costs nothing and the interval
-                // is entirely the Live slots', is gone with the frames it
-                // described. What has not changed is that the interval is the
-                // *deck's*: it is one number for four slots, so a window of
-                // them says nothing about which slot moved it, and a candidate
-                // on an off-air slot would be accepted or rolled back on its
-                // neighbours' cost. The trial is frozen and the verdict waits
-                // until the slot is Live, where the same ambiguity is at least
-                // the one `swap.rs` already records. What judges an off-air
-                // slot is the per-Set measurement `crate::governor` budgets
+                // **There is nothing left to freeze here.** An off-air slot
+                // draws (ADR-0258) and steps (ADR-0269), so it pays into the
+                // interval this frame produces — and the interval is the
+                // *deck's*, one number for four slots, which is why a candidate
+                // was once judged on its neighbours' cost and why the verdict
+                // on a parked slot used to wait for the slot to go on air. A
+                // candidate is judged on its own measured cost now, which is
+                // the same number whatever the residency, so the verdict lands
+                // here like anywhere else. What judges an off-air slot's
+                // *place* is the per-Set measurement `crate::governor` budgets
                 // against, which is a different question and a different
                 // number.
                 Residency::Priming | Residency::Allocated => slot.swap.begin_frame_parked(device),
             }
-            // A build landing, and a rollback putting the outgoing Set back,
-            // both replace what the slot is drawing — a swapped-in Set is
-            // cold, `t` at zero, and a restored one resumes at a different `t`
-            // than the candidate had. A measurement of the Set that was there
-            // is a measurement of a different image, on exactly the terms a
-            // pre-resize measurement is, so it is retired on those terms too.
-            // Nothing else in `Event` changes the material: `Accepted` only
-            // ends a trial, and `Rejected`, `SourceRefused` and `WorkerLost`
-            // change nothing at all — the last of the three because nothing
-            // was built for it in the first place.
+            // A build landing replaces what the slot is drawing — a swapped-in
+            // Set is cold, `t` at zero. A measurement of the Set that was
+            // there is a measurement of a different image, on exactly the
+            // terms a pre-resize measurement is, so it is retired on those
+            // terms too.
+            //
+            // **`Swapped` is the whole of the list since ADR-0316**, where it
+            // used to be `Swapped` or `RolledBack`: a verdict against no
+            // longer puts a Set back, so the only event that changes which Set
+            // a slot holds is the install. `Overloaded` stops the slot with
+            // the Set the swap just installed, and that Set's meter was
+            // retired by the swap in the same drain. Nothing else in `Event`
+            // changes the material either: `Accepted` is a verdict in favour,
+            // and `Rejected`, `SourceRefused` and `WorkerLost` change nothing
+            // at all — the last of the three because nothing was built for it
+            // in the first place.
             let replaced = slot.swap.pending_events()[seen..]
                 .iter()
-                .any(|e| matches!(e, Event::Swapped { .. } | Event::RolledBack { .. }));
+                .any(|e| matches!(e, Event::Swapped { .. }));
             if replaced {
                 if let Some(meters) = &mut self.meters {
                     meters.retire(i);
@@ -1383,6 +1396,23 @@ impl Deck {
     pub fn is_parked(&self, slot: usize) -> bool {
         let slot = &self.slots[slot];
         slot.requested == Residency::Priming && slot.effective == Residency::Allocated
+    }
+
+    /// **This slot has stopped updating**, because the version in it costs
+    /// more than one frame may — [`HotSwap::overloaded`](crate::swap::HotSwap::overloaded),
+    /// `swap::Event::Overloaded`, and ADR-0316.
+    ///
+    /// **It is not a residency and cannot be read as one.** A stopped slot
+    /// that is Live is still folded into the mix, at the frame it stopped on;
+    /// a stopped slot moved off air and back is still stopped. What it says is
+    /// *the picture in this slot is not moving and that is the reason*, which
+    /// every surface drawing a cell has to carry or draw a still as though it
+    /// were a preview (ADR-0269).
+    ///
+    /// Only a build clears it. See the two paths in
+    /// [`Frame::render`] for what it costs: nothing.
+    pub fn overloaded(&self, slot: usize) -> bool {
+        self.slots[slot].swap.overloaded()
     }
 
     /// Move a slot between residency levels.
@@ -2234,14 +2264,35 @@ impl Frame<'_> {
             // The effective residency, and only ever that: what the frame does
             // is what the governor last allowed, not what was asked for.
             //
-            // **Every branch draws, and the difference between them is what
-            // steps.** See "Every slot is drawn; only a Live slot is mixed" in
-            // the module doc. The draw is unconditional because the console
+            // **Every branch draws unless the slot is stopped, and the
+            // difference between the drawing ones is what steps.** See "Every
+            // slot is drawn; only a Live slot is mixed" in the module doc. The
+            // draw is otherwise unconditional because the console
             // shows every slot's own material continuously
             // (`docs/adr/0258-the-look-comes-before-the-fader-so-a-cell-draws-every-slot-and-says-which-nothing-it-is.md`);
             // what decides whether the mix folds this slot is `live` on its
             // edge, written below and read from the same `effective`.
+            // **A slot the watchdog stopped takes no step and draws no
+            // frame**, whatever its residency — `swap::Event::Overloaded`,
+            // and ADR-0316. Its target still holds the last image it made, so
+            // the composite below folds it in exactly as it was and the deck's
+            // cell goes on showing it; what a stopped slot costs this frame is
+            // nothing at all. The Live arm keeps its meter, because a held
+            // image is still reaching the mix and a meter that went quiet
+            // would say the slot had, which is the one thing that did not
+            // happen.
+            let stopped = slot.swap.overloaded();
             match slot.effective {
+                Residency::Live if stopped => {
+                    // **Stopped, on air, and still in the mix.** No
+                    // `prepare`, no `render`, and the transport is not
+                    // advanced either — a clock that ran on while the material
+                    // it drives stood still would put the slot somewhere it
+                    // never played the moment a build cleared the freeze.
+                    if let Some(meters) = &mut self.deck.meters {
+                        meters.record(i, encoder);
+                    }
+                }
                 Residency::Live => {
                     let view = &slot.view;
                     let set = slot.swap.live_mut();
@@ -2315,6 +2366,13 @@ impl Frame<'_> {
                 // branch prepares on every frame — which is what made the
                 // resize repair ADR-0072 records necessary and is now what
                 // makes it unnecessary.
+                //
+                // **Unless the slot is stopped**, which is the one thing that
+                // outranks all of the above: a slot taken off air and put back
+                // is still stopped, because what stopped is the version and
+                // not the placement. Its cell goes on showing the frame it
+                // stopped at, marked as what it is.
+                Residency::Priming | Residency::Allocated if stopped => {}
                 Residency::Priming | Residency::Allocated => {
                     let view = &slot.view;
                     let set = slot.swap.live_mut();

@@ -740,6 +740,33 @@ pub mod size {
     /// the arrangement reserves are one number or neither.
     pub const MASTER_ROW_H: f32 = BASE * LINE;
 
+    // -- the master bay's three effect rows ---------------------------------
+
+    /// `.master-body`'s `gap: 8px`, between the out row and the first effect
+    /// row and between the effect rows. The same number as [`MASTER_GAP`] and
+    /// a constant of its own, because they are two rules in the stylesheet —
+    /// one is the gap *inside* a row and one is the gap *between* rows, and a
+    /// change to either is a change to one of them.
+    pub const MASTER_STACK_GAP: f32 = 8.0;
+
+    /// `.fx`'s `padding: 4px 8px`, `gap: 7px` and `border-radius: 8px`: one
+    /// effect of the master chain, drawn as a well with a dot, a name, a track
+    /// and a figure in it.
+    pub const FX_PAD_X: f32 = 8.0;
+    pub const FX_PAD_Y: f32 = 4.0;
+    pub const FX_GAP: f32 = 7.0;
+    pub const FX_RADIUS: u8 = 8;
+
+    /// **One effect row**, which is `lib.rs`'s *"one `.fx` at 4 + 16.5 + 4"* —
+    /// the same 24.5 the arrangement's minimum for this bay reserves, so the
+    /// row a rectangle is given here and the height the arrangement keeps for
+    /// it are one derivation.
+    pub const FX_H: f32 = FX_PAD_Y * 2.0 + BASE * LINE;
+
+    /// `.fx .dot`'s `width: 6px` — square, and drawn as a circle by its own
+    /// `border-radius: 50%`. The mark that says this pass is in the frame.
+    pub const FX_DOT: f32 = 6.0;
+
     // -- the library's scopes -----------------------------------------------
 
     /// `.scopes`'s `padding: 7px 9px` and its `gap: 4px`: the row of chips
@@ -1123,4 +1150,59 @@ pub mod size {
     /// which is [`crate::view::inspector`]'s rule about a pane that overflows
     /// stated one row along.
     pub const REND_ROW_H: f32 = REND_ROW_PAD_T + REND_H + REND_ROW_PAD_B;
+
+    // -- the sequencer bay --------------------------------------------------
+
+    /// `.seq`'s `padding: 7px 9px 9px`: the ring of card the bay's rows sit
+    /// inside, under the bay head. Two constants because the top differs from
+    /// the sides and the bottom is the sides' number again.
+    pub const SEQ_PAD_X: f32 = 9.0;
+    pub const SEQ_PAD_TOP: f32 = 7.0;
+
+    /// `.seq`'s `gap: 5px`, between the head, the ruler and the body.
+    pub const SEQ_STACK_GAP: f32 = 5.0;
+
+    /// `.seq-head`'s `gap: 6px`, between the mode pill and the step readout.
+    pub const SEQ_HEAD_GAP: f32 = 6.0;
+
+    /// `.seq-body`'s `gap: 3px`, between two lanes. Tighter than the stack's
+    /// 5: the rows are one pattern read against itself, which is why they
+    /// share a ruler.
+    pub const SEQ_BODY_GAP: f32 = 3.0;
+
+    /// `.seq-row`'s `grid-template-columns: 30px 1fr` and its `gap: 5px`: the
+    /// label column every lane's name is right-aligned into, and the gap
+    /// before the cells.
+    pub const SEQ_LABEL_W: f32 = 30.0;
+    pub const SEQ_ROW_GAP: f32 = 5.0;
+
+    /// `.seq-label`'s `font-size: 10px`: a lane's name, smaller than the bay's
+    /// own type because it is a label on a row rather than a reading.
+    pub const SEQ_LABEL_SIZE: f32 = 10.0;
+
+    /// `.seq-lane`'s `gap: 2px`, between two cells.
+    pub const SEQ_CELL_GAP: f32 = 2.0;
+
+    /// `.seq-lane i`'s `height: 15px` and its `border-radius: 3px`: one cell,
+    /// which is one step of one lane.
+    ///
+    /// **The width is not here and cannot be**: `.seq-lane` is
+    /// `repeat(16, 1fr)`, so a cell is as wide as the row divided by the
+    /// count, and the count follows the mode — which is why an eighth's cells
+    /// are twice this one's width and the same height (ADR-0306).
+    pub const SEQ_CELL_H: f32 = 15.0;
+    pub const SEQ_CELL_RADIUS: u8 = 3;
+
+    /// `.seq-ruler`'s `font-size: 9px` and its `margin-left: 35px`: the count
+    /// a pattern is read against, inset so its numbers stand over the cells
+    /// rather than over the labels. **35 and not [`SEQ_LABEL_W`] plus
+    /// [`SEQ_ROW_GAP`]**, which is the same number arrived at twice: the
+    /// stylesheet writes the inset and the row writes the columns, and this
+    /// transcribes the one the ruler is actually laid out by.
+    pub const SEQ_RULER_SIZE: f32 = 9.0;
+    pub const SEQ_RULER_INSET: f32 = 35.0;
+
+    /// `.seq-play .lane i`'s `border-radius: 5px`: the playhead, the column
+    /// standing over the rows at the step the poll last answered.
+    pub const SEQ_PLAY_RADIUS: u8 = 5;
 }

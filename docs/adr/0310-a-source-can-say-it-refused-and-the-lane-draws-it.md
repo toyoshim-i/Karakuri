@@ -11,6 +11,20 @@ tags: [engine, environment, console, manual, m5]
 
 # A source can say it refused, and the lane draws it
 
+> **Annotated 2026-09-09: one of the five words changed and the shape of this record did not.**
+> [ADR-0316](0316-an-over-budget-candidate-stays-in-the-slot-and-the-slot-stops-updating.md) renames
+> `swap::Event::RolledBack` to `Event::Overloaded` and `view::Stage::RolledBack` to
+> `Stage::Overloaded`, and the word the lane and the health capsule draw is `overloaded`. Wherever
+> this record says *`RolledBack` is the budget's verdict*, that is still exactly what it is — a
+> different fact about a different moment from a checker's refusal, which is the distinction argued
+> below and is untouched. What did change is what the verdict *does*: the version stays in the slot
+> and the slot stops updating, so the alternative rejected here — *"a word meaning your Set was too
+> expensive used for your file has a typo"* — is if anything sharper, because the first of those is
+> now also a slot that is not running.
+>
+> **The consequence about a refusal waiting behind a trial was already false** and this record's own
+> last-but-one bullet says so, per ADR-0313.
+
 ## Context
 
 `karakuri_engine::swap::Source::poll` answered `Option<Request>`, and the whole of what a source

@@ -112,12 +112,12 @@ proc {name} {{
         .expect("one L1 and some L4s");
         set.resize(&gpu.device, W, H);
         // Still and level, so a frame is a frame rather than a moment in a sweep.
-        set.camera = karakuri_engine::camera::Orbit {
+        set.aim_camera(karakuri_engine::camera::Orbit {
             radius: 6.0,
             speed: 0.0,
             height: 0.0,
             ..Default::default()
-        };
+        });
         set
     }
 

@@ -324,10 +324,10 @@ use karakuri_console::view::{
     self, arrangement as arrangement_pill, audio_in as audio_in_pill, bay_grip, class_at,
     deck_head as deck_head_row, deck_name, inspector as inspector_pane, keep_pill,
     library as library_bay, look as look_row, master as master_row, mcp_pill, mixer as mixer_bay,
-    outputs, picture_rect, preview_rects, program_bay, program_head, tracker_group,
-    transition as transition_row, transport as transport_row, Aim, Ask, AudioAsk, AudioIn, Basis,
-    Budgeted, Chosen, Go, Kind, McpPill, Picked, Picture, Read, Reading, Scope, Taken, Tracker,
-    TransitionSettings, View, DECKS, DECK_LETTERS, REGIONS,
+    outputs, picture_rect, preview_rects, program_bay, program_head, sequencer as sequencer_bay,
+    tracker_group, transition as transition_row, transport as transport_row, Aim, Ask, AudioAsk,
+    AudioIn, Basis, Budgeted, Chosen, Go, Kind, McpPill, Picked, Picture, Read, Reading, Scope,
+    Sequenced, Taken, Tracker, TransitionSettings, View, DECKS, DECK_LETTERS, REGIONS,
 };
 // **How many slots a deck can hold**, which is how many this one has — see
 // [`SLOTS`]. Not re-exported at the crate root, and asked of the module that
@@ -347,8 +347,8 @@ use karakuri_engine::set::{Layering, Published};
 use karakuri_engine::transition::Selection;
 use karakuri_engine::transport::Sync as EngineSync;
 use karakuri_engine::{
-    compose, Blend, Committed, Control, Deck, Event, Gpu, HotSwap, Look, Mask, MaskKind, Present,
-    Residency, Set, Sink, Skip, TonemapOp, DEFAULT_BUDGET_MS,
+    compose, Blend, Chain, Committed, Control, Cut, Deck, Event, Gpu, HotSwap, Look, Mask,
+    MaskKind, Present, Residency, Set, Sink, Skip, TonemapOp, DEFAULT_BUDGET_MS,
 };
 use karakuri_environment::clock::Clock;
 use karakuri_environment::{audio, history, mcp, mix, session, setfile, watch, Asked, Opening};
@@ -1730,6 +1730,30 @@ struct Readout {
     ///
     /// `None` until a build produces a verdict, which is most of most runs.
     health: Option<view::Stage>,
+    /// **The session's four sequencer banks**, and the one piece of state in
+    /// this struct that is neither the panel's nor a reading of the engine —
+    /// `Readout::opening`'s category, over a pattern instead of over what a
+    /// model may reach.
+    ///
+    /// **A pattern is authored state and the engine holds none of it**
+    /// (ADR-0222: a lane is a fifth *route*, so what a lane does reaches the
+    /// deck as `Operation::SetOpacity` like everything else). It is kept here
+    /// because this window is what polls it and what the press arms edit; the
+    /// console draws a copy handed to `View::sequencer` per frame and applies
+    /// nothing to it (ADR-0156).
+    ///
+    /// **Nothing saves or loads one yet.** ADR-0227 settles where a pattern is
+    /// kept and ADR-0320 leaves the file form to the record that has something
+    /// to serialise, which is the row that saves one — so these four banks
+    /// live for the run and no longer.
+    sequencer: karakuri_pattern::Banks,
+    /// **Where the poll left the playhead**, so a lane emits at a step
+    /// boundary and never twice for one step.
+    ///
+    /// It is not in the pattern, and that is the shape rather than an
+    /// accident: a pattern is a thing that gets saved and where the playhead
+    /// has got to is not (`karakuri_pattern::Playhead`).
+    playhead: karakuri_pattern::Playhead,
 }
 
 impl Readout {
@@ -1741,6 +1765,11 @@ impl Readout {
             opening: Opening::closed(),
             // Nothing has been written yet, so the capsule is not drawn.
             health: None,
+            sequencer: demonstration_banks(),
+            // **Nothing polled yet**, which draws no playhead column and makes
+            // the first poll a boundary — a bay nobody has run is not a bay at
+            // step zero.
+            playhead: karakuri_pattern::Playhead::default(),
         }
     }
 
@@ -2679,6 +2708,24 @@ impl Readout {
                         None => {}
                     }
                 }
+                // **The Sequencer bay's three, asked before the knobs
+                // below**, and the order is arbitrary rather than a
+                // precedence: this bay is in the right pane under the master
+                // and no rectangle of it overlaps a strip, a knob or a chip.
+                // It is asked as one derivation for all three — a cell, a
+                // label and the mode pill are three questions about one
+                // laid-out bay, which is `input::claim`'s own row for them.
+                //
+                // **The press names the bank it landed on**, which is inside
+                // the operation: `Sequencer::press` carries `Sequencer::bank`
+                // so that a press cannot mean *whichever pattern is armed by
+                // the time this is performed*.
+                if let Some(operation) =
+                    sequencer_bay(ctx, self.panel.layout(), self.view.sequencer.as_ref())
+                        .and_then(|bay| bay.press(at))
+                {
+                    return (claim, Acted::Emitted(Some(operation)));
+                }
                 let sink =
                     outputs(ctx, self.panel.layout(), self.view.opening).filter(|row| row.hit(at));
                 let bay = mixer_bay(ctx, self.panel.layout(), &self.view.mixer);
@@ -2688,13 +2735,20 @@ impl Readout {
                 // fader it was is inside the `Knob`. The two bays cannot
                 // overlap, so the order is arbitrary — the mixer is asked
                 // first because it has five questions to this one's one.
+                // **Laid out once and asked twice**, where the mixer is: this
+                // bay has a knob question and a chip question now, and two
+                // derivations of it would be a chip painted where a hand
+                // cannot press it.
+                let master = master_row(
+                    ctx,
+                    self.panel.layout(),
+                    self.view.master_out,
+                    self.view.master_chain,
+                );
                 let knob = bay
                     .as_ref()
                     .and_then(|bay| bay.grab(at))
-                    .or_else(|| {
-                        master_row(ctx, self.panel.layout(), self.view.master_out)
-                            .and_then(|row| row.grab(at))
-                    })
+                    .or_else(|| master.as_ref().and_then(|row| row.grab(at)))
                     // **A parameter fader is a `Grab` like a strip's**, so it
                     // joins the knob rather than taking an arm of its own —
                     // the Master bay's arrangement one bay along, and which
@@ -2715,7 +2769,13 @@ impl Readout {
                                 at_pane.grab(pane, at)
                             })
                     });
-                let chip = bay.as_ref().and_then(|bay| bay.blend(at));
+                // **The blend chip and the feedback row's cut chip are one
+                // question here**, because what this file does with either is
+                // the same three steps and which it was is in the operation.
+                let chip = bay
+                    .as_ref()
+                    .and_then(|bay| bay.blend(at))
+                    .or_else(|| master.as_ref().and_then(|row| row.chip(at)));
                 let tally = bay.as_ref().and_then(|bay| bay.tally(at));
                 let mask = bay.as_ref().and_then(|bay| bay.mask(at));
                 match (sink, knob, chip, tally, mask) {
@@ -2744,10 +2804,12 @@ impl Readout {
                     // reached the deck another way would be a second route for
                     // the same change.
                     //
-                    // **One arm for the three chips**, because what this file
+                    // **One arm for the four chips**, because what this file
                     // does with any of them is the same three steps; which chip
                     // it was is in the operation, and the line `apply` prints
-                    // says so.
+                    // says so. The fourth is the Master bay's cut chip, which
+                    // is a cycle over a closed list of two exactly as the
+                    // blend's is over three.
                     (None, None, Some(operation), ..)
                     | (None, None, None, Some(operation), _)
                     | (None, None, None, None, Some(operation)) => {
@@ -4004,13 +4066,21 @@ impl Readout {
                             _ => "s",
                         }
                     ),
-                    // A bay with one row in it, and the row is one control:
-                    // the level the composited frame leaves the mix at. The
-                    // three effects the mock draws under it exist nowhere, so
-                    // there is nothing else in the bay to report.
-                    Kind::Master => match self.view.master_out {
-                        Some(out) => format!("bay, out {out:.2}"),
-                        None => "bay, no engine behind it".to_owned(),
+                    // A bay with four rows in it: the level the composited
+                    // frame leaves the mix at, and the three fixed passes it
+                    // then goes through. **How many of the three are recorded
+                    // is what is worth saying**, because an amount of zero is
+                    // no pass at all rather than a pass at nothing — see
+                    // `karakuri_engine::master`.
+                    Kind::Master => match (self.view.master_out, self.view.master_chain) {
+                        (Some(out), Some(chain)) => format!(
+                            "bay, out {out:.2}, {} of three passes running",
+                            usize::from(chain.feedback > 0.0)
+                                + usize::from(chain.bloom > 0.0)
+                                + usize::from(chain.rgb_shift > 0.0)
+                        ),
+                        (Some(out), None) => format!("bay, out {out:.2}, no chain behind it"),
+                        (None, _) => "bay, no engine behind it".to_owned(),
                     },
                     // A bay like the other five, and then a row per deck slot
                     // with a verdict outstanding. **None at startup, which is
@@ -4021,6 +4091,32 @@ impl Readout {
                         0 => "bay, nothing waiting".to_owned(),
                         waiting => format!("bay, {waiting} waiting"),
                     },
+                    // **The bay whose body is a pattern**, counted off the
+                    // pattern rather than written here: how many lanes there
+                    // are and how many of them are driving something is what
+                    // this bay *is*, and a constant would be the legend naming
+                    // a control's state from before the control existed —
+                    // which this line has been repaired of twice.
+                    Kind::Sequencer => {
+                        let pattern = self.sequencer.pattern();
+                        let lanes = pattern.lanes().len();
+                        let driving = pattern.lanes().iter().filter(|lane| !lane.muted()).count();
+                        format!(
+                            "bay, bank {} of {}, {} step{}, {lanes} lane{} and {driving} of them \
+                             driving",
+                            self.sequencer.armed() + 1,
+                            karakuri_pattern::BANKS,
+                            pattern.mode().count(),
+                            match pattern.mode().count() == 1 {
+                                true => "",
+                                false => "s",
+                            },
+                            match lanes == 1 {
+                                true => "",
+                                false => "s",
+                            }
+                        )
+                    }
                 },
                 None => match layout.axis(node.id) {
                     Some(Axis::Row) => "split, left to right".to_owned(),
@@ -4386,6 +4482,9 @@ fn knob_word(knob: &Knob) -> &'static str {
         Knob::Trim { .. } => "trim",
         Knob::Fader { .. } => "fader",
         Knob::Out => "out",
+        Knob::Feedback { .. } => "feedback",
+        Knob::Bloom => "bloom",
+        Knob::RgbShift => "rgb shift",
         Knob::Param { .. } => "parameter",
     }
 }
@@ -5487,6 +5586,21 @@ struct Engine {
     /// for it, so it is read back into every record and written out again
     /// unchanged ([ADR-0192](../../../docs/adr/0192-an-operation-asks-for-what-a-surface-can-say-and-the-record-stays-whole.md)).
     look: Look,
+    /// **What the master chain is set to**, and [`Engine::look`]'s twin at the
+    /// other end of that chain.
+    ///
+    /// Held here for `look`'s reason exactly: a press becomes
+    /// `Operation::SetFeedback`, `SetBloom` or `SetRgbShift`, which become one
+    /// `Record::MasterChain`, which [`apply`] writes here; the frame loop hands
+    /// this to `Present::set_chain` and the chain's uniform is written from it.
+    /// Nothing calls that setter behind the record's back, which is P-0090 on
+    /// this value.
+    ///
+    /// **A struct where the out is a bare `f32` on the deck**, and the two are
+    /// apart for the reason their records are: the level at the chain's entry
+    /// is ridden by a fader and the chain's settings are moved by a press
+    /// ([ADR-0317](../../../docs/adr/0317-the-master-chain-is-three-fixed-passes-and-feedback-reads-either-cut.md)).
+    chain: Chain,
     /// How many registrations have been freed, **over both textures**. The
     /// atlas leak this exists to prevent is invisible from outside: a resize
     /// that registers without freeing leaves a bind group per drag frame and
@@ -5768,14 +5882,16 @@ fn restated(aim: &watch::Aim) -> watch::Aim {
 /// not reach the store, which the watcher said at the time; it saves nothing
 /// rather than guessing.
 ///
-/// **A type of its own rather than two fields on [`App`]**, because the pair is
-/// one fact with one transition rule: a swap moves `playing` into `previous`, a
-/// rollback moves it back, and the two halves are never right apart.
+/// **A type of its own rather than a field on [`App`]**, because what a slot is
+/// running is one fact with one transition: a build lands and it moves. It held
+/// two lists until ADR-0316 — what is playing and what a rollback would bring
+/// back — because a rollback was the only thing that could name what it
+/// restored. **Nothing restores anything now**, so the second list was a
+/// version kept against an event that cannot happen; putting a version back is
+/// `Revision::Previous`, which reads the store's history and lands a build like
+/// any other, and this then records it like any other.
 struct Playing {
     playing: Vec<Option<Vec<setfile::SavedNode>>>,
-    /// What a rollback restores, and the only way to name it: a rollback brings
-    /// back a Set nothing will name again.
-    previous: Vec<Option<Vec<setfile::SavedNode>>>,
 }
 
 impl Playing {
@@ -5805,7 +5921,6 @@ impl Playing {
                     false => Some(nodes.iter().map(copied).collect()),
                 })
                 .collect(),
-            previous: (0..slots).map(|_| None).collect(),
         }
     }
 
@@ -5820,24 +5935,17 @@ impl Playing {
     ///
     /// **That is still a swap**, and taking it as one is the whole of why this
     /// is a method rather than an assignment at the call site: the slot is on
-    /// something new, so the version it was on becomes what a rollback restores,
-    /// and the slot itself has no address until the next build lands.
+    /// something new, and it has no address until the next build lands.
+    ///
+    /// **It is still a swap when the slot is stopped for cost, too.** A version
+    /// the watchdog stopped is in the slot and is what a save of that slot must
+    /// write down (ADR-0316); what is not true of it is that the slot is
+    /// running, which is the lane's to say and not this list's.
     fn landed(&mut self, slot: usize, nodes: Option<Vec<setfile::SavedNode>>) {
         if slot >= self.playing.len() {
             return;
         }
-        self.previous[slot] = self.playing[slot].take();
         self.playing[slot] = nodes;
-    }
-
-    /// **A build was rolled back**, so the slot is running what it was running
-    /// before it. With the launch version in `previous`, the first rollback of a
-    /// slot restores it like any other.
-    fn rolled_back(&mut self, slot: usize) {
-        if slot >= self.playing.len() {
-            return;
-        }
-        self.playing[slot] = self.previous[slot].take();
     }
 }
 
@@ -5923,7 +6031,11 @@ fn playing_values(
             .collect(),
         bindings: set.bindings().to_vec(),
         edges: edges.to_vec(),
-        camera: set.camera,
+        // **`Set::orbit` and not the `Set::camera` field**: three of the six
+        // are the camera node's parameters, so the field is what was last
+        // stated and the map is what a hand, a binding or a carried ride left
+        // there (ADR-0318).
+        camera: set.orbit(),
         layering: set.layering(),
         live: selected_renderer(set.inputs()),
         seeds: set.source_salts().to_vec(),
@@ -6698,8 +6810,9 @@ fn watched(
     // slot watches, and `None` for a harness with no store — the same
     // condition `stored` above is `None` under, and a separate argument
     // because the two keep different things: that one is what reached the
-    // *screen* and this is what reached the *compiler*. A version rolled back
-    // for costing too much is in this and in nothing else.
+    // *screen* and this is what reached the *compiler*. A version that cost
+    // too much to run is in both — it is in the slot, stopped — and a version
+    // that compiled and was superseded before it landed is in this alone.
     snapshots: Option<history::Shared>,
 ) -> (HotSwap, Aiming) {
     // **The other end of `Watch::aimed_by`**, kept by [`Engine`] so that a
@@ -6779,9 +6892,9 @@ fn watched(
         // budget transcribed into this file would be a second answer to *how
         // long may a frame take* the day the engine's moves (ADR-0179 on a
         // number that is not even the mock's). It is 20 ms, which is 60 Hz
-        // with room, and it is what makes a rollback reachable in this program
-        // at all — `HotSwap::fixed` judged against infinity, so no candidate
-        // could ever be thrown out for cost.
+        // with room, and it is what makes the budget's verdict reachable in
+        // this program at all — `HotSwap::fixed` judged against infinity, so no
+        // slot could ever be stopped for cost.
         //
         // **And it is the opening value rather than the final one.** A
         // `HotSwap` is built here, from the launch pair, before there is a
@@ -7044,6 +7157,10 @@ impl Engine {
             previews,
             slot_bind_groups,
             look: LOOK,
+            // **Nothing turned up**, which is the chain not being recorded at
+            // all: `Chain::default` is three zeros, so the frame this program
+            // opens on is the frame it drew before the chain existed.
+            chain: Chain::default(),
             freed: 0,
             aimed,
             pointing,
@@ -9748,11 +9865,12 @@ fn mixer(deck: &Deck, names: &[String], out: &mut Vec<view::Strip>) {
 ///
 /// # What each verdict does to a row
 ///
-/// - **`Swapped`, `Rejected`, `RolledBack`, `SourceRefused`** — the slot has a
-///   row, on `view::Stage`'s four words. Whether the build is on screen is
-///   what separates the first three, and the fourth is the one where there was
-///   no build: the checker turned the source down, so the row carries what it
-///   said as well as the word (ADR-0310).
+/// - **`Swapped`, `Rejected`, `Overloaded`, `SourceRefused`** — the slot has a
+///   row, on `view::Stage`'s four words. Whether the build is on screen and
+///   running is what separates the first three — `Overloaded` is on screen and
+///   stopped — and the fourth is the one where there was no build: the checker
+///   turned the source down, so the row carries what it said as well as the
+///   word (ADR-0310).
 /// - **`Accepted`** — the watchdog says the version held the budget, so the
 ///   file and the picture agree and the row leaves the lane. It is not the
 ///   operator's verdict, which is *keep* and is taste rather than cost; with
@@ -9760,16 +9878,15 @@ fn mixer(deck: &Deck, names: &[String], out: &mut Vec<view::Strip>) {
 ///   See `view::staging`, where that substitution is argued.
 /// - **`WorkerLost`** — the build worker panicked and nothing will be built
 ///   again this run. **No row changes**, and that is the reading rather than
-///   an omission: every verdict already taken still stands, and a slot whose
-///   candidate was on trial when the worker went keeps a trial the watchdog
-///   will still finish, because the watchdog is on this thread. What is lost
-///   is the *next* build, and the lane has never been where that is said —
-///   the engine prints it.
+///   an omission: every verdict already taken still stands, and there is no
+///   verdict outstanding for the worker to have taken with it — one is reached
+///   in the call its swap lands in. What is lost is the *next* build, and the
+///   lane has never been where that is said — the engine prints it.
 ///
 /// **A row is not removed when its slot is parked or its material is
-/// replaced.** A candidate that landed in a slot the governor then parks keeps
-/// its verdict outstanding, and that is `HotSwap::begin_frame_parked`'s own
-/// rule read from the surface: a slot that is not drawn is not judged.
+/// replaced.** What takes a row off the lane is a verdict in the candidate's
+/// favour, and residency does not reach one: a candidate is judged on its own
+/// measured cost wherever the slot is (ADR-0313).
 ///
 /// # It writes the transport's health capsule too, and the two are not the
 /// same reading
@@ -9778,8 +9895,8 @@ fn mixer(deck: &Deck, names: &[String], out: &mut Vec<view::Strip>) {
 /// *what is still outstanding*, so the two disagree in both directions and
 /// both are the mock's: a run in which the last build landed and was then
 /// accepted draws `landed` in the transport with an empty lane, and a run in
-/// which one slot rolled back while a later one landed draws `landed` in the
-/// transport with a `rolled back` row under it. The capsule carries no deck
+/// which one slot was stopped while a later one landed draws `landed` in the
+/// transport with an `overloaded` row under it. The capsule carries no deck
 /// letter, which is why it can only say the second of those and why the lane
 /// is where the address is.
 ///
@@ -9791,11 +9908,13 @@ fn mixer(deck: &Deck, names: &[String], out: &mut Vec<view::Strip>) {
 /// # It answers whether the live Set changed, because something else has to
 /// know
 ///
-/// `true` when a build was installed or a rollback put the previous Set back,
-/// which is the moment `Set::published` says a console should re-read a slot —
-/// *"A console reads this when a Set lands, not per frame."* [`inspector`] is
-/// what acts on it. A refusal and a verdict in favour both answer `false`:
-/// neither replaced what is playing.
+/// `true` when a build was installed, which is the moment `Set::published` says
+/// a console should re-read a slot — *"A console reads this when a Set lands,
+/// not per frame."* [`inspector`] is what acts on it. **Every other event
+/// answers `false`, the budget's verdict included**: since ADR-0316 neither
+/// verdict replaces what is playing — one lets the installed Set run and the
+/// other stops it where it is — and the install that did replace it was
+/// reported by `Swapped` in the same drain.
 ///
 /// One `String` per row that appears, on the frame a build landed on — which
 /// is the frame that also installed a whole Set built on the worker. A row
@@ -9806,8 +9925,8 @@ fn staging(
     out: &mut Vec<view::Candidate>,
     // **Where the same event goes when somebody who is not at the panel is
     // watching**, and `None` for a run without `--mcp`. A model that wrote a
-    // procedure has no other way to learn that it was rolled back for cost, and
-    // *it compiled* is not the same news as *it is on screen*.
+    // procedure has no other way to learn that its slot was stopped for cost,
+    // and *it compiled* is not the same news as *it is on screen and running*.
     //
     // **A checker's refusal goes out here with every diagnostic it had**, which
     // is the round trip `docs/principles/0083-…` is about: the reader at this
@@ -9822,11 +9941,15 @@ fn staging(
     // The `String` is formed only when there is somebody to tell.
     mcp: Option<&mcp::Reporter>,
     // **Which slots took a build, and which build**, for the caller to take up
-    // once this borrow of the deck has ended. `Some(id)` is a swap and `None` is
-    // a rollback, which is the pair [`Keeping::took_up`] is written against.
+    // once this borrow of the deck has ended — one entry per `Swapped`, which
+    // since ADR-0316 is the only event that changes what a slot is running.
+    // There used to be a second kind of entry, for a rollback, and it named no
+    // build because a rollback brought back a version nothing would name again;
+    // nothing is brought back now, so what a slot is playing after a verdict is
+    // what the swap put there.
     // Collected rather than acted on here, because `Deck::events` borrows the
     // deck for as long as it is being read.
-    took: &mut Vec<(usize, Option<u64>)>,
+    took: &mut Vec<(usize, u64)>,
     // **What the transport row's health capsule reads**, off the same drain
     // and for the same reason the reporter above is fed from here:
     // `Deck::events` empties the channel, so a second reader that came back
@@ -9846,21 +9969,16 @@ fn staging(
             if let Some(mcp) = mcp {
                 mcp.swap(slot, &event.to_string());
             }
-            match &event {
-                Event::Swapped { id, .. } => took.push((slot, Some(*id))),
-                Event::RolledBack { .. } => took.push((slot, None)),
-                _ => {}
+            if let Event::Swapped { id, .. } = &event {
+                took.push((slot, *id));
             }
             // **Whether the *live Set* changed**, which is a different
             // question from whether a row did and is why this is read here
             // rather than off the rows: a build that landed replaced what is
-            // playing, and a rollback replaced it back. A refusal changed
-            // nothing and neither did the watchdog's verdict in favour, which
-            // is the candidate staying exactly where it was.
-            landed |= matches!(
-                verdict(&event),
-                Verdict::Waiting(_, view::Stage::Landed | view::Stage::RolledBack)
-            );
+            // playing, and nothing else does. A refusal changed nothing, and
+            // neither verdict changes it either — one lets the installed Set
+            // run and the other stops it where it is (ADR-0316).
+            landed |= matches!(verdict(&event), Verdict::Waiting(_, view::Stage::Landed));
             // **The diagnostics, where there are any**, taken off the event
             // beside the verdict rather than carried through `Verdict`: that
             // type is `Copy` and is the mapping a CPU test asserts, and a
@@ -9893,6 +10011,24 @@ fn staging(
     landed
 }
 
+/// **Which of the four cells is showing a still**, in slot order —
+/// `view::View::overloaded`, which the caption reads.
+///
+/// A slot the watchdog stopped holds the frame it last drew and is not stepped
+/// or drawn (ADR-0316), and a held frame of good material is indistinguishable
+/// from material: the word under the cell is what says which it is (ADR-0269).
+///
+/// **`false` past `slot_count`, not a panic.** The row is `view::DECKS` cells
+/// whatever the deck holds, so the fourth cell of a three-slot deck asks about
+/// a slot that is not there — and *there is no slot* is the caption's own word
+/// rather than a state of one (`view::PREVIEW_NO_SLOT`).
+///
+/// A function rather than four lines in the frame loop, so that the bound is
+/// written once and can be named from a test.
+fn stopped_slots(deck: &Deck) -> [bool; view::DECKS] {
+    std::array::from_fn(|slot| slot < deck.slot_count() && deck.overloaded(slot))
+}
+
 /// **What one verdict does to the lane** — the whole of the mapping, in a
 /// function a test can reach without a device.
 ///
@@ -9915,7 +10051,7 @@ fn verdict(event: &Event) -> Verdict<'_> {
     match event {
         Event::Swapped { label, .. } => Verdict::Waiting(label, view::Stage::Landed),
         Event::Rejected { label, .. } => Verdict::Waiting(label, view::Stage::Refused),
-        Event::RolledBack { label, .. } => Verdict::Waiting(label, view::Stage::RolledBack),
+        Event::Overloaded { label, .. } => Verdict::Waiting(label, view::Stage::Overloaded),
         // **A row, because the file and the picture disagree** — which is the
         // whole of what this lane is for. Nothing was built, so nothing
         // replaced what is playing and the operator's newest edit is on disk
@@ -10021,21 +10157,28 @@ fn asked_layer(layer: Layer) -> karakuri_operation::Layer {
 /// wildcard.
 ///
 /// **A wildcard over exactly one node is that node's**, and the resolution
-/// invents nothing: *every node that declares the key* is a set the Set itself
+/// invents nothing: *where a bare name lands* is a set the Set itself
 /// determines, and where it holds one member there is no second group the row
 /// could go in. Over two or more it belongs to several groups at once, and the
 /// mock draws no `.param` outside a `.node-group` — so the row is dropped and
 /// [`inspector`] says how many were, rather than a place for it being invented
 /// here (ADR-0200: *no placeholder, and no empty case the mock did not itself
 /// draw*).
+///
+/// **The landing is asked for rather than worked out here**, and that is a
+/// correction rather than a tidying. This walked `Set::params` and counted the
+/// nodes holding the key, which is the same walk `Set::write_param` refuses on
+/// — agreeing with it by coincidence. The day the built-in camera declared a
+/// `radius` of its own the two stopped agreeing: a bare name does not reach
+/// that node, so the engine saw one landing where this saw two, and a `radius`
+/// row the pane draws every run was dropped as belonging to several groups
+/// (ADR-0318). `Set::landing_of` is the one answer, where the write is decided
+/// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
 fn node_of(set: &Set, control: &Published) -> Option<(Layer, u32)> {
     if let Some(at) = control.at {
         return Some(at);
     }
-    let mut declaring = set
-        .params()
-        .filter(|(_, _, key, _)| *key == control.key)
-        .map(|(layer, index, _, _)| (layer, index));
+    let mut declaring = set.landing_of(&control.key).into_iter();
     let first = declaring.next()?;
     match declaring.next() {
         None => Some(first),
@@ -10091,9 +10234,9 @@ fn node_of(set: &Set, control: &Published) -> Option<(Layer, u32)> {
 /// `Set::published` is documented *"Allocates, so not the frame path. A
 /// console reads this when a Set lands, not per frame."* **A Set lands
 /// whenever a `.kir` in a slot is saved**, since every slot is watched, so
-/// this is called at startup and again on the frame a build is installed or a
-/// rollback puts the previous Set back — `staging` is what answers *did one
-/// land*, and it is the only thing in this program that knows. Between those
+/// this is called at startup and again on the frame a build is installed —
+/// `staging` is what answers *did one land*, and it is the only thing in this
+/// program that knows. Between those
 /// frames almost every value above is constant: nothing writes a param,
 /// nothing binds one, and nothing grants an authority.
 ///
@@ -10127,8 +10270,12 @@ fn inspector(deck: &Deck, names: &[String], out: &mut Vec<view::Pane>) {
         let published = set.published();
         let mut rows: Vec<(Option<(Layer, u32)>, view::Param)> = Vec::new();
         for (at, control) in published.iter().enumerate() {
+            // **By the address the control carries, not by its name.** The
+            // built-in camera's three publish addressed, so a Set whose
+            // geometry also declares `radius` has two controls under that name
+            // and a name lookup answers for whichever comes first (ADR-0318).
             let value = set
-                .published_value(&control.name)
+                .value_at(control.at, &control.key)
                 .unwrap_or(control.range[0]);
             rows.push((
                 node_of(set, control),
@@ -10634,6 +10781,168 @@ fn refusal(refused: &Go, decks: usize) -> String {
     }
 }
 
+/// **The four banks a run starts with**: bank 0 holding one lane over deck A's
+/// channel fader, **muted**, and three empty banks beside it.
+///
+/// # Why there is a lane at all before anything has added one
+///
+/// `Operation::PointLane` is the control that makes a lane and **the console
+/// draws none** — the mock's `+ lane` needs a target chooser nobody has drawn,
+/// and the bay cannot grow a body while it is running anyway. So a first slice
+/// with no lane would draw a ruler over nothing and there would be no way to
+/// reach a cell (ADR-0320's consequences, and `view::sequencer`'s own list of
+/// what is not drawn). This is the demonstration, written here rather than in
+/// `karakuri-pattern` because it is *this program's opening state* and not
+/// what a pattern is.
+///
+/// # Why it is muted
+///
+/// **An unmuted lane writes its target on every step boundary**, on-steps and
+/// off-steps alike — that is what makes a lane a gate rather than a set of
+/// impulses (ADR-0320). A lane over deck A's fader with every step off would
+/// therefore hold deck A at `off` from the moment the window opened: the deck
+/// on air would go dark, and nothing on screen would say a sequencer had done
+/// it.
+///
+/// So the lane arrives the way the mock's third row is drawn — *"the pattern is
+/// kept and drives nothing"* — and the first press is the one that starts it.
+/// That is also the shape of the demonstration: mute the lane and the fader is
+/// the hand's again, which is rule 02's take-back for a lane and what
+/// ADR-0322 says the mute is *for*.
+///
+/// **`on` is 1.0 and `off` is 0.0**, which is a fader's pair: a gate.
+fn demonstration_banks() -> karakuri_pattern::Banks {
+    let mut banks = karakuri_pattern::Banks::default();
+    let mut lane =
+        karakuri_pattern::Lane::new(karakuri_operation::LaneTarget::Fader { deck: 0 }, 1.0, 0.0);
+    lane.set_muted(true);
+    if let Some(bank) = banks.at_mut(0) {
+        bank.push(lane);
+    }
+    banks
+}
+
+/// **A press in the Sequencer bay, applied to the pattern it names**, and what
+/// to say about it. `None` for every operation that is not one of the three.
+///
+/// [`scheduled`]'s shape one bay along, and for the same reason:
+/// `written` answers `Silent(Surface)` for all five of the sequencer's
+/// operations — a pattern is library data under the store on the arrangement's
+/// terms, and what a *lane* does reaches the stream as its own writes
+/// (ADR-0320, ADR-0322) — so there is nothing on the deck for [`apply`] to
+/// move and the surface that emits it is what performs it.
+///
+/// **Every arm names its bank**, and a press on a bank this session does not
+/// have is refused and said rather than swallowed, which is [`pointed`]'s rule:
+/// a press that does nothing and a press that is not bound are the same
+/// experience.
+///
+/// **A mode press and a bank press reset the playhead**, and a step press does
+/// not. The first two change what a step *index* means — the same bar read at
+/// another width, or another pattern's lanes under it — so a remembered index
+/// would hold the new reading silent until the bar came round. Turning a cell
+/// on changes what the *current* step is worth and not which step it is, and
+/// the mock already says when that is heard: *"the next time the playhead
+/// reaches the cell rather than when you asked for it"*.
+fn sequenced(
+    banks: &mut karakuri_pattern::Banks,
+    playhead: &mut karakuri_pattern::Playhead,
+    operation: &Operation,
+) -> Option<String> {
+    match *operation {
+        Operation::SetStep {
+            pattern,
+            lane,
+            step,
+            on,
+        } => {
+            let Some(lane_at) = banks
+                .at_mut(usize::from(pattern))
+                .and_then(|at| at.lane_mut(usize::from(lane)))
+            else {
+                return Some(format!(
+                    "  step: pattern {pattern} lane {lane} is not a lane this session holds — a \
+                     press names a bank, a lane and a slot, and this one names no row"
+                ));
+            };
+            lane_at.set_slot(usize::from(step), on);
+            Some(format!(
+                "  step: pattern {pattern} lane {lane} slot {step} -> {} -> no record, and that \
+                 is settled: a pattern is library data and what a lane does is its own writes. \
+                 Heard the next time the playhead reaches it",
+                match on {
+                    true => "on",
+                    false => "off",
+                }
+            ))
+        }
+        Operation::SetLaneMute {
+            pattern,
+            lane,
+            muted,
+        } => {
+            let Some(lane_at) = banks
+                .at_mut(usize::from(pattern))
+                .and_then(|at| at.lane_mut(usize::from(lane)))
+            else {
+                return Some(format!(
+                    "  lane: pattern {pattern} lane {lane} is not a lane this session holds"
+                ));
+            };
+            lane_at.set_muted(muted);
+            Some(format!(
+                "  lane: pattern {pattern} lane {lane} -> {} -> no record. {}",
+                match muted {
+                    true => "muted",
+                    false => "driving",
+                },
+                match muted {
+                    true =>
+                        "The pattern is kept and drives nothing, and the fader is a hand's \
+                             again — which is where this lane's take-back sits",
+                    false => "It writes its target at the next step boundary",
+                }
+            ))
+        }
+        Operation::SetPatternGrid { pattern, grid } => {
+            let Some(at) = banks.at_mut(usize::from(pattern)) else {
+                return Some(format!(
+                    "  grid: pattern {pattern} is not a bank this session holds"
+                ));
+            };
+            at.set_mode(grid);
+            // The same bar at another width, so the index it was remembering
+            // is about a reading that has gone.
+            playhead.reset();
+            Some(format!(
+                "  grid: pattern {pattern} -> {} -> no record. The bar is one bar, so the count \
+                 follows: {} steps over the same row, and the sixteen slots underneath are \
+                 untouched",
+                grid.name(),
+                grid.count()
+            ))
+        }
+        Operation::SelectPattern { pattern } => {
+            if !banks.select(usize::from(pattern)) {
+                return Some(format!(
+                    "  pattern: there is no bank {pattern} — this session holds {}",
+                    karakuri_pattern::BANKS
+                ));
+            }
+            playhead.reset();
+            Some(format!(
+                "  pattern: bank {pattern} armed -> no record. {} lane{} under the rows",
+                banks.pattern().lanes().len(),
+                match banks.pattern().lanes().len() == 1 {
+                    true => "",
+                    false => "s",
+                }
+            ))
+        }
+        _ => None,
+    }
+}
+
 /// **A press on one of the transition row's three pills, applied to the
 /// console's own setting**, and what to say about it. `None` for every
 /// operation that is not it.
@@ -10752,8 +11061,8 @@ fn played(gfx: &mut Gfx, operation: &Operation) -> Option<String> {
             // the same word the row they pressed on carries.
             //
             // **Written on the aim rather than on the swap**, which is a
-            // choice and not an oversight: the build may still be refused or
-            // rolled back for cost, and a name that waited for the verdict
+            // choice and not an oversight: the build may still be refused, or
+            // land and stop its slot for cost, and a name that waited for the verdict
             // would leave the strip naming material that is no longer in the
             // file. The staging lane is what says which of the three happened,
             // on the deck it happened to, and it is the surface built for
@@ -10842,7 +11151,7 @@ fn composited(aims: &mut [Aiming], operation: &Operation) -> Option<String> {
         Ok(()) => Some(format!(
             "  composite: deck {letter} re-aimed to {word} its renderers — the slot is \
              recompiling on the worker, and the staging lane says whether the build landed, was \
-             rolled back for cost or did not compile"
+             overloaded or did not compile"
         )),
         Err(()) => Some(format!(
             "  composite: deck {letter} will {word} its renderers from the next build on, but \
@@ -11067,7 +11376,7 @@ fn put_back(
 /// keeps this one function the only place a record becomes a movement — a
 /// second `apply_look` beside it would be the second route into the engine
 /// that P-0090 exists to refuse.
-fn apply(record: &Record, deck: &mut Deck, look: &mut Look) -> Option<String> {
+fn apply(record: &Record, deck: &mut Deck, look: &mut Look, chain: &mut Chain) -> Option<String> {
     // **A slot the deck has not got is refused rather than indexed**, and the
     // guard is [`held`] rather than a closure here, because the key arms in
     // `window_event` need the same answer one step earlier: a press reads the
@@ -11337,6 +11646,44 @@ fn apply(record: &Record, deck: &mut Deck, look: &mut Look) -> Option<String> {
                 deck.out()
             ))
         }
+        // **The chain itself, one record for all three passes.** Written whole
+        // for `Record::Look`'s reason and applied whole: the value lands on
+        // [`Engine::chain`] and the frame loop hands it to
+        // `Present::set_chain`, so nothing here touches a uniform. That is the
+        // look arm's arrangement one pass upstream, and it is why there is no
+        // `set_chain` call in this function.
+        //
+        // **The cut comes back off the wire word, refused rather than
+        // defaulted**, as the tone map operator and the blend mode do: a cut
+        // this engine has not got is a stream saying something this build
+        // cannot draw, and a default would silently play the other picture.
+        //
+        // **No clamp here either.** `Chain::clamped` is the wall and it is
+        // inside the setter, so a stream carrying 4.0 meets the same ceiling
+        // a fader does.
+        Record::MasterChain {
+            feedback,
+            ref cut,
+            bloom,
+            rgb_shift,
+        } => {
+            let cut = Cut::parse(cut)?;
+            *chain = Chain {
+                feedback,
+                cut,
+                bloom,
+                rgb_shift,
+            };
+            Some(format!(
+                "  master: chain -> Record::MasterChain -> feedback {feedback:.3} of the \
+                 {} cut, bloom {bloom:.3}, rgb shift {rgb_shift:.3} — {} of three passes \
+                 recorded",
+                cut.name(),
+                usize::from(feedback > 0.0)
+                    + usize::from(bloom > 0.0)
+                    + usize::from(rgb_shift > 0.0),
+            ))
+        }
         // **The whole of one slot's clock, because the record is a state and
         // not an ask.** `Record::Transport` carries the sync mode, the anchor
         // and the scrub together for a stated reason — a scrub position
@@ -11511,8 +11858,26 @@ fn reading(
     operation: &Operation,
     deck: &Deck,
     look: &Look,
+    chain: &Chain,
     settings: TransitionSettings,
 ) -> Current {
+    // **The whole chain, for whichever pass was asked for.** The look arm's
+    // argument one bay along: `Record::MasterChain` needs all four numbers and
+    // each row's press carries one pass, so the running chain is handed in and
+    // `written` takes the rows the press did not name.
+    let master_chain = match *operation {
+        Operation::SetFeedback { .. }
+        | Operation::SetBloom { .. }
+        | Operation::SetRgbShift { .. } => Some(karakuri_operation_record::Chain {
+            feedback: karakuri_operation::Feedback {
+                amount: chain.feedback,
+                cut: mix::cut(chain.cut),
+            },
+            bloom: chain.bloom,
+            rgb_shift: chain.rgb_shift,
+        }),
+        _ => None,
+    };
     let look = match *operation {
         // **Two thirds of the record, for whichever third was asked for.**
         // `SetTonemap` carries an operator and `SetExposure` a level, and
@@ -11675,11 +12040,35 @@ fn reading(
     };
     Current {
         look,
+        master_chain,
         mask,
         transport,
         tempo,
         transition,
         mix,
+    }
+}
+
+/// **The master chain, as the console reads it** — a level's reading rather
+/// than the level (ADR-0156), and the one place the engine's `Chain` becomes
+/// the panel's.
+///
+/// **Not `mix::current_chain`, and the two are not the same reading.** That one
+/// answers the *conversion* — what `written` completes a record from, in the
+/// engine's own amounts — and this one answers a *fader*, in track positions.
+/// The crossing they share, engine cut to vocabulary cut, is `mix::cut` and is
+/// made once.
+///
+/// **The feedback amount arrives as a track position**, `[0, 1]`, where the
+/// engine holds `[0, 0.95]`: a fader draws where it is along its own travel,
+/// and `Knob::Feedback` multiplies back by `Feedback::MAX` on the way out. The
+/// other two are `[0, 1]` at both ends and pass through.
+fn chain_view(chain: Chain) -> view::Chain {
+    view::Chain {
+        feedback: chain.feedback / karakuri_operation::Feedback::MAX,
+        cut: mix::cut(chain.cut),
+        bloom: chain.bloom,
+        rgb_shift: chain.rgb_shift,
     }
 }
 
@@ -12503,15 +12892,16 @@ impl Keeping {
 
     /// **Take up what a slot is now playing.**
     ///
-    /// `landed` is the build id when a swap went in, or `None` when one was
-    /// rolled back — which is the case [`Playing::previous`] exists for. A
-    /// rollback brings back a Set nothing will name again, so the only way to
-    /// say what came back is to have remembered it.
+    /// `landed` is the id of the build that went in, and there is no other
+    /// case: a swap is the only event that changes what a slot holds
+    /// (ADR-0316). It used to take an `Option`, whose `None` was a rollback,
+    /// and the version that came back had to have been remembered because
+    /// nothing would name it again.
     ///
     /// The `built` channel is drained here rather than per frame: it only has
     /// anything in it when a build has just been requested, and this runs when
     /// one has just landed.
-    fn took_up(&mut self, engine: &Engine, slot: usize, landed: Option<u64>) {
+    fn took_up(&mut self, engine: &Engine, slot: usize, landed: u64) {
         let mut ready: Vec<watch::Built> = Vec::new();
         while let Ok(built) = self.built.try_recv() {
             ready.push(built);
@@ -12519,23 +12909,18 @@ impl Keeping {
         for built in ready {
             self.pending.push(built);
         }
-        match landed {
-            // **Missing means the watcher could not store this build's
-            // sources**, which it said at the time. Handed to `landed` as `None`
-            // rather than returned on, because the swap happened either way: a
-            // slot that took a version nobody can name is a slot with no
-            // address, not a slot still on its old one.
-            Some(id) => {
-                let at = self.pending.iter().position(|built| built.id == id);
-                let built = at.map(|at| self.pending.remove(at));
-                let nodes = built
-                    .as_ref()
-                    .zip(engine.aimed.get(slot))
-                    .map(|(built, aiming)| built_nodes(built, &aiming.at));
-                self.playing.landed(slot, nodes);
-            }
-            None => self.playing.rolled_back(slot),
-        }
+        // **A build with nothing in `pending` is a build whose sources the
+        // watcher could not store**, which it said at the time. It is handed to
+        // `landed` as `None` rather than returned on, because the swap happened
+        // either way: a slot that took a version nobody can name is a slot with
+        // no address, not a slot still on its old one.
+        let at = self.pending.iter().position(|built| built.id == landed);
+        let built = at.map(|at| self.pending.remove(at));
+        let nodes = built
+            .as_ref()
+            .zip(engine.aimed.get(slot))
+            .map(|(built, aiming)| built_nodes(built, &aiming.at));
+        self.playing.landed(slot, nodes);
     }
 
     /// **Every save still being written, waited for — up to
@@ -12654,7 +13039,6 @@ impl App {
                 // on the same pass that makes the watchers.
                 playing: Playing {
                     playing: Vec::new(),
-                    previous: Vec::new(),
                 },
                 built,
                 pending: Vec::new(),
@@ -12869,6 +13253,19 @@ impl App {
                     if let Some(line) = scheduled(&mut readout.view, operation) {
                         println!("{line}");
                     }
+                    // **The Sequencer bay's three, performed where the
+                    // transition row's are and for their reason**: `written`
+                    // answers `Silent(Surface)` for all five of that bay's
+                    // operations, so the surface that emits one performs it and
+                    // there is nothing here for `apply` to do. What a *lane*
+                    // does is not this line — it comes back through this same
+                    // function as an `Operation::SetOpacity`, which is the
+                    // whole of ADR-0322. See [`sequenced`].
+                    if let Some(line) =
+                        sequenced(&mut readout.sequencer, &mut readout.playhead, operation)
+                    {
+                        println!("{line}");
+                    }
                     // **The reading is taken off the deck and off the console,
                     // and for four of this bay's controls it is *I read
                     // nothing*.** A gain, an
@@ -12890,7 +13287,13 @@ impl App {
                     let settings = readout.view.transition();
                     let written = written(
                         operation,
-                        &reading(operation, &gfx.engine.deck, &gfx.engine.look, settings),
+                        &reading(
+                            operation,
+                            &gfx.engine.deck,
+                            &gfx.engine.look,
+                            &gfx.engine.chain,
+                            settings,
+                        ),
                     );
                     // **A press that wrote no record says so**, and says
                     // which of the two kinds of nothing it was, before
@@ -12926,9 +13329,12 @@ impl App {
                             }
                         }
                         for record in records {
-                            if let Some(line) =
-                                apply(record, &mut gfx.engine.deck, &mut gfx.engine.look)
-                            {
+                            if let Some(line) = apply(
+                                record,
+                                &mut gfx.engine.deck,
+                                &mut gfx.engine.look,
+                                &mut gfx.engine.chain,
+                            ) {
                                 println!("{line}");
                             }
                         }
@@ -13242,6 +13648,10 @@ impl ApplicationHandler for App {
         // it — on a run that has one, and over a fader a hand can take hold
         // of. It is written again on every frame; this is the first.
         self.readout.view.master_out = Some(engine.deck.out());
+        // And the three rows under it, off the `Present` that holds them — the
+        // same seam one row down, and the reading rather than the state
+        // (ADR-0156).
+        self.readout.view.master_chain = Some(chain_view(engine.chain));
         // **And the room, before the legend**, because the legend says which
         // input is open and the answer is the host's rather than a sentence
         // here. The session tempo is the deck's own oscillator: it is what the
@@ -14745,6 +15155,18 @@ impl ApplicationHandler for App {
                 );
                 self.readout.view.picture = picture;
                 self.readout.view.previews = previews;
+                // **Which of those pictures is a still, and why** — the deck's
+                // own answer, read beside the pictures because the caption's
+                // word is a function of the pair. A slot the watchdog stopped
+                // holds the last frame it drew (ADR-0316), and a held frame of
+                // good material is indistinguishable from material: the
+                // caption is what says it (ADR-0269).
+                //
+                // Per frame like the pictures, and for the same reason it is
+                // not per verdict: this is a state a slot is in rather than an
+                // event it had, and it ends on a build the lane will also
+                // report.
+                self.readout.view.overloaded = stopped_slots(&gfx.engine.deck);
 
                 // **What the transport row reads, written beside the frame it
                 // is about**, exactly as the two lines above are: the picture
@@ -14797,6 +15219,79 @@ impl ApplicationHandler for App {
                 // `BEAT_STALENESS` for as long as there is one, so that frame
                 // is at most 24.67 ms away and there is always another —
                 // P-0094, and `View::transport_declares`.
+                // **The sequencer, polled**, and it is the one thing in this
+                // handler that emits an operation nobody pressed.
+                //
+                // **On the render thread, once a frame, against `beats`** —
+                // which is what a transition already is one row finer
+                // (`Transition::value_at(beats)`), and the engine has no beat
+                // callback for it to be anything else (ADR-0322). Nothing here
+                // reads a clock: `beats` is the oscillator's accumulator, a
+                // pure function of the `tick` records and the tempo
+                // corrections, so P-0092 is untouched.
+                //
+                // **Live only**, which is the whole of what a replay needs from
+                // this: what a lane did is already in the stream as the writes
+                // it made, verbatim, so re-deriving the steps at replay would
+                // need the pattern in the stream (ADR-0227 refuses it) and
+                // would make a replay depend on a file that may have been
+                // edited since. This window has no replay path at all, and this
+                // block is where one would have to be excluded.
+                //
+                // **Before the reading below**, so the column the bay draws is
+                // the step that was just emitted rather than the one before it.
+                let beats = gfx.engine.deck.signals().oscillator().beats();
+                let step = self
+                    .readout
+                    .playhead
+                    .advance(self.readout.sequencer.pattern(), beats);
+                if let Some(step) = step {
+                    // **One emission per unmuted lane, through the same
+                    // `performed` a press goes through** — so what reaches the
+                    // stream is `Record::Opacity` and `Record::Ride`, records
+                    // that already exist and already replay (ADR-0222's *"a
+                    // hand and a lane meet at `Live::operate` where every other
+                    // conflict is already resolved"*).
+                    //
+                    // **Indexed rather than iterated**, because the borrow of
+                    // the pattern has to end before `performed` takes the whole
+                    // readout: the operation is built and the borrow dropped,
+                    // and nothing is collected, so a boundary allocates
+                    // nothing on the frame path.
+                    for lane in 0..self.readout.sequencer.pattern().lanes().len() {
+                        let pattern = self.readout.sequencer.pattern();
+                        let Some(at) = pattern.lanes().get(lane) else {
+                            continue;
+                        };
+                        if at.muted() {
+                            continue;
+                        }
+                        let operation = at.operation_at(step, pattern.mode());
+                        let acted = Acted::Emitted(Some(operation));
+                        App::performed(
+                            gfx,
+                            self.started,
+                            &mut self.readout,
+                            self.recording.recorder(),
+                            &acted,
+                            // **A frame is already being drawn**, so a lane
+                            // asks for none: this is inside the handler that
+                            // composes, and a `Repaint::Now` here would be the
+                            // frame this one already is.
+                            Repaint::Never,
+                        );
+                    }
+                }
+                // **What the bay draws, beside the frame it is about.** The
+                // pattern is cloned per frame the way every other reading here
+                // is rebuilt per frame — the console holds no session and this
+                // is the seam (ADR-0156) — and the step is the *poll's* answer
+                // rather than a second derivation from `beats`.
+                self.readout.view.sequencer = Some(Sequenced {
+                    pattern: self.readout.sequencer.pattern().clone(),
+                    bank: self.readout.sequencer.armed(),
+                    step: self.readout.playhead.at(),
+                });
                 self.readout.view.transport = transport(
                     &gfx.engine.deck,
                     &self.costs,
@@ -14832,6 +15327,7 @@ impl ApplicationHandler for App {
                 // present pass read it, so the two are read off two different
                 // objects and written here in the same breath (ADR-0224).
                 self.readout.view.master_out = Some(gfx.engine.deck.out());
+                self.readout.view.master_chain = Some(chain_view(gfx.engine.chain));
                 // **And which classes are open to a model**, read off the
                 // handle rather than remembered from the last press on a pill.
                 // Nothing but a pill writes it today; the handle exists because
@@ -14863,7 +15359,7 @@ impl ApplicationHandler for App {
                 // slots were watched no Set ever landed after the first, so
                 // this read was a startup step and nothing else; it is still
                 // a startup step and now also a rebuild's.
-                let mut took: Vec<(usize, Option<u64>)> = Vec::new();
+                let mut took: Vec<(usize, u64)> = Vec::new();
                 if staging(
                     &mut gfx.engine.deck,
                     &mut self.readout.view.staging,
@@ -15041,8 +15537,15 @@ impl ApplicationHandler for App {
                         previews,
                         slot_bind_groups,
                         look,
+                        chain,
                         ..
                     } = engine;
+                    // **Per frame and unconditionally**, which is
+                    // `compose`'s own treatment of the tone map one pass
+                    // along: one `queue.write_buffer` into storage sized at
+                    // construction, and tracking whether it changed would buy
+                    // nothing and cost a way to go stale.
+                    present.set_chain(&gpu.queue, *chain);
                     let textures_delta = &mut output.textures_delta;
                     let cost = &mut cost;
                     let mut sinks: [&mut dyn Sink; 1] = [picture];
@@ -16047,6 +16550,50 @@ mod tests {
     /// [`unwritten`] carries what that was.
     use karakuri_operation_record::{Owed, Silent};
 
+    /// **The two spellings of feedback's ceiling are one number**, and this is
+    /// the package that can see both.
+    ///
+    /// `karakuri_operation::Feedback::MAX` is the reach a fader draws;
+    /// `karakuri_engine::master::Chain::FEEDBACK_MAX` is the wall the engine
+    /// clamps at, where the record is applied. Two crates state it because
+    /// neither may depend on the other, and both say at their own definition
+    /// that it is a convention held here — which is `Current::tempo`'s
+    /// arrangement one control along, and the shape
+    /// `docs/contributing.md` §4 asks for when a guarantee cannot be
+    /// structural.
+    ///
+    /// **Both directions of the cut list too**, for the same reason and by the
+    /// same route: `mix::cut` takes the engine's word to the vocabulary's and
+    /// `Cut::parse` takes the record's word back, so a cut that survived one
+    /// leg and not the other would be a picture a replay draws differently.
+    /// The crossing lives in `karakuri-environment` beside `mix::tonemap` and
+    /// `mix::sync`, because this window and `karakuri-cli` both make it.
+    #[test]
+    fn the_feedback_ceiling_and_the_cut_list_are_one_answer_in_two_crates() {
+        assert_eq!(
+            karakuri_operation::Feedback::MAX,
+            Chain::FEEDBACK_MAX,
+            "the reach the console draws and the wall the engine clamps at have drifted"
+        );
+        // The clamp is the identity on the top of the fader's own travel, which
+        // is what makes the two numbers being equal the thing that matters
+        // rather than a coincidence.
+        let top = Chain {
+            feedback: karakuri_operation::Feedback::MAX,
+            cut: Cut::Exit,
+            bloom: 1.0,
+            rgb_shift: 1.0,
+        };
+        assert_eq!(top.clamped(), top);
+        for cut in Cut::ALL {
+            assert_eq!(
+                Cut::parse(mix::cut(cut).name()),
+                Some(cut),
+                "a cut did not survive the round trip through a record's word"
+            );
+        }
+    }
+
     /// **The three things this program has decided about a room, and none of
     /// them needs a device.**
     ///
@@ -16894,7 +17441,7 @@ mod tests {
         // against one frame of the display. The lane does not read the number
         // — it reads which verdict it was — but a value that named the wrong
         // quantity here would be a test teaching the wrong sentence.
-        let rolled = |label: &str| Event::RolledBack {
+        let stopped = |label: &str| Event::Overloaded {
             id: 3,
             label: label.into(),
             cost_ms: 24.0,
@@ -16918,8 +17465,8 @@ mod tests {
             Verdict::Waiting("a + b", view::Stage::Refused)
         );
         assert_eq!(
-            verdict(&rolled("a + b")),
-            Verdict::Waiting("a + b", view::Stage::RolledBack)
+            verdict(&stopped("a + b")),
+            Verdict::Waiting("a + b", view::Stage::Overloaded)
         );
         // **The checker's refusal, which is a fourth word and not the
         // build's.** `Rejected` above is a Set that would not assemble;
@@ -16957,13 +17504,13 @@ mod tests {
             "the rows are not in the order the letters are drawn in"
         );
 
-        settle(&mut lane, 0, "a + a", view::Stage::RolledBack, &[]);
+        settle(&mut lane, 0, "a + a", view::Stage::Overloaded, &[]);
         assert_eq!(
             lane.len(),
             2,
             "a second verdict on one slot made a second row"
         );
-        assert_eq!(lane[0].stage, view::Stage::RolledBack);
+        assert_eq!(lane[0].stage, view::Stage::Overloaded);
         assert_eq!(
             lane[0].name, "a + a",
             "the name was not left as it was found"
@@ -18088,8 +18635,8 @@ mod tests {
     /// a key or a surface, because *"a live run changes its material by
     /// editing a file and letting the worker build it, which is what the
     /// budget watchdog is attached to"*. So this asserts files and an aim.
-    /// A load that built a Set here would be a picture nothing measured, on a
-    /// deck with no previous Set parked to roll back to.
+    /// A load that built a Set here would be a picture nothing measured, in a
+    /// slot the watchdog never got to judge.
     ///
     /// **Three things beyond *it happened*, and each is a wrong load that
     /// looks right.** The scratch name carries the deck letter and the node's
@@ -19178,6 +19725,114 @@ mod tests {
             "the operation did not go down the path every other emitted operation takes"
         );
         assert!(!readout.view.arrangement.open());
+    }
+
+    /// **The four presses the Sequencer bay performs**, and the one thing this
+    /// window does with a pattern that no test in `karakuri-console` can see:
+    /// that bay hands back an operation and applies nothing, so this is the
+    /// other side of that seam.
+    ///
+    /// **A press names a bank, and a bank this session does not have is
+    /// refused and said out loud** — [`pointed`]'s rule, and the reason each
+    /// arm answers a sentence rather than `None`.
+    #[test]
+    fn a_sequencer_press_moves_the_pattern_it_names() {
+        let mut banks = demonstration_banks();
+        let mut playhead = karakuri_pattern::Playhead::default();
+        assert!(
+            banks.pattern().lanes()[0].muted(),
+            "a run starts with the lane muted, so nothing writes deck A's fader until a hand asks"
+        );
+        // The mute, taken back.
+        assert!(sequenced(
+            &mut banks,
+            &mut playhead,
+            &Operation::SetLaneMute {
+                pattern: 0,
+                lane: 0,
+                muted: false,
+            }
+        )
+        .is_some());
+        assert!(!banks.pattern().lanes()[0].muted());
+        // A step, set rather than flipped.
+        for on in [true, true, false] {
+            assert!(sequenced(
+                &mut banks,
+                &mut playhead,
+                &Operation::SetStep {
+                    pattern: 0,
+                    lane: 0,
+                    step: 4,
+                    on,
+                }
+            )
+            .is_some());
+            assert_eq!(
+                banks.pattern().lanes()[0].slot_on(4),
+                on,
+                "a press asks for a state, so asking twice for the same one leaves it there"
+            );
+        }
+        // A slot the mode press must not touch, and it is slot 5 — an odd one,
+        // which an eighth does not read at all and which is therefore the slot
+        // a store sized to the count would have thrown away.
+        assert!(sequenced(
+            &mut banks,
+            &mut playhead,
+            &Operation::SetStep {
+                pattern: 0,
+                lane: 0,
+                step: 5,
+                on: true,
+            }
+        )
+        .is_some());
+        // The mode, which changes a reading and forgets where the playhead
+        // was, because the index it remembered is about a reading that has
+        // gone.
+        playhead.advance(banks.pattern(), 0.0);
+        assert!(playhead.at().is_some());
+        assert!(sequenced(
+            &mut banks,
+            &mut playhead,
+            &Operation::SetPatternGrid {
+                pattern: 0,
+                grid: karakuri_operation::StepMode::Eighth,
+            }
+        )
+        .is_some());
+        assert_eq!(banks.pattern().mode().count(), 8);
+        assert_eq!(
+            playhead.at(),
+            None,
+            "a mode press is the same bar at another width, so the next poll is a boundary"
+        );
+        assert!(
+            banks.pattern().lanes()[0].slot_on(5),
+            "and the sixteen slots underneath are untouched — including the odd ones an eighth \
+             does not read"
+        );
+        // A bank, and one this session does not have.
+        assert!(sequenced(
+            &mut banks,
+            &mut playhead,
+            &Operation::SelectPattern { pattern: 3 }
+        )
+        .is_some());
+        assert_eq!(banks.armed(), 3);
+        assert!(
+            banks.pattern().is_empty(),
+            "bank 3 is one of the three empty ones"
+        );
+        let refused = sequenced(
+            &mut banks,
+            &mut playhead,
+            &Operation::SelectPattern { pattern: 9 },
+        )
+        .expect("a press this session cannot perform says so rather than going quiet");
+        assert!(refused.contains("there is no bank 9"));
+        assert_eq!(banks.armed(), 3, "and a refused press moves nothing");
     }
 
     /// **A finished name is one operation of the vocabulary**, and the card is
@@ -24005,10 +24660,16 @@ mod press_handler {
             "transition_row(",
             &["row.shape(", "row.quantum(", "row.length(", "row.go("],
         ),
-        // **The Master bay's one**, and it is the Mixer bay's `grab` on a
-        // different type bound to a different local — which is why the local
-        // is part of what is written down and the method alone is not.
-        ("the Master bay's out", "master_row(", &["row.grab("]),
+        // **The Master bay's five**, and they are the Mixer bay's `grab` and
+        // `blend` on a different type bound to a different local — which is why
+        // the local is part of what is written down and the method alone is
+        // not. Two calls for five controls: `grab` answers for the out knob and
+        // the three effect rows' knobs, and `chip` for the feedback row's cut.
+        (
+            "the Master bay's five",
+            "master_row(",
+            &["row.grab(", "row.chip("],
+        ),
         // **The Inspector pane heads' name**, and it is the capsule's
         // arrangement at the other end of the same row: the pane is derived
         // per index and the run from the pane, so the derivation named here is
@@ -24159,6 +24820,17 @@ mod press_handler {
         // in four different regions and cannot be one laid-out box, but they
         // are one type and one question.
         ("the class pills", "mcp_pill(", &["pill.hit("]),
+        // **The Sequencer bay's three, one derivation and one call**: a cell,
+        // a label and the mode pill are three questions about one laid-out
+        // bay, and `Sequencer::press` is the one that answers all three —
+        // which of them it was is inside the operation it hands back, and the
+        // line `sequenced` prints says so. The same shape the transport row's
+        // `rec` pill is in, at three controls instead of one.
+        (
+            "the Sequencer bay's cells, labels and mode pill",
+            "sequencer_bay(",
+            &["bay.press("],
+        ),
     ];
 
     /// A line's code, `panel_column.rs`'s second cut: whatever trails a `//`
@@ -24642,7 +25314,6 @@ mod gpu {
             edges: Vec::new(),
             playing: Playing {
                 playing: Vec::new(),
-                previous: Vec::new(),
             },
             built,
             pending: Vec::new(),
@@ -24799,6 +25470,35 @@ mod gpu {
     /// check that fact owes — the sentence a model reads out of `swap_outcome`
     /// is the event the row was written from.
     ///
+    /// # The swap and its verdict arrive together, so the row may already be
+    /// gone
+    ///
+    /// **This asserted `Stage::Landed` on a row that is no longer there**, and
+    /// it was written when a candidate went on trial: the swap landed in one
+    /// drain and the verdict came thirty-eight frames later in another, so
+    /// between them the lane held a `landed` row. ADR-0313 put the verdict in
+    /// the call the swap lands in, so one `staging` pass sees `Swapped` **and**
+    /// its verdict, and a build that held the budget has its row settled in the
+    /// same pass that made it — *"empty is this lane's ordinary state"*.
+    ///
+    /// **So what this pins is the pair, on whichever verdict this machine's
+    /// clock produces**, which is `docs/contributing.md` §1's rule: a test that
+    /// turns on whether this adapter is fast is not a test. One frame of the
+    /// shipped example against a 20 ms budget is comfortable on the machines
+    /// this was written on and is not a fact about every machine, and the two
+    /// outcomes are two states of the instrument rather than a pass and a
+    /// failure:
+    ///
+    /// - **it ran** — no row, the capsule on `landed`, no cell marked, and the
+    ///   server's sentence saying it held the budget;
+    /// - **it was stopped** — a row on `overloaded`, the capsule with it, that
+    ///   deck's cell marked as a still, and the server's sentence saying so
+    ///   (ADR-0316).
+    ///
+    /// Which of the two happened is read off the deck (`Deck::overloaded`) and
+    /// never off the surfaces being checked, or this would be asserting that
+    /// three readings of one value agree with themselves.
+    ///
     /// **And what the slot is now playing moves with it.** A build that landed
     /// and was not taken up is a build a save would write the *previous*
     /// version of, so the address is asserted here rather than left to the save
@@ -24865,7 +25565,7 @@ mod gpu {
         // quiet before it builds, then compiles; the swap lands at a frame
         // boundary, which is `begin_frame`.
         let mut rows: Vec<view::Candidate> = Vec::new();
-        let mut took: Vec<(usize, Option<u64>)> = Vec::new();
+        let mut took: Vec<(usize, u64)> = Vec::new();
         // The transport's health capsule, off the same drain, so this test
         // reads both halves of what one verdict writes.
         let mut health: Option<view::Stage> = None;
@@ -24885,40 +25585,105 @@ mod gpu {
             !took.is_empty(),
             "nothing was built in 30s — the watcher never saw the edit"
         );
-        let row = rows
-            .iter()
-            .find(|row| row.deck == ON_AIR)
-            .expect("the lane drew no row for the deck that rebuilt");
-        assert_eq!(
-            row.stage,
-            view::Stage::Landed,
-            "the build did not land, so this test is not about what it says it is"
-        );
-
-        // **And the transport's health capsule, which is the same drain's
-        // other reader.** A `swap::Event` cannot be made without a device, so
-        // this is where *the window writes down what the last write did* is
-        // checked at all: `karakuri-console` can be asked whether a capsule
-        // draws the verdict it was handed, and nothing in that crate can be
-        // asked whether this program hands it one. A version that drew the
-        // capsule perfectly and never filled `Readout::health` would leave
-        // every console test green — which is the seam `mod press_handler`
-        // exists for, on the readout's side, where the scan it uses cannot
-        // see anything at all.
-        assert_eq!(
-            health,
-            Some(view::Stage::Landed),
-            "the lane was told what the build did and the transport row was not"
-        );
+        // **What the verdict was, read off the deck** — not off any of the
+        // three surfaces below, which is what makes them a check rather than a
+        // value compared with itself. See this test's documentation for why
+        // both answers are states of the instrument and neither is a failure.
+        let stopped = engine.deck.overloaded(ON_AIR);
+        let row = rows.iter().find(|row| row.deck == ON_AIR);
 
         // **The same sentence, out of the server.** `swap_outcome` answers with
-        // the reports the render loop handed over, newest last.
+        // the reports the render loop handed over, newest last. Read before the
+        // surfaces are checked, because every one of them is checked against
+        // it.
         let (failed, said) = call(port, "swap_outcome", serde_json::json!({}));
         assert!(!failed, "swap_outcome refused: {said}");
         assert!(
-            said.contains(&format!("slot {ON_AIR}:")) && said.contains(&row.name),
-            "the server was told something the lane was not: {said} against `{}`",
-            row.name
+            said.contains(&format!("slot {ON_AIR}:")),
+            "the server was told about a slot this test did not rebuild: {said}"
+        );
+        // The swap itself, which happened either way and is what `took` above
+        // is an entry of.
+        assert!(
+            said.contains("swapped in"),
+            "the swap reached the lane and did not reach the server: {said}"
+        );
+
+        // **The transport's health capsule, which is the same drain's other
+        // reader.** A `swap::Event` cannot be made without a device, so this is
+        // where *the window writes down what the last write did* is checked at
+        // all: `karakuri-console` can be asked whether a capsule draws the
+        // verdict it was handed, and nothing in that crate can be asked whether
+        // this program hands it one. A version that drew the capsule perfectly
+        // and never filled `Readout::health` would leave every console test
+        // green — which is the seam `mod press_handler` exists for, on the
+        // readout's side, where the scan it uses cannot see anything at all.
+        match stopped {
+            // **It ran.** The verdict was in the candidate's favour, so the
+            // file and the picture agree and the row left the lane in the same
+            // pass that made it — `view::staging`'s own rule, and the page's
+            // *empty is this lane's ordinary state*. The capsule keeps the
+            // swap's word, because a verdict in favour is not a write.
+            false => {
+                assert!(
+                    row.is_none(),
+                    "the build held the budget and its row is still on the lane, \
+                     which is a lane that never empties: {:?}",
+                    row.map(|row| row.stage)
+                );
+                assert_eq!(
+                    health,
+                    Some(view::Stage::Landed),
+                    "the lane was told what the build did and the transport row was not"
+                );
+                assert!(
+                    said.contains("held the budget") || said.contains("was not judged"),
+                    "the lane settled this build and the server was told something \
+                     else about it: {said}"
+                );
+            }
+            // **It was stopped** (ADR-0316). The version is in the slot, the
+            // slot is not stepping it, and three surfaces say so in one word.
+            true => {
+                let row = row.expect(
+                    "the slot was stopped for cost and the lane drew no row, which is \
+                     the disagreement this lane exists to say",
+                );
+                assert_eq!(
+                    row.stage,
+                    view::Stage::Overloaded,
+                    "the slot is stopped and its row says otherwise"
+                );
+                assert_eq!(
+                    health,
+                    Some(view::Stage::Overloaded),
+                    "the lane says the slot is stopped and the transport row does not"
+                );
+                assert!(
+                    said.contains("is overloaded"),
+                    "the lane says the slot is stopped and the server was told \
+                     something else: {said}"
+                );
+                assert!(
+                    said.contains(&row.name),
+                    "the server was told about a build the row was not: {said} \
+                     against `{}`",
+                    row.name
+                );
+            }
+        }
+
+        // **And the cells' half of the same reading**, which is the other thing
+        // a verdict writes into the view: only the slot the verdict was against
+        // is drawn as a still, and the entries past this deck's slot count are
+        // `false` rather than a panic, because the row is `view::DECKS` cells
+        // whatever the deck holds.
+        let mut cells = [false; view::DECKS];
+        cells[ON_AIR] = stopped;
+        assert_eq!(
+            stopped_slots(&engine.deck),
+            cells,
+            "the cells do not say what the deck says about which slot is stopped"
         );
 
         // And the slot is playing the new bytes, so a save would write them.
@@ -24943,9 +25708,22 @@ mod gpu {
     ///
     /// It is the one place the resolution in [`node_of`] is checked end to
     /// end: this deck's Sets have the **default** interface, so every control
-    /// they publish is a wildcard, and if the resolution were wrong the bay
-    /// would draw node heads with nothing under them and every other test
-    /// would still pass.
+    /// an author could have addressed is a wildcard, and if the resolution
+    /// were wrong the bay would draw node heads with nothing under them and
+    /// every other test would still pass.
+    ///
+    /// **Three of them are addressed all the same, and they are the built-in
+    /// camera's** — `radius`, `speed` and `height`, which the engine declares
+    /// for a node with no procedure behind it and publishes with their address
+    /// because a bare name does not reach them
+    /// (`docs/adr/0318-the-built-in-cameras-three-placement-numbers-are-parameter-rows.md`).
+    /// **That is what makes the last assertion here worth more than it was**:
+    /// the pair this deck opens on declares a `radius` of its own, so the two
+    /// halves of `node_of` are both exercised on one key — the wildcard one
+    /// landing on the L1 alone, and the addressed one landing on the camera —
+    /// and a resolution that counted the camera as a second declaration would
+    /// drop the geometry's row and leave the count short. It did, until the
+    /// landing stopped being worked out here.
     #[test]
     fn a_pane_reads_a_running_set() {
         let gpu = Gpu::headless().expect("no GPU");
@@ -26178,7 +26956,13 @@ mod gpu {
 
         // The record, and the deck.
         let record = super::tests::only_record(&operation);
-        assert!(apply(&record, &mut engine.deck, &mut engine.look).is_some());
+        assert!(apply(
+            &record,
+            &mut engine.deck,
+            &mut engine.look,
+            &mut engine.chain
+        )
+        .is_some());
         assert_eq!(
             engine.deck.gain(0),
             0.0,
@@ -26332,7 +27116,13 @@ mod gpu {
         let slot = held(&engine.deck, deck).expect("the selection is a slot this deck has");
         let gain = gain_key("]", engine.deck.gain(slot)).expect("`]` is one of the trim's keys");
         let record = super::tests::only_record(&Operation::SetGain { deck, gain });
-        assert!(apply(&record, &mut engine.deck, &mut engine.look).is_some());
+        assert!(apply(
+            &record,
+            &mut engine.deck,
+            &mut engine.look,
+            &mut engine.chain
+        )
+        .is_some());
         let now = snapshot(&engine.deck);
         assert!(
             (now[here].0 - (was[here].0 + GAIN_STEP)).abs() <= CLOSE,
@@ -26355,7 +27145,13 @@ mod gpu {
         let opacity =
             opacity_key("'", engine.deck.opacity(slot)).expect("`'` is one of the fader's keys");
         let record = super::tests::only_record(&Operation::SetOpacity { deck, opacity });
-        assert!(apply(&record, &mut engine.deck, &mut engine.look).is_some());
+        assert!(apply(
+            &record,
+            &mut engine.deck,
+            &mut engine.look,
+            &mut engine.chain
+        )
+        .is_some());
         let now = snapshot(&engine.deck);
         assert!(
             (now[here].1 - (was[here].1 + OPACITY_STEP)).abs() <= CLOSE,
@@ -26382,7 +27178,13 @@ mod gpu {
              on a press that did nothing"
         );
         let record = super::tests::only_record(&Operation::SetBlendMode { deck, blend });
-        assert!(apply(&record, &mut engine.deck, &mut engine.look).is_some());
+        assert!(apply(
+            &record,
+            &mut engine.deck,
+            &mut engine.look,
+            &mut engine.chain
+        )
+        .is_some());
         let now = snapshot(&engine.deck);
         assert_eq!(
             blend_mode(now[here].2),
@@ -26462,7 +27264,13 @@ mod gpu {
             deck,
             gain: off_the_deck,
         });
-        assert!(apply(&record, &mut engine.deck, &mut engine.look).is_some());
+        assert!(apply(
+            &record,
+            &mut engine.deck,
+            &mut engine.look,
+            &mut engine.chain
+        )
+        .is_some());
         assert!(
             (engine.deck.gain(here) - (0.25 + GAIN_STEP)).abs() <= CLOSE,
             "a press stepping from the deck's own reading landed at {} rather than at {}",
@@ -26915,7 +27723,13 @@ mod gpu {
         );
 
         // The reading, and the answer that used to be a sentence.
-        let current = reading(&operation, &engine.deck, &engine.look, settings);
+        let current = reading(
+            &operation,
+            &engine.deck,
+            &engine.look,
+            &engine.chain,
+            settings,
+        );
         let wiped = written(&operation, &current);
         assert!(
             matches!(wiped, Written::Records(_)),
@@ -26972,7 +27786,12 @@ mod gpu {
 
         // And the deck follows.
         for record in records {
-            apply(record, &mut engine.deck, &mut engine.look);
+            apply(
+                record,
+                &mut engine.deck,
+                &mut engine.look,
+                &mut engine.chain,
+            );
         }
         assert_eq!(
             engine.deck.mask(over).kind(),
@@ -26995,7 +27814,7 @@ mod gpu {
         assert_eq!(
             written(
                 &front,
-                &reading(&front, &engine.deck, &engine.look, settings)
+                &reading(&front, &engine.deck, &engine.look, &engine.chain, settings)
             ),
             Written::Owed(karakuri_operation_record::Owed::NotRead(
                 karakuri_operation_record::Reading::Mask
@@ -27112,7 +27931,13 @@ mod gpu {
                 level: "allocated".to_owned(),
             }
         );
-        assert!(apply(&record, &mut engine.deck, &mut engine.look).is_some());
+        assert!(apply(
+            &record,
+            &mut engine.deck,
+            &mut engine.look,
+            &mut engine.chain
+        )
+        .is_some());
         assert_eq!(
             engine.deck.requested_residency(ASKED_TO_PRIME),
             Residency::Allocated,
@@ -27176,7 +28001,13 @@ mod gpu {
             slot: ASKED_TO_PRIME as u8,
             level: "priming".to_owned(),
         };
-        assert!(apply(&again, &mut engine.deck, &mut engine.look).is_some());
+        assert!(apply(
+            &again,
+            &mut engine.deck,
+            &mut engine.look,
+            &mut engine.chain
+        )
+        .is_some());
         assert_eq!(
             engine.deck.requested_residency(ASKED_TO_PRIME),
             Residency::Priming,
@@ -27310,6 +28141,7 @@ mod gpu {
                 &operation,
                 &engine.deck,
                 &engine.look,
+                &engine.chain,
                 TransitionSettings::START,
             ),
         );
@@ -27329,7 +28161,13 @@ mod gpu {
         );
 
         // And the deck.
-        assert!(apply(&records[0], &mut engine.deck, &mut engine.look).is_some());
+        assert!(apply(
+            &records[0],
+            &mut engine.deck,
+            &mut engine.look,
+            &mut engine.chain
+        )
+        .is_some());
         let mask = engine.deck.mask(ON_AIR);
         assert_eq!(
             mask.kind(),
@@ -27488,6 +28326,7 @@ mod gpu {
                 &operation,
                 &engine.deck,
                 &engine.look,
+                &engine.chain,
                 TransitionSettings::START,
             ),
         );
@@ -27503,7 +28342,13 @@ mod gpu {
             }],
             "the record is not the whole look with only the operator changed"
         );
-        assert!(apply(&records[0], &mut engine.deck, &mut engine.look).is_some());
+        assert!(apply(
+            &records[0],
+            &mut engine.deck,
+            &mut engine.look,
+            &mut engine.chain
+        )
+        .is_some());
         assert_eq!(
             engine.look,
             Look {
@@ -27546,6 +28391,7 @@ mod gpu {
                 &operation,
                 &engine.deck,
                 &engine.look,
+                &engine.chain,
                 TransitionSettings::START,
             ),
         );
@@ -27562,7 +28408,13 @@ mod gpu {
             "the record is not the whole look with only the level changed — the operator the \
              press cannot name, or the white point no surface can, was rewritten"
         );
-        assert!(apply(&records[0], &mut engine.deck, &mut engine.look).is_some());
+        assert!(apply(
+            &records[0],
+            &mut engine.deck,
+            &mut engine.look,
+            &mut engine.chain
+        )
+        .is_some());
         assert_eq!(
             engine.look,
             Look {

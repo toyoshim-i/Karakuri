@@ -20,6 +20,8 @@
 use bytemuck::{Pod, Zeroable};
 use wgpu::util::DeviceExt;
 
+use crate::master::{Chain, MasterChain};
+
 /// The transfer from unbounded linear HDR to a displayable `[0, 1]`. Compared
 /// side by side by `examples/tonemap_compare.rs`, on the material this project
 /// actually renders: additive, saturated point sprites, which push channels far
@@ -105,6 +107,17 @@ pub struct Present {
     /// indistinguishable in the picture.
     tonemap: wgpu::Buffer,
     bind_group: wgpu::BindGroup,
+    /// **The master chain**, which is the three fixed passes between the mix's
+    /// write and this pass's read — see [`crate::master`].
+    ///
+    /// **Here because this module already owns every frame-sized target
+    /// between the fold and the surface**, and resizing them is one call: a
+    /// chain owned by the program would have to be threaded through
+    /// [`crate::frame::compose`] and every one of its callers, and would be a
+    /// second thing to remember to resize beside `hdr`. It does not weaken
+    /// what this module claims: the chain adds no encode and no transfer, so
+    /// *sRGB is encoded once, here* is the same sentence it was.
+    chain: MasterChain,
     width: u32,
     height: u32,
 }
@@ -207,6 +220,7 @@ impl Present {
             hdr_view,
             tonemap,
             bind_group,
+            chain: MasterChain::new(device, width, height),
             width,
             height,
         }
@@ -274,6 +288,10 @@ impl Present {
         self.hdr = hdr;
         self.hdr_view = view;
         self.bind_group = bind_group;
+        // The chain's four targets are frame-sized for the same reason `hdr`
+        // is, so they move with it and there is one call rather than two to
+        // forget.
+        self.chain.resize(device, width, height);
         self.width = width;
         self.height = height;
     }
@@ -303,9 +321,55 @@ impl Present {
         queue.write_buffer(&self.tonemap, 0, bytemuck::bytes_of(&uniform));
     }
 
-    /// The linear HDR target a `VideoSource` renders into.
+    /// The linear HDR target a `VideoSource` renders into, and what this pass
+    /// reads.
+    ///
+    /// **Not necessarily where the mix writes** — see [`Present::mix_target`].
+    /// With a master chain running, the mix writes into the chain's entry and
+    /// the chain's last pass writes here.
     pub fn hdr_view(&self) -> &wgpu::TextureView {
         &self.hdr_view
+    }
+
+    /// **Where the composited frame is written**: the master chain's entry
+    /// when the chain runs, and [`Present::hdr_view`] when it does not.
+    ///
+    /// The two are the same view for a chain at zero, which is what makes the
+    /// default look bit-identical to the one this program drew before the
+    /// chain existed: there is no pass in the way, not a pass that does
+    /// nothing.
+    pub fn mix_target(&self) -> &wgpu::TextureView {
+        self.chain.entry().unwrap_or(&self.hdr_view)
+    }
+
+    /// **What the master chain is set to.** One value, read back the way
+    /// `Deck::out` is — the Master bay's rows draw from it and
+    /// `karakuri-operation-record` completes a record from it.
+    pub fn chain(&self) -> Chain {
+        self.chain.chain()
+    }
+
+    /// Set the master chain. Clamped by the engine, on
+    /// `docs/principles/0090-a-surface-offers-it-never-decides.md`'s terms —
+    /// see `Chain::clamped`.
+    ///
+    /// **A `queue.write_buffer` and nothing else**, exactly as
+    /// [`Present::set_tonemap`] is: the pipelines and the targets exist from
+    /// construction, so turning an effect up mid-performance costs a uniform
+    /// write and the pass it turns on.
+    pub fn set_chain(&mut self, queue: &wgpu::Queue, chain: Chain) {
+        self.chain.set(queue, chain);
+    }
+
+    /// **Record the master chain into this frame's encoder**, between the
+    /// mix's write and this pass's read.
+    ///
+    /// Nothing at all for a chain that does not run. Called by
+    /// [`crate::frame::compose`] immediately after `Frame::render` and before
+    /// any sink is drawn into, which is what puts the chain in linear HDR and
+    /// upstream of the one tone map.
+    pub fn draw_chain(&self, encoder: &mut wgpu::CommandEncoder) {
+        self.chain.record(encoder, &self.hdr_view, &self.hdr);
     }
 
     pub fn hdr_texture(&self) -> &wgpu::Texture {

@@ -910,7 +910,12 @@ mod gpu {
         declared.sort_by_key(|(layer, _)| format!("{layer:?}"));
         assert_eq!(
             declared,
-            vec![(Kind::L1, 2.5), (Kind::L4, 7.5)],
+            // **Three, because the built-in camera declares a `radius` too**
+            // since ADR-0318 — at `Orbit::default().radius`, which no write
+            // here touches: a bare name does not reach it
+            // (`Set::addressed_only`), which the count below is the other half
+            // of.
+            vec![(Kind::L1, 2.5), (Kind::L3, 8.0), (Kind::L4, 7.5)],
             "the two declarations of `radius` did not survive as two values"
         );
 
@@ -919,7 +924,8 @@ mod gpu {
         assert_eq!(
             set.set_param("radius", 4.0),
             2,
-            "a bare name must move both"
+            "a bare name must move both — and only both: the camera declares a `radius` and a \
+             bare name is not a way to reach it"
         );
         assert_eq!(
             set.set_param("point_scale", 0.07),

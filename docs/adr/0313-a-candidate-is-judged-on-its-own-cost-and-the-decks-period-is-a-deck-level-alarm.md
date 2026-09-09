@@ -11,6 +11,32 @@ tags: [engine, live, governor, m5]
 
 # A candidate is judged on its own cost, and the deck's period is a deck-level alarm
 
+> **Annotated 2026-09-09: the gate is unchanged and what it does about a candidate it turns down is
+> not.** [ADR-0316](0316-an-over-budget-candidate-stays-in-the-slot-and-the-slot-stops-updating.md)
+> is the freeze this record calls *"the maintainer's option (b), which he deferred"*, and it landed
+> the same day on the measurement below. **`Event::RolledBack` is `Event::Overloaded`**, with the
+> same fields and the same asymmetry on `cost_ms`; there is no rollback, so the `Parked` local this
+> record introduced is gone with the last of `HotSwap::previous`, and the displaced Set is retired at
+> the install. Every sentence here about *rolling a candidate back* names the verdict correctly and
+> the action wrongly: what a verdict against does now is leave the candidate live and stop the slot.
+>
+> The objection this record raises against the freeze — *"a freeze under this gate would freeze slots
+> for their neighbours' cost, and a frozen slot is a hole in the picture where a rollback at least
+> leaves the previous material running"* — is what the gate fix answered, and the second half of it
+> turned out not to be true of the freeze that was built: a stopped slot holds the frame it last drew
+> and goes on being mixed, so it is not a hole.
+>
+> **One test was still written for the trial and was repaired on 2026-09-09**, beside ADR-0316's
+> work rather than by it: `karakuri`'s `the_swap_report_says_what_the_lane_says` asserted a
+> `landed` row that the swap's own drain had already settled, which had been failing since this
+> record landed. It now reads the verdict off the deck and holds the lane, the health capsule, the
+> cells and the server against it on either outcome.
+>
+> **And this record's last Consequence is one pass behind.** It says P-0094's *Undo* example is false
+> and owes a delete-and-re-record pass, and offers a replacement that still ends *"leaves the outgoing
+> Set unstepped so a rollback resumes it exactly where it was"*. ADR-0316 moves `swap.rs` out of
+> *Undo* altogether and writes the replacement example there.
+
 ## Context
 
 The maintainer, on 2026-09-09: *"今現在でほとんどの素材がrolled backされちゃう。ちょっとゲートが厳

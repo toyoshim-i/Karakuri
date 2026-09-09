@@ -106,7 +106,7 @@ proc dot {
         )
         .expect("one L1 and one L4");
         set.resize(&gpu.device, w, h);
-        set.camera = camera;
+        set.aim_camera(camera);
         set
     }
 
@@ -364,7 +364,7 @@ proc gain_dot {
         )
         .expect("one L1, an optional camera, and one L4");
         set.resize(&gpu.device, w, h);
-        set.camera = pinned();
+        set.aim_camera(pinned());
         set
     }
 
@@ -404,15 +404,27 @@ proc gain_dot {
         const H: u32 = 96;
         let mut set = with_camera(&gpu, Some(&sweep(5.0)), GAIN_DOT, W, H);
 
-        let declared: Vec<(u32, &str, f32)> = set
+        // **A procedure's map and the built-in's, side by side.** `L3:0` is the
+        // `sweep` this Set names and `L3:1` is the orbit after it, which
+        // declares the three placement numbers the engine states for it
+        // (ADR-0318) — so this asserts two things at once: each camera's params
+        // are reported at that camera's address, and the built-in's are its own
+        // rather than a procedure's.
+        let mut declared: Vec<(u32, &str, f32)> = set
             .params()
             .filter(|(layer, ..)| *layer == karakuri_ir::Kind::L3)
             .map(|(_, index, name, value)| (index, name, value))
             .collect();
+        declared.sort_by_key(|(index, name, _)| (*index, *name));
         assert_eq!(
             declared,
-            vec![(0, "dist", 5.0)],
-            "the camera's params are not reported as the camera's"
+            vec![
+                (0, "dist", 5.0),
+                (1, "height", 0.0),
+                (1, "radius", 5.0),
+                (1, "speed", 0.0),
+            ],
+            "the cameras' params are not reported as each camera's own"
         );
 
         let far = centroid(&gpu, &mut set, W, H).0 - W as f32 / 2.0;
@@ -483,12 +495,12 @@ proc gain_dot {
         let before = centroid(&gpu, &mut set, W, H);
         // A camera nowhere near the procedure's, and pointed from above rather than
         // level, so anything of it that leaked would move the material a long way.
-        set.camera = Orbit {
+        set.aim_camera(Orbit {
             radius: 20.0,
             height: 18.0,
             speed: 0.0,
             ..Default::default()
-        };
+        });
         let after = centroid(&gpu, &mut set, W, H);
 
         assert!(
@@ -724,7 +736,7 @@ proc plain {
         );
         set.map(|mut set| {
             set.resize(&gpu.device, w, h);
-            set.camera = pinned();
+            set.aim_camera(pinned());
             set
         })
     }
@@ -856,7 +868,7 @@ proc plain {
                 H,
             )
             .expect("a renderer bound to the built-in camera");
-            set.camera = Orbit { radius, ..pinned() };
+            set.aim_camera(Orbit { radius, ..pinned() });
             column(&frame(&gpu, &mut set, W, H), W, 0) - W as f32 / 2.0
         };
 
@@ -893,14 +905,24 @@ proc plain {
             "a Set with no camera procedure holds the built-in as its L3 node"
         );
         // The renderer is still the first node of L4, and its params are still
-        // reported as its own.
-        let declared: Vec<(karakuri_ir::Kind, u32, &str)> = set
+        // reported as its own — beside the camera's three, which are reported
+        // at `L3:0` and not at the renderer's address (ADR-0318). **That is
+        // what makes this test sharper rather than weaker**: the camera's map
+        // is no longer empty, so an origin off by one now lands the orbit's
+        // `radius` on the renderer instead of landing nothing there.
+        let mut declared: Vec<(karakuri_ir::Kind, u32, &str)> = set
             .params()
             .map(|(layer, index, name, _)| (layer, index, name))
             .collect();
+        declared.sort_by_key(|(layer, index, name)| (format!("{layer:?}"), *index, *name));
         assert_eq!(
             declared,
-            vec![(karakuri_ir::Kind::L4, 0, "gain")],
+            vec![
+                (karakuri_ir::Kind::L3, 0, "height"),
+                (karakuri_ir::Kind::L3, 0, "radius"),
+                (karakuri_ir::Kind::L3, 0, "speed"),
+                (karakuri_ir::Kind::L4, 0, "gain"),
+            ],
             "the renderer's params are reported at the renderer's address"
         );
 
@@ -921,11 +943,203 @@ proc plain {
             peak(&mut set) < 0.01,
             "writing `L4:0:gain` did not reach the renderer — every L4 address is off by one"
         );
-        // The camera's own address reaches a node that declares nothing, rather
-        // than reaching the renderer's map.
+        // The camera's own address reaches the camera, rather than reaching the
+        // renderer's map. It declares three parameters of its own since
+        // ADR-0318 and `gain` is not one of them, which is what makes this an
+        // off-by-one test rather than an empty-map one.
         assert!(
             !set.set_param_at(karakuri_ir::Kind::L3, 0, "gain", 1.0),
-            "the built-in camera declares no params, so there is no `gain` there to write"
+            "`L3:0` is the built-in camera, which has no `gain` — an address that writes one \
+             has walked into the renderer's map"
+        );
+    }
+
+    // ----- The built-in camera's three placement numbers ------------------
+    //
+    // `docs/adr/0318-the-built-in-cameras-three-placement-numbers-are-parameter-rows.md`:
+    // the orbit's `radius`, `speed` and `height` are parameters of the camera
+    // node, so every route a parameter has reaches them and no route was
+    // invented for them. These four are the four claims that decision makes,
+    // and each was watched to fail against the tree that did not carry it.
+
+    /// **The built-in camera declares three parameters**, at the values the
+    /// Set was aimed with and over the ranges the engine states.
+    ///
+    /// The Set here holds no camera procedure, so `L3:0` is the built-in — and
+    /// the values are `pinned()`'s rather than `Orbit::default()`'s, which is
+    /// the second claim in one: `Set::aim_camera` states the three into the
+    /// node's map and not only into the field beside it.
+    #[test]
+    fn the_built_in_camera_declares_its_three_placement_numbers() {
+        let gpu = Gpu::headless().expect("no GPU available");
+        let set = with_camera(&gpu, None, GAIN_DOT, 32, 32);
+
+        let mut declared: Vec<(u32, &str, f32)> = set
+            .params()
+            .filter(|(layer, ..)| *layer == karakuri_ir::Kind::L3)
+            .map(|(_, index, key, value)| (index, key, value))
+            .collect();
+        declared.sort_by_key(|(_, key, _)| *key);
+        assert_eq!(
+            declared,
+            vec![(0, "height", 0.0), (0, "radius", 5.0), (0, "speed", 0.0),],
+            "the built-in camera's parameter map is not the orbit it was aimed with"
+        );
+    }
+
+    /// **They are published, addressed, in the order the orbit states them**,
+    /// and over the declared ranges — which is what a fader draws and what a
+    /// MIDI control is learned against.
+    ///
+    /// **Addressed and not bare**, which is the part with a picture behind it:
+    /// seven of this repository's example procedures declare a `radius`, so a
+    /// bare control would weld the camera to a geometry.
+    #[test]
+    fn the_cameras_three_publish_addressed_and_in_order() {
+        let gpu = Gpu::headless().expect("no GPU available");
+        let set = with_camera(&gpu, None, GAIN_DOT, 32, 32);
+
+        let mine: Vec<(String, [f32; 2])> = set
+            .published()
+            .into_iter()
+            .filter(|p| Orbit::PLACEMENT.iter().any(|(key, _)| *key == p.key))
+            .inspect(|p| {
+                assert_eq!(
+                    p.at,
+                    Some((karakuri_ir::Kind::L3, 0)),
+                    "`{}` was published bare, and a bare name is a control over every node \
+                     that declares it",
+                    p.key
+                );
+            })
+            .map(|p| (p.key, p.range))
+            .collect();
+        assert_eq!(
+            mine,
+            vec![
+                ("radius".to_owned(), [1.0, 40.0]),
+                ("speed".to_owned(), [0.0, 2.0]),
+                ("height".to_owned(), [-40.0, 40.0]),
+            ],
+            "the camera's rows are not the three the engine declares, in order"
+        );
+    }
+
+    /// **A write to `L3:0:radius` reaches the frame**, which is the whole
+    /// claim: a row that emits a write nothing draws is a row that does
+    /// nothing.
+    ///
+    /// The same measurement `a_camera_procedure_produces_the_view` makes, with
+    /// the built-in as the producer instead of an L3 — so it is the plumbing
+    /// from the parameter map to the state buffer that is under test and
+    /// nothing else.
+    #[test]
+    fn a_write_to_the_cameras_radius_reaches_the_frame() {
+        let gpu = Gpu::headless().expect("no GPU available");
+        const W: u32 = 96;
+        const H: u32 = 96;
+
+        let offset = |radius: f32| {
+            let mut set = with_camera(&gpu, None, GAIN_DOT, W, H);
+            assert!(
+                set.write_param(&karakuri_engine::ParamWrite::at(
+                    karakuri_ir::Kind::L3,
+                    0,
+                    "radius",
+                    radius,
+                ))
+                .expect("one node, so no authority to cross")
+                    == 1,
+                "the write did not land on the camera node"
+            );
+            centroid(&gpu, &mut set, W, H).0 - W as f32 / 2.0
+        };
+        let far = offset(5.0);
+        let near = offset(3.0);
+
+        assert!(
+            far.abs() > 4.0,
+            "the material is on the centre column; nothing to measure"
+        );
+        assert!(
+            near.abs() > far.abs() * 1.3,
+            "closing the camera's radius from 5 to 3 moved the material from {far} texels off \
+             centre to {near} — the parameter did not reach the frame"
+        );
+    }
+
+    /// **A bare name does not reach it**, which is the other half of the row
+    /// above and the one with a defect behind it: `drift_shell` declares a
+    /// `radius` of its own, so a `--param radius=…` that also swung the camera
+    /// would be a control doing something it does not draw.
+    #[test]
+    fn a_bare_name_does_not_reach_the_cameras_radius() {
+        let gpu = Gpu::headless().expect("no GPU available");
+        let mut set = with_camera(&gpu, None, GAIN_DOT, 32, 32);
+
+        let landed = set
+            .write_param(&karakuri_engine::ParamWrite::everywhere("radius", 2.0))
+            .expect("nothing to cross");
+        assert_eq!(
+            landed, 0,
+            "a bare `radius` landed somewhere, and the only node declaring one here is the camera"
+        );
+        assert_eq!(set.orbit().radius, 5.0, "the camera moved on a bare name");
+    }
+
+    /// **A rebuild keeps a radius somebody rode**, which is ADR-0132 met by
+    /// ADR-0282's rule rather than by anything written for the camera: the
+    /// ridden value is marked, the rebuild restates the aim, and the mark is
+    /// carried back over the top of it.
+    ///
+    /// **The lens three come from the restatement and not from the ride**,
+    /// which is the half that says the two are different kinds of fact.
+    #[test]
+    fn a_rebuild_keeps_a_ridden_camera_and_restates_the_rest() {
+        let gpu = Gpu::headless().expect("no GPU available");
+        let mut outgoing = with_camera(&gpu, None, GAIN_DOT, 32, 32);
+        outgoing
+            .write_param(&karakuri_engine::ParamWrite::at(
+                karakuri_ir::Kind::L3,
+                0,
+                "radius",
+                12.0,
+            ))
+            .expect("nothing to cross");
+
+        // What the request would state: the aim the slot is pointed at, which
+        // is `pinned()` with a wider lens than the ride ever touches.
+        let restated = Orbit {
+            fov_y: 1.0,
+            ..pinned()
+        };
+        let mut incoming = with_camera(&gpu, None, GAIN_DOT, 32, 32);
+        incoming.aim_camera(restated);
+        assert_eq!(
+            incoming.orbit().radius,
+            5.0,
+            "the restatement is what a fresh build holds before anything is carried"
+        );
+
+        assert_eq!(
+            incoming.carry_moved_from(&outgoing),
+            1,
+            "one value was moved, so one is carried"
+        );
+        assert_eq!(
+            incoming.orbit().radius,
+            12.0,
+            "the ridden radius did not survive the rebuild"
+        );
+        assert_eq!(
+            incoming.orbit().fov_y,
+            1.0,
+            "the lens came from the outgoing Set rather than from what was restated"
+        );
+        assert_eq!(
+            incoming.orbit().speed,
+            pinned().speed,
+            "a number nobody moved came from somewhere other than the restatement"
         );
     }
 }

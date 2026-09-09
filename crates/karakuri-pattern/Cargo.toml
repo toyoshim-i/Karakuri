@@ -1,0 +1,19 @@
+[package]
+name = "karakuri-pattern"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+# **The vocabulary, and nothing else.** A pattern is made of the vocabulary's
+# own pieces — a lane's target is an operation with its value left out
+# (ADR-0321) and a step mode is a word this crate does not own — so this is a
+# dependency on a leaf crate that has none of its own (ADR-0180) and costs
+# every consumer nothing it was not already paying.
+#
+# **No serialiser yet, deliberately.** ADR-0227 leaves a pattern's file form
+# open *"for the record that has something to serialise"*, and nothing here
+# serialises: `Store` gains a `patterns/` directory with the row that saves
+# one, and this crate gains `serde` on the same day (ADR-0320).
+[dependencies]
+karakuri-operation = { version = "0.1.0", path = "../karakuri-operation" }

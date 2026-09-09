@@ -156,12 +156,12 @@ proc {name} {{
             karakuri_engine::set::Wiring::default(),
         )?;
         set.resize(&gpu.device, W, H);
-        set.camera = karakuri_engine::camera::Orbit {
+        set.aim_camera(karakuri_engine::camera::Orbit {
             radius: 5.0,
             speed: 0.0,
             height: 0.0,
             ..Default::default()
-        };
+        });
         Ok(set)
     }
 

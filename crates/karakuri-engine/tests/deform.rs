@@ -163,12 +163,12 @@ proc dots {
         // frames look from different angles and the x axis these fixtures lay their
         // material along is foreshortened by an amount that changes every frame.
         // Head-on and still, a displacement in x is a displacement in texels.
-        set.camera = karakuri_engine::camera::Orbit {
+        set.aim_camera(karakuri_engine::camera::Orbit {
             radius: 5.0,
             speed: 0.0,
             height: 0.0,
             ..Default::default()
-        };
+        });
         set
     }
 
@@ -655,12 +655,12 @@ proc paint {{
             )
             .expect("builds");
             set.resize(&gpu.device, W, H);
-            set.camera = karakuri_engine::camera::Orbit {
+            set.aim_camera(karakuri_engine::camera::Orbit {
                 radius: 5.0,
                 speed: 0.0,
                 height: 0.0,
                 ..Default::default()
-            };
+            });
             frame(&gpu, &mut set)
                 .chunks_exact(4)
                 .map(|t| t[0])
@@ -749,12 +749,12 @@ proc half_paint {
         )
         .expect("builds");
         set.resize(&gpu.device, W, H);
-        set.camera = karakuri_engine::camera::Orbit {
+        set.aim_camera(karakuri_engine::camera::Orbit {
             radius: 5.0,
             speed: 0.0,
             height: 0.0,
             ..Default::default()
-        };
+        });
 
         let brightest = |set: &mut Set| {
             frame(&gpu, set)

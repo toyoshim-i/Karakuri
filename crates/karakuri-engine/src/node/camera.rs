@@ -29,10 +29,27 @@ use karakuri_codegen::generate_l3;
 use karakuri_codegen::layout::{binding, camera as wire, group, UniformLayout};
 use karakuri_ir::typed::Checked;
 
-use crate::camera::State;
+use crate::camera::{Orbit, State};
 use crate::uniforms::UniformScratch;
 
 use super::View;
+
+/// [`crate::camera::Orbit::PLACEMENT`]'s names as the `&[String]` every other
+/// node hands back, built once.
+///
+/// **A `OnceLock` rather than three `String`s on the node**, because the list
+/// is the same for every built-in camera in the process and a per-node copy
+/// would be a second place for it to be wrong. It is not a cache: there is one
+/// list, and this is where it is.
+fn builtin_param_keys() -> &'static [String] {
+    static KEYS: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+    KEYS.get_or_init(|| {
+        Orbit::PLACEMENT
+            .iter()
+            .map(|(key, _)| key.to_string())
+            .collect()
+    })
+}
 
 /// The camera node: a producer, a state buffer, its derived form, and the pass
 /// between.
@@ -232,26 +249,34 @@ impl Camera {
         }
     }
 
-    /// **The addressable keys this node's params answer to**, or nothing when
-    /// the camera is the built-in — which declares none, because it is not a
-    /// procedure.
+    /// **Whether this node is the built-in orbit** rather than an L3
+    /// procedure — which is the same question as "has it a procedure", asked
+    /// where the answer is about the node instead of about the field.
+    pub(crate) fn is_builtin(&self) -> bool {
+        self.proc.is_none()
+    }
+
+    /// **The addressable keys this node's params answer to** — a procedure's
+    /// own, or the built-in orbit's three.
+    ///
+    /// The built-in is a node with no procedure behind it, so it has no
+    /// artifact to read a `param` list off and the engine states one:
+    /// [`crate::camera::Orbit::PLACEMENT`], in that order, which is the order a
+    /// surface draws them and the order a MIDI control counts. **This returned
+    /// nothing until 2026-09-09**, and the sentence that justified it — *it
+    /// declares none, because it is not a procedure* — was the reason it
+    /// declares nothing *of its own*, not a reason nothing could be declared
+    /// for it.
     ///
     /// There is deliberately no accessor for the other list: `param_names` is
     /// read at the one place it means anything — this node's own uniform write
     /// — and handing it out would be handing out a list of names a `--param`
-    /// cannot use.
-    /// **The addressable keys this node's params answer to**, or nothing when
-    /// the camera is the built-in — which declares none, because it is not a
-    /// procedure.
-    ///
-    /// There is deliberately no accessor for the other list: `param_names` is
-    /// read at the one place it means anything — this node's own uniform write
-    /// — and handing it out would be handing out a list of names a `--param`
-    /// cannot use.
+    /// cannot use. The built-in has no uniform block, so the two lists are one
+    /// list for it: there is no vector to expand.
     pub(crate) fn param_keys(&self) -> &[String] {
         match &self.proc {
             Some(p) => &p.param_keys,
-            None => &[],
+            None => builtin_param_keys(),
         }
     }
 

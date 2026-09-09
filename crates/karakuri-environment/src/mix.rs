@@ -165,6 +165,7 @@
 
 use karakuri_engine::binding::Curve;
 use karakuri_engine::deck::{Blend, Mask, MaskKind, Residency};
+use karakuri_engine::master::{Chain, Cut};
 use karakuri_engine::present::TonemapOp;
 use karakuri_engine::set::Authority;
 use karakuri_engine::transition::Control;
@@ -259,6 +260,21 @@ pub enum Change {
         writes: Vec<karakuri_engine::ParamWrite>,
     },
     Look(Look),
+    /// **The level at the master chain's entry**, which names no slot: it is
+    /// what the fold *produced*, after every deck's edge has been applied.
+    /// `karakuri_engine::deck::Deck::set_out` is what it decodes to, and says
+    /// *"Not per slot"* at the setter (ADR-0224).
+    MasterOut(f32),
+    /// **What the three fixed passes of the master chain are set to**, whole —
+    /// and it names no slot for [`Change::MasterOut`]'s reason, one pass
+    /// downstream of it. `karakuri_engine::present::Present::set_chain` is what
+    /// it decodes to.
+    ///
+    /// Carried as a value rather than as three amounts and a word, for
+    /// [`Change::Transport`]'s reason: the record says all four and a replay
+    /// must not fill one of them in from the build it is running on
+    /// (ADR-0317).
+    MasterChain(Chain),
     /// What a slot's clock does with the session's. Carried as a value rather
     /// than applied as a mode change, because the record says all three and a
     /// replay must not recompute one of them from the machine it is on.
@@ -356,6 +372,21 @@ pub fn tonemap(op: TonemapOp) -> karakuri_operation::Tonemap {
     }
 }
 
+/// The engine's feedback cut, as the vocabulary's. See [`blend_mode`].
+///
+/// **There is no function the other way**, and that is not an omission: a
+/// press carries the vocabulary's cut into a record as a *word*, and
+/// `karakuri_engine::master::Cut::parse` is what reads the word back — so the
+/// return leg goes through the record rather than around it, which is where
+/// every other closed list's does. [`change`]'s `master_chain` arm is that
+/// reader.
+pub fn cut(cut: Cut) -> karakuri_operation::Cut {
+    match cut {
+        Cut::Mix => karakuri_operation::Cut::Mix,
+        Cut::Exit => karakuri_operation::Cut::Exit,
+    }
+}
+
 /// The engine's authority level, as the vocabulary's. See [`blend_mode`].
 ///
 /// **Written before there is a reader for it**, which is why the lint has to be
@@ -386,6 +417,30 @@ pub fn current_look(look: &Look) -> karakuri_operation_record::Look {
         tonemap: tonemap(look.op),
         exposure: look.exposure,
         white_point: look.white_point,
+    }
+}
+
+/// **The master chain that is running, as the reading the conversion needs.**
+///
+/// [`current_look`]'s function one pass upstream and its argument with one more
+/// row in it: `Operation::SetBloom` carries an amount and nothing else, because
+/// that is what a row of the Master bay can say, and `Record::MasterChain`
+/// carries all four because that is what a replay can reconstruct a chain
+/// from — the same 0.5 is a one-frame echo under `mix` and a compounding trail
+/// under `exit`, so an amount without its cut is not a picture. See
+/// `docs/adr/0317-the-master-chain-is-three-fixed-passes-and-feedback-reads-either-cut.md`.
+///
+/// **The amount is the engine's and not a track position.** A fader draws where
+/// it is along its own travel and divides by `Feedback::MAX` to do it; a
+/// reading is what the pass is *at*, which is what the record carries.
+pub fn current_chain(chain: &Chain) -> karakuri_operation_record::Chain {
+    karakuri_operation_record::Chain {
+        feedback: karakuri_operation::Feedback {
+            amount: chain.feedback,
+            cut: cut(chain.cut),
+        },
+        bloom: chain.bloom,
+        rgb_shift: chain.rgb_shift,
     }
 }
 
@@ -859,6 +914,50 @@ pub fn change(record: &Record, slot_count: usize) -> Result<Option<Change>, Stri
                 op,
                 exposure: *exposure,
                 white_point: *white_point,
+            })))
+        }
+        // **The two ends of the master chain, and neither names a slot.**
+        //
+        // They were both under the wildcard below until 2026-09-09, and what
+        // that cost was a replay: a session that pulled the master out to 0.5,
+        // or turned a feedback trail up, rendered offscreen with the level at
+        // 1.0 and the chain off — a stream this program wrote and could not
+        // reproduce, which is the one thing
+        // `docs/principles/0092-the-same-inputs-produce-the-same-frame.md`
+        // is about. The live path applied both because `crates/karakuri` reads
+        // the records itself; every path through *this* decoder did not.
+        //
+        // **No clamp on either**, which is this module's rule everywhere: the
+        // engine holds the range — `clamp_gain` for the level and
+        // `Chain::clamped` for the chain — so a second opinion here would be a
+        // range written down twice.
+        Record::MasterOut { value } => Ok(Some(Change::MasterOut(*value))),
+        Record::MasterChain {
+            feedback,
+            cut,
+            bloom,
+            rgb_shift,
+        } => {
+            // **The cut comes back off the wire word, refused rather than
+            // defaulted**, exactly as the tone map operator above does and for
+            // the same reason: a cut this build has not got is a stream saying
+            // something it cannot draw, and a default would silently play the
+            // other picture.
+            let cut = Cut::parse(cut).ok_or_else(|| {
+                format!(
+                    "feedback cut `{cut}` — expected {}",
+                    Cut::ALL
+                        .iter()
+                        .map(|c| format!("`{}`", c.name()))
+                        .collect::<Vec<_>>()
+                        .join(" or ")
+                )
+            })?;
+            Ok(Some(Change::MasterChain(Chain {
+                feedback: *feedback,
+                cut,
+                bloom: *bloom,
+                rgb_shift: *rgb_shift,
             })))
         }
         // **A wildcard rather than an exhaustive match, and it is the one
@@ -2039,6 +2138,50 @@ mod tests {
         }
     }
 
+    /// **Both ends of the master chain decode**, which is the claim that stops
+    /// a replay rendering a session's master with the level at 1.0 and the
+    /// chain off.
+    ///
+    /// They were under this decoder's wildcard arm until 2026-09-09, and the
+    /// cost of that was exactly this: `karakuri-cli`'s live path and its
+    /// replay path both go through `change`, so a stream that pulled the out
+    /// down or turned a trail up came back without either.
+    #[test]
+    fn both_ends_of_the_master_chain_decode_from_their_records() {
+        let Some(Change::MasterOut(level)) =
+            change(&Record::MasterOut { value: 0.5 }, 1).expect("built here")
+        else {
+            panic!("a master out record did not decode as one");
+        };
+        assert_eq!(level, 0.5);
+
+        // **Every cut, through its wire word**, which is the tone map
+        // operator's test one bay along: a cut added to the engine and not to
+        // the spelling fails here rather than in a replay.
+        for want in Cut::ALL {
+            let record = Record::MasterChain {
+                feedback: 0.34,
+                cut: want.name().to_string(),
+                bloom: 0.6,
+                rgb_shift: 0.25,
+            };
+            let Some(Change::MasterChain(chain)) = change(&record, 1).expect("built here") else {
+                panic!("a master chain record did not decode as one");
+            };
+            assert_eq!(
+                chain,
+                Chain {
+                    feedback: 0.34,
+                    cut: want,
+                    bloom: 0.6,
+                    rgb_shift: 0.25,
+                },
+                "`{}` did not survive its wire word, or a value beside it moved",
+                want.name()
+            );
+        }
+    }
+
     /// A record this build cannot obey is **reported, not dropped**. Silently
     /// ignoring it would leave a session replaying at the wrong gain with
     /// nothing said, which is worse than refusing the line.
@@ -2060,6 +2203,22 @@ mod tests {
         let message = change(&unknown_op, 4).expect_err("`filmic` is not an operator here");
         assert!(message.contains("filmic"), "{message}");
         assert!(message.contains("aces"), "{message}");
+
+        // **And a feedback cut this build has not got**, refused on the tone
+        // map operator's terms and for the sharper reason: a default would not
+        // report a wrong level, it would silently play the other picture — one
+        // echo where the session had a trail.
+        let unknown_cut = Record::MasterChain {
+            feedback: 0.5,
+            cut: "previous".to_string(),
+            bloom: 0.0,
+            rgb_shift: 0.0,
+        };
+        let message = change(&unknown_cut, 4).expect_err("`previous` is not a cut here");
+        assert!(message.contains("previous"), "{message}");
+        for cut in Cut::ALL {
+            assert!(message.contains(cut.name()), "{message}");
+        }
 
         for (start, beats, to, wanted) in [
             (f64::NAN, 4.0, 1.0, "not a position"),

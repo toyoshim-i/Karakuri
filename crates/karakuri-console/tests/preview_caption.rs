@@ -20,7 +20,7 @@ use karakuri_console::room::{size, Room};
 use karakuri_console::view::{
     band_of, caption_of, preview_rects, Band, Basis, Budgeted, Picture, View, BAND_BLUE_MS,
     BAND_PURPLE_MS, BAND_RED_MS, BAND_YELLOW_MS, DECKS, DECK_LETTERS, MOCK_CANVAS,
-    PREVIEW_MATERIAL, PREVIEW_NO_SLOT,
+    PREVIEW_MATERIAL, PREVIEW_NO_SLOT, PREVIEW_OVERLOADED,
 };
 
 /// A window with the cells in the row under the picture, and the four
@@ -159,9 +159,15 @@ fn the_letter_is_not_painted_over_the_material() {
 
 /// **The state word is what the cell actually distinguishes.**
 ///
-/// `View::previews` is `Option<Picture>` and nothing else, so a cell has a
-/// slot behind it or it has none — and those are the two words. The two words
-/// it is *not* are the ones this file exists to keep out:
+/// A cell has a slot behind it or it has none, and a slot behind it is
+/// running or has **stopped updating** — and those are the three words.
+/// `overloaded` is the third since ADR-0316: the version in that slot costs
+/// more than one frame may, so the engine skips its step and its draw and the
+/// image is the last frame it made. **The image stays and the word is what
+/// marks it**, because a still that is not marked is a preview that lies
+/// (ADR-0269) and a blanked cell is indistinguishable from an empty slot.
+///
+/// The two words it is *not* are the ones this file exists to keep out:
 ///
 /// - **`off`** is residency, and residency has not gated a cell since
 ///   ADR-0240. It is what `view::preview` said until this pass, copied out of
@@ -177,6 +183,7 @@ fn the_state_word_is_what_the_cell_actually_distinguishes() {
     // comparing the code with itself.
     assert_eq!(PREVIEW_MATERIAL, "material");
     assert_eq!(PREVIEW_NO_SLOT, "no slot");
+    assert_eq!(PREVIEW_OVERLOADED, "overloaded");
 
     let (mut panel, cells) = cells();
 
@@ -188,6 +195,39 @@ fn the_state_word_is_what_the_cell_actually_distinguishes() {
         assert!(
             words.contains(&PREVIEW_MATERIAL.to_owned()),
             "cell {deck} shows material and its caption says {words:?}"
+        );
+    }
+
+    // **With a slot behind every cell and one of them stopped.** The picture
+    // is unchanged — the cell is still showing that slot's target, which is
+    // the frame it stopped at — so the word is the only thing that moved, and
+    // the cells beside it must not move with it.
+    let mut view = with_material();
+    view.overloaded[1] = true;
+    let painted = texts(&mut view, &mut panel);
+    for (deck, cell) in cells.iter().enumerate() {
+        let words = in_caption(&painted, caption_of(*cell));
+        let wanted = match deck {
+            1 => PREVIEW_OVERLOADED,
+            _ => PREVIEW_MATERIAL,
+        };
+        assert!(
+            words.contains(&wanted.to_owned()),
+            "cell {deck} should read `{wanted}` and its caption says {words:?}"
+        );
+    }
+
+    // **And a mark against a cell with no slot behind it says `no slot`.** A
+    // stopped slot that is not there is nothing, and the cell says which
+    // nothing it is (ADR-0258).
+    let mut view = View::new(Room::Day);
+    view.overloaded = [true; 4];
+    let painted = texts(&mut view, &mut panel);
+    for (deck, cell) in cells.iter().enumerate() {
+        let words = in_caption(&painted, caption_of(*cell));
+        assert!(
+            words.contains(&PREVIEW_NO_SLOT.to_owned()),
+            "cell {deck} has no slot behind it and its caption says {words:?}"
         );
     }
 

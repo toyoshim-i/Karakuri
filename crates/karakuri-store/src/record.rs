@@ -181,6 +181,17 @@ fn default_noise_octaves() -> u32 {
     4
 }
 
+/// What [`Record::Camera`]'s `height` reads as when a file does not carry one,
+/// which is every file written before 2026-09-09.
+///
+/// **`karakuri_engine::camera::Orbit::default().height`, restated.** This crate
+/// has no dependency on the engine and is not about to grow one for a float, so
+/// the two are a copy — held together by a test in `karakuri-environment`,
+/// which already depends on both and is where a Set file meets an `Orbit`.
+fn default_camera_height() -> f32 {
+    2.0
+}
+
 impl Default for BindNoise {
     fn default() -> BindNoise {
         BindNoise {
@@ -389,7 +400,7 @@ pub enum Record {
     },
     Camera {
         kind: String,
-        /// **Which camera node of the L3 layer these six numbers produce**, on
+        /// **Which camera node of the L3 layer these numbers are about**, on
         /// [`Record::Capacity`]'s and [`Record::Seed`]'s terms rather than
         /// [`Record::Param`]'s: this record describes one producer, and "every
         /// camera at radius 9" is not something a camera has ever said.
@@ -403,6 +414,30 @@ pub enum Record {
         index: u32,
         radius: f32,
         speed: f32,
+        /// **Where the eye rides above the target** — the third of the orbit's
+        /// three placement numbers, and the newest field in this record.
+        ///
+        /// **It carried two of the three until 2026-09-09**, so a Set kept with
+        /// its camera looking down and loaded again was looking along the
+        /// equator and nothing said so. The three became parameters of the
+        /// camera node that day
+        /// (`docs/adr/0318-the-built-in-cameras-three-placement-numbers-are-parameter-rows.md`),
+        /// which is what made the gap a defect rather than a limit: a number a
+        /// hand can move and a file cannot record is a knob that walks back on
+        /// its own.
+        ///
+        /// **Absent reads as 2.0**, which is what every file written before
+        /// this field meant — the engine's `Orbit::default().height`, restated
+        /// here because this crate depends on nothing and cannot ask for it.
+        /// The two are held together by a test in `karakuri-environment`, which
+        /// depends on both; see `default_camera_height`.
+        ///
+        /// **Written unconditionally**, on `radius`'s and `speed`'s terms
+        /// rather than `index`'s: a placement number is what this record is
+        /// for, and one omitted at its default would make a file's silence mean
+        /// two things depending on which of the three it was about.
+        #[serde(default = "default_camera_height")]
+        height: f32,
     },
     /// **This Set composites its renderers rather than overdrawing them.**
     ///
@@ -643,12 +678,19 @@ pub enum Record {
     /// which is also where the cost of saying so today is written down: with
     /// nothing in the chain, no frame tells the two levels apart.
     ///
-    /// **One value and no operator beside it**, which is why this is not
-    /// [`Record::Look`]'s shape in the other direction either: there is
-    /// nothing else about the master chain a stream can say yet, so a record
-    /// that carried more would be recording defaults nobody chose. It grows
-    /// the day an effect lands in the chain, on the terms
-    /// [`Record::Merge`] states for a per-input row.
+    /// **One value and no operator beside it.** When this was written there
+    /// was nothing else about the master chain a stream could say, so a record
+    /// that carried more would have been recording defaults nobody chose.
+    ///
+    /// **The chain landed on 2026-09-09 and this record did not grow — a
+    /// second one did.** [`Record::MasterChain`] carries the three passes'
+    /// settings, and the two are apart for the reason this record is not a
+    /// field of [`Record::Look`], one paragraph up: they are different values
+    /// in different passes, and folding them would make a fader ride rewrite
+    /// four settings sixty times a second and a settings change rewrite the
+    /// level a hand is holding. This one is a **level**, rode continuously by
+    /// a fader and classed with the mix faders in `gate.rs`; that one is a
+    /// **setting**, moved by a press and classed with the master effects.
     ///
     /// `value` is floored at zero and deliberately open above 1.0, on
     /// [`Record::Gain`]'s terms and through the engine's same `clamp_gain`:
@@ -657,10 +699,70 @@ pub enum Record {
     MasterOut {
         value: f32,
     },
+    /// **What the three fixed passes of the master chain are set to**, whole.
+    ///
+    /// The chain is feedback, then bloom, then rgb shift, between
+    /// [`Record::MasterOut`]'s level at its entry and [`Record::Look`]'s
+    /// exposure at the tone mapper's input — `karakuri_engine::master` is the
+    /// implementation and
+    /// `docs/adr/0317-the-master-chain-is-three-fixed-passes-and-feedback-reads-either-cut.md`
+    /// is the decision. **Nothing here names which effects are in the chain or
+    /// in what order**: the chain is fixed built-in presets, so a record that
+    /// carried the order would be recording a constant.
+    ///
+    /// **One record and not three**, which is [`Record::Look`]'s shape and its
+    /// argument: `feedback` without `cut` beside it is not a picture anybody
+    /// can reconstruct — the same 0.5 is a one-frame echo under `mix` and a
+    /// compounding trail under `exit` — and a stream that could move one pass
+    /// without saying where the others were would be describing a chain a
+    /// replay could not put back. The place that turns an operation into this
+    /// already knows the chain that is running and fills the rest in, exactly
+    /// as `karakuri-cli`'s `set_exposure` fills in the operator.
+    ///
+    /// **Session-wide and not per slot**, [`Record::MasterOut`]'s reason: the
+    /// chain reads what the fold produced, after every deck's edge has been
+    /// applied.
+    ///
+    /// **A performance's state and not a library's.** What a chain is set to
+    /// *while it is being played* is stream state, the way a Set's gain is;
+    /// what a chain is set to *saved under a name and put back tomorrow* is
+    /// library data in two tiers, and
+    /// `docs/adr/0227-a-pattern-and-a-master-chain-setting-are-library-data-in-two-tiers.md`
+    /// is where that was decided and left to the record that has something to
+    /// serialise. This is the first half only; no store directory is added
+    /// here.
+    ///
+    /// Every amount is floored at zero and capped by the engine —
+    /// `karakuri_engine::master::Chain::clamped` — which is the same division
+    /// of labour [`Record::Gain`] has: the record carries what was asked for,
+    /// the engine holds the range.
+    MasterChain {
+        /// `[0, 0.95]`. An amount of zero is the pass not being recorded at
+        /// all, which is [`Record::Gain`]'s zero one bay up.
+        feedback: f32,
+        /// Which frame feedback reads: `mix` — the frame as the mix wrote it,
+        /// before this chain — or `exit`, the chain's own output.
+        ///
+        /// **A `String` and not an enum**, which is [`Record::Blend`]'s and
+        /// [`Record::Residency`]'s rule: a word an older stream does not know
+        /// is the engine's to diagnose against what it actually supports,
+        /// rather than a parse failure that takes the whole line with it.
+        cut: String,
+        /// `[0, 1]`. What the pass blooms *from* is not here: the knee is 1.0
+        /// and the radius is fixed, both in `karakuri_engine::master` and
+        /// neither a control.
+        bloom: f32,
+        /// `[0, 1]` of 2% of the frame's height. In fractions of the frame and
+        /// never in texels, so a session replayed at another resolution shifts
+        /// the same distance.
+        rgb_shift: f32,
+    },
     /// **The procedure a deck slot is playing, from this moment on.**
     ///
-    /// Written when a hot swap lands and when one is rolled back — the two
-    /// moments the material a session is playing actually changes. Without it a
+    /// Written when a hot swap lands, which since ADR-0316 is the one moment
+    /// the material a session is playing changes: the budget's verdict leaves
+    /// the installed Set where it is and stops the slot, and there is no
+    /// rollback to write a second record for. Without it a
     /// session recorded the material *once*, before the first frame, and
     /// replayed the whole run with whatever it started with: a set in which a
     /// procedure was rewritten at minute ten replayed as though it never had.
@@ -675,12 +777,13 @@ pub enum Record {
     /// and a few kilobytes once, however many times the same procedure comes
     /// back.
     ///
-    /// **One thing it cannot carry**: a rollback restores the outgoing Set at
-    /// the `t` it was parked at, and a replay meeting this record builds afresh
-    /// from the source, so `t` restarts there. A swap-*in* is documented to
-    /// start cold and so replays exactly; only the rollback differs, and a
-    /// rollback means the candidate was over budget, which is already an
-    /// exceptional frame.
+    /// **One thing it cannot carry**, and ADR-0316 changed which. A swap-*in*
+    /// is documented to start cold, so a replay meeting this record builds
+    /// afresh and replays exactly. What this cannot say is that the slot was
+    /// **stopped**: a version over the frame budget is recorded like any other,
+    /// because it is what the slot holds, and a replay judges nothing — so it
+    /// runs at full rate material the performance had frozen. That is a gap in
+    /// this vocabulary and is recorded as one rather than patched here.
     Procedure {
         slot: u8,
         layer: Layer,
@@ -1412,6 +1515,7 @@ impl Record {
             | Record::Residency { .. }
             | Record::Look { .. }
             | Record::MasterOut { .. }
+            | Record::MasterChain { .. }
             | Record::Canvas { .. }
             | Record::Procedure { .. }
             | Record::Authority { .. }

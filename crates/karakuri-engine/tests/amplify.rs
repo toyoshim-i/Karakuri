@@ -240,12 +240,12 @@ proc dots {
         // Pinned, for the reason `deform.rs` gives at length: an orbiting camera
         // foreshortens by a different amount every frame, and these fixtures lay
         // their material along an axis that has to stay in the picture plane.
-        set.camera = karakuri_engine::camera::Orbit {
+        set.aim_camera(karakuri_engine::camera::Orbit {
             radius: 5.0,
             speed: 0.0,
             height: 0.0,
             ..Default::default()
-        };
+        });
         set
     }
 

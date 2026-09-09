@@ -153,9 +153,11 @@
 //!
 //! A resize retires every meter for the same reason: a reading of the
 //! pre-resize target is a reading of a different image. So does **a build
-//! landing on a slot** — a swap installs a cold Set with `t` back at zero, a
-//! rollback puts a differently-aged one back, and in both cases the reading in
-//! flight measures material that is no longer on air. `deck.rs` calls
+//! landing on a slot** — a swap installs a cold Set with `t` back at zero, so
+//! the reading in flight measures material that is no longer on air. A verdict
+//! against is not a third: it stops the slot with the Set the swap installed
+//! (ADR-0316), and a held image is exactly what the slot is contributing, so
+//! the meter goes on reading it. `deck.rs` calls
 //! [`Meters::retire`] for all three, and the rule behind them is one rule: the
 //! moment the meter can no longer vouch that what it measured is what the slot
 //! is showing, it reports nothing rather than the last thing it knew.

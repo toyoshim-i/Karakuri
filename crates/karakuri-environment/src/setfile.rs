@@ -70,8 +70,12 @@
 //! said with the component keys in the sentence. Loading reports what it could
 //! not carry — see [`Loaded::notes`] — because a Set file that half-applies is
 //! the failure mode this repository keeps refusing: checking clean and coming
-//! up short later. `camera` carrying two of the six fields the engine's orbit
-//! has is the one left that is a gap rather than a mismatch.
+//! up short later. `camera` carried two of the six fields the engine's orbit
+//! has until 2026-09-09 and was the one gap left in that list; it carries the
+//! three an operator can move now, which is what closed it. The lens three —
+//! `fov_y`, `near` and `far` — come back as declared, and that is not the same
+//! gap under a smaller number: nothing anywhere moves them, so a save has
+//! nothing about them to lose (ADR-0318).
 
 use std::collections::BTreeMap;
 use std::path::{Component, Path, PathBuf};
@@ -589,6 +593,11 @@ pub struct Saving<'a> {
     /// wired. Empty for a Set no node of which takes a second geometry, which
     /// is most of them.
     pub edges: &'a [karakuri_engine::set::Edge],
+    /// **The built-in camera as it is now, which is `Set::orbit`** and not the
+    /// `Set::camera` field beside it: three of the six are that node's
+    /// parameters, so the field holds what was last stated and the map holds
+    /// what a hand moved. A caller that passes the field saves a camera nobody
+    /// is looking through (ADR-0318).
     pub camera: &'a Orbit,
     /// **Whether this Set composites its renderers or overdraws them.**
     ///
@@ -818,6 +827,13 @@ pub fn save(store: &Store, asked: Asked, id: &str, set: Saving<'_>) -> Result<()
             proc_hash: node.hash,
         }));
     }
+    // **Which node of the L3 layer the built-in orbit is**: after every camera
+    // procedure this file names, which is `0` where it names none. Worked out
+    // once and read twice — by the `param` run below, which leaves that node's
+    // three to the `camera` record, and by the `camera` record itself, which
+    // says which node it is about. Two derivations of one index is how the two
+    // would come to disagree about which node they were talking round.
+    let builtin_camera = nodes.iter().filter(|n| n.layer == Kind::L3).count() as u32;
     // On L1, because that is the layer whose element buffers a capacity sizes,
     // and one per geometry, because that is what it sizes: each source declares
     // its own range and one number cannot serve two of them.
@@ -835,8 +851,26 @@ pub fn save(store: &Store, asked: Asked, id: &str, set: Saving<'_>) -> Result<()
     // write addressed at one node are two lines rather than one overwriting the
     // other. `None` sorts first, which puts the Set-wide value above the
     // narrower ones that override it — the order a reader wants.
+    //
+    // **The built-in camera's three are skipped here, and the `camera` record
+    // below is where they are written.** They are that node's parameters and
+    // `Set::params` reports them as such
+    // (`docs/adr/0318-the-built-in-cameras-three-placement-numbers-are-parameter-rows.md`),
+    // so without this a file would carry `radius` twice — once as a `param` at
+    // `L3:n` and once on the `camera` line — and two spellings of one fact
+    // leave a reader asking which a writer meant by choosing the other
+    // (`docs/contributing.md` §4). It is the `slot` rule one level down: the
+    // built-in has no `slot` record because it has no procedure to reference,
+    // and no `param` records because the record that describes it carries its
+    // values.
+    //
+    // **Here rather than in each caller.** Both save paths hand over
+    // `Set::params` whole, and a filter in two callers is a filter one of them
+    // forgets — the writer is what knows the format, so the writer is what
+    // knows which node the format spells another way.
     let ordered: BTreeMap<ParamKey<'_>, f32> = params
         .iter()
+        .filter(|w| w.at != Some((Kind::L3, builtin_camera)))
         .map(|w| {
             let at = w.at.map(|(layer, i)| (layer_ordinal(layer), i));
             ((at, w.key.as_str()), w.value)
@@ -899,11 +933,17 @@ pub fn save(store: &Store, asked: Asked, id: &str, set: Saving<'_>) -> Result<()
     // say which. It is `L3:0` in a Set whose files declare no camera procedure,
     // which is every Set written before they could — and zero is not written,
     // so those files are the line they always were.
+    //
+    // **Its three placement numbers, and they are the built-in camera node's
+    // parameters** — so what is written here is `Set::orbit`, the map's
+    // answer, and not the `Orbit` a Set was last *stated* with. A caller that
+    // handed over the field would save the number nobody has been moving.
     lines.push(Line::new(Record::Camera {
         kind: "orbit".to_string(),
-        index: nodes.iter().filter(|n| n.layer == Kind::L3).count() as u32,
+        index: builtin_camera,
         radius: camera.radius,
         speed: camera.speed,
+        height: camera.height,
     }));
     // On L1, because that is the layer whose randomness a salt moves, and one
     // per geometry, because that is what it salts. **Recorded rather than left
@@ -1141,6 +1181,7 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
                 index,
                 radius,
                 speed,
+                height,
             } => {
                 if kind != "orbit" {
                     notes.push(format!(
@@ -1160,13 +1201,19 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
                 // cameras the file names, and the count is only complete at
                 // the end.
                 camera_index = *index;
-                // The record carries two of the six fields an `Orbit` has, so
-                // the rest take their defaults. Said out loud because a saved
-                // camera and a loaded one are then not the same camera unless
-                // the other four were already default.
+                // **The record carries the three placement numbers**, which are
+                // the three an operator can move: they are the camera node's
+                // parameters
+                // (`docs/adr/0318-the-built-in-cameras-three-placement-numbers-are-parameter-rows.md`).
+                // The lens three take their declared defaults, and that is not
+                // the gap the same sentence used to name — nothing anywhere
+                // moves them, so there is nothing about them a save could lose.
+                // It carried two until 2026-09-09, and `height` absent reads as
+                // the default the file meant by leaving it out.
                 camera = Some(Orbit {
                     radius: *radius,
                     speed: *speed,
+                    height: *height,
                     ..Orbit::default()
                 });
             }
@@ -1227,6 +1274,11 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
             // Set's: it describes what the mix produced rather than one of
             // the things that went into it. See `Record::MasterOut`.
             | Record::MasterOut { .. }
+            // And what that fold's output is put through, one pass along: a
+            // Set file carrying the master chain's settings would reconfigure
+            // the master the moment it was loaded into any deck. See
+            // `Record::MasterChain`.
+            | Record::MasterChain { .. }
             | Record::Canvas { .. }
             | Record::Procedure { .. }
             // An authority names a node the way the records above it do, and
@@ -2875,6 +2927,7 @@ proc dissolve {
         let camera = Orbit {
             radius: 11.5,
             speed: 0.42,
+            height: -3.75,
             ..Orbit::default()
         };
         save(
@@ -2901,8 +2954,10 @@ proc dissolve {
         assert_eq!(loaded.params, params);
         assert_eq!(loaded.salts, vec![Some(4242)]);
         assert_eq!(
-            loaded.camera.map(|c| (c.radius, c.speed)),
-            Some((11.5, 0.42))
+            loaded.camera.map(|c| (c.radius, c.speed, c.height)),
+            Some((11.5, 0.42, -3.75)),
+            "the three placement numbers are what a Set file carries about the built-in \
+             camera, and the height was the one it dropped until ADR-0318"
         );
         assert_eq!(loaded.bindings.len(), 1);
         let back = &loaded.bindings[0];
@@ -3839,13 +3894,21 @@ proc glowing {
         assert!(loaded.notes.is_empty(), "{:?}", loaded.notes);
     }
 
-    /// **A one-geometry Set is byte for byte the file it has always been.**
+    /// **A one-geometry Set is byte for byte the file it has always been**,
+    /// except for the one field the format has grown since.
     ///
     /// Every Set file ever written is one L1 and its renderers, and the fields
     /// that carry a chain — `index` on every layer, `name` on a slot — are
     /// absent rather than defaulted for exactly this reason. A literal, not a
     /// re-save compared against itself: a round trip through one writer agrees
     /// with itself however far both halves have drifted.
+    ///
+    /// **`height` on the `camera` line is the exception, and it is a decision
+    /// rather than drift** (ADR-0318, 2026-09-09): the record carried two of
+    /// the orbit's three placement numbers, so a camera saved looking down came
+    /// back looking along the equator. This literal grew the field; a file
+    /// written without it still reads as the 2.0 it meant. What this test is
+    /// for is that nothing grows one *silently*, and it did its job.
     #[test]
     fn a_one_geometry_set_is_byte_for_byte_the_file_it_always_was() {
         let (_dir, store, l1, l4) = fixture();
@@ -3868,7 +3931,7 @@ proc glowing {
 {{"t":"slot","layer":"L1","proc":"{}"}}
 {{"t":"slot","layer":"L4","proc":"{}"}}
 {{"t":"capacity","layer":"L1","value":4096}}
-{{"t":"camera","kind":"orbit","radius":8.0,"speed":0.15}}
+{{"t":"camera","kind":"orbit","radius":8.0,"speed":0.15,"height":2.0}}
 {{"t":"seed","stream":"L1","value":1}}
 "#,
                 hash(&l1),
@@ -4231,6 +4294,102 @@ proc glowing {
     /// **A gap in a layer is refused on the way in too**, and on every layer:
     /// index 2 with no index 1 says a chain with a hole in it, and closing it up
     /// would silently change what deforms what — or, on L4, draw order.
+    /// **The built-in camera's three are written once, and the `camera` record
+    /// is where.**
+    ///
+    /// They are that node's parameters since ADR-0318, so `Set::params` reports
+    /// them and a writer that took the list whole would put `radius` in the
+    /// file twice — once as a `param` at `L3:0` and once on the `camera` line.
+    /// Two spellings of one fact leave a reader asking which a writer meant by
+    /// choosing the other, so the `param` run leaves that node to the record
+    /// that describes it, exactly as the `slot` run already does.
+    #[test]
+    fn the_built_in_cameras_three_are_written_as_the_camera_record_and_not_as_params() {
+        let (_dir, store, l1, l4) = fixture();
+        // A Set with no camera procedure, so the built-in is `L3:0`.
+        let params = vec![
+            ParamWrite::at(Kind::L3, 0, "radius", 12.0),
+            ParamWrite::at(Kind::L3, 0, "height", -4.0),
+            ParamWrite::everywhere("radius", 3.25),
+        ];
+        let camera = Orbit {
+            radius: 12.0,
+            height: -4.0,
+            ..Orbit::default()
+        };
+        save(
+            &store,
+            Asked::Operator,
+            "s1",
+            Saving {
+                nodes: &ordinary(&store, &l1, std::slice::from_ref(&l4)),
+                capacities: &[4096],
+                params: &params,
+                bindings: &[],
+                edges: &[],
+                camera: &camera,
+                layering: Layering::Overdraw,
+                live: None,
+                seeds: &[1],
+            },
+        )
+        .expect("save");
+
+        let text = written(&store, "s1");
+        assert!(
+            !text.contains(r#""layer":"L3""#),
+            "the built-in camera's parameters were written as `param` records as well as on \
+             the `camera` line:\n{text}"
+        );
+        assert!(
+            text.contains(
+                r#"{"t":"camera","kind":"orbit","radius":12.0,"speed":0.15,"height":-4.0}"#
+            ),
+            "the `camera` record does not carry the three:\n{text}"
+        );
+        // **And the bare write is untouched**, which is the half that says this
+        // is about one node rather than about the layer or the key: `radius`
+        // written everywhere is the geometry's and still a `param` line.
+        assert!(
+            text.contains(r#"{"t":"param","layer":"L1","key":"radius","value":3.25}"#),
+            "a bare write was dropped with the camera's:\n{text}"
+        );
+    }
+
+    /// **A file written before `height` reads as the default it meant**, and
+    /// that default is the engine's own.
+    ///
+    /// `karakuri-store` restates `Orbit::default().height` because it depends on
+    /// nothing and cannot ask for it; this is the test that holds the two
+    /// together, here because this crate is where a Set file meets an `Orbit`.
+    #[test]
+    fn a_camera_line_without_a_height_reads_as_the_engines_default() {
+        let (_dir, store, l1, l4) = fixture();
+        let put = |path: &std::path::Path| {
+            store
+                .put_artifact(&std::fs::read(path).expect("read"))
+                .expect("put")
+        };
+        let lines = parsed(&format!(
+            r#"{{"t":"set","id":"old","v":1}}
+{{"t":"slot","layer":"L1","proc":"{}"}}
+{{"t":"slot","layer":"L4","proc":"{}"}}
+{{"t":"camera","kind":"orbit","radius":8.0,"speed":0.15}}
+"#,
+            put(&l1),
+            put(&l4)
+        ));
+
+        let loaded = from_lines(&store, "old", &lines).expect("load");
+        assert_eq!(
+            loaded.camera.map(|c| c.height),
+            Some(Orbit::default().height),
+            "a file with no `height` has to read as what it always meant, which is the \
+             engine's default and not a number the record crate picked separately"
+        );
+        assert!(loaded.notes.is_empty(), "{:?}", loaded.notes);
+    }
+
     #[test]
     fn a_gap_in_a_chain_is_refused_rather_than_closed_up() {
         let (dir, store, l1, l4) = fixture();
