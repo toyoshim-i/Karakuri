@@ -2203,10 +2203,9 @@ named for a wire would then be parsing something that never touches one.
 
 **Learning it belongs on the control**, which is the maintainer's own model: a GUI component is a
 translator between one operation and N ways in, so *learn this control* is one gesture from one
-place and MIDI is only the first of the N. Both learn paths wait on the same missing mechanism,
-which is M5.11 — this console draws no tooltips at all, and the mock draws no key hints anywhere
-either, so **the console as drawn gives an operator no way to learn a key binding**, which is
-rule 01's keyboard surface with no teaching path
+place and MIDI is only the first of the N. The MIDI learn path landed in the hover layer (ADR-0330, ADR-0336); what is still missing is the key's own
+teaching path, so the console as drawn gives an operator no way to learn a key binding, which is rule 01's
+keyboard surface with no teaching path
 ([ADR-0205](adr/0205-a-question-whose-reply-the-vocabulary-cannot-say-gets-no-row.md)).
 
 **What a keyboard map has to name that a MIDI map never did**: twelve of the CLI's thirty-nine
