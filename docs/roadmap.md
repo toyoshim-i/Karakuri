@@ -199,14 +199,15 @@ shape* close with them — named rather than placed, because M5.14 now sits afte
 of this list* stopped locating them.
 
 **What is still open, as of 2026-09-10, and no bay is.** M5.1 to M5.9 have all closed — M5.5 —
-Inspector was the last of them, on 2026-09-10 — and so have M5.14 and *The console's own shape*. What
-is left of the cross-cutting run is **M5.10 MCP, M5.11 hover tooltips and M5.13 the keyboard**, each
-of which is a column of [every operation](manual/operations.html) rather than a bay and none of which
-the panel column's grep reads; **M5.12 MIDI closed on 2026-09-10** when its column's grep returned 0,
-and **M5.15 closed the same day** when the panel column's grep over the rows it named returned
-nothing. After them is **M5.16**. Each closed entry above is a stub naming what
-it decided, when its exit was met and where every owed item went;
-[history/m5.md](history/m5.md) keeps them whole.
+Inspector was the last of them, on 2026-09-10 — and so have M5.14, M5.15 and *The console's own
+shape*. **What is left of the cross-cutting run is M5.13 — the keyboard**, which is the key column of
+[every operation](manual/operations.html) rather than a bay and which the panel column's grep does not
+read: **M5.12 — MIDI closed on 2026-09-10** when its column's grep returned nothing, **M5.10 — MCP the
+same day** when the MCP column's did, and **M5.11 — hover tooltips the same day** on an exit that is
+not a grep at all. After it is **M5.16**, which is neither a bay nor a column and which carries M5.8's
+exit a second time. **So the open sub-milestones below are M5.13 and M5.16**, in the file's own order.
+Each closed entry above is a stub naming what it decided, when its exit was met and where every owed
+item went; [history/m5.md](history/m5.md) keeps them whole.
 
 **M5.15 was the first sub-milestone whose rows are in two bays, and its exit said so.** It was a
 change to what a library row *is* — a procedure is one, and loading one writes a single layer over
@@ -581,196 +582,111 @@ its fader and no parameters, which is under *Mx — TODO* as well. The bay's fiv
 rather than debt on ADR-0315's sentence; what reopens them is a model handed a view of this console,
 which that record leaves to the day it happens and which is **M6 — Autonomy**'s.
 
-#### M5.10 — MCP
+#### M5.10 — MCP — **closed**
 
-**Rows.** The MCP column of every row, which M5.1 to M5.9 leave out.
+The MCP column of [every operation](manual/operations.html), which the bays leave out. An eighth tool,
+`operate`, takes an operation of the vocabulary by its own heading, is audited by `gate` and is
+performed on the frame the panel performs a press on
+([ADR-0334](adr/0334-mcp-names-an-operation-by-the-vocabularys-own-name-and-the-frame-performs-it.md)),
+and what closed the column after it was asking each row still `plan` what it was waiting for rather
+than writing performers for it. **A route that answers is a built route even where the answer is no**,
+and a send that ends in the system's own save dialog is `gap`
+([ADR-0341](adr/0341-a-route-that-answers-is-built-and-a-send-that-ends-in-a-dialog-is-gap.md)) — the
+performers were already sitting in the window's own press arm and the drain calls them where the
+pointer's button-up arm does. **A walk names the Set it is a walk of** and reaches a model through a
+ninth tool of its own, because a directory walk is what only the server can do, while the two rows
+beside it are `gap` with a sentence each
+([ADR-0342](adr/0342-a-walk-names-the-set-it-is-of-and-the-two-rows-beside-it-are-gap.md)). The server
+runs in the instrument — `karakuri --mcp PORT` against the panel's own `Opening` — and `mcp.rs`'s
+classification has lost both of the groups a `plan` badge here ever meant, each variant deleted on the
+day it emptied. [history/m5.md](history/m5.md).
 
-**Exit.** No `plan` badge in the MCP column of [every operation](manual/operations.html).
-`grep -o 'rt \(plan\|has\|gap\)">MCP' docs/manual/operations.html | sort | uniq -c` is the
-count and it is not written down here.
+**Exit, met on 2026-09-10**: no `plan` badge in the MCP column of
+[every operation](manual/operations.html). `grep -c 'rt plan">MCP' docs/manual/operations.html`
+returns `0`, which is ADR-0342's own reading on the day it landed the last three rows. Every other row
+reads `has` or `gap`, and a `gap` meets this exit as it meets a bay's: since ADR-0341 it says a route
+is refused with a reason and nothing is owed, where `plan` says a route is coming — which is why the
+rows nobody intends to build one for are `gap` rather than waiting.
 
-**The forty `plan` badges are thirty-eight `has` and nine `plan`**, since
-[ADR-0334](adr/0334-mcp-names-an-operation-by-the-vocabularys-own-name-and-the-frame-performs-it.md):
-an eighth tool, `operate`, takes an operation of the vocabulary by its own heading, is audited by
-`gate`, and is performed on the frame the panel performs a press on. **A closed class is a built
-route** — ADR-0235's *"a closed class is reached and answered with a refusal"* — so thirty of the
-thirty-one are refused today and reachable the moment their pill is pressed.
+What M5.10 left owed is rescheduled, and all of it is under *Mx — TODO*: **the walk's row does not
+carry the page's `read` mark**, which ADR-0342's alternative (e) left open rather than refusing —
+`WalkHistory` is `Silent(Question)` and whether ADR-0281's mark tracks that arm is a decision about
+the manual, with nothing on the page false today; **listing procedures over MCP**, which arrived as
+M5.15's and is *List what the store holds*' to grow rather than this column's debt, *Filter the library
+by kind* reading `gap` because a model has no window; and **a press on a kind chip narrows what the
+console draws and does not re-read the listing the narrowing is applied to**, which ADR-0342 recorded
+rather than fixed — having fixed the same defect on the `history` chip in that pass — and gave to
+*that row's own pass*, a row of M5.15, which closed the same day and left it with no open
+sub-milestone over it.
 
-**Six of those nine closed on 2026-09-10**
-([ADR-0341](adr/0341-a-route-that-answers-is-built-and-a-send-that-ends-in-a-dialog-is-gap.md)), and
-none of them needed a performer written. Four were already written and sitting in the window's own
-press arm, and the drain now calls them where the pointer's button-up arm calls them: *Star a Set*,
-*Narrow the published interface*, *Choose where the frame goes*, *Record the session*. Two of those
-four were `plan` for want of an argument rather than of a performer — the drain is called from two
-`winit` handlers that hold the `ActiveEventLoop` a projector window is made on, and the store a
-recording's head is written into was one field away. *Set a deck's mask position* was the defect and
-is one arm of `reading`. **A route that answers is a built route even where the answer is no**: a
-model's star is refused by the performer, in ADR-0301's own sentence, and that record said the row
-was owed a tool rather than that it was unreachable.
-
-***Send a Set to somebody* is `gap` rather than `plan`**, which is the one of the nine that turned
-into a decision. Both halves of it are outside what this protocol carries and no performer would
-change either: a send names no destination and never will
-([ADR-0260](adr/0260-sending-a-set-is-a-read-and-a-reads-answer-goes-where-the-surface-that-asked-puts-answers.md)),
-the destination this surface supplies is the system's own save dialog
-([ADR-0311](adr/0311-a-row-menu-loads-a-set-onto-a-named-deck-and-saves-it-through-the-systems-own-dialog.md))
-and a model cannot answer one, and a take names a file where paths never cross. The refusal names
-`--package` and `--take-in`.
-
-**ADR-0338's two went the same day**, in the pass that built them: *Keep a node's procedure* gained
-an arm in the drain, and *Load a procedure over a layer* turned out never to have needed one — its
-press arm sits in `App::performed` beside the fold and the Set load, exactly as *Narrow the
-published interface*'s did, so the sentence refusing it had stopped being true before it was read.
-
-**And the last three went on 2026-09-10**
-([ADR-0342](adr/0342-a-walk-names-the-set-it-is-of-and-the-two-rows-beside-it-are-gap.md)) — the
-three that carried an `Undecided` payload, which is what a `plan` badge in this column had come to
-mean. One of them was the payload arriving and two were the question being asked properly:
-
-- ***Walk the edit history* names the Set it is a walk of**, and is `has walk_history`. What it was
-  waiting for was *which history*, which ADR-0308 called *"the one thing no surface spells"* — and a
-  model spells a Set id in `read_set`, so the sentence had stopped being true about this surface. It
-  is a **ninth tool** beside `read_set` and `list_sets` rather than a name `operate` takes, and that
-  is ADR-0199's own division rather than a second route: it reads the store and answers with rows,
-  which is what only the server can do, and a directory walk handed to the drain's frame is a walk
-  on the path that must not wait. The panel's route is unchanged — the chip asks for the walk and
-  the host answers the id off the pulldown deck's aim.
-- ***Edit the file instead* is `gap`.** The row names an *event*, somebody saving a file in another
-  program; a model does not do that, it calls `write_procedure`, which **is** its edit. There is
-  nothing here a model would say that the write does not already say, so nothing is owed
-  ([ADR-0205](adr/0205-a-question-whose-reply-the-vocabulary-cannot-say-gets-no-row.md)'s kind of
-  answer). The payload stays `Undecided` as the row's marker for `--watch`.
-- ***Move a boundary* is `gap`**, with
-  [ADR-0315](adr/0315-a-model-has-no-window-so-the-twelve-surface-rows-mcp-badges-are-gap.md)'s own
-  sentence: a divider's position is the arrangement's own state, exactly as the twelve rows below it
-  are, and that record's consequences already called this the thirteenth — held out only because its
-  payload is open. The payload stays open for
-  [ADR-0259](adr/0259-the-keyboard-is-addressed-to-the-bay-that-has-focus-and-a-global-letter-is-a-convenience-or-the-operators-own.md)'s
-  reason, a key cannot mean a viewport pixel, and settling it would not have moved the badge.
-
-**So `plan` in this column now means nothing at all**, which is this sub-milestone's exit read from
-the inside: `mcp.rs`'s classification lost *named, and nothing on this frame performs it yet* when
-its last row left (ADR-0341) and lost *the payload is undecided* when these two turned out to be
-`gap` for reasons of their own. Every operation the vocabulary names is performed, has a tool, is a
-window's, or is refused with a sentence saying nothing is owed.
-
-***Element capacity, seeds, the camera* left this list the day ADR-0334 was written**, which is the
-shape all six of 2026-09-10's took: ADR-0328 gave the Inspector's deck head two chips, `resized` and
-`re_salted` went onto the frame this drain lands on, and the row went `has operate` with nothing on
-this surface changing.
-
-**The server exists in the instrument**, which is a change to what this sub-milestone is. `karakuri
---mcp PORT` runs `karakuri_environment::mcp::serve` against the panel's own `Opening` and publishes
-eight tools, so the mechanism
-([ADR-0199](adr/0199-mcp-names-its-operations-and-performs-them-itself.md)) is not only settled, it
-is running, and so is the ninth, `operate`. **What is left here is the audit's surface**.
-
-**The audit's surface.** `gate` is the audit and has no wildcard arm, so a new operation stops the
-build until it is classed (ADR-0235, ADR-0236). The console draws four class pills. Four switches do
-not cover every closed row — the clock's, the sequencer's, `Quit`, *Select a deck* and rule 06's
-authority belong to no class — and an opening is map configuration rather than an operation, so
+What it does not owe, each named so it is met as a decision rather than as a surprise. **The CLI's
+`--mcp` drain refusing what it cannot perform is done**, in ADR-0341's annotation of 2026-09-10:
+`karakuri-cli --mcp` serves the same tools behind the same audit with none of the panel's performers
+and answered `Ok` regardless, so a model was told an operation was performed when nothing happened; it
+refuses now in one sentence naming the operation, saying that program has no control for it and naming
+the instrument as the surface that answers it, decided per call off `written` rather than from a list
+either side keeps. **No column reads that**, a badge here being a claim about the frame the panel
+drains. **Two payloads stay `Undecided` by design** — *Edit the file instead*, which keeps one as the
+row's marker for `--watch`, and *Move a boundary*, which keeps one because a key press cannot mean a
+viewport pixel (ADR-0259) — and **the place each is written is the vocabulary's own docs**, on the
+payload itself in `crates/karakuri-operation/`, where ADR-0342 put the sentence saying what it is;
+settling either would move no badge and no exit reads them. **The audit's surface is open on
+[the console page](manual/console.html)** under *What a model is refused, and where a class opens* —
 whether a press covers a class or one operation of it, whether an opening outlives a restart, and
-whether an open class shuts itself are open ([the console page](manual/console.html), *What a model
-is refused, and where a class opens*).
+whether an open class shuts itself — which is the specification this milestone is measured against
+rather than a list kept here; the four class pills are drawn, pressed and tipped.
 
-**Every write that compiles is a version, and this program keeps them now.**
-`mcp::write_procedure` runs `compile::check` and writes the file, and touches nothing else; what
-keeps the version it replaced is the watcher, at the compile-success point a hand at an editor and a
-model's write both pass through. `crates/karakuri/src/main.rs` builds one `history::Snapshots` for
-the run, seeds every slot's launch files into it before the window opens, and hands it to every
-watcher — so a panel run, which is where MCP is served from, accumulates versions under
-`<store>/history/` on the same terms a `--watch` run does, and what `write_procedure` already tells a
-client about the version it replaced is true on this surface as well. **It belongs here rather than
-in the bay that would read them**: what makes a version worth keeping is that something other than
-the operator's own hands wrote it, and this is where that something is. M5.3's *Walk the edit
-history* reads what this keeps. **The Set id goes in with the record** — the slot names it, so
-recording without it would file a version under a node and lose which Set it belonged to, which is
-the one thing the bay reading it needs
-([ADR-0276](adr/0276-a-versions-set-id-goes-in-the-snapshots-name-and-a-run-without-one-writes-none.md)):
-`Snapshots::record` takes the Set the slot is running and writes it into the name, and
-`watch::Watch::snapshotting_to` carries it per slot. **And in this program a load moves it**
-([ADR-0304](adr/0304-the-set-a-version-is-filed-under-rides-the-aim-that-re-points-the-slot.md)):
-every slot launches on the pair the command line settled, which is no Set at all, and a library load
-sends the id on the `watch::Aim` that re-points the slot, so the versions written after a load are
-filed under the Set that was loaded and a rewiring restates it. `Gfx::material` is not that answer
-and was never a candidate for it — that field is a *readout*, one name per slot, and at launch it is
-the pair rather than any id. **The reading was M5.3's task 2 and it is built** — a fifth scope chip
-in the Library bay whose rows are one Set's versions, with a landing on them
-([ADR-0308](adr/0308-the-library-bays-fifth-chip-walks-one-sets-history-and-a-row-lands-that-version-on-a-node.md))
-— so nothing here is owed to it.
+#### M5.11 — Hover tooltips — **closed**
 
-**Blocked on.** Nothing, and that changed with ADR-0334. It read *the bays above, for the rest* —
-a row whose operation the engine cannot yet perform has nothing for MCP to route to — and **every
-bay has closed**; the open sub-milestone carrying bays' rows is M5.16. Nothing is owed here: no
-performer, no payload and no tool. MCP is still a mouth rather than the control stick, which is why
-the list is short.
+Every compact control explains itself on hover. **The console paints its own hover layer and the tips
+are the manual's own words**
+([ADR-0330](adr/0330-the-console-paints-its-own-hover-layer-and-the-tips-are-the-manuals-own-words.md)),
+which is the decision this sub-milestone was blocked on from the day it was written: `input::PROBES`
+already answers what is under the pointer and ADR-0156's seam is that the console paints and the
+toolkit receives a rectangle, so the `egui`-widget alternative is rejected there with what would
+revive it written down. `docs/manual/console.html` is embedded and parsed at start-up, so the page
+stays the only copy of a tip and what is in Rust is a **citation** per control; the table is one entry
+per row of `input::PROBES`, so a control added to that register arrives here as a compile error. No
+operation on [every operation](manual/operations.html) is a tooltip, so this sub-milestone closed no
+badge and its exit was never a grep. [history/m5.md](history/m5.md).
 
-**Exit, checked.** `grep -c 'rt plan">MCP' docs/manual/operations.html` answers **0** on 2026-09-10.
-The sub-milestone is not closed here — that is the maintainer's.
+**Exit, met on 2026-09-10**: *every compact control explains itself on hover*. Every control the mock
+tips and this console draws resolves to its own tip, held by the three checks in
+`crates/karakuri-console/tests/hover.rs` rather than by a reading of the page — the array is
+`PROBES.len()` long, so a row that goes untipped is a compile error; a row carries one entry per
+control it claims unless `UNEVEN` names it with the reason and with the count it does carry; and every
+citation is resolved against the page, so a tip rewritten out of it fails there naming the control.
+**The one exception is the Master bay's effect rows, and they are M5.16's pass 2b** rather than this
+sub-milestone's: [ADR-0340](adr/0340-kind-l5-is-written-and-the-master-chain-is-an-ordered-list-of-them.md)
+makes the master chain an ordered list of kind L5 procedures, so a citation per row of the chain the
+mock draws would be written against a bay about to be rebuilt — and those rows are the ones M5.16
+retires from the page. `UNEVEN` carries the exception with that owner named, so it is an excused row
+rather than a silent one.
 
-#### M5.11 — Hover tooltips
+What M5.11 left owed is rescheduled. **The Master bay's effect rows are M5.16's**, above, and are the
+one thing this exit hands on. Under *Mx — TODO*: **the hover layer does not know that a card is
+down** — `claim`'s rule 2 gives every press to whichever card is open and this layer is handed
+`claim`'s answer rather than re-deriving its condition, so a pointer resting over a control an open
+card covers still resolves to that control, and closing it is a seam in `input` that answers *is a
+card down* for both surfaces.
 
-**Rows.** None. No operation on the page is a tooltip, so this sub-milestone closes no badge and its
-exit condition is not a grep.
-
-**What it is.** Every compact control explains itself on hover. The text was never what was
-missing: the mock carries 144 `data-tip` attributes as of 2026-09-09, and M5.1 to M5.9 each end by
-rewriting their bay's prose into more of them, so this sub-milestone started with its specification
-written and owed only the drawing.
-
-**Blocked on. Nothing.** The decision it waited on — who owns the pointer, whether the panel gains
-`egui` widgets or paints its own hover layer — is taken:
-[ADR-0330](adr/0330-the-console-paints-its-own-hover-layer-and-the-tips-are-the-manuals-own-words.md).
-**The console paints its own layer**, on the two records that were already here: `input::PROBES`
-already answers what is under the pointer, and ADR-0156's seam is that the console paints and the
-toolkit receives a rectangle. The `egui`-widget alternative is rejected there rather than dismissed,
-and what would revive it is written down — `egui` owning a control on this console for some other
-reason.
-
-**What is built.** [`karakuri-console`'s `hover`](../crates/karakuri-console/src/hover.rs): the
-page is embedded and parsed at start-up, so `console.html` stays the only copy of a tip and what is
-written in Rust is a **citation** per control rather than its words. The table is
-`[(&str, &[Tipped]); PROBES.len()]` — a control added to that crate's own register of what the
-pointer reaches arrives here as a compile error — and a row the mock is silent about carries an
-empty slice, which is the reading rule above said as a value. The box is the mock's
-`[data-tip]::after`, the dwell is `egui`'s own `tooltip_delay`, and the layer asks for a frame when
-a tip appears or goes and for nothing at all while one is up (ADR-0283).
-`crates/karakuri-console/tests/hover.rs` is where all of that is held.
-
-**Exit, and it is not a grep.** *Every compact control explains itself on hover* is **met**, with
-one exception that is owed elsewhere: every control the mock tips and this console draws now
-resolves to its own tip, except **the Master bay's three effect rows**, which are M5.16's pass 2b
-rather than this sub-milestone's — [ADR-0340](adr/0340-kind-l5-is-written-and-the-master-chain-is-an-ordered-list-of-them.md)
-makes the chain an ordered list of kind L5 procedures, so a citation per row of the chain the mock
-draws would be written against a bay that is about to be rebuilt. Seventy-six controls are tipped
-as of 2026-09-10, across thirty-four of the thirty-eight rows of `input::PROBES`. The rows that were
-short on 2026-09-09 are written: the Sequencer bay's five kinds of control are eight entries — four
-bank pills, a lane's cell, a lane's label, the mode pill and `+ lane` — the four class pills and the
-four preview cells are four entries each, a sensitivity row has its `take back` capsule beside its
-curve chip, and the deck head has the capacity chip and `re-salt`. Every one of them carries the
-sub-question the press handler already asks, read one question finer: which operation
-`Sequencer::press` hands back, which deck `ProgramBay::cell` answers, which chip
-`SensChip::operation` names, and `DeckHead::resized` and `re_salted` for the two build chips.
-
-**How the test holds it.** Three checks in `crates/karakuri-console/tests/hover.rs`, and they are
-three different halves. The array is `PROBES.len()` long, so a **row** that goes untipped is a
-compile error. A row carries **one entry per control the row claims**, which is `PROBES`' own
-number, unless `UNEVEN` names it, says why, and says how many it does carry. That is the half the
-array's length cannot hold: a fifth control on a row of four used to leave the pointer resolving to
-a neighbour's words with nothing saying so. And every **citation** is resolved against
-`docs/manual/console.html`, so a tip rewritten out of the page fails there naming the control
-rather than leaving that control drawing nothing. The four rows the mock is silent about are named
-in `SILENT` — a pane head's name, a bay head's grip, the Library bay's list and the Staging lane's
-`back` capsules — and a fifth empty row fails.
-
-**And one clause of rule 03 is paid in the mock's tense.** *Density is bought with hover* asks a
-symbol for three things — what it is, what state it is in, what a click will do — and a tip quoted
-from the page answers the first and third exactly and the second in the state the mock is drawn in.
-Reading the live value would mean composing the sentence rather than quoting it, which is a change
-to the page rather than to the console (ADR-0330's consequences).
-
-**What it unblocks.** M5.12's learn, which waited on this and landed with ADR-0336 the day after: *the
-assignment lives in the control's own tooltip*, and there is now a tooltip for it to live in.
+What it does not owe. **The rows the mock is silent about carry no tip and that is settled** — a pane
+head's name, a bay head's grip, the Library bay's list and the Staging lane's `back` capsules, each
+with ADR-0330's own reason: the page tips the pane head's count and its `keep` capsule and not the
+name between them, folding is explained in the page's prose rather than on `.grip`, what the page tips
+in the Library bay is the rows of a reading and the items of a row's menu rather than the listing row
+that probe claims, and a `back` capsule is tipped through the candidate row it sits in. **An empty
+tooltip is not a defect to fill in**, and the test holds the list at exactly those rows, so one more
+empty row fails rather than passing quietly. **Rule 03's second clause is paid in the mock's tense and
+that is settled too**: a tip quoted from the page says what a control is and what a click will do
+exactly, and says what state it is in in the state the mock is drawn in, and reading the live value
+would mean composing the sentence rather than quoting it — what that takes is the page marking its
+substitutable spans, a change to the manual which ADR-0330 wrote down as the revival condition rather
+than as work owed. The one value a tip does read live is the `⊕ MIDI:` line, which
+[ADR-0336](adr/0336-a-learn-is-a-map-edit-and-the-tips-midi-line-is-the-live-map.md) put there because
+the page's own assignments are the mock's and no operator's. **A control the page tips that no row of
+`input::PROBES` claims is not caught**, which is that register's documented blind spot rather than a
+second one.
 
 #### M5.12 — MIDI — **closed**
 
@@ -1640,6 +1556,36 @@ have.
   so the `history` chip does not go blank on the deck being edited; it is not an answer for what
   follows a keep, and whether a keep adopts the name it just wrote is undecided. From M5.15.
 
+- **The walk's row does not carry the page's `read` mark.** `Operation::WalkHistory` is
+  `Silent(Question)`, and
+  [ADR-0281](adr/0281-every-route-reaches-every-write-and-a-read-is-the-routes-own-interface-design.md)
+  marks a read row so that an empty column reads as that route's own design rather than as a debt.
+  [ADR-0342](adr/0342-a-walk-names-the-set-it-is-of-and-the-two-rows-beside-it-are-gap.md)'s
+  alternative (e) left the mark open rather than refusing it: the mark's rows are that arm's
+  membership as of ADR-0281, `FilterLibrary` joined the arm in ADR-0338 with the page not moving, and
+  **whether the mark tracks the arm is a decision about the manual** rather than about the
+  vocabulary. Nothing on the page is false today — the walk's key and MIDI columns are `gap`, which is
+  what they were — so what is owed is a page edit nobody has scheduled. It is here rather than under
+  *The decisions nobody has taken* because it blocks nothing, which is what every entry of that
+  section names. From M5.10.
+
+- **A press on a kind chip narrows what the console draws and does not re-read the listing the
+  narrowing is applied to.** The window's re-listing branch matches the scope press, the walk, a
+  listing and a favourite, and not `Operation::FilterLibrary`, so ADR-0338's six kind chips mark a
+  narrowing over rows that were read before it. ADR-0342 fixed the same defect on the `history` chip
+  in the pass that found this one and **recorded this one rather than fixing it**, giving it to *that
+  row's own pass* — *Filter the library by kind*, a row of M5.15, which closed on 2026-09-10. It is
+  here because a defect whose owner is a closed sub-milestone has nobody. From M5.10.
+
+- **The hover layer does not know that a card is down.** `claim`'s rule 2 gives every press to
+  whichever card is open, and the hover layer is handed `claim`'s answer rather than re-deriving its
+  condition, so a pointer resting over a control an open card covers still resolves to that control
+  and draws its tip.
+  [ADR-0330](adr/0330-the-console-paints-its-own-hover-layer-and-the-tips-are-the-manuals-own-words.md)
+  wrote it down rather than leaving it in a comment nobody meets, and what closes it is a seam in
+  `input` answering *is a card down* for the press path and the hover path at once, rather than a
+  second condition in the layer. From M5.11.
+
 ---
 
 ## The handover
@@ -1647,16 +1593,16 @@ have.
 **Read this if you are picking the work up.** It says where to start, what that piece needs, and
 what nobody has decided. Everything else is in the sub-milestone above, in the code, or in a record.
 
-### Where to start: M5.10 — MCP
+### Where to start: M5.13 — The keyboard
 
-**The work starts at M5.10 — MCP.** The order is this file's own, top to bottom, and M5.10 is the
-first sub-milestone above still open: **every bay has closed**, M5.5 — Inspector last on 2026-09-10,
-with M5.14 and *The console's own shape* among them, and M5.12 — MIDI and M5.15 — Procedures in the
-library closed the same day. What is left of the cross-cutting run is M5.10, M5.11 and M5.13, which
-is a column of [every operation](manual/operations.html) apiece rather than a bay, and after them
-M5.16. Each entry names its rows, its exit condition and what it is blocked on, and is the one place
-those are written down; what a closed sub-milestone left owed is under *Mx — TODO* and in
-[history/m5.md](history/m5.md).
+**The work starts at M5.13 — the keyboard.** The order is this file's own, top to bottom, and M5.13 is
+the first sub-milestone above still open: **every bay has closed**, M5.5 — Inspector last on
+2026-09-10, with M5.14 and *The console's own shape* among them, and M5.12 — MIDI, M5.15 — Procedures
+in the library, M5.10 — MCP and M5.11 — Hover tooltips closed the same day. **M5.13 is what is left of
+the cross-cutting run** — the key column of [every operation](manual/operations.html) rather than a
+bay — and after it M5.16, which is neither. Each entry names its rows, its exit condition and what it
+is blocked on, and is the one place those are written down; what a closed sub-milestone left owed is
+under *Mx — TODO* and in [history/m5.md](history/m5.md).
 
 **The panel is a program.** `cargo run -p karakuri` opens the console over a real deck: the
 picture, four deck previews, the transport, the mixer, the Library bay, the Inspector, the
@@ -1747,7 +1693,7 @@ which leaves the Library bay's planned *keep* pill an operator's act and owing n
 leaves a model unable to read back what it saved — `read_set` and `list_sets` read the library. The
 server addresses each deck's working copies rather than the paths the operator typed, so a model
 cannot rewrite the preset library, and there is no bind option: reaching it from another machine is
-`ssh -L`. **This changes what M5.10 has left** — see that sub-milestone.
+`ssh -L`. **M5.10 has since closed on it** — see its stub and [history/m5.md](history/m5.md).
 
 **A cell's letter and state are outside the image**, in a caption band under it, with a place kept
 for a risk badge that is not drawn. And
@@ -1865,7 +1811,7 @@ verdict is repeated on each of its rows
 ([ADR-0326](adr/0326-a-staging-row-is-a-changed-node-and-the-row-is-the-keep.md)). The account of it
 is in [history/m5.md](history/m5.md) under M5.7.
 
-Two more questions are named where they are met rather than here: who owns the pointer (M5.11), and
+Two more questions are named where they are met rather than here: who owns the pointer (decided by ADR-0330: the console paints its own hover layer; M5.11 has closed), and
 whether an addressed write by an agent onto a node the operator kept is refused, which cannot be
 decided until something writes a parameter on an agent's behalf — M6's, now that the Inspector has closed. **What an agent is one *of***
 is M6's and is open there.
