@@ -599,10 +599,16 @@ impl Analysis<'_> {
             // integer widths, which is not nothing: a `Source` identity is a
             // `uint`, so `source % 3u` is bounded and `float` of it stays that
             // way.
+            // **And a texture fetch is whatever was drawn into it**, which is
+            // the frame's own arithmetic several layers up and unbounded in
+            // linear HDR by construction — the pipeline runs unclamped and a
+            // texel above 1.0 is light the display cannot show rather than a
+            // mistake.
             TExprKind::Attr(_)
             | TExprKind::Far(_)
             | TExprKind::Ambient(_)
             | TExprKind::Field { .. }
+            | TExprKind::Sample { .. }
             | TExprKind::Source { .. } => Value::of(Range::of(e.ty)),
             TExprKind::Unary { op, value } => {
                 let v = self.eval(value);

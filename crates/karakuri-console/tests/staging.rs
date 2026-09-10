@@ -154,6 +154,11 @@ fn slot_row(deck: usize, name: &str, stage: Stage) -> Candidate {
 
 /// The mock's `.addr` spelling, which the host writes and this file restates
 /// because it is building the value the host would hand in.
+///
+/// **Kept in step with `karakuri/src/main.rs`'s `layer_word` by hand**, which is
+/// what a fixture that restates a host's spelling costs: the two are one
+/// spelling in two places, and a row addressed by one and drawn by the other
+/// would be a row an operator cannot press back.
 fn layer_word(layer: karakuri_operation::Layer) -> &'static str {
     match layer {
         karakuri_operation::Layer::L1 => "L1",
@@ -161,6 +166,19 @@ fn layer_word(layer: karakuri_operation::Layer) -> &'static str {
         karakuri_operation::Layer::L3 => "L3",
         karakuri_operation::Layer::L4 => "L4",
         karakuri_operation::Layer::Field => "F",
+        // **Answered here and reached by nothing today.** A candidate is a node
+        // of a *Set* that a build produced, and a Set holds no L5 node: a frame
+        // effect runs in the master chain, which is one level out from every
+        // Set, and the chain is still three fixed passes. So no Staging row is
+        // ever addressed `L5:0` and this arm builds a value nothing asks for.
+        //
+        // **Named rather than left to a wildcard anyway**, on the terms the
+        // match itself exists for: what this fixture is checking is that an
+        // address a row is drawn with is an address a press can type back, and
+        // a catch-all is how the fifth layer went wrong one kind ago
+        // (`setfile::layer_from_ordinal`). `L5` and not a bare letter, matching
+        // the host's own spelling above.
+        karakuri_operation::Layer::L5 => "L5",
     }
 }
 

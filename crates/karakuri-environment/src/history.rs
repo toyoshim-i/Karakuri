@@ -440,7 +440,7 @@ pub struct Listing {
     pub unclaimed: usize,
 }
 
-/// **The five words a layer is spelled with**, in a `kind` line and in a
+/// **The six words a layer is spelled with**, in a `kind` line and in a
 /// snapshot's name.
 ///
 /// One list, because [`declared_kind`] and [`list`] have to agree about it: the
@@ -451,7 +451,7 @@ pub struct Listing {
 /// **No entry is a prefix of another**, which is what lets a name's
 /// `L41`/`Field` field be split into a layer and an index by trying each of
 /// these in turn.
-pub const LAYERS: [&str; 5] = ["L1", "L2", "L3", "L4", "Field"];
+pub const LAYERS: [&str; 6] = ["L1", "L2", "L3", "L4", "Field", "L5"];
 
 /// One of [`LAYERS`], or `None` for a word this module does not spell a layer
 /// with.
@@ -879,7 +879,7 @@ pub fn declared_kind(source: &[u8]) -> Option<&'static str> {
             continue;
         }
         // [`LAYERS`] rather than a match written out here, because [`list`]
-        // reads the same five words back off a file name — and the layer a
+        // reads the same six words back off a file name — and the layer a
         // snapshot is filed under has to be the layer a listing reports it
         // under, for the reason this doc gives about addressing.
         return known_layer(rest.trim_start().split(char::is_whitespace).next()?);
@@ -931,6 +931,37 @@ mod tests {
         }
         out.sort();
         out
+    }
+
+    /// **Every word in [`LAYERS`] is a word [`declared_kind`] reads back**, and
+    /// the sixth is the one that would have gone quietly wrong.
+    ///
+    /// The layer a snapshot is filed under has to be the layer an agent
+    /// addresses it by; `declared_kind` answers off `LAYERS` rather than off a
+    /// match written out here for exactly that reason, and this is the
+    /// assertion that the indirection holds — including for a `kind` line with
+    /// a trailing comment, which is the shape the scan's *first token after the
+    /// space* rule exists for.
+    #[test]
+    fn declared_kind_reads_back_every_layer_including_l5() {
+        for layer in LAYERS {
+            let source = format!("proc p {{\n  kind {layer}\n}}\n");
+            assert_eq!(
+                declared_kind(source.as_bytes()),
+                Some(layer),
+                "`kind {layer}` has to read back as `{layer}`"
+            );
+        }
+        assert_eq!(
+            declared_kind(b"proc feedback {\n  kind L5   // a frame effect\n  retains\n}\n"),
+            Some("L5"),
+            "a trailing comment is not part of the answer"
+        );
+        // **`L5` is not a prefix of another word and no other word is a prefix
+        // of it**, which is what lets a snapshot's `L41`/`Field` name be split
+        // into a layer and an index by trying each of these in turn.
+        assert_eq!(declared_kind(b"proc p {\n  kind L55\n}\n"), None);
+        assert_eq!(declared_kind(b"proc p {\n  kind L6\n}\n"), None);
     }
 
     /// The load-bearing claim: what was there before an edit is still readable

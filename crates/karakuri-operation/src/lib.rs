@@ -360,17 +360,21 @@ pub enum Layer {
     L3,
     L4,
     Field,
+    /// **A `kind L5` procedure** — a frame effect over the picture handed to
+    /// it. See
+    /// `docs/adr/0340-kind-l5-is-written-and-the-master-chain-is-an-ordered-list-of-them.md`.
+    L5,
 }
 
 /// **Which kinds of row a library listing shows**: the five procedure kinds and
 /// Sets, each on or off, with an **OR** across the ones that are on and
 /// **everything** where none is.
 ///
-/// [`Operation::FilterLibrary`]'s payload, and the whole of it. Six named
+/// [`Operation::FilterLibrary`]'s payload, and the whole of it. Seven named
 /// booleans rather than a list of members, because the list is closed by
-/// construction — a procedure declares one of [`Layer`]'s five kinds and the
-/// sixth row kind is a Set — and a `Vec` would admit a member said twice, which
-/// is a state this control cannot be in.
+/// construction — a procedure declares one of [`Layer`]'s six kinds and the
+/// seventh row kind is a Set — and a `Vec` would admit a member said twice,
+/// which is a state this control cannot be in.
 ///
 /// **Every state is said at once.** A press names the whole row and never one
 /// chip, which is [`Operation::Publish`]'s rule on a different list: *"adding
@@ -393,6 +397,11 @@ pub struct LibraryKinds {
     pub l3: bool,
     pub l4: bool,
     pub field: bool,
+    /// **The seventh**, and it arrived the day `kind L5` did: a frame effect is
+    /// a procedure with a `kind` like any other, so it is a row of the Library
+    /// and the filter row has a toggle for it. See
+    /// `docs/adr/0340-kind-l5-is-written-and-the-master-chain-is-an-ordered-list-of-them.md`.
+    pub l5: bool,
     /// Sets, which is the one row kind that is not a procedure's `kind` — a
     /// Set fills several layers and declares none, so *is this its kind* is not
     /// a question it answers.
@@ -410,6 +419,7 @@ impl LibraryKinds {
         l3: false,
         l4: false,
         field: false,
+        l5: false,
         sets: false,
     };
 
@@ -419,7 +429,7 @@ impl LibraryKinds {
     /// filter row that could hide the whole listing would have a state an
     /// operator cannot see their way out of.
     pub fn narrowing(&self) -> bool {
-        self.l1 || self.l2 || self.l3 || self.l4 || self.field || self.sets
+        self.l1 || self.l2 || self.l3 || self.l4 || self.field || self.l5 || self.sets
     }
 
     /// Whether a procedure of `layer` is shown. `true` for every layer while
@@ -434,6 +444,7 @@ impl LibraryKinds {
             Layer::L3 => self.l3,
             Layer::L4 => self.l4,
             Layer::Field => self.field,
+            Layer::L5 => self.l5,
         }
     }
 

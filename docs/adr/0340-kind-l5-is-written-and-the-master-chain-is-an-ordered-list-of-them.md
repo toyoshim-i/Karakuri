@@ -314,24 +314,64 @@ nothing owes that.
 ## Consequences
 
 **Dated 2026-09-10 and written as what M5.16 builds**, to be rewritten by that work as a
-description of the tree.
+description of the tree. **The language half is built as of 2026-09-10** and is marked below;
+everything unmarked is still what M5.16 owes.
 
-- **`karakuri-ir` gains a sixth `Kind` and a fifth block.** `Kind::L5`, `BlockKind::Frame`, the
-  `frame` block, the `retains` header declaration, the `Texture` slot type on `uses`, and three
-  builtins in `Builtin::ALL` — which is also how they reach a model, `mcp.rs` serving the checker's
-  own table rather than a second copy (`docs/contributing.md` §4). `check.rs` gains the refusals
-  above, each with a negative control beside it (`docs/contributing.md` §3).
-- **`cost.rs` prices an L5 on `ops_per_fragment` alone** and holds it to
-  `MAX_OPS_PER_FULLSCREEN_FRAGMENT`. `fragment_ceiling` currently switches on
-  `topology == Fullscreen`, which an L5 does not declare; it switches on the kind as well.
-- **`karakuri-codegen` gains `l5.rs`**, one fullscreen pipeline per slot over the chain's bind
-  group layout, and `naga_test.rs` covers the three shipped procedures — the checklist item that
-  is not optional for this crate (`docs/contributing.md` §7).
+### The language half — built, 2026-09-10
+
+- **`karakuri-ir` has a sixth `Kind` and a fifth block.** `Kind::L5`, `BlockKind::Frame`, the
+  `frame` block, the bare `retains` header declaration, `SlotTy::Texture` on `uses`, and
+  `Builtin::Texel` / `Tap` / `FrameStep` in `Builtin::ALL` — which is also how they reach a
+  model, the MCP curriculum rendering the checker's own table rather than a second copy
+  (`docs/contributing.md` §4). `check.rs` carries the refusals above, each with a negative
+  control beside it (`docs/contributing.md` §3); the eight refused ambients each name the fix
+  rather than the rule (P-0083).
+- **A texture is not a value, and that is structural rather than a rule.** There is no `Ty` for
+  one: the first argument of `texel` and `tap` is a `Shape::Texture` position that the check pass
+  resolves as a *name*, and `TExprKind::Sample` carries which binding rather than an expression.
+  So `let x = src;` is refused at the read with both builtins named, and it can never become a
+  value by accident. **This is the one shape not written down above**, and it is the answer to a
+  question this record did not ask.
+- **`cost.rs` prices an L5 on `ops_per_fragment` alone**, zero on the other two axes, and holds
+  it to `MAX_OPS_PER_FULLSCREEN_FRAGMENT`. `fragment_ceiling` switches on the kind as well as on
+  `topology == Fullscreen`.
+- **`karakuri-codegen` has `l5.rs`**, one fullscreen pipeline over `master.wgsl`'s own bind group
+  layout — uniform, `src`, `held`, sampler, then the Texture slots, with binding 2 left empty
+  rather than renumbered where nothing is retained — and `naga_test.rs` validates the three
+  shipped procedures and asserts `feedback`'s and `rgb_shift`'s expressions against the
+  hand-written bodies term for term (`docs/contributing.md` §7).
+- **`examples/feedback.kir`, `examples/bloom.kir` and `examples/rgb_shift.kir` exist**, compile
+  through every stage, and cost **17**, **3889** and **41** ops per fragment against a ceiling of
+  4096.
+- **Bloom is at 95% of the ceiling, and the measurement this record owes is now overdue rather
+  than merely owed.** The ceiling was calibrated against a raymarcher — thirty-odd iterations of
+  a distance function — and not against a blur, and the three weights behind the figure (`texel`
+  2, `tap` 4, `frame_step` 2) are the least examined numbers in `cost.rs`. A tap weighted at a
+  transcendental's 8 refuses a 9×9 kernel outright, which would be a ceiling saying no to a shape
+  every post-processing stack ships. **What the estimate is worth here is a question a GPU
+  answers**, and nothing has asked one.
+- **A `kind L5` compiles and has nowhere to run**, which is stated as a decision rather than left
+  as a gap: `compile::sort_compiled` refuses one where a slot is loaded, with the reason, and
+  MCP's `LAYERS` stays five because advertising a layer a slot cannot hold would offer a client
+  an address that cannot resolve. `Set`'s node addressing answers `L5` with an empty range on the
+  terms `L3` did before the built-in camera became a node.
+- **The vocabulary's sixth word landed with the kind**: `karakuri_store::record::Layer::L5`,
+  `karakuri_operation::Layer::L5`, `LibraryKinds`' seventh boolean, `history::LAYERS`,
+  `setfile::kind_name` / `layer_named` / `layer_ordinal`, and `declared_kind` reading `L5` back.
+  **The two word tables with a wildcard needed naming rather than compiling**, which is what
+  `layer_from_ordinal`'s own comment predicted one kind earlier: a match on a `&str` has no
+  compiler behind it, so `karakuri/src/main.rs`'s `kind_of` and `setfile::layer_named` would each
+  have read a `kind L5` file as declaring nothing.
+- **`docs/ir-spec.md`'s specification moved rather than being restated.** The kind, its three
+  builtins, its cost and its lowering are in the present tense above the *Beyond* boundary; what
+  is left below it is the chain — the list, the cuts, the record, the surface — under *L5's chain
+  — specified, not built*.
+
+### The chain half — still M5.16's
+
 - **`karakuri-engine`'s `master.rs` stops being three passes and becomes a list**, `master.wgsl`
   goes with the three procedures that replace it, and `present.rs`'s targets become two plus one
   per retained cut instead of four.
-- **`examples/` gains `feedback.kir`, `bloom.kir` and `rgb_shift.kir`**, a second kind of shipped
-  part beside `surface.map`, and nothing in this program writes there (P-0096).
 - **[Every operation](../manual/operations.html) loses three rows and gains three**, and the page
   moves first (`docs/contributing.md` §5). **This reopens a closed sub-milestone's exit if the two
   halves land apart**: M5.8 closed on *no `plan` badge in the panel column of this bay's rows*, and
@@ -345,12 +385,13 @@ description of the tree.
   driver resolves each slot's address against the store before the first frame.
 - **`karakuri-store` gains nothing for the session half** and a `chains/` directory when the
   library half is taken, which is *Mx — TODO*'s.
-- **`docs/architecture.md` owes two edits this record does not make**, both being sentences about a
-  count rather than about the layer: *The Layer Model*'s L5 paragraph is annotated here, and
-  *Words that carry more than one sense* says *"There are five"* kinds, with
-  `karakuri_store::record::Layer` and `karakuri_operation::Layer` named beside it. Both become six
-  the day M5.16 lands, and `docs/ir-spec.md`'s *A note on the word* says the same thing from the
-  other side.
+- **`docs/architecture.md`'s two edits are made**, both having been sentences about a count
+  rather than about the layer: *The Layer Model*'s L5 paragraph now says the kind is built and the
+  chain is not, and *Words that carry more than one sense* says there are six, with
+  `karakuri_store::record::Layer` and `karakuri_operation::Layer` grown to match.
+  `docs/ir-spec.md`'s *A note on the word* says it from the other side, and what it had to give up
+  is the clause *"only `L1` through `L4` are kinds"* — `L0` is the only model position with no
+  kind behind it now, and the two senses stay distinct anyway.
 - **ADR-0317 is annotated by this record rather than edited.** Its deferral is taken up and its
   revival condition met; its *Alternatives rejected* already says what would do it, and an ADR is a
   description of history ([ADR-0151](0151-an-adr-is-a-description-of-history.md)). Two of its

@@ -8,8 +8,10 @@
 //! thumbnails/<hash>.mp4
 //! sets/<id>.kbset
 //! sandbox/<id>.kbset
+//! sandbox/<stamp>.kir               one node's source, kept by a model
 //! sessions/<stamp>.ndjson
 //! arrangements/<name>.arrangement.json
+//! procedures/<name>.kir             one node's source, kept under a name
 //! favourites.json                   the ids of the Sets that are starred
 //! ```
 //!
@@ -46,8 +48,31 @@
 //! Which of the two a save goes to is decided by whoever asked and never here:
 //! [`Store::write_set`] and [`Store::write_sandbox_set`] are two methods so
 //! that no caller can reach the library by leaving an argument at its default.
+//! **It holds a kept procedure the same way** — [`Store::write_procedure`] and
+//! [`Store::write_sandbox_procedure`] are the same pair one file kind along,
+//! and a `.kir` under `sandbox/` is a model's keep rather than a row of
+//! anybody's library.
 //!
-//! **`favourites.json` is the fifth thing here and it is beside the Sets on
+//! **`procedures/` is the fifth thing here and it is a library rather than the
+//! artifacts.** Every build already puts its sources under `<hash>.kir` at the
+//! root, and that population is the *edit history's*: one file per compile,
+//! under a name that is an address. A procedure here is the other thing — one
+//! node's source that an operator **kept**, under a name they typed, so that it
+//! can be a row of a library and loaded over a layer of what a deck is playing
+//! (`docs/adr/0338-a-procedure-is-a-row-of-the-library-and-one-loaded-over-a-layer-makes-a-set-with-no-name.md`).
+//! It is `arrangements/`' shape a second time — a name that is one path
+//! component, a place of its own under the root, bytes handed over whole — and
+//! it is written only by an operator's own act
+//! (`docs/principles/0096-the-operators-library-is-written-by-an-operators-own-act.md`).
+//!
+//! **And nothing here reads what is in one.** [`Store::list_procedures`]
+//! answers names and nothing else, exactly as [`Store::list_sets`] does: what
+//! layer a `.kir` declares is a fact about the *language*, which
+//! `karakuri_environment::history::declared_kind` scans off a source and is the
+//! one answer to it. A second scan here would be this module parsing a file it
+//! holds, which is the line `arrangements/` above already draws.
+//!
+//! **`favourites.json` is the sixth thing here and it is beside the Sets on
 //! purpose.** A star is not part of a Set: putting it in the file would make it
 //! travel to whoever the Set is sent to, and would have to be *written*, so a
 //! starred Set would jump to the top of a listing ordered by when it was made.
@@ -86,6 +111,38 @@ pub enum StoreError {
     /// somebody typed, and the sentence an operator needs is the name back.
     #[error("no arrangement named `{0}`")]
     NoArrangement(String),
+    /// No procedure is filed under that name.
+    ///
+    /// [`StoreError::NoArrangement`]'s sibling and for its reason: a procedure
+    /// is addressed by a name somebody typed, and the sentence whoever asked
+    /// needs back is that name
+    /// ([P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md)).
+    /// A row of the Library bay that has gone since the listing was built is
+    /// the ordinary way to meet it, and it is exactly the sentence a load has
+    /// to say rather than swallow.
+    #[error("no procedure named `{0}`")]
+    NoProcedure(String),
+    /// **A keep was asked for under a name `procedures/` already holds.**
+    ///
+    /// **Refused rather than overwritten, where an arrangement and a Set id are
+    /// not**, and the difference is what each name is over. An arrangement's
+    /// name is a *place an operator keeps coming back to* — saving `four_deck`
+    /// again is what an operator who has just moved a divider means (ADR-0221)
+    /// — and a Set id typed twice replaces what is under it because the caller
+    /// typed it (ADR-0128). A kept procedure is neither: the name arrives from
+    /// a capsule that types nothing and takes a stamp, or from a head that
+    /// typed one once, and what is under it is **somebody's part of a library**
+    /// that a later keep of a different node would silently replace.
+    ///
+    /// The sentence carries the name back, which is the whole of what the next
+    /// attempt needs
+    /// ([P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md)):
+    /// there is one thing to change and it is the name.
+    #[error(
+        "a procedure named `{0}` is already kept — a keep never overwrites one, so name this \
+         one something else"
+    )]
+    ProcedureTaken(String),
     /// **A star was asked for on an id `sets/` does not hold.**
     ///
     /// Its own variant beside [`StoreError::NoArrangement`] and for that
@@ -217,6 +274,13 @@ impl Store {
         // it and `list_arrangements` answers "nothing kept" rather than
         // "no such directory".
         fs::create_dir_all(root.join("arrangements"))?;
+        // Established on `open` like the four above, so a store written by an
+        // older build gains it the first time this one opens it and
+        // `list_procedures` answers "nothing kept" rather than "no such
+        // directory" — which matters more here than anywhere else in this
+        // list, because the Library bay lists this directory on the first
+        // press of a run whether or not anything has ever written into it.
+        fs::create_dir_all(root.join(Store::PROCEDURES))?;
         Ok(Store { root })
     }
 
@@ -277,6 +341,36 @@ impl Store {
     /// instrument as broken
     /// (`docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md`).
     pub const SANDBOX: &str = "sandbox";
+
+    /// **Where the operator's kept procedures live**, and the one place the
+    /// directory is spelled — [`Store::open`] makes it,
+    /// [`Store::list_procedures`] reads it and [`Store::read_procedure`] opens
+    /// a file in it, and three literals could drift into a store that writes
+    /// where it does not list.
+    ///
+    /// Public for [`Store::SANDBOX`]'s reason: a refusal and an accept both
+    /// have to be able to say where a file went, and *kept* with no directory
+    /// named is a sentence that sends somebody looking.
+    pub const PROCEDURES: &str = "procedures";
+
+    /// **What a kept procedure's file is called**, which is the extension every
+    /// `.kir` in this workspace carries — one node's source, in the language
+    /// `docs/ir-spec.md` specifies.
+    ///
+    /// Named here for [`Store::SET_FILE_SUFFIX`]'s reason rather than its
+    /// argument: this one says nothing about resolution, since a procedure is
+    /// one file and names no parts. What it does is the same job — the listing
+    /// derives a name back **by stripping this**, so two literals could drift
+    /// into a store that holds a file under a name it cannot list.
+    pub const PROCEDURE_FILE_SUFFIX: &str = ".kir";
+
+    /// [`Store::arrangement_path`]'s sibling under [`Store::PROCEDURES`], built
+    /// the same way and off the same suffix.
+    fn procedure_path(&self, name: &str) -> PathBuf {
+        self.root
+            .join(Store::PROCEDURES)
+            .join(format!("{name}{}", Store::PROCEDURE_FILE_SUFFIX))
+    }
 
     fn set_path(&self, id: &str) -> PathBuf {
         self.root
@@ -537,6 +631,151 @@ impl Store {
         }
         out.sort_by(|a, b| a.name.cmp(&b.name));
         Ok(out)
+    }
+
+    /// **List the procedures the operator has kept**, in ascending name order,
+    /// each with the time its file was last written.
+    ///
+    /// [`Store::list_arrangements`]'s shape one directory along, and every
+    /// sentence that method carries holds here: the time comes from the
+    /// filesystem because a `.kir` carries none; the order is the name's rather
+    /// than recency's, because two files written inside one tick of a coarse
+    /// clock tie and a tied sort is not an order; a name the layout does not
+    /// claim is skipped rather than repaired, so an editor's backup and a
+    /// `.tmp` left by a write that died are not offered as procedures
+    /// [`Store::read_procedure`] cannot open; and an empty directory lists
+    /// nothing while a missing one is an error.
+    ///
+    /// **What layer a row implements is not answered here**, and that is the
+    /// one thing a caller may expect and not get. The badge on a library row is
+    /// a procedure's `kind`, which is a line of the *language* — this module
+    /// keeps files it does not parse, exactly as it keeps an arrangement's
+    /// bytes without reading them (ADR-0158's rule met a second time), and
+    /// `karakuri_environment::history::declared_kind` is the one scanner for
+    /// it. So a caller that wants badges pairs this listing with
+    /// [`Store::read_procedure`] and that scan, which is one small read per
+    /// row, on the press that builds a listing and never on a frame
+    /// ([P-0091](../../../docs/principles/0091-cost-is-known-before-it-is-paid.md)).
+    ///
+    /// **These are not the artifacts, and the difference is the whole of why
+    /// this method exists.** [`Store::list_artifacts`] answers every `.kir` any
+    /// build has ever put at the root, under a name that is a content address:
+    /// that population is the edit history's, one row per compile. A procedure
+    /// here is one a person kept and named
+    /// (`docs/adr/0338-a-procedure-is-a-row-of-the-library-and-one-loaded-over-a-layer-makes-a-set-with-no-name.md`).
+    pub fn list_procedures(&self) -> Result<Vec<ProcedureEntry>, StoreError> {
+        let mut out = Vec::new();
+        for entry in fs::read_dir(self.root.join(Store::PROCEDURES))? {
+            let entry = entry?;
+            let file_name = entry.file_name();
+            // Non-UTF-8 fails `to_str` and falls out of the listing with
+            // everything else the layout does not claim, which is
+            // `list_sets`' rule and its reason: no lossy repair, and no
+            // unwrap for a hostile name to trip.
+            let Some(name) = file_name
+                .to_str()
+                .and_then(|n| n.strip_suffix(Store::PROCEDURE_FILE_SUFFIX))
+            else {
+                continue;
+            };
+            if entry.file_type()?.is_dir() {
+                continue;
+            }
+            out.push(ProcedureEntry {
+                name: name.to_string(),
+                written: entry.metadata()?.modified()?,
+            });
+        }
+        out.sort_by(|a, b| a.name.cmp(&b.name));
+        Ok(out)
+    }
+
+    /// **Read a kept procedure back**, as the bytes that were written.
+    ///
+    /// [`StoreError::NoProcedure`] where nothing is filed under that name,
+    /// which is an ordinary answer rather than a damaged store — the row a
+    /// hand pressed may have been deleted since the listing was built — and
+    /// the name asked for is what the sentence carries.
+    ///
+    /// **Bytes and not a parse**, which is [`Store::get_artifact`]'s contract:
+    /// what a `.kir` says is the checker's question and the compiler's, and
+    /// this module answers neither.
+    pub fn read_procedure(&self, name: &str) -> Result<Vec<u8>, StoreError> {
+        fs::read(self.procedure_path(name)).map_err(|e| match e.kind() {
+            std::io::ErrorKind::NotFound => StoreError::NoProcedure(name.to_string()),
+            _ => StoreError::Io(e),
+        })
+    }
+
+    /// **Keep one node's source under a name** (`procedures/<name>.kir`), and
+    /// answer where it went.
+    ///
+    /// This is the one thing that writes the operator's tier of the library,
+    /// and it exists so that the tier exists at all
+    /// ([P-0096](../../../docs/principles/0096-the-operators-library-is-written-by-an-operators-own-act.md),
+    /// `docs/adr/0338-…`). What ships under the presets root is written by
+    /// nothing, and the `<hash>.kir` artifacts at the root are the edit
+    /// history's rather than anybody's shelf.
+    ///
+    /// **It refuses a name that is taken**, where [`Store::write_set`] and
+    /// [`Store::write_arrangement`] overwrite — see
+    /// [`StoreError::ProcedureTaken`], which is where that difference is
+    /// argued. The check is a race with anybody else writing the same path and
+    /// is a check all the same: the two callers of this are one hand and one
+    /// model on one frame loop, and what it stops is the ordinary case rather
+    /// than a concurrent one.
+    ///
+    /// **Bytes handed over whole**, which is [`Store::put_artifact`]'s
+    /// contract and `arrangements/`': what a `.kir` says is the compiler's
+    /// question and this module answers none of it.
+    ///
+    /// **Nothing here checks the name**, exactly as nothing checks a Set id or
+    /// an arrangement's: `<name>` becomes one path component and that is the
+    /// caller's rule to keep —
+    /// `karakuri_environment::mcp::checked_id` is where a name that is not one
+    /// is refused rather than sanitised.
+    ///
+    /// The path comes back because a keep's outcome has to say where the file
+    /// went: *kept* with no directory named is a sentence that sends somebody
+    /// looking (P-0083).
+    pub fn write_procedure(&self, name: &str, source: &[u8]) -> Result<PathBuf, StoreError> {
+        let path = self.procedure_path(name);
+        if path.exists() {
+            return Err(StoreError::ProcedureTaken(name.to_string()));
+        }
+        ndjson::write_atomic(&path, source)?;
+        Ok(path)
+    }
+
+    /// **Keep one node's source in the sandbox** (`sandbox/<name>.kir`) —
+    /// [`Store::write_procedure`]'s sibling under [`Store::SANDBOX`], and the
+    /// one a model's keep goes to.
+    ///
+    /// A method of its own rather than an argument, which is
+    /// [`Store::write_sandbox_set`]'s rule and its reason: the directory is
+    /// decided by *who asked*, and a `bool` here would make the operator's
+    /// library what a caller gets by saying nothing
+    /// ([P-0096](../../../docs/principles/0096-the-operators-library-is-written-by-an-operators-own-act.md),
+    /// `docs/adr/0261-…`).
+    ///
+    /// **It refuses a taken name too**, on [`Store::write_procedure`]'s terms:
+    /// a model's keep is stamped, so meeting one is a clock that has not moved
+    /// rather than a name somebody chose, and overwriting there would lose the
+    /// earlier of two keeps a model made in the same millisecond.
+    pub fn write_sandbox_procedure(
+        &self,
+        name: &str,
+        source: &[u8],
+    ) -> Result<PathBuf, StoreError> {
+        let path = self
+            .root
+            .join(Store::SANDBOX)
+            .join(format!("{name}{}", Store::PROCEDURE_FILE_SUFFIX));
+        if path.exists() {
+            return Err(StoreError::ProcedureTaken(name.to_string()));
+        }
+        ndjson::write_atomic(&path, source)?;
+        Ok(path)
     }
 
     /// **List the Sets the store holds**, in ascending id order, each with the
@@ -825,6 +1064,23 @@ pub struct SetEntry {
 /// operator typed sorts nowhere near when they typed it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ArrangementEntry {
+    pub name: String,
+    pub written: SystemTime,
+}
+
+/// A procedure the operator has kept, as [`Store::list_procedures`] found it:
+/// what to hand [`Store::read_procedure`], and when that file was last written.
+///
+/// **`name` rather than `id`**, which is [`ArrangementEntry`]'s own word and
+/// carries its argument: a Set is ordinarily filed under a stamp nobody chose,
+/// and a procedure never is — it is here because somebody pressed `keep` on a
+/// node and said what to call it.
+///
+/// **No `kind` field**, and it is left off rather than dropped: what layer the
+/// file declares is a line of the language, and [`Store::list_procedures`] is
+/// where the reason this module does not read one is written.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProcedureEntry {
     pub name: String,
     pub written: SystemTime,
 }

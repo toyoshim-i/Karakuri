@@ -156,7 +156,17 @@ fn the_run_sits_one_gap_after_the_label() {
             // `min` of exactly these two.
             let count =
                 pane_count(&ctx, &at_pane, &pane, None).expect("a head with room for its count");
-            let room = count.min.x - size::HALF_HEAD_GAP - named.name.min.x;
+            // **The chooser's own room comes off it too**, since 2026-09-10:
+            // the `▾` sits between the run and everything else in the row and
+            // is a control now, so the run is clipped short of it rather than
+            // over it (ADR-0338, decision 5). The mark's width is read off the
+            // derivation rather than restated, because `CHEVRON_W` is the
+            // view's own and a second copy here would go on saying what it
+            // said the day the mark changed size.
+            let room = count.min.x
+                - size::HALF_HEAD_GAP
+                - (named.chevron.width() + size::HALF_HEAD_GAP)
+                - named.name.min.x;
             assert!(
                 near(
                     named.name.width(),
@@ -249,8 +259,19 @@ fn a_head_with_no_room_for_the_run_draws_none() {
     // and the gap the words stop short of it by: a head exactly this wide has
     // the run starting where the run must already have stopped.
     let capsule = run(&ctx, "keep") + size::PILL_PAD_X * 2.0;
+    // **And the chooser between them**, which is the `▾` this pass made a
+    // control: the run stops one gap short of the mark and the mark keeps its
+    // place, so a head this wide has nowhere left to paint a name. Its width
+    // is read off a head that has room rather than restated — the view owns
+    // `CHEVRON_W`.
+    let chevron = deck_name(&ctx, &at_pane, &pane, None)
+        .expect("a head with room for the run")
+        .chevron
+        .width();
     let bare = size::HALF_HEAD_PAD_X
         + run(&ctx, "showing")
+        + size::HALF_HEAD_GAP
+        + chevron
         + size::HALF_HEAD_GAP
         + size::HALF_HEAD_GAP
         + capsule

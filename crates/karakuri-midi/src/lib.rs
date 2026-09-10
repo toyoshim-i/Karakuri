@@ -57,6 +57,6 @@ mod device;
 mod map;
 mod message;
 
-pub use device::Port;
-pub use map::{Map, Parameter};
+pub use device::{Out, Port};
+pub use map::{Control, Echo, Half, Map, Parameter, Shown, Wide};
 pub use message::Message;

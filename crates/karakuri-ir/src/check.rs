@@ -107,12 +107,12 @@ use std::collections::{HashMap, HashSet};
 
 use crate::ast::{
     Ambient, Attr, BinOp, BlockKind, Expr, Kind, Lit, Output, Proc, SlotTy, Stmt, Topology, Ty,
-    UnOp,
+    UnOp, TEXTURE_HELD, TEXTURE_SRC,
 };
 use crate::builtin::{Builtin, Domain, Shape};
 use crate::error::{IrError, IrResult, Stage};
 use crate::span::Span;
-use crate::typed::{Checked, Slot, TBlock, TExpr, TExprKind, TStmt, Target};
+use crate::typed::{Checked, Slot, TBlock, TExpr, TExprKind, TStmt, Target, TexRef};
 
 /// The spelling [`Output::PointRate`] had before its unit stopped being pixels.
 ///
@@ -201,6 +201,19 @@ pub fn check(proc: &Proc) -> IrResult<Checked> {
         .filter(|u| u.ty == SlotTy::Source)
         .map(|u| u.name.as_str())
         .collect();
+    // **The sixth such fact, and the one that makes a name fetchable.** A
+    // Texture slot is read only as `texel(<name>)` or `tap(<name>, uv)`, so
+    // what the header declared has to reach the call checker or the call
+    // resolves against the builtin table and finds nothing.
+    //
+    // A list, like the field and source ones: a fold of three pictures is as
+    // ordinary as a fold of two, and nothing caps it.
+    let textures: Vec<&str> = proc
+        .uses
+        .iter()
+        .filter(|u| u.ty == SlotTy::Texture)
+        .map(|u| u.name.as_str())
+        .collect();
     // **Whether this procedure declares a geometry slot**, which is what makes
     // `source` ambiguous rather than merely present — see
     // [`Checker::paired`].
@@ -228,6 +241,8 @@ pub fn check(proc: &Proc) -> IrResult<Checked> {
             &fields,
             camera,
             &sources,
+            &textures,
+            proc.retains.is_some(),
             paired.as_deref(),
             &params,
             &emit_set,
@@ -276,7 +291,7 @@ pub fn check(proc: &Proc) -> IrResult<Checked> {
                     .filter(|a| a.is_derivable()),
             )
             .collect();
-        let closed_form = is_closed_form(proc.kind, &carried, &blocks);
+        let closed_form = is_closed_form(proc.kind, proc.retains.is_some(), &carried, &blocks);
         let reads_beats = reads_beats(&blocks);
         Ok(Checked {
             name: proc.name.clone(),
@@ -296,6 +311,13 @@ pub fn check(proc: &Proc) -> IrResult<Checked> {
                 Kind::L4 => Some(drawn_topology(&blocks)),
                 // A field is a function of space and has no elements at all.
                 Kind::Field => None,
+                // **An L5 covers the frame exactly once and declares nothing
+                // about it.** `Topology::Fullscreen` describes what a
+                // *renderer* answered by having no `vertex` block, and an L5
+                // has no per-element form for its absence to be an answer
+                // against — so the field stays empty and `cost::fragment_ceiling`
+                // asks the kind instead.
+                Kind::L5 => None,
             },
             capacity: proc.capacity,
             amplify: proc.amplify.map(|a| a.factor),
@@ -307,6 +329,7 @@ pub fn check(proc: &Proc) -> IrResult<Checked> {
                     ty: u.ty,
                 })
                 .collect(),
+            retains: proc.retains.is_some(),
             blend: proc.blend,
             params: proc.params.clone(),
             emit: emit_vec.into_iter().map(|(a, _)| a).collect(),
@@ -348,12 +371,25 @@ fn kind_name(kind: Kind) -> &'static str {
         Kind::L3 => "L3",
         Kind::L4 => "L4",
         Kind::Field => "Field",
+        Kind::L5 => "L5",
     }
 }
 
 // ---------------------------------------------------------------------------
 // Header
 // ---------------------------------------------------------------------------
+
+/// **A `uses … : Texture` slot on a kind that is handed no picture.**
+///
+/// One function rather than five copies, because the refusal is one sentence
+/// with one clause that varies: a texture is what an L5 folds, and every other
+/// kind is handed elements or a position. `why` is that clause.
+fn texture_slot_is_l5s(span: Span, why: &str) -> IrError {
+    IrError::contract(span, "`uses … : Texture` is L5 only").with_hint(format!(
+        "remove it, or change `kind` to `L5`: {why}. A Texture slot is one input of a nested \
+         L5, bound by an `edge` and read with `texel` and `tap`"
+    ))
+}
 
 fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
     match proc.kind {
@@ -447,6 +483,11 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                     // the file and no buffer, no bind group and nothing to the
                     // chain.
                     SlotTy::Source => {}
+                    SlotTy::Texture => errors.push(texture_slot_is_l5s(
+                        u.span,
+                        "an L1 makes geometry, and a picture is what the layers below it eventually \
+                         produce",
+                    )),
                 }
             }
             if proc.blocks.iter().all(|b| b.kind != BlockKind::Element) {
@@ -599,6 +640,16 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                     ),
                 );
             }
+            // **The one kind whose slot rules are written as filters rather
+            // than as a `match`**, so this refusal is a loop of its own rather
+            // than an arm. Same sentence as the other four.
+            for u in proc.uses.iter().filter(|u| u.ty == SlotTy::Texture) {
+                errors.push(texture_slot_is_l5s(
+                    u.span,
+                    "an L2 rewrites elements, and a picture is what several layers below it \
+                     eventually produce",
+                ));
+            }
             let mut geometries = proc.uses.iter().filter(|u| u.ty == SlotTy::Geometry);
             if let Some(first) = geometries.next() {
                 for u in geometries {
@@ -739,6 +790,11 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                              here for `source` to name",
                         ),
                     ),
+                    SlotTy::Texture => errors.push(texture_slot_is_l5s(
+                        u.span,
+                        "an L3 produces a viewpoint, and a picture is what is seen from one rather \
+                         than something a camera takes in",
+                    )),
                 }
             }
             if !proc.emit.is_empty() {
@@ -872,6 +928,11 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                              geometries — mask in the caller, where there is one source to name",
                         ),
                     ),
+                    SlotTy::Texture => errors.push(texture_slot_is_l5s(
+                        u.span,
+                        "a field is handed `point` and returns a distance, and a picture has no \
+                         distance at a point",
+                    )),
                 }
             }
             if !proc.emit.is_empty() || !proc.consumes.is_empty() {
@@ -946,6 +1007,11 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                     // *instance* rather than per element, so a procedure with
                     // no element still knows whose chain it is running in.
                     SlotTy::Source => {}
+                    SlotTy::Texture => errors.push(texture_slot_is_l5s(
+                        u.span,
+                        "a renderer draws *into* a picture rather than out of one — folding several \
+                         together is what an L5 is",
+                    )),
                 }
             }
             // **A renderer looks from one place.** Two would each need their
@@ -1017,6 +1083,154 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                 );
             }
         }
+        // **An L5 is handed a picture and declares nothing about the material
+        // that made it.** Every geometry declaration is refused at the header,
+        // on the terms every misplaced declaration is refused: an L5 counts
+        // nothing, spawns nothing, kills nothing and stores nothing.
+        //
+        // **There is no `vertex` block to refuse here**, and that is the
+        // block-owner check below rather than an omission: `vertex` belongs to
+        // L4, so a `frame` procedure that declares one is turned away with a
+        // sentence about which kind owns it. The absence of a vertex stage is
+        // not a *declaration* on an L5 the way it is on an L4 — an L5 has no
+        // per-element form for it to be a declaration against.
+        Kind::L5 => {
+            for (present, what, hint) in [
+                (
+                    proc.capacity.is_some(),
+                    "capacity",
+                    "an L5 covers the frame it is handed exactly once, and how much material \
+                     is in that frame was settled several layers upstream",
+                ),
+                (
+                    proc.topology.is_some(),
+                    "topology",
+                    "an L5 has no elements to be points or lines. It covers the frame, which \
+                     is what `fullscreen` says about a renderer and is not a thing to declare \
+                     here",
+                ),
+                (
+                    proc.blend.is_some(),
+                    "blend",
+                    "an L5 writes one texel per texel and nothing overdraws, so there is \
+                     nothing for two fragments on one texel to be combined by",
+                ),
+                (
+                    proc.amplify.is_some(),
+                    "amplify",
+                    "an L5 makes no elements, so there is nothing to multiply",
+                ),
+            ] {
+                if present {
+                    errors.push(
+                        IrError::contract(proc.span, format!("`{what}` is not an L5's"))
+                            .with_hint(format!("remove `{what}`: {hint}")),
+                    );
+                }
+            }
+            for u in &proc.uses {
+                match u.ty {
+                    // **The one kind that may declare one**, and this is the
+                    // nested role's fan-in: several pictures folded into the
+                    // one `Texture` a Set outputs, each bound by an `edge`.
+                    // Any number of them — a fold of three is as ordinary as a
+                    // fold of two, and each costs one texture binding.
+                    SlotTy::Texture => {}
+                    // **All three are element-level, and an L5 is handed a
+                    // picture rather than the material that made it.** One
+                    // sentence for the three because it is one sentence: by the
+                    // time a frame exists, the elements that drew it are gone
+                    // and the camera they were seen from is one of possibly
+                    // several.
+                    SlotTy::Geometry => {
+                        errors.push(IrError::contract(u.span, "`uses` is L2 only").with_hint(
+                            "remove it: an L5 is handed a picture, and the elements that drew \
+                             it are no longer in front of it. Fold another picture in with \
+                             `uses <name> : Texture` instead",
+                        ))
+                    }
+                    SlotTy::Camera => errors.push(
+                        IrError::contract(u.span, "`uses … : Camera` is L4 only").with_hint(
+                            "remove it: the frame an L5 is handed may hold several decks\u{2019} \
+                             material seen from several cameras, so there is no one viewpoint \
+                             for it to name",
+                        ),
+                    ),
+                    SlotTy::Source => errors.push(
+                        IrError::contract(
+                            u.span,
+                            "`uses … : Source` is for masking, and an L5 masks nothing",
+                        )
+                        .with_hint(
+                            "remove it: a Source slot is the comparand for `source`, and the \
+                             frame an L5 is handed may hold several sources folded together — \
+                             mask upstream, in a node that runs over one geometry",
+                        ),
+                    ),
+                    // **The one refusal here that has to be argued rather than
+                    // followed.** The four kinds that may evaluate a field are
+                    // the four that have a position in space to evaluate it at.
+                    // An L5 has a frame coordinate; `eye` and `ray` are refused
+                    // above; and a field marched from a viewpoint an L5 cannot
+                    // name would be a shape drawn against nothing.
+                    SlotTy::Field => errors.push(
+                        IrError::contract(u.span, "`uses … : Field` is not an L5\u{2019}s")
+                            .with_hint(
+                            "remove it: a field is a distance at a *point in space*, and an L5 \
+                             has only a frame coordinate — the viewpoint that would turn one \
+                             into the other is exactly what an L5 has no way to name. March \
+                             the field in a fullscreen L4 and hand this pass the picture",
+                        ),
+                    ),
+                }
+            }
+            if !proc.emit.is_empty() || !proc.consumes.is_empty() {
+                errors.push(
+                    IrError::contract(
+                        proc.span,
+                        "`emit` and `consumes` are about elements, and an L5 has none",
+                    )
+                    .with_hint(
+                        "remove them: an L5 reads the frame it is handed with `texel(src)` and \
+                         `tap(src, uv)`, and the attributes of the elements that drew it are \
+                         not something it can see",
+                    ),
+                );
+            }
+            if !proc.blocks.iter().any(|b| b.kind == BlockKind::Frame) {
+                errors.push(
+                    IrError::contract(proc.span, "L5 procedures require a `frame` block")
+                        .with_hint("add `frame { … }`: it is the whole of what an L5 does"),
+                );
+            }
+        }
+    }
+
+    // **`retains` is refused on every kind but L5**, at the declaration rather
+    // than at the read, so that a procedure which declares it and never reads
+    // `held` is turned away too: what it asks the engine for is a frame-sized
+    // target, and nothing but a chain slot or a merge has a frame to retain.
+    if let Some(r) = &proc.retains {
+        if proc.kind != Kind::L5 {
+            errors.push(
+                IrError::contract(
+                    r.span,
+                    format!(
+                        "`retains` is L5 only, and this is {} {}",
+                        if matches!(proc.kind, Kind::Field) {
+                            "a"
+                        } else {
+                            "an"
+                        },
+                        kind_name(proc.kind)
+                    ),
+                )
+                .with_hint(
+                    "remove `retains`: it says this procedure reads a retained cut of the \
+                     previous *frame*, and a frame is what an L5 is handed",
+                ),
+            );
+        }
     }
 
     check_slot_names(proc, errors);
@@ -1065,7 +1279,21 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
 /// `eye` stays refused everywhere, but as an *ambient* rather than an output —
 /// a marching fragment reads it, so it genuinely is in scope in an L4.
 fn shadows_output(name: &str, kind: Kind) -> bool {
-    Output::from_name(name).is_some_and(|o| o.block().kind() == kind)
+    Output::from_name(name).is_some_and(|o| output_block(o, kind).kind() == kind)
+}
+
+/// **Which block writes `output` in a procedure of this kind.**
+///
+/// [`Output::block`] answers for the four kinds that had one each, and `color`
+/// is now written by two: a `fragment` block on an L4 and a `frame` block on an
+/// L5. It is the same output — `vec4`, linear, unclamped, the same value at the
+/// next node down — which is exactly why it is one name rather than two, and
+/// why this is a redirection here rather than a fifth `Output` variant.
+fn output_block(output: Output, kind: Kind) -> BlockKind {
+    match (output, kind) {
+        (Output::Color, Kind::L5) => BlockKind::Frame,
+        _ => output.block(),
+    }
 }
 
 /// Attributes, ambients, and stage outputs are a closed, reserved vocabulary
@@ -1094,6 +1322,30 @@ fn check_slot_names(proc: &Proc, errors: &mut Vec<IrError>) {
         // so a slot called `position` or `t` would make one spelling mean two
         // things depending on what follows it.
         check_reserved(&u.name, u.name_span, proc.kind, "slot", errors);
+        // **The two names an L5's `frame` block already holds.** `src` is the
+        // incoming picture and `held` is the retained one, and both are fetched
+        // the way a Texture slot is — so a slot called either would be one
+        // spelling for two bindings, in the one kind where a Texture slot is
+        // legal at all. Asked of the kind rather than reserved language-wide,
+        // because `src` is an ordinary name in every other layer.
+        if proc.kind == Kind::L5 && matches!(u.name.as_str(), TEXTURE_SRC | TEXTURE_HELD) {
+            errors.push(
+                IrError::contract(
+                    u.name_span,
+                    format!("`{}` is a texture an L5 is already handed", u.name),
+                )
+                .with_hint(format!(
+                    "rename the slot: `{}` names {} in a `frame` block, and `texel`/`tap` \
+                     would have one name for two pictures",
+                    u.name,
+                    if u.name == TEXTURE_SRC {
+                        "the incoming frame"
+                    } else {
+                        "the retained cut of the previous frame"
+                    }
+                )),
+            );
+        }
         if proc.params.iter().any(|p| p.name == u.name) {
             errors.push(
                 IrError::contract(u.name_span, format!("`{}` is already a param", u.name))
@@ -1220,6 +1472,8 @@ fn check_params(proc: &Proc, errors: &mut Vec<IrError>) -> HashMap<String, Ty> {
             &[],
             None,
             &[],
+            &[],
+            false,
             None,
             &empty_params,
             &empty_attrs,
@@ -1406,7 +1660,17 @@ fn check_consumes_emitted(
 /// arbitrary `t` evaluates it once from wherever it happened to be. That is
 /// the failure this whole pass exists to refuse — checking clean and then
 /// coming up short at runtime. Under-claim.
-fn is_closed_form(kind: Kind, carried: &HashSet<Attr>, blocks: &[TBlock]) -> bool {
+fn is_closed_form(kind: Kind, retains: bool, carried: &HashSet<Attr>, blocks: &[TBlock]) -> bool {
+    // **An L5 is the stateless layers' shape with one exception, and the
+    // exception is the whole of what `retains` declares.** A frame effect with
+    // no `retains` is a function of the picture it is handed, the clock and its
+    // params — nothing to warm, on an L4's terms. One that reads `held` is
+    // reading its own output from the previous frame, which is accumulation
+    // whatever it is spelled with: the trail at `t` is every frame that led to
+    // it, and there is no un-integrating one. Under-claim.
+    if kind == Kind::L5 {
+        return !retains;
+    }
     // Vacuously true for L4, and said here rather than left to fall out of an
     // empty `emit`. An L4 procedure holds no per-element state: it reads what
     // L1 wrote and throws the result at a target, so there is nothing about it
@@ -1474,6 +1738,12 @@ fn reads_carried(e: &TExpr, carried: &HashSet<Attr>) -> bool {
         TExprKind::Builtin { args, .. } | TExprKind::Construct { args } => {
             args.iter().any(|a| reads_carried(a, carried))
         }
+        // **A fetch reads a picture, and a picture is not carried state.** The
+        // frame an L5 is handed was drawn this frame by everything upstream of
+        // it; `held` is the exception in appearance only, since an L5 has no
+        // per-element state for `closed_form` to be a question about — see
+        // `is_closed_form`, which never asks an L5.
+        TExprKind::Sample { at, .. } => at.as_ref().is_some_and(|a| reads_carried(a, carried)),
         // **The argument, and nothing behind it.** A field is a function of the
         // position it is handed and holds no state of its own, so what decides
         // this is whatever the caller computed the point from.
@@ -1528,6 +1798,9 @@ fn reads_beats(blocks: &[TBlock]) -> bool {
             // and the Set asks it there — see `Checked::reads_beats`. What is
             // this procedure's is the point it hands over.
             TExprKind::Field { point, .. } => in_expr(point),
+            // The same shape: what is this procedure's is the coordinate it
+            // computes, and a texture holds no clock.
+            TExprKind::Sample { at, .. } => at.as_ref().is_some_and(|a| in_expr(a)),
             TExprKind::Swizzle { value, .. } => in_expr(value),
         }
     }
@@ -1596,6 +1869,11 @@ fn required_keys(block: BlockKind, emit: &HashSet<Attr>, draws_lines: bool) -> V
             keys
         }
         BlockKind::Fragment => vec![CovKey::Output(Output::Color)],
+        // **The same output and the same requirement**, because it is the same
+        // value at the next node down: an L5 writes what an L4 writes, `vec4`,
+        // linear and unclamped, and a `frame` block that assigned nothing would
+        // be a pass with no picture in it.
+        BlockKind::Frame => vec![CovKey::Output(Output::Color)],
         // **Nothing is required of a `deform`.** An L2 rewrites some of what
         // reaches it and passes the rest through untouched — that is what makes
         // a modulator a modulator rather than a second generator, and requiring
@@ -1753,6 +2031,22 @@ struct Checker<'a> {
     /// asking `source == a || source == b` is the ordinary case and each slot
     /// costs a `u32` in a uniform block that already exists.
     sources: &'a [&'a str],
+    /// **What this procedure calls the pictures it folds in**, from every `uses
+    /// <name> : Texture` in its header.
+    ///
+    /// The list is what makes `tap(<name>, uv)` mean anything, and it is per
+    /// procedure for the reason every field beside it is. Empty on a chain
+    /// slot's L5 and on every other kind, where the declaration is refused at
+    /// the header.
+    textures: &'a [&'a str],
+    /// **Whether the header declares `retains`**, which is the whole of what
+    /// makes [`TEXTURE_HELD`] readable.
+    ///
+    /// Carried rather than asked of the header for the reason the six lists
+    /// above are: a block does not see its own header, and `held` outside
+    /// `retains` has to be refused with a sentence about the declaration rather
+    /// than about the name.
+    retains: bool,
     /// **What this procedure calls the second geometry it takes, if it takes
     /// one** — the same declaration [`Checker::uses`] carries, kept a second
     /// time because this one is read where `source` is.
@@ -1780,10 +2074,10 @@ enum TargetRes {
 }
 
 impl<'a> Checker<'a> {
-    // Eleven, and each one is a fact about the *procedure* that a block checker
-    // cannot see for itself — the header is not in the block. Bundling them
-    // into a struct would be the same eleven fields under one name, and the
-    // struct would have exactly one constructor and one use.
+    // Thirteen, and each one is a fact about the *procedure* that a block
+    // checker cannot see for itself — the header is not in the block. Bundling
+    // them into a struct would be the same thirteen fields under one name, and
+    // the struct would have exactly one constructor and one use.
     #[allow(clippy::too_many_arguments)]
     fn new(
         kind: Kind,
@@ -1793,6 +2087,8 @@ impl<'a> Checker<'a> {
         fields: &'a [&'a str],
         camera: Option<&'a str>,
         sources: &'a [&'a str],
+        textures: &'a [&'a str],
+        retains: bool,
         paired: Option<&'a str>,
         params: &'a HashMap<String, Ty>,
         emit: &'a HashSet<Attr>,
@@ -1806,6 +2102,8 @@ impl<'a> Checker<'a> {
             fields,
             camera,
             sources,
+            textures,
+            retains,
             paired,
             params,
             emit,
@@ -1813,6 +2111,31 @@ impl<'a> Checker<'a> {
             scope: Scope::new(),
             errors: Vec::new(),
         }
+    }
+
+    /// **Which texture `name` refers to**, and `None` for a name that is not
+    /// one here.
+    ///
+    /// Three sources and they are asked in this order because that is the order
+    /// they are decided in: `src` is the language's, always present in a
+    /// `frame` block; `held` is the header's, present under `retains`; a slot
+    /// is the header's too, under whatever it was called. Nothing else can
+    /// reach this — the two reserved names are refused as slot names and as
+    /// locals, so one spelling never means two things.
+    fn texture(&self, name: &str) -> Option<TexRef> {
+        if self.block != Some(BlockKind::Frame) {
+            return None;
+        }
+        if name == TEXTURE_SRC {
+            return Some(TexRef::Src);
+        }
+        if name == TEXTURE_HELD && self.retains {
+            return Some(TexRef::Held);
+        }
+        if self.textures.contains(&name) {
+            return Some(TexRef::Slot(name.to_string()));
+        }
+        None
     }
 
     /// **`eye` and `ray` exist only where the lowering defines them**, which is
@@ -1968,6 +2291,36 @@ impl<'a> Checker<'a> {
             );
             return;
         }
+        if self.textures.contains(&name) {
+            self.err_hint(
+                Stage::Contract,
+                span,
+                format!("`{name}` is a picture this procedure folds in"),
+                "a slot and a local share one scope — rename one of them",
+            );
+            return;
+        }
+        // **The two reserved names of a `frame` block**, on the terms `color`
+        // is reserved in a `fragment` one: a local called `src` would make one
+        // spelling mean two things — the incoming frame in one line and a
+        // binding in the next — and `held` the same under `retains`. Refused
+        // only where they name something, so an L4 local called `src` stays
+        // legal.
+        if self.block == Some(BlockKind::Frame)
+            && (name == TEXTURE_SRC || (name == TEXTURE_HELD && self.retains))
+        {
+            self.err_hint(
+                Stage::Contract,
+                span,
+                format!("`{name}` is a texture this procedure is handed"),
+                format!(
+                    "`{name}` names a picture in a `frame` block and cannot also name a local \
+                     — rename the local. Fetch from the texture with `texel({name})` or \
+                     `tap({name}, uv)`"
+                ),
+            );
+            return;
+        }
         if Ambient::from_name(name).is_some() {
             self.err(
                 Stage::Contract,
@@ -2025,10 +2378,13 @@ impl<'a> Checker<'a> {
                 Some(BlockKind::Deform) => {
                     self.emit.contains(&attr) || self.consumes.contains(&attr)
                 }
+                // An L5 is handed a picture, and a texel has no element
+                // behind it to write an attribute onto.
                 Some(BlockKind::Vertex)
                 | Some(BlockKind::Fragment)
                 | Some(BlockKind::Camera)
                 | Some(BlockKind::Mask)
+                | Some(BlockKind::Frame)
                 | None => false,
             };
             if !available {
@@ -2080,15 +2436,16 @@ impl<'a> Checker<'a> {
             return TargetRes::Invalid;
         }
         if let Some(output) = Output::from_name(name) {
-            if self.block != Some(output.block()) {
+            // **The block that writes it, asked of the kind** — `color` is a
+            // `fragment` block's on an L4 and a `frame` block's on an L5. See
+            // [`output_block`].
+            let owner = output_block(output, self.kind);
+            if self.block != Some(owner) {
                 self.err_hint(
                     Stage::Contract,
                     span,
-                    format!("`{name}` belongs to the `{}` block", output.block().name()),
-                    format!(
-                        "write `{name}` inside `{}`, not here",
-                        output.block().name()
-                    ),
+                    format!("`{name}` belongs to the `{}` block", owner.name()),
+                    format!("write `{name}` inside `{}`, not here", owner.name()),
                 );
                 return TargetRes::Invalid;
             }
@@ -2407,8 +2764,10 @@ impl<'a> Checker<'a> {
                 Some(BlockKind::Vertex) | Some(BlockKind::Fragment) => {
                     self.consumes.contains(&attr)
                 }
-                // An L3 has no element in hand — see `check_header`.
-                Some(BlockKind::Camera) | None => false,
+                // An L3 has no element in hand — see `check_header`. Neither
+                // has an L5: what it is handed is the picture the elements
+                // already drew.
+                Some(BlockKind::Camera) | Some(BlockKind::Frame) | None => false,
             };
             if available {
                 return Some(TExpr::new(attr.ty(), span, TExprKind::Attr(attr)));
@@ -2443,6 +2802,11 @@ impl<'a> Checker<'a> {
                      elements — pointing one at geometry means naming a reduction or element \
                      zero, which `docs/ir-spec.md` specifies and nothing builds yet"
                     .to_string(),
+                Some(BlockKind::Frame) => format!(
+                    "an L5 is handed a picture rather than the material that made it, so \
+                     `{name}` — a property of an element — has nothing here to be a property \
+                     of. Read the frame with `texel(src)` and `tap(src, uv)`"
+                ),
                 None => "attributes are not available in a header expression".to_string(),
             };
             self.err_hint(
@@ -2541,6 +2905,61 @@ impl<'a> Checker<'a> {
                 );
                 return None;
             }
+            // **The eight an L5 refuses, each by name and each with its own
+            // sentence** — which is the whole of P-0083 at this layer: a
+            // refusal that names the fix beats one that names the rule.
+            //
+            // Before the three sentences below it, because every one of those
+            // is about a kind an L5 is not: `seed` here is not a fullscreen
+            // L4's `seed`, and `source` here is not a field's.
+            if self.kind == Kind::L5 {
+                let hint = match ambient {
+                    Ambient::Seed => {
+                        "`seed` is not available to an L5: a fullscreen pass has no element. \
+                         Vary the picture with `point_coord`, `t`, `beats` or a `param` instead"
+                    }
+                    Ambient::Copy => {
+                        "`copy` is which copy of its parent an element is, and an L5 has no \
+                         element: the frame in front of it was drawn by every copy at once. \
+                         Drive the effect from a `param`"
+                    }
+                    Ambient::Source => {
+                        "`source` names which geometry a chain instance runs over, and the \
+                         frame an L5 is handed may hold several decks\u{2019} material folded \
+                         together. Mask upstream, in a node that runs over one geometry"
+                    }
+                    Ambient::Point => {
+                        "`point` is a `field` block\u{2019}s one input and nothing else\u{2019}s. An L5 \
+                         has a frame coordinate — read `point_coord`, which is 0..1 across \
+                         the frame and is the coordinate `tap` takes"
+                    }
+                    Ambient::Capacity => {
+                        "`capacity` is how much material an L1 was built for, and an L5 makes \
+                         no material: it covers the frame exactly once whatever is in it"
+                    }
+                    Ambient::Camera => {
+                        "`camera` projects an element, and an L5 has none — the frame in front \
+                         of it may hold several decks\u{2019} material seen from several cameras, \
+                         so there is no one viewpoint for it to name"
+                    }
+                    Ambient::Eye | Ambient::Ray => {
+                        "`eye` and `ray` are what a marcher looks along, and an L5 is standing \
+                         on the picture a marcher already drew — there is no one viewpoint it \
+                         could be. March in a fullscreen L4 and hand this pass the result"
+                    }
+                    // The four an L5 does read, and none of them reaches here.
+                    Ambient::T | Ambient::Beats | Ambient::Dt | Ambient::PointCoord => {
+                        unreachable!("`{}` is available in a `frame` block", ambient.name())
+                    }
+                };
+                self.err_hint(
+                    Stage::Contract,
+                    span,
+                    format!("`{name}` is not available to an L5"),
+                    hint,
+                );
+                return None;
+            }
             // The fourth such sentence, for the two kinds that have no chain
             // instance to be running over. "Not available in this block" would
             // send an author looking at the block, where what is wrong is the
@@ -2611,6 +3030,55 @@ impl<'a> Checker<'a> {
                     "evaluate it at a point — `{name}(p)` — which is the whole of what a \
                      field offers"
                 ),
+            );
+            return None;
+        }
+        // **A texture is not a value, and it is the one slot type that can
+        // never become one.** A geometry has no type for a whole source, a
+        // field has none until it is evaluated, a camera is six numbers — and
+        // each of those sentences is about a value this language could in
+        // principle have. This one is not: what a texture offers is a *fetch*,
+        // at this fragment or at a coordinate, and both of those are the two
+        // builtins rather than a value with parts.
+        //
+        // **Before the ambient arm and before the undefined fallthrough**, so
+        // that `src` reads as what it is rather than as a name nobody declared
+        // — which is the sentence an author of a `frame` block would find
+        // hardest to act on.
+        if let Some(tex) = self.texture(name) {
+            let what = match tex {
+                TexRef::Src => "the incoming frame".to_string(),
+                TexRef::Held => "the retained frame".to_string(),
+                TexRef::Slot(_) => {
+                    format!("a picture this procedure folds in, from `uses {name} : Texture`")
+                }
+            };
+            self.err_hint(
+                Stage::Contract,
+                span,
+                format!("`{name}` is a texture, not a value"),
+                format!(
+                    "fetch from it — `texel({name})` for this fragment's own texel, unfiltered, \
+                     or `tap({name}, uv)` for a filtered sample at a frame coordinate. `{name}` \
+                     is {what}, and a picture is not something the language can hold"
+                ),
+            );
+            return None;
+        }
+        // **`held` named where nothing retains a frame.** Refused with a
+        // sentence about the *declaration* rather than about the name, because
+        // the name is right and the header is what is missing — and refused
+        // only in a `frame` block, since `held` is an ordinary word everywhere
+        // else and an author who calls a local that is not shadowing anything.
+        if name == TEXTURE_HELD && self.block == Some(BlockKind::Frame) && !self.retains {
+            self.err_hint(
+                Stage::Contract,
+                span,
+                "`held` is available only under `retains`",
+                "add a bare `retains` to the header: it says this procedure reads a retained \
+                 cut of the previous frame, and it is what makes `held` a texture here. Which \
+                 cut is held — `mix` or `exit` — is answered where the procedure is placed, \
+                 not in the file",
             );
             return None;
         }
@@ -2887,8 +3355,164 @@ impl<'a> Checker<'a> {
         ))
     }
 
+    /// **A fetch from a named texture** — `texel(src)`, `tap(held, uv)`.
+    ///
+    /// The texture position takes a bare name and nothing else: not a local
+    /// holding one, because there is no type to hold it in, and not an
+    /// expression, because there is nothing to compute. Every other position is
+    /// checked the ordinary way, which today is `tap`'s `vec2`.
+    fn check_texture_call(
+        &mut self,
+        b: Builtin,
+        tex_at: usize,
+        args_ast: &[Expr],
+        span: Span,
+    ) -> Option<TExpr> {
+        let sig = b.signature();
+        if args_ast.len() != sig.args.len() {
+            let hint = if b == Builtin::Texel {
+                "`texel` takes the texture and no coordinate, deliberately: a coordinate is an \
+                 invitation to resample, and a centre tap that resamples makes a pass at an \
+                 amount just above zero differ from one that did not run by what a filter did \
+                 rather than by what the effect is. `tap(<texture>, uv)` is the filtered read"
+            } else {
+                "`tap` takes the texture and a frame coordinate — `tap(src, point_coord)`, \
+                 where the coordinate runs 0..1 across the frame and `frame_step` is what \
+                 turns a distance into one"
+            };
+            self.err_hint(
+                Stage::Type,
+                span,
+                format!(
+                    "`{}` takes {} argument(s), found {}",
+                    b.name(),
+                    sig.args.len(),
+                    args_ast.len()
+                ),
+                hint,
+            );
+            for a in args_ast {
+                self.check_expr(a);
+            }
+            return None;
+        }
+
+        // Resolved first, so that a mistake in the coordinate does not hide a
+        // mistake in the texture — both are reported in one pass.
+        let texture = match &args_ast[tex_at] {
+            Expr::Ident { name, .. } => match self.texture(name) {
+                Some(tex) => Some(tex),
+                None => {
+                    // `check_ident` owns every sentence about why a name is not
+                    // a texture — `held` without `retains`, an undeclared slot,
+                    // a param — so it is asked rather than second-guessed here.
+                    // It always reports, since a name that resolved to
+                    // something else is not a texture either.
+                    match self.check_ident(name, args_ast[tex_at].span()) {
+                        Some(other) => {
+                            self.err_hint(
+                                Stage::Type,
+                                other.span,
+                                format!(
+                                    "`{}` expects a texture, found a `{}`",
+                                    b.name(),
+                                    other.ty.name()
+                                ),
+                                "the first argument names a texture this procedure is \
+                                 handed — `src`, `held` under `retains`, or a slot from \
+                                 `uses <name> : Texture`",
+                            );
+                            None
+                        }
+                        None => None,
+                    }
+                }
+            },
+            other => {
+                self.err_hint(
+                    Stage::Type,
+                    other.span(),
+                    format!("`{}` expects a texture name here", b.name()),
+                    "a texture is named rather than computed: there is no value of one to \
+                     build, pass or bind to a `let`. Write `src`, `held` under `retains`, or \
+                     the name of a `uses <name> : Texture` slot",
+                );
+                self.check_expr(other);
+                None
+            }
+        };
+
+        let mut at: Option<Box<TExpr>> = None;
+        let mut ok = texture.is_some();
+        for (i, arg) in args_ast.iter().enumerate() {
+            if i == tex_at {
+                continue;
+            }
+            let Some(t) = self.check_expr(arg) else {
+                ok = false;
+                continue;
+            };
+            if t.ty != Ty::Vec2 {
+                self.err_hint(
+                    Stage::Type,
+                    t.span,
+                    format!("`{}` expects `vec2`, found `{}`", b.name(), t.ty.name()),
+                    "a frame coordinate runs 0..1 across the frame, x to the right and y \
+                     down — `point_coord`, and `frame_step` for a distance to add to it",
+                );
+                ok = false;
+                continue;
+            }
+            at = Some(Box::new(t));
+        }
+        if !ok {
+            return None;
+        }
+
+        Some(TExpr::new(
+            Ty::Vec4,
+            span,
+            TExprKind::Sample {
+                func: b,
+                texture: texture.expect("checked above"),
+                at,
+            },
+        ))
+    }
+
     fn check_builtin_call(&mut self, b: Builtin, args_ast: &[Expr], span: Span) -> Option<TExpr> {
         let sig = b.signature();
+        // **Refused by kind before it is refused by shape**, because the shape
+        // is not what is wrong: `frame_step(0.02)` types perfectly well in an
+        // L4 and lowers to a read of a `viewport` field no other module carries
+        // — which is a `.kir` that checks clean and comes up short at stage 5
+        // ([ADR-0032](../../../docs/adr/0032-nothing-checks-clean-and-comes-up-short-at-runtime.md)).
+        // Its two neighbours refuse themselves for want of a texture name, and
+        // they get this sentence anyway so that all three are one rule.
+        if b.is_frame_effect() && self.kind != Kind::L5 {
+            self.err_hint(
+                Stage::Contract,
+                span,
+                format!("`{}` is an L5 builtin", b.name()),
+                format!(
+                    "`texel`, `tap` and `frame_step` read and measure the frame a pass is \
+                     handed, and only a `kind L5` procedure is handed one. Change `kind` to \
+                     `L5`, or drop the `{}` call",
+                    b.name()
+                ),
+            );
+            for a in args_ast {
+                self.check_expr(a);
+            }
+            return None;
+        }
+        // **A texture argument is a name and not an expression**, so it is
+        // resolved here rather than by `check_expr` below — see
+        // [`Shape::Texture`]. What comes back is which binding to fetch from,
+        // which is what the tree carries.
+        if let Some(at) = b.texture_arg() {
+            return self.check_texture_call(b, at, args_ast, span);
+        }
         if args_ast.len() != sig.args.len() {
             self.err(
                 Stage::Type,
@@ -2993,6 +3617,13 @@ impl<'a> Checker<'a> {
                     // No builtin puts `Scalar` in an argument position today
                     // (it only ever appears as `ret`); nothing to unify.
                 }
+                // Diverted to `check_texture_call` above, which is what
+                // `Builtin::texture_arg` is asked for — a texture position is a
+                // name rather than an expression, so there is nothing here that
+                // could have been checked.
+                Shape::Texture => {
+                    unreachable!("a texture argument is resolved by name, not unified as a type")
+                }
             }
         }
         if !ok {
@@ -3003,6 +3634,10 @@ impl<'a> Checker<'a> {
             Shape::Exact(t) => t,
             Shape::Same => same_ty.unwrap_or(Ty::Float),
             Shape::Scalar => Ty::Float,
+            // Nothing *returns* a texture, and nothing will: a builtin that
+            // produced one would be a value of a type the language does not
+            // have.
+            Shape::Texture => unreachable!("no builtin returns a texture"),
         };
         Some(TExpr::new(
             ret_ty,

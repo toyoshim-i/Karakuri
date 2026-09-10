@@ -93,6 +93,7 @@ fn mock() -> Pane {
         aimed: None,
         nodes: vec![
             Node {
+                keep: None,
                 addr: "L1:0".to_owned(),
                 name: "drift_shell".to_owned(),
                 authority: Some(NodeAuthority {
@@ -114,6 +115,7 @@ fn mock() -> Pane {
             },
             Node {
                 uses: Vec::new(),
+                keep: None,
                 addr: "L4".to_owned(),
                 name: "renderers".to_owned(),
                 authority: None,

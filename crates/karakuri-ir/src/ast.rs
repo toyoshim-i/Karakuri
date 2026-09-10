@@ -44,6 +44,26 @@ pub enum Kind {
     /// multiple L1 sources arrived with. See
     /// `docs/adr/0152-a-kir-names-a-slot-and-the-set-names-the-nodes.md`.
     Field,
+    /// **A frame effect: `[Texture] -> Texture`.** One required block,
+    /// [`BlockKind::Frame`], which is a fullscreen fragment body over the
+    /// incoming texture.
+    ///
+    /// **One kind with two roles**, and what differs between them is only
+    /// whether a surface is attached: a master chain slot is this signature
+    /// with one input, and a nested merge is the same with several, bound by
+    /// `edge`s to as many `uses … : Texture` slots as the header declares. See
+    /// `docs/adr/0098-l5-is-one-node-kind-with-two-roles.md`.
+    ///
+    /// **The absence this ends was a condition rather than a principle.** A
+    /// `kind` says what a procedure *lowers to*, and while the compositing was
+    /// fixed there was nothing for a `kind L5` file to contain. Somebody wrote
+    /// the compositing down —
+    /// `docs/adr/0340-kind-l5-is-written-and-the-master-chain-is-an-ordered-list-of-them.md`
+    /// — so there is code to lower and the layer algebra gains a line rather
+    /// than an exception. `crate::node::Merge` keeps its place beside this kind
+    /// exactly where the built-in orbit camera keeps its place beside
+    /// [`Kind::L3`].
+    L5,
 }
 
 /// What a procedure's geometry *is*, on an L1 header, and what an L4 procedure
@@ -88,8 +108,30 @@ impl Kind {
     /// them — so a field's `param` could be written but not bound, published,
     /// read back or saved. One list, and the next kind reaches every one of
     /// them by existing.
-    pub const ALL: [Kind; 5] = [Kind::L1, Kind::L2, Kind::L3, Kind::L4, Kind::Field];
+    pub const ALL: [Kind; 6] = [
+        Kind::L1,
+        Kind::L2,
+        Kind::L3,
+        Kind::L4,
+        Kind::Field,
+        Kind::L5,
+    ];
 }
+
+/// **The incoming texture an L5 is handed**, reserved in a `frame` block the
+/// way [`Output::Color`] is reserved in a `fragment` one.
+///
+/// Implicit rather than declared: what supplies it is the chain slot's position
+/// or the Set's `edge`s, and a procedure that named its own supplier would be
+/// coupled to one arrangement.
+pub const TEXTURE_SRC: &str = "src";
+
+/// **The retained cut of the previous frame**, readable only where the header
+/// declares `retains`.
+///
+/// *Which* cut is not the procedure's to know — the slot answers that with
+/// `mix` or `exit` — which is the same division `uses` and `edge` already draw.
+pub const TEXTURE_HELD: &str = "held";
 
 impl Topology {
     pub fn name(self) -> &'static str {
@@ -662,7 +704,11 @@ impl Ambient {
             // is spliced into whichever procedures call `field(p)`, and one of
             // those may be a fragment stage — so there is no element even in
             // principle, let alone one this evaluation belongs to.
-            Ambient::Seed => kind != Kind::L3 && kind != Kind::Field,
+            // **Three kinds now, and the third is an L5.** A frame pass is
+            // handed a picture rather than the material that made it: there is
+            // no element behind a texel, and the frame in front of it may hold
+            // several decks' material at once.
+            Ambient::Seed => !matches!(kind, Kind::L3 | Kind::Field | Kind::L5),
             // **The same two kinds, and it is the same sentence.** An L3 runs
             // once a frame over nothing and the salt is a property of a Set's
             // geometry, which a camera is not; a field is a function of space,
@@ -674,7 +720,11 @@ impl Ambient {
             // and this is per *instance*, so a fullscreen L4 — which has no
             // element and reads no `seed` — reads this perfectly well: its
             // uniform holds the salt like every other module's.
-            Ambient::Source => kind != Kind::L3 && kind != Kind::Field,
+            // **And the same third kind**, for the sentence one line up: an L5
+            // runs over a frame rather than over a geometry, and the frame it
+            // is handed may hold several sources' material folded together — so
+            // there is no chain instance for it to name.
+            Ambient::Source => !matches!(kind, Kind::L3 | Kind::Field | Kind::L5),
             // **Downstream of an amplifier, and nowhere else it could mean
             // anything.** An L1 writes the buffer an amplifier later reads, so
             // `copy` there is zero by construction; an L3 has no element. In an
@@ -694,9 +744,16 @@ impl Ambient {
             // between a node that may hold state and one that may not: a
             // camera's craft is mostly smoothing, and smoothing is written
             // against a step. See `docs/ir-spec.md`, "L2 and L3".
-            Ambient::Dt => kind == Kind::L1 || kind == Kind::L3,
+            // **An L5 gets it too**, and not on the state argument above: a
+            // frame effect that moves at a rate rather than to a position reads
+            // the step it is being asked to advance by, and `dt` comes from a
+            // record rather than from a clock so a replay pays nothing for it.
+            Ambient::Dt => matches!(kind, Kind::L1 | Kind::L3 | Kind::L5),
             Ambient::Camera => kind == Kind::L4,
-            Ambient::PointCoord => block == BlockKind::Fragment,
+            // **The coordinate `tap` takes**, in a `frame` block, and it is the
+            // same sentence it already means in a fragment one: 0..1 across the
+            // primitive, which for a fullscreen pass is 0..1 across the frame.
+            Ambient::PointCoord => matches!(block, BlockKind::Fragment | BlockKind::Frame),
             // Fragment-only, and not because a vertex stage could not be given
             // them: a fullscreen procedure has no vertex block at all, and in a
             // per-element one a ray through the fragment is not a thing a
@@ -1093,6 +1150,27 @@ pub enum SlotTy {
     /// `source == a || source == b` is the ordinary case, and each slot costs
     /// one `u32` in a uniform block rather than a buffer or a bind group.
     Source,
+    /// **A picture this node folds in** — one input of a nested [`Kind::L5`],
+    /// bound by an `edge` like every other slot.
+    ///
+    /// **Legal on an L5 and nowhere else**, any number of them: this is the
+    /// nested role's fan-in, and it is the fan-in `docs/architecture.md` says is
+    /// already solved — `uses` plus `edge`, with no new mechanism. Every other
+    /// kind is handed elements or a position, and a texture is neither.
+    ///
+    /// **Read through the two texture builtins**, `texel(<slot>)` and
+    /// `tap(<slot>, uv)`, which is what separates it from every slot type beside
+    /// it: a geometry is read as a member, a field as a call, a source as a bare
+    /// value, and a texture only ever as a fetch. There is no [`Ty`] for one,
+    /// deliberately — a texture is not a value this language can hold, so `let x
+    /// = tex;` has nothing to bind and is refused where it is written.
+    ///
+    /// **A chain slot's L5 declares none.** The master chain is an ordered list
+    /// and its only fan-in is that order; there is no Set for an `edge` to be
+    /// written in, so a procedure with a Texture slot is refused *from a chain
+    /// slot* rather than from the language — a refusal that belongs where the
+    /// chain is built, beside the one that refuses an unbound slot.
+    Texture,
 }
 
 impl SlotTy {
@@ -1105,6 +1183,7 @@ impl SlotTy {
             "Field" => SlotTy::Field,
             "Camera" => SlotTy::Camera,
             "Source" => SlotTy::Source,
+            "Texture" => SlotTy::Texture,
             _ => return None,
         })
     }
@@ -1117,8 +1196,31 @@ impl SlotTy {
             SlotTy::Field => "Field",
             SlotTy::Camera => "Camera",
             SlotTy::Source => "Source",
+            SlotTy::Texture => "Texture",
         }
     }
+}
+
+/// `retains` — **a bare declaration and no operand**.
+///
+/// It says *this procedure reads a retained frame*, and that is the whole of
+/// what it says: it makes [`TEXTURE_HELD`] readable in the `frame` block and
+/// decides nothing about which cut is held.
+///
+/// **Which cut is the slot's answer**, `mix` or `exit`, written where the
+/// procedure is instantiated rather than in the file — which is
+/// [P-0086](../../../docs/principles/0086-a-procedure-knows-only-what-it-declares.md)
+/// at the width of one declaration, and the same division `uses` and `edge`
+/// already draw. `retains mix` in the file would be two procedures where there
+/// is one, `feedback_mix.kir` and `feedback_exit.kir`, with the operator's
+/// choice spelled as a library swap.
+///
+/// A struct rather than a `bool` so the span survives: a refusal about
+/// `retains` on a kind that has no frames to retain has to point at the
+/// declaration.
+#[derive(Debug, Clone, Copy)]
+pub struct RetainsDecl {
+    pub span: Span,
 }
 
 /// One `proc`, which is one file and fills one slot.
@@ -1132,6 +1234,8 @@ pub struct Proc {
     pub capacity: Option<CapacityDecl>,
     /// L2 only.
     pub amplify: Option<AmplifyDecl>,
+    /// L5 only — see [`RetainsDecl`].
+    pub retains: Option<RetainsDecl>,
     /// **The named inputs this procedure declares**, of whichever types its
     /// kind allows.
     ///
@@ -1194,6 +1298,13 @@ pub enum BlockKind {
     Vertex,
     /// L4: once per rasterised fragment.
     Fragment,
+    /// L5: once per texel of the frame it is handed, and never more.
+    ///
+    /// **This is [`Topology::Fullscreen`]'s shape with the camera taken out**,
+    /// which is what most of the rules about it are: there is no element, no
+    /// viewpoint and no geometry, and the whole of the procedure is this one
+    /// body over `src`.
+    Frame,
 }
 
 impl BlockKind {
@@ -1207,6 +1318,7 @@ impl BlockKind {
             BlockKind::Vertex => "vertex",
             BlockKind::Fragment => "fragment",
             BlockKind::Field => "field",
+            BlockKind::Frame => "frame",
         }
     }
 
@@ -1219,6 +1331,7 @@ impl BlockKind {
             "camera" => BlockKind::Camera,
             "vertex" => BlockKind::Vertex,
             "fragment" => BlockKind::Fragment,
+            "frame" => BlockKind::Frame,
             _ => return None,
         })
     }
@@ -1230,6 +1343,7 @@ impl BlockKind {
             BlockKind::Camera => Kind::L3,
             BlockKind::Vertex | BlockKind::Fragment => Kind::L4,
             BlockKind::Field => Kind::Field,
+            BlockKind::Frame => Kind::L5,
         }
     }
 }

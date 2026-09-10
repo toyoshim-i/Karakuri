@@ -32,9 +32,17 @@ use karakuri_console::input::{claim, wheeled, Claim, Turned};
 use karakuri_console::panel::{Panel, GRAB};
 use karakuri_console::room::{size, Room};
 use karakuri_console::view::{
-    library, mcp_pill, Aim, Field, Filters, LibraryBay, Opened, Picked, Published, Read, Reading,
-    RowItem, Scope, Target, View, DECK_LETTERS, HOLDS_UNSET, LAYERS, LAYER_UNSET,
+    library, mcp_pill, Aim, Field, Filters, KindChip, LibraryBay, Opened, Picked, Published, Read,
+    Reading, RowItem, RowKind, Rows, Scope, Target, View, DECK_LETTERS, HOLDS_UNSET, LAYERS,
 };
+
+/// **A listing of Sets and nothing else**, which is what every test in this
+/// file that says nothing about kinds is about: a row with no entry in the
+/// kinds beside it is a Set with no badge, which is what this bay drew before
+/// ADR-0338 (`view::RowKind`).
+fn listed(names: &[String]) -> Rows<'_> {
+    Rows { names, kinds: &[] }
+}
 use karakuri_layout::{Point, Rect};
 use karakuri_operation::gate::{Class, Open};
 use karakuri_operation::{Operation, SetTransfer};
@@ -205,8 +213,8 @@ fn the_rows_and_the_foot_are_the_bays_own_geometry() {
     );
 
     // The filter row: under the scope row, its own height, the bay's full
-    // width — and the two fields sharing what is left of it after the padding
-    // and the one gap, which is `.field`'s `flex: 1`.
+    // width — and the field taking what is left of it after the padding, which
+    // is `.field`'s `flex: 1` with nothing beside it (ADR-0338).
     let filters = bay.filters.expect("the bay draws its filter row");
     assert!(
         near(filters.min.y, scopes.max.y) && near(filters.height(), size::LIB_FILTERS_H),
@@ -218,22 +226,55 @@ fn the_rows_and_the_foot_are_the_bays_own_geometry() {
         "the filter row does not span the bay: {filters:?} in {region:?}"
     );
     let holds = bay.field(Field::Holds).expect("the `holds` field");
-    let layer = bay.field(Field::Layer).expect("the `layer` field");
     assert!(
-        near(holds.width(), layer.width()) && near(holds.height(), size::FIELD_H),
-        "the two fields are {} and {} wide at {} tall",
-        holds.width(),
-        layer.width(),
+        near(holds.height(), size::FIELD_H),
+        "the field is {} tall",
         holds.height()
     );
     assert!(
         near(holds.min.x, filters.min.x + size::LIB_FILTERS_PAD_X)
-            && near(layer.max.x, filters.max.x - size::LIB_FILTERS_PAD_X)
-            && near(layer.min.x - holds.max.x, size::LIB_FILTERS_GAP),
-        "the fields are {holds:?} and {layer:?} in a row spanning {} to {}",
+            && near(holds.max.x, filters.max.x - size::LIB_FILTERS_PAD_X),
+        "the field is {holds:?} in a row spanning {} to {}",
         filters.min.x,
         filters.max.x
     );
+
+    // The kind row: under the filter row, its own height, the bay's full
+    // width, and six chips from its left padding each as wide as the word in
+    // it (ADR-0338).
+    let kinds = bay.kinds.expect("the bay draws its kind row");
+    assert!(
+        near(kinds.min.y, filters.max.y) && near(kinds.height(), size::LIB_KINDS_H),
+        "the kind row is {kinds:?} and the filter row ends at {}",
+        filters.max.y
+    );
+    assert!(
+        near(kinds.min.x, region.min.x) && near(kinds.max.x, region.max.x),
+        "the kind row does not span the bay: {kinds:?} in {region:?}"
+    );
+    let chips: Vec<(KindChip, egui::Rect)> = bay.kind_chips(&drawn_once()).collect();
+    assert_eq!(
+        chips.len(),
+        KindChip::ALL.len(),
+        "the row draws {} of the six chips",
+        chips.len()
+    );
+    assert!(
+        near(chips[0].1.min.x, kinds.min.x + size::LIB_KINDS_PAD_X)
+            && near(chips[0].1.min.y, kinds.min.y + size::LIB_KINDS_PAD_Y)
+            && near(chips[0].1.height(), size::KIND_H),
+        "the first chip is {:?} in a row starting at {:?}",
+        chips[0].1,
+        kinds.min
+    );
+    for pair in chips.windows(2) {
+        assert!(
+            near(pair[1].1.min.x - pair[0].1.max.x, size::LIB_KINDS_GAP),
+            "{:?} and {:?} are not one gap apart",
+            pair[0].0,
+            pair[1].0
+        );
+    }
     assert!(
         near(holds.min.y, filters.min.y + size::LIB_FILTERS_PAD_Y),
         "the fields sit at {} in a row starting at {}",
@@ -241,13 +282,13 @@ fn the_rows_and_the_foot_are_the_bays_own_geometry() {
         filters.min.y
     );
 
-    // The list: under the filter row, inside `.lib-list`'s padding on all four
+    // The list: under the kind row, inside `.lib-list`'s padding on all four
     // sides, and up to the foot.
     assert!(
-        near(bay.list.min.y, filters.max.y + size::LIB_LIST_PAD),
-        "the list starts at {} and the filter row ends at {}",
+        near(bay.list.min.y, kinds.max.y + size::LIB_LIST_PAD),
+        "the list starts at {} and the kind row ends at {}",
         bay.list.min.y,
-        filters.max.y
+        kinds.max.y
     );
     assert!(
         near(bay.list.min.x, region.min.x + size::LIB_LIST_PAD)
@@ -371,6 +412,7 @@ fn the_foot_says_how_many_are_listed_of_how_many_there_are() {
         - size::HEAD_H
         - size::SCOPES_H
         - size::LIB_FILTERS_H
+        - size::LIB_KINDS_H
         - size::LIB_LIST_PAD * 2.0
         - size::LIB_FOOT_H;
     assert_eq!(
@@ -568,6 +610,7 @@ fn a_folded_or_soloed_or_short_bay_lists_nothing() {
     let chrome = size::HEAD_H
         + size::SCOPES_H
         + size::LIB_FILTERS_H
+        + size::LIB_KINDS_H
         + size::LIB_FOOT_H
         + size::LIB_LIST_PAD * 2.0;
     let short = solved(Rect {
@@ -585,10 +628,14 @@ fn a_folded_or_soloed_or_short_bay_lists_nothing() {
         "a bay with no room for one row listed some"
     );
 
-    // A hundred and twenty-five pixels of window taller is one row, which is
-    // what says the answer above is the room and not the window.
+    // Two hundred and fifteen pixels of window taller is one row, which is
+    // what says the answer above is the room and not the window. It was a
+    // hundred and twenty-five until the kind row landed: that band is one more
+    // thing between the head and the list, and the bay is held at its declared
+    // minimum until the window is tall enough to give it more, so the window
+    // with room for exactly one row is that much taller again (ADR-0338).
     let barely = solved(Rect {
-        h: 285.0,
+        h: 375.0,
         ..SMALLEST
     });
     let region = to_egui(rect_of(&barely, "library"));
@@ -1056,7 +1103,7 @@ fn a_star_is_inside_its_row_and_names_the_state_the_row_is_not_in() {
     let none = std::collections::BTreeSet::new();
     let at = bay.star(1).center();
     assert_eq!(
-        bay.starred(&mock(), &none, Point::new(at.x, at.y)),
+        bay.starred(listed(&mock()), &none, Point::new(at.x, at.y)),
         Some(Operation::SetFavourite {
             id: "lattice_veil".to_owned(),
             favourite: true,
@@ -1069,7 +1116,7 @@ fn a_star_is_inside_its_row_and_names_the_state_the_row_is_not_in() {
     let one: std::collections::BTreeSet<String> =
         std::iter::once("lattice_veil".to_owned()).collect();
     assert_eq!(
-        bay.starred(&mock(), &one, Point::new(at.x, at.y)),
+        bay.starred(listed(&mock()), &one, Point::new(at.x, at.y)),
         Some(Operation::SetFavourite {
             id: "lattice_veil".to_owned(),
             favourite: false,
@@ -1082,7 +1129,7 @@ fn a_star_is_inside_its_row_and_names_the_state_the_row_is_not_in() {
     // where the carry begins and the mark answers nothing there.
     let ground = egui::pos2(bay.row(1).max.x - size::LIB_ROW_PAD_X, at.y);
     assert_eq!(
-        bay.starred(&mock(), &none, Point::new(ground.x, ground.y)),
+        bay.starred(listed(&mock()), &none, Point::new(ground.x, ground.y)),
         None,
         "the star answered a press at the far end of its row"
     );
@@ -1091,7 +1138,7 @@ fn a_star_is_inside_its_row_and_names_the_state_the_row_is_not_in() {
     // `take`'s refusal rather than a clamp: a star answered bare would name a
     // Set nobody can see.
     assert_eq!(
-        bay.starred(&[], &none, Point::new(at.x, at.y)),
+        bay.starred(Rows::NONE, &none, Point::new(at.x, at.y)),
         None,
         "the star named a Set in a listing with nothing in it"
     );
@@ -1919,7 +1966,8 @@ fn a_press_on_load_asks_for_the_deck_the_pulldown_names() {
             &ctx,
             viewport(&panel),
             at,
-            view.library.get(view.cursor_row()).map(String::as_str),
+            listed(&view.library),
+            view.cursor_row(),
             probe
         ),
         Some(Aim::Load(Operation::LoadSet {
@@ -1944,7 +1992,8 @@ fn a_press_on_load_asks_for_the_deck_the_pulldown_names() {
             &ctx,
             viewport(&panel),
             at,
-            None,
+            Rows::NONE,
+            0,
             Point::new(load.button.center().x, load.button.center().y)
         ),
         Some(Aim::NoSet),
@@ -1982,7 +2031,8 @@ fn a_pick_in_the_pulldown_names_a_deck_and_asks_for_nothing() {
             &ctx,
             viewport(&panel),
             shut,
-            Some("drift_night"),
+            listed(&mock()),
+            0,
             Point::new(load.deck.center().x, load.deck.center().y)
         ),
         Some(Aim::Open),
@@ -2011,7 +2061,8 @@ fn a_pick_in_the_pulldown_names_a_deck_and_asks_for_nothing() {
             &ctx,
             viewport(&panel),
             open,
-            Some("drift_night"),
+            listed(&mock()),
+            0,
             Point::new(row.center().x, row.center().y)
         ),
         Some(Aim::Deck(2)),
@@ -2129,7 +2180,8 @@ fn while_the_list_is_down_every_press_is_part_of_that_gesture() {
                 &ctx,
                 viewport(&panel),
                 at,
-                Some("drift_night"),
+                listed(&mock()),
+                0,
                 Point::new(probe.x, probe.y)
             ),
             Some(Aim::Shut),
@@ -2164,17 +2216,233 @@ fn strip() -> karakuri_console::view::Strip {
 }
 
 // ---------------------------------------------------------------------------
-// The two filter fields
+// A row's badges, and what a procedure row is
 // ---------------------------------------------------------------------------
 
-/// **Every layer of the vocabulary is one the `layer` field can be stepped
-/// to**, which is what makes `View::narrow` right to accept any of them.
+/// **The mock's own listing with a procedure in it**, which is the bay
+/// ADR-0338 draws: four Sets carrying the layers their files fill, and
+/// `orbit_wide` between two of them carrying its one `kind`.
+fn with_a_procedure() -> (Vec<String>, Vec<RowKind>) {
+    use karakuri_operation::Layer;
+    let set = |badges: Vec<Layer>| RowKind {
+        badges,
+        procedure: false,
+    };
+    (
+        [
+            "drift_night",
+            "lattice_veil",
+            "orbit_wide",
+            "glass_shell",
+            "night01",
+        ]
+        .iter()
+        .map(|s| (*s).to_owned())
+        .collect(),
+        vec![
+            set(vec![Layer::L1, Layer::L2, Layer::L4]),
+            set(vec![Layer::L1, Layer::L4]),
+            RowKind {
+                badges: vec![Layer::L3],
+                procedure: true,
+            },
+            set(vec![Layer::L1, Layer::L4]),
+            set(vec![Layer::L1, Layer::L2, Layer::L4]),
+        ],
+    )
+}
+
+/// **A row carries its kinds, and the words are the chips' own** — a Set's are
+/// the layers its files fill and a procedure's is the one kind it declares
+/// (ADR-0338).
 ///
-/// The match is the enforcement rather than the assertion under it: a sixth
-/// variant on `karakuri_operation::Layer` does not compile here until somebody
-/// has decided what this field calls it and where in the cycle it goes.
+/// **And a row with no kinds beside it is a Set with no badge**, which is what
+/// the seam's default buys: every other test in this file hands a listing and
+/// no kinds, and this asserts that reads as it did before this row existed.
 #[test]
-fn the_layer_field_steps_through_every_layer_there_is() {
+fn a_row_carries_the_words_of_the_layers_it_implements() {
+    let (names, kinds) = with_a_procedure();
+    let rows = Rows {
+        names: &names,
+        kinds: &kinds,
+    };
+    assert_eq!(rows.badges(0), vec!["L1", "L2", "L4"]);
+    assert_eq!(rows.badges(2), vec!["L3"]);
+    assert!(
+        rows.procedure(2),
+        "the procedure row does not say it is one"
+    );
+    assert!(!rows.procedure(0), "a Set row says it is a procedure");
+
+    // **The star, the reading and the send take a Set and a procedure row hands
+    // them nothing**, which is one question rather than three.
+    assert_eq!(rows.set(0), Some("drift_night"));
+    assert_eq!(rows.set(2), None, "a procedure row was offered as a Set id");
+    assert_eq!(rows.set(9), None, "a row past the end was offered as a Set");
+
+    let bare = listed(&names);
+    assert!(
+        bare.badges(0).is_empty(),
+        "a row with no kinds drew a badge"
+    );
+    assert!(
+        !bare.procedure(2),
+        "a row with no kinds beside it is not a Set"
+    );
+    assert_eq!(bare.set(2), Some("orbit_wide"));
+}
+
+/// **The badges are laid out from the right of the row, one gap apart**, which
+/// is where the mock puts them: after the name and before the row's own
+/// padding, so a longer name never moves them.
+#[test]
+fn the_badges_end_where_the_rows_padding_starts() {
+    let panel = console(PLAUSIBLE);
+    let ctx = drawn_once();
+    let bay = bay(&panel);
+    let (names, kinds) = with_a_procedure();
+    let rows = Rows {
+        names: &names,
+        kinds: &kinds,
+    };
+    let row = bay.row(0);
+    let drawn: Vec<(&str, egui::Rect)> = bay.badges(&ctx, 0, &rows.badges(0)).collect();
+    assert_eq!(
+        drawn.iter().map(|(word, _)| *word).collect::<Vec<_>>(),
+        vec!["L1", "L2", "L4"]
+    );
+    assert!(
+        near(
+            drawn[2].1.max.x,
+            row.max.x - karakuri_console::room::size::LIB_ROW_PAD_X
+        ),
+        "the last badge ends at {} in a row ending at {}",
+        drawn[2].1.max.x,
+        row.max.x
+    );
+    for pair in drawn.windows(2) {
+        assert!(
+            near(
+                pair[1].1.min.x - pair[0].1.max.x,
+                karakuri_console::room::size::BADGE_GAP
+            ),
+            "{:?} and {:?} are not one gap apart",
+            pair[0].0,
+            pair[1].0
+        );
+    }
+    assert!(
+        near(drawn[0].1.height(), karakuri_console::room::size::BADGE_H)
+            && drawn[0].1.center().y == row.center().y,
+        "a badge is {:?} in a row centred at {}",
+        drawn[0].1,
+        row.center().y
+    );
+    // A row with no badges draws none, and asks `egui` for nothing to say so.
+    assert_eq!(bay.badges(&ctx, 1, &[]).count(), 0);
+}
+
+/// **A procedure row has no star, and every load off it names
+/// `LoadProcedure`** — the button, the row menu's items and the carry, which
+/// are the three routes ADR-0338 names.
+#[test]
+fn a_procedure_row_has_no_star_and_loads_one_layer() {
+    let panel = console(PLAUSIBLE);
+    let ctx = drawn_once();
+    let bay = bay(&panel);
+    let (names, kinds) = with_a_procedure();
+    let rows = Rows {
+        names: &names,
+        kinds: &kinds,
+    };
+    let none = std::collections::BTreeSet::new();
+
+    // The star on the procedure row answers nothing, and the star on the Set
+    // row above it still does.
+    let star = bay.star(2);
+    assert_eq!(
+        bay.starred(rows, &none, Point::new(star.center().x, star.center().y)),
+        None,
+        "a press on a procedure row's star asked for a favourite"
+    );
+    let star = bay.star(0);
+    assert_eq!(
+        bay.starred(rows, &none, Point::new(star.center().x, star.center().y)),
+        Some(Operation::SetFavourite {
+            id: "drift_night".to_owned(),
+            favourite: true
+        })
+    );
+
+    // The `load` button, with the cursor on the procedure row.
+    let load = bay.load(&ctx, AIMED);
+    assert_eq!(
+        bay.aim(
+            &ctx,
+            viewport(&panel),
+            AIMED,
+            rows,
+            2,
+            Point::new(load.button.center().x, load.button.center().y)
+        ),
+        Some(Aim::Load(Operation::LoadProcedure {
+            deck: 0,
+            procedure: "orbit_wide".to_owned()
+        })),
+        "the `load` button named a Set load on a procedure row"
+    );
+
+    // A row menu's `Load to Slot B`, and the menu on such a row carries no
+    // send at all — a bare `.kir` is not a Set and nothing takes one in.
+    let at = karakuri_console::view::Menued {
+        row: Some(2),
+        decks: 4,
+        sends: false,
+    };
+    let menu = bay
+        .menu(&ctx, viewport(&panel), at)
+        .expect("the menu is down");
+    assert_eq!(menu.save, None, "a procedure row's menu carries a send");
+    assert_eq!(menu.rule, None, "a procedure row's menu draws a separator");
+    let item = menu.load(1);
+    assert_eq!(
+        bay.menu_ask(
+            &ctx,
+            viewport(&panel),
+            at,
+            rows,
+            Point::new(item.center().x, item.center().y)
+        ),
+        Some(Picked::Load(Operation::LoadProcedure {
+            deck: 1,
+            procedure: "orbit_wide".to_owned()
+        }))
+    );
+
+    // And the carry, which names the operand and says which load a drop will
+    // ask for.
+    let row = bay.row(2);
+    let taken = bay
+        .take(rows, Point::new(row.center().x, row.center().y))
+        .expect("the row was not taken in hand");
+    assert_eq!(taken.set, "orbit_wide");
+    assert!(taken.procedure, "the carry does not say it is a procedure");
+}
+
+// ---------------------------------------------------------------------------
+// The filter field and the six kind chips
+// ---------------------------------------------------------------------------
+
+/// **The six chips are the five kinds a procedure declares and the Sets**, each
+/// spelled once, which is what makes a badge and the chip that filters by it
+/// read the same word.
+///
+/// The match is the enforcement rather than the assertion under it: a variant
+/// added to `karakuri_operation::Layer` does not compile here until somebody has
+/// decided what this row calls it and where in it the chip goes. `L5` is
+/// ADR-0340's own pass and is deliberately not on this row yet.
+#[test]
+fn the_kind_chips_are_the_five_kinds_and_the_sets() {
     use karakuri_operation::Layer;
     for layer in [Layer::L1, Layer::L2, Layer::L3, Layer::L4, Layer::Field] {
         let spelled = match layer {
@@ -2183,18 +2451,139 @@ fn the_layer_field_steps_through_every_layer_there_is() {
             Layer::L3 => "L3",
             Layer::L4 => "L4",
             Layer::Field => "FIELD",
+            Layer::L5 => unreachable!("L5 is not on this row"),
         };
         let found = LAYERS
             .iter()
             .find(|(kind, _)| *kind == layer)
-            .unwrap_or_else(|| panic!("{layer:?} is not on the `layer` field's cycle"));
+            .unwrap_or_else(|| panic!("{layer:?} has no word on the kind row"));
         assert_eq!(found.1, spelled, "{layer:?} is spelled two ways");
+        assert_eq!(
+            KindChip::Layer(layer).word(),
+            spelled,
+            "the chip and the badge spell {layer:?} two ways"
+        );
     }
     assert_eq!(
         LAYERS.len(),
         5,
-        "the cycle has {} entries and the vocabulary has five layers",
-        LAYERS.len()
+        "the row draws a chip per layer and no more"
+    );
+    assert_eq!(
+        KindChip::ALL.len(),
+        6,
+        "the row is five kinds and the Sets — {} chips",
+        KindChip::ALL.len()
+    );
+    assert_eq!(KindChip::Sets.word(), "SET");
+}
+
+/// **A press on a kind chip names all six**, which is what makes the row a
+/// destination rather than six statements two hands can disagree about
+/// (ADR-0338).
+///
+/// The whole row, one chip at a time: each press turns its own chip on and says
+/// what every other chip is, and a second press on the same chip turns it off
+/// again — so none-on, which shows everything, is a state a press can always
+/// get back to.
+#[test]
+fn a_press_on_a_kind_chip_names_all_six_and_turns_that_one_over() {
+    use karakuri_operation::{LibraryKinds, Operation};
+    let panel = console(PLAUSIBLE);
+    let ctx = drawn_once();
+    let bay = bay(&panel);
+    let boxes: Vec<(KindChip, egui::Rect)> = bay.kind_chips(&ctx).collect();
+    let mut at = LibraryKinds::EVERYTHING;
+    for (chip, box_) in &boxes {
+        let asked = bay
+            .kind(
+                &ctx,
+                Filters {
+                    holds: None,
+                    kinds: at,
+                },
+                Point::new(box_.center().x, box_.center().y),
+            )
+            .expect("the chip did not answer a press on it");
+        let Operation::FilterLibrary { kinds } = asked else {
+            panic!("a kind chip named something other than `FilterLibrary`");
+        };
+        assert!(chip.on(kinds), "a press on {chip:?} did not turn it on");
+        for (other, _) in &boxes {
+            if other != chip {
+                assert_eq!(
+                    other.on(kinds),
+                    other.on(at),
+                    "a press on {chip:?} moved {other:?}"
+                );
+            }
+        }
+        at = kinds;
+    }
+    assert!(
+        at.narrowing(),
+        "six presses left the row showing everything"
+    );
+    // And back off again, chip by chip, to the state a run opens in.
+    for (chip, box_) in &boxes {
+        let asked = bay
+            .kind(
+                &ctx,
+                Filters {
+                    holds: None,
+                    kinds: at,
+                },
+                Point::new(box_.center().x, box_.center().y),
+            )
+            .expect("the chip did not answer a press on it");
+        let Operation::FilterLibrary { kinds } = asked else {
+            panic!("a kind chip named something other than `FilterLibrary`");
+        };
+        assert!(
+            !chip.on(kinds),
+            "a press on a lit {chip:?} did not turn it off"
+        );
+        at = kinds;
+    }
+    assert_eq!(
+        at,
+        LibraryKinds::EVERYTHING,
+        "the row cannot be pressed back to showing everything"
+    );
+}
+
+/// **The row's own ground answers nothing**, which is the scope row's rule one
+/// band down: the gaps between the chips and the padding either side are bare
+/// card, and a bay with no kind row at all answers no press anywhere in it.
+#[test]
+fn the_kind_rows_own_ground_is_nobodys() {
+    let panel = console(PLAUSIBLE);
+    let ctx = drawn_once();
+    let bay = bay(&panel);
+    let row = bay.kinds.expect("the bay draws its kind row");
+    let boxes: Vec<(KindChip, egui::Rect)> = bay.kind_chips(&ctx).collect();
+    let gap = Point::new((boxes[0].1.max.x + boxes[1].1.min.x) * 0.5, row.center().y);
+    assert_eq!(
+        bay.kind(&ctx, Filters::NONE, gap),
+        None,
+        "the gap between two chips answered a press"
+    );
+    assert_eq!(
+        bay.kind(
+            &ctx,
+            Filters::NONE,
+            Point::new(row.min.x + 1.0, row.center().y)
+        ),
+        None,
+        "the row's left padding answered a press"
+    );
+
+    let bare = library(panel.layout(), &[], &mock(), None, None, 0.0).expect("the bay lists rows");
+    assert_eq!(bare.kinds, None, "a bay with no scope row drew a kind row");
+    assert_eq!(
+        bare.kind(&ctx, Filters::NONE, gap),
+        None,
+        "a bay with no kind row answered a press on one"
     );
 }
 
@@ -2210,7 +2599,6 @@ fn the_layer_field_steps_through_every_layer_there_is() {
 /// other.
 #[test]
 fn a_press_on_a_filter_field_steps_it_and_names_where_it_arrived() {
-    use karakuri_operation::Layer;
     let panel = console(PLAUSIBLE);
     let bay = bay(&panel);
     let holds: Vec<String> = ["drift_shell", "soft_points"]
@@ -2222,33 +2610,14 @@ fn a_press_on_a_filter_field_steps_it_and_names_where_it_arrived() {
         Point::new(box_.center().x, box_.center().y)
     };
 
-    // The `layer` field, all the way round: unset, the five layers in order,
-    // and unset again.
-    let mut layer = None;
-    for want in [
-        Some(Layer::L1),
-        Some(Layer::L2),
-        Some(Layer::L3),
-        Some(Layer::L4),
-        Some(Layer::Field),
-        None,
-    ] {
-        let asked = bay
-            .filter(&holds, Filters { holds: None, layer }, at(Field::Layer))
-            .expect("the `layer` field did not answer a press on it");
-        assert_eq!(
-            asked,
-            karakuri_operation::Operation::ListSets {
-                holds: None,
-                layer: want
-            },
-            "the `layer` field stepped from {layer:?} to something else"
-        );
-        layer = want;
-    }
-
     // The `holds` field, over the two candidates and back to unset — and with
-    // a layer set, which the operation has to carry through untouched.
+    // the kind row narrowed, which the press must leave exactly where it is:
+    // `ListSets` carries no kinds, and the two controls on this row are two
+    // questions (ADR-0338).
+    let narrowed = karakuri_operation::LibraryKinds {
+        l3: true,
+        ..karakuri_operation::LibraryKinds::EVERYTHING
+    };
     let mut set = None;
     for want in [Some("drift_shell"), Some("soft_points"), None] {
         let asked = bay
@@ -2256,7 +2625,7 @@ fn a_press_on_a_filter_field_steps_it_and_names_where_it_arrived() {
                 &holds,
                 Filters {
                     holds: set,
-                    layer: Some(Layer::L4),
+                    kinds: narrowed,
                 },
                 at(Field::Holds),
             )
@@ -2265,9 +2634,13 @@ fn a_press_on_a_filter_field_steps_it_and_names_where_it_arrived() {
             asked,
             karakuri_operation::Operation::ListSets {
                 holds: want.map(str::to_owned),
-                layer: Some(Layer::L4)
+                // **The layer goes out unset and the field it came from is
+                // gone**: `Operation::ListSets` keeps the field for
+                // `list_sets` and `--list-sets`, and this console stopped
+                // asking it (ADR-0338).
+                layer: None
             },
-            "the `holds` field stepped from {set:?} to something else, or dropped the layer"
+            "the `holds` field stepped from {set:?} to something else"
         );
         set = want;
     }
@@ -2411,28 +2784,32 @@ fn the_filter_fields_clear_every_boundary() {
 /// nobody chose is the failure this avoids.
 #[test]
 fn the_fields_read_what_is_set_and_a_stale_candidate_reads_as_unset() {
-    use karakuri_operation::Layer;
+    use karakuri_operation::LibraryKinds;
+    let cameras = LibraryKinds {
+        l3: true,
+        ..LibraryKinds::EVERYTHING
+    };
     let mut view = View::new(karakuri_console::room::Room::Day);
     assert_eq!(view.filters().holds_word(), HOLDS_UNSET);
-    assert_eq!(view.filters().layer_word(), LAYER_UNSET);
+    assert_eq!(view.filters().kinds, LibraryKinds::EVERYTHING);
 
     view.holds = vec!["drift_shell".to_owned(), "soft_points".to_owned()];
-    assert!(view.narrow(Some("soft_points"), Some(Layer::L4)));
+    assert!(view.narrow(Some("soft_points"), cameras));
     assert_eq!(view.filters().holds_word(), "soft_points");
-    assert_eq!(view.filters().layer_word(), "L4");
+    assert_eq!(view.filters().kinds, cameras);
     assert!(
-        !view.narrow(Some("soft_points"), Some(Layer::L4)),
+        !view.narrow(Some("soft_points"), cameras),
         "narrowing to what it was already narrowed to moved something"
     );
 
     // **A `holds` this console cannot draw is refused, and refused whole**:
-    // the layer beside it is not written either.
+    // the kinds beside it are not written either.
     assert!(
-        !view.narrow(Some("no_such_node"), Some(Layer::L1)),
+        !view.narrow(Some("no_such_node"), LibraryKinds::EVERYTHING),
         "a filter the field cannot draw was accepted"
     );
     assert_eq!(view.filters().holds_word(), "soft_points");
-    assert_eq!(view.filters().layer_word(), "L4");
+    assert_eq!(view.filters().kinds, cameras);
 
     // **The candidates go, and the field reads unset** — not `drift_shell`,
     // which is what clamping would have answered.
@@ -2440,9 +2817,9 @@ fn the_fields_read_what_is_set_and_a_stale_candidate_reads_as_unset() {
     assert_eq!(view.filters().holds_word(), HOLDS_UNSET);
     assert_eq!(view.filters().holds, None);
     assert_eq!(
-        view.filters().layer,
-        Some(Layer::L4),
-        "the layer is the console's own and did not survive the candidates going"
+        view.filters().kinds,
+        cameras,
+        "the kinds are the console's own and did not survive the candidates going"
     );
 }
 
@@ -2535,12 +2912,7 @@ fn the_params_chip_asks_for_the_set_under_the_cursor() {
     let chip = bay.params_chip(&ctx, AIMED);
     let probe = Point::new(chip.min.x + 2.0, chip.center().y);
     let ask = |view: &View, bay: &LibraryBay| {
-        bay.read(
-            &ctx,
-            AIMED,
-            view.library.get(view.cursor_row()).map(String::as_str),
-            probe,
-        )
+        bay.read(&ctx, AIMED, view.rows().set(view.cursor_row()), probe)
     };
 
     assert_eq!(
@@ -3277,7 +3649,7 @@ fn a_press_on_a_history_row_lands_that_version_on_the_pulldowns_deck() {
         "landing a version moved the deck selection"
     );
     assert_eq!(
-        bay.take(view.sets(), probe),
+        bay.take(view.rows(), probe),
         None,
         "a row of `history` was taken in hand as though it were a Set"
     );
@@ -3287,7 +3659,7 @@ fn a_press_on_a_history_row_lands_that_version_on_the_pulldowns_deck() {
     assert!(view.select_scope(Scope::AllSets));
     view.library = mock();
     assert!(
-        bay.take(view.sets(), probe).is_some(),
+        bay.take(view.rows(), probe).is_some(),
         "a row of `all` was not taken in hand"
     );
     assert_eq!(
@@ -3371,7 +3743,7 @@ fn a_secondary_press_names_a_row_and_a_press_on_nothing_names_none() {
                 &ctx,
                 viewport(&panel),
                 shut,
-                view.sets(),
+                view.rows(),
                 Point::new(at.x, at.y)
             ),
             Some(Picked::Open(row)),
@@ -3386,7 +3758,7 @@ fn a_secondary_press_names_a_row_and_a_press_on_nothing_names_none() {
         "the point below the last row is on one, so this test measures nothing"
     );
     assert_eq!(
-        bay.menu_ask(&ctx, viewport(&panel), shut, view.sets(), ground),
+        bay.menu_ask(&ctx, viewport(&panel), shut, view.rows(), ground),
         None,
         "a press on the list's own ground put a menu down"
     );
@@ -3400,7 +3772,7 @@ fn a_secondary_press_names_a_row_and_a_press_on_nothing_names_none() {
             &ctx,
             viewport(&panel),
             view.menued(),
-            view.sets(),
+            view.rows(),
             Point::new(at.x, at.y)
         ),
         None,
@@ -3454,14 +3826,18 @@ fn the_row_menu_offers_the_drawn_decks_and_always_the_send() {
         );
     }
     assert_eq!(
-        menu.picked(near_centre(menu.save)),
+        menu.picked(near_centre(
+            menu.save.expect("a Set row's menu carries a send")
+        )),
         Some(RowItem::Save),
         "the last item is not the send"
     );
     // The separator is nothing: it names no item, and a press on it is the
     // dismissal rather than a pick.
     assert_eq!(
-        menu.picked(near_centre(menu.rule)),
+        menu.picked(near_centre(
+            menu.rule.expect("a Set row's menu carries a separator")
+        )),
         None,
         "the separator answered a press"
     );
@@ -3479,7 +3855,12 @@ fn the_row_menu_offers_the_drawn_decks_and_always_the_send() {
         .menu(&ctx, viewport(&panel), bare.menued())
         .expect("the menu is down");
     assert_eq!(menu.loads, 0, "a card with no strip offered a load");
-    assert_eq!(menu.picked(near_centre(menu.save)), Some(RowItem::Save));
+    assert_eq!(
+        menu.picked(near_centre(
+            menu.save.expect("a Set row's menu carries a send")
+        )),
+        Some(RowItem::Save)
+    );
 }
 
 /// **A pick names the item's deck and the menu's own row, and moves no mark.**
@@ -3515,7 +3896,7 @@ fn a_row_menu_pick_names_its_deck_and_its_own_row_and_moves_no_mark() {
             &ctx,
             viewport(&panel),
             view.menued(),
-            view.sets(),
+            view.rows(),
             near_centre(menu.load(2))
         ),
         Some(Picked::Load(want)),
@@ -3554,8 +3935,8 @@ fn the_row_menus_send_names_the_row_it_was_opened_on() {
             &ctx,
             viewport(&panel),
             view.menued(),
-            view.sets(),
-            near_centre(menu.save)
+            view.rows(),
+            near_centre(menu.save.expect("a Set row's menu carries a send"))
         ),
         Some(Picked::Send(Operation::TransferSet {
             transfer: SetTransfer::Send {
@@ -3598,7 +3979,7 @@ fn while_a_row_menu_is_down_every_press_is_part_of_that_gesture() {
             menu.card.center().x,
             menu.card.min.y + size::LIB_LIST_PAD * 0.5,
         ),
-        near_centre(menu.rule),
+        near_centre(menu.rule.expect("a Set row's menu carries a separator")),
         Point::new(elsewhere.x, elsewhere.y),
     ] {
         assert_eq!(
@@ -3614,11 +3995,11 @@ fn while_a_row_menu_is_down_every_press_is_part_of_that_gesture() {
             menu.card.center().x,
             menu.card.min.y + size::LIB_LIST_PAD * 0.5,
         ),
-        near_centre(menu.rule),
+        near_centre(menu.rule.expect("a Set row's menu carries a separator")),
         Point::new(elsewhere.x, elsewhere.y),
     ] {
         assert_eq!(
-            bay.menu_ask(&ctx, viewport(&panel), at, view.sets(), probe),
+            bay.menu_ask(&ctx, viewport(&panel), at, view.rows(), probe),
             Some(Picked::Shut),
             "a press at {probe:?} with the menu down did not take it away"
         );
@@ -3875,7 +4256,7 @@ fn a_press_above_the_list_reaches_no_row_even_where_one_is_drawn() {
         "the probe is inside the list, so this test measures nothing"
     );
     assert_eq!(
-        bay.take(&sets, hidden),
+        bay.take(listed(&sets), hidden),
         None,
         "a press above the list took a Set in hand"
     );
@@ -3888,7 +4269,7 @@ fn a_press_above_the_list_reaches_no_row_even_where_one_is_drawn() {
     // And the half that is inside the list is that row, by the same call.
     let shown = Point::new(cut.center().x, bay.list.min.y + 1.0);
     assert_eq!(
-        bay.take(&sets, shown).map(|taken| taken.row),
+        bay.take(listed(&sets), shown).map(|taken| taken.row),
         Some(first),
         "the visible half of the cut row was not taken in hand"
     );
@@ -3898,7 +4279,7 @@ fn a_press_above_the_list_reaches_no_row_even_where_one_is_drawn() {
     let gone = bay.row(0);
     assert!(gone.max.y <= bay.list.min.y);
     assert_eq!(
-        bay.take(&sets, Point::new(gone.center().x, gone.center().y)),
+        bay.take(listed(&sets), Point::new(gone.center().x, gone.center().y)),
         None,
         "a row nothing draws was taken in hand"
     );

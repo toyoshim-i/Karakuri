@@ -89,6 +89,14 @@ pub enum Layer {
     /// are declared, addressable and an operator's to ride, so a record naming
     /// them needs somewhere to say so.
     Field,
+    /// **A `kind L5` procedure** — a frame effect, `[Texture] -> Texture`.
+    ///
+    /// One kind with two roles, and only the nested one is a Set's node: a
+    /// master chain slot is one input with a surface on it and is master state
+    /// rather than a Set's, which is why a Set file carries nothing for the
+    /// chain. See
+    /// `docs/adr/0340-kind-l5-is-written-and-the-master-chain-is-an-ordered-list-of-them.md`.
+    L5,
 }
 
 /// `serde`'s `skip_serializing_if` wants a predicate by path, and `u32::is_zero`

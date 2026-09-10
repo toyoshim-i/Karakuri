@@ -1,0 +1,65 @@
+// The master chain's second fixed pass, written down — and the one of the
+// three that is *not* the hand-written body term for term.
+//
+// **The hand-written bloom is two passes and this is one**, and the gap is
+// structural rather than awkward. `master.wgsl`'s `fs_bloom_bright` writes a
+// bright-and-blurred-in-x buffer and `fs_bloom_blend` reads both that buffer
+// *and* the frame it was taken from — and a chain slot's output replaces the
+// frame, so by the time a second slot ran the frame it needs would be gone.
+// Letting it name the earlier value is a graph, and the chain is a list. So
+// the separable 9-tap blur becomes one 9x9 kernel: **81 fetches per texel
+// where the pair costs 19**, at the same radius and the same picture.
+//
+// **The weights are the pair's, multiplied out.** `master.wgsl` writes W0..W4
+// as a Gaussian with sigma half the radius — `exp(-i*i/8)`, normalised by
+// `1/4.8980` — and a separable kernel's 2D weight is the product of its two 1D
+// ones. So the row weight is computed once per row and the column weight once
+// per tap, and the two normalisations fold into the single constant below.
+// Writing them out would be eighty-one literals for the arithmetic that
+// produced five.
+//
+// **The knee and the radius are literals a reader can see**, which is what the
+// language buys back on the same page as the fetch count. `1.0` is the top of
+// the range the sRGB encode is honest about, and everything above it is light
+// the display cannot show; `0.012` is 1.2% of the frame's height, 8.6 texels
+// at 720 and 17.3 at 1440 — the same picture at two resolutions. Neither is a
+// control, and the reason is unchanged: the tap count is what a radius costs,
+// and a cost is known before it is paid. A different radius is now a different
+// procedure, priced when it is compiled instead of refused as a knob.
+//
+// **The 81 taps are what this file costs, and the figure is close to the
+// ceiling.** See `docs/adr/0340-…`, which owes this pass a fresh measurement:
+// the 0.80 ms on record was taken on the two-pass form and does not describe
+// this one.
+
+proc bloom {
+  kind L5
+
+  param amount : float [0.0, 4.0] = 0.0
+
+  frame {
+    // A quarter of the radius per tap, nine taps across: the pair's spacing,
+    // as a fraction of the frame's height in the coordinates `tap` takes.
+    let d    = frame_step(0.003);
+    let knee = vec3(1.0);
+    let zero = vec3(0.0);
+
+    var sum = vec3(0.0);
+    for i in -4..5 {
+      let fi = float(i);
+      let wi = exp(fi * fi * -0.125);
+      let ox = fi * d.x;
+      for j in -4..5 {
+        let fj = float(j);
+        let w  = wi * exp(fj * fj * -0.125);
+        let s  = tap(src, point_coord + vec2(ox, fj * d.y));
+        sum = sum + w * max(s.xyz - knee, zero);
+      }
+    }
+
+    // `0.0416826` is `(1/4.8980)^2` — the two 1D normalisations of the
+    // separable pair, folded into one multiply outside the loop.
+    let c = texel(src);
+    color = vec4(c.xyz + amount * (sum * 0.0416826), c.w);
+  }
+}

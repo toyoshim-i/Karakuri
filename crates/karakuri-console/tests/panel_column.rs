@@ -689,6 +689,50 @@ fn sample(variant: &str) -> Operation {
             deck: 0,
             property: karakuri_operation::Property::Capacity { elements: 65_536 },
         },
+        // **The `keep` capsule on a node group's head**, which writes one
+        // node's source into the operator's own library (ADR-0338, decision
+        // 4). The value is any node, because what the badge claims is that an
+        // operator reaches the row.
+        //
+        // **`id` is `None` and that is the capsule's own answer**, not an
+        // unfilled field: this is the press that types nothing and takes a
+        // stamp, which is ADR-0128's second route drawn on one capsule — the
+        // first is the name typed into the pane head above, and the host is
+        // what pairs the two.
+        "KeepProcedure" => Operation::KeepProcedure {
+            deck: 0,
+            node: karakuri_operation::NodeAt {
+                layer: karakuri_operation::Layer::L1,
+                index: 0,
+            },
+            id: None,
+        },
+        // **The six kind chips under the filter field**, which say which kinds
+        // of row the listing holds (ADR-0338, decision 2). The value is any
+        // state of the six, because what the badge claims is that an operator
+        // reaches the row — and every press names all six, so there is no
+        // partial value to choose.
+        "FilterLibrary" => Operation::FilterLibrary {
+            kinds: karakuri_operation::LibraryKinds {
+                l3: true,
+                ..karakuri_operation::LibraryKinds::EVERYTHING
+            },
+        },
+        // **A procedure row's load**, reached from the row's own press, the
+        // `load` button and the row menu's four items (ADR-0338, decision 3).
+        // The value is any deck and any name, for the row above's reason.
+        "LoadProcedure" => Operation::LoadProcedure {
+            deck: 0,
+            procedure: "orbit_wide".to_owned(),
+        },
+        // **The pulldown on a pane head**, which points that pane at a deck
+        // and moves nothing else (ADR-0338, decision 5). The pane is named by
+        // the arrangement's own handle for it, which is what the payload
+        // carries: this crate has the names and `karakuri-operation` cannot.
+        "PointPane" => Operation::PointPane {
+            pane: karakuri_console::view::PANE_NAMES[0].to_owned(),
+            deck: 0,
+        },
         other => panic!(
             "`{SRC}` constructs `Operation::{other}` and this file has no value for it — a \
              control started emitting an operation nobody accounted for. Add an arm here, and \

@@ -1,0 +1,36 @@
+// The master chain's first fixed pass, written down.
+//
+// `crates/karakuri-engine/src/shaders/master.wgsl`'s `fs_feedback` term for
+// term: the retained cut of the previous frame, added to this one. Colour
+// only — alpha is coverage, and adding an echo does not change what a frame
+// covers, so the source's alpha goes through unchanged.
+//
+// **`retains` is bare, and that is the whole declaration.** It says this
+// procedure reads a retained frame and nothing about *which* one: `mix` — the
+// frame as the mixer wrote it, one echo and not a trail — or `exit`, the
+// chain's own output, a trail because what is read back already contains it.
+// That is a picture the operator picks between, so it is answered where this
+// file is placed rather than in the file. Writing it here would be two
+// procedures where there is one.
+//
+// **Nothing guards `held` against a non-finite texel**, and its absence is the
+// specification rather than an omission: the retained frame is sanitised where
+// it is *written*, at the copy, so a `.kir` neither needs the guard nor can
+// leave it out. `master.wgsl`'s `keepable` moved one step earlier.
+//
+// **Both reads are `texel`.** The retained frame is the same size as this one
+// and lines up texel for texel, so there is nothing to interpolate and a
+// filtered read would only cost precision.
+
+proc feedback {
+  kind L5
+  retains
+
+  param amount : float [0.0, 1.0] = 0.0
+
+  frame {
+    let s = texel(src);
+    let h = texel(held);
+    color = vec4(s.xyz + amount * h.xyz, s.w);
+  }
+}

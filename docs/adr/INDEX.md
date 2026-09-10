@@ -362,9 +362,11 @@ number; new records continue from the end.
 | [ADR-0334](0334-mcp-names-an-operation-by-the-vocabularys-own-name-and-the-frame-performs-it.md) | MCP names an operation by the vocabulary's own name, and the frame performs it | 2026-09-09 | accepted |
 | [ADR-0335](0335-the-panel-opens-the-first-surface-there-is-and-the-map-is-two-tiers-under-the-store.md) | The panel opens the first surface there is, and the map is two tiers under the store | 2026-09-10 | accepted |
 | [ADR-0336](0336-a-learn-is-a-map-edit-and-the-tips-midi-line-is-the-live-map.md) | A learn is a map edit, binds a position, and the tip's MIDI line is the live map | 2026-09-10 | accepted |
+| [ADR-0337](0337-a-surface-is-written-to-as-well-and-a-fader-is-sixteen-thousand-positions.md) | A surface is written to as well, and a fader is 16384 positions | 2026-09-10 | accepted |
 | [ADR-0338](0338-a-procedure-is-a-row-of-the-library-and-one-loaded-over-a-layer-makes-a-set-with-no-name.md) | A procedure is a row of the library, and one loaded over a layer makes a Set with no name | 2026-09-10 | accepted |
 | [ADR-0339](0339-a-rebuild-inherits-the-attachments-somebody-made.md) | A rebuild inherits the attachments somebody made | 2026-09-10 | accepted |
 | [ADR-0340](0340-kind-l5-is-written-and-the-master-chain-is-an-ordered-list-of-them.md) | `kind L5` is written, and the master chain is an ordered list of them | 2026-09-10 | accepted |
+| [ADR-0341](0341-a-route-that-answers-is-built-and-a-send-that-ends-in-a-dialog-is-gap.md) | A route that answers is built, and a send that ends in a dialog is `gap` | 2026-09-10 | accepted |
 
 ## Retired numbers
 

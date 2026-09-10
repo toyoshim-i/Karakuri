@@ -37,6 +37,27 @@ pub struct Slot {
     pub ty: SlotTy,
 }
 
+/// **Which texture a fetch reads**, resolved from the name at the call site.
+///
+/// Three of them and no more: an L5 is handed the incoming picture, may be
+/// handed a retained cut of the previous frame where it declares `retains`, and
+/// may declare any number of further inputs as `uses … : Texture` slots. What
+/// fills each is decided outside the file — the chain slot's position, the
+/// slot's `cut`, the Set's `edge`s — which is why the file names them and never
+/// says where they come from.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TexRef {
+    /// `src` — the incoming texture, implicit and undeclared.
+    Src,
+    /// `held` — the retained cut, readable only under `retains`.
+    Held,
+    /// A `uses <name> : Texture` slot, under the name the header gave it. The
+    /// name is carried for the reason [`TExprKind::Field`]'s is: it is what the
+    /// lowering addresses the binding under, and what an `edge` is written
+    /// against.
+    Slot(String),
+}
+
 /// A procedure that has passed parsing, type checking, and contract checking.
 ///
 /// Holding one of these is the claim that the rules in `docs/ir-spec.md` hold
@@ -96,6 +117,15 @@ pub struct Checked {
     /// enforces it is written; a shape that could only hold one would put a
     /// second copy of that rule in the type.
     pub uses: Vec<Slot>,
+    /// **Whether this procedure reads a retained cut of the previous frame**,
+    /// from a bare `retains` on the header. L5's, and false everywhere else.
+    ///
+    /// A `bool` here where the AST carries a span, because what a consumer
+    /// wants is the fact: the engine allocates a retention only where a slot's
+    /// answer names one, and the lowering declares a second texture binding.
+    /// *Which* cut is not in this type and must not be — the file does not know
+    /// it.
+    pub retains: bool,
     pub blend: Option<Blend>,
     pub params: Vec<Param>,
     pub emit: Vec<Attr>,
@@ -238,6 +268,21 @@ impl Checked {
     /// want. Every caller wants the Source ones specifically: what fills one is
     /// an L1's assigned identity, and a slot of another type answers a
     /// different question.
+    /// **The pictures this procedure folds in**, in header order, and empty for
+    /// a chain slot's L5 — which declares none, because the chain's only fan-in
+    /// is its order.
+    ///
+    /// A list on [`Checked::field_slots`]'s terms: a fold of three is as
+    /// ordinary as a fold of two, and nothing caps it but what a bind group can
+    /// hold.
+    pub fn texture_slots(&self) -> Vec<&str> {
+        self.uses
+            .iter()
+            .filter(|s| s.ty == SlotTy::Texture)
+            .map(|s| s.name.as_str())
+            .collect()
+    }
+
     pub fn source_slots(&self) -> Vec<&str> {
         self.uses
             .iter()
@@ -540,6 +585,27 @@ pub enum TExprKind {
     /// uniform field under, and what the engine writes the salt into.
     Source {
         slot: String,
+    },
+    /// **A fetch from a texture an L5 was handed** — `texel(src)`,
+    /// `tap(held, uv)`, `tap(<slot>, uv)`.
+    ///
+    /// **Its own variant rather than a [`TExprKind::Builtin`] with a texture
+    /// argument**, and the reason is that there is no such argument: a texture
+    /// is not a value this language has a [`Ty`] for, so what the call site
+    /// names is a *binding* and the tree carries which one rather than an
+    /// expression that evaluates to it. Making it a `Ty` would give `let x =
+    /// src;` a type and put the refusal two lines later than the mistake.
+    ///
+    /// `func` is [`Builtin::Texel`] or [`Builtin::Tap`], kept so that the one
+    /// table still says what each costs and what each is called — the check
+    /// pass, cost estimation and the lowering read it here exactly as they read
+    /// it for every other builtin.
+    Sample {
+        func: Builtin,
+        texture: TexRef,
+        /// The frame coordinate, for `tap`, and `None` for `texel` — which
+        /// takes no coordinate on purpose. See [`TexRef`].
+        at: Option<Box<TExpr>>,
     },
     /// `vec3(a, b, c)`, `vec3(x)` broadcasting, and the scalar conversions
     /// `float(i)` / `int(x)` / `uint(x)`. All of them construct `ty` from

@@ -247,10 +247,33 @@ fn every_part_is_in_some_set() {
         .iter()
         .flat_map(|s| s.parts.iter().map(|p| p.path.clone()))
         .collect();
-    // Nothing is on it. Kept because an empty exception list is a statement —
-    // it says the directory is parts and Sets and no leftovers — and because
-    // the next file that cannot be in one needs somewhere to say why.
-    let in_no_set: [(&str, &str); 0] = [];
+    // **Three, and all three for one reason.** A `kind L5` is a frame effect: it
+    // runs in the **master chain**, which sits one level out from every Set, so
+    // a `.kset` holding one would be a Set reaching outside itself — the same
+    // failure `record.rs` names for a Set carrying its gain
+    // (`docs/adr/0227-…`, `docs/adr/0340-…`). There is nothing to write here
+    // even when the chain gains its slots; what would put one in a Set is the
+    // *nested* role, folding several renderers into the one `Texture` a Set
+    // outputs, and nothing builds that either.
+    //
+    // A list rather than a rule about the kind, deliberately: a nested L5 *is*
+    // a Set's node, so "an L5 is never in a Set" would be the wrong sentence to
+    // teach this test, and the day one is written it belongs in a `.kset` like
+    // every other part.
+    let in_no_set: [(&str, &str); 3] = [
+        (
+            "feedback.kir",
+            "a master chain slot, and the chain is one level out from every Set",
+        ),
+        (
+            "bloom.kir",
+            "a master chain slot, and the chain is one level out from every Set",
+        ),
+        (
+            "rgb_shift.kir",
+            "a master chain slot, and the chain is one level out from every Set",
+        ),
+    ];
 
     for path in kir_files() {
         let file = path.file_name().expect("a file name").to_string_lossy();

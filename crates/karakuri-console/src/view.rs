@@ -283,9 +283,9 @@ use egui::{Color32, CornerRadius, FontFamily, FontId, Pos2, Rect, Stroke, Stroke
 use karakuri_layout::{Axis, Hit, NodeId};
 use karakuri_operation::gate::{Class, Open};
 use karakuri_operation::{
-    Authority, BeatSource, BlendMode, GridScale, LaneTarget, Layer, NodeAt, Operation, Output,
-    Recording, Residency, Revision, StepMode, Sync, Tonemap, TransitionSetting, Undecided,
-    WipeKind,
+    Authority, BeatSource, BlendMode, GridScale, LaneTarget, Layer, LibraryKinds, NodeAt,
+    Operation, Output, Recording, Residency, Revision, StepMode, Sync, Tonemap, TransitionSetting,
+    Undecided, WipeKind,
 };
 
 use crate::budget::{Declared, PANEL_PASS};
@@ -12390,9 +12390,141 @@ pub struct Taken {
     pub row: usize,
     /// The Set on it, by the name the listing carried.
     pub set: String,
+    /// **Whether that name is a procedure's** — which decides whether a drop
+    /// over a strip names `Operation::LoadProcedure` or `Operation::LoadSet`
+    /// (ADR-0338). It travels with the name because the operation is built at
+    /// the release, where the listing this row came from is no longer in hand.
+    pub procedure: bool,
 }
 
-// -- the library's two filter fields ------------------------------------
+// -- what one row of the listing is -------------------------------------
+
+/// **What one row of the Library bay's listing is**: a Set or a procedure, and
+/// the layers its badge names.
+///
+/// # Both facts, because a row draws two things off them
+///
+/// The **badge** is what the row implements — a Set's is the layers its own
+/// files fill, a procedure's is the one `kind` it declares — and it is a
+/// readout with nothing to press. Whether the row is a **procedure** decides
+/// three other things: no star (a star is a control over a Set this store holds
+/// and is refused on anything else, ADR-0299), no `params` reading yet, and a
+/// load that names [`Operation::LoadProcedure`] rather than
+/// [`Operation::LoadSet`] — one layer of what the deck is playing replaced,
+/// where a Set load replaces every layer
+/// (`docs/adr/0338-a-procedure-is-a-row-of-the-library-and-one-loaded-over-a-layer-makes-a-set-with-no-name.md`).
+///
+/// # The default is a Set with no badges, and that is what makes the seam cheap
+///
+/// [`View::kinds`] is a parallel row to [`View::library`] and a host that has
+/// not written it leaves every row *a Set the console knows nothing else
+/// about* — which is what this bay drew before ADR-0338 and is every test in
+/// this crate that does not say otherwise. So a console handed a listing and no
+/// kinds behaves exactly as it did.
+///
+/// **The badges are [`Layer`] values and not words**, so the chip that filters
+/// by a kind and the badge that reports one are spelled once, in [`LAYERS`].
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RowKind {
+    /// **The layers this row implements**, in the order they are drawn — a
+    /// Set's slots, or a procedure's one `kind`. Empty is a row with no badge,
+    /// which is a Set the host could not read and a procedure that declares no
+    /// kind at all.
+    pub badges: Vec<Layer>,
+    /// **A procedure and not a Set.**
+    pub procedure: bool,
+}
+
+/// **The listing, as the controls of this bay read it**: the names and what
+/// each row is.
+///
+/// # One argument because they are one reading
+///
+/// [`Listed`]'s rule at the seam rather than at the paint: the host writes
+/// [`View::library`] and [`View::kinds`] on one press, and a control handed the
+/// two halves separately could star a row whose kind it read out of a listing
+/// that had been rewritten under it. Borrowed for [`Filters`]' reason — nothing
+/// is cloned to answer a pointer event.
+///
+/// **A row past the end of either half is not a row.** [`Rows::name`] answers
+/// `None` there and every control in this bay refuses rather than clamps, which
+/// is `LibraryBay::take`'s own rule: an index answered bare would name a row
+/// nobody can see.
+#[derive(Debug, Clone, Copy)]
+pub struct Rows<'a> {
+    /// The names the bay lists, in the order the host listed them —
+    /// [`View::library`].
+    pub names: &'a [String],
+    /// **What each of those rows is** — [`View::kinds`], in the same order.
+    /// **Shorter than `names` is not an error**: a row past the end of it is a
+    /// Set with no badges, which is this seam's own default.
+    pub kinds: &'a [RowKind],
+}
+
+impl<'a> Rows<'a> {
+    /// Nothing listed at all, which is a scope whose rows this control cannot
+    /// name — `history` under [`View::rows`], whose rows are versions.
+    pub const NONE: Rows<'static> = Rows {
+        names: &[],
+        kinds: &[],
+    };
+
+    /// How many rows there are, which is the **names**': the kinds are a
+    /// decoration of them and a shorter row of kinds lists nothing away.
+    pub fn len(&self) -> usize {
+        self.names.len()
+    }
+
+    /// Whether the listing holds nothing.
+    pub fn is_empty(&self) -> bool {
+        self.names.is_empty()
+    }
+
+    /// The name on this row, or `None` past the end.
+    pub fn name(&self, row: usize) -> Option<&'a str> {
+        self.names.get(row).map(String::as_str)
+    }
+
+    /// **Whether this row is a procedure** — `false` for a row past the end of
+    /// either half, which is [`RowKind`]'s default and is what a control that
+    /// has already refused the row never asks.
+    pub fn procedure(&self, row: usize) -> bool {
+        self.kinds.get(row).is_some_and(|kind| kind.procedure)
+    }
+
+    /// **The name on this row where it is a Set**, and `None` where it is a
+    /// procedure or past the end.
+    ///
+    /// It is what every control whose operand is a **Set id** takes — the star,
+    /// the `params` chip and the row menu's send — so a procedure row hands
+    /// them nothing rather than being special-cased at each of them, which is
+    /// [`Scope::lists_sets`]'s arrangement one question finer.
+    pub fn set(&self, row: usize) -> Option<&'a str> {
+        (!self.procedure(row)).then(|| self.name(row)).flatten()
+    }
+
+    /// **The words on this row's badges**, in the order they are drawn —
+    /// [`LAYERS`]' spelling, so a badge and the chip that filters by it read
+    /// the same word. Empty for a row with no badge and for a row past the end.
+    pub fn badges(&self, row: usize) -> Vec<&'static str> {
+        self.kinds
+            .get(row)
+            .map(|kind| {
+                kind.badges
+                    .iter()
+                    .filter_map(|layer| {
+                        LAYERS
+                            .iter()
+                            .find(|(kind, _)| kind == layer)
+                            .map(|(_, word)| *word)
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+}
+
+// -- the library's filter field and its kind chips -----------------------
 
 /// **What the `holds` field reads with no filter set**, which is the mock's
 /// own `holds&hellip;` — the ellipsis is the placeholder saying the field is
@@ -12402,24 +12534,30 @@ pub struct Taken {
 /// reading the mock never took.
 pub const HOLDS_UNSET: &str = "holds…";
 
-/// The same one field along, and the mock's `layer&hellip;`.
-pub const LAYER_UNSET: &str = "layer…";
-
-/// **The layers the `layer` field steps through, in the order it steps them.**
+/// **The layers, in the order the kind chips draw them and with the word each
+/// chip carries.**
 ///
 /// **Curated here because the vocabulary has no list to cycle**, which is
 /// [`WIPE_SHAPES`]' whole argument three bays along: `karakuri_operation::Layer`
-/// is an enum with no `ALL` and no word for a member, so a control that cycles
+/// is an enum with no `ALL` and no word for a member, so a control that draws
 /// it has to say which order and which spelling. The spellings are the five
 /// the MCP `list_sets` tool takes and the five the Inspector's `.addr` writes —
-/// `L1:0`, `L4` — so a filter an operator sets by pressing and a filter a model
-/// sets by name are the same five words.
+/// `L1:0`, `L4` — so a kind a hand presses and a layer a model names are the
+/// same five words.
 ///
-/// **Exhaustive over [`Layer`], and that is load-bearing rather than tidy**:
-/// [`View::narrow`] refuses a `holds` it cannot draw and accepts any layer,
-/// which is only true while every layer is here. A sixth variant added to the
-/// vocabulary does not fail to compile here — an array is not a match — so the
-/// day one lands, this is the line to read, and `tests/library.rs` counts them.
+/// **It was the `layer` field's cycle until 2026-09-10**, and what reads it now
+/// is [`KindChip`]: ADR-0338 replaced that field with six toggles, and the list
+/// of five outlived the control because the list was never what was wrong with
+/// it — *"ADR-0262 was right about the list and wrong about the control, and
+/// what changed is that the list grew a sixth member which is not a layer at
+/// all"*.
+///
+/// **Five and not every [`Layer`] there is**, since `kind L5` joined the
+/// vocabulary (ADR-0340): the word for it, the seventh chip and the badge are
+/// that record's own pass, which draws them here and in the mock together. An
+/// array is not a match, so a variant added to the vocabulary does not fail to
+/// compile here — this is the line to read the day one lands, and
+/// `tests/library.rs` counts them.
 pub const LAYERS: [(Layer, &str); 5] = [
     (Layer::L1, "L1"),
     (Layer::L2, "L2"),
@@ -12428,22 +12566,139 @@ pub const LAYERS: [(Layer, &str); 5] = [
     (Layer::Field, "FIELD"),
 ];
 
-/// **Which of the two filter fields a press landed on.**
+/// **The word the `SET` chip carries**, and the one place it is spelled — the
+/// sixth of the six, and the only one that is not a [`Layer`].
+pub const SETS_CHIP: &str = "SET";
+
+/// **One chip of the kind filter row**: a layer, or the Sets.
 ///
-/// Two rather than an index, for [`Knob`]'s reason: the two fields ask
-/// different halves of one operation, and a caller that had to remember which
-/// of them `0` was would be carrying the row's order around with it.
+/// # Six and not five, because a Set is not a kind
+///
+/// A procedure declares one of [`Layer`]'s five kinds; a Set fills several and
+/// declares none. So *is this its kind* is a question a procedure answers and a
+/// Set does not, and the sixth chip asks the other question — *show me the
+/// Sets* — which is why the row is a **partition of the rows** rather than a
+/// filter over one kind of them
+/// (`docs/adr/0338-a-procedure-is-a-row-of-the-library-and-one-loaded-over-a-layer-makes-a-set-with-no-name.md`).
+///
+/// # A toggle, and the arithmetic is this console's
+///
+/// [`karakuri_operation::LibraryKinds`] is six named booleans and says nothing
+/// about a press ([P-0090]). A press here flips this chip's field and sends
+/// **all six** — [`LibraryBay::kind`] — because what leaves has to be a
+/// destination rather than a step: six statements each saying *this one
+/// changed* are six things a second surface can arrive in the middle of.
+///
+/// [P-0090]: ../../../docs/principles/0090-a-surface-offers-it-never-decides.md
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KindChip {
+    /// One of the five kinds a procedure declares.
+    Layer(Layer),
+    /// The Sets, which is the row kind that declares no `kind` at all.
+    Sets,
+}
+
+impl KindChip {
+    /// **The six, left to right in the order `.lib-kinds` draws them** — the
+    /// five of [`LAYERS`] and the Sets last, which is the mock's own
+    /// `L1 L2 L3 L4 FIELD SET`.
+    ///
+    /// **A seventh for `kind L5` is ADR-0340's**, whose own pass draws it here
+    /// and in the mock together: a control the panel draws that the mock does
+    /// not is a defect (`docs/contributing.md` §5), and the payload already
+    /// carries the field it would set — [`KindChip::on`] reads it.
+    pub const ALL: [KindChip; 6] = [
+        KindChip::Layer(Layer::L1),
+        KindChip::Layer(Layer::L2),
+        KindChip::Layer(Layer::L3),
+        KindChip::Layer(Layer::L4),
+        KindChip::Layer(Layer::Field),
+        KindChip::Sets,
+    ];
+
+    /// The word in the chip — [`LAYERS`]' spelling, or [`SETS_CHIP`].
+    ///
+    /// A layer with no entry in [`LAYERS`] reads [`SETS_CHIP`], which is
+    /// unreachable while that list is exhaustive and is the fallback rather
+    /// than a panic for [`Filters::holds_word`]'s reason: a bay draws what it
+    /// was handed, and a missing word is a chip an operator cannot read rather
+    /// than a run that stops.
+    pub fn word(self) -> &'static str {
+        match self {
+            KindChip::Sets => SETS_CHIP,
+            KindChip::Layer(layer) => LAYERS
+                .iter()
+                .find(|(kind, _)| *kind == layer)
+                .map_or(SETS_CHIP, |(_, word)| *word),
+        }
+    }
+
+    /// **Whether this chip is on**, read off the payload the host was last
+    /// handed — the mint `.kind.on` against the plain `.kind`.
+    ///
+    /// **It is the chip's own field and never [`LibraryKinds::narrowing`]**: a
+    /// row with nothing on shows everything, and drawing all six lit for it
+    /// would say six presses had been made.
+    pub fn on(self, kinds: LibraryKinds) -> bool {
+        match self {
+            KindChip::Sets => kinds.sets,
+            KindChip::Layer(Layer::L1) => kinds.l1,
+            KindChip::Layer(Layer::L2) => kinds.l2,
+            KindChip::Layer(Layer::L3) => kinds.l3,
+            KindChip::Layer(Layer::L4) => kinds.l4,
+            KindChip::Layer(Layer::Field) => kinds.field,
+            // **Answered, and not yet drawn.** `KindChip` is parameterised by
+            // [`Layer`], so the sixth kind gives it a variant by existing;
+            // whether the filter row shows a seventh chip is
+            // [`KindChip::ALL`]'s question and is the pass that gives the
+            // chain its slots.
+            KindChip::Layer(Layer::L5) => kinds.l5,
+        }
+    }
+
+    /// **All six with this one turned the other way**, which is what a press on
+    /// it asks for — the surface's arithmetic, and the whole of it.
+    pub fn flipped(self, kinds: LibraryKinds) -> LibraryKinds {
+        let mut kinds = kinds;
+        let want = !self.on(kinds);
+        match self {
+            KindChip::Sets => kinds.sets = want,
+            KindChip::Layer(Layer::L1) => kinds.l1 = want,
+            KindChip::Layer(Layer::L2) => kinds.l2 = want,
+            KindChip::Layer(Layer::L3) => kinds.l3 = want,
+            KindChip::Layer(Layer::L4) => kinds.l4 = want,
+            KindChip::Layer(Layer::Field) => kinds.field = want,
+            KindChip::Layer(Layer::L5) => kinds.l5 = want,
+        }
+        kinds
+    }
+}
+
+/// **Which filter field a press landed on**, and there is one.
+///
+/// # It has one variant, and it is an enum rather than nothing
+///
+/// `Field::Layer` was the second until 2026-09-10, when ADR-0338 replaced the
+/// `layer…` field with [`KindChip`]'s six toggles — *"a filter over a closed
+/// list of six is a set of toggles, because every subset of six is askable and
+/// a position in a cycle can only ever name one"*. What is left is `holds…`,
+/// which is untouched and is still a first cut (ADR-0292 took its premise away
+/// and ADR-0338 does not answer it).
+///
+/// **Kept as a name rather than collapsed into the method**, for [`Knob`]'s
+/// reason: [`LibraryBay::field`] and [`LibraryBay::filter`] are asked *which
+/// field*, the row is drawn from a list, and a caller passing nothing would
+/// have to be edited again the day the row grows the filter this one is a first
+/// cut of.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Field {
     /// `holds…` — what a node in the Set is called.
     Holds,
-    /// `layer…` — which layer the Set has a node on.
-    Layer,
 }
 
 impl Field {
-    /// The two, left to right, in the order `.lib-filters` draws them.
-    pub const ALL: [Field; 2] = [Field::Holds, Field::Layer];
+    /// The row's fields, left to right, in the order `.lib-filters` draws them.
+    pub const ALL: [Field; 1] = [Field::Holds];
 }
 
 /// **What the two filter fields are narrowing the listing to**, read off the
@@ -12457,8 +12712,15 @@ impl Field {
 pub struct Filters<'a> {
     /// Part of a node's name, or `None` for a field nobody has set.
     pub holds: Option<&'a str>,
-    /// Which layer a Set must hold a node on, or `None`.
-    pub layer: Option<Layer>,
+    /// **Which kinds of row the listing shows**, which is the six chips under
+    /// the field — [`karakuri_operation::LibraryKinds`], and
+    /// [`LibraryKinds::EVERYTHING`] where none of them is on.
+    ///
+    /// **A payload and not a position**, where `layer` beside it was an
+    /// `Option<Layer>` until 2026-09-10: a cycle can name six of the sixty-four
+    /// states this row has, and a filter over a closed list of six is every
+    /// subset of it (ADR-0338).
+    pub kinds: LibraryKinds,
 }
 
 impl Filters<'_> {
@@ -12466,7 +12728,7 @@ impl Filters<'_> {
     /// in this crate that does not say otherwise.
     pub const NONE: Filters<'static> = Filters {
         holds: None,
-        layer: None,
+        kinds: LibraryKinds::EVERYTHING,
     };
 
     /// What the `holds` field reads: the filter, or [`HOLDS_UNSET`].
@@ -12474,23 +12736,10 @@ impl Filters<'_> {
         self.holds.unwrap_or(HOLDS_UNSET)
     }
 
-    /// What the `layer` field reads: the layer's word out of [`LAYERS`], or
-    /// [`LAYER_UNSET`].
-    pub fn layer_word(&self) -> &str {
-        match self.layer {
-            None => LAYER_UNSET,
-            Some(layer) => LAYERS
-                .iter()
-                .find(|(kind, _)| *kind == layer)
-                .map_or(LAYER_UNSET, |(_, word)| *word),
-        }
-    }
-
     /// The word this field reads.
     pub fn word(&self, field: Field) -> &str {
         match field {
             Field::Holds => self.holds_word(),
-            Field::Layer => self.layer_word(),
         }
     }
 }
@@ -12515,19 +12764,6 @@ fn stepped_holds(choices: &[String], at: Option<&str>) -> Option<String> {
             .map_or(0, |at| at + 1),
     };
     choices.get(next).cloned()
-}
-
-/// The same one field along, over [`LAYERS`] — the next layer, and off the end
-/// back to nothing.
-fn stepped_layer(at: Option<Layer>) -> Option<Layer> {
-    let next = match at {
-        None => 0,
-        Some(at) => LAYERS
-            .iter()
-            .position(|(kind, _)| *kind == at)
-            .map_or(0, |at| at + 1),
-    };
-    LAYERS.get(next).map(|(kind, _)| *kind)
 }
 
 /// **Where this library is pointed**: the directory in the `.path` row, and
@@ -13081,6 +13317,22 @@ pub struct LibraryBay {
     /// is `list`'s own rule stated on a row that has a `gap` in the middle of
     /// it — see `library_box`.
     pub filters: Option<Rect>,
+    /// `.lib-kinds`: the row of six kind toggles under the filter field, one
+    /// [`size::LIB_KINDS_H`] tall and the full width of the bay, with its own
+    /// rule along the bottom of it.
+    ///
+    /// **`None` wherever [`filters`](Self::filters) is**, and that is one
+    /// condition rather than two: both are the bay's head rather than its body
+    /// — one narrows the listing by what a node is called and the other by what
+    /// a row *is* — so a console that has been told about no library draws
+    /// neither, and a bay too narrow to hold the field is too narrow to hold
+    /// six chips.
+    ///
+    /// **Under the fields and not beside them**, which is `style.css`'s own
+    /// note: `.field` carries `flex: 1` and six chips sharing one row with it
+    /// in a bay this narrow would leave the chips a few pixels each, and a chip
+    /// nobody can hit is not a control (ADR-0338).
+    pub kinds: Option<Rect>,
     /// `.lib-list`'s content box: the region under the bay head and the scope
     /// row and above the foot, inside [`size::LIB_LIST_PAD`], where the rows
     /// are laid from the top with no gap between them.
@@ -13277,6 +13529,34 @@ pub enum Wiring {
     Pick(Operation),
 }
 
+/// **What a press on a pane head's `▾` asks for**, and it is a control in two
+/// parts: a mark and the card it puts down.
+///
+/// [`Wiring`]'s shape one row up and the same division: every arm is either a
+/// move of this console's own state or one named operation, and never a pane
+/// pointed here
+/// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
+/// The mark asks for nothing at all — opening a list is this console's own
+/// pointer moving — which is why it has an arm of its own rather than an
+/// `Operation`, and why the operations page carries one row for this control
+/// and not two (ADR-0305).
+#[derive(Debug, Clone, PartialEq)]
+pub enum Pointing {
+    /// **The mark pressed**, named by the pane whose head it is in. The host
+    /// puts that card down; a press on the mark of a card that is already down
+    /// never reaches this arm, because a press outside the card is the
+    /// dismissal and the mark is outside it.
+    Mark(usize),
+    /// Take the card away — a press anywhere but inside it while it is down.
+    /// **The press is spent on the dismissal**, which is
+    /// [`crate::input::claim`]'s rule 2 said in the control.
+    Shut,
+    /// **The pointing, named** — `Operation::PointPane { pane, deck }`, with
+    /// the pane off the head the card came out of and the deck off the row
+    /// that was picked.
+    Pick(Operation),
+}
+
 /// **The foot's load control, laid out**: the `load` button, the `→` label,
 /// the pulldown and the list under it.
 ///
@@ -13430,6 +13710,15 @@ pub struct Menued {
     /// offered, which is the count the pulldown's list is cut to rather than a
     /// second rule"*.
     pub decks: usize,
+    /// **Whether this row can be sent**, which is whether it is a Set.
+    ///
+    /// `Save as a kbset` writes that Set out with every source it names inlined
+    /// after it, each checked against the address its `slot` record carries —
+    /// and a bare `.kir` names nothing, which is ADR-0338's own reason a
+    /// `folder` scope lists no procedure. So a procedure row's menu is the
+    /// loads and no separator, and this is the condition the card is laid out
+    /// from rather than an item drawn and then refused.
+    pub sends: bool,
 }
 
 /// **One item of a row's menu**, as what a press on it is about.
@@ -13497,9 +13786,14 @@ pub struct RowMenu {
     /// and air, between the loads and the send. It takes no press: a press
     /// inside it is the dismissal, which is what *the separator is nothing*
     /// means as a rectangle.
-    pub rule: Rect,
-    /// The `Save as a kbset` item, under the band.
-    pub save: Rect,
+    ///
+    /// **`None` where there is no send under it**, which is a procedure row: a
+    /// rule with nothing on the far side of it separates something from nothing
+    /// (ADR-0338, [`Menued::sends`]).
+    pub rule: Option<Rect>,
+    /// The `Save as a kbset` item, under the band — `None` on a row that
+    /// cannot be sent, which is [`Menued::sends`].
+    pub save: Option<Rect>,
 }
 
 impl RowMenu {
@@ -13531,7 +13825,7 @@ impl RowMenu {
     /// on the separator, or off the card altogether.
     pub fn picked(&self, p: karakuri_layout::Point) -> Option<RowItem> {
         let at = Pos2::new(p.x, p.y);
-        if self.save.contains(at) {
+        if self.save.is_some_and(|save| save.contains(at)) {
             return Some(RowItem::Save);
         }
         (0..self.loads)
@@ -13693,9 +13987,13 @@ impl LibraryBay {
     /// **A listing shorter than the rows drawn asks nothing**, which is
     /// `take`'s refusal rather than a clamp: a star answered bare would name a
     /// Set nobody can see.
+    /// **A procedure row has no star and answers nothing**, which is
+    /// [`Rows::set`]'s whole job: a star is refused on an id `<store>/sets/`
+    /// does not hold — `StoreError::NoSet`, ADR-0299 — so a procedure row draws
+    /// the column with nothing in it and a press there is a press on the row.
     pub fn starred(
         &self,
-        sets: &[String],
+        rows: Rows<'_>,
         marks: &std::collections::BTreeSet<String>,
         p: karakuri_layout::Point,
     ) -> Option<Operation> {
@@ -13706,9 +14004,9 @@ impl LibraryBay {
         let row = self
             .drawn()
             .find(|index| self.list.contains(p) && self.star(*index).contains(p))?;
-        let id = sets.get(row)?;
+        let id = rows.set(row)?;
         Some(Operation::SetFavourite {
-            id: id.clone(),
+            id: id.to_owned(),
             favourite: !marks.contains(id),
         })
     }
@@ -13935,10 +14233,13 @@ impl LibraryBay {
     ///   deck selection does not move — that is the whole of what the second
     ///   mark is for, and `View::select` is not called from here.
     /// - **The button** is `Operation::LoadSet { deck, set }`, with the deck
-    ///   off [`Target::deck`] and the Set off the cursor. With no row under
-    ///   the cursor it is [`Aim::NoSet`] and nothing is emitted: a load with
-    ///   one operand missing is not a load, and answering `None` would leave
-    ///   the press claimed and unaccounted for.
+    ///   off [`Target::deck`] and the Set off the cursor — or
+    ///   `Operation::LoadProcedure` where the row under the cursor is a
+    ///   procedure, which is one file written over what the deck is playing
+    ///   rather than every layer replaced (ADR-0338). With no row under the
+    ///   cursor it is [`Aim::NoSet`] and nothing is emitted: a load with one
+    ///   operand missing is not a load, and answering `None` would leave the
+    ///   press claimed and unaccounted for.
     ///
     /// **While the list is down, every press is the dismissal**, which is
     /// [`ArrangementPill::ask`]'s rule and `input::claim`'s rule 2: the card
@@ -13955,7 +14256,8 @@ impl LibraryBay {
         ctx: &egui::Context,
         viewport: Rect,
         at: Target,
-        set: Option<&str>,
+        rows: Rows<'_>,
+        cursor: usize,
         p: karakuri_layout::Point,
     ) -> Option<Aim> {
         if ctx.cumulative_pass_nr() == 0 {
@@ -13977,12 +14279,22 @@ impl LibraryBay {
         if !load.hit_button(p) {
             return None;
         }
-        Some(match set {
-            Some(id) => Aim::Load(Operation::LoadSet {
+        // **Which of the two loads it is is the row's, and the operand is the
+        // same word either way.** A Set row names every layer of what the deck
+        // will play; a procedure row names one file written over what it is
+        // playing already (ADR-0338). The button, the row menu and the drag all
+        // arrive at this pair, which is why the division is here rather than
+        // three times over.
+        Some(match (rows.name(cursor), rows.procedure(cursor)) {
+            (Some(name), true) => Aim::Load(Operation::LoadProcedure {
+                deck: at.deck,
+                procedure: name.to_owned(),
+            }),
+            (Some(id), false) => Aim::Load(Operation::LoadSet {
                 deck: at.deck,
                 set: id.to_owned(),
             }),
-            None => Aim::NoSet,
+            (None, _) => Aim::NoSet,
         })
     }
 
@@ -14026,12 +14338,19 @@ impl LibraryBay {
             })
         };
         let loads = at.decks.min(DECKS);
+        // **The send is measured only where it is drawn**, which is
+        // [`Menued::sends`]: a card as wide as `Save as a kbset` with no such
+        // item in it would be a menu whose width said what it holds and was
+        // wrong.
         let widest = (0..loads)
             .map(|deck| width(&load_item(deck as u8)))
-            .chain(std::iter::once(width(MENU_SAVE)))
+            .chain(at.sends.then(|| width(MENU_SAVE)))
             .fold(size::ROW_MENU_MIN_W, f32::max);
-        let height =
-            size::LIB_LIST_PAD * 2.0 + size::LIB_ROW_H * (loads + 1) as f32 + size::ROW_MENU_RULE_H;
+        let sent = match at.sends {
+            true => size::LIB_ROW_H + size::ROW_MENU_RULE_H,
+            false => 0.0,
+        };
+        let height = size::LIB_LIST_PAD * 2.0 + size::LIB_ROW_H * loads as f32 + sent;
         let card = held_inside(
             &viewport,
             row.min.x + size::ROW_MENU_INSET,
@@ -14043,20 +14362,24 @@ impl LibraryBay {
         Some(RowMenu {
             card,
             loads,
-            rule: Rect::from_min_size(
-                Pos2::new(card.min.x + size::LIB_LIST_PAD, band),
-                egui::vec2(
-                    card.width() - size::LIB_LIST_PAD * 2.0,
-                    size::ROW_MENU_RULE_H,
-                ),
-            ),
-            save: Rect::from_min_size(
-                Pos2::new(
-                    card.min.x + size::LIB_LIST_PAD,
-                    band + size::ROW_MENU_RULE_H,
-                ),
-                egui::vec2(card.width() - size::LIB_LIST_PAD * 2.0, size::LIB_ROW_H),
-            ),
+            rule: at.sends.then(|| {
+                Rect::from_min_size(
+                    Pos2::new(card.min.x + size::LIB_LIST_PAD, band),
+                    egui::vec2(
+                        card.width() - size::LIB_LIST_PAD * 2.0,
+                        size::ROW_MENU_RULE_H,
+                    ),
+                )
+            }),
+            save: at.sends.then(|| {
+                Rect::from_min_size(
+                    Pos2::new(
+                        card.min.x + size::LIB_LIST_PAD,
+                        band + size::ROW_MENU_RULE_H,
+                    ),
+                    egui::vec2(card.width() - size::LIB_LIST_PAD * 2.0, size::LIB_ROW_H),
+                )
+            }),
         })
     }
 
@@ -14090,7 +14413,7 @@ impl LibraryBay {
         ctx: &egui::Context,
         viewport: Rect,
         at: Menued,
-        sets: &[String],
+        rows: Rows<'_>,
         p: karakuri_layout::Point,
     ) -> Option<Picked> {
         if ctx.cumulative_pass_nr() == 0 {
@@ -14098,23 +14421,44 @@ impl LibraryBay {
         }
         let Some(row) = at.row else {
             let row = self.at_row(Pos2::new(p.x, p.y))?;
-            sets.get(row)?;
+            rows.name(row)?;
             return Some(Picked::Open(row));
         };
         let Some(menu) = self.menu(ctx, viewport, at) else {
             return Some(Picked::Shut);
         };
-        let Some(id) = sets.get(row) else {
+        let Some(name) = rows.name(row) else {
             return Some(Picked::Shut);
         };
         Some(match menu.picked(p) {
-            Some(RowItem::Load(deck)) => Picked::Load(Operation::LoadSet {
-                deck,
-                set: id.to_owned(),
+            // **The item names the deck and the row names which load it
+            // is**, which is [`LibraryBay::aim`]'s division arriving by the
+            // third route: four items on a procedure row load that one file
+            // over that deck's layer, and four on a Set row load every layer
+            // (ADR-0338).
+            Some(RowItem::Load(deck)) => Picked::Load(match rows.procedure(row) {
+                true => Operation::LoadProcedure {
+                    deck,
+                    procedure: name.to_owned(),
+                },
+                false => Operation::LoadSet {
+                    deck,
+                    set: name.to_owned(),
+                },
             }),
-            Some(RowItem::Save) => Picked::Send(Operation::TransferSet {
-                transfer: karakuri_operation::SetTransfer::Send { id: id.to_owned() },
-            }),
+            // **The send is a Set's and a procedure row has none.** What is
+            // written out is that Set with every source it names inlined after
+            // it, checked against the address each `slot` record carries — and
+            // a loose `.kir` names nothing, which is ADR-0338's own reason a
+            // `folder` lists no procedure. So the item is not drawn on such a
+            // row (see [`Menued::sends`]) and a press where it would have been
+            // dismisses.
+            Some(RowItem::Save) => match rows.set(row) {
+                Some(id) => Picked::Send(Operation::TransferSet {
+                    transfer: karakuri_operation::SetTransfer::Send { id: id.to_owned() },
+                }),
+                None => Picked::Shut,
+            },
             None => Picked::Shut,
         })
     }
@@ -14153,11 +14497,17 @@ impl LibraryBay {
     /// is what keeps the row a press lands on the row the paint drew. Never
     /// more than [`LibraryBay::rows`] of them, so a press below the last row is
     /// on the list's own ground and belongs to nobody.
-    pub fn take(&self, sets: &[String], p: karakuri_layout::Point) -> Option<Taken> {
+    pub fn take(&self, rows: Rows<'_>, p: karakuri_layout::Point) -> Option<Taken> {
         self.at_row(Pos2::new(p.x, p.y)).and_then(|row| {
             Some(Taken {
                 row,
-                set: sets.get(row)?.clone(),
+                set: rows.name(row)?.to_owned(),
+                // **What is in hand says which load a drop names**, which is
+                // the drag's half of [`LibraryBay::aim`]'s division: the
+                // gesture names both operands and the second arrives at the
+                // release, so the first has to carry what kind of row it was
+                // (ADR-0338).
+                procedure: rows.procedure(row),
             })
         })
     }
@@ -14321,23 +14671,168 @@ impl LibraryBay {
 
     /// **One filter field's box**, or `None` for a bay with no filter row.
     ///
-    /// `.field` carries `flex: 1; min-width: 0` and nothing else has a width in
-    /// the row, so the two share whatever is left of `.lib-filters`'s content
-    /// box after its one [`size::LIB_FILTERS_GAP`] — which is a division rather
-    /// than a measurement, and is why this bay still asks `egui` for nothing. The
-    /// chips one row up are the exception and stay the exception: a chip is as
-    /// wide as the word in it and a field is not.
+    /// `.field` carries `flex: 1; min-width: 0` and nothing else is in the row,
+    /// so it takes the whole of `.lib-filters`'s content box — which is a
+    /// division rather than a measurement, and is why this bay still asks `egui`
+    /// for nothing. The chips above and below it are the exception and stay the
+    /// exception: a chip is as wide as the word in it and a field is not.
+    ///
+    /// **It shared the row with `layer…` until 2026-09-10**, each taking half
+    /// of what was left after one [`size::LIB_FILTERS_GAP`]. ADR-0338 retired
+    /// that field for the six chips in [`LibraryBay::kinds`], which are their
+    /// own row under this one — six toggles and a `flex: 1` field on one row in
+    /// a bay this narrow would leave the chips a few pixels each, and a chip
+    /// nobody can hit is not a control (`style.css`, `.lib-kinds`).
     pub fn field(&self, which: Field) -> Option<Rect> {
         let row = self.filters?;
-        let width = (row.width() - size::LIB_FILTERS_PAD_X * 2.0 - size::LIB_FILTERS_GAP) * 0.5;
+        let width = row.width() - size::LIB_FILTERS_PAD_X * 2.0;
         let at = match which {
             Field::Holds => row.min.x + size::LIB_FILTERS_PAD_X,
-            Field::Layer => row.min.x + size::LIB_FILTERS_PAD_X + width + size::LIB_FILTERS_GAP,
         };
         Some(Rect::from_min_size(
             Pos2::new(at, row.min.y + size::LIB_FILTERS_PAD_Y),
             egui::vec2(width, size::FIELD_H),
         ))
+    }
+
+    /// **One kind chip and its box**, left to right in [`KindChip::ALL`]'s
+    /// order — the same walk `library_into` paints and [`LibraryBay::kind`]
+    /// hit-tests, so the capsule a press lands on is the capsule the mint is
+    /// drawn in.
+    ///
+    /// **A chip is as wide as the word in it**, which is [`LibraryBay::chips`]'
+    /// sentence one row up and the second place this bay has to ask `egui`
+    /// anything. `.kind` is `font-size: 9px; padding: 0 6px` with a hairline
+    /// border, so the box is the word at [`size::KIND_SIZE`] inside
+    /// [`size::KIND_PAD_X`] either side.
+    ///
+    /// Empty for a bay with no kind row, which is a bay with no filter row —
+    /// see [`LibraryBay::kinds`], where the one condition is written.
+    pub fn kind_chips<'a>(
+        &self,
+        ctx: &'a egui::Context,
+    ) -> impl Iterator<Item = (KindChip, Rect)> + 'a {
+        let row = self.kinds;
+        let mut x = row.map_or(0.0, |row| row.min.x + size::LIB_KINDS_PAD_X);
+        let top = row.map_or(0.0, |row| row.min.y + size::LIB_KINDS_PAD_Y);
+        let drawn = row.map_or(0, |_| KindChip::ALL.len());
+        KindChip::ALL.into_iter().take(drawn).map(move |chip| {
+            let width = ctx.fonts_mut(|f| {
+                f.layout_no_wrap(
+                    chip.word().to_owned(),
+                    FontId::new(size::KIND_SIZE, FontFamily::Proportional),
+                    Color32::PLACEHOLDER,
+                )
+                .size()
+                .x
+            }) + size::KIND_PAD_X * 2.0;
+            let box_ = Rect::from_min_size(Pos2::new(x, top), egui::vec2(width, size::KIND_H));
+            x += width + size::LIB_KINDS_GAP;
+            (chip, box_)
+        })
+    }
+
+    /// **What a press at `p` on the kind row asks for**, or `None` where there
+    /// is no chip under it.
+    ///
+    /// # The chip flips and the operation names all six
+    ///
+    /// `Operation::FilterLibrary { kinds }` carries the whole row, never one
+    /// chip: *"six presses that each say this one changed are six statements
+    /// two hands can disagree about, and one that says these are the kinds
+    /// showing is a destination"* (ADR-0338, which is
+    /// `Operation::Publish`'s rule on a different list). So the flip is this
+    /// console's arithmetic ([P-0090]) and what leaves is where it arrived —
+    /// [`KindChip::flipped`].
+    ///
+    /// **A press on a chip that is on turns it off**, and with the last one off
+    /// the row is [`LibraryKinds::EVERYTHING`] again: every state this row can
+    /// be in is one a press can leave, which is what a control with more than
+    /// two positions owes.
+    ///
+    /// [P-0090]: ../../../docs/principles/0090-a-surface-offers-it-never-decides.md
+    ///
+    /// # A chip is pressed only where it is drawn
+    ///
+    /// [`LibraryBay::chip`]'s rule one row up and for its reason: the row
+    /// clips, so a chip that runs past the bay's own edge is pressable only
+    /// where it is painted, and the point is held to the row before any chip is
+    /// asked about. **`None` before the first pass** for that method's reason
+    /// too — there are no fonts to measure a word with.
+    pub fn kind(
+        &self,
+        ctx: &egui::Context,
+        at: Filters<'_>,
+        p: karakuri_layout::Point,
+    ) -> Option<Operation> {
+        let row = self.kinds?;
+        if ctx.cumulative_pass_nr() == 0 {
+            return None;
+        }
+        let p = Pos2::new(p.x, p.y);
+        if !row.contains(p) {
+            return None;
+        }
+        self.kind_chips(ctx)
+            .find(|(_, box_)| box_.contains(p))
+            .map(|(chip, _)| Operation::FilterLibrary {
+                kinds: chip.flipped(at.kinds),
+            })
+    }
+
+    /// **The `index`th row's badges, right to left from the row's own
+    /// padding** — one box per word, in the order [`Rows::badges`] hands them
+    /// and laid out so the last word ends where the row's padding starts.
+    ///
+    /// **A badge is as wide as the word in it**, which is [`kind_chips`]'
+    /// sentence one row up: `.badge` is `font-size: 8px; padding: 0 4px`, so
+    /// the box is the word at [`size::BADGE_SIZE`] inside [`size::BADGE_PAD_X`]
+    /// either side, and `.badges`' `gap: 3px` is [`size::BADGE_GAP`].
+    ///
+    /// **One derivation for the paint and the hover**, which is
+    /// [`LibraryBay::load`]'s rule: `library_into` paints from this and
+    /// `hover`'s probe asks it whether the pointer is on one, so the readout a
+    /// tip explains is the readout that is drawn. Nothing presses it —
+    /// what narrows the list by kind is the row of chips above.
+    ///
+    /// **Laid out from the right**, because the mock puts the badges at the end
+    /// of the row after the name: a row measured forwards from the name would
+    /// move every badge whenever a name got longer.
+    pub fn badges<'a>(
+        &self,
+        ctx: &'a egui::Context,
+        index: usize,
+        words: &'a [&'static str],
+    ) -> impl Iterator<Item = (&'static str, Rect)> + 'a {
+        let row = self.row(index);
+        let widths: Vec<f32> = words
+            .iter()
+            .map(|word| {
+                ctx.fonts_mut(|f| {
+                    f.layout_no_wrap(
+                        (*word).to_owned(),
+                        FontId::new(size::BADGE_SIZE, FontFamily::Proportional),
+                        Color32::PLACEHOLDER,
+                    )
+                    .size()
+                    .x
+                }) + size::BADGE_PAD_X * 2.0
+            })
+            .collect();
+        let whole: f32 =
+            widths.iter().sum::<f32>() + size::BADGE_GAP * widths.len().saturating_sub(1) as f32;
+        let mut x = row.max.x - size::LIB_ROW_PAD_X - whole;
+        let top = row.center().y - size::BADGE_H * 0.5;
+        words
+            .iter()
+            .zip(widths)
+            .map(move |(word, width)| {
+                let box_ = Rect::from_min_size(Pos2::new(x, top), egui::vec2(width, size::BADGE_H));
+                x += width + size::BADGE_GAP;
+                (*word, box_)
+            })
+            .collect::<Vec<_>>()
+            .into_iter()
     }
 
     /// **What a press at `p` on the filter row asks the store for**, or `None`
@@ -14393,13 +14888,16 @@ impl LibraryBay {
             .into_iter()
             .find(|field| self.field(*field).is_some_and(|box_| box_.contains(p)))?;
         Some(match which {
+            // **`layer` goes out unset and the field it came from is gone.**
+            // `Operation::ListSets` keeps that field — `list_sets` over MCP and
+            // `--list-sets` are where *which Sets hold a node on this layer*
+            // lives — and this console stopped asking it on 2026-09-10, because
+            // a kind chip asks a different question of a different thing
+            // (ADR-0338). The panel's way to *which Sets use this* is `holds`,
+            // which asks by node name.
             Field::Holds => Operation::ListSets {
                 holds: stepped_holds(holds, at.holds),
-                layer: at.layer,
-            },
-            Field::Layer => Operation::ListSets {
-                holds: at.holds.map(str::to_owned),
-                layer: stepped_layer(at.layer),
+                layer: None,
             },
         })
     }
@@ -14550,19 +15048,31 @@ fn library_box(
     // Both are the bay's head rather than its body — one says which library is
     // being read and the other narrows what that library answers — so a
     // console that has been told about no library draws neither. The width
-    // check is `list`'s below, stated on a row that has two boxes and a gap in
-    // it: a row too narrow for two fields would draw two slivers and a rule.
-    let filters = (chips
-        && region.width() - size::LIB_FILTERS_PAD_X * 2.0 - size::LIB_FILTERS_GAP > 0.0)
-        .then(|| {
-            Rect::from_min_max(
-                Pos2::new(region.min.x, under_path),
-                Pos2::new(region.max.x, under_path + size::LIB_FILTERS_H),
-            )
-        });
-    let top = match filters {
-        Some(filters) => filters.max.y,
-        None => under_path,
+    // check is `list`'s below, stated on a row that has a box and a padding in
+    // it: a row too narrow for the field would draw a sliver and a rule.
+    let filters = (chips && region.width() - size::LIB_FILTERS_PAD_X * 2.0 > 0.0).then(|| {
+        Rect::from_min_max(
+            Pos2::new(region.min.x, under_path),
+            Pos2::new(region.max.x, under_path + size::LIB_FILTERS_H),
+        )
+    });
+    // **The kind row is the filter row's condition and not a third one**, which
+    // is the sentence above read once more: both are the bay's head, one asks
+    // what a Set is made of and the other what a row *is*, and a bay with room
+    // for neither draws neither. **The chips are not measured against the
+    // width**, which is the scope row's own answer one band up: a chip is as
+    // wide as the word in it, the row clips, and a press is held to the part of
+    // a chip that is drawn (ADR-0338, `LibraryBay::kind`).
+    let kinds = filters.map(|filters| {
+        Rect::from_min_max(
+            Pos2::new(region.min.x, filters.max.y),
+            Pos2::new(region.max.x, filters.max.y + size::LIB_KINDS_H),
+        )
+    });
+    let top = match (kinds, filters) {
+        (Some(kinds), _) => kinds.max.y,
+        (None, Some(filters)) => filters.max.y,
+        (None, None) => under_path,
     };
     let list = Rect::from_min_max(
         Pos2::new(region.min.x + size::LIB_LIST_PAD, top + size::LIB_LIST_PAD),
@@ -14620,6 +15130,7 @@ fn library_box(
         scopes,
         path,
         filters,
+        kinds,
         list,
         rows: 0,
         total,
@@ -14694,14 +15205,14 @@ fn library_into(
     at: Target,
     open: Option<Opened<'_>>,
 ) {
-    let Listed { sets, starred } = listed;
+    let Listed { rows, starred } = listed;
     let painter = ui.painter().with_clip_rect(bay.list);
     // **The rows that reach the picture and not the ones that are whole**,
     // which is `LibraryBay::drawn` against `LibraryBay::rows`: a row cut by an
     // edge is drawn as far as the list goes, and the clip above is what cuts
     // it. The foot's count is the other number and says how many are whole.
     for index in bay.drawn() {
-        let Some(name) = sets.get(index) else {
+        let Some(name) = rows.name(index) else {
             continue;
         };
         let row = bay.row(index);
@@ -14727,23 +15238,60 @@ fn library_into(
         // else the row is wearing, and `.star.off` is `--c-faint` — the one
         // mark in this bay that a row's own state colours and the wash above
         // does not.
-        let on = starred.contains(name);
-        star_mark(
-            &painter,
-            bay.star(index).center(),
-            STAR_SIZE,
-            match on {
-                true => pal.sun,
-                false => pal.faint,
-            },
-            on,
-        );
+        //
+        // **A procedure row draws none at all**, which is `.star.none`'s
+        // `visibility: hidden` in the mock: the column is kept so every name
+        // starts in the same place, and there is nothing in it because a star
+        // is a control over a Set this store holds (ADR-0299, ADR-0338).
+        if !rows.procedure(index) {
+            let on = starred.contains(name);
+            star_mark(
+                &painter,
+                bay.star(index).center(),
+                STAR_SIZE,
+                match on {
+                    true => pal.sun,
+                    false => pal.faint,
+                },
+                on,
+            );
+        }
         let galley = painter.layout_job(span_at(name, size::BASE, ink));
         painter.galley(
             Pos2::new(bay.named(index), row.center().y - galley.size().y * 0.5),
             galley,
             ink,
         );
+        // **The badges, at the right of the row.** `.badge` is a hairline round
+        // `--c-faint` and `.badge.kind` — the one badge a procedure row wears —
+        // is `--c-line` round `--c-dim`, which is `style.css`'s own pair and
+        // carries a real distinction: on a procedure row the single badge is
+        // what the row *is*, where a Set's badges are a list of what it holds.
+        let (ring, word) = match rows.procedure(index) {
+            true => (pal.line, pal.dim),
+            false => (pal.hair, pal.faint),
+        };
+        for (badge, box_) in bay.badges(ui.ctx(), index, &rows.badges(index)) {
+            painter.rect_stroke(
+                box_,
+                CornerRadius::same(size::BADGE_RADIUS as u8),
+                Stroke::new(size::HAIRLINE, ring),
+                StrokeKind::Inside,
+            );
+            let galley = painter.layout_no_wrap(
+                badge.to_owned(),
+                FontId::new(size::BADGE_SIZE, FontFamily::Proportional),
+                word,
+            );
+            painter.galley(
+                Pos2::new(
+                    box_.center().x - galley.size().x * 0.5,
+                    box_.center().y - galley.size().y * 0.5,
+                ),
+                galley,
+                word,
+            );
+        }
     }
 
     // **The reading, under the row it is a reading of.** Drawn inside the same
@@ -14893,6 +15441,52 @@ fn deck_list_into(ui: &Ui, pal: &Palette, load: &Load, at: Target, card: Rect) {
     }
 }
 
+/// **A pane head's deck list, painted** — [`deck_list_into`]'s card one bay
+/// along, with the deck the pane is *showing* in the panel's own text colour
+/// and the rest dim.
+///
+/// Where everything goes is [`PaneTarget`]'s, so this paints and derives
+/// nothing, which is [`deck_list_into`]'s own sentence.
+///
+/// **The marked row is what this pane is pointed at and never the deck
+/// selection**, which is the whole of what this mark is: a pane showing deck C
+/// while the keys are on deck A draws `C` in the text colour here and the ring
+/// stays on A's strip, one bay over.
+fn pane_list_into(ui: &Ui, pal: &Palette, target: &PaneTarget, showing: usize, card: Rect) {
+    let painter = ui.painter();
+    painter.add(pal.shadow.as_shape(card, CornerRadius::same(8)));
+    painter.rect_filled(card, CornerRadius::same(8), pal.panel);
+    painter.rect_stroke(
+        card,
+        CornerRadius::same(8),
+        Stroke::new(size::HAIRLINE, pal.line),
+        StrokeKind::Inside,
+    );
+    // `take` rather than a range, because the rows are the letters — see
+    // [`deck_list_into`], and `View::point_pane` is what stops a deck this
+    // crate has no letter for being asked for.
+    for (index, letter) in DECK_LETTERS.iter().enumerate().take(target.rows) {
+        let row = target.row(card, index);
+        let ink = match index == showing {
+            true => pal.text,
+            false => pal.dim,
+        };
+        let galley = painter.layout_no_wrap(
+            (*letter).to_owned(),
+            FontId::new(size::BASE, FontFamily::Proportional),
+            ink,
+        );
+        painter.galley(
+            Pos2::new(
+                row.min.x + size::LIB_ROW_PAD_X,
+                row.center().y - galley.size().y * 0.5,
+            ),
+            galley,
+            ink,
+        );
+    }
+}
+
 /// **A `uses` line's card, painted** — one row per node the input may be wired
 /// to, with the one it is wired to now drawn in the panel's own text colour.
 ///
@@ -14993,15 +15587,22 @@ fn row_menu_into(ui: &Ui, pal: &Palette, menu: &RowMenu) {
     for index in 0..menu.loads.min(DECKS) {
         word(menu.load(index), load_item(index as u8));
     }
-    let rule = menu.rule.center().y;
-    painter.line_segment(
-        [
-            Pos2::new(menu.rule.min.x + size::LIB_ROW_PAD_X, rule),
-            Pos2::new(menu.rule.max.x - size::LIB_ROW_PAD_X, rule),
-        ],
-        Stroke::new(size::HAIRLINE, pal.hair),
-    );
-    word(menu.save, MENU_SAVE.to_owned());
+    // **The separator and the send are drawn where there is one**, which is a
+    // Set row: a procedure cannot be written out as a `.kbset` — nothing takes
+    // a bare `.kir` in — so its menu is the loads and stops (ADR-0338).
+    if let Some(band) = menu.rule {
+        let rule = band.center().y;
+        painter.line_segment(
+            [
+                Pos2::new(band.min.x + size::LIB_ROW_PAD_X, rule),
+                Pos2::new(band.max.x - size::LIB_ROW_PAD_X, rule),
+            ],
+            Stroke::new(size::HAIRLINE, pal.hair),
+        );
+    }
+    if let Some(save) = menu.save {
+        word(save, MENU_SAVE.to_owned());
+    }
 }
 
 /// **What the list is drawing this frame**: the rows, and which of them the
@@ -15014,9 +15615,8 @@ fn row_menu_into(ui: &Ui, pal: &Palette, menu: &RowMenu) {
 /// frame.
 #[derive(Debug, Clone, Copy)]
 struct Listed<'a> {
-    /// The names the bay lists, in the order the host listed them —
-    /// [`View::library`].
-    sets: &'a [String],
+    /// The names the bay lists and what each of them is — [`View::rows`].
+    rows: Rows<'a>,
     /// The ids the store has starred — [`View::starred`].
     starred: &'a std::collections::BTreeSet<String>,
 }
@@ -15312,11 +15912,11 @@ fn path_into(ui: &Ui, pal: &Palette, bay: &LibraryBay, at: Pointed<'_>) {
 /// Term for term from `style.css`:
 ///
 /// - `.lib-filters { display: flex; gap: 5px; padding: 6px 9px; border-bottom:
-///   1px solid var(--c-hair) }` — two fields from the left of the row, one
-///   [`size::LIB_FILTERS_GAP`] apart, over a rule the row's bottom pixel.
+///   1px solid var(--c-hair) }` — the field from the left of the row, over a
+///   rule the row's bottom pixel.
 /// - `.field { border: 1px solid var(--c-line); border-radius: 999px; padding:
 ///   0 9px; color: var(--c-faint); flex: 1 }` — a word at [`size::BASE`] in a
-///   bordered capsule, each field taking half of what is left.
+///   bordered capsule, taking the whole of what is left.
 ///
 /// **A set field and an unset one differ in the word alone**, which is
 /// [`HOLDS_UNSET`]'s sentence: `style.css` gives `.field` one rule and no set
@@ -15362,6 +15962,77 @@ fn filters_into(ui: &Ui, pal: &Palette, bay: &LibraryBay, at: Filters<'_>) {
     // and the same hairline the scope row above it draws. It is inside the row
     // rather than under it, which is what keeps the list's top where
     // [`library_box`] put it.
+    let rule = row.max.y - size::HAIRLINE * 0.5;
+    painter.line_segment(
+        [Pos2::new(row.min.x, rule), Pos2::new(row.max.x, rule)],
+        Stroke::new(size::HAIRLINE, pal.hair),
+    );
+}
+
+/// **The kind row, painted**: the six toggles and the rule under them.
+///
+/// Where each chip goes is [`LibraryBay::kind_chips`], so this paints and
+/// derives nothing — [`scopes_into`]'s rule two rows up, and it is that method's
+/// shape term for term because it is the same object: a row of capsules, as
+/// wide as the words in them, over a hairline that is the row's own bottom
+/// pixel.
+///
+/// Term for term from `style.css`:
+///
+/// - `.lib-kinds { display: flex; gap: 4px; padding: 5px 9px; border-bottom:
+///   1px solid var(--c-hair) }` — six chips from the left of the row, one
+///   [`size::LIB_KINDS_GAP`] apart.
+/// - `.kind { font-size: 9px; padding: 0 6px; border-radius: 999px; border: 1px
+///   solid var(--c-line); color: var(--c-faint) }` — a word at
+///   [`size::KIND_SIZE`] in a bordered capsule.
+/// - `.kind.on { border-color: transparent; color: var(--c-mint); background:
+///   color-mix(in srgb, var(--c-mint) 15%, transparent) }` — **mint and not
+///   lavender**, which is what this console draws a control that is *on*: the
+///   `params` pill in this bay's own foot is lit the same way, and lavender
+///   here is the deck the keys are addressed to.
+///
+/// **All six plain is the row a run opens on**, and it says *everything shows*
+/// rather than *nothing does* — [`karakuri_operation::LibraryKinds::narrowing`]
+/// settles that reading once, and nothing here draws a seventh state for it.
+fn kinds_into(ui: &Ui, pal: &Palette, bay: &LibraryBay, at: Filters<'_>) {
+    let Some(row) = bay.kinds else {
+        return;
+    };
+    let painter = ui.painter().with_clip_rect(row);
+    for (chip, box_) in bay.kind_chips(ui.ctx()) {
+        let on = chip.on(at.kinds);
+        let ink = match on {
+            true => pal.mint,
+            false => pal.faint,
+        };
+        match on {
+            true => painter.rect_filled(
+                box_,
+                CornerRadius::same((size::KIND_H * 0.5) as u8),
+                tint(pal.mint, 15),
+            ),
+            false => painter.rect_stroke(
+                box_,
+                CornerRadius::same((size::KIND_H * 0.5) as u8),
+                Stroke::new(size::HAIRLINE, pal.line),
+                StrokeKind::Inside,
+            ),
+        };
+        let galley = painter.layout_no_wrap(
+            chip.word().to_owned(),
+            FontId::new(size::KIND_SIZE, FontFamily::Proportional),
+            ink,
+        );
+        painter.galley(
+            Pos2::new(
+                box_.center().x - galley.size().x * 0.5,
+                box_.center().y - galley.size().y * 0.5,
+            ),
+            galley,
+            ink,
+        );
+    }
+
     let rule = row.max.y - size::HAIRLINE * 0.5;
     painter.line_segment(
         [Pos2::new(row.min.x, rule), Pos2::new(row.max.x, rule)],
@@ -16138,6 +16809,22 @@ pub const PANES: usize = 2;
 /// not.
 pub const PANE_NAMES: [&str; PANES] = ["inspector-1", "inspector-2"];
 
+/// **Which deck each pane opens pointed at** — the first pane at deck A and
+/// the second at deck B, which is the mock's own two heads.
+///
+/// It is what this console did before the pulldown existed, written down as a
+/// *default* rather than left as the host's habit: the panes used to be filled
+/// slot by slot, so a fourth slot could not be looked at at all. See
+/// [`View::pane_deck`], which is the pointer this seeds.
+///
+/// **Not a reading of anything**, so a console with fewer strips than this
+/// names opens with a pane pointed at a deck the mixer draws none for — which
+/// is a pane with no nodes in it and is the honest state, exactly as
+/// [`View::selection`]'s deck A is on a console with no deck behind it.
+///
+/// [`View::pane_deck`]: View::pane_deck
+pub const PANE_DECKS: [u8; PANES] = [0, 1];
+
 /// **The three levels a node head shows, in the order it shows them.**
 ///
 /// `karakuri_operation::Authority` deliberately carries no `ALL` — *"no map
@@ -16428,6 +17115,30 @@ pub struct Node {
     /// argument one crate along and `docs/contributing.md` §4's structural
     /// tier.
     pub authority: Option<NodeAuthority>,
+    /// **The node whose source a `keep` on this head would write**, or `None`
+    /// on a head with nothing to keep.
+    ///
+    /// **Two heads carry no capsule and both are the rule rather than an
+    /// omission** (`docs/adr/0338-…`, decision 4):
+    ///
+    /// - **A head standing over more than one node**, which is the mock's
+    ///   folded `L4 renderers`. It is [`Node::authority`]'s own absence one
+    ///   control along and for its sentence: one capsule over three renderers
+    ///   would be one of three answers drawn as *the* answer. Open the fold
+    ///   and each renderer has its own.
+    /// - **The built-in camera**, which is a node with no procedure behind it:
+    ///   a Set declaring no `kind L3` holds the built-in orbit at `L3:0`
+    ///   (`docs/ir-spec.md`, *Several cameras*), and there is **no source to
+    ///   write**. The mock draws that absence too, and this pass reproduces it
+    ///   rather than drawing a capsule that refuses.
+    ///
+    /// **It is a field beside [`Node::authority`] rather than that field read
+    /// again**, because the two absences are not the same set: the built-in
+    /// camera *has* an authority and has nothing to keep. A `bool` beside the
+    /// address would be *present or absent as a unit* held true by prose,
+    /// which is [`NodeAuthority`]'s own argument, so the address and the
+    /// having-one are one `Option`.
+    pub keep: Option<NodeAt>,
     /// The mock's `.rend-row`: every renderer this Set has, and which of them
     /// is live. Empty on every group that is not the renderers'.
     pub renderers: Vec<Renderer>,
@@ -17023,12 +17734,70 @@ impl InspectorPane {
             if !head.contains(at) {
                 return None;
             }
-            auth_chips(ctx, head)
+            // **Inside what the `keep` capsule leaves**, and the trim is
+            // [`auth_chips`]' own rather than applied here — a press on the
+            // capsule is [`InspectorPane::keep_procedure`]'s and reaches no
+            // chip, because the chips are not drawn there.
+            auth_chips(ctx, head, node)
                 .find(|(_, chip)| chip.contains(at))
                 .map(|(authority, _)| Operation::SetAuthority {
                     deck: pane.deck as u8,
                     node: at_node,
                     authority,
+                })
+        })
+    }
+
+    /// **What a press at `p` on a node head's `keep` capsule asks for**, or
+    /// `None` off every capsule this pane drew.
+    ///
+    /// [`InspectorPane::set_authority`]'s walk at the other end of the same
+    /// row, and the same order of questions: the body, the group's head, then
+    /// the capsule.
+    ///
+    /// **A head with no capsule is not a target**, which is [`Node::keep`]
+    /// being `None` — a head over several nodes, and the built-in camera. Both
+    /// fall out here by the derivation answering `None` rather than by a check
+    /// of their own, which is the same shape `set_authority` refuses a folded
+    /// head in.
+    ///
+    /// **`id: None`, and the store names the file.** This is the press that
+    /// types nothing, so it takes the stamp —
+    /// [ADR-0128](../../../docs/adr/0128-a-set-saved-under-a-name-the-caller-chose-overwrites.md)'s
+    /// two routes drawn on one capsule, exactly as [`KeepPill`] draws them for
+    /// the deck. The name a head *has* typed is
+    /// [`View::named_set`]'s, and the host is what pairs the two: a keep sent
+    /// while this pane's head is asking for a name files under what was typed.
+    pub fn keep_procedure(
+        &self,
+        ctx: &egui::Context,
+        pane: &Pane,
+        p: karakuri_layout::Point,
+    ) -> Option<Operation> {
+        if ctx.cumulative_pass_nr() == 0 {
+            return None;
+        }
+        let at = Pos2::new(p.x, p.y);
+        if !self.body.contains(at) {
+            return None;
+        }
+        self.drawn(&pane.nodes).find_map(|index| {
+            let node = pane.nodes.get(index)?;
+            let at_node = node.keep?;
+            let group = self.group(&pane.nodes, index);
+            let head = Rect::from_min_max(
+                group.min,
+                Pos2::new(group.max.x, group.min.y + size::NODE_HEAD_H),
+            );
+            if !head.contains(at) {
+                return None;
+            }
+            node_keep(ctx, head, node)?
+                .contains(at)
+                .then_some(Operation::KeepProcedure {
+                    deck: pane.deck as u8,
+                    node: at_node,
+                    id: None,
                 })
         })
     }
@@ -19014,6 +19783,17 @@ pub fn deck_name(
             None => head.max.x,
         },
     };
+    // **And the chooser's own room comes off it**, which is the half of
+    // ADR-0292's *the chooser is boxed in* that the chooser landing makes
+    // real: `.half-head` is `showing`, the run, `▾`, `.sep`, the count and the
+    // capsule, so the `▾` sits **between** the run and everything else in the
+    // row. The run is the one thing here that is clipped rather than dropped
+    // (`pane_count`'s own note), so it is the run that gives way and never the
+    // control. Before this the chevron was reserved and unpainted, and its
+    // rectangle could sit on top of the count in a narrow head — which cost
+    // nothing while nobody drew it and would be a target over another
+    // control's ink now that somebody does.
+    let limit = limit - (CHEVRON_W + size::HALF_HEAD_GAP);
     let left = head.min.x + size::HALF_HEAD_PAD_X + run(head_label(naming)) + size::HALF_HEAD_GAP;
     let text = match naming {
         Some(typed) => naming_text_in_head(pane, typed),
@@ -19026,12 +19806,14 @@ pub fn deck_name(
     let top = head.min.y + size::HALF_HEAD_PAD_Y;
     let name = Rect::from_min_max(Pos2::new(left, top), Pos2::new(right, top + size::PILL_H));
     Some(DeckName {
-        // **The chooser's place and not a control**: one gap after the run, at
-        // the glyph's own measure — [`CHEVRON_W`], which is the arrangement
-        // pill's `▾` three bays along. It is where the mark *would* go, so a
-        // head with no room left for it holds a rectangle outside its own
-        // clip; nothing paints it and nothing hit-tests it, and what it is for
-        // is that [`DeckName::name`] stops before it.
+        // **The chooser**, one gap after the run and at the glyph's own
+        // measure — [`CHEVRON_W`], which is the arrangement pill's `▾` three
+        // bays along. It was reserved and drawn by nobody until 2026-09-10
+        // (ADR-0292's *the chooser is boxed in*), and it is a control now:
+        // [`pane_target`] is what paints and hit-tests it, off this
+        // rectangle. What has not changed is that [`DeckName::name`] stops
+        // before it — the run is one target and the mark beside it is
+        // another.
         chevron: Rect::from_min_size(
             Pos2::new(
                 name.max.x + size::HALF_HEAD_GAP,
@@ -19041,6 +19823,144 @@ pub fn deck_name(
         ),
         name,
         deck: pane.deck,
+    })
+}
+
+/// **The pulldown on a pane head, and the card it brings down** — *point this
+/// pane at another deck*.
+///
+/// # It is the pane's own pointer and it is not the deck selection
+///
+/// A pick moves this pane and nothing else: not the deck the keys are
+/// addressed to ([`View::selection`]), not the pane next door, and not the
+/// Library bay's load target ([`View::target_deck`]). That is the whole of why
+/// the mark exists — a pane can show a deck the keys are **not** on — and it
+/// is [`Load`]'s argument one bay along
+/// (`docs/adr/0305-…`, `docs/adr/0338-…`, decision 5).
+///
+/// # A pulldown and not a flip
+///
+/// The maintainer's choice, and
+/// [P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)
+/// underneath it: a flip is a *step*, so two panes stepping cannot both be
+/// aimed without knowing where they started, and a key, a map line or a model
+/// would have to count presses to say *deck C*. Every row of this card names a
+/// destination.
+///
+/// # What it offers is what the mixer is drawing
+///
+/// [`Target::decks`]' count read a second time and not a second rule: a deck
+/// the mixer draws no strip for is not in the list, which is
+/// [`View::select`]'s own refusal met from one more direction.
+///
+/// # The card hangs down, as the `uses` line's does
+///
+/// It is inside a pane's body's own bay rather than in a foot, so what is
+/// under the head is the pane — [`UsesLine::list`]'s division, and it is held
+/// inside the viewport for that method's reason.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PaneTarget {
+    /// **The `▾` after the run** — [`DeckName::chevron`], made live. A press on
+    /// it puts the card down; a press on it while the card is down is the
+    /// host's to read as *shut it*, which is [`Load`]'s arrangement.
+    pub chevron: Rect,
+    /// **Which pane this head belongs to**, as an index into [`PANE_NAMES`] —
+    /// what [`Operation::PointPane`]'s `pane` is spelled from, and what says
+    /// which of [`View::pane_deck`]'s entries a pick moves.
+    pub pane: usize,
+    /// **How many decks the card offers**, which is how many strips the mixer
+    /// is drawing while it is down and **zero** while it is shut —
+    /// [`Load::rows`]' shape and its reason: [`PaneTarget::row`] cannot hand
+    /// out a rectangle for a card nobody opened.
+    pub rows: usize,
+}
+
+impl PaneTarget {
+    /// Whether `p` is on the mark, which is the whole of what the shut control
+    /// owns: the run to its left is [`DeckName`]'s and the count to its right
+    /// is a readout.
+    pub fn hit(&self, p: karakuri_layout::Point) -> bool {
+        self.chevron.contains(Pos2::new(p.x, p.y))
+    }
+
+    /// **The card under the mark, or `None` while it is shut** — and `None`
+    /// for a console with no strip to offer, which is every test in this crate
+    /// that hands no mixer in.
+    pub fn list(&self, viewport: Rect) -> Option<Rect> {
+        if self.rows == 0 {
+            return None;
+        }
+        let height = size::LIB_LIST_PAD * 2.0 + size::LIB_ROW_H * self.rows as f32;
+        let width = size::LIB_ROW_H + (size::LIB_ROW_PAD_X + size::LIB_LIST_PAD) * 2.0;
+        Some(held_inside(
+            &viewport,
+            self.chevron.min.x,
+            self.chevron.max.y + size::PILL_GAP,
+            width,
+            height,
+        ))
+    }
+
+    /// **Where the `index`th deck's row is**, from the top of `card` — the
+    /// decks in [`DECK_LETTERS`] order, which is [`Load::row`]'s own reading.
+    ///
+    /// Panics on a row this card has not got, which is that method's rule: a
+    /// caller has invented a deck.
+    pub fn row(&self, card: Rect, index: usize) -> Rect {
+        assert!(index < self.rows, "deck {index} of a list of {}", self.rows);
+        Rect::from_min_size(
+            Pos2::new(
+                card.min.x + size::LIB_LIST_PAD,
+                card.min.y + size::LIB_LIST_PAD + size::LIB_ROW_H * index as f32,
+            ),
+            egui::vec2(card.width() - size::LIB_LIST_PAD * 2.0, size::LIB_ROW_H),
+        )
+    }
+
+    /// **What a press at `p` on the card asks for**, or `None` off every row.
+    ///
+    /// The pane is named by [`PANE_NAMES`], which is the arrangement's own
+    /// handle for it — `karakuri-operation` has no dependencies and cannot
+    /// hold one, which is [`Operation::FoldPane`]'s spelling and its reason.
+    pub fn picked(&self, viewport: Rect, p: karakuri_layout::Point) -> Option<Operation> {
+        let card = self.list(viewport)?;
+        let at = Pos2::new(p.x, p.y);
+        let deck = (0..self.rows).find(|index| self.row(card, *index).contains(at))?;
+        Some(Operation::PointPane {
+            pane: PANE_NAMES.get(self.pane)?.to_string(),
+            deck: deck as u8,
+        })
+    }
+}
+
+/// **The pulldown on one pane head, derived** — [`deck_name`] answers where
+/// the run is and this answers where the mark after it is, which is
+/// [`keep_pill`]'s division along the same row.
+///
+/// `None` is a head with no run drawn in it, which is [`deck_name`]'s own
+/// refusal: the mark sits one gap after the run, so a head too narrow to paint
+/// any of the name has nowhere to put it. The run is clipped short of this
+/// mark rather than over it — see [`deck_name`], where that is one line.
+pub fn pane_target(
+    ctx: &egui::Context,
+    at: &InspectorPane,
+    pane: &Pane,
+    index: usize,
+    naming: Option<&str>,
+    decks: usize,
+    open: bool,
+) -> Option<PaneTarget> {
+    let named = deck_name(ctx, at, pane, naming)?;
+    Some(PaneTarget {
+        chevron: named.chevron,
+        pane: index,
+        // **Zero while it is shut**, which is what stops [`PaneTarget::row`]
+        // handing out a rectangle for a card nobody opened — [`Load`]'s own
+        // field.
+        rows: match open {
+            true => decks.min(DECK_LETTERS.len()),
+            false => 0,
+        },
     })
 }
 
@@ -19097,6 +20017,27 @@ impl View {
             .as_ref()
             .filter(|naming| naming.pane == index)
             .map(Naming::typed)
+    }
+
+    /// **What is being typed into the head of whichever pane is showing
+    /// `deck`**, or `None` where no head is asking for a name over that deck.
+    ///
+    /// **What it is for is a node's keep** (ADR-0338, decision 4): the capsule
+    /// on a node group's head types nothing and takes a stamp, and a head that
+    /// *is* taking letters is what a keep from that pane files under — which
+    /// is ADR-0128's two routes drawn on one capsule, exactly as the deck's
+    /// own `keep` draws them.
+    ///
+    /// **The pane is found by the deck rather than carried**, which is
+    /// [`View::named_set`]'s own rule: the gesture spans frames, so what is
+    /// filed is what the head says it is filing *now*. An empty buffer answers
+    /// `Some("")`, and that is the field's rule and not this method's — the
+    /// console emits what was typed, including nothing, and the wall is where
+    /// the file is written (P-0090).
+    pub fn naming_over(&self, deck: u8) -> Option<String> {
+        let naming = self.naming.as_ref()?;
+        let pane = self.inspector.get(naming.pane)?;
+        (pane.deck == usize::from(deck)).then(|| naming.typed().to_owned())
     }
 
     /// **Ask for a name in pane `index`'s head**, starting from empty.
@@ -19246,6 +20187,12 @@ fn inspector_into(
     pane: &Pane,
     on_air: bool,
     naming: Option<&str>,
+    // **The pulldown's mark**, derived by the caller off the same reading the
+    // press is hit-tested against — `View::pane_pulldown`. It is handed in
+    // rather than asked here because the card's rows are read off the mixer,
+    // which `draw` has already borrowed. The card itself is painted after
+    // every bay, for the `uses` line's card's reason.
+    target: Option<PaneTarget>,
 ) {
     // **Derived here and hit-tested by `claim` off the same call**, and asked
     // before the words are painted rather than after: `.half-head` is a flex
@@ -19321,6 +20268,23 @@ fn inspector_into(
         ],
         Stroke::new(size::HAIRLINE, pal.hair),
     );
+    // **The pulldown's mark, after the run and inside the head's own clip** —
+    // the mock's `▾` beside `deck A · drift_night`, drawn rather than typed
+    // for [`CHEVRON_W`]'s reason. It is painted in the label's ink rather than
+    // the run's: the mark is a control and the name beside it is a readout,
+    // and the console draws every `▾` it has in `--c-faint`.
+    if let Some(target) = target {
+        let mark = target.chevron;
+        painter.add(egui::Shape::convex_polygon(
+            vec![
+                mark.left_top(),
+                mark.right_top(),
+                Pos2::new(mark.center().x, mark.max.y),
+            ],
+            pal.faint,
+            Stroke::NONE,
+        ));
+    }
     // **The mock draws the first pane's `keep` as `.pill.on` and the second
     // pane's as a plain `.pill`**, and what the lit one reads is now on the
     // page: the deck this pane is *showing* is on air. Deck A in the mock is
@@ -19534,7 +20498,33 @@ fn node_into(painter: &egui::Painter, pal: &Palette, rect: Rect, node: &Node) {
         pal.dim,
     );
     if let Some(authority) = node.authority {
-        auth_into(painter, pal, head, authority.level);
+        auth_into(painter, pal, head, node, authority.level);
+    }
+    // **The `keep` capsule at the right of the head**, and the chips above are
+    // laid out inside what it leaves — [`node_keep`], which is where both
+    // halves of that arithmetic are. A head that carries none draws none,
+    // which is [`Node::keep`]'s two cases rather than a capsule that refuses.
+    if let Some(pill) = node_keep(painter.ctx(), head, node) {
+        // **A plain `.mini` and never `.sel`**, which is the mock's own and is
+        // [`KeepPill`]'s note one row up read on a node: a keep is a press and
+        // not a setting, so there is nothing here for a wash to be *on*. The
+        // pane head's capsule carries one because it reads the deck's
+        // residency, and a node has none.
+        let galley = painter.layout_no_wrap(
+            KEEP_LABEL.to_owned(),
+            FontId::new(size::MINI_SIZE, FontFamily::Proportional),
+            pal.faint,
+        );
+        mini_into(painter, pal, pill, false, |painter, colour| {
+            painter.galley(
+                Pos2::new(
+                    pill.min.x + size::MINI_PAD_X,
+                    pill.center().y - galley.size().y * 0.5,
+                ),
+                galley,
+                colour,
+            );
+        });
     }
 
     // **The inputs this node declares, under its head and above its rows**,
@@ -19583,8 +20573,14 @@ fn node_into(painter: &egui::Painter, pal: &Palette, rect: Rect, node: &Node) {
 /// being `None`: authority is per node, so one chip over three renderers would
 /// be one of three answers drawn as *the* answer and a press on it would set
 /// three nodes at once.
-fn auth_into(painter: &egui::Painter, pal: &Palette, head: Rect, authority: Authority) {
-    for (level, rect) in auth_chips(painter.ctx(), head) {
+fn auth_into(
+    painter: &egui::Painter,
+    pal: &Palette,
+    head: Rect,
+    node: &Node,
+    authority: Authority,
+) {
+    for (level, rect) in auth_chips(painter.ctx(), head, node) {
         let galley = painter.layout_no_wrap(
             auth_word(level).to_owned(),
             FontId::new(size::AUTH_SIZE, FontFamily::Proportional),
@@ -19627,7 +20623,23 @@ fn auth_into(painter: &egui::Painter, pal: &Palette, head: Rect, authority: Auth
 /// Right-aligned, so the whole row has to be measured before the first chip
 /// can be placed: `.node-head`'s `.sep` pushes `.auth` to the end of the flex
 /// row.
-pub fn auth_chips(ctx: &egui::Context, head: Rect) -> impl Iterator<Item = (Authority, Rect)> {
+///
+/// # The node is taken because the `keep` capsule is at the same end
+///
+/// `.node-head` ends `.sep, .auth, .mini` — the capsule is hard against the
+/// head's padding and the chips are stepped back from it — so where a chip
+/// goes depends on whether this head carries one ([`node_keep`]). **The trim
+/// is inside this function rather than at its callers**, because a caller that
+/// forgot it would place three chips over the capsule, and the paint and the
+/// hit-test would agree with each other and disagree with the mock. Two
+/// callers each applying it correctly is a rule held by prose, which is
+/// exactly what `docs/contributing.md` §4's structural tier is against.
+pub fn auth_chips(
+    ctx: &egui::Context,
+    head: Rect,
+    node: &Node,
+) -> impl Iterator<Item = (Authority, Rect)> {
+    let head = auth_head(ctx, head, node);
     let widths: Vec<f32> = AUTHORITIES
         .into_iter()
         .map(|level| auth_width(ctx, level))
@@ -19645,6 +20657,76 @@ pub fn auth_chips(ctx: &egui::Context, head: Rect) -> impl Iterator<Item = (Auth
         })
         .collect::<Vec<_>>()
         .into_iter()
+}
+
+/// **Where a node head's `keep` capsule goes**, or `None` on a head that
+/// carries none.
+///
+/// The mock's `.node-head` is a flex row of the address, the name, a `.sep`,
+/// the `.auth` chips and then `<span class="mini">keep</span>` — so the
+/// capsule is hard against the head's right-hand padding and the chips are
+/// stepped back from it by [`size::NODE_HEAD_GAP`], which is `.node-head`'s
+/// own `gap: 7px`. That is why this is derived before [`auth_chips`] rather
+/// than beside it: the chips are laid out inside what this leaves.
+///
+/// **`None` on the two heads that carry no capsule** — [`Node::keep`], where
+/// the rule is written — and `None` on a head with no room for it, which is
+/// [`keep_pill`]'s rule one row down: *a control that does not fit in the row
+/// it is drawn in is no control at all, rather than half of one*.
+///
+/// **One derivation, asked twice** — [`node_into`] paints it and
+/// [`InspectorPane::keep_procedure`] hit-tests it, which is [`auth_chips`]'
+/// own rule: two copies of where a capsule is would be a capsule painted where
+/// a hand cannot press it.
+pub fn node_keep(ctx: &egui::Context, head: Rect, node: &Node) -> Option<Rect> {
+    node.keep?;
+    // Fonts are not valid until `egui` has run a pass — [`keep_pill`]'s guard,
+    // and before the first one there is nothing drawn here to press.
+    if ctx.cumulative_pass_nr() == 0 {
+        return None;
+    }
+    let w = ctx.fonts_mut(|f| {
+        f.layout_no_wrap(
+            KEEP_LABEL.to_owned(),
+            FontId::new(size::MINI_SIZE, FontFamily::Proportional),
+            Color32::PLACEHOLDER,
+        )
+        .size()
+        .x
+    }) + size::MINI_PAD_X * 2.0;
+    let pill = Rect::from_min_size(
+        Pos2::new(
+            head.max.x - size::NODE_HEAD_PAD_X - w,
+            head.center().y - size::MINI_H * 0.5,
+        ),
+        egui::vec2(w, size::MINI_H),
+    );
+    // Measured against the head's content box, exactly as [`keep_pill`] is:
+    // the capsule is placed from the right-hand padding, so what it runs off
+    // is the left one.
+    let room = head.width() - size::NODE_HEAD_PAD_X * 2.0;
+    (positive(head) && w <= room).then_some(pill)
+}
+
+/// **What is left of a node head for the authority chips** — the head, less
+/// the `keep` capsule and the gap before it where there is one.
+///
+/// One function because [`auth_into`] paints the chips and
+/// [`InspectorPane::set_authority`] hit-tests them, and a head trimmed in one
+/// of the two would be three chips drawn where a hand cannot press them. It is
+/// [`node_keep`]'s other half: the two controls at the right of this row are
+/// laid out from the right, the capsule first.
+fn auth_head(ctx: &egui::Context, head: Rect, node: &Node) -> Rect {
+    match node_keep(ctx, head, node) {
+        Some(keep) => Rect::from_min_max(
+            head.min,
+            Pos2::new(
+                keep.min.x - size::NODE_HEAD_GAP + size::NODE_HEAD_PAD_X,
+                head.max.y,
+            ),
+        ),
+        None => head,
+    }
 }
 
 /// One authority chip's width: its word at [`size::AUTH_SIZE`] inside
@@ -20351,6 +21433,25 @@ pub struct View {
     /// directory read the host does on the press that changed the scope. See
     /// [`View::scopes`] and [`Scope`].
     pub library: Vec<String>,
+    /// **What each row of [`View::library`] is**, in the same order — a Set or
+    /// a procedure, and the layers its badge names.
+    ///
+    /// **Empty is every row a Set with no badge**, which is what this bay drew
+    /// before ADR-0338 and is every test in this crate that does not say
+    /// otherwise. So a host that has not been changed to answer it draws
+    /// exactly what it drew, and a host that has hands the two halves over on
+    /// one press — see [`RowKind`], where that default is argued, and
+    /// [`View::rows`], which is what every control here reads.
+    ///
+    /// **The same seam as [`View::library`]**: a Set's layers are its file's
+    /// own `slot` records and a procedure's kind is the `kind` line of a
+    /// source, both of which are a directory read on the press that builds a
+    /// listing — and this crate reads no store (ADR-0156, P-0091).
+    ///
+    /// **Shorter than the listing is not an error**, for [`View::starred`]'s
+    /// reason read the other way: a row past the end of it is a Set with no
+    /// badges, which is a row this console can draw and act on.
+    pub kinds: Vec<RowKind>,
     /// **Which Sets this store has starred**, as their ids — and **empty** for
     /// a console with no store behind it, which is every test in this crate
     /// that does not say otherwise and is a listing whose every row draws a
@@ -20719,14 +21820,28 @@ pub struct View {
     /// the right answer; this one *narrows a listing*, and clamping it would
     /// leave the bay hiding Sets under a filter nobody chose.
     holds_at: Option<usize>,
-    /// **Which layer the `layer` field is set to**, or `None`.
+    /// **Which kinds of row the listing is showing**, which is the six chips
+    /// under the `holds` field — [`LibraryKinds::EVERYTHING`] where none of them
+    /// is on, which is where every run starts.
     ///
-    /// **A value and not a position**, where [`View::holds_at`] beside it is a
-    /// position, and it is [`View::transition`]'s distinction below: the layers
-    /// are the console's own closed list ([`LAYERS`]) and cannot change under
-    /// this pointer, where the `holds` candidates are a reading of a store that
-    /// can.
-    layer: Option<Layer>,
+    /// **A value and not a position**, where [`View::holds_at`] above it is a
+    /// position, and it is [`View::transition`]'s distinction below: the kinds
+    /// are the console's own closed list ([`KindChip::ALL`]) and cannot change
+    /// under this pointer, where the `holds` candidates are a reading of a
+    /// store that can.
+    ///
+    /// **It was `layer: Option<Layer>` until 2026-09-10**, the `layer…` field's
+    /// value, and ADR-0338 replaced that field with these six toggles: a cycle
+    /// names six of the sixty-four states this row has, and the two controls
+    /// ask different questions — *which Sets hold a node on this layer*, which
+    /// `Operation::ListSets` still carries, against *which kinds of row is this
+    /// listing showing*.
+    ///
+    /// **`showing` and not `kinds`**, because [`View::kinds`] is already the
+    /// row of what each *listed row* is: one field says what the bay is being
+    /// asked for and the other says what came back, and two fields called
+    /// `kinds` would be a name meaning two things.
+    showing: LibraryKinds,
     /// **Which pane head is taking letters, and what has been typed into it**
     /// — or `None` for a console where nothing is being named, which is where
     /// every run starts.
@@ -20778,6 +21893,39 @@ pub struct View {
     /// turns a wheel, which is every test in this crate and is a pane at the
     /// top of what its deck holds.
     scroll: [f32; PANES],
+    /// **Which deck each Inspector pane is pointed at**, one per pane, and the
+    /// console's ninth pointer — the pulldown on the pane head
+    /// (`docs/adr/0338-…`, decision 5).
+    ///
+    /// **Beside [`View::scroll`] because it is the same kind of thing**: a
+    /// pane's own answer, two panes are two of them, and neither is the
+    /// console's. It is not [`View::selection`] — that is *the* deck, one
+    /// value, what a key press is addressed to — and it is not
+    /// [`View::target`] either, which is the Library bay's load mark. Three
+    /// pointers naming a deck, and the whole reason there are three is that
+    /// each answers a different question.
+    ///
+    /// **It cannot live in [`View::inspector`]**, which is [`View::naming`]'s
+    /// and [`View::scroll`]'s reason: a pane is rewritten whenever a Set lands,
+    /// so a target kept in one would be the host's answer read back as the
+    /// console's question. [`Pane::deck`] is what the host *filled from this*,
+    /// and the two are a pointer and a reading rather than two copies.
+    ///
+    /// **Private, with [`View::point_pane`] the only way in** —
+    /// [`View::selection`]'s rule, and that method is what refuses a deck the
+    /// mixer draws no strip for.
+    ///
+    /// **Deck A and deck B**, which is where a run opens and is the mock's own
+    /// two heads.
+    pane_deck: [u8; PANES],
+    /// **Which pane head's pulldown is down**, or `None` — the console's own
+    /// state, like [`View::target_open`] and [`Arrangement::menu`].
+    ///
+    /// One `Option` and not one flag per pane, for [`Naming`]'s reason read on
+    /// a card: `input::claim`'s rule 2 hands every press to a card that is
+    /// down, so two down at once would be two hands mid-choice with nothing on
+    /// the panel saying which one the next press belongs to.
+    pane_open: Option<usize>,
     /// **What the next fade, crossfade or wipe means** — the wipe's front
     /// shape and angle, the grid it starts on and how long it lasts — and the
     /// fourth of this console's pointers.
@@ -20868,6 +22016,7 @@ impl View {
             // is not a number this crate has, and the list is written once
             // rather than per frame.
             library: Vec::new(),
+            kinds: Vec::new(),
             // **Nothing starred**, which is a console with no store behind it
             // and is every test in this crate that does not say otherwise —
             // `View::library`'s rule one field down.
@@ -20894,7 +22043,7 @@ impl View {
             // narrowed one — where a run begins, and every test in this crate
             // that does not say otherwise.
             holds_at: None,
-            layer: None,
+            showing: LibraryKinds::EVERYTHING,
             // **No head asking for a name**, which is where a run starts and
             // is every test in this crate that does not say otherwise: the two
             // pane heads are readouts until a hand lands on one of them.
@@ -20903,6 +22052,14 @@ impl View {
             // run starts and is every test in this crate that does not turn a
             // wheel.
             scroll: [0.0; PANES],
+            // **Deck A in the first pane and deck B in the second**, which is
+            // the mock's two heads and is what this console showed before the
+            // pulldown existed: the host filled pane `n` from slot `n`, and
+            // that arrangement is now a *default* rather than a rule.
+            pane_deck: PANE_DECKS,
+            // **No pulldown down**, which is where a run starts and is every
+            // test in this crate that does not open one.
+            pane_open: None,
             // Nothing outstanding on any slot, which is a console with no
             // engine behind it and is also every ordinary frame of one that
             // has. Room for as many rows as a deck can ever have slots, so
@@ -21310,6 +22467,13 @@ impl View {
         Menued {
             row: self.menu_row,
             decks: self.mixer.len().min(DECKS),
+            // **Whether the row it is on can be sent**, which is whether it is
+            // a Set: a procedure row's menu is the loads and no separator
+            // (ADR-0338). Read here beside the row it is about, so the card
+            // that is drawn and the card a press lands on are one reading.
+            sends: self
+                .menu_row
+                .is_some_and(|row| self.rows().set(row).is_some()),
         }
     }
 
@@ -21583,6 +22747,127 @@ impl View {
         moved
     }
 
+    /// **Which deck one Inspector pane is pointed at** — see
+    /// [`View::pane_deck`] the field, which is where the argument is.
+    ///
+    /// **This is what the host reads to fill the pane**, which is
+    /// [`View::target_deck`]'s arrangement one bay along: the pointer is the
+    /// console's and what is under it is the host's answer to *what is that
+    /// deck playing*.
+    ///
+    /// Deck A for a pane index past [`PANES`], which is a caller's error and
+    /// not a state — [`View::scroll_in`]'s own rule.
+    ///
+    /// [`View::pane_deck`]: Self::pane_deck
+    pub fn pane_deck(&self, pane: usize) -> u8 {
+        self.pane_deck.get(pane).copied().unwrap_or(0)
+    }
+
+    /// **Every pane's target at once**, which is what a host reads before it
+    /// fills [`View::inspector`]: the panes are written through a `&mut` of
+    /// that field, so asking pane by pane while it is borrowed is a second
+    /// borrow of this struct. It is two bytes and `Copy`.
+    pub fn pane_decks(&self) -> [u8; PANES] {
+        self.pane_deck
+    }
+
+    /// **Point one pane at `deck`**, put the card away, and answer whether
+    /// anything moved.
+    ///
+    /// **A deck the mixer has no strip for is refused**, which is
+    /// [`View::select`]'s rule and [`View::aim_at`]'s read a third time rather
+    /// than a third rule: the head says which deck it is showing, so a target
+    /// past the deck's slots would be a letter naming a deck with nothing
+    /// under it.
+    ///
+    /// **It refuses rather than clamping**, for `select`'s reason: a pick of
+    /// deck D at a two-slot deck means *deck D*, and clamping would point the
+    /// pane at deck B — a different deck than the one asked for.
+    ///
+    /// **Nothing else moves**, and that is the whole of what this mark is for:
+    /// not the deck selection, not the pane next door, not the Library bay's
+    /// load target. Each of those is a pointer of its own with a writer of its
+    /// own, and this one touches none of them.
+    ///
+    /// **The card goes away here**, which is [`View::aim_at`]'s clause: a pick
+    /// is one gesture and this is the whole of it, so a card left down would
+    /// go on claiming every press on the console. It is put away even where
+    /// the pane did not move — picking the deck a pane already shows is still
+    /// a hand finishing what it started.
+    ///
+    /// The `bool` is [`View::select`]'s: a caller repaints on a move and not
+    /// on a press.
+    pub fn point_pane(&mut self, pane: usize, deck: u8) -> bool {
+        if usize::from(deck) >= self.mixer.len() {
+            return false;
+        }
+        let Some(at) = self.pane_deck.get_mut(pane) else {
+            return false;
+        };
+        let moved = *at != deck || self.pane_open.is_some();
+        *at = deck;
+        self.pane_open = None;
+        moved
+    }
+
+    /// **Which pane head's pulldown is down**, or `None` — see
+    /// [`View::pane_open`] the field.
+    ///
+    /// [`View::pane_open`]: Self::pane_open
+    pub fn pane_target_open(&self) -> Option<usize> {
+        self.pane_open
+    }
+
+    /// **Put one pane head's card down**, and answer whether anything moved.
+    ///
+    /// **Refused for a pane this console is not showing**, which is
+    /// [`View::open_wiring`]'s own guard and its reason: a card with no head
+    /// under it offers nothing to pick and nothing to leave by, and
+    /// `input::claim`'s rule 2 would hand it every press until a second one
+    /// shut it.
+    pub fn open_pane_target(&mut self, pane: usize) -> bool {
+        if pane >= PANES || self.inspector.get(pane).is_none() {
+            return false;
+        }
+        let moved = self.pane_open != Some(pane);
+        self.pane_open = Some(pane);
+        moved
+    }
+
+    /// **Put it away**, and answer whether one was down.
+    pub fn shut_pane_target(&mut self) -> bool {
+        let was = self.pane_open.is_some();
+        self.pane_open = None;
+        was
+    }
+
+    /// **What one pane head's pulldown is**, laid out — the mark and, while it
+    /// is down, the card under it.
+    ///
+    /// Read once for the frame and handed to the paint and to the press,
+    /// exactly as [`View::target`] is: the mark that is drawn and the mark a
+    /// press lands on are one derivation of one reading.
+    ///
+    /// `None` is a head with no run in it, which is [`deck_name`]'s refusal —
+    /// see [`pane_target`].
+    pub fn pane_pulldown(
+        &self,
+        ctx: &egui::Context,
+        at: &InspectorPane,
+        pane: &Pane,
+        index: usize,
+    ) -> Option<PaneTarget> {
+        pane_target(
+            ctx,
+            at,
+            pane,
+            index,
+            self.naming_set_in(index),
+            self.mixer.len(),
+            self.pane_open == Some(index),
+        )
+    }
+
     /// **What the Library bay's cursor row has open**, or `None` where
     /// nothing is.
     ///
@@ -21671,6 +22956,29 @@ impl View {
         match self.scope() {
             Some(scope) if !scope.lists_sets() => &[],
             _ => &self.library,
+        }
+    }
+
+    /// **The listing as this bay's controls read it** — the names of
+    /// [`View::sets`] and what each of those rows is ([`View::kinds`]),
+    /// answered together.
+    ///
+    /// **One reading and not two**, which is [`Rows`]' own argument: the star,
+    /// the `params` chip, the `load` button, the row menu and the carry each
+    /// need to know whether the row under them is a Set or a procedure, and two
+    /// slices fetched separately are two slices that can disagree about it.
+    ///
+    /// **Empty under [`Scope::History`]**, exactly as [`View::sets`] is and for
+    /// its reason: those rows are versions, and every control that takes this
+    /// refuses a row it cannot name rather than being told which scope is
+    /// marked.
+    pub fn rows(&self) -> Rows<'_> {
+        match self.scope() {
+            Some(scope) if !scope.lists_sets() => Rows::NONE,
+            _ => Rows {
+                names: &self.library,
+                kinds: &self.kinds,
+            },
         }
     }
 
@@ -21844,7 +23152,7 @@ impl View {
                 .holds_at
                 .and_then(|at| self.holds.get(at))
                 .map(String::as_str),
-            layer: self.layer,
+            kinds: self.showing,
         }
     }
 
@@ -21877,23 +23185,25 @@ impl View {
         }
     }
 
-    /// **Narrow the listing to `holds` and `layer`, and answer whether that
-    /// moved anything.**
+    /// **Narrow the listing to `holds` and to these kinds, and answer whether
+    /// that moved anything.**
     ///
     /// **A `holds` this console cannot draw is refused**, which is
     /// [`View::select_scope`]'s rule and the same reasoning: the field reads
     /// the value, so a filter that is not among [`View::holds`] is a word the
-    /// bay would draw with no way to step off it. The layers are not refused,
-    /// because [`LAYERS`] is every layer there is.
+    /// bay would draw with no way to step off it. The kinds are not refused,
+    /// because every one of the sixty-four states six toggles can be in is a
+    /// row this bay can draw.
     ///
     /// **It refuses the pair or neither**, so a call that would have set the
-    /// layer and dropped the `holds` on the floor sets nothing. The one caller
-    /// hands back an [`Operation::ListSets`] this bay built, so the refusal is
-    /// a caller's error rather than a state — as [`View::select_scope`]'s is.
+    /// kinds and dropped the `holds` on the floor sets nothing. The two callers
+    /// hand back an [`Operation::ListSets`] or an
+    /// [`Operation::FilterLibrary`] this bay built, so the refusal is a
+    /// caller's error rather than a state — as [`View::select_scope`]'s is.
     ///
     /// The `bool` is [`View::select`]'s: a caller repaints on a move and not on
     /// a press.
-    pub fn narrow(&mut self, holds: Option<&str>, layer: Option<Layer>) -> bool {
+    pub fn narrow(&mut self, holds: Option<&str>, kinds: LibraryKinds) -> bool {
         let holds_at = match holds {
             None => None,
             Some(want) => match self.holds.iter().position(|held| held == want) {
@@ -21901,9 +23211,9 @@ impl View {
                 None => return false,
             },
         };
-        let moved = self.filters() != (Filters { holds, layer });
+        let moved = self.filters() != (Filters { holds, kinds });
         self.holds_at = holds_at;
-        self.layer = layer;
+        self.showing = kinds;
         if moved {
             // **The cursor goes back to the top of a listing it has never
             // seen**, which is [`View::select_scope`]'s reason word for word:
@@ -22371,6 +23681,11 @@ impl View {
         let chain = self.master_chain;
         let strips = self.mixer.as_slice();
         let sets = self.library.as_slice();
+        // **And what each of those rows is**, read beside the names for their
+        // reason: the two halves are one listing (`Rows`), and a badge drawn
+        // from a second read could describe a row that had been rewritten
+        // under it (ADR-0338).
+        let kinds = self.kinds.as_slice();
         // **Which of them are starred, read once for the frame beside the
         // listing it points into** — `draw` takes `&mut self`, and the arm
         // below borrows both.
@@ -22421,6 +23736,10 @@ impl View {
         // **Which `uses` line has its card down**, read once for the frame like
         // every other pointer this console keeps — see [`View::wiring_open`].
         let wiring = self.wiring_open;
+        // **And which pane head's pulldown is down, read the same way** — see
+        // [`View::pane_open`]. The count of decks it offers is the strips',
+        // which `load` above has already read off the same slice.
+        let pane_open = self.pane_open;
         let menued = self.menued();
         // **And how far the Library bay is scrolled**, read once for the frame
         // beside the two pointers above it: `library` clamps it and hands the
@@ -22652,11 +23971,20 @@ impl View {
                             // being read answers, where everything under it is
                             // what came back.
                             filters_into(ui, &pal, &bay, narrowed);
+                            // **And the kind row under the field**, which is
+                            // the filter row's own sentence one band down: it
+                            // narrows what the library answers by what a row
+                            // *is*, where the field above narrows by what a
+                            // Set is made of (ADR-0338).
+                            kinds_into(ui, &pal, &bay, narrowed);
                             library_into(
                                 ui,
                                 &pal,
                                 &bay,
-                                Listed { sets, starred },
+                                Listed {
+                                    rows: Rows { names: sets, kinds },
+                                    starred,
+                                },
                                 cursor_row,
                                 load,
                                 opened,
@@ -22756,15 +24084,29 @@ impl View {
             // painted, and nothing else on the panel overlaps them.
             for (index, pane) in panes.iter().enumerate().take(PANES) {
                 if let Some(at) = inspector(panel.layout(), index, pane, scrolled[index]) {
+                    let typed = naming
+                        .filter(|naming| naming.pane == index)
+                        .map(Naming::typed);
                     inspector_into(
                         ui,
                         &pal,
                         &at,
                         pane,
                         on_air(strips, pane.deck),
-                        naming
-                            .filter(|naming| naming.pane == index)
-                            .map(Naming::typed),
+                        typed,
+                        // **The same derivation `claim` hit-tests**, asked
+                        // here rather than inside the paint because the rows
+                        // it offers are the mixer's, and this loop already
+                        // borrows what a reading of them would come off.
+                        pane_target(
+                            ui.ctx(),
+                            &at,
+                            pane,
+                            index,
+                            typed,
+                            load.decks,
+                            pane_open == Some(index),
+                        ),
                     );
                 }
             }
@@ -22834,6 +24176,29 @@ impl View {
                                 pane.nodes.get(node).and_then(|at| at.uses.get(input)),
                             ) {
                                 uses_card_into(ui, &pal, &line, uses, card, room);
+                            }
+                        }
+                    }
+                }
+            }
+            // **A pane head's deck list, over everything for the same reason**
+            // — it hangs out of a head at the top of a pane and down over that
+            // pane's own groups, so a card painted from inside the pane loop
+            // would go on before them. It can never be down while any of the
+            // others is, because `input`'s rule 2 sends the press that would
+            // open a second one to whichever is already open.
+            if let Some(pane_at) = pane_open {
+                if let Some(pane) = panes.get(pane_at) {
+                    if let Some(at) = inspector(panel.layout(), pane_at, pane, scrolled[pane_at]) {
+                        let typed = naming
+                            .filter(|naming| naming.pane == pane_at)
+                            .map(Naming::typed);
+                        let room = to_egui(panel.layout().viewport());
+                        if let Some(target) =
+                            pane_target(ui.ctx(), &at, pane, pane_at, typed, load.decks, true)
+                        {
+                            if let Some(card) = target.list(room) {
+                                pane_list_into(ui, &pal, &target, pane.deck, card);
                             }
                         }
                     }
@@ -23930,6 +25295,13 @@ mod tests {
                         index: 0,
                     },
                     level: Authority::Manual,
+                }),
+                // **A node with a source**, which every node but the built-in
+                // camera has — and the capsule this draws is what the tests
+                // below measure the head's right-hand end against.
+                keep: Some(NodeAt {
+                    layer: Layer::L1,
+                    index: 0,
                 }),
                 uses: Vec::new(),
                 renderers: Vec::new(),

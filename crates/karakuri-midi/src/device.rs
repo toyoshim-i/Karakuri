@@ -60,7 +60,7 @@
 
 use std::sync::mpsc::{self, Receiver, Sender};
 
-use midir::{MidiInput, MidiInputConnection};
+use midir::{MidiInput, MidiInputConnection, MidiOutput, MidiOutputConnection};
 
 use crate::Message;
 
@@ -205,5 +205,202 @@ impl Port {
     /// The port that was opened, as the device named it.
     pub fn name(&self) -> &str {
         &self.name
+    }
+}
+
+/// **An open MIDI output, written to from a thread of its own.**
+///
+/// The other direction, and it is a different problem from [`Port`]'s. An
+/// input hands this process bytes on somebody else's thread and the frame
+/// drains them; an output is written to *by the frame*, and
+/// `MidiOutputConnection::send` is a system call into a driver that this
+/// process does not own the timing of. **Nothing on the frame path waits**
+/// (`docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md`),
+/// so the frame does not make that call.
+///
+/// ## The shape is ADR-0067's, one stream along
+///
+/// A **bounded** channel to a thread that owns the connection, and a frame
+/// that finds it full **drops and counts** rather than blocking or growing:
+///
+/// - **Bounded**, because the queue is a picture of one moment. A surface's
+///   LEDs and faders show where the deck is *now*, so a backlog is a fader
+///   travelling through positions it was already past — unlike a session
+///   stream, where every record is owed.
+/// - **Dropped rather than blocked**, because the alternative is the render
+///   thread waiting on a driver. What a drop costs is one stale control until
+///   the next change moves it, and the caller re-states a control whenever the
+///   deck changes it.
+/// - **Counted**, because a surface that quietly stopped following the deck is
+///   the failure nobody notices — `docs/adr/0067-the-session-writer-never-blocks-never-grows-and-never-silently-drops.md`
+///   is the record and [`Out::dropped`] is the count, said once by whoever
+///   holds this.
+///
+/// **The connection is opened on the sender's own thread** rather than moved
+/// on to it, and the result is carried back over a one-shot channel: the
+/// caller still finds out why a port would not open, and nothing here depends
+/// on a `midir` connection being `Send`.
+pub struct Out {
+    to: mpsc::SyncSender<[u8; 3]>,
+    name: String,
+    dropped: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+}
+
+/// **How many messages may be in flight**, and it is a whole surface's worth
+/// several times over.
+///
+/// A frame writes at most one message per mapped control that changed, and a
+/// map is single figures to a few dozen lines; a pair is two. So this is full
+/// only when the sender thread has stopped making progress at all — a driver
+/// that has stopped taking bytes, or a device unplugged mid-set — which is
+/// exactly the case a bound exists for.
+const QUEUE: usize = 256;
+
+impl Out {
+    /// Open the output whose name contains `wanted`, case-insensitively, or
+    /// `Err` naming every output there was.
+    ///
+    /// A substring for [`Port::open`]'s reason exactly, and it matters more
+    /// here: a device's input and output ports are named by the manufacturer
+    /// and often differ past the first word — "nanoKONTROL2 SLIDER/KNOB" in
+    /// and "nanoKONTROL2 CTRL" out — so whoever pairs an output with an input
+    /// hands in as much of the name as the two share.
+    pub fn open(wanted: &str) -> Result<Out, String> {
+        let (ready, opened) = mpsc::channel::<Result<String, String>>();
+        let (to, from) = mpsc::sync_channel::<[u8; 3]>(QUEUE);
+        let wanted = wanted.to_owned();
+        std::thread::Builder::new()
+            .name("karakuri-midi-out".to_string())
+            .spawn(move || match Out::connect(&wanted) {
+                Err(why) => {
+                    let _ = ready.send(Err(why));
+                }
+                Ok((mut connection, name)) => {
+                    if ready.send(Ok(name)).is_err() {
+                        return;
+                    }
+                    // **The only place in this process that writes MIDI.**
+                    // `recv` blocks, which is the point: this thread waits so
+                    // that the frame never does. A send that fails is a port
+                    // that has gone, and a MIDI callback is the last place to
+                    // report that — the drop count is what says so.
+                    while let Ok(bytes) = from.recv() {
+                        let _ = connection.send(&bytes);
+                    }
+                }
+            })
+            .map_err(|e| format!("no thread for MIDI out: {e}"))?;
+        let name = opened
+            .recv()
+            .map_err(|_| "the MIDI output thread stopped before it opened a port".to_string())??;
+        Ok(Out {
+            to,
+            name,
+            dropped: std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+        })
+    }
+
+    /// Find the port and connect, on the sender thread. Split out so that
+    /// every early return above is one `match`.
+    fn connect(wanted: &str) -> Result<(MidiOutputConnection, String), String> {
+        let output = MidiOutput::new("karakuri").map_err(|e| format!("no MIDI at all: {e}"))?;
+        let ports = output.ports();
+        let named: Vec<(usize, String)> = ports
+            .iter()
+            .enumerate()
+            .map(|(i, p)| (i, output.port_name(p).unwrap_or_else(|_| "?".to_string())))
+            .collect();
+        let found = named
+            .iter()
+            .find(|(_, name)| {
+                wanted.is_empty() || name.to_lowercase().contains(&wanted.to_lowercase())
+            })
+            .ok_or_else(|| {
+                let list = if named.is_empty() {
+                    "there are no MIDI outputs".to_string()
+                } else {
+                    format!(
+                        "the outputs are: {}",
+                        named
+                            .iter()
+                            .map(|(_, n)| n.as_str())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
+                };
+                format!("no MIDI output matching `{wanted}` — {list}")
+            })?;
+        let (index, name) = (found.0, found.1.clone());
+        let connection = output
+            .connect(&ports[index], "karakuri-out")
+            .map_err(|e| format!("could not open `{name}`: {e}"))?;
+        Ok((connection, name))
+    }
+
+    /// **Queue one message. Never waits.**
+    ///
+    /// `true` if it was queued and `false` if it was dropped — a full queue or
+    /// a sender thread that has gone. A dropped message is counted either way,
+    /// so a caller that ignores the answer still has [`Out::dropped`] to say
+    /// it with.
+    pub fn send(&self, message: [u8; 3]) -> bool {
+        match self.to.try_send(message) {
+            Ok(()) => true,
+            Err(_) => {
+                self.dropped
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                false
+            }
+        }
+    }
+
+    /// How many messages have been dropped over the whole run.
+    pub fn dropped(&self) -> usize {
+        self.dropped.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// The port that was opened, as the device named it.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// **A full queue drops rather than blocking**, which is the property the
+    /// bound exists for and the one that cannot be checked with a device
+    /// attached: what it is about is a sender thread that has stopped taking
+    /// bytes.
+    ///
+    /// The queue with nothing draining it stands in for that exactly — no
+    /// port, no thread, and the same `SyncSender` the frame writes to. A test
+    /// that hangs here is the failure it is looking for.
+    #[test]
+    fn a_full_queue_drops_rather_than_blocking() {
+        let (to, held) = mpsc::sync_channel::<[u8; 3]>(QUEUE);
+        let out = Out {
+            to,
+            name: "nothing is draining this".to_string(),
+            dropped: std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+        };
+        for i in 0..QUEUE {
+            assert!(out.send([0xb0, 1, 0]), "message {i} was dropped with room");
+        }
+        assert_eq!(out.dropped(), 0);
+        // The queue is full and this returns rather than waiting.
+        for i in 0..8 {
+            assert!(
+                !out.send([0xb0, 1, 0]),
+                "message {i} past the bound was queued"
+            );
+        }
+        assert_eq!(out.dropped(), 8, "a drop went uncounted");
+        // And a receiver that has gone is a drop too, rather than a panic on
+        // the frame path: a run that is ending is not a run that should fault.
+        drop(held);
+        assert!(!out.send([0xb0, 1, 0]));
+        assert_eq!(out.dropped(), 9);
     }
 }

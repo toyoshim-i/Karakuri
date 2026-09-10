@@ -589,8 +589,8 @@ use crate::panel::{Panel, GRAB};
 use crate::view::{
     arrangement, audio_in, bay_grip, deck_head, deck_name, inspector, keep_pill, learn_pill,
     library, look, map_pill, master, mcp_pill, mixer, outputs, program_bay, program_head,
-    sequencer, staging, tracker_group, transition, transport, Field, Scope, View, BAY_GRIPS, DECKS,
-    REGIONS,
+    sequencer, staging, tracker_group, transition, transport, Field, KindChip, Scope, View,
+    BAY_GRIPS, DECKS, REGIONS,
 };
 
 /// **What each of rule 4's derivations answers for**, one row per probe and in
@@ -723,7 +723,7 @@ use crate::view::{
 /// answering a different question. So the **list** is the control and which row
 /// is inside [`crate::view::LibraryBay::take`], which is the `params` chip's
 /// row read the other way round.
-pub const PROBES: [Probe; 34] = [
+pub const PROBES: [Probe; 38] = [
     Probe {
         name: "the Outputs row's sinks",
         claims: 1,
@@ -799,6 +799,21 @@ pub const PROBES: [Probe; 34] = [
         claims: 1,
         ask: on_keep,
     },
+    // **The mark between the run and the count, and the card it puts down.**
+    // Two controls and one row, which is the Library bay's `load` button and
+    // deck pulldown's arrangement: one derivation, one ask.
+    //
+    // **Its place in this table is a cost ordering and nothing else** — the
+    // header says so of every row — and the mark cannot be confused with the
+    // run beside it either way: `deck_name` clips the run one gap short of
+    // this rectangle, so the two are disjoint by construction rather than by
+    // which probe answers first. While the card is down `claim`'s rule 2 has
+    // already taken the press.
+    Probe {
+        name: "the Inspector pane heads' deck pulldown",
+        claims: 2,
+        ask: on_pane_target,
+    },
     Probe {
         name: "a deck head's seven",
         claims: 7,
@@ -829,6 +844,15 @@ pub const PROBES: [Probe; 34] = [
         claims: crate::view::AUTHORITIES.len(),
         ask: on_auth,
     },
+    // **The capsule at the right of the same head**, and the count is **one**
+    // for the renderer row's reason and not the authority chips': how many
+    // heads draw one is a property of the Set in the slot, where the three
+    // levels are a closed list this console owns.
+    Probe {
+        name: "a node head's keep capsule",
+        claims: 1,
+        ask: on_node_keep,
+    },
     Probe {
         name: "a sensitivity row's curve and take back",
         claims: 2,
@@ -858,6 +882,16 @@ pub const PROBES: [Probe; 34] = [
         name: "the Library bay's filter fields",
         claims: Field::ALL.len(),
         ask: on_filter,
+    },
+    Probe {
+        name: "the Library bay's kind chips",
+        claims: KindChip::ALL.len(),
+        ask: on_kinds,
+    },
+    Probe {
+        name: "the Library bay's row badges",
+        claims: 1,
+        ask: on_badges,
     },
     Probe {
         name: "the params chip in the Library bay's foot",
@@ -1265,6 +1299,45 @@ fn on_keep(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
     })
 }
 
+/// **The `▾` in each Inspector pane's head, and the card a press on it brings
+/// down** — two controls and one row, which is the Library bay's `load` button
+/// and deck pulldown's arrangement and its reason: they are one derivation and
+/// one ask.
+///
+/// **The mark emits nothing**, which is what makes it a control here and no
+/// row of its own on the operations page: it opens a list, and *open the list*
+/// is not something a map or a model could want to say (ADR-0305). The card's
+/// rows emit `PointPane`.
+///
+/// **The card is asked first**, because it is drawn over the pane the mark
+/// hangs off — a press inside it belongs to the card and not to the groups
+/// under it. That is [`on_uses`]'s own order one row down, and while the card
+/// is down [`claim`]'s rule 2 has already answered anyway; this row is what
+/// makes the *mark* reachable when it is not.
+fn on_pane_target(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    let room = crate::view::to_egui(panel.layout().viewport());
+    view.inspector.iter().enumerate().any(|(index, pane)| {
+        inspector(panel.layout(), index, pane, view.scroll_in(index))
+            .and_then(|at| view.pane_pulldown(ctx, &at, pane, index))
+            .is_some_and(|target| target.hit(p) || target.picked(room, p).is_some())
+    })
+}
+
+/// **The `keep` capsule on a node group's head**, and it is [`on_auth`]'s
+/// arrangement at the other end of the same row: the pane is derived per index
+/// and the capsule from the group's head.
+///
+/// **A head with nothing to keep is not a target** — `Node::keep` is `None` on
+/// a head standing over several nodes and on the built-in camera — so the two
+/// absences the mock draws fall out of the derivation rather than out of a
+/// check here.
+fn on_node_keep(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    view.inspector.iter().enumerate().any(|(index, pane)| {
+        inspector(panel.layout(), index, pane, view.scroll_in(index))
+            .is_some_and(|at| at.keep_procedure(ctx, pane, p).is_some())
+    })
+}
+
 /// **The deck head's seven, one pane at a time**, and each pane is
 /// derived once for all of them exactly as a strip is: the anchor's
 /// place is measured from the mode chip's, the arrows' from the
@@ -1487,6 +1560,58 @@ fn on_filter(panel: &Panel, _ctx: &egui::Context, view: &View, p: Point) -> bool
     .is_some_and(|bay| bay.filter(&view.holds, view.filters(), p).is_some())
 }
 
+/// **The Library bay's six kind chips**, one row under the field, and the bay
+/// is derived again for [`on_filter`]'s reason.
+///
+/// **It asks `egui` for a word width apiece**, which is the scope chips' cost
+/// two rows up and the same argument: a chip is as wide as the word in it, and
+/// the only thing that knows how wide a word is is the thing that will paint
+/// it. `LibraryBay::kind` is the derivation, asked for the whole row rather
+/// than chip by chip, so a press that lands between two of them is on the row's
+/// own ground and belongs to nobody.
+fn on_kinds(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    library(
+        panel.layout(),
+        &view.scopes,
+        &view.library,
+        view.opened(),
+        view.pointed(),
+        view.library_scroll(),
+    )
+    .is_some_and(|bay| bay.kind(ctx, view.filters(), p).is_some())
+}
+
+/// **A row's badges**, which say what that row implements.
+///
+/// **A readout and still a row here**, which is the `map` pill's own sentence
+/// in this table: nothing is pressed, a press on one lands on the panel and
+/// takes the row in hand exactly as a press on the name does, and what this row
+/// buys is the tooltip — the words that say what a badge means and that the
+/// control which narrows by kind is the chip row above (ADR-0338).
+///
+/// **Its count is one for the stars' reason**: a pointer is over the badges of
+/// one row of however many the bay drew, and how many that is moves when a
+/// divider moves.
+fn on_badges(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    let at = egui::Pos2::new(p.x, p.y);
+    library(
+        panel.layout(),
+        &view.scopes,
+        &view.library,
+        view.opened(),
+        view.pointed(),
+        view.library_scroll(),
+    )
+    .is_some_and(|bay| {
+        let rows = view.rows();
+        bay.list.contains(at)
+            && bay.drawn().any(|index| {
+                bay.badges(ctx, index, &rows.badges(index))
+                    .any(|(_, box_)| box_.contains(at))
+            })
+    })
+}
+
 /// **The `params` chip in the Library bay's foot**, and it is the
 /// one control in this bay that is not in its head: the chips say
 /// which library and the fields narrow it, where this reads the row
@@ -1579,7 +1704,7 @@ fn on_star(panel: &Panel, _ctx: &egui::Context, view: &View, p: Point) -> bool {
         view.pointed(),
         view.library_scroll(),
     )
-    .is_some_and(|bay| bay.starred(view.sets(), &view.starred, p).is_some())
+    .is_some_and(|bay| bay.starred(view.rows(), &view.starred, p).is_some())
 }
 
 /// **The rows of the Library bay's list**, and they are the first
@@ -1617,7 +1742,7 @@ fn on_row(panel: &Panel, _ctx: &egui::Context, view: &View, p: Point) -> bool {
         view.library_scroll(),
     )
     .is_some_and(|bay| {
-        bay.take(view.sets(), p).is_some() || bay.land(view.versions(), view.target(), p).is_some()
+        bay.take(view.rows(), p).is_some() || bay.land(view.versions(), view.target(), p).is_some()
     })
 }
 
@@ -1731,6 +1856,12 @@ pub fn claim(panel: &mut Panel, ctx: &egui::Context, view: &View, p: Point) -> C
         // else is the dismissal (`docs/adr/0329-…`). It can never be down while
         // any of the others is, for their reason.
         || view.wiring_open().is_some()
+        // **And a pane head's deck list, which is a sixth**: it hangs off the
+        // `▾` in a pane head and down over that pane's own groups, so while it
+        // is down a press inside it belongs to the card and a press anywhere
+        // else is the dismissal (`docs/adr/0338-…`, decision 5). It can never
+        // be down while any of the others is, for their reason.
+        || view.pane_target_open().is_some()
         // **And a row's menu, which is a fourth**, hanging off a row of that
         // same list and down over the rows under it. It is here rather than
         // among rule 4's controls for the reason the three above it are: a
@@ -1815,6 +1946,7 @@ pub fn wheeled(panel: &mut Panel, view: &View, p: Point) -> Option<Turned> {
         || view.naming_set().is_some()
         || view.target_open()
         || view.wiring_open().is_some()
+        || view.pane_target_open().is_some()
         || view.menu_open()
     {
         return None;

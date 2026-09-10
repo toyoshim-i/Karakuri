@@ -95,6 +95,7 @@ fn mock() -> Pane {
         aimed: None,
         nodes: vec![
             Node {
+                keep: None,
                 addr: "L2:0".to_owned(),
                 name: "swirl_warp".to_owned(),
                 authority: None,
@@ -111,6 +112,7 @@ fn mock() -> Pane {
                 ],
             },
             Node {
+                keep: None,
                 addr: "L1:1".to_owned(),
                 name: "sphere_shell".to_owned(),
                 authority: None,
@@ -119,6 +121,7 @@ fn mock() -> Pane {
                 params: vec![row(2, "detail", Some((Layer::L1, 1)))],
             },
             Node {
+                keep: None,
                 addr: "L4".to_owned(),
                 name: "renderers".to_owned(),
                 authority: None,

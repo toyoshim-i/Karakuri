@@ -115,11 +115,61 @@
 //! carries beside it, and the place that writes the record fills it in
 //! ([ADR-0192](../../../docs/adr/0192-an-operation-asks-for-what-a-surface-can-say-and-the-record-stays-whole.md)).
 //!
-//! **It is 7-bit.** A control change carries 128 positions and this reads them
-//! as 128 positions; the 14-bit MSB/LSB convention is not implemented. That is
-//! a real coarseness on a gain — about 0.8% of the range per step — and the
-//! honest note is that it has not been a problem to look at rather than that it
-//! is fine in principle.
+//! ## A fader is 128 positions, or 16384 where the line says `cc14`
+//!
+//! A control change carries seven bits, and `cc 1 -> gain 0` reads them as 128
+//! positions — about 0.8% of a gain's range per step, which is a real
+//! coarseness and was the whole of what this crate did. **`cc14 <msb> <lsb> ->
+//! <control>` is the pair**, the MIDI convention where one controller carries
+//! the top seven bits and a second carries the bottom seven: the value is
+//! `(msb << 7) | lsb` over 16384 positions, scaled onto the target's range
+//! exactly as a 7-bit line's is.
+//!
+//! **Both numbers are written out.** The convention pairs `n` with `n + 32`
+//! and controllers exist that do not honour it, so the line names the two it
+//! means and an operator checks them against their device's manual rather than
+//! against a convention. A pair that is one controller twice, or whose second
+//! half is past 127, is refused at parse **naming both numbers**.
+//!
+//! ### The lone MSB moves the control coarsely and the LSB refines it
+//!
+//! A device sends the MSB first and the LSB after it, and the two are two
+//! messages with a frame boundary free to fall between them. **An MSB on its
+//! own is read as the 7-bit value it is** — `msb / 127`, the same reading
+//! `cc <msb>` would give — and the LSB that follows re-states the control at
+//! `((msb << 7) | lsb) / 16383`. So **both ends stay exact**: a fader at the
+//! top sends MSB 127 and reaches 1.0 whether or not its LSB arrives, and a
+//! surface that sends MSBs only is a 7-bit fader on the same line. **A lone
+//! LSB moves nothing** — [`Map::operation`] answers `None` for it — because
+//! there is nothing to refine until an MSB has been seen for that control.
+//!
+//! Nothing is held back and nothing is timed: **no message waits for its
+//! partner**, so no fader is ever left between two values by a pair that did
+//! not finish. Holding the MSB for a window instead is the alternative, and it
+//! needs a clock on a route that has none (see this crate's *Latency is not
+//! compensated here*) and leaves a coarse-only device stuck at its last
+//! position for as long as the window lasts.
+//!
+//! **The one piece of state a pair needs is the caller's.** The MSB last seen
+//! for a control has to live somewhere between two messages, and this module
+//! is a pure function of one message: [`Map::wide`] says which half arrived
+//! and which pair it belongs to, and [`Map::operation_wide`] takes the
+//! assembled value. `karakuri_environment::midi::Router` is what holds the
+//! halves, beside the frame's coalescing it already holds.
+//!
+//! ## The surface is shown what the deck holds
+//!
+//! The map read the other way: [`Map::echoes`] is every mapped control as an
+//! [`Echo`], which says *what to read* ([`Echo::control`], an address rather
+//! than a value) and *how to say it on the wire* ([`Echo::position`] and
+//! [`Echo::wire`]). That is what makes an LED follow a residency and a
+//! motorised fader follow a gain a transition is moving.
+//!
+//! **This crate still reads nothing back.** An `Echo` is handed a [`Shown`] —
+//! where the control is, in its own units — by whoever holds the deck, and
+//! answers the bytes. The inverse of [`scale`] is the whole of the
+//! arithmetic, and it is exact at both ends for the same ranges the forward
+//! direction is.
 
 use std::collections::HashMap;
 
@@ -312,16 +362,33 @@ impl Key {
     /// [`crate::Message`]'s and the translation happens in `parse_key`, once
     /// each way.
     fn spelled(self) -> String {
-        let (kind, number, channel) = match self {
-            Key::Cc {
-                channel,
-                controller,
-            } => ("cc", controller, channel),
-            Key::Note { channel, note } => ("note", note, channel),
+        self.spelled_with(None)
+    }
+
+    /// [`Key::spelled`], and the LSB half where this is a `cc14` line's — the
+    /// whole left-hand side, so a readout and a written-back line say what the
+    /// file says. `None` is a plain `cc` or a `note`.
+    fn spelled_with(self, lsb: Option<u8>) -> String {
+        let (head, channel) = match (self, lsb) {
+            (
+                Key::Cc {
+                    channel,
+                    controller,
+                },
+                None,
+            ) => (format!("cc {controller}"), channel),
+            (
+                Key::Cc {
+                    channel,
+                    controller,
+                },
+                Some(lsb),
+            ) => (format!("cc14 {controller} {lsb}"), channel),
+            (Key::Note { channel, note }, _) => (format!("note {note}"), channel),
         };
         match channel {
-            Some(channel) => format!("{kind} {number} ch {}", channel + 1),
-            None => format!("{kind} {number}"),
+            Some(channel) => format!("{head} ch {}", channel + 1),
+            None => head,
         }
     }
 }
@@ -361,10 +428,258 @@ impl Parameter {
     }
 }
 
+/// **Which half of a 14-bit control a message is**, and the pair it belongs
+/// to — [`Map::wide`]'s answer.
+///
+/// The pair is named by its **MSB** controller whichever half arrived, so a
+/// caller holds the MSB it has seen under one number rather than two.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Wide {
+    /// The MSB half's controller — the first number on the `cc14` line.
+    pub control: u8,
+    /// Which half this message is.
+    pub half: Half,
+}
+
+/// The two halves of a 14-bit control change.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Half {
+    /// The top seven bits. **On its own it moves the control coarsely**, at
+    /// exactly the reading a plain `cc` line would give — see the module
+    /// documentation, where the lone-MSB rule is.
+    Msb,
+    /// The bottom seven bits. **On its own it moves nothing**: there is
+    /// nothing to refine until an MSB has been seen for that control.
+    Lsb,
+}
+
+/// **What a mapped control *is*, as an address rather than a value** — what
+/// [`Echo::control`] answers and what whoever holds the deck reads a value at.
+///
+/// It is [`Target`] with the ranges taken off, which is the difference between
+/// *what the map does to a message* and *which control of the instrument this
+/// line is about*. A caller answering these is answering about the deck and
+/// never about the mapping.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Control {
+    Gain {
+        deck: u8,
+    },
+    Opacity {
+        deck: u8,
+    },
+    Exposure,
+    MaskPosition {
+        deck: u8,
+    },
+    /// **A pad, and the state it names.** What is shown is whether the deck is
+    /// in that state — one pad of the three lights, which is what makes a
+    /// residency row on a surface a readout as well as a control.
+    Residency {
+        deck: u8,
+        residency: Residency,
+    },
+    /// A pad, and the mode it names, on [`Control::Residency`]'s terms.
+    Blend {
+        deck: u8,
+        blend: BlendMode,
+    },
+    /// A control of the Set on a deck, by its place in the published
+    /// interface, counting from one.
+    Param {
+        deck: u8,
+        position: u16,
+    },
+    /// **A beat has no state**, so nothing is ever shown for a `tap` line. It
+    /// is here so that the list is the grammar's list and a target added to
+    /// the grammar and not to this one does not compile.
+    Tap,
+}
+
+/// **Where a control is right now**, as whoever holds the deck reads it —
+/// [`Echo::position`]'s argument.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Shown {
+    /// A continuous control at `value`, in the control's own units.
+    At(f32),
+    /// **A published control**, whose range is the Set's rather than this
+    /// crate's: `declared` is what the Set published it over, and a range
+    /// written on the `param` line wins over it exactly as it does on the way
+    /// in ([`Parameter::value`]).
+    Published { value: f32, declared: [f32; 2] },
+    /// A pad's control, and whether the deck is in the state that pad names.
+    On(bool),
+}
+
+/// **One mapped control, as something to show a surface** — the map read the
+/// other way, and the whole of MIDI out that this crate owns.
+///
+/// It carries the line: which message reaches the control, whether that line
+/// is a pair, and what the control is. [`Echo::control`] says what to read,
+/// [`Echo::position`] turns the value read back into the number the wire
+/// carries, and [`Echo::wire`] turns that into bytes.
+///
+/// **The two steps are separate because the caller compares them.** A surface
+/// is written to when the deck changes a control and not once a frame, and the
+/// thing worth comparing is the *position* — a gain that moved by less than a
+/// step of the fader is a message that would say nothing.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Echo {
+    key: Key,
+    lsb: Option<u8>,
+    target: Target,
+}
+
+impl Echo {
+    /// **What this shows**, as an address whoever holds the deck can read a
+    /// value at.
+    pub fn control(self) -> Control {
+        match self.target {
+            Target::Gain { slot, .. } => Control::Gain { deck: slot },
+            Target::Opacity { slot, .. } => Control::Opacity { deck: slot },
+            Target::Exposure { .. } => Control::Exposure,
+            Target::MaskPosition { slot, .. } => Control::MaskPosition { deck: slot },
+            Target::Residency { slot, residency } => Control::Residency {
+                deck: slot,
+                residency,
+            },
+            Target::Blend { slot, blend } => Control::Blend { deck: slot, blend },
+            Target::Tap => Control::Tap,
+            Target::Param { slot, position, .. } => Control::Param {
+                deck: slot,
+                position,
+            },
+        }
+    }
+
+    /// **Where `shown` sits on this control's own range, as the wire carries
+    /// it**: `0..=127` on a `cc` line, `0..=16383` on a `cc14` one, and 0 or
+    /// 127 for a pad.
+    ///
+    /// **The inverse of [`scale`]**, and exact at both ends wherever that one
+    /// is: a gain at 0.0 answers 0 and a gain at 1.0 answers the top of the
+    /// span, so a motorised fader parks where the operator would have put it
+    /// rather than a step short. A value outside the line's range is clamped
+    /// to the end it is past — a gain pushed to 1.4 by `]` on a fader written
+    /// `[0, 1]` shows the top of that fader, which is where the fader would
+    /// have to be.
+    ///
+    /// A value that is not finite answers 0 rather than a number built out of
+    /// a NaN: what reaches the wire has to be seven bits either way, and 0 is
+    /// the end a control that cannot be read should be shown at.
+    pub fn position(self, shown: Shown) -> u16 {
+        let steps = f32::from(self.steps());
+        let (range, value) = match (self.target, shown) {
+            (_, Shown::On(on)) => return if on { 127 } else { 0 },
+            (Target::Gain { range, .. }, Shown::At(value))
+            | (Target::Opacity { range, .. }, Shown::At(value))
+            | (Target::Exposure { range }, Shown::At(value))
+            | (Target::MaskPosition { range, .. }, Shown::At(value)) => (range, value),
+            (Target::Param { range, .. }, Shown::Published { value, declared }) => {
+                (range.unwrap_or(declared), value)
+            }
+            // A press asked about as a position, or a fader asked about as a
+            // published control: the caller answered a control it was not
+            // asked about, and 0 is the end nothing lights at.
+            _ => return 0,
+        };
+        let [lo, hi] = range;
+        let at = match self.target.shape() {
+            Shape::Linear => (value - lo) / (hi - lo),
+            // `parse_target` refuses a ratio range that reaches zero, which is
+            // what makes both logarithms defined.
+            Shape::Ratio => (value / lo).ln() / (hi / lo).ln(),
+        };
+        if !at.is_finite() {
+            return 0;
+        }
+        (at.clamp(0.0, 1.0) * steps).round() as u16
+    }
+
+    /// **The bytes that show `position`**, appended to `into`: one message for
+    /// a `cc` line and for a pad, and **two for a pair, MSB first**, which is
+    /// the order the wire has always taken them in.
+    ///
+    /// **The channel is the line's**, and channel 1 where the line named none
+    /// — the same forgiving default the way in has, read the other way: a map
+    /// that does not care which channel a knob arrives on is a map whose
+    /// surface is the only thing plugged in.
+    ///
+    /// A pad is lit with a note-on at velocity 127 and unlit with one at
+    /// velocity 0, which is [`crate::Message`]'s own reading of a release —
+    /// so a surface that echoes what it is sent stays consistent with what
+    /// this crate would read back from it.
+    pub fn wire(self, position: u16, into: &mut Vec<[u8; 3]>) {
+        let channel = match self.key {
+            Key::Cc { channel, .. } | Key::Note { channel, .. } => channel.unwrap_or(0) & 0x0f,
+        };
+        match (self.key, self.lsb) {
+            (Key::Note { note, .. }, _) => {
+                into.push([0x90 | channel, note, if position == 0 { 0 } else { 127 }]);
+            }
+            (Key::Cc { controller, .. }, None) => {
+                into.push([0xb0 | channel, controller, position.min(127) as u8]);
+            }
+            (Key::Cc { controller, .. }, Some(lsb)) => {
+                let value = position.min(16383);
+                into.push([0xb0 | channel, controller, (value >> 7) as u8]);
+                into.push([0xb0 | channel, lsb, (value & 0x7f) as u8]);
+            }
+        }
+    }
+
+    /// The top of this control's span: 16383 for a pair and 127 for
+    /// everything else.
+    fn steps(self) -> u16 {
+        match self.lsb {
+            Some(_) => 16383,
+            None => 127,
+        }
+    }
+
+    /// A stable order for [`Map::echoes`] — pads after faders, then by the
+    /// number on the wire and the channel, so the same map lights a surface in
+    /// the same order on every run.
+    fn order(&self) -> (u8, u8, u8) {
+        match self.key {
+            Key::Cc {
+                channel,
+                controller,
+            } => (0, controller, channel.unwrap_or(0)),
+            Key::Note { channel, note } => (1, note, channel.unwrap_or(0)),
+        }
+    }
+}
+
+/// **One line of the table**: what the message moves, and the controller its
+/// LSB half arrives on where the line is a `cc14`.
+///
+/// A pair is **one** entry and not two, which is what keeps [`Map::len`], the
+/// line a readout says and the line [`Map::lines`] writes back all talking
+/// about the line an operator wrote. The LSB half is reached through
+/// [`Map::fine`](Map) instead, which points at the MSB this is keyed by.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Entry {
+    target: Target,
+    /// The controller the LSB half arrives on, or `None` for a 7-bit line.
+    lsb: Option<u8>,
+}
+
 /// One operator's table.
 #[derive(Debug, Default, Clone)]
 pub struct Map {
-    entries: HashMap<Key, Target>,
+    entries: HashMap<Key, Entry>,
+    /// **The LSB half of every `cc14` line**, pointing at the controller its
+    /// MSB half is keyed by — the number the pair is named by everywhere else
+    /// here.
+    ///
+    /// A second table rather than a second entry, because a pair is one
+    /// mapping: an LSB in `entries` would be counted, listed and read back as
+    /// a control of its own. Nothing is looked up here until `entries` has
+    /// answered `None`, so a plain `cc N` line always wins over a pair that
+    /// wanted N for its LSB — and [`Map::parse`] says so out loud rather than
+    /// letting the pair go quiet.
+    fine: HashMap<Key, u8>,
 }
 
 impl Map {
@@ -384,8 +699,20 @@ impl Map {
                 continue;
             }
             match parse_line(line) {
-                Ok((key, target)) => {
-                    if map.entries.insert(key, target).is_some() {
+                Ok((key, entry)) => {
+                    if let (Key::Cc { channel, .. }, Some(lsb)) = (key, entry.lsb) {
+                        map.fine.insert(
+                            Key::Cc {
+                                channel,
+                                controller: lsb,
+                            },
+                            match key {
+                                Key::Cc { controller, .. } => controller,
+                                Key::Note { note, .. } => note,
+                            },
+                        );
+                    }
+                    if map.entries.insert(key, entry).is_some() {
                         notes.push(format!(
                             "line {}: this message was already mapped; the later line wins",
                             i + 1
@@ -393,6 +720,21 @@ impl Map {
                     }
                 }
                 Err(message) => notes.push(format!("line {}: {message}", i + 1)),
+            }
+        }
+        // **A controller cannot be a line of its own and half of a pair**, and
+        // which of the two the file meant is not something the order of the
+        // lines should decide. `entries` wins, because a plain line is the
+        // whole of what it says; the pair keeps its coarse half and loses its
+        // fine one, which is a fader at 128 positions rather than a fader that
+        // went quiet — and it is said here rather than discovered.
+        for key in map.fine.keys() {
+            if map.entries.contains_key(key) {
+                notes.push(format!(
+                    "`{}` is a line of its own and is also the LSB half of a `cc14` line; the \
+                     plain line wins and the pair stays 7-bit",
+                    key.spelled()
+                ));
             }
         }
         (map, notes)
@@ -440,8 +782,8 @@ impl Map {
             },
         };
         let line = format!("{} -> {target}", key.spelled());
-        let (key, target) = parse_line(&line)?;
-        self.entries.insert(key, target);
+        let (key, entry) = parse_line(&line)?;
+        self.entries.insert(key, entry);
         Ok(line)
     }
 
@@ -457,58 +799,124 @@ impl Map {
     /// and a momentary control that wants both ends is a different target from
     /// these, not the same one read twice.
     pub fn operation(&self, message: crate::Message) -> Option<Operation> {
-        use crate::Message;
-        let key = self.target(message)?;
-        let value = match message {
-            Message::ControlChange { value, .. } => Some(value),
-            _ => None,
-        };
+        operating(self.target(message)?, coarse(message))
+    }
 
-        // A fader mapped to a pad's target, or the reverse, cannot happen:
-        // `parse_line` refuses it. This is the same fact stated where the value
-        // is used, so a target added to one list and not the other is a `None`
-        // rather than a wrong operation.
-        // `key.shape()` rather than the shape spelled out per arm: the same
-        // function decides which validation a range gets at parse time, so a
-        // target that is validated as a ratio cannot be scaled as a line.
-        //
-        // **Nothing below allocates.** Every operation a map line can name
-        // carries scalars only, which is what lets `karakuri-cli` route a fader
-        // sweep inside `Live::frame` without a heap touch per message.
-        let shape = key.shape();
-        match (key, value) {
-            (Target::Gain { slot, range }, Some(v)) => Some(Operation::SetGain {
-                deck: slot,
-                gain: scale(v, range, shape),
-            }),
-            (Target::Opacity { slot, range }, Some(v)) => Some(Operation::SetOpacity {
-                deck: slot,
-                opacity: scale(v, range, shape),
-            }),
-            (Target::Exposure { range }, Some(v)) => Some(Operation::SetExposure {
-                exposure: scale(v, range, shape),
-            }),
-            (Target::MaskPosition { slot, range }, Some(v)) => Some(Operation::SetMaskPosition {
-                deck: slot,
-                position: scale(v, range, shape),
-            }),
-            (Target::Residency { slot, residency }, None) => Some(Operation::SetResidency {
-                deck: slot,
-                residency,
-            }),
-            (Target::Blend { slot, blend }, None) => {
-                Some(Operation::SetBlendMode { deck: slot, blend })
-            }
-            (Target::Tap, None) => Some(Operation::TapBeat),
-            // **The one target this cannot finish**, and it is answered by
-            // [`Map::parameter`] instead. A published control is addressed by
-            // its *position*, and a position becomes a `ParamAt` only against
-            // the Set that is in the deck — which is a readback, and this
-            // function has none by charter. Whoever holds the deck completes
-            // it; see `karakuri_environment::midi::Router`.
-            (Target::Param { .. }, _) => None,
-            _ => None,
+    /// **Which half of a 14-bit control this message is**, or `None` for a
+    /// message no `cc14` line names either half of.
+    ///
+    /// [`Wide::control`] is the pair's **MSB** controller whichever half
+    /// arrived, so it is the key a caller holds the halves under — see the
+    /// module documentation, where the whole of the pairing is.
+    ///
+    /// A plain `cc` line answers `None` here, and so does a controller that is
+    /// both a plain line and some pair's LSB: the plain line wins, which
+    /// [`Map::parse`] says out loud when it loads the two.
+    pub fn wide(&self, message: crate::Message) -> Option<Wide> {
+        let crate::Message::ControlChange {
+            channel,
+            controller,
+            ..
+        } = message
+        else {
+            return None;
+        };
+        if let Some(entry) = self.entry(channel, controller) {
+            return entry.lsb.map(|_| Wide {
+                control: controller,
+                half: Half::Msb,
+            });
         }
+        let msb = *self
+            .fine
+            .get(&Key::Cc {
+                channel: Some(channel),
+                controller,
+            })
+            .or_else(|| {
+                self.fine.get(&Key::Cc {
+                    channel: None,
+                    controller,
+                })
+            })?;
+        // **The pair is checked from the other end**, so a knob whose MSB half
+        // was re-learned as a plain `cc` line does not go on being refined by
+        // a controller that is no longer its LSB. `learn` writes into
+        // `entries` and leaves `fine` alone, which is what makes this a
+        // question rather than an assumption.
+        (self.entry(channel, msb)?.lsb == Some(controller)).then_some(Wide {
+            control: msb,
+            half: Half::Lsb,
+        })
+    }
+
+    /// **[`Map::operation`] for a 14-bit pair whose halves are both in hand**,
+    /// where `value` is `(msb << 7) | lsb` — `0..=16383`.
+    ///
+    /// `message` is either half; what it names is the pair, and the pair's
+    /// target. A message no `cc14` line names answers `None`, so this cannot
+    /// be used to read a 7-bit line at 14 bits.
+    pub fn operation_wide(&self, message: crate::Message, value: u16) -> Option<Operation> {
+        operating(self.wide_target(message)?, Some(fine(value)))
+    }
+
+    /// **[`Map::parameter`] for a 14-bit pair**, on
+    /// [`Map::operation_wide`]'s terms exactly — the two stay disjoint by
+    /// target at 14 bits for the reason they are at 7.
+    pub fn parameter_wide(&self, message: crate::Message, value: u16) -> Option<Parameter> {
+        parametered(self.wide_target(message)?, Some(fine(value)))
+    }
+
+    /// The target a 14-bit message's **pair** is on, whichever half arrived.
+    fn wide_target(&self, message: crate::Message) -> Option<Target> {
+        let crate::Message::ControlChange { channel, .. } = message else {
+            return None;
+        };
+        let wide = self.wide(message)?;
+        self.entry(channel, wide.control).map(|entry| entry.target)
+    }
+
+    /// The entry a control change reaches: the channel it arrived on wins over
+    /// a line that named no channel, which is [`Map::target`]'s own order.
+    fn entry(&self, channel: u8, controller: u8) -> Option<Entry> {
+        self.entries
+            .get(&Key::Cc {
+                channel: Some(channel),
+                controller,
+            })
+            .or_else(|| {
+                self.entries.get(&Key::Cc {
+                    channel: None,
+                    controller,
+                })
+            })
+            .copied()
+    }
+
+    /// **Every mapped control, as something to show a surface** — the map read
+    /// the other way, for MIDI out.
+    ///
+    /// Built once and kept, not asked per frame: it allocates, and the caller
+    /// that sends feedback runs inside a frame. `karakuri_environment::midi`'s
+    /// `Router` builds it at construction and again on a learn, which are the
+    /// two moments a map changes.
+    ///
+    /// **Sorted by the message that reaches the control**, because a
+    /// `HashMap`'s order is not an order: a surface lit in a different order
+    /// every run is a surface whose dropped messages are a different set every
+    /// run.
+    pub fn echoes(&self) -> Vec<Echo> {
+        let mut echoes: Vec<Echo> = self
+            .entries
+            .iter()
+            .map(|(key, entry)| Echo {
+                key: *key,
+                lsb: entry.lsb,
+                target: entry.target,
+            })
+            .collect();
+        echoes.sort_by_key(Echo::order);
+        echoes
     }
 
     /// **What this message asks of a deck's published interface**, or `None`
@@ -535,27 +943,7 @@ impl Map {
     /// where the knob is on its span; turning that into a value takes the
     /// declared range, which is [`Parameter::value`]'s argument.
     pub fn parameter(&self, message: crate::Message) -> Option<Parameter> {
-        use crate::Message;
-        let Target::Param {
-            slot,
-            position,
-            range,
-        } = self.target(message)?
-        else {
-            return None;
-        };
-        let Message::ControlChange { value, .. } = message else {
-            // Unreachable through `parse_line`, which refuses a `note` on a
-            // continuous target. Said as a `None` rather than trusted, which is
-            // `Map::operation`'s own arm one target along.
-            return None;
-        };
-        Some(Parameter {
-            deck: slot,
-            position,
-            at: f32::from(value.min(127)) / 127.0,
-            range,
-        })
+        parametered(self.target(message)?, coarse(message))
     }
 
     /// **Every mapping, as the lines that would load it** — the map written
@@ -570,9 +958,13 @@ impl Map {
     /// Unordered, because a `HashMap` is; the caller sorts, and one that did
     /// not would write a file that shuffled on every run.
     pub fn lines(&self) -> impl Iterator<Item = String> + '_ {
-        self.entries
-            .iter()
-            .map(|(key, target)| format!("{} -> {}", key.spelled(), target.spelled()))
+        self.entries.iter().map(|(key, entry)| {
+            format!(
+                "{} -> {}",
+                key.spelled_with(entry.lsb),
+                entry.target.spelled()
+            )
+        })
     }
 
     /// **Which message reaches `target`**, as an operator would write the
@@ -603,8 +995,8 @@ impl Map {
     pub fn bound(&self, target: &str) -> Option<String> {
         self.entries
             .iter()
-            .find(|(_, held)| held.spelled() == target)
-            .map(|(key, _)| key.spelled())
+            .find(|(_, held)| held.target.spelled() == target)
+            .map(|(key, entry)| key.spelled_with(entry.lsb))
     }
 
     /// **Whether this message moves a control that carries a position**, and
@@ -625,7 +1017,15 @@ impl Map {
     /// A pure function of one message, like [`Map::operation`] and for the
     /// same reason: it reads the table and nothing else.
     pub fn is_continuous(&self, message: crate::Message) -> bool {
-        self.target(message).is_some_and(Target::continuous)
+        // **Either half of a pair is the fader it is half of.** An LSB is not
+        // in `entries` — a pair is one mapping — so asking `target` alone
+        // answered `false` for it, and a caller coalescing a frame's messages
+        // read the fine half of a sweep as a *press* and emitted it beside the
+        // coarse one. Still one predicate and not a list: `Target::continuous`
+        // is asked about the same target either way round.
+        self.target(message)
+            .or_else(|| self.wide_target(message))
+            .is_some_and(Target::continuous)
     }
 
     /// What this message is mapped to, before its value is known. The channel
@@ -667,7 +1067,7 @@ impl Map {
     }
 
     fn find(&self, key: Key) -> Option<Target> {
-        self.entries.get(&key).copied()
+        self.entries.get(&key).map(|entry| entry.target)
     }
 
     /// How many mappings loaded. For the line an operator reads on startup:
@@ -682,6 +1082,100 @@ impl Map {
     }
 }
 
+/// **What a target asks for at `at`**, where `at` is where the control change
+/// sits on its span and `None` is a press.
+///
+/// The one match over the grammar's targets, so [`Map::operation`] and
+/// [`Map::operation_wide`] cannot come to disagree about what a line means at
+/// two resolutions.
+///
+/// A fader mapped to a pad's target, or the reverse, cannot happen:
+/// `parse_line` refuses it. This is the same fact stated where the value is
+/// used, so a target added to one list and not the other is a `None` rather
+/// than a wrong operation. `target.shape()` rather than the shape spelled out
+/// per arm: the same function decides which validation a range gets at parse
+/// time, so a target that is validated as a ratio cannot be scaled as a line.
+///
+/// **Nothing below allocates.** Every operation a map line can name carries
+/// scalars only, which is what lets `karakuri-cli` route a fader sweep inside
+/// `Live::frame` without a heap touch per message.
+fn operating(target: Target, at: Option<f32>) -> Option<Operation> {
+    let shape = target.shape();
+    {
+        match (target, at) {
+            (Target::Gain { slot, range }, Some(v)) => Some(Operation::SetGain {
+                deck: slot,
+                gain: scale(v, range, shape),
+            }),
+            (Target::Opacity { slot, range }, Some(v)) => Some(Operation::SetOpacity {
+                deck: slot,
+                opacity: scale(v, range, shape),
+            }),
+            (Target::Exposure { range }, Some(v)) => Some(Operation::SetExposure {
+                exposure: scale(v, range, shape),
+            }),
+            (Target::MaskPosition { slot, range }, Some(v)) => Some(Operation::SetMaskPosition {
+                deck: slot,
+                position: scale(v, range, shape),
+            }),
+            (Target::Residency { slot, residency }, None) => Some(Operation::SetResidency {
+                deck: slot,
+                residency,
+            }),
+            (Target::Blend { slot, blend }, None) => {
+                Some(Operation::SetBlendMode { deck: slot, blend })
+            }
+            (Target::Tap, None) => Some(Operation::TapBeat),
+            // **The one target this cannot finish**, and it is answered by
+            // [`Map::parameter`] instead. A published control is addressed by
+            // its *position*, and a position becomes a `ParamAt` only against
+            // the Set that is in the deck — which is a readback, and this
+            // function has none by charter. Whoever holds the deck completes
+            // it; see `karakuri_environment::midi::Router`.
+            (Target::Param { .. }, _) => None,
+            _ => None,
+        }
+    }
+}
+
+/// [`operating`] for the one target it cannot finish — the `param` line's
+/// address and where the knob is on its span.
+fn parametered(target: Target, at: Option<f32>) -> Option<Parameter> {
+    let Target::Param {
+        slot,
+        position,
+        range,
+    } = target
+    else {
+        return None;
+    };
+    Some(Parameter {
+        deck: slot,
+        position,
+        at: at?,
+        range,
+    })
+}
+
+/// **Where a 7-bit control change sits on its span**, and `None` for a press.
+///
+/// It is also what a `cc14` line's **MSB half alone** is read as, which is the
+/// module documentation's lone-MSB rule: `msb / 127` reaches both ends of the
+/// range exactly, so a surface that sends no LSB is a 7-bit fader on the same
+/// line rather than one that cannot quite arrive.
+fn coarse(message: crate::Message) -> Option<f32> {
+    match message {
+        crate::Message::ControlChange { value, .. } => Some(f32::from(value.min(127)) / 127.0),
+        _ => None,
+    }
+}
+
+/// **Where an assembled 14-bit pair sits on its span** — `(msb << 7) | lsb`
+/// over 16383, so both ends are exact and 16384 positions lie between them.
+fn fine(value: u16) -> f32 {
+    f32::from(value.min(16383)) / 16383.0
+}
+
 /// A `0..=127` position on a range.
 ///
 /// **Exact at both ends for every range worth writing**, which is not the same
@@ -690,8 +1184,7 @@ impl Map {
 /// `[5.4778967, 6.2798347]` comes back an ulp low at the top. The claim is
 /// worth the qualification because it is the one that matters — a fader that
 /// cannot reach silence or unity cannot be matched against another slot.
-fn scale(value: u8, range: [f32; 2], shape: Shape) -> f32 {
-    let t = f32::from(value.min(127)) / 127.0;
+fn scale(t: f32, range: [f32; 2], shape: Shape) -> f32 {
     let [lo, hi] = range;
     match shape {
         Shape::Linear => lo + t * (hi - lo),
@@ -704,11 +1197,11 @@ fn scale(value: u8, range: [f32; 2], shape: Shape) -> f32 {
     }
 }
 
-fn parse_line(line: &str) -> Result<(Key, Target), String> {
+fn parse_line(line: &str) -> Result<(Key, Entry), String> {
     let (from, to) = line
         .split_once("->")
         .ok_or_else(|| "expected `<message> -> <control>`".to_string())?;
-    let key = parse_key(from.trim())?;
+    let (key, lsb) = parse_key(from.trim())?;
     let target = parse_target(to.trim())?;
     let is_note = matches!(key, Key::Note { .. });
     if is_note && target.continuous() {
@@ -720,14 +1213,14 @@ fn parse_line(line: &str) -> Result<(Key, Target), String> {
                 .to_string(),
         );
     }
-    Ok((key, target))
+    Ok((key, Entry { target, lsb }))
 }
 
-fn parse_key(from: &str) -> Result<Key, String> {
+fn parse_key(from: &str) -> Result<(Key, Option<u8>), String> {
     let mut words = from.split_whitespace();
     let kind = words
         .next()
-        .ok_or_else(|| "expected `cc` or `note`".to_string())?;
+        .ok_or_else(|| "expected `cc`, `cc14` or `note`".to_string())?;
     let number: u8 = words
         .next()
         .ok_or_else(|| format!("`{kind}` needs a number"))?
@@ -736,7 +1229,37 @@ fn parse_key(from: &str) -> Result<Key, String> {
     if number > 127 {
         return Err(format!("`{kind} {number}` is past 127"));
     }
-    let channel = match (words.next(), words.next()) {
+    // **The LSB half, and both numbers are on the line.** The convention pairs
+    // `n` with `n + 32` and controllers exist that do not honour it, so what a
+    // line means is the two numbers it names rather than a convention plus
+    // arithmetic — and every refusal below can then name both of them, which
+    // is what an operator checks against their device's manual.
+    let mut lsb = None;
+    let mut after = words.next();
+    if kind == "cc14" {
+        let word = after.filter(|word| *word != "ch").ok_or_else(|| {
+            format!(
+                "`cc14 {number}` needs the controller its LSB half arrives on — write \
+                 `cc14 {number} {}`, which is the usual pairing",
+                u16::from(number) + 32
+            )
+        })?;
+        let fine: u8 = word.parse().map_err(|_| {
+            format!("`cc14 {number} {word}`: the LSB half is a controller number in 0-127")
+        })?;
+        if fine > 127 {
+            return Err(format!("`cc14 {number} {fine}`: the LSB half is past 127"));
+        }
+        if fine == number {
+            return Err(format!(
+                "`cc14 {number} {fine}`: the two halves are one controller — an MSB and its LSB \
+                 are two"
+            ));
+        }
+        lsb = Some(fine);
+        after = words.next();
+    }
+    let channel = match (after, words.next()) {
         (None, _) => None,
         (Some("ch"), Some(n)) => {
             // The front panel's spelling, 1-16, because that is what is printed
@@ -756,15 +1279,21 @@ fn parse_key(from: &str) -> Result<Key, String> {
         return Err("too many words before `->`".to_string());
     }
     Ok(match kind {
-        "cc" => Key::Cc {
-            channel,
-            controller: number,
-        },
-        "note" => Key::Note {
-            channel,
-            note: number,
-        },
-        other => return Err(format!("`{other}` is not `cc` or `note`")),
+        "cc" | "cc14" => (
+            Key::Cc {
+                channel,
+                controller: number,
+            },
+            lsb,
+        ),
+        "note" => (
+            Key::Note {
+                channel,
+                note: number,
+            },
+            None,
+        ),
+        other => return Err(format!("`{other}` is not `cc`, `cc14` or `note`")),
     })
 }
 
@@ -995,6 +1524,258 @@ mod tests {
         }
     }
 
+    /// A 14-bit pair, as a helper: the two messages a surface sends for one
+    /// fader position, in the order it sends them.
+    fn pair(msb: u8, lsb: u8, value: u16) -> [Message; 2] {
+        [cc(msb, (value >> 7) as u8), cc(lsb, (value & 0x7f) as u8)]
+    }
+
+    /// **`cc14 <msb> <lsb>` is the pair**, it is one mapping rather than two,
+    /// and it spells itself back as the line an operator wrote.
+    #[test]
+    fn a_cc14_line_is_one_mapping_and_spells_itself_back() {
+        let m = map("cc14 1 33 -> gain 0");
+        assert_eq!(m.len(), 1, "a pair was counted as two mappings");
+        assert_eq!(
+            m.bound("gain 0").as_deref(),
+            Some("cc14 1 33"),
+            "the readout did not say the line that was written"
+        );
+        assert_eq!(
+            m.lines().collect::<Vec<_>>(),
+            vec!["cc14 1 33 -> gain 0".to_string()],
+            "the line written back was not the line loaded"
+        );
+        // And the channel survives, in the front panel's 1-16.
+        let m = map("cc14 1 33 ch 2 -> gain 0");
+        assert_eq!(m.bound("gain 0").as_deref(), Some("cc14 1 33 ch 2"));
+    }
+
+    /// **A malformed pair is refused at parse, naming both numbers.** Which
+    /// two controllers a line means is the whole of what a `cc14` says, so a
+    /// refusal that named one of them would be a refusal an operator has to
+    /// go and look the other half up for (P-0083).
+    #[test]
+    fn a_malformed_pair_is_refused_at_parse_naming_both_numbers() {
+        for (line, wanted) in [
+            // The two halves are one controller.
+            ("cc14 7 7 -> gain 0", vec!["7 7"]),
+            // The LSB half is past what the wire carries.
+            ("cc14 7 200 -> gain 0", vec!["7 200"]),
+            // No LSB half at all, and the complaint carries the line to write.
+            ("cc14 7 -> gain 0", vec!["cc14 7", "cc14 7 39"]),
+            ("cc14 7 ch 2 -> gain 0", vec!["cc14 7", "cc14 7 39"]),
+            // Not a number.
+            ("cc14 7 lsb -> gain 0", vec!["7 lsb"]),
+        ] {
+            let (m, notes) = Map::parse(line);
+            assert!(m.is_empty(), "`{line}` loaded");
+            let note = notes
+                .first()
+                .unwrap_or_else(|| panic!("`{line}` said nothing"));
+            for wanted in wanted {
+                assert!(note.contains(wanted), "`{line}` said `{note}`");
+            }
+        }
+        // And a pair on a press target is refused as a `cc` is, because it is
+        // one: a pad takes a note.
+        let (_, notes) = Map::parse("cc14 1 33 -> residency 0 live");
+        assert!(
+            notes.first().is_some_and(|note| note.contains("note")),
+            "{notes:?}"
+        );
+    }
+
+    /// **The pair assembles into 16384 positions and scales onto the range**,
+    /// which is the whole of what 14 bits buys: the step between two adjacent
+    /// pairs is a 128th of what a 7-bit step is.
+    #[test]
+    fn a_pair_assembles_into_sixteen_thousand_positions_and_scales_onto_the_range() {
+        let m = map("cc14 1 33 -> gain 0");
+        // Both ends are exact, which is the property every fader here has.
+        for (value, wanted) in [(0u16, 0.0f32), (16383, 1.0), (8191, 8191.0 / 16383.0)] {
+            let [msb, lsb] = pair(1, 33, value);
+            assert_eq!(m.wide(msb).map(|w| w.half), Some(Half::Msb));
+            assert_eq!(m.wide(lsb).map(|w| w.half), Some(Half::Lsb));
+            assert_eq!(
+                m.operation_wide(lsb, value),
+                Some(Operation::SetGain {
+                    deck: 0,
+                    gain: wanted
+                }),
+                "the pair {value} did not assemble onto the range"
+            );
+        }
+        // **Two adjacent pairs are a 128th of a 7-bit step apart**, which is
+        // the number this line exists for: a 7-bit fader moves a gain by
+        // 1/127 and this one by 1/16383.
+        let step = |value: u16| match m.operation_wide(pair(1, 33, value)[1], value) {
+            Some(Operation::SetGain { gain, .. }) => gain,
+            other => panic!("{other:?}"),
+        };
+        let one = step(8192) - step(8191);
+        assert!(
+            (one - 1.0 / 16383.0).abs() < 1e-6,
+            "one step of a pair was {one}"
+        );
+        // And a line's own range is scaled onto exactly as a 7-bit line's is.
+        let m = map("cc14 1 33 -> gain 0 [0, 2]");
+        assert_eq!(
+            m.operation_wide(pair(1, 33, 16383)[1], 16383),
+            Some(Operation::SetGain { deck: 0, gain: 2.0 })
+        );
+    }
+
+    /// **An MSB alone never leaves the fader between two values.** It is read
+    /// as the 7-bit value it is — both ends exact — so a surface that sends no
+    /// LSB is a 7-bit fader on the same line, and one that sends the pair is
+    /// the same fader refined. Nothing is held back waiting for a partner.
+    #[test]
+    fn an_msb_alone_does_not_leave_the_fader_between_two_values() {
+        let m = map("cc14 1 33 -> gain 0");
+        let seven = map("cc 1 -> gain 0");
+        for msb in [0u8, 1, 64, 126, 127] {
+            assert_eq!(
+                m.operation(cc(1, msb)),
+                seven.operation(cc(1, msb)),
+                "an MSB alone read differently from the 7-bit line it is"
+            );
+        }
+        // The top of the fader is unity and not a step short of it, which is
+        // what `(msb << 7) / 16383` would have made it.
+        assert_eq!(
+            m.operation(cc(1, 127)),
+            Some(Operation::SetGain { deck: 0, gain: 1.0 })
+        );
+        // **And a lone LSB moves nothing**: there is nothing to refine until
+        // an MSB has been seen, and a caller holding no MSB has no pair.
+        assert_eq!(m.operation(cc(33, 100)), None);
+        assert_eq!(m.parameter(cc(33, 100)), None);
+    }
+
+    /// **A controller cannot be a plain line and half of a pair.** The plain
+    /// line wins — it is the whole of what it says — and the pair keeps its
+    /// coarse half, which is a fader at 128 positions rather than one that
+    /// went quiet. Said out loud on load either way round.
+    #[test]
+    fn a_controller_that_is_both_a_line_and_a_pairs_lsb_is_reported() {
+        for text in [
+            "cc14 1 33 -> gain 0\ncc 33 -> opacity 0",
+            "cc 33 -> opacity 0\ncc14 1 33 -> gain 0",
+        ] {
+            let (m, notes) = Map::parse(text);
+            assert!(
+                notes.iter().any(|note| note.contains("cc 33")),
+                "{notes:?} for `{text}`"
+            );
+            // The plain line is what controller 33 does.
+            assert_eq!(
+                m.operation(cc(33, 127)),
+                Some(Operation::SetOpacity {
+                    deck: 0,
+                    opacity: 1.0
+                })
+            );
+            assert_eq!(m.wide(cc(33, 127)), None, "the pair claimed the plain line");
+            // And the pair's MSB half still moves its own control, coarsely.
+            assert_eq!(
+                m.operation(cc(1, 127)),
+                Some(Operation::SetGain { deck: 0, gain: 1.0 })
+            );
+        }
+    }
+
+    /// **An echo says what to read and what the wire shows**, which is the
+    /// whole of MIDI out this crate owns.
+    #[test]
+    fn an_echo_says_what_to_read_and_the_wire_shows_it() {
+        let m = map(
+            "cc 1 -> gain 0\ncc14 2 34 -> opacity 1\nnote 32 -> residency 0 live\ncc 20 -> exposure\n\
+             cc 30 -> param 0 3\nnote 61 -> tap",
+        );
+        let echoes = m.echoes();
+        assert_eq!(echoes.len(), 6);
+        let of = |control: Control| {
+            *echoes
+                .iter()
+                .find(|echo| echo.control() == control)
+                .unwrap_or_else(|| panic!("no echo for {control:?}"))
+        };
+        let mut wire = Vec::new();
+
+        // A 7-bit fader: one message, and both ends exact.
+        let gain = of(Control::Gain { deck: 0 });
+        assert_eq!(gain.position(Shown::At(0.0)), 0);
+        assert_eq!(gain.position(Shown::At(1.0)), 127);
+        gain.wire(gain.position(Shown::At(1.0)), &mut wire);
+        assert_eq!(wire, vec![[0xb0, 1, 127]]);
+
+        // A pair: two messages, **MSB first**, and the two halves of the
+        // number the position is.
+        wire.clear();
+        let opacity = of(Control::Opacity { deck: 1 });
+        assert_eq!(opacity.position(Shown::At(1.0)), 16383);
+        assert_eq!(opacity.position(Shown::At(0.0)), 0);
+        let half = opacity.position(Shown::At(0.5));
+        opacity.wire(half, &mut wire);
+        assert_eq!(
+            wire,
+            vec![
+                [0xb0, 2, (half >> 7) as u8],
+                [0xb0, 34, (half & 0x7f) as u8]
+            ]
+        );
+        // And it comes back through the way in, to the value it was shown.
+        assert_eq!(
+            m.operation_wide(cc(34, 0), half),
+            Some(Operation::SetOpacity {
+                deck: 1,
+                opacity: half as f32 / 16383.0
+            })
+        );
+
+        // A pad: lit is a note-on at 127 and unlit is one at 0, which is this
+        // crate's own reading of a release.
+        wire.clear();
+        let live = of(Control::Residency {
+            deck: 0,
+            residency: Residency::Live,
+        });
+        live.wire(live.position(Shown::On(true)), &mut wire);
+        live.wire(live.position(Shown::On(false)), &mut wire);
+        assert_eq!(wire, vec![[0x90, 32, 127], [0x90, 32, 0]]);
+
+        // Exposure is a ratio control, so the middle of the fader is unity.
+        let exposure = of(Control::Exposure);
+        assert_eq!(exposure.position(Shown::At(1.0)), 64);
+        assert_eq!(exposure.position(Shown::At(0.25)), 0);
+        assert_eq!(exposure.position(Shown::At(4.0)), 127);
+
+        // A published control is shown over the range the Set published it,
+        // unless the line wrote one.
+        let param = of(Control::Param {
+            deck: 0,
+            position: 3,
+        });
+        assert_eq!(
+            param.position(Shown::Published {
+                value: 4.0,
+                declared: [0.0, 8.0]
+            }),
+            64
+        );
+
+        // A value past the end of the line's range shows the end: that is
+        // where the fader would have to be.
+        assert_eq!(gain.position(Shown::At(1.4)), 127);
+        assert_eq!(gain.position(Shown::At(-1.0)), 0);
+        assert_eq!(gain.position(Shown::At(f32::NAN)), 0);
+
+        // A beat has no state, and the list carries it so that a target added
+        // to the grammar and not to `Control` does not compile.
+        assert_eq!(of(Control::Tap).control(), Control::Tap);
+    }
+
     /// **A `param` line names a deck and a place in its interface**, and it
     /// answers [`Map::parameter`] rather than [`Map::operation`] — the one
     /// target this crate cannot finish, because a position becomes a key only
@@ -1079,8 +1860,12 @@ mod tests {
         ];
         for line in lines {
             let (from, to) = line.split_once(" -> ").expect("a test line");
-            let (_, target) = parse_line(line).unwrap_or_else(|e| panic!("`{line}`: {e}"));
-            assert_eq!(target.spelled(), to, "`{line}` did not spell itself back");
+            let (_, entry) = parse_line(line).unwrap_or_else(|e| panic!("`{line}`: {e}"));
+            assert_eq!(
+                entry.target.spelled(),
+                to,
+                "`{line}` did not spell itself back"
+            );
             // And the whole line round-trips through the table, which is what
             // `Map::bound` is asked for.
             let m = map(line);

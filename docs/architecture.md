@@ -167,10 +167,13 @@ once here so that a term means the same thing in the roadmap, the manual and the
 
 ### The Layer Model
 
-Six positions, `L0` through `L5`. **This is not the IR's list of five `kind`s**, and the two
-lists overlap on four: `L1` through `L4` are in both, `Field` is a `kind` with no position
-here, and `L0` and `L5` have a position here and no `kind` file at all — [ir-spec.md](ir-spec.md)
-says outright there is no `kind L5`, because compositing has no code to lower.
+Six positions, `L0` through `L5`. **This is not the IR's list of six `kind`s**, and the two
+lists overlap on five: `L1` through `L5` are in both, `Field` is a `kind` with no position
+here, and `L0` is a position here with no `kind` file at all. **`L5` used to be the second
+such position and is not any more**: [ir-spec.md](ir-spec.md) stated its absence as a
+*condition* — compositing was fixed, so there was no code to lower — and
+[ADR-0340](adr/0340-kind-l5-is-written-and-the-master-chain-is-an-ordered-list-of-them.md)
+ended it by writing the compositing down.
 
 | Position | Role |
 |---|---|
@@ -184,30 +187,33 @@ says outright there is no `kind L5`, because compositing has no code to lower.
 *Layer* in this column is the model position and nothing else. The other two senses of the
 word are under [Words that carry more than one sense](#words-that-carry-more-than-one-sense).
 
-The signatures the five `kind`s have as an algebra, what breaks L2's endomorphism, how
+The signatures the six `kind`s have as an algebra, what breaks L2's endomorphism, how
 several sources or several renderers compose within one position, and how a consumer's
 missing attribute is synthesised are all [ir-spec.md](ir-spec.md)'s. They are not restated
 here.
 
-**L5 has no writable form, and giving it one is not an extension of the algebra.**
-`karakuri-engine/src/node/merge.rs` already writes the signature: `[Texture] -> Texture`. A
-master effect is that with one input and the mixer is the same with several, so admitting
-frame effects means adding `L5` to `Kind::ALL` — whose one stated reason for excluding it, no
-code to lower, lapses the moment an L5 is authored. Fan-in is already solved by `uses` plus
-`edge`; a per-deck effect and a master effect become one node at different points; and the
-deck count stops being a system constant, since how many inputs an L5 folds becomes a property
-of the procedure rather than of one built-in shader. **Feedback was the exception and is not one
+**L5 has a writable form, and giving it one was not an extension of the algebra.**
+`karakuri-engine/src/node/merge.rs` already wrote the signature: `[Texture] -> Texture`. A
+master effect is that with one input and the mixer is the same with several, so admitting frame
+effects was adding `L5` to `Kind::ALL` — whose one stated reason for excluding it, no code to
+lower, lapsed the moment an L5 could be authored. Fan-in is solved by `uses` plus `edge`, and
+`uses <name> : Texture` is that declaration; a per-deck effect and a master effect become one
+node at different points, which nothing builds; and the deck count stops being a system
+constant, since how many inputs an L5 folds is a property of the procedure rather than of one
+built-in shader. **What is built is the kind and not the chain**: the master chain is still
+three hand-written passes, so a `.kir` declaring `kind L5` compiles, costs and lowers and has
+nowhere to run. **Feedback was the exception and is not one
 any more**: reading the previous frame is a cycle, and which cut it reads was decided on
 2026-09-09 — either of them, chosen where the pass is instantiated, with only the chosen one
 retained
 ([ADR-0317](adr/0317-the-master-chain-is-three-fixed-passes-and-feedback-reads-either-cut.md)).
-**And the writable form was decided on 2026-09-10 and is built by nobody**: `kind L5` joins the
-language and the master chain becomes an ordered list of L5 slots
-([ADR-0340](adr/0340-kind-l5-is-written-and-the-master-chain-is-an-ordered-list-of-them.md)),
-specified at [ir-spec.md](ir-spec.md)'s *L5, written* and scheduled as
-[roadmap.md](roadmap.md)'s M5.16. **The first sentence above is the present tense until that
-lands** — `Kind::ALL` is five, no `.kir` may declare an L5, and the row in the table above is a
-model position with no `kind` file exactly as it says.
+**The writable form was decided on 2026-09-10 and the kind is built**
+([ADR-0340](adr/0340-kind-l5-is-written-and-the-master-chain-is-an-ordered-list-of-them.md)):
+`Kind::ALL` is six, a `.kir` may declare `kind L5`, and the row in the table above is a model
+position **and** a kind. The specification is in the present tense at
+[ir-spec.md](ir-spec.md)'s *The `frame` block (L5)*. **What is still nobody's is the chain** —
+the master chain becoming an ordered list of L5 slots, which is *L5's chain — specified, not
+built* and [roadmap.md](roadmap.md)'s M5.16.
 
 Two things sit orthogonal to the positions: the **control plane** — agents, director, mix
 agent, generation worker — and the **library** — search, genealogy, embeddings, thumbnails —
@@ -236,11 +242,11 @@ disjoint by name and not merely disjoint in practice.
 
 **`layer` carries three senses.**
 
-- **A kind** — what a procedure lowers to: `L1`, `L2`, `L3`, `L4`, `Field`. This is the
+- **A kind** — what a procedure lowers to: `L1`, `L2`, `L3`, `L4`, `Field`, `L5`. This is the
   `layer` field on a `slot`, `capacity`, `param`, `bind` and `procedure` record, the
-  `karakuri_store::record::Layer` type and `karakuri_operation::Layer`. There are five. A
+  `karakuri_store::record::Layer` type and `karakuri_operation::Layer`. There are six. A
   bare *layer* in [ir-spec.md](ir-spec.md) means this.
-- **A position in the architecture model** — the six rows above. Overlaps the kinds on four.
+- **A position in the architecture model** — the six rows above. Overlaps the kinds on five.
 - **What one deck slot contributes to the mix**, stacked in deck slot order. **Never written
   bare**: it is *a deck slot's layer* or *a deck's layer*, with its owner attached.
   [Concepts](manual/concepts.html) disowns the loose reading — *"A deck is not a layer in an

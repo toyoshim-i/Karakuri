@@ -20,7 +20,7 @@
 
 use crate::ast::{
     AmplifyDecl, Attr, BinOp, Blend, Block, BlockKind, CapacityDecl, Expr, Kind, Lit, Param, Proc,
-    SlotTy, Stmt, Topology, Ty, UnOp, UsesDecl,
+    RetainsDecl, SlotTy, Stmt, Topology, Ty, UnOp, UsesDecl,
 };
 use crate::error::IrError;
 use crate::error::IrResult;
@@ -49,9 +49,10 @@ pub fn parse(src: &str) -> IrResult<Proc> {
 
 /// Header/block keywords. Declaration recovery scans forward to the next one
 /// of these (or `}`), so one bad declaration does not eat the rest of the file.
-const DECL_KEYWORDS: [&str; 17] = [
-    "kind", "topology", "capacity", "amplify", "uses", "param", "emit", "consumes", "blend",
-    "spawn", "element", "deform", "mask", "camera", "field", "vertex", "fragment",
+const DECL_KEYWORDS: [&str; 19] = [
+    "kind", "topology", "capacity", "amplify", "retains", "uses", "param", "emit", "consumes",
+    "blend", "spawn", "element", "deform", "mask", "camera", "field", "vertex", "fragment",
+    "frame",
 ];
 
 struct Parser {
@@ -315,6 +316,7 @@ impl Parser {
         let mut topology = None;
         let mut capacity = None;
         let mut amplify = None;
+        let mut retains = None;
         let mut uses = Vec::new();
         let mut blend = None;
         let mut params = Vec::new();
@@ -343,6 +345,15 @@ impl Parser {
                     }
                     "capacity" => capacity = Some(self.parse_capacity()),
                     "amplify" => amplify = Some(self.parse_amplify()),
+                    // **A bare word and nothing after it**, so there is no
+                    // operand to parse and no way for one to be wrong. A second
+                    // `retains` overwrites the first with the same value, which
+                    // is what a repeated declaration of a flag is.
+                    "retains" => {
+                        retains = Some(RetainsDecl {
+                            span: self.advance().span,
+                        })
+                    }
                     "uses" => {
                         if let Some(u) = self.parse_uses() {
                             uses.push(u);
@@ -374,6 +385,7 @@ impl Parser {
                     "field" => blocks.push(self.parse_block(BlockKind::Field)),
                     "vertex" => blocks.push(self.parse_block(BlockKind::Vertex)),
                     "fragment" => blocks.push(self.parse_block(BlockKind::Fragment)),
+                    "frame" => blocks.push(self.parse_block(BlockKind::Frame)),
                     _ => {
                         let sp = self.peek().span;
                         self.error(
@@ -430,6 +442,7 @@ impl Parser {
             topology,
             capacity,
             amplify,
+            retains,
             uses,
             blend,
             params,
@@ -448,20 +461,22 @@ impl Parser {
     /// at the end of `parse_proc`.
     fn parse_kind(&mut self) -> Kind {
         self.advance(); // "kind"
-        match self.expect_ident("`L1`, `L2`, `L3`, `L4` or `Field`") {
+        match self.expect_ident("`L1`, `L2`, `L3`, `L4`, `L5` or `Field`") {
             Some((name, span)) => match name.as_str() {
                 "L1" => Kind::L1,
                 "L2" => Kind::L2,
                 "L3" => Kind::L3,
                 "L4" => Kind::L4,
+                "L5" => Kind::L5,
                 "Field" => Kind::Field,
                 _ => {
                     self.error_with_hint(
                         span,
                         format!("unknown kind `{name}`"),
                         "this compiler builds `L1` (geometry), `L2` (geometry modulation), \
-                         `L3` (the camera), `L4` (rendering) and `Field` (a signed distance \
-                         at a point, spliced into whoever evaluates it)",
+                         `L3` (the camera), `L4` (rendering), `L5` (a frame effect over the \
+                         picture handed to it) and `Field` (a signed distance at a point, \
+                         spliced into whoever evaluates it)",
                     );
                     Kind::L1
                 }
@@ -546,15 +561,16 @@ impl Parser {
         // Both have already reported, so neither reaches the check pass;
         // carrying on with one of the types there are lets the rest of the
         // header be parsed and its own mistakes reported in the same run.
-        let ty = match self.expect_ident("`Geometry`, `Field`, `Camera` or `Source`") {
+        let ty = match self.expect_ident("`Geometry`, `Field`, `Camera`, `Source` or `Texture`") {
             Some((spelling, ty_span)) => SlotTy::from_name(&spelling).unwrap_or_else(|| {
                 self.error_with_hint(
                     ty_span,
                     format!("unknown input type `{spelling}`"),
                     "a `uses` slot is `Geometry` — the elements of an L1, read beside the ones \
                      this node runs over — `Field`, a `kind Field` procedure this one \
-                     evaluates, `Camera`, a viewpoint this one draws from, or `Source`, the \
-                     identity of one geometry for `source` to be compared against",
+                     evaluates, `Camera`, a viewpoint this one draws from, `Source`, the \
+                     identity of one geometry for `source` to be compared against, or \
+                     `Texture`, a picture an L5 folds in",
                 );
                 SlotTy::Geometry
             }),
@@ -1120,6 +1136,7 @@ fn empty_proc(span: Span) -> Proc {
         topology: None,
         capacity: None,
         amplify: None,
+        retains: None,
         uses: Vec::new(),
         blend: None,
         params: Vec::new(),

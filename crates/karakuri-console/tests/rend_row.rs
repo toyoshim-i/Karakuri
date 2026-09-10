@@ -46,6 +46,7 @@ use karakuri_operation::{Authority, Layer, NodeAt, Operation, Sync};
 fn renderers() -> Node {
     Node {
         uses: Vec::new(),
+        keep: None,
         addr: "L4".to_owned(),
         name: "renderers".to_owned(),
         authority: None,
@@ -67,6 +68,7 @@ fn renderers() -> Node {
 /// fields would fail for a reason that is not this row's.
 fn shell() -> Node {
     Node {
+        keep: None,
         addr: "L1:0".to_owned(),
         name: "drift_shell".to_owned(),
         authority: Some(NodeAuthority {
