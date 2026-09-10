@@ -75,8 +75,9 @@ be validated and compiled to WGSL, and it can be hot-swapped without dropping a 
 A deck of Sets, a mix, transitions on a beat grid, MIDI and audio in, a session recorded and
 replayed frame for frame. [history/m2.md](history/m2.md).
 
-What M2 left owed is rescheduled: MIDI *out* and 14-bit control changes are M5.12's, and a
-session stream that cannot say what a deck held is under *Mx — TODO*.
+What M2 left owed is rescheduled: MIDI *out* and 14-bit control changes are the third MIDI
+phase's, named on M5.12's stub (ADR-0337), and a session stream that cannot say what a deck held
+is under *Mx — TODO*.
 
 ---
 
@@ -197,11 +198,12 @@ M5.9 close and the two sections *Rows the manual has not given a home* and *The 
 shape* close with them — named rather than placed, because M5.14 now sits after both and *at the end
 of this list* stopped locating them.
 
-**What is still open, as of 2026-09-09.** Of the bays, **M5.5 — Inspector alone**: M5.1 to M5.4 and
-M5.6 to M5.9 have closed, and so have M5.14 and *The console's own shape*. What is left beside the
-Inspector is the cross-cutting run — **M5.10 MCP, M5.11 hover tooltips, M5.12 MIDI and M5.13 the
-keyboard** — each of which is a column of [every operation](manual/operations.html) rather than a
-bay, and none of which the panel column's grep reads. Each closed entry above is a stub naming what
+**What is still open, as of 2026-09-10, and no bay is.** M5.1 to M5.9 have all closed — M5.5 —
+Inspector was the last of them, on 2026-09-10 — and so have M5.14 and *The console's own shape*. What
+is left of the cross-cutting run is **M5.10 MCP, M5.11 hover tooltips and M5.13 the keyboard**, each
+of which is a column of [every operation](manual/operations.html) rather than a bay and none of which
+the panel column's grep reads; **M5.12 MIDI closed on 2026-09-10** when its column's grep returned 0.
+After them are **M5.15** and **M5.16**, in that order. Each closed entry above is a stub naming what
 it decided, when its exit was met and where every owed item went;
 [history/m5.md](history/m5.md) keeps them whole.
 
@@ -212,9 +214,9 @@ what a deck is playing
 — so it lands in the Library and in the Inspector at once and belongs to neither. Its exit is
 therefore a grep over the **panel** column of the four rows it names rather than over a bay's, which
 is the same test read on the list the sub-milestone owns. **The four rows are M5.15's and not the
-two bays'**, which has to be said rather than assumed: M5.3 closed its column against the rows that
-existed then, and M5.5 is still open, so two `plan` panel badges arriving under *Inside a Set* would
-otherwise enlarge an exit somebody is working towards. M5.5's rows are **enumerated by name** — ten
+two bays'**, which has to be said rather than assumed: M5.3 and M5.5 each closed their column
+against the rows on their own list, and neither list is *Inside a Set*, so two `plan` panel badges
+arriving there would otherwise reopen an exit already met. M5.5's rows are **enumerated by name** — ten
 of them, spread over five sections and deliberately not *Inside a Set* — and neither of these two is
 on that list. They are named in M5.15 and nowhere else.
 
@@ -263,7 +265,8 @@ real work, none of it closes a badge, and no exit condition above measures it.
   is *of* was M4's undecided question, handed to that bay to judge; it closed without judging
   either, so both are under *Mx — TODO*. Neither has a row.
 - **Reaching a MIDI map while running.** A map is a file saved and recalled per controller. The file
-  exists; no row says it can be loaded while the instrument runs.
+  exists; no row says it can be loaded while the instrument runs. It is under *Mx — TODO* since M5.12
+  closed, which is where it is tracked; this list says only that no sub-milestone's exit reads it.
 
 *An arrangement is saved and restored* has no entry here because it is finished: the record, the
 place, the two operations and the transport row's arrangement pill all exist.
@@ -401,290 +404,46 @@ the tooltip's promise rewritten, a decision nobody has taken and a page change b
 and **the tooltip item**, which is not a drawing but a reading of this bay's own notes against what
 its tips now say.
 
-#### M5.5 — Inspector
+#### M5.5 — Inspector — **closed**
 
-**Rows.** The rows whose panel badge names a control this bay draws, which is **not** the page's
-*Inside a Set* section and is where the count has to be derived from: they are spread over five
-sections. **Ten of them** — *Composite a deck's renderers*, ***Choose which renderer of a deck is
-live*** (moved here from M5.2 on 2026-09-05, because the mock draws its chips directly under
-*Composite* and the console page describes the two as one control and the choice it turns into),
-*Write a parameter*, *Attach a signal to a parameter*, *Take a parameter back*, *Element capacity,
-seeds, the camera*, *Set a node's authority*, *Keep what a deck is playing*, and — since
-2026-09-09 — ***Wire a procedure's input to a node*** and ***Narrow the published interface***.
-
-**The last two joined this list rather than being scheduled onto it.** They carried a `plan` badge
-over a panel cell reading `—` and sat in *Rows the manual has not given a home*, which said the
-manual had to name a home before they could be scheduled. It did, and the home was already implied
-by rule 05 and by the mock: a node's declared input is a line on that node's group, and whether a
-control is published is the number at the left of its own parameter row — the position a MIDI knob
-counts, present or absent
+The pane and the deck head over it, which is rule 05's *everything about what a deck **is***. A control
+that moves a field of the aim re-aims the slot and the rebuild is the write, which is why this bay
+needed no live setter and why two of its blockers were wrong in the same way
+([ADR-0314](adr/0314-a-control-that-moves-a-field-of-the-aim-re-aims-the-slot-and-the-rebuild-is-the-write.md));
+the built-in camera's three placement numbers are parameter rows, so the vocabulary lost an arm rather
+than gaining a payload
+([ADR-0318](adr/0318-the-built-in-cameras-three-placement-numbers-are-parameter-rows.md)); an attachment
+is a session record and taking a parameter back removes it, there being no suspended state to leave
+behind ([ADR-0319](adr/0319-an-attachment-is-a-session-record-and-taking-a-parameter-back-removes-it.md));
+the deck head steps a slot's capacity over the powers of two its geometries declare and re-salts it from
+the slot's own sequence, and `Property` loses the node address nothing filled
+([ADR-0328](adr/0328-the-inspectors-deck-head-steps-a-slots-capacity-and-re-salts-it.md)); and an input
+is wired on the node that declares it while the number at the left of a parameter row **is** the publish
+mark, which is what emptied *Rows the manual has not given a home*
 ([ADR-0329](adr/0329-an-input-is-wired-on-the-node-that-declares-it-and-the-number-is-the-publish-mark.md)).
-Both are `has` on the panel, both re-aim the slot, and that section is now empty.
+[history/m5.md](history/m5.md).
 
-***Read one node's source* and *Check and write one node's source* were the ninth and tenth and are
-neither**, dropped on 2026-09-09 with the maintainer's decision that they stay model-only —
-「モデル専用のまま (panel は gap)」. Both panel badges are `gap` now and the two rows say so: a source
-editor is a third letter-taking flow on a console that has two, each bounded to one path component
-(ADR-0292), and a procedure is unbounded; the operator's editor is the file, which `--watch` and
-this panel's own watchers already pick up. So this bay owes them nothing rather than owing them a
-control it has not built — [ADR-0314](adr/0314-a-control-that-moves-a-field-of-the-aim-re-aims-the-slot-and-the-rebuild-is-the-write.md).
+**Exit, met on 2026-09-10**: no `plan` badge in the panel column of this bay's **ten** rows on
+[every operation](manual/operations.html), a `gap` meeting it as a `has` does. Every one of the ten
+reads `has`. The `plan` panel badges left on the page are M5.15's — *Keep a node's procedure* and
+*Point an Inspector pane at a deck* under *Inside a Set*, *Filter the library by kind* and *Load a
+procedure over a layer* under *The library* — and not one of them is on this bay's list, which is why
+two of them arriving under *Inside a Set* enlarges nothing here.
 
-***Keep what a deck is playing* is claimed twice**, here and inside M5.3's rule. The mock draws
-`keep` in this bay's pane head, one per pane, so the control is this bay's; M5.3's paragraph and
-`crates/karakuri/src/main.rs`'s *"the Library bay has no keep pill drawn"* are the other spelling.
-
-***Set a deck's sync mode* and *Scrub a deck a quarter beat* were counted here and are M5.13's**,
-dropped on 2026-09-05. Both sit at the deck head and both carry a `has` panel badge — the chip and
-the scrub are drawn — so the only thing this bay held them for was the letters on their key badges
-(`y`, `u i`), and under
-[ADR-0259](adr/0259-the-keyboard-is-addressed-to-the-bay-that-has-focus-and-a-global-letter-is-a-convenience-or-the-operators-own.md)
-a key press is addressed to the bay that has focus rather than to a letter a bay picked, so there is
-no letter here to bind.
-
-**Exit.** No `plan` badge in the panel column of this bay's rows on
-[every operation](manual/operations.html). **A `gap` meets it as a `has` does**, and the two source
-rows are the first use of that: the exit asks that no row of this bay is still *waiting* on a
-control, and a row saying the panel is not a way in is not waiting on one.
-
-**The grep is met as of 2026-09-09, and this section is not closed here.** The exit is a grep over
-**this bay's rows**, and all ten read `has`: the last two `plan` badges on them were *Wire a
-procedure's input to a node* and *Narrow the published interface*, which are this bay's now and are
-built. `grep -c 'rt plan">panel' docs/manual/operations.html` does **not** return 0 — it is counting
-rows added elsewhere the same day, on other bays' lists — so the whole-page reading of that command
-is not this section's exit and never was. Closing the sub-milestone is the maintainer's call and
-nothing here does it.
-
-**Blocked on. Nothing, since 2026-09-09.** It was five until 2026-09-08, four, three and then one
-on 2026-09-09, and the last of them — *Element capacity, seeds, the camera* — was closed the same
-day by
-[ADR-0328](adr/0328-the-inspectors-deck-head-steps-a-slots-capacity-and-re-salts-it.md): the
-deck head grew a capacity chip that steps and a `re-salt` capsule, both re-aims on the fold's own
-mechanism, and the vocabulary's `Property` lost the node address that was half the reason the row
-read as blocked. Every row of this bay carries `has` or `gap`.
-[ADR-0319](adr/0319-an-attachment-is-a-session-record-and-taking-a-parameter-back-removes-it.md)
-took the last three together, because the sentence below said they were one decision and they were:
-**what each records**. *Attach a signal to a parameter* records `Record::Source` — `Record::Bind`'s
-session twin, on the terms `Record::Ride` is `Record::Param`'s — and *Take a parameter back* is the
-same record with its attachment absent, which is what made the third row's *nothing to call* stop
-being true: `Set::unbind` is `Set::bind`'s inverse and a take-back **removes** the attachment,
-because there was never any suspended state for it to leave behind. *Set a node's authority* needed
-no new record at all; what it needed was `Deck::set_authority`, and the three chips have been drawn
-and unclaimed since 2026-08-29. All three are `has` on the panel.
-
-**Two questions the rows had left open were answered on the way, and both are on the page.** A hand
-on a bound parameter's fader **writes and the attachment stays** — order-independent by
-construction, which is what a blend on confidence buys — so a knob cannot detach a signal by
-accident; what the console does instead is draw the fader and not take hold of it, because at full
-confidence the number a hand would write carries no weight and a handle that moved without moving
-the picture is the one thing a handle must not be. And **an authority enforces nothing yet, which
-the row says rather than implies**: nothing writes a parameter on an agent's behalf, so what a level
-reaches today is the bare-name refusal — granting one renderer and keeping the other narrows what
-one knob may do from the next press — and the record is kept so an agent's write can be refused
-against it later.
-
-*Write a parameter* landed with the parameter row's fader, on the route
-ADR-0280 and ADR-0282 had already laid through the engine
-([ADR-0286](adr/0286-a-parameter-row-writes-the-control-it-draws-and-carries-the-range-rather-than-the-position.md)),
-and it is what the sentence below about the writer was written for. Then *Composite a deck's
-renderers* landed and *Element capacity, seeds, the camera* stopped being blocked at all, for a
-reason that is worth reading before anything else here: **two of the bullets below were wrong, and
-they were wrong in the same way**
-([ADR-0314](adr/0314-a-control-that-moves-a-field-of-the-aim-re-aims-the-slot-and-the-rebuild-is-the-write.md)).
-Then that row's remaining undecided third was answered and turned out to be no operation at all
-([ADR-0318](adr/0318-the-built-in-cameras-three-placement-numbers-are-parameter-rows.md)): the
-built-in camera's three placement numbers are parameters of its node, so the Inspector draws them
-as parameter rows and the vocabulary lost an arm rather than gaining a payload.
-
-**A layering, a capacity, a seed and the salts are not writes and never wanted a setter.** They are
-fields of `watch::Aim` — the description a slot's watcher is pointed at — so a control that moves
-one restates the other thirteen and sends the aim, the worker recompiles the slot off the render
-thread, and the build lands at a frame boundary and is judged against the budget like an edited
-file or a library load. That is ADR-0228's mechanism, unchanged and eleven days old when these
-bullets were written; what made them read as blockers is that each stops one clause short of its
-own answer. *The engine has no writer* is true, and the sentence it belongs to ends *because a
-live write is not how material changes here*.
-
-**There is no public route from a `&mut Deck` to a live `Set`.** Every control this panel has built
-lands operation → `Record` → `apply` → a `Deck` setter, and `Deck`'s public surface has no param,
-binding or authority writer. `Deck::slot` hands back a `&HotSwap` and says why — *"Deliberately not
-mutable"* — and `HotSwap::live_mut` is `pub(crate)` with the same argument written out. The engine's
-writers all exist and are all reachable only at a build: `Set::write_param`, `Set::set_published`,
-`Set::bind`, `Set::set_authority`. **`Set::write_param` no longer is**:
-[ADR-0280](adr/0280-a-parameter-written-to-a-live-set-is-a-session-record.md) put `Deck::write_param`
-over it and `Record::Ride` under it, so *Write a parameter* had a route through the engine and what
-the panel owed was the control. **The control is built**, so this bay is no longer the bay where an
-operator turns a knob and the bay with no way to turn one. **And the hole is closed for the other
-two**: `Deck::bind`, `Deck::unbind` and `Deck::set_authority` reach `live_mut` by the same road and
-for the same argument — nothing renders and nothing replaces, so *which Sets is this frame made of*
-has the answer it had before the call — and each was the one line ADR-0280 predicted once the record
-was decided (ADR-0319). `Set::set_published` is the writer nothing has needed yet, and *Narrow the
-published interface* is in *Rows the manual has not given a home* rather than here.
-
-- ***Take a parameter back* had nothing to call, and the reason was the answer.** `Set::bind` had
-  no inverse anywhere and `Binding` carried no suspended state — and the second half of that is why
-  the row's own tip promised something nothing could do (*"the binding is kept and stops driving, so
-  you can hand it back"*). `Set::unbind` is the inverse; there is no suspension, because *not
-  driving this parameter* is already written and it is the absence — P-0084's blend writes the
-  param's own value at confidence 0.0. What is given up is handing it back in one press; what
-  replaces it is that the stream carries the source, the curve and the range on the line that
-  attached it. Panel badge `has`, the control is the `.sens` row's last chip, and the page's promise
-  is corrected rather than left standing (ADR-0319).
-- ***Composite a deck's renderers* is built**, and it is the demonstration of the paragraph above
-  rather than an item in this list. The mock had drawn the chip all along; what was missing was the
-  press. `DeckHead::compositing` names the layering the deck is *not* in, `composited` in
-  `crates/karakuri/src/main.rs` re-aims the slot beside the arm the library load uses, and the
-  Staging lane carries the verdict because a composite press is a build — which matters here, since
-  compositing costs a frame-sized target per renderer. Panel badge `has`, and `op-when` is *on a
-  worker* where it was *launch*.
-- ***Element capacity, seeds, the camera* is built, and its two questions were answered by
-  precedent rather than by a new idea**
-  ([ADR-0328](adr/0328-the-inspectors-deck-head-steps-a-slots-capacity-and-re-salts-it.md)). The
-  engine was never what stood in the way — a capacity and the salts ride the same aim the layering
-  does — and what was left was the control and the two things that decided its shape. **The
-  affordance**: a capacity is a number in a declared range, which on this panel is a parameter
-  row's track, and a track dragged is a **rebuild a frame** where a parameter's is a uniform write,
-  so the drag is what P-0091 refuses. The answer is one bay over — a field that **steps** a closed
-  list and emits the value it arrived at (ADR-0262) — so the deck head's capacity chip steps the
-  powers of two inside the range the deck's geometries declare, wrapping, and `Set` grew the one
-  reader that makes the offer honest: `declared_capacities`, which is the same declaration
-  `capacity_in_range` refuses against. **The address**: `Aim::capacity` is one `Option<u32>` for
-  the whole slot where `Property::Capacity` addressed a node, which is ADR-0228's recorded limit —
-  closed by narrowing the payload to the deck it already named rather than by widening the aim,
-  since no route filled the address and nothing could have honoured it. A pairing Set whose two
-  geometries want two capacities is what would revive it. **The seeds** are a `re-salt` capsule
-  beside the chip: it asks for the next salt in the slot's own sequence, derived by the host from
-  the salt the slot is running, because a console that invented one would draw a picture no later
-  run could draw again (P-0092). Panel badge `has`, `op-when` *on a worker*, and `written` answers
-  `Silent(NoRecord)` on `SetCompositing`'s and `LoadSet`'s terms — a session replayed does not come
-  back at a stepped capacity, and **a keep does**, since `capacity` and `seed` are Set-file
-  records. **The camera is no longer the third** and is not this row's any more
-  ([ADR-0318](adr/0318-the-built-in-cameras-three-placement-numbers-are-parameter-rows.md),
-  2026-09-09, on the maintainer's 「Orbit の 3 値をパラメータ行として」). The two live answers were
-  never two: the built-in orbit's `radius`, `speed` and `height` are parameters of the camera node,
-  the engine declaring them where a `.kir` would, so *Write a parameter* is the operation, the
-  Inspector draws three faders under the `orbit` group, a knob is learned against their positions,
-  a `bind` drives one, a `Record::Ride` replays one and a rebuild carries one — **and not a line of
-  `karakuri-console` changed**, because the pane is built from `Set::published`. `Property::Camera`
-  is deleted.
-- **What this bay owes next is room, and it is a measurement rather than a row.** The deck head is
-  seven chips now and an Inspector pane at the console's declared minimum window holds five: the
-  row needs about 296 pixels and a pane at 1244 wide gets 237.5, so the two build chips are dropped
-  and the five that were there are kept. The panel opens at 1440 and they are drawn from about
-  1360 up with two panes, so nothing an operator launches into is short of them — but this is the
-  first control on the console that comes and goes with the window, and it is the warning under
-  *Mx — TODO* arriving: **a region's declared minimum is a reading of its content, and a bay
-  growing a control invalidates it.** Both manual pages say the limit rather than leaving it to be
-  found by dragging.
-
-**Three more this bay owes, and none of them is a row.** They were recorded, verified and left in
-prose, which is how a bay's exit — a grep over one column — could be met while its pane drew
-nothing an operator could reach. **Two of the three are now done** — the centre's declared minimum
-and the pane's scroll, both below — so what is owed here is one, and it is an engine item.
-
-- **A pane drew a node group whole or not at all, and there was no scroll position anywhere in the
-  crate — done on 2026-09-08.** With the pair a bare run opens on, the first group is the L1's at
-  26.5 + 19 x 22.5 = 454px against a bay minimum of 151.5, so below roughly 534px of Inspector bay
-  **not one parameter row was drawn**, in the bay whose whole content is parameter rows. The
-  decision in front of it — scroll, or a group that can be part-drawn — was this bay's rather than
-  the arrangement's, and the maintainer took it: **the pane scrolls**
-  ([ADR-0307](adr/0307-the-inspectors-pane-scrolls-and-the-position-is-the-panes-own.md)). The
-  body moves under the two heads, the wheel over a pane turns it, the head reads `n of m` for the
-  groups it is showing whole, and the position is the pane's own state — clamped at the draw and
-  never written back, so a resize does not lose an operator's place (P-0082, ADR-0250). **It
-  answers the *reachable* half and not the whole of the item**: what is left over is the keyboard,
-  which is ADR-0259's arrows walking this bay's items and is M5.13's, and until it exists the
-  scroll has one route and that route is the pointer's. That is a gap on this bay's list and not a
-  `plan` badge, because no row on the operations page names a scroll — it is pointer-state, like
-  the Library's cursor, which ADR-0264 and ADR-0265 refuse a row for and for the reason the record
-  gives: nothing outside the console could be the model of record for it.
-- **`centre`'s declared minimum was the mock's CSS track and not a reading of its content, and is
-  now the second — done.** 340 where the `.param` grid wants 207 in a pane before its fader has any
-  width, and a divider drag reaches a 340 centre at *any* window width, so no window minimum could
-  hold it (ADR-0272).
-  [ADR-0279](adr/0279-the-centre-is-two-parameter-rows-wide-because-a-pane-that-cannot-draw-a-fader-is-not-a-minimum.md)
-  closed it on the axis it was on: an inspector pane declares **208** — one parameter row with a
-  fader in it — and the centre declares 2 x 208 + 9 = **425**, taking `MINIMUM_VIEWPORT` to
-  777 x 658.5. **It is not the 423 and 775 this entry used to name**: the fader is the `1fr` track
-  and is drawn only where what is left over is positive, so at a pane of exactly 207 there is no
-  fader and the figure closes nothing — the record carries the measurement. **It was the item below
-  on the other axis**, and that one is still owed: the Inspector's declared minimum does not fit the
-  Inspector's contents down the column, and no minimum can fix that one.
-- **Adding and removing a node**, which *What no sub-milestone owns* names and which the node
-  editor below is the drawing half of. **The engine half is not this bay's and should not be
-  smuggled in**: `karakuri-layout`'s arena has no insert or remove and `NodeId` is a bare index, so
-  a removal shifts every id anything holds. That is an engine item, and naming it here is not the
-  same as this bay carrying it.
-
-**Six of the ten are built now.** Three waited on nothing and landed on 2026-09-08; the three the
-list above was written for landed on 2026-09-09 with ADR-0319 — *Attach a signal to a parameter* is
-the sensitivity row's curve chip, *Take a parameter back* is the chip beside it, and *Set a node's
-authority* is the three words on a node head that had been drawn and unclaimed for eleven days.
-*Composite a deck's renderers* and *Choose which renderer of a deck is live* are the other two of
-the six. **What is left is one row and it is `plan`**: *Element capacity, seeds, the camera*, two
-thirds of one thing — a capacity control and a seed control, both waiting on a decision about the
-affordance rather than on anything in the engine.
-
-**Three of the ten waited on nothing, and all three are built, on 2026-09-08.** *Write a parameter*
-is the pane's fader; *Choose which renderer of a deck is live* is a claim on the chips and the
-`Record::Select` arm in `apply`; *Keep what a deck is playing* is the capsule in the pane head,
-which files under a stamp because a press types no name
-([ADR-0287](adr/0287-the-keep-pill-files-under-a-stamp-because-the-consoles-one-letter-taking-flow-is-an-arrangements-name.md))
-— and the other half of that row, a **name** typed into the head beside it, landed the same day
-([ADR-0292](adr/0292-the-pane-heads-name-takes-letters-and-the-keep-capsule-stays-a-stamp.md)).
-**The keep was one short of what this said**: the call cannot be made from the press handler, which
-has no engine, so it is a rectangle, a claim, an operation and a branch at the pointer's call site.
-
-**One thing to know before drawing the first control, and it is not a press — and it is now done.**
-A live parameter write used to be **discarded on the next rebuild**, and a rebuild is any save of
-any `.kir` in that slot, because every slot is watched. `Request::params` was restated on every
-rebuild from `Watch::overrides`, which only a re-point writes, so a knob walked back on the next
-save and a slot loaded from a Set file — which states every declaration of every node — could not be
-ridden at all.
-[ADR-0282](adr/0282-a-rebuild-inherits-the-values-somebody-moved-and-reads-the-rest-from-the-code.md)
-closed it where the values already were: `Set` remembers which of them somebody stated, a rebuild
-carries those across at the install and reads the rest from the code it just recompiled, and the
-watcher states its aim's values on the build that aim causes and on no other. **So a parameter
-control owes a writer into the Set and nothing else** — the writer into the watcher this entry used
-to ask for is what was removed.
-
-**There used to be no row on screen to press, and that was the first thing this bay's own work had
-to fix.** A pane drew a node group whole or not at all and there was no scroll position anywhere in
-the crate, so with the pair a bare run opens on the first group is the L1's at 26.5 + 19 x 22.5 =
-454px against a bay minimum of 151.5, and below roughly 534px of Inspector bay not one parameter row
-was drawn. **The pane scrolls since 2026-09-08**
-([ADR-0307](adr/0307-the-inspectors-pane-scrolls-and-the-position-is-the-panes-own.md)), so a short
-bay draws part of a group rather than none of it and every row is one notch of the wheel away. What
-is still owed is the keyboard's route to it, which is ADR-0259's grammar and is M5.13's rather than
-this bay's — see the entry above.
-
-**Also here.** Three of the seven *Adds* items land in this bay. The **node
-editor**, whose source half is
-`ReadProcedure` and `WriteProcedure` and is the two *node's source* rows above; adding
-or removing a node is the part with no home, listed in the preamble. The **parameter surfaces**,
-which are *Write a parameter*, *Attach a signal to a parameter* and *Take a parameter back* — the
-MIDI learn half of that item is M5.12 and the tooltip it lives in is M5.11. **What each of them
-addresses is a component**, since
-[ADR-0268](adr/0268-a-vector-parameter-is-driven-one-component-at-a-time.md): a `param glow : vec3`
-is three rows — `glow.x`, `glow.y`, `glow.z` — and the engine holds one `f32` under each. That
-record closes nothing here; it is written down beside the item because the three surfaces are where
-the spelling is first felt, and because **a surface can write a parameter live since 2026-09-08**, which is
-what makes these three the item they are. And the **`man / sug /
-auto` control**, which is *Set a node's authority*: the node head draws it since 2026-08-29 and the
-writer is what is left.
-
-**The sync toggles item is done, as far as a bay can own it.** The deck head draws both controls —
-two of the three sync modes are conditional rather than one, which is what the chip has to be able
-to say, and a one-off scrub shows a price rather than a disabled control ("8 bars back — 340 ms") —
-and the two key badges that were the remainder of it left with the two rows above, for M5.13.
-
-**The bay's prose, as tooltips.** Eight notes: *Inspector*, *A control that names no one node*,
-*The deck head, and why it is in the inspector*, *Who is holding a control*, *A knob is bound to a
-deck, not to a Set*, *Two focuses, and they do not look alike*, *Authority is per node*, and *The
-camera is a node, and three of its six numbers are rows* — retitled with ADR-0318, which is what
-put the rows there. Only the focus half of *Two focuses* is
-this bay's; the selection half is the mixer's, above. This is the largest body of prose on the page
-and the bay the mock has tipped most: the deck head, the wildcard group, the authority chips, the
-renderer row and *take back* each carry one, and the parameter rows and their faders do not.
+What M5.5 left owed is rescheduled, and all of it is under *Mx — TODO*: **a narrowing survives no replay
+and no keep**, which is a gap in the record format rather than a decision and the one row where a keep
+does not close it (ADR-0329); **a renderer's declared input is unreachable from the panel**, the folded
+`L4` head standing over several nodes taking no `uses` line for the reason it takes no authority chip
+(ADR-0329, alternative **e**); **the candidate list is inferred from the layer the input already
+reaches**, so a kind the deck reaches by no edge offers nothing; **the aim carries one capacity per
+slot**, so a per-geometry capacity is unaskable from any surface, with ADR-0328's revival condition —
+a pairing Set whose two geometries want two capacities — written into the record; and **the pane's
+scroll and the deck head's two build chips dropping before the row**, which are one reading arriving
+twice and sit under the existing entry that a region's declared minimum is a reading of its content and
+a bay that grows a control invalidates it. The scroll's other half, the keyboard's route to it, is
+**M5.13's** rather than owed here. **Every row of this bay but *Write a parameter* reads nothing in the MIDI
+column, and that is settled rather than owed**: a map line names a slot number, a word from a closed
+list or a range, and cannot say a node address.
 
 #### M5.6 — Outputs — **closed**
 
@@ -946,73 +705,41 @@ from the page answers the first and third exactly and the second in the state th
 Reading the live value would mean composing the sentence rather than quoting it, which is a change
 to the page rather than to the console (ADR-0330's consequences).
 
-**What it unblocks.** M5.12's learn, which is the one thing that section says waits on this: *the
+**What it unblocks.** M5.12's learn, which waited on this and landed with ADR-0336 the day after: *the
 assignment lives in the control's own tooltip*, and there is now a tooltip for it to live in.
 
-#### M5.12 — MIDI
+#### M5.12 — MIDI — **closed**
 
-**Rows.** One, and **it is closed as of 2026-09-10**. *Write a parameter* carried the page's only
-`plan` MIDI badge and now reads `cc → param N M`
-([ADR-0336](adr/0336-a-learn-is-a-map-edit-and-the-tips-midi-line-is-the-live-map.md)).
-`grep -c 'rt plan">MIDI' docs/manual/operations.html` is 0.
+The MIDI column of [every operation](manual/operations.html), which the bays leave out. The panel opens
+the first surface there is at start-up — no flag — and resolves a map in two tiers, `<store>/maps/default.map`
+then the `examples/surface.map` that ships, draining what arrives into `App::performed` beside the MCP
+drain, so a mapped knob writes the record a fader writes
+([ADR-0335](adr/0335-the-panel-opens-the-first-surface-there-is-and-the-map-is-two-tiers-under-the-store.md));
+and a learn is a **map edit** rather than an operation — its operand is the pointer, a permission an
+actor can grant itself is not one, and a record of a learn would put the room's wiring in the session
+stream — binding a deck and a **position** in the published interface rather than a parameter by name,
+with the tip's `⊕ MIDI:` line read off the live map instead of the page's own words
+([ADR-0336](adr/0336-a-learn-is-a-map-edit-and-the-tips-midi-line-is-the-live-map.md)). That closed what
+ADR-0220 left open for this column: MIDI measures the instrument rather than `karakuri-cli` alone, and
+no badge moved for it, because the grammar is one file both programs read.
+[history/m5.md](history/m5.md).
 
-**Exit.** No `plan` badge in the MIDI column of [every operation](manual/operations.html). **Met.**
+**Exit, met on 2026-09-10**: no `plan` badge in the MIDI column of
+[every operation](manual/operations.html). `grep -c 'rt plan">MIDI' docs/manual/operations.html` returns
+`0`. *Write a parameter* was the one row and now reads `cc → param N M`; every other row reads `has` or
+`gap`, and a `gap` here says a map line cannot name that operation rather than that one is waited for.
 
-**The panel takes a port and a map, as of 2026-09-10**
-([ADR-0335](adr/0335-the-panel-opens-the-first-surface-there-is-and-the-map-is-two-tiers-under-the-store.md)).
-It opens **the first MIDI input there is** at start-up — no flag, for ADR-0220's reason one column
-along — resolves a map in two tiers (`<store>/maps/default.map`, then the `examples/surface.map`
-that ships), and drains what arrives into `App::performed` beside the MCP drain, so **a mapped knob
-writes the record a fader writes**. The port and the map are both fixed for the run. **That closes
-what ADR-0220 left open for this column**: MIDI now measures the instrument, as the panel and key
-columns do, rather than `karakuri-cli` alone — and **no badge moved**, because the grammar is one
-file that both programs read.
-
-**What the badge count leaves out.** Four things, none of which has a row. The map is migrated and
-`Action` is deleted ([ADR-0196](adr/0196-a-map-line-names-a-state-and-an-old-line-is-refused.md)),
-and what is missing is **reaching a map while running** — a map is a file saved and recalled per
-controller. **The pill is drawn now and it is a readout**: it says which file is loaded, and the
-`View` field, the probe row and the tip landed with learn (ADR-0336). What is left is the *menu*
-under it — a press that opens *save · load · new*, and a `Surface::reload` beside
-`Surface::first`. The arrangement pill is that menu over a different file and is built
-([ADR-0221](adr/0221-an-arrangement-is-named-by-the-operator-and-kept-in-a-fourth-place.md)), which
-is what makes this an entry rather than a design. **Learning does not wait on it**: a learned line
-goes into `<store>/maps/default.map` and is loaded from there on the next start.
-
-The next was **learn**, and it is built (ADR-0336). A control is bound to a deck and a position in
-the Set's published interface, never to a parameter by name, and the assignment lives in the
-control's own tooltip. That position is why a vector parameter publishes as `x`, `y`, `z` in that
-order and never as one row — one row would be a position no control change can set
-([ADR-0268](adr/0268-a-vector-parameter-is-driven-one-component-at-a-time.md)). What landed with it:
-the grammar's `param <deck> <position>`, resolved against the deck by
-`karakuri_environment::midi::Interface` so that **both** programs read a map file the same way; the
-transport row's `learn` pill as the control and `map · <name>` as a readout; the tip's `⊕ MIDI:`
-line read off the live map, with the page's sentence kept where a control is unmapped; and
-`<store>/maps/default.map` as where a learned line goes, whichever map the run loaded. **A learn is
-a map edit and not an operation** — its operand is the pointer, a permission an actor can grant
-itself is not one, and a record of a learn would put the room's wiring in the session stream, which
-P-0092 is exactly about. So the vocabulary gained nothing and no row was added.
-
-The last two are M2's, and they are the surface itself rather than a route into it:
-**MIDI *out***, so a surface's LEDs and motorised faders follow the deck, which matters the moment
-two things can move a fader; and **14-bit control changes**, so a fader is more than 128 positions.
-
-**And the tip's MIDI line is the live map's, as of 2026-09-10.** Every tooltip on [the console
-page](manual/console.html) ends with a `⊕ MIDI:` line and it used to be the page's own words, which
-are the *mock's* assignments and no operator's — the tip confidently wrong about the one thing
-somebody hovers to check. It is derived from the map in use now, with the page's sentence kept
-where a control is unmapped, because that sentence carries the *reason* and no reverse lookup can.
-The seam is the part that would have been got wrong: `karakuri-console` cannot read a map, since
-`karakuri-midi` pulls `midir` and
-[ADR-0156](adr/0156-the-consoles-arrangement-is-a-tree-this-repository-owns.md) is that this crate
-takes no device — so the assignment is derived by `crates/karakuri` and handed to the hover layer,
-beside the `View`.
-
-**Blocked on. Nothing**, and that changed with ADR-0330. This read *M5.11, and only for learn:
-there is no tooltip to learn from until the pointer decision is taken.* The decision was taken and
-the layer built — `karakuri-console`'s `hover` — so there was a tooltip for an assignment to live
-in, and learn now lives in it. **What is left of M5.12 is MIDI out and 14-bit control changes**,
-neither of which ever waited on anything here.
+What M5.12 left owed. **MIDI *out* and 14-bit control changes are the third MIDI phase's and are in
+flight now** — MIDI out so a surface's LEDs and motorised faders follow the deck, 14-bit so a fader is
+more than 128 positions. They are M2's, they are the surface itself rather than a route into it, they
+carry no row, and they are named here rather than rescheduled. **Reaching a map while running** is under
+*Mx — TODO*: the `map` pill is a **readout** of which file is loaded and has no chevron for that reason,
+and what is missing is the menu under it — *save · load · new*, and a `Surface::reload` beside
+`Surface::first` — which the arrangement pill already is over a different file (ADR-0221). Learning
+never waited on it: a learned line goes into `<store>/maps/default.map` and is loaded from there on the
+next start. **A learn over a control with no position is refused and is not owed**: a position counts
+from one and is the number the Inspector draws, the only place a position is visible, so a control off
+the published interface has none and `param N 0` is refused with that sentence (ADR-0336).
 
 #### M5.13 — The keyboard
 
@@ -1711,8 +1438,57 @@ have.
   `MINIMUM_VIEWPORT` is the declared minima summed along each axis (ADR-0272), a test recomputes it
   from the tree, and what the test cannot check is whether a region's *declared* minimum is still a
   reading of its content. `centre`'s first number was a CSS track rather than a reading, and at it
-  the parameter faders were not drawn (ADR-0279) — so every bay still growing controls, M5.5 above
-  all, owes that reading again. From *The console's own shape*.
+  the parameter faders were not drawn (ADR-0279) — so every bay still growing controls owes that
+  reading again. **M5.5 is where it arrived twice and it is the worked example**: an Inspector pane
+  at the declared minimum window is 237.5 pixels wide against the deck head's 296 for seven
+  controls, so the two build chips are **dropped before the row is** (ADR-0328 §5) — the first
+  control on this console that comes and goes with the window — and the pane **scrolls** rather than
+  drawing a node group whole or not at all (ADR-0307), which is the same reading taken down the
+  other axis. The scroll's own remainder, a keyboard route to it, is M5.13's and not this entry's.
+  From *The console's own shape* and M5.5.
+
+- **A narrowing survives no replay and no keep.** `Operation::Publish` writes `Silent(NoRecord)` and
+  nothing in this vocabulary says what a Set publishes — not in a Set file and not in a session — so
+  a narrowing lives in the run that made it and a keep does not carry it.
+  [ADR-0329](adr/0329-an-input-is-wired-on-the-node-that-declares-it-and-the-number-is-the-publish-mark.md)
+  refuses to invent the spelling here, on ADR-0046's terms, and says outright that this is the one
+  row where the keep does not close what a session leaves out. A gap in the record format rather
+  than a decision, and both manual pages carry it. From M5.5.
+
+- **A renderer's declared input is unreachable from the panel.** The renderers of a deck are drawn
+  as one group under a bare `L4` head, and a renderer may declare an input —
+  `examples/second_eye.kir` declares `uses view : Camera`. A `uses` line on that head would be one
+  node's declaration drawn on a head standing for several, which is what ADR-0216 refuses for the
+  authority chip, so the folded head takes no line and the input is reached from the file and from a
+  model (ADR-0329, alternative **e**). Named as a limit rather than left to be found. From M5.5.
+
+- **The `uses` capsule's candidate list is inferred from the layer the input already reaches**, so a
+  kind the deck currently reaches by no edge offers nothing — a control offering less than the
+  language allows, which is the side of
+  [P-0090](principles/0090-a-surface-offers-it-never-decides.md) to be wrong on. An engine reader
+  for a node's declared inputs is the honest-looking fix and ADR-0329 refuses it as a second answer
+  to a question `Set::validate` already settles, so what this wants is a way to widen the offer
+  without keeping a second answer in step. From M5.5.
+
+- **The aim carries one capacity per slot, so a per-geometry capacity is unaskable from any
+  surface.** `Property::Capacity` lost its node rather than `Aim::capacity` gaining an entry per
+  geometry, because no route filled the address and nothing could have honoured it
+  ([ADR-0328](adr/0328-the-inspectors-deck-head-steps-a-slots-capacity-and-re-salts-it.md), which is
+  ADR-0228's own recorded limit closed by narrowing the payload). **The revival condition is written
+  into the record**: a pairing Set whose two geometries want two capacities. Until one exists this
+  is a statement rather than a gap. From M5.5.
+
+- **Reaching a MIDI map while running.** A map is a file saved and recalled per controller; the file
+  exists, the map is migrated and `Action` is deleted
+  ([ADR-0196](adr/0196-a-map-line-names-a-state-and-an-old-line-is-refused.md)), and no row on
+  [every operation](manual/operations.html) says a map can be loaded while the instrument runs.
+  **The `map` pill is a readout** of which file is loaded and carries no chevron for that reason —
+  `▾` on this console means *there is a menu under this*, and drawing one over a readout is
+  scaffolding (ADR-0336 §5). What is missing is the menu: *save · load · new*, and a
+  `Surface::reload` beside `Surface::first`. The arrangement pill is that menu over a different file
+  and is built (ADR-0221), which is what makes this an entry rather than a design. Learning never
+  waited on it — a learned line goes into `<store>/maps/default.map` and is loaded from there on the
+  next start. From M5.12.
 
 ---
 
@@ -1721,15 +1497,16 @@ have.
 **Read this if you are picking the work up.** It says where to start, what that piece needs, and
 what nobody has decided. Everything else is in the sub-milestone above, in the code, or in a record.
 
-### Where to start: M5.5 — Inspector
+### Where to start: M5.10 — MCP
 
-**The work starts at M5.5 — Inspector.** The order is this file's own, top to bottom, and the
-Inspector is the first sub-milestone above still open — **and the only bay still open**, every one
-below it having closed on or before 2026-09-09, *The console's own shape* with them. What follows it
-is the cross-cutting run, M5.10 to M5.13, which is a column of [every
-operation](manual/operations.html) apiece rather than a bay. Each entry names its rows, its exit
-condition and what it is blocked on, and is the one place those are written down; what a closed
-sub-milestone left owed is under *Mx — TODO* and in [history/m5.md](history/m5.md).
+**The work starts at M5.10 — MCP.** The order is this file's own, top to bottom, and M5.10 is the
+first sub-milestone above still open: **every bay has closed**, M5.5 — Inspector last on 2026-09-10,
+with M5.14 and *The console's own shape* among them, and M5.12 — MIDI closed the same day. What is
+left of the cross-cutting run is M5.10, M5.11 and M5.13, which is a column of [every
+operation](manual/operations.html) apiece rather than a bay, and after them M5.15 and M5.16 in that
+order. Each entry names its rows, its exit condition and what it is blocked on, and is the one place
+those are written down; what a closed sub-milestone left owed is under *Mx — TODO* and in
+[history/m5.md](history/m5.md).
 
 **The panel is a program.** `cargo run -p karakuri` opens the console over a real deck: the
 picture, four deck previews, the transport, the mixer, the Library bay, the Inspector, the
@@ -1940,7 +1717,7 @@ is in [history/m5.md](history/m5.md) under M5.7.
 
 Two more questions are named where they are met rather than here: who owns the pointer (M5.11), and
 whether an addressed write by an agent onto a node the operator kept is refused, which cannot be
-decided until something writes a parameter on an agent's behalf (M5.5). **What an agent is one *of***
+decided until something writes a parameter on an agent's behalf — M6's, now that the Inspector has closed. **What an agent is one *of***
 is M6's and is open there.
 
 ---
