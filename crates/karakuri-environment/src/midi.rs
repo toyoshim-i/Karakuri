@@ -88,6 +88,27 @@
 //! both mean something, and the line between the two halves is
 //! `karakuri_midi::Map::is_continuous` rather than a list kept here.
 //!
+//! ## The surface is written to as well, and the frame does not wait for it
+//!
+//! [`Router::shown`] is the other direction: every mapped control's current
+//! value, read back through [`Feedback`] and turned into wire messages, so a
+//! surface's LEDs and motorised faders follow the deck. **It runs on the frame
+//! the change lands** — the drain and the send are one pass — and it sends
+//! only what *moved*, which is the difference between it and writing the whole
+//! map out sixty times a second.
+//!
+//! **Nothing on the frame path blocks** (P-0094): what [`Surface::show`] does
+//! with the bytes is `karakuri_midi::Out::send`, a bounded queue to a thread
+//! that owns the connection, dropping and counting when it is full — ADR-0067's
+//! shape, and `karakuri_midi::device`'s own documentation carries why a bound
+//! is right for this stream and not for a session's.
+//!
+//! **And nothing is written into the record stream.** A surface being shown
+//! where the deck is produces no `Operation` and no `Record`: the wire is the
+//! only thing that changes, so a session recorded from a controller still
+//! replays with neither controller nor map attached
+//! ([P-0092](../../../docs/principles/0092-the-same-inputs-produce-the-same-frame.md)).
+//!
 //! **Everything said here is said once per control**, and that is not tidiness.
 //! A fader sweep is several hundred messages, this runs inside `Live::frame`,
 //! and `eprintln!` takes a lock and issues a write — so a line per message is a
@@ -99,7 +120,7 @@
 use std::collections::HashSet;
 use std::path::Path;
 
-use karakuri_midi::{Map, Port};
+use karakuri_midi::{Control, Echo, Half, Map, Out, Port, Shown};
 
 /// **The wire, parsed** — `karakuri_midi::Message`, re-exported because a
 /// learn is a gesture the *program* drives and a program has to be able to say
@@ -170,6 +191,78 @@ impl Interface for Decks<'_> {
     }
 }
 
+/// **What a mapped control is at right now**, so the surface can be shown it —
+/// the readback MIDI out needs, and [`Interface`]'s twin at the other end of
+/// the same route.
+///
+/// Two traits and not one, because they are asked different questions by
+/// different callers: [`Interface`] resolves a *position* on the way in and is
+/// asked once per message that arrives, and this is asked once per mapped
+/// control per frame on the way out. They are also answered by different
+/// things — a `param` line's way in needs the deck alone, and the way out
+/// needs the room's look as well, because `exposure` is a map line and is not
+/// a deck's.
+///
+/// **`None` is a control this program cannot read**, and nothing is sent for
+/// it. `tap` is the permanent one — a beat has no state — and a slot past the
+/// end of the deck is the ordinary one.
+pub trait Feedback {
+    /// Where `control` is, or `None` for one there is nothing to show.
+    fn shown(&self, control: Control) -> Option<Shown>;
+}
+
+/// **[`Feedback`] over a real deck and the look it is drawn under**, which is
+/// the implementation both programs use and the only one that is not a test's.
+///
+/// It reads a published control exactly as [`Decks`] does — `Set::published()`
+/// in order, counting from one — so what is shown on a knob is the control
+/// that knob moves, and the Inspector's number is the number in the line.
+pub struct Lit<'a> {
+    pub deck: &'a karakuri_engine::deck::Deck,
+    /// **The room's exposure**, which is not the deck's and is the reason this
+    /// is not `Decks`. Each program holds its own: the panel's is
+    /// `Engine::look` and `karakuri-cli`'s is `Live::look`.
+    pub exposure: f32,
+}
+
+impl Feedback for Lit<'_> {
+    fn shown(&self, control: Control) -> Option<Shown> {
+        // A slot this deck does not hold is nothing to show rather than a
+        // panic: `Deck::gain` and its neighbours index directly, and a map
+        // written against a deck of four played on a deck of one is the
+        // ordinary state the router already says one sentence about.
+        let slot =
+            |deck: u8| (usize::from(deck) < self.deck.slot_count()).then_some(usize::from(deck));
+        Some(match control {
+            Control::Gain { deck } => Shown::At(self.deck.gain(slot(deck)?)),
+            Control::Opacity { deck } => Shown::At(self.deck.opacity(slot(deck)?)),
+            Control::Exposure => Shown::At(self.exposure),
+            Control::MaskPosition { deck } => Shown::At(self.deck.mask(slot(deck)?).position()),
+            // **A pad shows whether the deck is in the state that pad names**,
+            // which is what makes a residency row on a surface a readout as
+            // well as a control: one of the three is lit.
+            Control::Residency { deck, residency } => {
+                Shown::On(crate::mix::residency(self.deck.residency(slot(deck)?)) == residency)
+            }
+            Control::Blend { deck, blend } => {
+                Shown::On(crate::mix::blend_mode(self.deck.blend(slot(deck)?)) == blend)
+            }
+            Control::Param { deck, position } => {
+                let set = self.deck.slot(slot(deck)?).set();
+                let at = usize::from(position).checked_sub(1)?;
+                let published = set.published().into_iter().nth(at)?;
+                Shown::Published {
+                    value: set.value_at(published.at, &published.key)?,
+                    declared: published.range,
+                }
+            }
+            // A beat has no state to show, so nothing is ever sent for a
+            // `tap` line.
+            Control::Tap => return None,
+        })
+    }
+}
+
 /// The compiler's layer as the vocabulary spells it — [`crate::mcp`]'s
 /// `kind_of` backwards, and written here because that one is private to the
 /// module that serves a model.
@@ -181,6 +274,7 @@ fn layer_of(kind: karakuri_ir::Kind) -> karakuri_operation::Layer {
         Kind::L3 => karakuri_operation::Layer::L3,
         Kind::L4 => karakuri_operation::Layer::L4,
         Kind::Field => karakuri_operation::Layer::Field,
+        Kind::L5 => karakuri_operation::Layer::L5,
     }
 }
 
@@ -219,6 +313,34 @@ pub struct Router {
     /// than a guess, because every key here comes from a target and a target
     /// comes from an entry.
     coalescing: Vec<(Continuous, usize)>,
+    /// **The MSB last seen for each 14-bit control**, keyed by the channel it
+    /// arrived on and the pair's own controller number
+    /// (`karakuri_midi::Wide::control`).
+    ///
+    /// The one piece of state a `cc14` pair needs, and it is here because
+    /// `karakuri_midi::Map` is a pure function of one message: the two halves
+    /// are two messages with a frame boundary free to fall between them. See
+    /// that module's *A fader is 128 positions, or 16384*, which carries the
+    /// lone-MSB rule this holds the state for.
+    ///
+    /// **A `Vec` with the map's own length reserved and a linear scan**, for
+    /// `coalescing`'s reason exactly: a map's 14-bit controls are single
+    /// figures and a `HashMap` that had to grow would allocate on the frame
+    /// path. It is pushed to once per control per run and read after that.
+    halves: Vec<((u8, u8), u8)>,
+    /// **Every mapped control, as something to show a surface** — the map read
+    /// the other way, built once because it allocates and this is read inside
+    /// a frame. Rebuilt on a learn, which is the only other moment a map
+    /// changes.
+    echoes: Vec<Echo>,
+    /// **What each control above was last shown at**, one per `echoes` entry
+    /// and `None` for one never shown.
+    ///
+    /// This is what makes MIDI out *"on the frame the change lands"* rather
+    /// than *"every frame"*: a control whose position has not moved by a step
+    /// of its own fader is a message that would say nothing, and a surface's
+    /// queue is better spent on the ones that did move.
+    lit: Vec<Option<u16>>,
 }
 
 /// **What state a continuous operation names**: its variant, and the deck it
@@ -249,9 +371,22 @@ type Continuous = (
     Option<u16>,
 );
 
+/// **At what resolution a message is read** — [`Router::paired`]'s answer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Paired {
+    /// Seven bits, which is every plain `cc` line, every `note`, and a
+    /// `cc14` line's MSB half on its own.
+    Seven,
+    /// Fourteen bits, `(msb << 7) | lsb`.
+    Wide(u16),
+    /// An LSB half with no MSB held for its control. It moves nothing.
+    Lone,
+}
+
 impl Router {
     pub fn new(map: Map) -> Router {
         let controls = map.len();
+        let echoes = map.echoes();
         Router {
             map,
             notices: Vec::new(),
@@ -259,6 +394,9 @@ impl Router {
             seen_no_slot: HashSet::new(),
             seen_no_control: HashSet::new(),
             coalescing: Vec::with_capacity(controls),
+            halves: Vec::with_capacity(controls),
+            lit: vec![None; echoes.len()],
+            echoes,
         }
     }
 
@@ -298,23 +436,35 @@ impl Router {
             // target but one addresses something the vocabulary spells
             // outright, and `param` addresses a *position* in a deck's
             // published interface, which only the deck can resolve.
-            let (operation, position) = match self.map.operation(*message) {
-                Some(operation) => (Some(operation), None),
-                None => match self.map.parameter(*message) {
-                    Some(asked) => (
-                        self.resolved(asked, slot_count, interface),
-                        Some(asked.position),
-                    ),
-                    None => {
-                        // A release is unmapped by construction — every pad
-                        // acts on the press — so reporting one would call the
-                        // other half of every hit a discovery.
-                        if !matches!(message, Message::NoteOff { .. }) {
-                            self.report_unmapped(*message);
-                        }
-                        continue;
+            // **A 14-bit pair, assembled** — or the message as it stands,
+            // which is every 7-bit line and a `cc14` line's MSB half. See
+            // [`Router::paired`], where the whole of the pairing is.
+            let asked = match self.paired(*message) {
+                // A lone LSB with no MSB held: there is nothing to refine, and
+                // it is not a discovery either — the line that names it is
+                // loaded and its other half has simply not arrived yet.
+                Paired::Lone => continue,
+                Paired::Wide(value) => (
+                    self.map.operation_wide(*message, value),
+                    self.map.parameter_wide(*message, value),
+                ),
+                Paired::Seven => (self.map.operation(*message), self.map.parameter(*message)),
+            };
+            let (operation, position) = match asked {
+                (Some(operation), _) => (Some(operation), None),
+                (None, Some(asked)) => (
+                    self.resolved(asked, slot_count, interface),
+                    Some(asked.position),
+                ),
+                (None, None) => {
+                    // A release is unmapped by construction — every pad
+                    // acts on the press — so reporting one would call the
+                    // other half of every hit a discovery.
+                    if !matches!(message, Message::NoteOff { .. }) {
+                        self.report_unmapped(*message);
                     }
-                },
+                    continue;
+                }
             };
             // Resolution failed and said so; nothing more to do with it.
             let Some(operation) = operation else {
@@ -430,6 +580,108 @@ impl Router {
         }
         self.coalescing.push((control, out.len()));
         out.push(operation);
+    }
+
+    /// **Which resolution this message is read at**, holding the MSB half of a
+    /// 14-bit pair as it goes past.
+    ///
+    /// The rule is `karakuri_midi::map`'s and this is where its one piece of
+    /// state lives:
+    ///
+    /// - **A 7-bit line** is [`Paired::Seven`] and nothing is held.
+    /// - **An MSB half** is held *and* answered [`Paired::Seven`], so it moves
+    ///   the control coarsely at `msb / 127` — both ends of the fader exact,
+    ///   which is what keeps a surface that sends no LSB from being a fader
+    ///   that cannot quite arrive.
+    /// - **An LSB half** with an MSB held is [`Paired::Wide`], carrying
+    ///   `(msb << 7) | lsb`.
+    /// - **An LSB half with nothing held** is [`Paired::Lone`] and moves
+    ///   nothing: there is nothing to refine yet.
+    ///
+    /// **Nothing waits and nothing is timed.** Every message that arrives is
+    /// acted on as it arrives, so no fader is left between two values by a
+    /// pair that did not finish — which is why there is no deadline here and
+    /// no clock to hang one on.
+    ///
+    /// **The channel is part of the key.** Two surfaces on two channels
+    /// sending the same pair of controller numbers are two faders, and a map
+    /// line that named no channel maps both of them; holding one MSB for the
+    /// two would refine each with the other's top bits.
+    fn paired(&mut self, message: Message) -> Paired {
+        let Some(wide) = self.map.wide(message) else {
+            return Paired::Seven;
+        };
+        let Message::ControlChange { channel, value, .. } = message else {
+            return Paired::Seven;
+        };
+        let key = (channel, wide.control);
+        match wide.half {
+            Half::Msb => {
+                match self.halves.iter_mut().find(|(seen, _)| *seen == key) {
+                    Some((_, held)) => *held = value,
+                    None => self.halves.push((key, value)),
+                }
+                Paired::Seven
+            }
+            Half::Lsb => match self.halves.iter().find(|(seen, _)| *seen == key) {
+                Some((_, msb)) => Paired::Wide((u16::from(*msb) << 7) | u16::from(value)),
+                None => Paired::Lone,
+            },
+        }
+    }
+
+    /// **What the surface should be shown**, as wire messages, for every
+    /// mapped control the deck has moved since the last call.
+    ///
+    /// `out` is cleared first and holds complete messages: one per 7-bit
+    /// control and per pad, two for a `cc14` pair. **The caller sends them**,
+    /// which is this module's own split — a `Router` has no port, so what can
+    /// be wrong here is what is *shown* rather than what a device did with it,
+    /// and a test needs no device to check it.
+    ///
+    /// **Only what moved.** A control whose position on its own fader has not
+    /// changed says nothing, so a still deck writes nothing at all and a
+    /// transition moving one mask front writes one message a frame. That is
+    /// the difference between this and re-stating the whole map every frame,
+    /// which would fill a surface's queue with the answer it already had.
+    ///
+    /// **A control this program cannot read is skipped and not zeroed.**
+    /// `Feedback::shown` answers `None` for `tap`, for a slot past the end of
+    /// the deck and for a `param` line reaching past a Set's interface, and
+    /// darkening a pad because a value could not be read would be the surface
+    /// asserting something about the deck.
+    ///
+    /// **Nothing is recorded.** No `Operation` is produced and no `Record` is
+    /// written: a session recorded from a controller replays with neither
+    /// controller nor map attached (P-0092), and MIDI out is the wire rather
+    /// than the stream.
+    ///
+    /// **Nothing here allocates** once the run is warm: `echoes` and `lit` are
+    /// built at construction, and `out` is the caller's own buffer, cleared
+    /// rather than dropped.
+    pub fn shown(&mut self, values: &dyn Feedback, out: &mut Vec<[u8; 3]>) {
+        out.clear();
+        let Router { echoes, lit, .. } = self;
+        for (index, echo) in echoes.iter().enumerate() {
+            let Some(shown) = values.shown(echo.control()) else {
+                continue;
+            };
+            let position = echo.position(shown);
+            if lit[index] == Some(position) {
+                continue;
+            }
+            lit[index] = Some(position);
+            echo.wire(position, out);
+        }
+    }
+
+    /// **The map read the other way, rebuilt** — for a learn, which is the one
+    /// thing that changes a map while a run is going. A control that has just
+    /// been bound has never been shown, so every echo starts unlit again and
+    /// the next frame states the whole surface once.
+    fn relit(&mut self) {
+        self.echoes = self.map.echoes();
+        self.lit = vec![None; self.echoes.len()];
     }
 
     fn report_unmapped(&mut self, message: Message) {
@@ -654,6 +906,22 @@ fn squashed(spelling: &str) -> String {
 /// An open surface: a [`Router`] with a port in front of it.
 pub struct Surface {
     port: Port,
+    /// **The same device's output port, where it has one** — what makes a
+    /// surface's LEDs and motorised faders follow the deck.
+    ///
+    /// `None` is a surface that only sends: a controller with no output port,
+    /// one whose output another program holds, or a device whose two ports are
+    /// named so differently that [`paired_out`] could not match them. Every
+    /// one of those is a state and not a fault — MIDI in is what a map is for,
+    /// and the run goes on exactly as it did before this existed.
+    out: Option<Out>,
+    /// Whether a dropped message has been said out loud yet. A full queue is
+    /// worth one sentence a run and not one a frame — the same rule the
+    /// router's own notices keep, for the same reason.
+    said_dropped: bool,
+    /// Scratch for [`Router::shown`], owned so the frame path does not
+    /// allocate, on [`Surface::inbox`](Surface)'s terms exactly.
+    outbox: Vec<[u8; 3]>,
     router: Router,
     /// **What the map is called**, or `None` for a surface running without
     /// one. The file's stem rather than its path: it is what a readout names —
@@ -698,6 +966,12 @@ impl Surface {
                 ""
             }
         );
+        // **Said only when there is one.** A surface with no output port is
+        // the state every run before MIDI out existed was in, and a line
+        // announcing its absence would be a complaint about most controllers.
+        if let Some(out) = surface.out_name() {
+            eprintln!("midi out: `{out}` — mapped controls follow the deck");
+        }
         Ok(surface)
     }
 
@@ -745,6 +1019,9 @@ impl Surface {
         };
         Ok((
             Surface {
+                out: paired_out(port.name()),
+                said_dropped: false,
+                outbox: Vec::with_capacity(INBOX),
                 port,
                 router: Router::new(map),
                 map_name: map_path
@@ -855,6 +1132,10 @@ impl Surface {
         self.map_name = to
             .file_stem()
             .map(|stem| stem.to_string_lossy().into_owned());
+        // **The map changed, so the map read the other way changed too.** A
+        // knob just bound has never been shown, and the control it took over
+        // may have been shown on another knob a moment ago.
+        self.router.relit();
         Ok(line)
     }
 
@@ -884,6 +1165,64 @@ impl Surface {
     pub fn bound(&self, target: &str) -> Option<String> {
         self.router.map.bound(target)
     }
+
+    /// **The output port that was opened**, or `None` for a surface that only
+    /// sends — for the line a program says in its legend.
+    pub fn out_name(&self) -> Option<&str> {
+        self.out.as_ref().map(Out::name)
+    }
+
+    /// **Show the surface where the deck is** — [`Router::shown`] with the port
+    /// in front of it, called once a frame beside the drain.
+    ///
+    /// Every mapped control the deck has moved since the last call is written
+    /// to the wire: a `cc` per continuous control at its 7-bit or 14-bit
+    /// position, and a note per pad whose state changed. **Nothing is sent for
+    /// a control nothing is mapped to**, because the map is the list, and
+    /// nothing is written into the session stream at all.
+    ///
+    /// **It does not wait.** `Out::send` is a bounded queue to a thread that
+    /// owns the connection, and a frame that finds it full drops rather than
+    /// blocking (P-0094, ADR-0067's shape). The drop is counted and said
+    /// **once a run**, because a surface that quietly stopped following the
+    /// deck is the failure nobody notices.
+    ///
+    /// A surface with no output port does nothing here, and costs one branch.
+    pub fn show(&mut self, values: &dyn Feedback) {
+        let Some(out) = self.out.as_ref() else {
+            return;
+        };
+        let Surface { router, outbox, .. } = self;
+        router.shown(values, outbox);
+        for message in outbox.iter() {
+            out.send(*message);
+        }
+        if !self.said_dropped && self.out.as_ref().is_some_and(|out| out.dropped() > 0) {
+            self.said_dropped = true;
+            eprintln!(
+                "  midi out: the surface is not keeping up and messages are being dropped — a \
+                 control may show where the deck was rather than where it is"
+            );
+        }
+    }
+}
+
+/// **The output port that goes with an input**, or `None`.
+///
+/// A device's two ports carry the manufacturer's name and often differ past
+/// it — "nanoKONTROL2 SLIDER/KNOB" in and "nanoKONTROL2 CTRL" out — so the
+/// whole name is tried first and the first word after it. **The first word is
+/// the device**, which is what makes this a pairing rather than a guess: two
+/// controllers plugged in at once have two different first words, and a device
+/// whose output is named nothing like its input is answered `None` rather than
+/// paired with somebody else's port.
+///
+/// It is deliberately silent. A surface with no output is the state every run
+/// before this existed was in, and a program that printed a complaint for it
+/// would be complaining about most controllers.
+fn paired_out(input: &str) -> Option<Out> {
+    let first = input.split_whitespace().next().unwrap_or(input);
+    Out::open(input).or_else(|_| Out::open(first)).ok()
 }
 
 #[cfg(test)]
@@ -931,6 +1270,50 @@ mod tests {
                 },
                 *range,
             ))
+        }
+    }
+
+    /// **A deck read back, without a deck.** What [`Lit`] answers off a real
+    /// one, as a table a test writes: a value per continuous control and a
+    /// state per pad. `None` is a control this stands in for nothing of, which
+    /// is what `tap` and a slot past the end of a deck are.
+    #[derive(Default)]
+    struct Held(std::collections::HashMap<String, Shown>);
+
+    impl Held {
+        fn at(mut self, control: &str, value: f32) -> Held {
+            self.0.insert(control.to_string(), Shown::At(value));
+            self
+        }
+        fn on(mut self, control: &str, on: bool) -> Held {
+            self.0.insert(control.to_string(), Shown::On(on));
+            self
+        }
+        fn set(&mut self, control: &str, value: f32) {
+            self.0.insert(control.to_string(), Shown::At(value));
+        }
+    }
+
+    /// The spelling of a control, which is the map's own key for it
+    /// (`Target::spelled`) and the one both directions agree on.
+    fn named(control: Control) -> String {
+        match control {
+            Control::Gain { deck } => format!("gain {deck}"),
+            Control::Opacity { deck } => format!("opacity {deck}"),
+            Control::Exposure => "exposure".to_string(),
+            Control::MaskPosition { deck } => format!("mask-position {deck}"),
+            Control::Residency { deck, residency } => {
+                format!("residency {deck} {}", residency.name())
+            }
+            Control::Blend { deck, blend } => format!("blend {deck} {}", blend.name()),
+            Control::Param { deck, position } => format!("param {deck} {position}"),
+            Control::Tap => "tap".to_string(),
+        }
+    }
+
+    impl Feedback for Held {
+        fn shown(&self, control: Control) -> Option<Shown> {
+            self.0.get(&named(control)).copied()
         }
     }
 
@@ -1546,5 +1929,142 @@ mod tests {
             4,
         );
         assert!(r.notices().is_empty(), "{:?}", r.notices());
+    }
+
+    /// **A 14-bit pair moves the control at 16384 positions**, and the two
+    /// halves are two messages with a frame boundary free to fall between
+    /// them — so the MSB is held here rather than in the map, which is a pure
+    /// function of one message.
+    #[test]
+    fn a_pair_assembles_across_two_messages_and_the_msb_alone_moves_the_control() {
+        let mut r = router("cc14 1 33 -> gain 0");
+        // The MSB alone moves the fader coarsely, at exactly the reading a
+        // 7-bit line would give: both ends exact, so nothing is left between
+        // two values by a pair that has not finished.
+        assert_eq!(
+            routed(&mut r, &[cc(1, 127)], 4),
+            vec![Operation::SetGain { deck: 0, gain: 1.0 }]
+        );
+        // The LSB refines the MSB that is held, in a later frame.
+        assert_eq!(
+            routed(&mut r, &[cc(33, 0)], 4),
+            vec![Operation::SetGain {
+                deck: 0,
+                gain: 16256.0 / 16383.0
+            }]
+        );
+        // And within one frame the two coalesce, so what reaches the deck is
+        // the refined value alone.
+        let mut r = router("cc14 1 33 -> gain 0");
+        assert_eq!(
+            routed(&mut r, &[cc(1, 64), cc(33, 3)], 4),
+            vec![Operation::SetGain {
+                deck: 0,
+                gain: 8195.0 / 16383.0
+            }],
+            "a pair inside one frame was not one operation"
+        );
+    }
+
+    /// **A lone LSB moves nothing and is not a discovery.** There is nothing
+    /// to refine until an MSB has been seen for that control, and the line
+    /// that names it *is* loaded — so reporting it as unmapped would tell an
+    /// operator to write a line they have already written.
+    #[test]
+    fn a_lone_lsb_moves_nothing_and_is_not_reported_as_unmapped() {
+        let mut r = router("cc14 1 33 -> gain 0");
+        assert_eq!(routed(&mut r, &[cc(33, 100)], 4), vec![]);
+        assert_eq!(
+            r.notices(),
+            &[] as &[String],
+            "a loaded line was called unmapped"
+        );
+    }
+
+    /// **A deck change writes the mapped control's value to the surface, and
+    /// an unmapped one writes nothing.** The map is the list: a control no
+    /// line names has no message to send, and MIDI out cannot reach further
+    /// than MIDI in does.
+    #[test]
+    fn a_deck_change_shows_a_mapped_control_and_an_unmapped_one_shows_nothing() {
+        let mut r = router("cc 1 -> gain 0\nnote 32 -> residency 0 live");
+        let mut held = Held::default()
+            .at("gain 0", 0.0)
+            .at("gain 1", 0.0)
+            .at("opacity 0", 0.5)
+            .on("residency 0 live", false);
+        let mut wire = Vec::new();
+
+        // The first pass states what is mapped, once.
+        r.shown(&held, &mut wire);
+        assert_eq!(wire, vec![[0xb0, 1, 0], [0x90, 32, 0]]);
+
+        // A deck nothing moved says nothing at all.
+        r.shown(&held, &mut wire);
+        assert_eq!(
+            wire,
+            Vec::<[u8; 3]>::new(),
+            "a still deck wrote to the surface"
+        );
+
+        // A mapped control moved is one message.
+        held.set("gain 0", 1.0);
+        r.shown(&held, &mut wire);
+        assert_eq!(wire, vec![[0xb0, 1, 127]]);
+
+        // **An unmapped control moved is nothing.** `gain 1` and `opacity 0`
+        // are on the deck and on no line of this map.
+        held.set("gain 1", 1.0);
+        held.set("opacity 0", 1.0);
+        r.shown(&held, &mut wire);
+        assert_eq!(
+            wire,
+            Vec::<[u8; 3]>::new(),
+            "a control no line names was sent"
+        );
+
+        // And a pad follows the state it names, both ways.
+        held.0
+            .insert("residency 0 live".to_string(), Shown::On(true));
+        r.shown(&held, &mut wire);
+        assert_eq!(wire, vec![[0x90, 32, 127]]);
+    }
+
+    /// **A 14-bit control is shown as a pair, MSB first**, and a move too
+    /// small to change its 7-bit half still moves the fine one — which is the
+    /// whole of what the second seven bits buy on the way out.
+    #[test]
+    fn a_pair_is_shown_as_two_messages_and_a_fine_move_still_says_something() {
+        let mut r = router("cc14 2 34 -> opacity 1");
+        let mut held = Held::default().at("opacity 1", 0.0);
+        let mut wire = Vec::new();
+        r.shown(&held, &mut wire);
+        assert_eq!(wire, vec![[0xb0, 2, 0], [0xb0, 34, 0]]);
+        // A move of one 14-bit step: the MSB half does not change and the
+        // fader still follows.
+        held.set("opacity 1", 1.0 / 16383.0);
+        r.shown(&held, &mut wire);
+        assert_eq!(wire, vec![[0xb0, 2, 0], [0xb0, 34, 1]]);
+        // A move too small even for that says nothing.
+        held.set("opacity 1", 1.0 / 16383.0 + 1e-6);
+        r.shown(&held, &mut wire);
+        assert_eq!(wire, Vec::<[u8; 3]>::new());
+    }
+
+    /// **A control this program cannot read is skipped rather than zeroed.**
+    /// `tap` is the permanent case — a beat has no state — and darkening a pad
+    /// because a value could not be read would be the surface asserting
+    /// something about the deck.
+    #[test]
+    fn a_control_with_nothing_to_show_is_skipped_rather_than_darkened() {
+        let mut r = router("note 61 -> tap\ncc 1 -> gain 0");
+        let held = Held::default().at("gain 0", 1.0);
+        let mut wire = Vec::new();
+        r.shown(&held, &mut wire);
+        assert_eq!(
+            wire,
+            vec![[0xb0, 1, 127]],
+            "a control with no value was sent"
+        );
     }
 }

@@ -13,7 +13,7 @@
 //! short, direct implementations in `l1.rs` and `l4.rs`.
 
 use karakuri_ir::builtin::Builtin;
-use karakuri_ir::typed::{TExpr, TExprKind};
+use karakuri_ir::typed::{TExpr, TExprKind, TexRef};
 use karakuri_ir::{Ambient, Attr, BinOp, Lit, Ty, UnOp};
 
 use crate::layout::{mangle_param, mangle_source_slot};
@@ -93,6 +93,28 @@ pub trait Resolver {
         let _ = name;
         None
     }
+
+    /// **The WGSL binding one of the textures an L5 was handed is declared
+    /// under.** Only [`crate::l5`] has such a resolver; the checker refuses a
+    /// fetch anywhere else, so every other implementation says so rather than
+    /// inventing an answer.
+    fn read_texture(&self, tex: &TexRef) -> String {
+        unreachable!("a fetch from {tex:?} is refused outside a `frame` block")
+    }
+
+    /// **This fragment's own texel, as an integer coordinate** — what
+    /// `textureLoad` takes, and what makes `texel` unfiltered.
+    ///
+    /// Its own method rather than a constant string, because it is the one part
+    /// of a fetch that depends on how the entry point spelled its position.
+    fn texel_at(&self) -> String {
+        unreachable!("`texel` is refused outside a `frame` block")
+    }
+
+    /// **The sampler `tap` filters through.**
+    fn sampler(&self) -> String {
+        unreachable!("`tap` is refused outside a `frame` block")
+    }
 }
 
 /// Lowers one expression, recording any helper functions or `mod`
@@ -140,6 +162,35 @@ pub fn lower_expr(expr: &TExpr, resolver: &dyn Resolver, req: &mut Requirements)
             resolver.read_ambient(Ambient::T),
             resolver.read_ambient(Ambient::Beats),
         ),
+        // **Two fetches, lowered at the call site rather than through the
+        // prelude**, because WGSL already has both and neither needs a wrapper:
+        // `texel` is a `textureLoad` at this fragment's own integer coordinate,
+        // unfiltered and unresampled, and `tap` is a `textureSampleLevel` at
+        // level zero through the chain's sampler.
+        //
+        // **The difference between them is the whole of why `texel` takes no
+        // coordinate.** At an amount just above zero a shift's outer taps land
+        // back on the centre, and a pass that resampled there would differ from
+        // one that did not run by what a filter did rather than by what the
+        // effect is. There is no coordinate to get wrong because there is no
+        // coordinate.
+        TExprKind::Sample { func, texture, at } => {
+            let tex = resolver.read_texture(texture);
+            match func {
+                Builtin::Texel => format!("textureLoad({tex}, {}, 0)", resolver.texel_at()),
+                Builtin::Tap => {
+                    let uv = at
+                        .as_ref()
+                        .map(|a| lower_expr(a, resolver, req))
+                        .expect("a checked `tap` carries its coordinate");
+                    format!(
+                        "textureSampleLevel({tex}, {}, {uv}, 0.0)",
+                        resolver.sampler()
+                    )
+                }
+                other => unreachable!("{other:?} does not take a texture"),
+            }
+        }
         TExprKind::Construct { args } => {
             let inner: Vec<String> = args.iter().map(|a| lower_expr(a, resolver, req)).collect();
             format!("{}({})", wgsl_ty(expr.ty), inner.join(", "))

@@ -97,7 +97,7 @@ use egui::epaint::text::{LayoutJob, TextFormat};
 use egui::{Color32, CornerRadius, FontFamily, FontId, Galley, Pos2, Rect, Stroke, StrokeKind, Ui};
 use karakuri_layout::Point;
 use karakuri_operation::gate::Class;
-use karakuri_operation::Output;
+use karakuri_operation::{Layer, Output};
 
 use crate::input::{Claim, PROBES};
 use crate::panel::Panel;
@@ -105,7 +105,7 @@ use crate::room::size::HAIRLINE;
 use crate::view::{
     arrangement, audio_in, deck_head, inspector, keep_pill, library, look, master, mcp_pill, mixer,
     outputs, program_bay, program_head, sequencer, staging, to_egui, tracker_group, transition,
-    transport, Field, Scope, View,
+    transport, Field, KindChip, Scope, View,
 };
 
 /// **The mock, embedded**: the only copy of every tip on this console.
@@ -467,6 +467,22 @@ pub const TIPS: [(&str, &[Tipped]); PROBES.len()] = [
             at: on_keep,
         }],
     ),
+    // **The mark between the run and the count**, whose words the mock has
+    // carried since the chooser was drawn: it cites the *first* pane's `▾`,
+    // and the second pane's own tip says the same thing about the head next
+    // door — one entry, because one probe answers for both heads.
+    (
+        "the Inspector pane heads' deck pulldown",
+        &[Tipped {
+            control: "the pane head's deck pulldown",
+            cites: Cite {
+                class: "",
+                text: "&#9662;",
+                nth: 0,
+            },
+            at: on_pane_target,
+        }],
+    ),
     // **Four of the row's seven.** The two that landed with the deck head's
     // second row are not tipped here yet, and a fifth entry is what closes
     // that — the row's own count is `input::PROBES`' and moves with the bay.
@@ -595,6 +611,24 @@ pub const TIPS: [(&str, &[Tipped]); PROBES.len()] = [
             at: on_auth,
         }],
     ),
+    // **The capsule at the right of the same head.** The mock writes the whole
+    // of it once, on `drift_shell`'s — what it keeps, where it goes, what it
+    // is filed as, where a model's lands, and the two heads that carry none —
+    // and gives the other two capsules a sentence apiece pointing back at it.
+    // This cites the long one, because it is the one an operator meeting the
+    // control needs.
+    (
+        "a node head's keep capsule",
+        &[Tipped {
+            control: "a node head's keep capsule",
+            cites: Cite {
+                class: "mini",
+                text: "keep",
+                nth: 0,
+            },
+            at: on_node_keep,
+        }],
+    ),
     (
         "a sensitivity row's curve and take back",
         &[Tipped {
@@ -686,26 +720,86 @@ pub const TIPS: [(&str, &[Tipped]); PROBES.len()] = [
     ),
     (
         "the Library bay's filter fields",
+        &[Tipped {
+            control: "the holds field",
+            cites: Cite {
+                class: "field",
+                text: "holds&hellip;",
+                nth: 0,
+            },
+            at: on_holds,
+        }],
+    ),
+    (
+        "the Library bay's kind chips",
         &[
             Tipped {
-                control: "the holds field",
+                control: "the L1 chip",
                 cites: Cite {
-                    class: "field",
-                    text: "holds&hellip;",
+                    class: "kind",
+                    text: "L1",
                     nth: 0,
                 },
-                at: on_holds,
+                at: on_kind_l1,
             },
             Tipped {
-                control: "the layer field",
+                control: "the L2 chip",
                 cites: Cite {
-                    class: "field",
-                    text: "layer&hellip;",
+                    class: "kind",
+                    text: "L2",
                     nth: 0,
                 },
-                at: on_layer,
+                at: on_kind_l2,
+            },
+            Tipped {
+                control: "the L3 chip",
+                cites: Cite {
+                    class: "kind",
+                    text: "L3",
+                    nth: 0,
+                },
+                at: on_kind_l3,
+            },
+            Tipped {
+                control: "the L4 chip",
+                cites: Cite {
+                    class: "kind",
+                    text: "L4",
+                    nth: 0,
+                },
+                at: on_kind_l4,
+            },
+            Tipped {
+                control: "the FIELD chip",
+                cites: Cite {
+                    class: "kind",
+                    text: "FIELD",
+                    nth: 0,
+                },
+                at: on_kind_field,
+            },
+            Tipped {
+                control: "the SET chip",
+                cites: Cite {
+                    class: "kind",
+                    text: "SET",
+                    nth: 0,
+                },
+                at: on_kind_sets,
             },
         ],
+    ),
+    (
+        "the Library bay's row badges",
+        &[Tipped {
+            control: "a row's badges",
+            cites: Cite {
+                class: "badges",
+                text: "L1L2L4",
+                nth: 0,
+            },
+            at: on_badges,
+        }],
     ),
     (
         "the params chip in the Library bay's foot",
@@ -1001,6 +1095,25 @@ fn on_keep(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
     })
 }
 
+/// **The mark and not the card**, where `input`'s row answers for both: a tip
+/// explains a control an operator is pointing at, and while the card is down
+/// the hover layer is not what the next press is about — `claim`'s rule 2 has
+/// already taken it.
+fn on_pane_target(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    view.inspector.iter().enumerate().any(|(index, pane)| {
+        inspector(panel.layout(), index, pane, view.scroll_in(index))
+            .and_then(|at| view.pane_pulldown(ctx, &at, pane, index))
+            .is_some_and(|target| target.hit(p))
+    })
+}
+
+fn on_node_keep(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    view.inspector.iter().enumerate().any(|(index, pane)| {
+        inspector(panel.layout(), index, pane, view.scroll_in(index))
+            .is_some_and(|at| at.keep_procedure(ctx, pane, p).is_some())
+    })
+}
+
 fn on_sync(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
     on_head(panel, ctx, view, |head| head.sync(p).is_some())
 }
@@ -1125,8 +1238,58 @@ fn on_holds(panel: &Panel, _ctx: &egui::Context, view: &View, p: Point) -> bool 
     on_field(panel, view, p, Field::Holds)
 }
 
-fn on_layer(panel: &Panel, _ctx: &egui::Context, view: &View, p: Point) -> bool {
-    on_field(panel, view, p, Field::Layer)
+fn on_kind_l1(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    on_kind(panel, ctx, view, p, KindChip::Layer(Layer::L1))
+}
+
+fn on_kind_l2(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    on_kind(panel, ctx, view, p, KindChip::Layer(Layer::L2))
+}
+
+fn on_kind_l3(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    on_kind(panel, ctx, view, p, KindChip::Layer(Layer::L3))
+}
+
+fn on_kind_l4(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    on_kind(panel, ctx, view, p, KindChip::Layer(Layer::L4))
+}
+
+fn on_kind_field(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    on_kind(panel, ctx, view, p, KindChip::Layer(Layer::Field))
+}
+
+fn on_kind_sets(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    on_kind(panel, ctx, view, p, KindChip::Sets)
+}
+
+/// **One kind chip**, told from the five beside it by the chip the bay says is
+/// at that point — `LibraryBay::kind_chips` is the same walk the paint makes
+/// and the same one a press is resolved against, so a tip and a press cannot
+/// land on two different chips.
+fn on_kind(panel: &Panel, ctx: &egui::Context, view: &View, p: Point, want: KindChip) -> bool {
+    let at = Pos2::new(p.x, p.y);
+    library_bay(panel, view).is_some_and(|bay| {
+        bay.kinds.is_some_and(|row| row.contains(at))
+            && bay
+                .kind_chips(ctx)
+                .any(|(chip, box_)| chip == want && box_.contains(at))
+    })
+}
+
+/// **A row's badges**, which is the one readout in this bay's list: nothing is
+/// pressed there, and the tip is what says so and what the words mean. Asked of
+/// the rows the bay is drawing, so a badge under the pointer is a badge on
+/// screen.
+fn on_badges(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    let at = Pos2::new(p.x, p.y);
+    library_bay(panel, view).is_some_and(|bay| {
+        let rows = view.rows();
+        bay.list.contains(at)
+            && bay.drawn().any(|index| {
+                bay.badges(ctx, index, &rows.badges(index))
+                    .any(|(_, box_)| box_.contains(at))
+            })
+    })
 }
 
 /// **One filter field.** `LibraryBay::filter` answers with the `ListSets` a
@@ -1141,13 +1304,8 @@ fn on_field(panel: &Panel, view: &View, p: Point, which: Field) -> bool {
 
 fn on_read(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
     library_bay(panel, view).is_some_and(|bay| {
-        bay.read(
-            ctx,
-            view.target(),
-            view.sets().get(view.cursor_row()).map(String::as_str),
-            p,
-        )
-        .is_some()
+        bay.read(ctx, view.target(), view.rows().set(view.cursor_row()), p)
+            .is_some()
     })
 }
 
@@ -1160,7 +1318,7 @@ fn on_load_deck(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bo
 }
 
 fn on_star(panel: &Panel, _ctx: &egui::Context, view: &View, p: Point) -> bool {
-    library_bay(panel, view).is_some_and(|bay| bay.starred(view.sets(), &view.starred, p).is_some())
+    library_bay(panel, view).is_some_and(|bay| bay.starred(view.rows(), &view.starred, p).is_some())
 }
 
 /// The Library bay, derived the one way [`crate::input::claim`] derives it.

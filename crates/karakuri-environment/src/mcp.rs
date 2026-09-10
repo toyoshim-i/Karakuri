@@ -622,6 +622,19 @@ impl Slots {
 /// kinds of node, so the most interesting material in the language — the
 /// deformations, the camera, the field — was in the files and unreachable from
 /// the one surface built for editing them.
+///
+/// **Five, and [`Kind`] is six.** `kind L5` is a language and a lowering as of
+/// M5.16's IR/codegen pass, and it is *not* a layer a slot holds: a frame
+/// effect runs in the master chain, the chain is still three fixed passes, and
+/// a Set has no L5 node for an `edge` to bind — `compile::sort_compiled`
+/// refuses one where it is loaded. Advertising it here would offer a client an
+/// address that cannot resolve, which is the same failure this list's own
+/// history records from the other direction. **What the sixth kind reaches a
+/// model through today is the curriculum**, which renders
+/// [`karakuri_ir::builtin::Builtin::ALL`] and the `kind` table from the
+/// checker's own tables rather than from a copy — so `texel`, `tap` and
+/// `frame_step` are published the day they exist. The pass that gives the chain
+/// its slots is what adds the sixth entry here.
 const LAYERS: [Kind; 5] = [Kind::L1, Kind::L2, Kind::L3, Kind::L4, Kind::Field];
 
 /// A layer as a client writes it, in the compiler's own `Kind`.
@@ -659,6 +672,7 @@ fn layer_name(layer: Kind) -> &'static str {
         Kind::L3 => "L3",
         Kind::L4 => "L4",
         Kind::Field => "Field",
+        Kind::L5 => "L5",
     }
 }
 
@@ -683,6 +697,7 @@ fn layer_of(layer: Kind) -> karakuri_operation::Layer {
         Kind::L3 => karakuri_operation::Layer::L3,
         Kind::L4 => karakuri_operation::Layer::L4,
         Kind::Field => karakuri_operation::Layer::Field,
+        Kind::L5 => karakuri_operation::Layer::L5,
     }
 }
 
@@ -696,6 +711,7 @@ fn kind_of(layer: karakuri_operation::Layer) -> Kind {
         karakuri_operation::Layer::L3 => Kind::L3,
         karakuri_operation::Layer::L4 => Kind::L4,
         karakuri_operation::Layer::Field => Kind::Field,
+        karakuri_operation::Layer::L5 => Kind::L5,
     }
 }
 
@@ -729,6 +745,14 @@ fn absent(layer: Kind) -> &'static str {
         Kind::Field => {
             "a `kind Field` is optional, and is code the other procedures evaluate rather \
              than a node of its own"
+        }
+        // **Every slot holds none, and will while the chain is fixed.** A frame
+        // effect runs in the master chain rather than in a Set, and the chain is
+        // still three hand-written passes — so this is what a slot is told
+        // about a kind that compiles and has nowhere to be placed yet.
+        Kind::L5 => {
+            "a frame effect runs in the master chain rather than in a Set, and the chain is \
+             still three fixed passes"
         }
     }
 }
@@ -2024,12 +2048,23 @@ enum Sayable {
     /// **The payload is `karakuri_operation::Undecided`.** A surface can say
     /// only what the vocabulary has settled, and these three are not settled.
     Undecided,
-    /// **Nothing on the frame this tool lands on performs it**, and the clause
-    /// says which part of the program does instead. A call answered `ok` for
-    /// work that did not happen is the plausible wrong answer
-    /// [P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)
-    /// is written against, so this is refused rather than accepted.
-    Unperformed(&'static str),
+    /// **This surface will not reach it, and the clause says why and where the
+    /// route that does is.** The row's MCP badge is `gap`, and what makes it
+    /// `gap` rather than `plan` is that **nothing is owed**: no performer
+    /// moving onto the drain's frame would change it, because what stops it is
+    /// the shape of this protocol rather than a gap in this program
+    /// ([ADR-0341](../../../docs/adr/0341-a-route-that-answers-is-built-and-a-send-that-ends-in-a-dialog-is-gap.md)).
+    ///
+    /// **There was a sixth answer beside this one until 2026-09-10** —
+    /// `Unperformed`, *the vocabulary names it and nothing on this frame
+    /// performs it yet*, which is what a `plan` badge in the MCP column meant.
+    /// It went when its last row did (ADR-0341): every operation this
+    /// vocabulary names either has a performer, has a tool, is a window's, is
+    /// unsettled, or is this. **A `plan` badge in that column is now only an
+    /// `Undecided` payload**, and the day a row is added that a surface can
+    /// say and the frame cannot perform, this `match` has no wildcard and
+    /// stops the build until somebody puts the answer back.
+    Never(&'static str),
 }
 
 /// **Whether `operate` names this operation, and what it says where it does
@@ -2074,6 +2109,45 @@ fn sayable(operation: &Operation) -> Sayable {
         | Operation::SetProperty { .. }
         | Operation::SetAuthority { .. }
         | Operation::RestoreProcedure { .. }
+        // **The five ADR-0334 left `plan` for want of a performer on this
+        // frame, and each of them has one now** (ADR-0341). Four were already
+        // written and sat in the window's own press arm — the star's refusal,
+        // the projector's window, the `rec` pill's two ends and the publish
+        // mark's re-aim — and `App::operated` calls them where the pointer's
+        // button-up arm calls them; the mask position was a missing reading and
+        // is one arm of `crates/karakuri`'s `reading`. They leave this list by
+        // having a performer rather than by this rule bending, which is the
+        // shape ADR-0334 said each of them would leave in.
+        | Operation::SetMaskPosition { .. }
+        | Operation::Publish { .. }
+        | Operation::SetFavourite { .. }
+        | Operation::RouteFrame { .. }
+        | Operation::RecordSession { .. }
+        // **And ADR-0338's load, which left the `plan` column on 2026-09-10 for
+        // the reason *Narrow the published interface* did**: its performer was
+        // never missing. `overlaid` sits in `App::performed`, in the arm the
+        // fold and the library load are in, and this drain lands there — so
+        // the sentence this row used to carry, *nothing re-aims a slot with
+        // one layer replaced yet*, had stopped being true before it was read.
+        | Operation::LoadProcedure { .. }
+        // **And ADR-0338's keep, which left the `plan` column on 2026-09-10 by
+        // gaining a performer.** `App::operated` hands it to
+        // `Keeping::keep_procedure` where the pointer's button-up arm hands
+        // the capsule's press to the same method, and the two differ in one
+        // argument: a model's is `Asked::Model` and lands in
+        // `<store>/sandbox/`, stamped and overwriting nothing, where an
+        // operator's own act writes `<store>/procedures/`
+        // (`docs/principles/0096-…`, `docs/adr/0261-…`).
+        //
+        // **A model is not refused here where its star is**, and ADR-0301 is
+        // why: a favourite has no sandbox form to land in and a kept procedure
+        // is a file, so it has one.
+        //
+        // **The answer arrives when the file does.** A keep is *"on a
+        // worker"*, so the drain hands the reply to the write thread rather
+        // than saying *performed* on the frame it arrived on — which is
+        // `save_set`'s own arrangement one file kind along.
+        | Operation::KeepProcedure { .. }
         | Operation::Quit => Sayable::Operable,
 
         // ----- the seven that have a tool of their own ---------------------
@@ -2128,49 +2202,25 @@ fn sayable(operation: &Operation) -> Sayable {
         | Operation::WatchFiles { .. }
         | Operation::MoveBoundary { .. } => Sayable::Undecided,
 
-        // ----- the seven nothing on this frame performs --------------------
-        Operation::SetMaskPosition { .. } => Sayable::Unperformed(
-            "the panel reads no mask where a position is asked for, so the record comes back \
-             unwritten and nothing would move",
+        // ----- the one no route here will ever take -------------------------
+        //
+        // **This was the last group and it used to have a neighbour**: rows
+        // the vocabulary named that nothing on the drain's frame performed
+        // yet, which is what a `plan` badge in the MCP column meant.
+        // `SetProperty` left it when the Inspector's deck head grew the two
+        // chips that perform it (ADR-0328), the five ADR-0334 named followed
+        // on 2026-09-10, and ADR-0338's two went the same day (ADR-0341) — so
+        // that group and its answer are gone, and this row is what is left:
+        // the one that is not waiting for anything.
+        Operation::TransferSet { .. } => Sayable::Never(
+            "both halves of it are outside what this protocol carries. A send names no \
+             destination and never will — it is a read, and a read's answer goes where the \
+             surface that asked puts answers, which on the panel is the system's own save \
+             dialog and a model cannot answer one. A take names a file, and paths never cross \
+             this protocol. The route is the command line: `--package ID > FILE.kbset` sends \
+             one and `--take-in FILE` takes one in",
         ),
-        // **`SetProperty` was here until the Inspector's deck head grew the two
-        // chips that perform it** (ADR-0328). It left this group by having a
-        // performer rather than by this rule changing, which is the shape every
-        // row here leaves in.
-        Operation::Publish { .. } => Sayable::Unperformed(
-            "nothing on the frame this tool lands on performs it, so opening its class would \
-             buy an answer of `ok` for work that did not happen",
-        ),
-        Operation::SetFavourite { .. } => Sayable::Unperformed(
-            "the star's performer is in the window's own press arm rather than on the frame \
-             this tool lands on, and what it answers a model is already written there",
-        ),
-        Operation::TransferSet { .. } => Sayable::Unperformed(
-            "both halves of it end in the system's own dialog, which is the window's and not \
-             the frame's",
-        ),
-        Operation::RouteFrame { .. } => Sayable::Unperformed(
-            "the performer that opens a projector window needs the event loop, which the frame \
-             this tool lands on does not hold",
-        ),
-        Operation::RecordSession { .. } => Sayable::Unperformed(
-            "its performer is in the window's own press arm rather than on the frame this tool \
-             lands on",
-        ),
-        // **ADR-0338's two acts, and both are waiting on a performer rather
-        // than on a decision.** The payloads are settled and a surface can say
-        // either of them; what neither has yet is an arm on the frame this
-        // drain lands on, and an answer of `ok` for work that did not happen is
-        // the plausible wrong answer P-0094 is written against.
-        Operation::LoadProcedure { .. } => Sayable::Unperformed(
-            "nothing on the frame this tool lands on re-aims a slot with one layer replaced \
-             yet, so opening its class would buy an answer of `ok` for work that did not \
-             happen",
-        ),
-        Operation::KeepProcedure { .. } => Sayable::Unperformed(
-            "nothing writes a node's source into the store's procedures yet, and a model's \
-             would land in the sandbox when something does",
-        ),
+
     }
 }
 
@@ -3011,13 +3061,26 @@ const SPELLED: &[Spelled] = &[
             (
                 Operation::SetMaskPosition {
                     deck: 0,
-                    position: 0.0,
+                    position: 0.5,
                 },
-                Value::Null,
+                json!({ "deck": 0, "position": 0.5 }),
             )
         },
-        make: None,
-        shape: None,
+        make: Some(|with, slots| {
+            Ok(Operation::SetMaskPosition {
+                deck: deck_of(with, "deck", slots)?,
+                position: f32_of(with, "position")?,
+            })
+        }),
+        shape: Some(|| {
+            shaped(
+                json!({
+                    "deck": p_deck(),
+                    "position": p_number("how far the front has travelled: 0 reveals nothing, 1 reveals everything. It is the number a wipe's scheduled move is writing, so this cancels one"),
+                }),
+                &["deck", "position"],
+            )
+        }),
     },
     Spelled {
         sample: || {
@@ -3437,13 +3500,82 @@ const SPELLED: &[Spelled] = &[
             (
                 Operation::Publish {
                     deck: 0,
-                    controls: Vec::new(),
+                    controls: vec![karakuri_operation::Control {
+                        name: "glow".to_string(),
+                        node: Some(NodeAt {
+                            layer: karakuri_operation::Layer::L4,
+                            index: 0,
+                        }),
+                        key: "glow".to_string(),
+                        range: [0.0, 1.0],
+                    }],
                 },
-                Value::Null,
+                json!({
+                    "deck": 0,
+                    "controls": [
+                        { "name": "glow", "node": { "layer": "L4" }, "key": "glow", "range": [0.0, 1.0] },
+                    ],
+                }),
             )
         },
-        make: None,
-        shape: None,
+        // **The whole list, never one entry**, which is what the operation
+        // carries and why: adding or removing one at a time is a statement
+        // about an entry, and it is what lets two hands on one deck disagree
+        // about what is published. An empty list asks for every declared
+        // control published, which is what an unnarrowed deck is.
+        make: Some(|with, slots| {
+            let deck = deck_of(with, "deck", slots)?;
+            let listed = with.get("controls").and_then(Value::as_array).ok_or(
+                "`with.controls` is required and is the whole published interface as a list, \
+                 in the order it is drawn — `[]` publishes every control the deck declares, \
+                 which is what an unnarrowed deck is. `read_set` names what one declares",
+            )?;
+            let mut controls = Vec::with_capacity(listed.len());
+            for control in listed {
+                controls.push(karakuri_operation::Control {
+                    name: named_of(control, "name", "a published control")?,
+                    // Absent is the wildcard — the control matches by key
+                    // wherever it is declared, which is what the default
+                    // interface is made of.
+                    node: match control.get("node") {
+                        Some(Value::Null) | None => None,
+                        Some(_) => Some(node_of(control, "node")?),
+                    },
+                    key: named_of(control, "key", "a parameter key")?,
+                    range: range_of(control, "range")?,
+                });
+            }
+            Ok(Operation::Publish { deck, controls })
+        }),
+        shape: Some(|| {
+            shaped(
+                json!({
+                    "deck": p_deck(),
+                    "controls": {
+                        "type": "array",
+                        "description": "the whole published interface, in the order it is drawn — `[]` publishes every control the deck declares. A knob is learned against a position in this list, so reordering it moves what a mapped control reaches",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "name": p_string("what the console shows"),
+                                "node": p_node("which node declares it; left out for a control that matches by key wherever it is declared, which is what the default interface is made of"),
+                                "key": p_string("the parameter key it writes"),
+                                "range": {
+                                    "type": "array",
+                                    "items": { "type": "number" },
+                                    "minItems": 2,
+                                    "maxItems": 2,
+                                    "description": "low and high, which narrow the declared range and never redefine it",
+                                },
+                            },
+                            "required": ["name", "key", "range"],
+                            "additionalProperties": false,
+                        },
+                    },
+                }),
+                &["deck", "controls"],
+            )
+        }),
     },
     Spelled {
         sample: || {
@@ -3549,11 +3681,35 @@ const SPELLED: &[Spelled] = &[
                     },
                     id: None,
                 },
-                Value::Null,
+                json!({ "deck": 0, "node": { "layer": "L4" } }),
             )
         },
-        make: None,
-        shape: None,
+        make: Some(|with, slots| {
+            Ok(Operation::KeepProcedure {
+                deck: deck_of(with, "deck", slots)?,
+                node: node_of(with, "node")?,
+                // **Left out is a stamp**, which is `save_set`'s own
+                // convention and is what the panel's capsule sends: a caller
+                // that can type a name is not made to take a timestamp, and
+                // one that says nothing gets the time it kept it. Checked
+                // here, because what a model names becomes one path component
+                // (`checked_id`).
+                id: match with.get("id") {
+                    None | Some(Value::Null) => None,
+                    Some(_) => Some(checked_id(text_of(with, "id")?)?),
+                },
+            })
+        }),
+        shape: Some(|| {
+            shaped(
+                json!({
+                    "deck": p_deck(),
+                    "node": p_node("which node's source to keep — a head standing over several nodes has none, and the built-in camera is a node with no procedure behind it"),
+                    "id": p_string("what to file it under, or leave it out for the time you kept it. A keep asked for here lands in `<store>/sandbox/` rather than in the operator's library, and never overwrites a name already there"),
+                }),
+                &["deck", "node"],
+            )
+        }),
     },
     Spelled {
         sample: || {
@@ -3615,14 +3771,36 @@ const SPELLED: &[Spelled] = &[
         sample: || {
             (
                 Operation::SetFavourite {
-                    id: String::new(),
-                    favourite: false,
+                    id: "a_set".to_string(),
+                    favourite: true,
                 },
-                Value::Null,
+                json!({ "set": "a_set", "favourite": true }),
             )
         },
-        make: None,
-        shape: None,
+        // **Taken, and answered with a refusal.** `Standing::Open` and the
+        // gate are untouched (ADR-0301): a model's star is refused by the
+        // *performer*, in a sentence that names the id and says where the Set
+        // is, so what a model gets is an answer it can hand to the person
+        // sitting there rather than a name this tool does not know.
+        make: Some(|with, _| {
+            Ok(Operation::SetFavourite {
+                id: checked_id(text_of(with, "set")?)?,
+                favourite: bool_of(with, "favourite")?,
+            })
+        }),
+        shape: Some(|| {
+            shaped(
+                json!({
+                    "set": {
+                        "type": "string",
+                        "pattern": ID_PATTERN,
+                        "description": "a Set id this store holds, as `list_sets` names them",
+                    },
+                    "favourite": p_bool("whether this Set is under `my sets`. It names the state rather than flipping one. A model's star is refused: `my sets` is the list of Sets the operator chose, and the refusal says where the Set is"),
+                }),
+                &["set", "favourite"],
+            )
+        }),
     },
     Spelled {
         sample: || (Operation::ReadSet { id: String::new() }, Value::Null),
@@ -3660,11 +3838,38 @@ const SPELLED: &[Spelled] = &[
                     deck: 0,
                     procedure: "orbit_wide".to_string(),
                 },
-                Value::Null,
+                json!({ "deck": 0, "procedure": "orbit_wide" }),
             )
         },
-        make: None,
-        shape: None,
+        // **`LoadSet`'s spelling with the name in the other tier**, which is
+        // what this operation is: a deck, and one procedure of the library
+        // written over the layer it declares (ADR-0338). `checked_id` for the
+        // same reason that row takes it — a procedure is filed under its name,
+        // so the name becomes a file name and a separator is refused here
+        // rather than resolved anywhere.
+        //
+        // **Which node it lands on is not in the payload and is not missing
+        // from it**: a procedure declares one kind and the load takes the
+        // first node of that kind, which is the limit the page writes down.
+        make: Some(|with, slots| {
+            Ok(Operation::LoadProcedure {
+                deck: deck_of(with, "deck", slots)?,
+                procedure: checked_id(text_of(with, "procedure")?)?,
+            })
+        }),
+        shape: Some(|| {
+            shaped(
+                json!({
+                    "deck": p_deck(),
+                    "procedure": json!({
+                        "type": "string",
+                        "pattern": ID_PATTERN,
+                        "description": "a procedure of the library, by the name it is filed under — the layer it lands on is the kind it declares, and it takes the first node of that kind",
+                    }),
+                }),
+                &["deck", "procedure"],
+            )
+        }),
     },
     // ----- Procedures ------------------------------------------------------
     Spelled {
@@ -3857,26 +4062,112 @@ const SPELLED: &[Spelled] = &[
         sample: || {
             (
                 Operation::RouteFrame {
-                    output: karakuri_operation::Output::Program,
+                    output: karakuri_operation::Output::Projector(0),
                     on: true,
                 },
-                Value::Null,
+                json!({ "output": "projector", "index": 0, "on": true }),
             )
         },
-        make: None,
-        shape: None,
+        // **A word from a closed list and never the label on a chip**, which
+        // is the operation's own rule: a projector chip carries the display it
+        // is on and that changes when the cable does. The index is the
+        // projector's or the plugin's place in the list, and the picture has
+        // none — one output, no number.
+        //
+        // **`plugin` is taken and refused by the performer**, which is a built
+        // route rather than a missing one: there is no manifest to read a sink
+        // out of, and the refusal is where that is said.
+        make: Some(|with, _| {
+            let named = text_of(with, "output")?;
+            let numbered = with.get("index").is_some_and(|at| !at.is_null());
+            // Read only where it means something, so a bad `index` beside
+            // `program` is refused for being there rather than for its value.
+            let index = |with: &Value| -> Result<u8, String> {
+                if !numbered {
+                    return Ok(0);
+                }
+                u8::try_from(u32_of(with, "index")?).map_err(|_| {
+                    "`with.index` is past what an output list holds — outputs are numbered \
+                     from zero in the order the list draws them"
+                        .to_string()
+                })
+            };
+            let output = match named {
+                "program" if numbered => {
+                    return Err(
+                        "`with.index` is given with `program`, and the picture in the Program \
+                         bay is one output with no number — say `program` on its own"
+                            .to_string(),
+                    )
+                }
+                "program" => karakuri_operation::Output::Program,
+                "projector" => karakuri_operation::Output::Projector(index(with)?),
+                "plugin" => karakuri_operation::Output::Plugin(index(with)?),
+                said => {
+                    return Err(format!(
+                        "`with.output` is `{said}`, and an output is one of: program, \
+                         projector, plugin"
+                    ))
+                }
+            };
+            Ok(Operation::RouteFrame {
+                output,
+                on: bool_of(with, "on")?,
+            })
+        }),
+        shape: Some(|| {
+            shaped(
+                json!({
+                    "output": p_word(
+                        vec!["program", "projector", "plugin"],
+                        "which destination: the picture in the Program bay, a window this program opens, or a sink a plugin brings. Nothing loads a plugin today and asking for one is refused saying so",
+                    ),
+                    "index": p_int("which projector or plugin, by its place in the list; 0 where it is left out, and refused with `program`"),
+                    "on": p_bool("whether it is publishing. All of them may be off — the deck previews are monitors rather than outputs and keep running"),
+                }),
+                &["output", "on"],
+            )
+        }),
     },
     Spelled {
         sample: || {
             (
                 Operation::RecordSession {
-                    recording: karakuri_operation::Recording::Stop,
+                    recording: karakuri_operation::Recording::Start { id: None },
                 },
-                Value::Null,
+                json!({ "recording": "start" }),
             )
         },
-        make: None,
-        shape: None,
+        // **No id on the wire, and the vocabulary's `Option` is always
+        // `None`.** Each start takes a fresh stamp (ADR-0289) — a second head
+        // written into a stream that already exists is read back as edits —
+        // and `crates/karakuri`'s performer refuses a named one in as many
+        // words. A key this table accepted and the frame then refused would be
+        // exactly the `ok` for work that did not happen this surface is
+        // arranged against, so the key is not offered.
+        make: Some(|with, _| {
+            let recording = match text_of(with, "recording")? {
+                "start" => karakuri_operation::Recording::Start { id: None },
+                "stop" => karakuri_operation::Recording::Stop,
+                said => {
+                    return Err(format!(
+                        "`with.recording` is `{said}`, and a recording is one of: start, stop"
+                    ))
+                }
+            };
+            Ok(Operation::RecordSession { recording })
+        }),
+        shape: Some(|| {
+            shaped(
+                json!({
+                    "recording": p_word(
+                        vec!["start", "stop"],
+                        "start one or end the one running. A start is filed under a stamp and cannot be named here, because a second head under one id is read back as edits. Its head is the material deck A is playing as it stands, so a replay of it begins that material from the top",
+                    ),
+                }),
+                &["recording"],
+            )
+        }),
     },
     Spelled {
         sample: || (Operation::Quit, json!({})),
@@ -3987,10 +4278,9 @@ fn operated(args: &Value, slots: &Slots) -> Result<Operation, String> {
                  operation acts on is an open question — so no surface can say it yet, \
                  including this one"
             ),
-            Sayable::Unperformed(why) => format!(
-                "`{named}` is named by this vocabulary and is not performed on the frame \
-                 this tool lands on: {why}. It is refused rather than accepted, because a \
-                 call answered `ok` for work that did not happen is worse than one refused"
+            Sayable::Never(why) => format!(
+                "`{named}` is named by this vocabulary and has no route on this surface: \
+                 {why}"
             ),
         });
     };
@@ -6221,6 +6511,9 @@ proc probe_knobs {
         );
         let listed: Value = serde_json::from_str(&listed).expect("json");
         let tools = listed["result"]["tools"].as_array().expect("tools");
+        // **Five, where `Kind` is six** — see `LAYERS`. `kind L5` compiles and
+        // lowers and is not a layer a *slot* holds, so this list is the one a
+        // client can address rather than the one the language has.
         let expected = json!(["L1", "L2", "L3", "L4", "Field"]);
         for name in ["read_procedure", "write_procedure"] {
             let tool = tools
@@ -8168,6 +8461,172 @@ proc probe_knobs {
         );
     }
 
+    /// **The five ADR-0334 left `plan` reach the loop now, and the one it
+    /// listed beside them never will.**
+    ///
+    /// ADR-0334 named six rows that `operate` refused for want of a performer
+    /// on the frame the drain lands on, and ADR-0341 is the day each of them
+    /// got one — four by the drain calling the window's own press arm, one by
+    /// a reading `crates/karakuri` was not taking. **What is asserted here is
+    /// the half this crate owns**: the name is taken, the payload crosses the
+    /// channel as it was spelled, and the audit is what stands between them
+    /// rather than a refusal written in this file. What each of them then *does*
+    /// needs a window and is asserted where the window is.
+    ///
+    /// **With every class open**, because four of the five are closed rows and
+    /// a fixture that left them shut would assert the gate a second time
+    /// instead of the route. The one that is open either way is the star: its
+    /// class is nobody's, the refusal it meets is the performer's, and
+    /// `gate.rs` is untouched (ADR-0301).
+    ///
+    /// **No count in the name.** It was five when it was written and six by
+    /// the end of the day, because ADR-0338's two moved in another session
+    /// while this one was running — so the list below is what it is and the
+    /// name does not have to be edited when it grows again.
+    ///
+    /// **Watched to fail** with any of them taken out of `sayable`'s operable
+    /// list: the call is refused on the connection thread, `failed` is true,
+    /// and the loop sees nothing.
+    #[test]
+    fn the_rows_that_grew_a_performer_reach_the_loop() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let l1 = dir.path().join("l1.kir");
+        let l4 = dir.path().join("l4.kir");
+        std::fs::write(&l1, PROBE_L1).expect("l1");
+        std::fs::write(&l4, PROBE_L4).expect("l4");
+        let opening = crate::Opening::closed();
+        opening.set(
+            karakuri_operation::gate::Class::ALL
+                .iter()
+                .fold(karakuri_operation::gate::Open::CLOSED, |open, class| {
+                    open.with(*class, true)
+                }),
+        );
+        let reporter = serve(
+            0,
+            Slots::of(vec![(l1, vec![l4])]),
+            store_root(&dir),
+            true,
+            opening,
+        )
+        .expect("serve");
+        let port = reporter.port();
+
+        let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let taken = seen.clone();
+        std::thread::spawn(move || loop {
+            for OperateRequest { operation, reply } in reporter.operations() {
+                taken.lock().expect("lock").push(operation.clone());
+                reply.settled(Ok(format!("`{}` was performed", operation.title())));
+            }
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        });
+
+        // The five, each with the call written beside its row in [`SPELLED`],
+        // so this test and the schema a client reads cannot come apart.
+        let asked = [
+            (
+                "Set a deck's mask position",
+                json!({"deck": 0, "position": 0.5}),
+                Operation::SetMaskPosition {
+                    deck: 0,
+                    position: 0.5,
+                },
+            ),
+            (
+                "Narrow the published interface",
+                json!({"deck": 0, "controls": []}),
+                Operation::Publish {
+                    deck: 0,
+                    controls: Vec::new(),
+                },
+            ),
+            (
+                "Star a Set, or take the star off",
+                json!({"set": "a_set", "favourite": true}),
+                Operation::SetFavourite {
+                    id: "a_set".to_string(),
+                    favourite: true,
+                },
+            ),
+            (
+                "Choose where the frame goes",
+                json!({"output": "projector", "index": 0, "on": true}),
+                Operation::RouteFrame {
+                    output: karakuri_operation::Output::Projector(0),
+                    on: true,
+                },
+            ),
+            (
+                "Record the session",
+                json!({"recording": "start"}),
+                Operation::RecordSession {
+                    recording: karakuri_operation::Recording::Start { id: None },
+                },
+            ),
+        ];
+        for (title, with, expected) in &asked {
+            let (failed, said) = call(port, "operate", json!({"operation": title, "with": with}));
+            assert!(
+                !failed,
+                "`{title}` is refused over the wire with every class open: {said}"
+            );
+            assert!(
+                said.contains("was performed"),
+                "`{title}` was answered by something other than the loop: {said}"
+            );
+            assert!(
+                seen.lock().expect("lock").contains(expected),
+                "`{title}` reached the loop as something other than what was spelled — {:?}",
+                seen.lock().expect("lock")
+            );
+        }
+
+        // **And ADR-0338's load, which is taken here and answered by the
+        // audit rather than by this file.** Its class is a predicate over the
+        // deck it names and this server has read no residency, so it is
+        // refused with the reading nobody took — `LoadSet`'s own answer beside
+        // it (ADR-0334), and a built route rather than a missing one. What is
+        // asserted is *which* refusal: a spelling that did not take the name
+        // would refuse it before the gate ever saw it.
+        let (failed, said) = call(
+            port,
+            "operate",
+            json!({
+                "operation": "Load a procedure over a layer",
+                "with": {"deck": 0, "procedure": "orbit_wide"},
+            }),
+        );
+        assert!(
+            failed,
+            "the load was accepted with no residency read: {said}"
+        );
+        assert!(
+            !said.contains("no operation `") && !said.contains("no route on this surface"),
+            "the load was refused by this file's spelling rather than by the audit: {said}"
+        );
+
+        // **And the send is refused, in a sentence naming the flag that
+        // sends.** It is the row that is `gap` rather than `plan`: a send names
+        // no destination and a model cannot answer the dialog the panel puts
+        // one in, and a take names a file, which never crosses this protocol.
+        let (failed, said) = call(
+            port,
+            "operate",
+            json!({"operation": "Send a Set to somebody, and take one in", "with": {"set": "a_set"}}),
+        );
+        assert!(failed, "the send was accepted: {said}");
+        assert!(
+            said.contains("--package") && said.contains("--take-in"),
+            "the send's refusal does not say where a model's operator sends one from: {said}"
+        );
+        assert_eq!(
+            seen.lock().expect("lock").len(),
+            asked.len(),
+            "a refused operation reached the render loop"
+        );
+    }
+
     /// **Two assertions, and the weaker one covers more.** The four this
     /// fixture can carry to a real answer must succeed outright. All seven must
     /// come back saying something other than the refusal — a tool that fails
@@ -8899,9 +9358,24 @@ mod tests {
             .expect_err("its payload is undecided");
         assert!(refusal.contains("settled"), "{refusal}");
 
-        let refusal = operated(&json!({ "operation": "Record the session" }), &slots)
-            .expect_err("nothing on this frame performs it");
-        assert!(refusal.contains("press arm"), "{refusal}");
+        // **And the row that is waiting for nothing.** This case named a row
+        // *waiting for a performer* until 2026-09-10 — *Record the session*,
+        // then ADR-0338's two as each moved — and there is no such row left:
+        // `Sayable::Unperformed` went with its last one (ADR-0341), so a
+        // `plan` badge in the MCP column is now only an unsettled payload,
+        // which the case above this one covers. What is left is the opposite
+        // answer, and it reads differently on purpose: a model told *not yet*
+        // about a send would go on asking, where what it needs is the flag its
+        // operator has.
+        let refusal = operated(
+            &json!({ "operation": "Send a Set to somebody, and take one in" }),
+            &slots,
+        )
+        .expect_err("no route on this surface takes it");
+        assert!(
+            refusal.contains("no route on this surface") && refusal.contains("--package"),
+            "{refusal}"
+        );
     }
 
     /// **A closed operation is refused at the seam every tool crosses, in the
@@ -9444,7 +9918,7 @@ mod tests {
                         Sayable::Tool(tool) => format!("`{tool}` is its tool"),
                         Sayable::Window => "a model has no window".to_string(),
                         Sayable::Undecided => "its payload is undecided".to_string(),
-                        Sayable::Unperformed(why) => why.to_string(),
+                        Sayable::Never(why) => why.to_string(),
                         Sayable::Operable => "it does not".to_string(),
                     }
                 ),

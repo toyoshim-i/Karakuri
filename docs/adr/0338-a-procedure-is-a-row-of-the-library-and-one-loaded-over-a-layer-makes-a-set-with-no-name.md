@@ -382,3 +382,102 @@ them as a description of the tree.
 - **Two limits are recorded rather than fixed**, and both are named above so that they are met as
   decisions rather than as surprises: a procedure load reaches node 0 of its kind and no other, and
   a `.kir` in a dropped folder is not a row.
+
+### What decisions 1, 2 and 3 became, 2026-09-10
+
+The Library and host pass, written as a description of the tree.
+
+- **`procedures/` is `Store::open`'s fifth directory**, with `Store::PROCEDURES`,
+  `Store::PROCEDURE_FILE_SUFFIX`, `Store::list_procedures`, `Store::read_procedure` and
+  `StoreError::NoProcedure` beside it. **It reads no `kind` line**, which is the one thing the
+  decision above left to the pass: this module keeps files it does not parse — the line
+  `arrangements/` already draws — so `history::declared_kind` stays the single scanner and the two
+  callers pair it with the listing. That costs one small read per row, on the press that builds a
+  listing and never on a frame.
+- **`places::Presets::list_procedures` lists the shipped tier** as `PresetProcedure { name, file,
+  kind }`, and it **does** open each file, because a badge is what that listing is for. A `.kir`
+  declaring no `kind` is a row with no badge rather than a file dropped silently.
+- **The console's seam is `RowKind` and `Rows`**, a row of what each listed row *is* beside the row
+  of names, and **a row with no entry is a Set with no badge** — so every surface that was handed a
+  listing and nothing else draws exactly what it drew. `LibraryBay::badges` lays the words out from
+  the right of the row; `Rows::set` is the one question the star, the `params` chip and the send
+  each ask, so a procedure row hands them nothing rather than being special-cased three times.
+- **The six toggles are `KindChip`**, `LibraryBay::kinds`, `kind_chips` and `kind`, and a press
+  flips one field and emits all six. `Field::Layer`, `LAYER_UNSET` and `stepped_layer` are gone with
+  the `layer…` field, off the mock and off the panel together; `Filters` carries `kinds` where it
+  carried `layer`, and `View::narrow` takes a `LibraryKinds`.
+- **A procedure row's menu is the loads and no separator.** `RowMenu`'s `rule` and `save` became
+  `Option`s and `Menued` gained `sends`, because `Save as a kbset` inlines every source a Set names
+  and checks it against the address its `slot` record carries — and a bare `.kir` names nothing,
+  which is this record's own reason a `folder` lists no procedure.
+- **The load is `main.rs`'s `overlaid`/`overlaying` beside `played`.** It finds the file in the two
+  tiers in the order the bay lists them, reads the slot's own files to find the first node of the
+  declared kind, writes the procedure into the deck's scratch under `scratch::node_name`, and
+  re-aims through `Aiming::changed` — so every other field is restated and **`Aim::set` does not
+  move**. A replaced node **keeps the name the Set gave it**, because an `edge` and a `bind`
+  resolve against it; a node that is *added* is named after the row, and a name the slot already
+  holds is refused rather than shadowed. The strip's `<base> + <kir>` is `base_material` and
+  `derived_material`, and the base is `Aim::set` or the pair the run was launched with.
+- **`mcp.rs`'s `Load a procedure over a layer` gained its `make` and `shape`**, spelled like
+  `LoadSet` beside it. **`sayable` stays `Unperformed`**: what this pass wired is the press path,
+  and the frame the MCP drain lands on is M5.10's owed row.
+- **Three limits are recorded where they bite**, beside the two the decision already named. A preset
+  **Set** row carries no badge, because that listing opens no file and reading every Set file on a
+  press is a cost nobody asked for. A `params` press on a **procedure** row asks nothing, because
+  the reading is a Set's and a procedure row's own card is a reading nobody has drawn. And a `.kir`
+  declaring no `kind` is listed, badgeless, showing only while no chip is on, with a load off it
+  refused by name.
+
+### What decisions 4 and 5 became, 2026-09-10
+
+The Inspector pass, written as a description of the tree.
+
+- **The `keep` capsule is `view::node_keep`**, hard against `.node-head`'s right-hand padding at a
+  `.mini`'s own box, and **the three authority chips are laid out inside what it leaves**. That trim
+  is `auth_head` and it is applied **inside `auth_chips`** rather than at its two callers: a caller
+  that forgot it would put three chips under the capsule, and the paint and the hit-test would agree
+  with each other and disagree with the mock. `InspectorPane::keep_procedure` is the press,
+  `input::PROBES` carries a row for it, and `tests/node_keep.rs` is what watches the two rectangles
+  stay apart.
+- **The two heads that carry none are `view::Node::keep` being `None`**, and it is a field beside
+  `Node::authority` rather than that field read again — the two absences are not the same set, since
+  the built-in camera has an authority and has nothing to keep. The host answers it off
+  `Set::cameras`' own sentence, *never empty, and the last one is always the built-in orbit*, so
+  neither absence is a check written twice.
+- **The capsule emits `id: None` and the host pairs it with the head.** `crates/karakuri`'s press
+  arm asks `View::naming_over(deck)` — what the head of the pane showing that deck is taking letters
+  into — so ADR-0128's two routes are one capsule here as they are for the deck's own `keep`, and
+  the stamp is `history::stamped_id` where no head is asking.
+- **`karakuri-store` gained the writer as well as the directory**: `Store::write_procedure` and
+  `Store::write_sandbox_procedure`, and **a name already kept is refused rather than overwritten**
+  (`StoreError::ProcedureTaken`). That is where a procedure differs from a Set id and an
+  arrangement's name, and the difference is what each name is over: those two are instructions to
+  replace, and this one would replace a part of somebody's library with a different node's source.
+- **`crates/karakuri` gained `Kept` and `Keeping::keep_procedure`**, which is `save_set`'s shape one
+  node down — the bytes are the run's (`Playing`), the write is on a thread of its own, and the
+  outcome is said at the frame it arrives on through `finished_keeps`. A node a build landed carries
+  no bytes, so the writer reads them back out of the store by the address it carries; **neither
+  route re-reads the `.kir` on disk**, which is `SavedNode::source`'s own rule.
+- **`mcp.rs`'s *Keep a node's procedure* is `Operable` and not `Unperformed`.** The list above said
+  `operate` would take none of the four; it takes this one, because the drain gained an arm on the
+  same frame the capsule did. `App::operated` hands it to the same writer with `Asked::Model`, so a
+  model's lands in `<store>/sandbox/` — stamped, overwriting nothing, and readable by nothing that
+  reads the library — and its MCP badge went `has` with the panel's rather than staying on M5.10's
+  owed list. **A model is not refused here where its star is**, which is ADR-0301's own sentence
+  read the other way: a kept procedure is a file, so it has a sandbox form to land in.
+- **The pulldown is `DeckName::chevron` made live**, which is ADR-0292's *the chooser is boxed in*
+  spent: that record reserved the rectangle and painted nothing, and `view::PaneTarget` is what took
+  it. **The run gave way rather than the control** — `deck_name`'s clip now stops one gap short of
+  the mark — because the run is the one thing in that row that is clipped rather than dropped.
+- **A pane's target is `View::pane_deck`, one per pane, beside `View::scroll`**, and the host reads
+  it to fill the panes: `inspector` takes the targets instead of filling pane *n* from slot *n*,
+  which is what makes slots C and D reachable at all. `PANE_DECKS` is deck A and deck B, and that is
+  now a default rather than a rule. `pointed_pane` performs the pick beside `pointed`, re-reads the
+  pane it moved, and moves no selection, no other pane and no load target — `tests/pane_target.rs`
+  asserts all three.
+- **`input::claim`'s rule 2 gained a sixth card**, which is this pulldown's: it hangs off a head at
+  the top of a pane and down over that pane's own groups, so while it is down a press inside it
+  belongs to the card and a press anywhere else is the dismissal.
+- **`room.rs` gained no constant**, which is worth writing down because the list above expected one:
+  the capsule is a `.mini` at the node head's own `gap: 7px` and the mark is `CHEVRON_W`, and both
+  were already spelled for controls this console draws elsewhere.

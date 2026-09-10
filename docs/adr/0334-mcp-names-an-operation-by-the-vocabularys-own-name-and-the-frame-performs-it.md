@@ -228,3 +228,16 @@ be wrong.
 - **A defect is recorded rather than fixed here**: `reading` does not supply the mask for
   `SetMaskPosition`. It was found by asking, per row, whether an accepted call would be true.
 - **No new principle.** This applies P-0090 and P-0087, and the closed half of it is ADR-0235's.
+
+**2026-09-10.** Six of the nine closed, in
+[ADR-0341](0341-a-route-that-answers-is-built-and-a-send-that-ends-in-a-dialog-is-gap.md), and none
+of them needed a performer written. Two clauses above were wrong about which rows had one: *Narrow
+the published interface* is performed by `attended`, in the arm `App::performed` has called since
+ADR-0329, so *"has none anywhere"* was wrong; and *Choose where the frame goes* needs the event loop,
+which the drain's two call sites — both `winit` handlers — do hold, so it was `plan` for want of an
+argument rather than of a loop. *Star a Set* went `has` because a route that answers is a built route
+even when the answer is the refusal ADR-0301 wrote. *Send a Set to somebody* went `gap` rather than
+`plan`: nothing is owed there. The defect this record named is fixed. What is left of the nine is the
+three `Undecided` payloads — and ADR-0338's two rows, which arrived after this record and left the
+same day, took the *no performer on this frame* answer with them: `mcp.rs` no longer carries one, so
+a `plan` badge in the MCP column now means an unsettled payload and nothing else.

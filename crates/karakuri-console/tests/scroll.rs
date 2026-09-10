@@ -62,6 +62,7 @@ fn row(ord: usize, name: &str) -> Param {
 /// A node of `params` rows and no renderers, named so a failure says which.
 fn node(index: usize, params: usize) -> Node {
     Node {
+        keep: None,
         addr: format!("L1:{index}"),
         name: format!("node_{index}"),
         authority: Some(NodeAuthority {

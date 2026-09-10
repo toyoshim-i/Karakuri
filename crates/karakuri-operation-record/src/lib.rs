@@ -1755,6 +1755,7 @@ fn store_layer(layer: karakuri_operation::Layer) -> karakuri_store::record::Laye
         From::L3 => To::L3,
         From::L4 => To::L4,
         From::Field => To::Field,
+        From::L5 => To::L5,
     }
 }
 

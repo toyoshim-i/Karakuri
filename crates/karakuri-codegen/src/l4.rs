@@ -313,6 +313,16 @@ fn scan_expr(e: &TExpr, seed: &mut bool, copy: &mut bool, attrs: &mut HashSet<At
         // The point handed over, and nothing behind it: a field reads no
         // element of its caller's.
         TExprKind::Field { point, .. } => scan_expr(point, seed, copy, attrs),
+        // **Unreachable, and it stays a walk rather than a panic.** The check
+        // pass refuses `texel`, `tap` and `frame_step` outside a `kind L5`
+        // procedure, so no L4 tree holds one — but this scan decides which
+        // varyings a shader carries, and a scan that got that wrong by panicking
+        // would be a worse failure than one that got it right by recursing.
+        TExprKind::Sample { at, .. } => {
+            if let Some(a) = at {
+                scan_expr(a, seed, copy, attrs);
+            }
+        }
         TExprKind::Builtin { args, .. } | TExprKind::Construct { args } => {
             for a in args {
                 scan_expr(a, seed, copy, attrs);

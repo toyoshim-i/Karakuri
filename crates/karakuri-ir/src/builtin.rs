@@ -23,6 +23,20 @@ pub enum Shape {
     /// `float`, whatever the generic type is. `length` and `dot` are this:
     /// vector in, scalar out.
     Scalar,
+    /// **A texture this procedure is handed**, named rather than computed:
+    /// `src`, `held` under `retains`, or a `uses … : Texture` slot.
+    ///
+    /// **Not a [`Ty`], and it must not become one.** A texture is not a value
+    /// this language can hold — there is nothing to construct, nothing to
+    /// swizzle and nothing to pass — so what this position accepts is a *name*
+    /// the check pass resolves against what the header and the kind make
+    /// available, and never an expression. That is what makes `let x = src;` a
+    /// refusal at the read rather than a type error two lines later, and it is
+    /// why [`Builtin::texture_arg`] exists beside the ordinary unification.
+    ///
+    /// Only [`Builtin::Texel`] and [`Builtin::Tap`] use it, and only in their
+    /// first argument.
+    Texture,
 }
 
 /// Which types the generic position may resolve to.
@@ -81,8 +95,9 @@ macro_rules! builtins {
 }
 
 use Domain::{FloatOrVector, None as Concrete, VectorOnly};
+use Shape::Texture;
 use Shape::{Exact, Same, Scalar};
-use Ty::{Float, Int, Uint, Vec2, Vec3};
+use Ty::{Float, Int, Uint, Vec2, Vec3, Vec4};
 
 builtins! {
     // Math
@@ -153,6 +168,24 @@ builtins! {
     // slot the header declares now, resolved in `check_call` before this table
     // is consulted at all, and what a builtin cannot be is *bound*.
 
+    // Frame effects: L5's three, and the language change is exactly these.
+    //
+    // **`texel` takes no coordinate on purpose.** A coordinate is an invitation
+    // to resample, and a centre tap that resamples makes a pass at an amount
+    // just above zero differ from one that did not run by what a filter did
+    // rather than by what the effect is.
+    //
+    // **`frame_step` is the load-bearing one.** A displacement across a frame
+    // is the one thing a frame effect cannot express without the render size,
+    // and no ambient carries it — `Ambient::ALL` has no `viewport` on purpose,
+    // because the render size is not part of the picture and one frame is
+    // rendered at the largest enabled output's size and scaled into the rest.
+    // So the conversion is a builtin that performs it **without handing the
+    // number over**, and a `.kir` has no way to write a radius in texels.
+    Texel     => "texel",      [Texture] -> Exact(Vec4), Concrete, [];
+    Tap       => "tap",        [Texture, Exact(Vec2)] -> Exact(Vec4), Concrete, [];
+    FrameStep => "frame_step", [Exact(Float)] -> Exact(Vec2), Concrete, [];
+
     // Transform
     RotX    => "rot_x",    [Exact(Vec3), Exact(Float)] -> Exact(Vec3), Concrete, [];
     RotY    => "rot_y",    [Exact(Vec3), Exact(Float)] -> Exact(Vec3), Concrete, [];
@@ -172,6 +205,32 @@ builtins! {
 }
 
 impl Builtin {
+    /// **Whether this builtin is an L5's**, and so is refused in every other
+    /// kind rather than left to fail at lowering.
+    ///
+    /// Two of the three refuse themselves — there is no texture name in scope
+    /// anywhere but a `frame` block, so `texel(x)` has nothing to name — but
+    /// `frame_step` would type-check anywhere and lower to a read of a
+    /// `viewport` field no other module carries. That is a `.kir` checking
+    /// clean and coming up short at
+    /// [stage 5](../../../docs/adr/0032-nothing-checks-clean-and-comes-up-short-at-runtime.md),
+    /// so all three are refused in one place with one sentence.
+    pub fn is_frame_effect(self) -> bool {
+        matches!(self, Builtin::Texel | Builtin::Tap | Builtin::FrameStep)
+    }
+
+    /// **Which argument position takes a texture name**, or `None` for a
+    /// builtin that takes none.
+    ///
+    /// Read off [`Signature::args`] rather than written out, so a fourth
+    /// texture builtin reaches the check pass's special case by existing.
+    pub fn texture_arg(self) -> Option<usize> {
+        self.signature()
+            .args
+            .iter()
+            .position(|s| matches!(s, Shape::Texture))
+    }
+
     /// Whether this builtin reads the seed stream salt, and so needs it in
     /// scope wherever it is lowered.
     pub fn is_seeded(self) -> bool {

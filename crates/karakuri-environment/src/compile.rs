@@ -458,6 +458,24 @@ pub fn sort_compiled(
                 l1s.push(checked);
                 (karakuri_ir::Kind::L1, l1s.len() - 1, l1s.last())
             }
+            // **Refused, and refused here rather than filed into a list
+            // nothing reads.** `kind L5` parses, checks, costs and lowers as of
+            // M5.16's IR/codegen pass — a `.kir` is a complete artifact and can
+            // be stored. What does not exist yet is anywhere to *put* one: the
+            // master chain is still three fixed passes, and a Set has no L5
+            // node for an `edge` to bind. Accepting it into a slot would build
+            // a Set with a procedure in it that never runs, which is the one
+            // shape
+            // [ADR-0032](../../../docs/adr/0032-nothing-checks-clean-and-comes-up-short-at-runtime.md)
+            // exists to refuse.
+            karakuri_ir::Kind::L5 => {
+                return Err(format!(
+                    "{} declares `kind L5`, and a Set has nowhere to put one yet — a frame \
+                     effect runs in the master chain, which is still three fixed passes. The \
+                     file compiles and can be stored; what is missing is the chain's slots",
+                    named.path.display()
+                ));
+            }
         };
         let checked = filed.expect("the procedure was pushed onto that layer's list above");
         // **The node first, and its card read off the node.** A card names the

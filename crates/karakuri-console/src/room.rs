@@ -852,11 +852,18 @@ pub mod size {
     /// console's [`BASE`].
     pub const PATH_H: f32 = PATH_PAD_Y * 2.0 + PATH_SIZE * LINE + HAIRLINE;
 
-    // -- the library's two filter fields ------------------------------------
+    // -- the library's filter field and its kind chips ------------------------
 
-    /// `.lib-filters`'s `padding: 6px 9px` and its `gap: 5px`: the row of two
-    /// fields under the scope row, which narrows what the marked library
-    /// answers where the chips above it say *which* library is being read.
+    /// `.lib-filters`'s `padding: 6px 9px` and its `gap: 5px`: the row under
+    /// the scope row, which narrows what the marked library answers where the
+    /// chips above it say *which* library is being read.
+    ///
+    /// **The gap is kept and nothing is drawn either side of it**, which is
+    /// worth a sentence rather than a deletion: the row held two fields until
+    /// 2026-09-10, and ADR-0338 retired `layer…` for the six toggles in
+    /// [`LIB_KINDS_H`]'s own row. `.lib-filters` still declares `gap: 5px` and
+    /// still would space a second field, so the number stays where the page's
+    /// own declaration is rather than being taken out of a transcription of it.
     pub const LIB_FILTERS_PAD_X: f32 = 9.0;
     pub const LIB_FILTERS_PAD_Y: f32 = 6.0;
     pub const LIB_FILTERS_GAP: f32 = 5.0;
@@ -883,6 +890,59 @@ pub mod size {
     /// and below, so the two rows land on the same height without either
     /// being read off the other.
     pub const LIB_FILTERS_H: f32 = LIB_FILTERS_PAD_Y * 2.0 + FIELD_H + HAIRLINE;
+
+    /// `.lib-kinds`'s `padding: 5px 9px` and its `gap: 4px`: the row of six
+    /// toggles under the filter field, which says which kinds of row the
+    /// listing holds (ADR-0338).
+    ///
+    /// **Its own band and not room made beside the field**, which is
+    /// `style.css`'s own note: `.field` carries `flex: 1`, and six chips
+    /// sharing one row with it in a bay this narrow would leave the chips a few
+    /// pixels each — a chip nobody can hit is not a control.
+    pub const LIB_KINDS_PAD_X: f32 = 9.0;
+    pub const LIB_KINDS_PAD_Y: f32 = 5.0;
+    pub const LIB_KINDS_GAP: f32 = 4.0;
+
+    /// `.kind`'s `font-size: 9px` and its `padding: 0 6px`, around the word in
+    /// it. The vertical half of that padding is zero, which is why the box
+    /// below is the type's own height and nothing else — [`FIELD_H`]'s own
+    /// sentence at a smaller size, and with the border **not** counted for the
+    /// reason a `.kind.on` has none to count: the lit chip trades its border
+    /// for a wash, so a height that included one would move six chips whenever
+    /// one was pressed.
+    pub const KIND_SIZE: f32 = 9.0;
+    pub const KIND_PAD_X: f32 = 6.0;
+
+    /// One kind chip's box: [`KIND_SIZE`] at [`LINE`] — **13.5**.
+    pub const KIND_H: f32 = KIND_SIZE * LINE;
+
+    /// The kind row's box: one chip inside [`LIB_KINDS_PAD_Y`], plus the one
+    /// pixel of the rule under it — [`HAIRLINE`], which is `.lib-kinds`'s own
+    /// border-bottom and the same pixel every other rule in this bay is drawn
+    /// at. **24.5**.
+    pub const LIB_KINDS_H: f32 = LIB_KINDS_PAD_Y * 2.0 + KIND_H + HAIRLINE;
+
+    // -- a row's badges -------------------------------------------------------
+
+    /// `.badge`'s `font-size: 8px` and its `padding: 0 4px`, around the layer's
+    /// word; `.badges`' `gap: 3px` between two of them. What a badge says is
+    /// which layers a row implements, and it is a readout: nothing here is
+    /// pressed, and what narrows the list by kind is the row of chips above
+    /// (ADR-0338).
+    pub const BADGE_SIZE: f32 = 8.0;
+    pub const BADGE_PAD_X: f32 = 4.0;
+    pub const BADGE_GAP: f32 = 3.0;
+
+    /// One badge's box: [`BADGE_SIZE`] at [`LINE`] — **12**. Its
+    /// `border: 1px solid var(--c-hair)` is not counted, for [`KIND_H`]'s
+    /// reason read the other way: every badge draws one, so counting it would
+    /// move the whole row and change nothing about which of them is taller.
+    pub const BADGE_H: f32 = BADGE_SIZE * LINE;
+
+    /// `.badge`'s `border-radius: 3px`, which is the one rounded box in this
+    /// bay that is not a capsule: a badge is as tall as one line of very small
+    /// type, and a `999px` radius on it would be a lozenge round two letters.
+    pub const BADGE_RADIUS: f32 = 3.0;
 
     // -- the library's list -------------------------------------------------
 

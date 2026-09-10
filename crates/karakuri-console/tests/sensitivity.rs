@@ -112,6 +112,7 @@ fn second() -> Source {
 /// row below a row that already grew one.
 fn shell() -> Node {
     Node {
+        keep: None,
         addr: "L1:0".to_owned(),
         name: "drift_shell".to_owned(),
         authority: Some(NodeAuthority {
@@ -142,6 +143,7 @@ fn shell() -> Node {
 fn renderers() -> Node {
     Node {
         uses: Vec::new(),
+        keep: None,
         addr: "L4".to_owned(),
         name: "renderers".to_owned(),
         authority: None,
@@ -483,7 +485,7 @@ fn every_authority_chip_names_the_level_it_lands_on() {
         egui::pos2(group.max.x, group.min.y + size::NODE_HEAD_H),
     );
 
-    let chips: Vec<_> = karakuri_console::view::auth_chips(&ctx, head).collect();
+    let chips: Vec<_> = karakuri_console::view::auth_chips(&ctx, head, &pane.nodes[0]).collect();
     assert_eq!(
         chips.iter().map(|(level, _)| *level).collect::<Vec<_>>(),
         AUTHORITIES.to_vec(),

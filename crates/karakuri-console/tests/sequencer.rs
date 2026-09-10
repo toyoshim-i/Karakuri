@@ -640,6 +640,8 @@ fn choosing() -> View {
             addr: "L2:0".to_owned(),
             name: "warp".to_owned(),
             authority: None,
+            // Not this bay's control: nothing here presses a node head.
+            keep: None,
             uses: Vec::new(),
             renderers: Vec::new(),
             params: vec![param("twist", 0), param("bend", 1)],

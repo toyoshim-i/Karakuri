@@ -286,6 +286,22 @@ fn set_id(name: &OsStr) -> Option<&str> {
     name.to_str()?.strip_suffix(AUTHORING_SUFFIX)
 }
 
+/// **The name a procedure in a presets root goes by**: the file's stem, with
+/// `.kir` taken off. `None` for every name this layout does not claim.
+///
+/// [`set_id`]'s rule one extension along, and the same rule for its reason: a
+/// row is drawn under the name a file is *called*, so the `orbit_wide` in this
+/// bay is the `orbit_wide` the strip reads back after a load.
+///
+/// **The suffix is `karakuri_store::Store::PROCEDURE_FILE_SUFFIX`**, which is
+/// where a kept procedure's extension is spelled — the two tiers hold the same
+/// kind of file (ADR-0227, ADR-0338), and a second literal here would be this
+/// tier listing files the other one could not.
+fn procedure_name(name: &OsStr) -> Option<&str> {
+    name.to_str()?
+        .strip_suffix(karakuri_store::Store::PROCEDURE_FILE_SUFFIX)
+}
+
 /// **A Set a presets root holds**, as [`Presets::list_sets`] found it.
 ///
 /// Both fields, because the caller needs both and can derive neither safely: a
@@ -303,6 +319,37 @@ pub struct PresetSet {
     /// here can fail when the two spellings part company. The listing read the
     /// name off a disk; it may as well say which one it read.
     pub file: PathBuf,
+}
+
+/// **A procedure a presets root ships**, as [`Presets::list_procedures`] found
+/// it: the name a row is drawn under, the file the load reads, and the layer it
+/// declares.
+///
+/// [`PresetSet`]'s shape with one field more, and that field is the difference
+/// between the two listings: a Set's file says which layers it fills in its own
+/// `slot` records, and a procedure says its one `kind` in the source. So this
+/// listing **opens each file** where [`Presets::list_sets`] opens none — one
+/// small read per row, on the press that builds a listing and never on a frame
+/// ([P-0091](../../../docs/principles/0091-cost-is-known-before-it-is-paid.md)).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PresetProcedure {
+    /// The file's stem, which is the name the row shows and the name a load
+    /// names it by.
+    pub name: String,
+    /// The file itself, which is what a load reads and writes into the deck's
+    /// scratch.
+    pub file: PathBuf,
+    /// **What layer it implements**, one of [`crate::history::LAYERS`], or
+    /// `None` for a file that declares no `kind` at all.
+    ///
+    /// **`None` is a row and not a skip**, which is the choice worth stating: a
+    /// `.kir` in this directory with no `kind` line is a file somebody put
+    /// there, and dropping it from the listing would answer *what ships here*
+    /// with a file missing and nothing said. What it costs is a row with no
+    /// badge, and a load off it is refused by name — see this crate's
+    /// [`crate::history::declared_kind`], which is the one scanner for the
+    /// line.
+    pub kind: Option<&'static str>,
 }
 
 impl Presets {
@@ -383,6 +430,62 @@ impl Presets {
             });
         }
         out.sort_by(|a, b| a.id.cmp(&b.id));
+        Ok(out)
+    }
+
+    /// **What this root ships that can go over a layer**: the `.kir` files
+    /// directly in it, each under the name a row is drawn with and the kind it
+    /// declares, in ascending name order.
+    ///
+    /// [`Presets::list_sets`]' shape one extension along, and everything that
+    /// method carries transfers: the order is the name's and nothing else's, a
+    /// name the layout does not claim is skipped rather than repaired, the
+    /// scope is *this* root and not a walk, no time is carried beside a row,
+    /// and a root that has gone since it was resolved is an error where an
+    /// empty one is a value.
+    ///
+    /// **The one sentence that does not transfer is *the name is all that is
+    /// read*.** A badge is a procedure's `kind` and a `kind` is a line of the
+    /// file, so this opens each one and scans it with
+    /// [`crate::history::declared_kind`] — the same scanner the edit history
+    /// files a snapshot under and the same one MCP resolves an address with, so
+    /// a row's badge and an address's layer cannot come apart. That is a read
+    /// per row rather than none, paid on the press that builds a listing and
+    /// never on a frame, and it compiles nothing
+    /// (ADR-0338, [P-0091](../../../docs/principles/0091-cost-is-known-before-it-is-paid.md)).
+    ///
+    /// **A file that will not read is skipped and a file with no `kind` is
+    /// not.** The first is a fact about this machine's disk at this instant and
+    /// there is nothing to draw for it; the second is a file somebody shipped
+    /// and it gets a row with no badge, which is [`PresetProcedure::kind`]'s
+    /// own note.
+    pub fn list_procedures(&self) -> Result<Vec<PresetProcedure>, String> {
+        let entries = std::fs::read_dir(&self.dir).map_err(|e| self.cannot_be_listed(&e))?;
+        let mut out = Vec::new();
+        for entry in entries {
+            let entry = entry.map_err(|e| self.cannot_be_listed(&e))?;
+            let name = entry.file_name();
+            let Some(name) = procedure_name(&name) else {
+                continue;
+            };
+            if entry
+                .file_type()
+                .map_err(|e| self.cannot_be_listed(&e))?
+                .is_dir()
+            {
+                continue;
+            }
+            let path = entry.path();
+            let Ok(source) = std::fs::read(&path) else {
+                continue;
+            };
+            out.push(PresetProcedure {
+                name: name.to_string(),
+                file: path,
+                kind: crate::history::declared_kind(&source),
+            });
+        }
+        out.sort_by(|a, b| a.name.cmp(&b.name));
         Ok(out)
     }
 
@@ -471,6 +574,50 @@ mod tests {
         std::fs::create_dir_all(&path).expect("mkdir");
         std::fs::write(path.join("drift_shell.kir"), "kind L1\n").expect("write");
         path
+    }
+
+    /// **The `.kir` files a presets root ships are rows too, each under the
+    /// name a load names it by and the kind it declares** (ADR-0338).
+    ///
+    /// Everything `list_sets` refuses is refused here for its reasons — a
+    /// backup, a `.tmp`, a name the layout does not claim, a directory — and
+    /// the one thing that is not is a file with no `kind` line: that is a row
+    /// with no badge, because dropping it would answer *what ships here* with
+    /// a file missing and nothing said.
+    #[test]
+    fn a_presets_root_lists_its_procedures_with_the_kind_each_declares() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let dir = library(tmp.path().join("shipped"));
+        std::fs::write(
+            dir.join("orbit_wide.kir"),
+            "proc orbit_wide {\n  kind L3\n}\n",
+        )
+        .expect("write");
+        std::fs::write(dir.join("late_bloom.kir"), "  kind  L2\n").expect("write");
+        std::fs::write(dir.join("no_kind.kir"), "// nothing declared\n").expect("write");
+        std::fs::write(dir.join("orbit_wide.kir~"), "kind L3\n").expect("write");
+        std::fs::write(dir.join("half.kir.tmp"), "kind L3\n").expect("write");
+        std::fs::create_dir(dir.join("old.kir")).expect("mkdir");
+
+        let listed = root(dir).list_procedures().expect("the root is there");
+        let names: Vec<&str> = listed.iter().map(|row| row.name.as_str()).collect();
+        assert_eq!(
+            names,
+            ["drift_shell", "late_bloom", "no_kind", "orbit_wide"],
+            "the listing is {names:?}"
+        );
+        let kinds: Vec<Option<&str>> = listed.iter().map(|row| row.kind).collect();
+        assert_eq!(kinds, [Some("L1"), Some("L2"), None, Some("L3")]);
+        assert!(
+            listed[3].file.ends_with("orbit_wide.kir"),
+            "the row does not carry the file a load reads: {:?}",
+            listed[3].file
+        );
+
+        // A root that has gone since it was resolved is an error, not an empty
+        // listing — `list_sets`' own answer one extension along.
+        let gone = root(tmp.path().join("nowhere"));
+        assert!(gone.list_procedures().is_err());
     }
 
     /// One authoring Set file named `id`, with the two records a real one

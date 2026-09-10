@@ -3485,6 +3485,14 @@ impl Set {
             Kind::L3 => self.cameras.len(),
             Kind::L4 => first.renderers.len(),
             Kind::Field => self.field_count,
+            // **Zero, and that is the state of the tree rather than a rule.**
+            // `kind L5` is a language and a lowering as of M5.16's IR/codegen
+            // pass; a *nested* L5 is a node of a Set and nothing builds one
+            // yet. So a Set holds none, the address resolves to an empty range
+            // like `L3`'s did before the built-in camera became a node, and
+            // `--param L5:0` reaches nothing rather than panicking. What fills
+            // this in is the pass that gives the chain its slots.
+            Kind::L5 => 0,
         }
     }
 
@@ -3520,6 +3528,12 @@ impl Set {
                     + self.procedures(Kind::L3)
                     + self.procedures(Kind::L4)
             }
+            // **After the fields, and it addresses nothing today** — see
+            // `Set::procedures`. Placed at the end rather than between the
+            // renderers and the fields so that every existing address keeps its
+            // number: a Set file written before this kind existed addresses the
+            // same maps after it.
+            Kind::L5 => self.params.len(),
         }
     }
 
@@ -3539,6 +3553,10 @@ impl Set {
             // addressable and a Set that holds nothing there reports
             // `--param Field:…` as reaching nothing.
             Kind::Field => start..start + self.field_count,
+            // Empty, on `L3`'s own terms one paragraph up: the kind is
+            // addressable and a Set that holds nothing there reports
+            // `--param L5:…` as reaching nothing.
+            Kind::L5 => start..start,
         }
     }
 
@@ -3616,6 +3634,11 @@ impl Set {
                 .iter()
                 .map(|r| r.param_keys())
                 .collect(),
+            // **Nothing, because a Set holds no L5 node** — see
+            // `Set::procedures`. An empty list rather than a panic, so an
+            // address into the sixth kind reaches nothing instead of taking the
+            // render thread down.
+            Kind::L5 => Vec::new(),
         }
     }
 
@@ -5079,6 +5102,9 @@ impl Set {
                 // Nothing to resolve against, and `Set::bind` refuses the key
                 // before this runs — see `Set::nodes_of`.
                 Kind::Field => (0, 0..0),
+                // The same, and for the stronger reason: a Set holds no L5
+                // node at all yet.
+                Kind::L5 => (0, 0..0),
             };
             let manual = range
                 .clone()

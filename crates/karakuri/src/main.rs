@@ -343,7 +343,7 @@ use karakuri_console::view::{
     outputs, picture_rect, preview_rects, program_bay, program_head, sequencer as sequencer_bay,
     staging as staging_bay, tracker_group, transition as transition_row,
     transport as transport_row, Aim, Ask, AudioAsk, AudioIn, Basis, Budgeted, Chose, Chosen, Go,
-    Kind, McpPill, Picked, Picture, Read, Reading, Scope, Sequenced, Taken, Tracker,
+    Kind, McpPill, Picked, Picture, Read, Reading, RowKind, Scope, Sequenced, Taken, Tracker,
     TransitionSettings, View, Wiring, DECKS, DECK_LETTERS, REGIONS,
 };
 // **How many slots a deck can hold**, which is how many this one has — see
@@ -2183,10 +2183,12 @@ impl Readout {
                             ctx,
                             view::to_egui(self.panel.layout().viewport()),
                             self.view.menued(),
-                            // **The Sets, for the load button's reason two
-                            // controls along**: every item this menu carries
-                            // names a Set, and a `history` row is a version.
-                            self.view.sets(),
+                            // **The rows, for the load button's reason two
+                            // controls along**: a `history` row is a version
+                            // and this menu's items name none, and which of
+                            // the two loads an item asks for is what the row
+                            // *is* — a Set or a procedure (ADR-0338).
+                            self.view.rows(),
                             at,
                         )
                     });
@@ -2308,6 +2310,53 @@ impl Readout {
                     did = self.wired(ask);
                     return (claim, did);
                 }
+                // **A pane head's deck list is a card too**, and it is asked
+                // here for the `uses` card's reason one block up: it hangs out
+                // of a head at the top of a pane and down over that pane's own
+                // groups, so while it is down a press anywhere on the console
+                // belongs to it (`input::claim`'s rule 2) and a press outside
+                // it is the dismissal.
+                //
+                // **The pick is asked before the mark**, which is that block's
+                // ordering and its reason: a press inside the card belongs to
+                // the card, and the mark the card came out of is above it.
+                let picked = self.view.pane_target_open().and_then(|pane_at| {
+                    let pane = self.view.inspector.get(pane_at)?;
+                    let laid = inspector_pane(
+                        self.panel.layout(),
+                        pane_at,
+                        pane,
+                        self.view.scroll_in(pane_at),
+                    )?;
+                    self.view
+                        .pane_pulldown(ctx, &laid, pane, pane_at)?
+                        .picked(room, at)
+                        .map(view::Pointing::Pick)
+                });
+                let pointing = picked.or_else(|| {
+                    self.view
+                        .inspector
+                        .iter()
+                        .enumerate()
+                        .find_map(|(index, pane)| {
+                            let laid = inspector_pane(
+                                self.panel.layout(),
+                                index,
+                                pane,
+                                self.view.scroll_in(index),
+                            )?;
+                            let target = self.view.pane_pulldown(ctx, &laid, pane, index)?;
+                            target.hit(at).then_some(view::Pointing::Mark(index))
+                        })
+                });
+                if self.view.pane_target_open().is_some() {
+                    did = self.pointing(pointing.unwrap_or(view::Pointing::Shut));
+                    return (claim, did);
+                }
+                if let Some(ask) = pointing {
+                    did = self.pointing(ask);
+                    return (claim, did);
+                }
                 // **The Library bay's load control, and its list is a third
                 // card**, so it is asked here rather than beside the bay's own
                 // rows below: the card hangs up out of that bay's foot and
@@ -2339,15 +2388,15 @@ impl Readout {
                         ctx,
                         view::to_egui(self.panel.layout().viewport()),
                         self.view.target(),
-                        // **The Sets, which is empty under `history`**:
-                        // this button loads a Set and that scope's rows are
-                        // versions, so it answers `Aim::NoSet` there rather
-                        // than naming a load of a word no store holds
-                        // (`view::View::sets`).
-                        self.view
-                            .sets()
-                            .get(self.view.cursor_row())
-                            .map(String::as_str),
+                        // **The rows and the cursor, which is empty under
+                        // `history`**: this button loads what the cursor is
+                        // on and that scope's rows are versions, so it
+                        // answers `Aim::NoSet` there rather than naming a
+                        // load of a word no store holds
+                        // (`view::View::rows`). Which of the two loads it
+                        // names is the row's own kind (ADR-0338).
+                        self.view.rows(),
+                        self.view.cursor_row(),
                         at,
                     )
                 });
@@ -2667,6 +2716,31 @@ impl Readout {
                 if let Some(operation) = spoken {
                     return (claim, Acted::Emitted(Some(operation)));
                 }
+                // **The `keep` capsule at the right of the same head**, and
+                // the pane is the whole derivation for the authority chips'
+                // reason: which group and where the capsule is are inside
+                // `InspectorPane::keep_procedure`. **Two heads carry none and
+                // answer `None`** — a head standing over several nodes, and
+                // the built-in camera, which is a node with no procedure
+                // behind it — so both are drawn without a capsule rather than
+                // drawn with one that refuses (ADR-0338, decision 4).
+                let kept = self
+                    .view
+                    .inspector
+                    .iter()
+                    .enumerate()
+                    .find_map(|(index, pane)| {
+                        let at_pane = inspector_pane(
+                            self.panel.layout(),
+                            index,
+                            pane,
+                            self.view.scroll_in(index),
+                        )?;
+                        at_pane.keep_procedure(ctx, pane, at)
+                    });
+                if let Some(operation) = kept {
+                    return (claim, Acted::Emitted(Some(operation)));
+                }
                 // **The sensitivity row's chips under a bound parameter**, and
                 // two of its four are controls: the curve chip re-attaches the
                 // same signal through the next shape, and `take back` removes
@@ -2812,6 +2886,30 @@ impl Readout {
                 {
                     return (claim, self.narrowed(operation));
                 }
+                // **The six kind chips, one row under the field**, derived from
+                // the same call for the row above's reason and asked after it
+                // because the row they are in is drawn only where that one is.
+                //
+                // **A press names all six.** A chip flips its own field and
+                // what leaves carries the whole row — `Operation::FilterLibrary
+                // { kinds }` — because six statements each saying *this one
+                // changed* are six things a second surface can arrive in the
+                // middle of, and one saying *these are the kinds showing* is a
+                // destination (ADR-0338). So it lands in `Readout::narrowed`
+                // beside the field's own press: a scope, a filter and a kind
+                // are one question asked of different halves.
+                if let Some(operation) = library_bay(
+                    self.panel.layout(),
+                    &self.view.scopes,
+                    &self.view.library,
+                    self.view.opened(),
+                    self.view.pointed(),
+                    self.view.library_scroll(),
+                )
+                .and_then(|bay| bay.kind(ctx, self.view.filters(), at))
+                {
+                    return (claim, self.narrowed(operation));
+                }
                 // **The `params` chip in the Library bay's foot**, and the bay
                 // is derived a third time for the reason `claim` derives it a
                 // third time: each of these is a question about one laid-out
@@ -2875,7 +2973,7 @@ impl Readout {
                 // **The Sets, for the `params` chip's reason one control up**: a star is
                 // a control over a Set this store holds, and a `history` row is
                 // not one.
-                .and_then(|bay| bay.starred(self.view.sets(), &self.view.starred, at))
+                .and_then(|bay| bay.starred(self.view.rows(), &self.view.starred, at))
                 {
                     return (claim, Acted::Emitted(Some(operation)));
                 }
@@ -2905,7 +3003,7 @@ impl Readout {
                     self.view.pointed(),
                     self.view.library_scroll(),
                 )
-                .and_then(|bay| bay.take(self.view.sets(), at))
+                .and_then(|bay| bay.take(self.view.rows(), at))
                 {
                     return (claim, self.took(at, taken));
                 }
@@ -3289,7 +3387,7 @@ impl Readout {
                         ctx,
                         view::to_egui(self.panel.layout().viewport()),
                         self.view.menued(),
-                        self.view.sets(),
+                        self.view.rows(),
                         at,
                     )
                 });
@@ -3469,6 +3567,41 @@ impl Readout {
                 self.view.shut_wiring();
                 Acted::Emitted(Some(operation))
             }
+        }
+    }
+
+    /// **What a press on a pane head's `▾` did** — the mark, or a row of the
+    /// card it puts down (ADR-0338, decision 5).
+    ///
+    /// [`Readout::wired`]'s shape one row up and the same division: every arm
+    /// is either this console's own state moving or one operation emitted down
+    /// the path every other operation takes. **Nothing is performed here** — a
+    /// `PointPane` is [`pointed_pane`]'s, which is where the pane is resolved
+    /// and the deck refused.
+    ///
+    /// **A press on the mark of a card that is down shuts it**, for
+    /// [`Readout::wired`]'s reason: the mark is outside the card and every
+    /// press outside a card that is down is the dismissal.
+    fn pointing(&mut self, ask: view::Pointing) -> Acted {
+        match ask {
+            view::Pointing::Mark(pane) => {
+                println!(
+                    "inspector: pane `{}` is showing deck {} — pick a deck to point it at",
+                    view::PANE_NAMES.get(pane).copied().unwrap_or("?"),
+                    deck_letter(self.view.pane_deck(pane)),
+                );
+                self.view.open_pane_target(pane);
+                Acted::Nothing
+            }
+            view::Pointing::Shut => {
+                self.view.shut_pane_target();
+                Acted::Nothing
+            }
+            // **The pick puts the card away and emits**, and it is one
+            // gesture: `View::point_pane` is what takes the card down, and it
+            // is reached through [`pointed_pane`] so that a press and a
+            // model's `operate` move the pointer by one route.
+            view::Pointing::Pick(operation) => Acted::Emitted(Some(operation)),
         }
     }
 
@@ -3834,15 +3967,30 @@ impl Readout {
     /// moment one of those two is marked again — and a press that appears to
     /// do nothing is what this line exists to prevent.
     fn narrowed(&mut self, operation: Operation) -> Acted {
-        let Operation::ListSets { holds, layer } = &operation else {
-            unreachable!("the filter fields emit `ListSets` and nothing else");
+        let holds = match &operation {
+            Operation::ListSets { holds, .. } => holds.as_deref(),
+            // **A kind press keeps the field where it is**, which is the whole
+            // of what two controls on one row means: `FilterLibrary` carries
+            // the six chips and says nothing about `holds`, so the value that
+            // goes back into `View::narrow` is the one the field is already on.
+            Operation::FilterLibrary { .. } => self.view.filters().holds,
+            _ => {
+                unreachable!("the filter row emits `ListSets` and `FilterLibrary` and nothing else")
+            }
         };
-        let moved = self.view.narrow(holds.as_deref(), *layer);
+        let holds = holds.map(str::to_owned);
+        let kinds = match &operation {
+            Operation::FilterLibrary { kinds } => *kinds,
+            // **And a `holds` press keeps the chips where they are**, for the
+            // reason above read the other way: `ListSets` carries no kinds.
+            _ => self.view.filters().kinds,
+        };
+        let moved = self.view.narrow(holds.as_deref(), kinds);
         let at = self.view.filters();
         println!(
-            "filter: `{}` / `{}` — {}",
+            "filter: `{}` / {} — {}",
             at.holds_word(),
-            at.layer_word(),
+            showing(at.kinds),
             match (self.view.scope(), moved) {
                 (Some(Scope::AllSets | Scope::MySets), true) =>
                     "the listing under it is what the store holds, narrowed, and the cursor is \
@@ -3950,7 +4098,11 @@ impl Readout {
     /// — and this method is not reached there, because `View::sets` hands the
     /// carry nothing (ADR-0308).
     fn took(&mut self, p: Point, taken: Taken) -> Acted {
-        let Taken { row, set } = taken;
+        let Taken {
+            row,
+            set,
+            procedure,
+        } = taken;
         // **The mark first, and the hand after it.** Both are this console's
         // own pointers and neither is an operation, so the order is only about
         // the borrow — but the mark is what says the press was seen.
@@ -3960,7 +4112,7 @@ impl Readout {
              or anywhere else to load nothing",
             p.x, p.y
         );
-        self.panel.carry(p, set);
+        self.panel.carry(p, set, procedure);
         // **The `bool` is answered rather than dropped**, which is the whole
         // of the re-read above: a row the hand arrived at is a row the reading
         // moves to, and a press that landed on the row the cursor was already
@@ -6730,6 +6882,142 @@ struct Saved {
     reply: Option<mcp::Reply>,
 }
 
+/// **One node's procedure kept**, from the frame that asked for it to the file
+/// on disk and back.
+///
+/// [`Save`] and [`Saved`] folded into one type, and that is the difference in
+/// the act rather than a shortcut: a Set save gathers a whole slot's worth of
+/// readings off the live deck, so what is *asked for* and what *came back* are
+/// two shapes; a keep is one node's bytes and a name, so the request and the
+/// outcome carry the same three fields and the outcome is what is added.
+///
+/// **Nothing here is a reading of the engine.** The bytes are the run's own —
+/// what [`Playing`] holds for that slot — and where they go is decided by
+/// [`Asked`], which is the call site's. So the whole of this crosses onto the
+/// write thread with no deck behind it.
+struct Kept {
+    /// **Whose act this keep is**, which decides the directory it lands in —
+    /// [`Save::asked`]'s field and its argument: an operator's own act writes
+    /// `<store>/procedures/` and a model's writes `<store>/sandbox/`
+    /// (P-0096, ADR-0261).
+    asked: Asked,
+    /// **What it is filed as** — the name typed into this pane's head where
+    /// one was, and a stamp where the capsule typed nothing (ADR-0128,
+    /// ADR-0287, ADR-0292).
+    name: String,
+    /// The store root, not an open store — [`Save::root`]'s reason: opening it
+    /// is I/O and belongs on the thread below.
+    root: std::path::PathBuf,
+    /// **The bytes, where this node is still on the version the run launched
+    /// with**, and `None` where a build put it in the store instead — which is
+    /// [`setfile::SavedNode::source`]'s own rule. Either way the address below
+    /// names it, so the write thread has one place to go for what it has not
+    /// got.
+    source: Option<std::sync::Arc<str>>,
+    /// **The address of those bytes**, which is what a rebuilt node carries
+    /// instead of them: the watcher put its source in the store as it built
+    /// it, so `<hash>.kir` at the store root is where a keep reads it back
+    /// from.
+    hash: karakuri_store::hash::Hash,
+    /// **What the pane calls this node** — `L2:0` — carried for the sentence
+    /// and nothing else. An address is what an operator is looking at when
+    /// they press, and an outcome naming a file with no node beside it is an
+    /// answer to a question nobody asked.
+    addr: String,
+    /// Where the file went, once it has gone there — `Ok` and it is on disk,
+    /// `Err` and nothing claims otherwise, which is [`Saved::outcome`]'s rule.
+    outcome: Result<std::path::PathBuf, String>,
+    /// Where a client that asked for this keep is waiting, and `None` when a
+    /// hand pressed the capsule — [`Saved::reply`]'s field and its reason.
+    reply: Option<mcp::Reply>,
+}
+
+impl Kept {
+    /// **Write it.** Everything here is off the render thread: opening a store
+    /// creates directories, an artifact may have to be read back, and the file
+    /// itself is written and renamed into place.
+    ///
+    /// **The bytes are found in one of two places and never a third.** A node
+    /// still on its launch version carries them; a node a build landed has
+    /// them in the store under the address it carries instead. **Neither is a
+    /// re-read of the `.kir` on disk**, which is
+    /// [`setfile::SavedNode::source`]'s own sentence: a file rewritten since
+    /// the compile is a version nobody has seen, and a keep of it would put a
+    /// picture nobody watched into a library.
+    fn run(self) -> Kept {
+        let Kept {
+            asked,
+            name,
+            root,
+            source,
+            hash,
+            addr,
+            reply,
+            ..
+        } = self;
+        let outcome = (|| {
+            let store =
+                Store::open(&root).map_err(|e| format!("store `{}`: {e}", root.display()))?;
+            let bytes = match &source {
+                Some(source) => source.as_bytes().to_vec(),
+                None => store
+                    .get_artifact(&hash)
+                    .map_err(|e| format!("the source of `{addr}`: {e}"))?,
+            };
+            match asked {
+                Asked::Operator => store.write_procedure(&name, &bytes),
+                Asked::Model => store.write_sandbox_procedure(&name, &bytes),
+            }
+            .map_err(|e| e.to_string())
+        })();
+        Kept {
+            asked,
+            name,
+            root,
+            source,
+            hash,
+            addr,
+            outcome,
+            reply,
+        }
+    }
+
+    /// **The one sentence this outcome is said in**, formed here so that the
+    /// words a test reads, the words an operator reads and the words a model
+    /// is handed are the same run of text — [`Sent::said`]'s rule and
+    /// [`Keeping::took_save`]'s.
+    fn said(&self) -> Result<String, String> {
+        match &self.outcome {
+            Ok(path) => Ok(match self.asked {
+                Asked::Operator => format!(
+                    "  keep: {} kept as procedure `{}` — `{}`. The Library bay lists it, and a \
+                     press on that row writes it over that layer of what a deck is playing",
+                    self.addr,
+                    self.name,
+                    path.display()
+                ),
+                // **The sandbox's sentence says where it is and what does not
+                // read it**, which is a Set save's own division one file kind
+                // along: a model told only that a procedure was kept would go
+                // looking for a library row that is not there (P-0083,
+                // ADR-0261).
+                Asked::Model => format!(
+                    "  keep: {} kept as `{}` in the sandbox — `{}`. A keep asked for over MCP is \
+                     written there rather than in the operator's library, so the Library bay does \
+                     not list it and no load off a row reaches it",
+                    self.addr,
+                    self.name,
+                    path.display()
+                ),
+            }),
+            Err(e) => Err(format!(
+                "  keep: {}: procedure `{}` was not kept: {e}",
+                self.addr, self.name
+            )),
+        }
+    }
+}
+
 /// **What a send came back with**, at the frame it arrives.
 ///
 /// [`Saved`]'s shape one act along, and the fields differ where the two acts
@@ -8405,6 +8693,152 @@ fn transport(
 /// Either way the answer is a list, and an empty one is a bay with nothing in
 /// it — which is what `view::library` draws for it, and is honest: a store
 /// this run could not read holds nothing it can name.
+fn procedures(root: &std::path::Path) -> Vec<ListedProcedure> {
+    if !root.is_dir() {
+        // Said once by `library` beside it on the same press, so this one is
+        // quiet: two lines about one missing store would be one fact said
+        // twice.
+        return Vec::new();
+    }
+    let store = match Store::open(root) {
+        Ok(store) => store,
+        Err(e) => {
+            println!("library: {} could not be opened: {e}", root.display());
+            return Vec::new();
+        }
+    };
+    let listed = match store.list_procedures() {
+        Ok(listed) => listed,
+        Err(e) => {
+            // Said rather than swallowed, for [`library`]'s reason: a tier
+            // that is empty because a directory could not be read looks
+            // exactly like a tier nobody has kept into.
+            println!(
+                "library: {}/{} could not be listed: {e}",
+                root.display(),
+                Store::PROCEDURES
+            );
+            return Vec::new();
+        }
+    };
+    let mut out: Vec<ListedProcedure> = listed
+        .into_iter()
+        .filter_map(|entry| {
+            // **One small read per row, and it compiles nothing** — the badge
+            // is the file's `kind` line, which `history::declared_kind` scans
+            // (ADR-0338, P-0091). A file that will not read is dropped rather
+            // than drawn: it is a fact about this disk at this instant and
+            // there is nothing to put in a row.
+            let source = store.read_procedure(&entry.name).ok()?;
+            Some(ListedProcedure {
+                name: entry.name,
+                written: entry.written,
+                kind: karakuri_environment::history::declared_kind(&source).and_then(kind_of),
+            })
+        })
+        .collect();
+    out.sort_by(|a, b| b.written.cmp(&a.written).then_with(|| a.name.cmp(&b.name)));
+    out
+}
+
+/// **What a Set's row is**: the layers its own `slot` records fill, once each
+/// and in the file's own order.
+///
+/// **Read off the summary the listing already has**, which is why a badge costs
+/// nothing beyond what `all` was already paying: `setfile::summarise` reads a
+/// line per node to answer *what is in my library*, and the layer is one of the
+/// fields it already carries (P-0091, ADR-0338).
+///
+/// **Once each**, because a badge says *this Set fills that layer* and a Set of
+/// three renderers fills L4 once for the purpose of reading a row.
+fn set_row(set: &setfile::SetSummary) -> RowKind {
+    let mut badges: Vec<karakuri_operation::Layer> = Vec::new();
+    for node in &set.nodes {
+        let layer = asked(node.layer);
+        if !badges.contains(&layer) {
+            badges.push(layer);
+        }
+    }
+    RowKind {
+        badges,
+        procedure: false,
+    }
+}
+
+/// **What a kept procedure's row is**: its one declared kind, and that it is a
+/// procedure. A file that declares none draws no badge.
+fn kept_row(kept: &ListedProcedure) -> RowKind {
+    RowKind {
+        badges: kept.kind.into_iter().collect(),
+        procedure: true,
+    }
+}
+
+/// [`kept_row`] one tier along, for a procedure that ships.
+fn shipped_row(shipped: &karakuri_environment::places::PresetProcedure) -> RowKind {
+    RowKind {
+        badges: shipped.kind.and_then(kind_of).into_iter().collect(),
+        procedure: true,
+    }
+}
+
+/// **Does this procedure pass the kind row?**
+///
+/// `LibraryKinds::shows_layer` answers it for a file that declares a kind, and
+/// this adds the one case that value cannot carry: **a `.kir` with no `kind`
+/// line shows only while nothing is on**. It is a row of the library either way
+/// — dropping it would answer *what have I kept* with a file missing — and a
+/// chip that named it would be a chip claiming it is of a kind nobody wrote.
+fn shows_kept(
+    kinds: karakuri_operation::LibraryKinds,
+    kind: Option<karakuri_operation::Layer>,
+) -> bool {
+    match kind {
+        Some(layer) => kinds.shows_layer(layer),
+        None => !kinds.narrowing(),
+    }
+}
+
+/// **What the presets root ships that can go over a layer**, as its rows —
+/// [`presets_listing`]'s shape one extension along and with its failures.
+fn presets_procedures(
+    presets: Option<&karakuri_environment::places::Presets>,
+) -> Vec<karakuri_environment::places::PresetProcedure> {
+    let Some(presets) = presets else {
+        return Vec::new();
+    };
+    match presets.list_procedures() {
+        Ok(procedures) => procedures,
+        // **Said out loud and then empty**, which is [`presets_listing`]'s own
+        // answer beside it: a tier that is empty because a directory could not
+        // be read looks exactly like one that ships nothing.
+        Err(why) => {
+            println!("library: {why}");
+            Vec::new()
+        }
+    }
+}
+
+/// **One procedure the operator has kept**, as [`procedures`] found it: the
+/// name its row is drawn under, when it was written, and the layer it declares.
+///
+/// **`ListedProcedure` and not `Kept`**, which is taken: [`Kept`] is what a
+/// press on the Inspector's `keep` capsule *files*, and this is a row of the
+/// listing that files show up in. One is an act and the other is a listing, and
+/// a name over both would be a name meaning two things.
+///
+/// **`kind` is an `Option` and a `None` is a row**, which is
+/// `places::PresetProcedure::kind`'s own note one tier along: a `.kir` with no
+/// `kind` line is a file somebody kept, and dropping it from the listing would
+/// answer *what have I kept* with a file missing and nothing said. It draws no
+/// badge, and a load off it is refused by name.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ListedProcedure {
+    name: String,
+    written: std::time::SystemTime,
+    kind: Option<karakuri_operation::Layer>,
+}
+
 fn library(root: &std::path::Path) -> Vec<setfile::SetSummary> {
     if !root.is_dir() {
         println!(
@@ -8706,6 +9140,63 @@ fn read_reading(view: &mut View, store: &std::path::Path) -> String {
 ///
 /// **Exhaustive with no wildcard**, which is what makes it a table rather than
 /// a guess: a sixth layer does not compile until somebody says which it is.
+fn asked(layer: karakuri_store::record::Layer) -> karakuri_operation::Layer {
+    use karakuri_operation::Layer as Asked;
+    use karakuri_store::record::Layer as Written;
+    match layer {
+        Written::L1 => Asked::L1,
+        Written::L2 => Asked::L2,
+        Written::L3 => Asked::L3,
+        Written::L4 => Asked::L4,
+        Written::Field => Asked::Field,
+        Written::L5 => Asked::L5,
+    }
+}
+
+/// **The word a `kind` line spells a layer with, as the vocabulary's own
+/// value** — `karakuri_environment::history::LAYERS`' six words read back.
+///
+/// `None` for a word that is not one of the six, which is a `.kir` declaring
+/// no kind at all: `declared_kind` already answers `None` there, and this is
+/// the same absence carried one step further rather than a second reading of
+/// it.
+///
+/// **The wildcard is the risk here and it is why `LAYERS` is the list.** This
+/// match answers a word rather than a value, so a sixth kind does *not* stop
+/// the build — it falls to `None` and a `kind L5` file reads as one declaring
+/// nothing. That is the failure `setfile::layer_from_ordinal`'s comment names
+/// one layer earlier, arriving through the other door.
+fn kind_of(word: &str) -> Option<karakuri_operation::Layer> {
+    use karakuri_operation::Layer;
+    match word {
+        "L1" => Some(Layer::L1),
+        "L2" => Some(Layer::L2),
+        "L3" => Some(Layer::L3),
+        "L4" => Some(Layer::L4),
+        "Field" => Some(Layer::Field),
+        "L5" => Some(Layer::L5),
+        _ => None,
+    }
+}
+
+/// **Which kinds the filter row is showing, as a sentence** — the words of the
+/// chips that are on, or *every kind* where none of them is.
+///
+/// `karakuri_operation::LibraryKinds::narrowing` settles the reading of *none
+/// on* once and this says it in the panel's own words: a row that hid the whole
+/// listing would be a state an operator cannot see their way out of.
+fn showing(kinds: karakuri_operation::LibraryKinds) -> String {
+    if !kinds.narrowing() {
+        return String::from("every kind");
+    }
+    let on: Vec<&str> = karakuri_console::view::KindChip::ALL
+        .into_iter()
+        .filter(|chip| chip.on(kinds))
+        .map(|chip| chip.word())
+        .collect();
+    on.join(", ")
+}
+
 fn recorded(layer: karakuri_operation::Layer) -> karakuri_store::record::Layer {
     use karakuri_operation::Layer as Asked;
     use karakuri_store::record::Layer as Written;
@@ -8715,6 +9206,7 @@ fn recorded(layer: karakuri_operation::Layer) -> karakuri_store::record::Layer {
         Asked::L3 => Written::L3,
         Asked::L4 => Written::L4,
         Asked::Field => Written::Field,
+        Asked::L5 => Written::L5,
     }
 }
 
@@ -9343,58 +9835,140 @@ fn listing(
     view.starred = favourites(store);
     // **Copied out rather than borrowed across the write below**: `filters`
     // borrows `View::holds`, and the listing is written into the same `View`.
-    let (holds, layer, spelled) = {
+    // **`layer` is `None` and no field sets it any more**, which is ADR-0338:
+    // the `layer…` field is retired for the six kind chips, and
+    // `Operation::ListSets` keeps the field for `list_sets` and `--list-sets`,
+    // where *which Sets hold a node on this layer* now lives. It is kept in the
+    // narrowing below rather than deleted from it because that predicate is
+    // what the MCP tool applies too.
+    let (holds, layer) = {
         let at = view.filters();
-        (
-            at.holds.map(str::to_owned),
-            at.layer,
-            at.layer.is_some().then(|| at.layer_word().to_owned()),
-        )
+        (at.holds.map(str::to_owned), None)
     };
-    view.library = match scope {
-        Scope::AllSets => held
-            .iter()
-            .filter(|set| narrows(set, holds.as_deref(), layer))
-            .map(|set| set.id.clone())
-            .collect(),
+    // **What the operator has kept, and what ships**, which are the two tiers a
+    // procedure is a row of (ADR-0227's shape a fourth time, ADR-0338). Read
+    // here beside the Sets and on the same press, because the two halves of a
+    // scope's listing are one answer: `all` gains `<store>/procedures/` and
+    // `presets` gains the presets root's `.kir` files, and no other scope
+    // gains either — `my sets` is the starred subset of the Sets and a star is
+    // refused on anything else, and a `folder` row is a *take*, which nothing
+    // does with a bare `.kir`.
+    let kept = match scope {
+        Scope::AllSets => procedures(store),
+        _ => Vec::new(),
+    };
+    let shipped = match scope {
+        Scope::Presets => presets_procedures(presets),
+        _ => Vec::new(),
+    };
+    let kinds = view.filters().kinds;
+    // **One listing of rows and not two lists side by side**, which is
+    // ADR-0338's *a procedure is a row of the same list*: the names and what
+    // each row is are built together here and split into the two fields the
+    // console reads, so a badge can never describe the row above the one it is
+    // drawn on.
+    let rows: Vec<(String, RowKind)> = match scope {
+        Scope::AllSets => {
+            let mut rows: Vec<(String, RowKind, std::time::SystemTime)> = held
+                .iter()
+                .filter(|set| narrows(set, holds.as_deref(), layer))
+                .filter(|_| kinds.shows_sets())
+                .map(|set| (set.id.clone(), set_row(set), set.written))
+                .chain(
+                    kept.iter()
+                        .filter(|kept| shows_kept(kinds, kept.kind))
+                        .map(|kept| (kept.name.clone(), kept_row(kept), kept.written)),
+                )
+                .collect();
+            // **Most recent first, and the name breaks a tie**, which is
+            // `library`'s own order applied to the merged list: two files
+            // written inside one tick of a coarse clock tie, and a tied sort
+            // is not an order.
+            rows.sort_by(|a, b| b.2.cmp(&a.2).then_with(|| a.0.cmp(&b.0)));
+            rows.into_iter().map(|(id, kind, _)| (id, kind)).collect()
+        }
         // **The starred subset, and it is an intersection rather than a
         // second listing** (ADR-0299): the rows are the store's own, in the
         // store's own order, keeping only the ids the marks name. A mark whose
         // Set is gone draws no row, which is what makes a stale mark a line in
         // a file rather than a hazard — and it can still have its star taken
         // off, because `Store::set_favourite` refuses only the starring.
+        //
+        // **And no procedure is here**, which is a decision rather than an
+        // omission: a star is refused on an id `sets/` does not hold, so there
+        // is nothing to star on a procedure row and the starred subset of the
+        // Sets is exactly what this chip is (ADR-0338).
         Scope::MySets => held
             .iter()
             .filter(|set| view.starred.contains(&set.id))
             .filter(|set| narrows(set, holds.as_deref(), layer))
-            .map(|set| set.id.clone())
+            .filter(|_| kinds.shows_sets())
+            .map(|set| (set.id.clone(), set_row(set)))
             .collect(),
-        Scope::Presets => presets_listing(presets)
-            .into_iter()
-            .map(|preset| preset.id)
-            .collect(),
+        // **What ships, in two kinds of file and one list**: the `.kset` files
+        // and the `.kir` files beside them, in name order because a shipped
+        // file's mtime is when this machine checked it out.
+        //
+        // **A preset Set row carries no badge**, and the cost is stated where
+        // it is paid (P-0091): `Presets::list_sets` opens no file at all, so
+        // what layers one fills is not known without reading twenty-two Set
+        // files on a press. A procedure's kind *is* known, because that listing
+        // reads one small file per row for it.
+        Scope::Presets => {
+            let mut rows: Vec<(String, RowKind)> = presets_listing(presets)
+                .into_iter()
+                .filter(|_| kinds.shows_sets())
+                .map(|preset| (preset.id, RowKind::default()))
+                .chain(
+                    shipped
+                        .iter()
+                        .filter(|shipped| shows_kept(kinds, shipped.kind.and_then(kind_of)))
+                        .map(|shipped| (shipped.name.clone(), shipped_row(shipped))),
+                )
+                .collect();
+            rows.sort_by(|a, b| a.0.cmp(&b.0));
+            rows
+        }
         // **The directory a folder was dropped on this window to name**, and
         // it is the host's for [`presets_listing`]'s reason one arm up: a
         // listing is a directory read, and this side is the only side with a
         // disk (ADR-0156). Pointed nowhere it lists nothing and the sentence
         // about it is [`why_nothing`]'s.
-        Scope::Folder => folder_listing(folder),
+        //
+        // **A `.kir` in it is not a row**, and that note stands as written: a
+        // folder row is a *take*, `--take-in` checks every inlined source
+        // against the address its `slot` record names, and a loose `.kir`
+        // names nothing (ADR-0338).
+        Scope::Folder => folder_listing(folder)
+            .into_iter()
+            .filter(|_| kinds.shows_sets())
+            .map(|id| (id, RowKind::default()))
+            .collect(),
         // **The versions of the Set the load pulldown's deck is running**,
         // already narrowed and already in order — see [`walked`], and this
         // function's own head for why the narrowing is a Set rather than a
         // deck and why a `None` row matches nothing.
+        //
+        // **The kind chips do not narrow it**, because a version is not a Set
+        // and not a procedure: it is one node's source at one moment, and the
+        // six chips partition the rows of a *library*.
         Scope::History => walked
             .as_ref()
             .map(|found| found.rows.clone())
-            .unwrap_or_default(),
+            .unwrap_or_default()
+            .into_iter()
+            .map(|row| (row, RowKind::default()))
+            .collect(),
     };
+    view.library = rows.iter().map(|(name, _)| name.clone()).collect();
+    view.kinds = rows.into_iter().map(|(_, kind)| kind).collect();
     // **Only where the filter was applied.** `layer` survives a scope change —
     // it is the console's own value and not a position in a listing — so a bay
     // reading `presets` under a set `layer` field would otherwise report a
     // narrowing that narrowed nothing. What says so out loud is the press:
     // `Readout::narrowed`.
     let narrowed = matches!(scope, Scope::AllSets | Scope::MySets)
-        .then(|| narrowing(holds.as_deref(), spelled.as_deref()))
+        .then(|| narrowing(holds.as_deref(), None))
         .flatten();
     // **What the walk has to say beside the count**, and it is empty for every
     // other scope: a truncated listing that read as a whole one is the failure
@@ -11079,6 +11653,10 @@ fn layer_word(layer: Layer) -> &'static str {
         Layer::L3 => "L3",
         Layer::L4 => "L4",
         Layer::Field => "F",
+        // **A bare letter like the four above and unlike `F`'s neighbour**,
+        // which is the address a press types back in — `L5:0`, on
+        // `karakuri_environment::setfile::layer_ordinal`'s numbering.
+        Layer::L5 => "L5",
     }
 }
 
@@ -11094,6 +11672,7 @@ fn asked_layer(layer: Layer) -> karakuri_operation::Layer {
         Layer::L3 => karakuri_operation::Layer::L3,
         Layer::L4 => karakuri_operation::Layer::L4,
         Layer::Field => karakuri_operation::Layer::Field,
+        Layer::L5 => karakuri_operation::Layer::L5,
     }
 }
 
@@ -11110,6 +11689,7 @@ fn ir_layer(layer: karakuri_operation::Layer) -> Layer {
         karakuri_operation::Layer::L3 => Layer::L3,
         karakuri_operation::Layer::L4 => Layer::L4,
         karakuri_operation::Layer::Field => Layer::Field,
+        karakuri_operation::Layer::L5 => Layer::L5,
     }
 }
 
@@ -11280,10 +11860,37 @@ fn inspector(
     // test in this crate that hands none in and is honest either way: a slot
     // nothing is pointed at is a slot nothing will rebuild.
     aims: &[Aiming],
+    // **Which deck each pane is pointed at**, which is the console's own
+    // pointer read back — `view::View::pane_deck`, one per pane, moved by the
+    // pulldown on that pane's head (ADR-0338, decision 5).
+    //
+    // **It is handed in rather than read here**, which is `View::target_deck`'s
+    // arrangement one bay along: the pointer belongs to the console and what
+    // is under it belongs to the deck, so this function answers *what is that
+    // slot playing* and never *which slot should this pane show*.
+    //
+    // Panes used to be filled slot by slot — pane `n` from slot `n` — so slots
+    // C and D had no way onto this bay at all. That arrangement is the default
+    // this array opens with (`view::PANE_DECKS`) rather than a rule.
+    targets: [u8; view::PANES],
     out: &mut Vec<view::Pane>,
 ) {
     out.clear();
-    for slot in 0..deck.slot_count().min(view::PANES) {
+    // **A pane per target, in pane order**, which is what makes the position
+    // of an entry in `out` the pane it belongs to — `view::inspector` reads it
+    // by index, and `View::inspector` is walked the same way.
+    for target in targets {
+        let slot = usize::from(target);
+        // **A pane pointed at a deck this run has no slot for draws nothing**,
+        // and the panes after it go with it because a pane is addressed by its
+        // position in this list. `View::point_pane` refuses a deck the mixer
+        // draws no strip for, so the only way here is the tail of the default:
+        // a run with one slot opens with the second pane pointed at deck B,
+        // which is where `slot_count().min(PANES)` left it before this
+        // pointer existed.
+        if slot >= deck.slot_count() {
+            break;
+        }
         // The strip's name for the same slot, and for [`mixer`]'s reason: a
         // pane head reads `deck A · drift_night`, and after a load that is the
         // Set the operator chose rather than the pair the run opened with.
@@ -11441,10 +12048,32 @@ fn inspector(
             ));
         }
 
+        // **Which L3 node is the built-in camera**, which is the one node on a
+        // pane with no procedure behind it and so nothing to keep.
+        //
+        // **The last camera node, always** — `Set::cameras`: *"Never empty,
+        // and the last one is always the built-in orbit."* A Set whose files
+        // declare no `kind L3` holds it at `L3:0`, and one that declares two
+        // holds it at `L3:2`; either way it is the highest index on that
+        // layer, so this is a `max` rather than a check for an empty layer.
+        //
+        // **Asked here rather than of the store**, because what a `keep` needs
+        // is *is there a source at all*, and the Set is what knows. The bytes
+        // themselves are the host's to find at the press — `Keeping::playing`
+        // — and a pane that named a node the store cannot answer for would be
+        // a capsule refusing after it was drawn.
+        let builtin_camera = set
+            .node_names()
+            .iter()
+            .filter_map(|name| set.node_named(name))
+            .filter(|(layer, _)| *layer == Layer::L3)
+            .map(|(_, index)| index)
+            .max();
         let mut nodes: Vec<view::Node> = Vec::new();
         let mut renderers: Vec<view::Renderer> = Vec::new();
         let mut renderer_nodes = 0;
         let mut renderer_authority = None;
+        let mut renderer_keep = None;
         for name in set.node_names() {
             let Some((layer, index)) = set.node_named(name) else {
                 continue;
@@ -11490,12 +12119,35 @@ fn inspector(
                     // chip is dropped rather than showing the first of them.
                     _ => None,
                 };
+                // **And no capsule either, for that sentence** — one `keep` on
+                // a head standing over three renderers would keep one of the
+                // three and say nothing about which (ADR-0338, decision 4).
+                // Open the fold and each renderer has its own; a Set with one
+                // renderer has one node under that head and carries the
+                // capsule like any other.
+                renderer_keep = match renderer_nodes {
+                    1 => Some(karakuri_operation::NodeAt {
+                        layer: asked_layer(layer),
+                        index,
+                    }),
+                    _ => None,
+                };
                 continue;
             }
             nodes.push(view::Node {
                 addr: node_addr(layer, index),
                 name: name.clone(),
                 authority,
+                // **Every node but the built-in camera has a source to keep**,
+                // which is what `builtin_camera` above answers. The address
+                // rides with it rather than beside it, for `view::Node::keep`'s
+                // own reason: a head with nothing to keep has no node either.
+                keep: (layer != Layer::L3 || Some(index) != builtin_camera).then_some(
+                    karakuri_operation::NodeAt {
+                        layer: asked_layer(layer),
+                        index,
+                    },
+                ),
                 renderers: Vec::new(),
                 uses: match aims.get(slot) {
                     Some(aiming) => uses_of(set, &aiming.at.edges, name),
@@ -11525,6 +12177,7 @@ fn inspector(
                 addr: layer_word(Layer::L4).to_owned(),
                 name: RENDERERS_NODE.to_owned(),
                 authority: renderer_authority,
+                keep: renderer_keep,
                 renderers,
                 // **The folded renderer head takes none**, and it is the same
                 // reason its authority chip is dropped where it stands over
@@ -12139,6 +12792,57 @@ fn pointed(view: &mut View, operation: &Operation) -> Option<String> {
     ))
 }
 
+/// **A pick on a pane head's pulldown, applied to the console's own pointer**,
+/// and what to say about it. `None` for every operation that is not it.
+///
+/// [`pointed`]'s shape one mark along and for its sentence:
+/// `Operation::PointPane` is `Silent(Surface)`, so there is nothing on the deck
+/// for [`apply`] to move and the surface that emits it performs it.
+///
+/// **It is not the deck selection**, and nothing here touches it — that is the
+/// whole of what this mark is for (ADR-0338, decision 5): a pane can show a
+/// deck the keys are not on, which is the Library bay's load pulldown's
+/// argument one bay along.
+///
+/// **The pane is named rather than numbered**, because
+/// `Operation::PointPane { pane }` is a `String` — `karakuri-operation` has no
+/// dependencies and cannot hold the arrangement's handle type — so this is
+/// where the name is resolved back to a position in `View::inspector`. A name
+/// no pane has is refused with the two that exist, which is what the next
+/// attempt needs (P-0083).
+///
+/// **A deck the mixer has no strip for is refused**, and `View::point_pane` is
+/// where that rule lives — [`pointed`]'s own refusal, read on a pane instead of
+/// on the ring.
+fn pointed_pane(view: &mut View, operation: &Operation) -> Option<String> {
+    let Operation::PointPane { pane, deck } = operation else {
+        return None;
+    };
+    let Some(at) = view::PANE_NAMES.iter().position(|name| name == pane) else {
+        return Some(format!(
+            "  pane: `{pane}` refused — this console's panes are {}",
+            view::PANE_NAMES.join(" and ")
+        ));
+    };
+    let letter = deck_letter(*deck);
+    if !view.point_pane(at, *deck) && usize::from(*deck) >= view.mixer.len() {
+        return Some(format!(
+            "  pane: `{pane}` -> deck {letter} refused — this deck has {} slot{}, and a pane \
+             pointed at one it has not got is a head naming a deck with nothing under it",
+            view.mixer.len(),
+            match view.mixer.len() {
+                1 => "",
+                _ => "s",
+            }
+        ));
+    }
+    Some(format!(
+        "  pane: `{pane}` -> deck {letter} -> no record, and that is settled: a pane's target is \
+         a surface's own pointer. The keys stay where they are and the pane next door does not \
+         move"
+    ))
+}
+
 /// **What a refused `go` says**, and the whole of what this window puts on
 /// this side of that seam.
 ///
@@ -12624,6 +13328,264 @@ fn played(gfx: &mut Gfx, operation: &Operation) -> Option<String> {
              that deck is still running"
         )),
     }
+}
+
+/// **A procedure loaded over one layer of what a deck is playing, performed** —
+/// a press on a procedure row's `load`, on one of its row menu's four loads, or
+/// a drag of it onto a strip or a cell, and `None` for every operation that is
+/// not one.
+///
+/// # It is [`played`]'s shape with one file instead of every file
+///
+/// A Set load re-points the slot at every file that Set names; this re-points
+/// it at **the files it is already on with one of them replaced**, which is the
+/// whole of ADR-0338 taken literally. Both are one `Aiming::re_point`, both are
+/// compiled off the render thread and judged at a frame boundary on what one
+/// frame of the result costs, and the Staging lane says which of the three
+/// happened. Nothing is installed and nothing is written where the presets are.
+///
+/// **`Aim::set` is left where it is**, which is the half of the maintainer's
+/// answer that has a mechanism behind it: the versions this slot writes from
+/// here on go on being filed under the Set it started from, so the `history`
+/// chip keeps listing that deck's versions and the snapshot every compile takes
+/// stays alive (ADR-0304, ADR-0308). It follows from `overlaying` restating the
+/// aim rather than building one.
+///
+/// **The strip then reads `<base> + <kir>`**, so what is on air says what it is
+/// made of and never claims to be a Set the library holds. `keep` is what gives
+/// it a name, and it files a new Set exactly as it does for any other deck —
+/// what `Playing` gathers is the aim's own files, which is what this changed.
+///
+/// **Written on the aim rather than on the swap**, which is [`played`]'s own
+/// choice and its argument word for word: the build may be refused or land and
+/// stop its slot for cost, and a readout that waited for the verdict would name
+/// material that is no longer in the file. The staging lane is the surface built
+/// for that disagreement.
+fn overlaid(gfx: &mut Gfx, operation: &Operation) -> Option<String> {
+    let Operation::LoadProcedure { deck, procedure } = operation else {
+        return None;
+    };
+    let slot = usize::from(*deck);
+    let letter = deck_letter(*deck);
+    let count = gfx.engine.aimed.len();
+    // **The base before the aim is borrowed**, because the sentence and the
+    // readout both want it and `overlaying` takes the aim mutably.
+    let base = base_material(
+        gfx.engine
+            .aimed
+            .get(slot)
+            .and_then(|aim| aim.at.set.as_deref()),
+        &gfx.launch,
+    );
+    let presets = gfx.presets.clone();
+    let store = gfx.store.clone();
+    let Some(aim) = gfx.engine.aimed.get_mut(slot) else {
+        return Some(format!(
+            "  load: deck {letter} refused — this deck has {count} slot{}, and `{procedure}` has \
+             nowhere to land",
+            match count {
+                1 => "",
+                _ => "s",
+            }
+        ));
+    };
+    match overlaying(&store, presets.as_deref(), slot, aim, procedure) {
+        Ok(line) => {
+            if let Some(name) = gfx.material.get_mut(slot) {
+                name.clear();
+                name.push_str(&derived_material(&base, procedure));
+            }
+            Some(line)
+        }
+        Err(e) => Some(format!(
+            "  load: `{procedure}` did not reach deck {letter}: {e} — nothing moved, and what is \
+             on that deck is still running"
+        )),
+    }
+}
+
+/// **What the derived material a procedure load leaves is a derivation *of***:
+/// the Set the slot is filed under, or the pair the run was launched with where
+/// it is filed under none.
+///
+/// **`watch::Aim::set` first**, because that is the one field a load moves and a
+/// procedure load does not (ADR-0304, ADR-0338): a slot that has been loaded is
+/// running that Set with one layer over it, and the strip has to say so. A slot
+/// nobody has loaded is running the launch pair, which no id names — that is
+/// the state `Aim::set` is `None` in, and the launch pair is what the strip has
+/// been reading since the first frame.
+fn base_material(set: Option<&str>, launch: &str) -> String {
+    set.map(str::to_owned).unwrap_or_else(|| launch.to_owned())
+}
+
+/// **What the strip reads once a layer has been written over what a deck is
+/// playing**: `<base> + <kir>`, which is the maintainer's own
+/// `drift_night + orbit_wide`.
+///
+/// So what is on air says what it is made of and never claims to be a Set the
+/// library holds — `keep` is what gives it a name (ADR-0338).
+fn derived_material(base: &str, procedure: &str) -> String {
+    format!("{base} + {procedure}")
+}
+
+/// **Write one procedure over the layer it declares and re-aim the slot**, or
+/// say why it did not.
+///
+/// # Where the file comes from, and it is the two tiers and nothing else
+///
+/// `<store>/procedures/<name>.kir` first and the presets root's
+/// `<name>.kir` after it, which is the order the Library bay lists them in and
+/// the only two places a procedure row can have come from (ADR-0227's two tiers,
+/// ADR-0338's decision 1). The content-addressed artifacts at the store root are
+/// **not** searched: that population is the edit history's, addressed by hash,
+/// and a name is not one.
+///
+/// # Which position it lands on, and the limit is recorded rather than designed around
+///
+/// **The first node of that kind.** A procedure declares one `kind` and nothing
+/// about where it goes, and a library row cannot say an index — so the payload
+/// carries none, and `L4:0` is the renderer a `kind L4` replaces. The second
+/// renderer of a three-renderer Set is unreachable from this row, and the day
+/// the Inspector's node head grows a *replace this node* control is the day the
+/// payload gains a `NodeAt` (ADR-0338, stated at the point it bites).
+///
+/// **Where the slot has no node of that kind the procedure is added as node 0 of
+/// it**, which is the case the request is about: a Set of a geometry and a
+/// renderer declares no camera, so it holds the built-in orbit at `L3:0` and a
+/// `kind L3` row takes that position — the picture changes camera with nothing
+/// else moving.
+///
+/// # What each file already on the slot is
+///
+/// Read off the files themselves with `history::declared_kind`, which is the one
+/// scanner for a `kind` line, and with `compile`'s own fallback where a file
+/// declares none — the first node is an L1 and the rest are L4s, which is what
+/// a bare pair is. That is one small read per node, on the press, and it
+/// compiles nothing (P-0091).
+///
+/// # The node name is kept, and that is what keeps the edges
+///
+/// A replaced position keeps the **name the Set gave that node**, because an
+/// `edge` and a `bind` in the aim resolve against it: a rebuild that renamed the
+/// node would break the wiring the slot is running. A node that is *added* is
+/// named after the row, and a name the slot already holds is refused rather than
+/// shadowed.
+fn overlaying(
+    root: &std::path::Path,
+    presets: Option<&std::path::Path>,
+    slot: usize,
+    aim: &mut Aiming,
+    name: &str,
+) -> Result<String, String> {
+    let (source, tier) = kept_source(root, presets, name)?;
+    let kind = karakuri_environment::history::declared_kind(&source).ok_or_else(|| {
+        format!(
+            "`{name}` declares no `kind`, so there is no layer to write it over — a procedure \
+             says which layer it implements in a `kind` line, and this one says nothing"
+        )
+    })?;
+    // **Head and rest are one list here**, because *the first node of that kind*
+    // is a question about the slot's files in order and the split is only how a
+    // `watch::Aim` carries them.
+    let mut files: Vec<karakuri_environment::compile::Named> = std::iter::once(aim.at.head.clone())
+        .chain(aim.at.rest.iter().cloned())
+        .collect();
+    let at = files.iter().enumerate().find_map(|(index, file)| {
+        let source = std::fs::read(&file.path).ok()?;
+        let declared = karakuri_environment::history::declared_kind(&source)
+            .unwrap_or(if index == 0 { "L1" } else { "L4" });
+        (declared == kind).then_some(index)
+    });
+    let (at, added) = match at {
+        Some(at) => (at, false),
+        None => (files.len(), true),
+    };
+    if added && files.iter().any(|file| file.name.as_deref() == Some(name)) {
+        return Err(format!(
+            "deck {} already holds a node called `{name}`, and this row would add a second — \
+             rename one of them and load again",
+            deck_letter(slot as u8)
+        ));
+    }
+    let path = karakuri_environment::scratch::place(
+        root,
+        &karakuri_environment::scratch::node_name(slot, at, name),
+        &String::from_utf8_lossy(&source),
+    )?;
+    match added {
+        // **Named after the row**, because nothing in the slot named it: a node
+        // added here is addressed by the name an operator can read off the row
+        // they pressed.
+        true => files.push(karakuri_environment::compile::Named {
+            name: Some(name.to_string()),
+            path,
+        }),
+        // **The node keeps the name the Set gave it**, which is what an `edge`
+        // resolves against — see this function's own head.
+        false => files[at].path = path,
+    }
+    let mut files = files.into_iter();
+    let head = files
+        .next()
+        .ok_or_else(|| String::from("this deck is running no files at all"))?;
+    let rest: Vec<karakuri_environment::compile::Named> = files.collect();
+    // **Every other field restated**, which is `Aiming::changed`'s single
+    // derivation: the layering, the fold, the capacity, the seed and the salts,
+    // the camera, the overrides, the wiring, the grants and the Set this slot is
+    // filed under all come back as the slot's own rather than as a default
+    // (ADR-0314). `Aim::set` is among them, which is why the history goes on
+    // filing under the base.
+    aim.changed(|at| {
+        at.head = head;
+        at.rest = rest;
+    })
+    .map_err(|()| {
+        format!(
+            "deck {}'s build worker is gone, so `{name}` cannot be built; what is on that deck \
+             keeps running",
+            deck_letter(slot as u8)
+        )
+    })?;
+    let where_ = match added {
+        true => format!("added as {kind}:0, which this deck had no node for"),
+        false => format!("written over {kind}:0"),
+    };
+    Ok(format!(
+        "  load: `{name}` ({tier}) {where_} on deck {} — the slot is recompiling on the worker \
+         with every other layer where it was, and the staging lane says whether the build \
+         landed, was overloaded or did not compile",
+        deck_letter(slot as u8)
+    ))
+}
+
+/// **A procedure's bytes, out of whichever tier holds it**, with the word for
+/// the tier so the sentence a press prints says where the file came from.
+///
+/// The operator's own first and what ships after it, which is the order the
+/// listing draws them under `all` and `presets`: a name kept in this store is
+/// this store's answer, and nothing this program does writes where the presets
+/// are (P-0096).
+fn kept_source(
+    root: &std::path::Path,
+    presets: Option<&std::path::Path>,
+    name: &str,
+) -> Result<(Vec<u8>, &'static str), String> {
+    if let Ok(store) = Store::open(root) {
+        if let Ok(source) = store.read_procedure(name) {
+            return Ok((source, "kept"));
+        }
+    }
+    let shipped = presets.map(|dir| dir.join(format!("{name}.kir")));
+    if let Some(path) = shipped {
+        if let Ok(source) = std::fs::read(&path) {
+            return Ok((source, "shipped"));
+        }
+    }
+    Err(format!(
+        "no procedure named `{name}` — this store's `{}/` does not hold one and the presets root \
+         does not ship one, so the row it was listed under has gone since the listing was built",
+        Store::PROCEDURES
+    ))
 }
 
 /// **A deck's renderers folded or overdrawn, performed** — the Inspector deck
@@ -13924,15 +14886,27 @@ fn reading(
         Operation::SetSync { .. } => Some(mix::current_tempo(deck.signals().oscillator())),
         _ => None,
     };
-    // **Two operations read this and one of them names two decks.** A wipe
+    // **Three operations read this and one of them names two decks.** A wipe
     // writes `Record::Mask` for the deck *arriving* — twice, at the front's
     // present position and then at 0 — so the mask handed over is `to`'s and
     // `from` is read for nothing at all. Handing in the covered deck's would
     // put somebody else's soft edge on the front that is about to cross the
     // frame, which is `Current::mask`'s own sentence and `karakuri-cli`'s
     // `Live::operate` arm exactly.
+    //
+    // **`SetMaskPosition` was missing from this list until 2026-09-10**, and
+    // it is the one arm ADR-0334 recorded as a defect rather than a scope:
+    // both halves of a mask write `Record::Mask` whole, so a position needs
+    // the shape, the angle and the soft edge it does not name, and without
+    // this `written` answered `Owed(NotRead(Mask))` and nothing moved. It was
+    // reachable from a mapped controller before it was reachable from a model,
+    // so the hole was a MIDI knob that did nothing as well as a call that
+    // could not be accepted. `karakuri-cli`'s arm has always named all three,
+    // which is what makes this a slip in one file rather than a decision.
     let mask = match *operation {
-        Operation::SetMaskShape { deck: slot, .. } | Operation::Wipe { to: slot, .. } => {
+        Operation::SetMaskShape { deck: slot, .. }
+        | Operation::SetMaskPosition { deck: slot, .. }
+        | Operation::Wipe { to: slot, .. } => {
             let slot = usize::from(slot);
             (slot < deck.slot_count()).then(|| {
                 let mask = deck.mask(slot);
@@ -14315,6 +15289,25 @@ struct Gfx {
     /// Rewritten where the slot is: [`played`], on the press, which is also
     /// where the store is read. Nothing on the frame path touches it.
     material: Vec<String>,
+    /// **What a slot that has never been loaded is playing**, which is the pair
+    /// this run was launched with — [`Sources::material`], said once because
+    /// every slot opens on it.
+    ///
+    /// **It is the base a procedure load reads**, and it is the one case
+    /// `watch::Aim::set` cannot answer: a slot running a Set is filed under
+    /// that id and a slot running the launch pair is filed under nothing, so
+    /// the strip's `<base> + <kir>` needs this where the aim says `None`
+    /// (ADR-0338). It never moves — a load writes [`Gfx::material`], which is
+    /// what the strip reads.
+    launch: String,
+    /// **Where the presets root is**, copied from [`App::presets`] when the
+    /// device was made, or `None` on a machine with no library.
+    ///
+    /// Here for [`Gfx::store`]'s reason word for word: a procedure load reaches
+    /// a disk on a press and is handed nothing but a device, and the shipped
+    /// tier is one of the two places a library row's file can be
+    /// (ADR-0227, ADR-0338).
+    presets: Option<std::path::PathBuf>,
     /// **Where the library is**, copied from [`App::store`] when the device
     /// was made.
     ///
@@ -14605,6 +15598,20 @@ struct Keeping {
     /// [`saves`]: Self::saves
     sends: std::sync::mpsc::Receiver<Sent>,
     send_tx: std::sync::mpsc::Sender<Sent>,
+    /// **Where a kept procedure's outcome comes back**, and it is a third
+    /// channel beside [`saves`](Self::saves) and [`sends`](Self::sends) for
+    /// their reason: three acts that end on a disk, each answered at the frame
+    /// its answer arrives on, and a queue apiece so that a slow write of one
+    /// cannot delay another's answer.
+    ///
+    /// **It is not the save channel with a flag on it.** A keep writes one
+    /// `.kir` under a name and a save writes a Set file naming every node; the
+    /// two outcomes say different things, land in different directories and
+    /// are refused for different reasons — one of them refuses a name that is
+    /// taken, which a Set save does not — so folding them would be one
+    /// sentence meaning two things.
+    keeps: std::sync::mpsc::Receiver<Kept>,
+    keep_tx: std::sync::mpsc::Sender<Kept>,
     /// How many saves are being written right now. The run waits for these once,
     /// at the end and under a bound — see [`Keeping::awaited_saves`].
     in_flight: usize,
@@ -14801,6 +15808,146 @@ impl Keeping {
                 reply,
             });
         });
+    }
+
+    /// **Write one node's source into a library**, which is the act that makes
+    /// the operator's tier of procedures exist at all
+    /// ([P-0096](../../../docs/principles/0096-the-operators-library-is-written-by-an-operators-own-act.md),
+    /// ADR-0338 decision 4).
+    ///
+    /// **[`Keeping::save_set`]'s shape one node down**, and every division it
+    /// makes is made here for its reason: the slot is an argument because a
+    /// Set file describes one deck and this deck holds four; the id is what
+    /// the caller wanted it called or a stamp, because the capsule on a node
+    /// head types nothing; an operator-typed name is checked here, because the
+    /// panel owns the affordance and never the authority (P-0090); and
+    /// everything up to the spawn is a read off values already in memory,
+    /// because a disk write is not a thing to do on a frame (P-0091).
+    ///
+    /// **Where it lands is decided by who asked and never by which control
+    /// carried it**: `Asked::Operator` writes `<store>/procedures/` and
+    /// `Asked::Model` writes `<store>/sandbox/`, which is a Set save's own
+    /// division one file kind along (ADR-0261). A model is not refused here
+    /// where its *star* is, because what it keeps is a file and so has a
+    /// sandbox form to land in (ADR-0301).
+    ///
+    /// **The bytes are this run's rather than the disk's**, which is the whole
+    /// of what [`Playing`] is for: what is kept is the version the node is
+    /// *running*, and a `.kir` rewritten since the compile cannot reach a
+    /// kept file.
+    ///
+    /// **Eight arguments, which is [`Keeping::save_set`]'s seven and the
+    /// node.** Grouping them into a request type would be a shape only this
+    /// call site can fill and would hide the one thing worth reading at a
+    /// glance: which of `Asked`'s two this keep is, since that decides the
+    /// directory.
+    #[allow(clippy::too_many_arguments)]
+    fn keep_procedure(
+        &mut self,
+        engine: &Engine,
+        root: &std::path::Path,
+        asked: Asked,
+        slot: usize,
+        node: karakuri_operation::NodeAt,
+        id: Option<String>,
+        reply: Option<mcp::Reply>,
+    ) {
+        // **Checked here rather than only where the request came from**, which
+        // is `save_set`'s own guard: a press cannot name a slot this deck does
+        // not hold and a tool call can.
+        let count = engine.deck.slot_count();
+        if !slot_in_range(slot, count) {
+            return refused(reply, karakuri_environment::no_such_slot(slot, count));
+        }
+        // **The address as the pane draws it** — `node_addr`'s own spelling,
+        // which is the run of text under the operator's eye when they pressed.
+        let addr = node_addr(ir_layer(node.layer), node.index);
+        let Some(nodes) = self.playing.at(slot) else {
+            return refused(
+                reply,
+                karakuri_environment::nothing_to_save(slot, None, false),
+            );
+        };
+        // **The one node of that slot, by layer and index.** A node the list
+        // has no entry for is the built-in camera or an address nobody drew,
+        // and either way there is no source: the panel draws no capsule on the
+        // camera's head, so a hand cannot reach this, and a model naming it is
+        // told what it named rather than handed an empty file (P-0083).
+        let Some(found) = nodes.iter().find(|kept| {
+            kept.layer == setfile::kind_name(ir_layer(node.layer)) && kept.index == node.index
+        }) else {
+            let said = format!(
+                "`{addr}` on deck {} has no source to keep — the built-in camera is a node with \
+                 no procedure behind it, and no other address on this deck is missing one",
+                deck_letter(slot as u8)
+            );
+            println!("keep: {said}");
+            return refused(reply, said);
+        };
+        // **An id an operator typed is checked here**, which is `save_set`'s
+        // own wall and its reason: `<name>` becomes one path component, and
+        // the console emits what was typed including the empty string.
+        if let Some(said) = id
+            .as_deref()
+            .and_then(|id| karakuri_environment::mcp::checked_id(id).err())
+        {
+            println!("keep: {said}");
+            return refused(reply, said);
+        }
+        // **A stamp where nobody typed**, which is `accepted_save`'s own
+        // convention read one file kind along: the capsule is the press that
+        // types nothing (ADR-0128, ADR-0287).
+        let name = id.unwrap_or_else(karakuri_environment::history::stamped_id);
+        let kept = Kept {
+            asked,
+            name,
+            root: root.to_path_buf(),
+            source: found.source.clone(),
+            hash: found.hash,
+            addr,
+            // **Filled by the thread**, and this value is never read: the
+            // request and the outcome are one type here because the two carry
+            // the same fields, and the `Ok` below is the unwritten state
+            // rather than a claim.
+            outcome: Ok(std::path::PathBuf::new()),
+            reply,
+        };
+        let tx = self.keep_tx.clone();
+        // **A thread per keep**, and detached: no frame waits for it — the
+        // save path's own arrangement, and a keep is rarer than a save.
+        self.in_flight += 1;
+        std::thread::spawn(move || {
+            let _ = tx.send(kept.run());
+        });
+    }
+
+    /// **Every kept procedure that has landed since the last frame, said and
+    /// answered.**
+    ///
+    /// [`Keeping::finished_saves`]' drain one act along and on the same terms:
+    /// drained and never waited on, because a frame owes the display a picture
+    /// and owes a disk nothing.
+    ///
+    /// **It returns whether any of them landed**, which is what the Library
+    /// bay's listing is re-read on: a keep is the only thing in this program
+    /// that adds a procedure to the operator's tier, and a bay that did not
+    /// list it would be a readout that is wrong and silent. **A model's does
+    /// not count**, for the reason a sandbox save does not: `all` lists the
+    /// operator's library and the sandbox is not in it.
+    fn finished_keeps(&mut self) -> bool {
+        let mut landed = false;
+        while let Ok(kept) = self.keeps.try_recv() {
+            self.in_flight = self.in_flight.saturating_sub(1);
+            let said = kept.said();
+            match &said {
+                Ok(line) | Err(line) => println!("{line}"),
+            }
+            landed |= said.is_ok() && kept.asked == Asked::Operator;
+            if let Some(reply) = kept.reply {
+                reply.settled(said);
+            }
+        }
+        landed
     }
 
     /// **What a session's head is written from**, gathered off the live deck
@@ -15068,6 +16215,10 @@ impl Keeping {
     /// blocking.
     fn awaited_saves(&mut self) {
         self.finished_saves();
+        // **And the keeps, because they raise the same count.** A run that
+        // kept a procedure and quit a frame later has a thread still writing
+        // it, and the bound below is what it is waited for under.
+        self.finished_keeps();
         if self.in_flight == 0 {
             return;
         }
@@ -15087,10 +16238,18 @@ impl Keeping {
             };
             // Timed out, or every sender is gone and nothing more can arrive.
             // Either way there is nothing left to wait for.
-            let Ok(saved) = self.saves.recv_timeout(left) else {
-                break;
-            };
-            self.took_save(saved);
+            // **Both queues under one bound**, and it is a poll rather than a
+            // block because `recv_timeout` waits on *one* channel and the two
+            // are two by design (`Keeping::keeps`). Waiting the whole deadline
+            // on the saves would make a run that kept a procedure and quit sit
+            // out the bound with the file already written. The slice is short
+            // enough that a quit is not noticeably slower and long enough that
+            // this is not a spin.
+            let slice = left.min(std::time::Duration::from_millis(20));
+            if let Ok(saved) = self.saves.recv_timeout(slice) {
+                self.took_save(saved);
+            }
+            self.finished_keeps();
         }
         if self.in_flight > 0 {
             println!(
@@ -15148,6 +16307,7 @@ impl App {
         let (built_tx, built) = std::sync::mpsc::channel();
         let (save_tx, saves) = std::sync::mpsc::channel();
         let (send_tx, sends) = std::sync::mpsc::channel();
+        let (keep_tx, keeps) = std::sync::mpsc::channel();
         App {
             gfx: None,
             sources: launch.sources,
@@ -15195,6 +16355,8 @@ impl App {
                 save_tx,
                 sends,
                 send_tx,
+                keeps,
+                keep_tx,
                 in_flight: 0,
             },
             recording: Sessions::new(),
@@ -15373,7 +16535,41 @@ impl App {
                     if let Some(line) = pointed(&mut readout.view, operation) {
                         println!("{line}");
                     }
+                    // **And a pane's own pointer, performed beside the deck
+                    // selection**, which is the mark it is deliberately not:
+                    // `written` answers `Silent(Surface)` for it too, so the
+                    // surface that names it performs it and nothing here
+                    // touches the deck. See [`pointed_pane`].
+                    if let Some(line) = pointed_pane(&mut readout.view, operation) {
+                        println!("{line}");
+                        // **And the panes are re-read on the press that moved
+                        // one**, which is the transport's own arrangement one
+                        // arm down: this operation writes no record, so the
+                        // line that re-reads on a `Record::Transport` cannot
+                        // catch it, and a pane pointed at a new deck while
+                        // still drawing the old one's nodes would be the
+                        // readout being wrong and silent. It is a press and
+                        // never a frame, which is what `Set::published`
+                        // allocating asks of every caller.
+                        let targets = readout.view.pane_decks();
+                        inspector(
+                            &gfx.engine.deck,
+                            &gfx.material,
+                            &gfx.engine.aimed,
+                            targets,
+                            &mut readout.view.inspector,
+                        );
+                    }
                     if let Some(line) = played(gfx, operation) {
+                        println!("{line}");
+                    }
+                    // **The load beside it that replaces one file instead of
+                    // every file**, and it is the same act: a re-point of a
+                    // slot's watcher with one layer written over what the deck
+                    // is playing. `written` answers `Silent(NoRecord)` for it
+                    // exactly as it does for `LoadSet`, so the surface that
+                    // names it performs it. See [`overlaid`] and ADR-0338.
+                    if let Some(line) = overlaid(gfx, operation) {
                         println!("{line}");
                     }
                     // **The deck head's fold, performed where the load beside
@@ -15576,10 +16772,12 @@ impl App {
                                     | Record::Authority { .. }
                             )
                         }) {
+                            let targets = readout.view.pane_decks();
                             inspector(
                                 &gfx.engine.deck,
                                 &gfx.material,
                                 &gfx.engine.aimed,
+                                targets,
                                 &mut readout.view.inspector,
                             );
                         }
@@ -15621,21 +16819,115 @@ impl App {
     /// deck's own reading — so the sentence says where each of those is rather
     /// than holding a connection open across a transition. That is
     /// `mcp::WireRequest`'s third point, one route along.
+    ///
+    /// # The three whose performer is not in [`App::performed`]
+    ///
+    /// **Most operations end in `performed` and this function names none of
+    /// them.** Three do not, and each is taken here in the order and by the
+    /// call the pointer's button-up arm takes it in — a second route into one
+    /// of them would be the second answer
+    /// [P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)
+    /// exists to prevent, so this calls the same functions rather than
+    /// repeating what they do
+    /// ([ADR-0341](../../../docs/adr/0341-a-route-that-answers-is-built-and-a-send-that-ends-in-a-dialog-is-gap.md)).
+    ///
+    /// - **A star, refused** — [`favourite`] with [`Asked::Model`], which is
+    ///   ADR-0301's decision reached by the route that record said it was owed.
+    ///   `my sets` is the list of Sets the operator chose, so the refusal is
+    ///   the answer and it goes back as one: `Err`, which reaches the client as
+    ///   a failed call, carrying the id and where the Set actually is. A
+    ///   success reported for an act that had no effect is what that record
+    ///   refused, and answering `ok` here would be it.
+    /// - **A projector, opened** — [`routed`], which needs an `ActiveEventLoop`
+    ///   and is why this function takes one. **The drain is already on the
+    ///   event loop's thread**: both call sites are `winit` handlers holding
+    ///   the loop, so the argument was there to be passed and the row was
+    ///   `plan` for want of one parameter.
+    /// - **A recording, started or stopped** — [`Sessions::asked`], which needs
+    ///   the store as well and is why this takes that too. Both ends are
+    ///   gathered here and written off the render thread, exactly as the `rec`
+    ///   pill's press does.
+    ///
+    /// **They fall through to `performed` afterwards, as a press does**, so a
+    /// row that also writes a record writes it once and in one place.
+    // **Nine, where clippy's line is seven**, and the two past it are the two
+    // the three arms above need: the event loop a window is made on, and the
+    // store a recording's head is written into. [`App::mapped`] carries the
+    // same allowance for the same reason — a struct here would be `App` itself
+    // with the fields that need no window left out.
+    #[allow(clippy::too_many_arguments)]
     fn operated(
         gfx: &mut Gfx,
+        event_loop: &ActiveEventLoop,
         started: Instant,
         readout: &mut Readout,
         recording: &mut Sessions,
-        keeping: &Keeping,
+        keeping: &mut Keeping,
+        store: &std::path::Path,
         egui_due: &mut Option<Instant>,
         costs: &mut Costs,
     ) {
-        let Some(mcp) = keeping.mcp.as_ref() else {
-            return;
+        // **Collected out of the borrow before any of it is acted on**, and it
+        // is a `match` rather than a `let else` on `keeping.mcp` because the
+        // loop below takes `&mut` of the same struct: the reporter is read,
+        // the queue is drained into a `Vec`, and the borrow ends on this line.
+        let asked: Vec<mcp::OperateRequest> = match keeping.mcp.as_ref() {
+            Some(mcp) => mcp.operations().collect(),
+            None => return,
         };
-        let asked: Vec<mcp::OperateRequest> = mcp.operations().collect();
         for mcp::OperateRequest { operation, reply } in asked {
+            // **The one act in this drain that ends on a disk**, and it leaves
+            // here rather than falling through: a keep is *"on a worker"* on
+            // the page it is specified on, so the press goes and the answer
+            // arrives later — which is what the reply riding the request is
+            // for (`Kept::reply`). The sentence below would say it was
+            // performed on this frame, and the file is not written yet.
+            //
+            // **`Asked::Model`, so it lands in `<store>/sandbox/`** — stamped,
+            // overwriting nothing, and readable by nothing that reads the
+            // library. A model is not refused here where its star is, because
+            // what it keeps is a file and so has a sandbox form to land in
+            // (P-0096, ADR-0261, ADR-0301).
+            if let Operation::KeepProcedure { deck, node, ref id } = operation {
+                keeping.keep_procedure(
+                    &gfx.engine,
+                    store,
+                    Asked::Model,
+                    usize::from(deck),
+                    node,
+                    id.clone(),
+                    Some(reply),
+                );
+                continue;
+            }
             let title = operation.title();
+            // **A star is answered and never performed**, and [`favourite`]
+            // answers `None` for every other operation, so this is the whole
+            // of the branch. Nothing falls through: nothing was written, so
+            // there is no record to write and no frame to ask for.
+            if let Some(refusal) = favourite(store, Asked::Model, &operation) {
+                println!("{refusal}");
+                reply.settled(Err(refusal));
+                continue;
+            }
+            // **The projector, opened where the chip in the Outputs row opens
+            // it**, which is the one act in this file that makes a window and
+            // is why this function takes the loop.
+            let mut aside = None;
+            if let Operation::RouteFrame { output, on } = &operation {
+                aside = routed(gfx, event_loop, *output, *on);
+            }
+            // **And the `rec` pill's two ends**, gathered here and written off
+            // the render thread exactly as the press does — see [`Sessions`].
+            if let Operation::RecordSession {
+                recording: asked_for,
+            } = &operation
+            {
+                recording.asked(keeping, &gfx.engine, store, asked_for);
+            }
+            if let Some(line) = aside.as_deref() {
+                println!("{line}");
+            }
             let repaint = App::performed(
                 gfx,
                 started,
@@ -15645,12 +16937,21 @@ impl App {
                 Repaint::Never,
             );
             App::wants(gfx, egui_due, costs, repaint);
+            // **The performer's own line goes back where there is one**, which
+            // is the projector's: whether a window opened, was already open,
+            // or could not be made at the format the present pass draws. The
+            // sentence below says where a *later* answer lands and would have
+            // said nothing about a window that never opened.
             reply.settled(Ok(format!(
                 "`{title}` was performed on the frame it arrived on, where the same \
                  operation from the panel, a key or a mapped control is performed. What the \
                  deck made of it is on this run's terminal. Anything it started rather than \
                  finished is reported where it lands: ask `swap_outcome` for a rebuild, and \
-                 a scheduled move arrives on the grid."
+                 a scheduled move arrives on the grid.{}",
+                match aside {
+                    Some(line) => format!("\n{}", line.trim_start()),
+                    None => String::new(),
+                }
             )));
         }
     }
@@ -15726,6 +17027,7 @@ impl App {
         // is true and the operator lit it.
         if readout.view.learn {
             App::learned(gfx, readout, hover, maps, egui_due, costs);
+            App::showed(gfx);
             return;
         }
         let Some(surface) = gfx.midi.as_mut() else {
@@ -15761,6 +17063,37 @@ impl App {
             App::wants(gfx, egui_due, costs, repaint);
         }
         gfx.performed_by_hand = asked;
+        App::showed(gfx);
+    }
+
+    /// **The surface is shown where the deck is** — MIDI out, the other
+    /// direction of [`App::mapped`] and the send beside its drain.
+    ///
+    /// **After the frame's operations have been applied**, so a motorised
+    /// fader follows the value the deck holds rather than the one it was asked
+    /// for — and after a learn too, because a knob just bound has never been
+    /// shown and the control it took over may have been lit on another knob.
+    ///
+    /// **Every source is shown and not just this surface's own**, which is the
+    /// whole reason MIDI out is worth having: a key, a model over `--mcp`, the
+    /// pointer on a strip and a transition all move a fader, and *two things
+    /// can move a fader* is the sentence `docs/roadmap.md` gives this row.
+    ///
+    /// **It does not wait** (P-0094): `Surface::show` queues into a bounded
+    /// channel and drops when it is full rather than blocking the render
+    /// thread — `karakuri_environment::midi`, where that whole argument lives.
+    /// **And it writes no record**: what changes is the wire, so a session
+    /// recorded from this surface still replays with neither surface nor map
+    /// attached (P-0092).
+    fn showed(gfx: &mut Gfx) {
+        let Gfx { midi, engine, .. } = gfx;
+        let Some(surface) = midi.as_mut() else {
+            return;
+        };
+        surface.show(&midi::Lit {
+            deck: &engine.deck,
+            exposure: engine.look.exposure,
+        });
     }
 
     /// **A knob turned while `learn` is lit binds the control under the
@@ -16117,10 +17450,12 @@ impl ApplicationHandler for App {
         // is the first of those readings rather than the only one, and the
         // frame handler takes the rest. See `inspector`, which is also where
         // the controls it could not place are reported.
+        let targets = self.readout.view.pane_decks();
         inspector(
             &engine.deck,
             &material,
             &engine.aimed,
+            targets,
             &mut self.readout.view.inspector,
         );
         // **And the Master bay's level, for the strips' reason.** The legend
@@ -16208,6 +17543,8 @@ impl ApplicationHandler for App {
             // channel and the same rule.
             performed_by_hand: Vec::with_capacity(MAPPED),
             budget_ms: budget,
+            launch: self.sources.material(),
+            presets: self.presets.as_ref().map(|presets| presets.dir.clone()),
             material,
             store: self.store.clone(),
             window,
@@ -16233,7 +17570,11 @@ impl ApplicationHandler for App {
     /// on `ResumeTimeReached`: a wait that is cancelled early by a real event
     /// still has to leave a due deadline serviced, and checking two `Instant`s
     /// costs nothing.
-    fn new_events(&mut self, _event_loop: &ActiveEventLoop, _cause: StartCause) {
+    // **The loop is used now**, and it stopped being `_event_loop` on
+    // 2026-09-10: [`App::operated`] is drained here and a model's
+    // `RouteFrame` opens a projector window, which `winit` will not make
+    // without one (ADR-0341).
+    fn new_events(&mut self, event_loop: &ActiveEventLoop, _cause: StartCause) {
         let now = Instant::now();
         if self.egui_due.is_some_and(|due| due <= now) {
             self.egui_due = None;
@@ -16281,14 +17622,22 @@ impl ApplicationHandler for App {
                 // of `requests` is written.
                 App::operated(
                     gfx,
+                    event_loop,
                     self.started,
                     &mut self.readout,
                     &mut self.recording,
-                    &self.keeping,
+                    &mut self.keeping,
+                    &self.store,
                     &mut self.egui_due,
                     &mut self.costs,
                 );
-                if self.keeping.finished_saves() {
+                // **And a kept procedure with them**, drained beside the saves and
+                // for their reason: the two acts both end on a disk, and the
+                // Library bay lists what both of them wrote. `|` and not `||`,
+                // so the second drain runs whether or not the first landed
+                // anything — a short-circuit here would leave a keep's outcome
+                // in its channel until a save happened to arrive.
+                if self.keeping.finished_saves() | self.keeping.finished_keeps() {
                     let running = aimed_set(gfx, &self.readout.view);
                     println!(
                         "{}",
@@ -16646,6 +17995,38 @@ impl ApplicationHandler for App {
                         Asked::Operator,
                         usize::from(deck),
                         id.clone(),
+                        None,
+                    );
+                }
+                // **And a press that asked to keep a node's procedure is one
+                // file to write**, here for the Set keep's reason one line up:
+                // the bytes are the run's, the store is the window's, and a
+                // disk write is not a thing to do on a frame (P-0091).
+                //
+                // **`Asked::Operator`, so it lands in `<store>/procedures/`**
+                // — a hand on this panel is the operator's own act, which is
+                // what makes that tier exist (P-0096). A model's arrives
+                // through the operate drain and carries `Asked::Model`.
+                //
+                // **The id is the pane head's if one is being typed there.**
+                // The capsule emits `None`, because it is the press that types
+                // nothing (ADR-0128); the head three items along is this
+                // console's second letter-taking flow, and a keep sent while
+                // that head is asking files under what was typed. The head is
+                // looked up by the deck the operation names rather than by the
+                // pane the capsule was drawn in, for `View::named_set`'s own
+                // reason: the gesture spans frames and the deck is read at the
+                // commit.
+                if let Acted::Emitted(Some(Operation::KeepProcedure { deck, node, ref id })) = acted
+                {
+                    let id = id.clone().or_else(|| self.readout.view.naming_over(deck));
+                    self.keeping.keep_procedure(
+                        &gfx.engine,
+                        &self.store,
+                        Asked::Operator,
+                        usize::from(deck),
+                        node,
+                        id,
                         None,
                     );
                 }
@@ -17653,10 +19034,12 @@ impl ApplicationHandler for App {
                 // its answer. See [`App::operated`].
                 App::operated(
                     gfx,
+                    event_loop,
                     self.started,
                     &mut self.readout,
                     &mut self.recording,
-                    &self.keeping,
+                    &mut self.keeping,
+                    &self.store,
                     &mut self.egui_due,
                     &mut self.costs,
                 );
@@ -17675,7 +19058,13 @@ impl ApplicationHandler for App {
                     &mut self.egui_due,
                     &mut self.costs,
                 );
-                if self.keeping.finished_saves() {
+                // **And a kept procedure with them**, drained beside the saves and
+                // for their reason: the two acts both end on a disk, and the
+                // Library bay lists what both of them wrote. `|` and not `||`,
+                // so the second drain runs whether or not the first landed
+                // anything — a short-circuit here would leave a keep's outcome
+                // in its channel until a save happened to arrive.
+                if self.keeping.finished_saves() | self.keeping.finished_keeps() {
                     let running = aimed_set(gfx, &self.readout.view);
                     // **The one thing in this program that adds a Set**, so the
                     // bay that lists them is re-read on the frame it landed —
@@ -18026,10 +19415,12 @@ impl ApplicationHandler for App {
                     // This is the one place in the program that knows a Set
                     // landed, which is why it is here rather than per frame.
                     self.readout.view.costs = costs(&gfx.engine.deck.govern());
+                    let targets = self.readout.view.pane_decks();
                     inspector(
                         &gfx.engine.deck,
                         &gfx.material,
                         &gfx.engine.aimed,
+                        targets,
                         &mut self.readout.view.inspector,
                     );
                 }
@@ -19547,6 +20938,155 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A store root of this test's own, cleared of whatever a previous run
+    /// left — [`a_library_is_the_store_and_a_missing_store_is_not_made`]'s
+    /// arrangement, so a keep is written where nothing else is writing.
+    fn keep_root(what: &str) -> std::path::PathBuf {
+        let root = std::env::temp_dir().join(format!(
+            "karakuri-keep-{what}-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        root
+    }
+
+    /// One keep, gathered as [`Keeping::keep_procedure`] gathers it and run on
+    /// this thread rather than on a spawned one.
+    fn keep_run(root: &std::path::Path, asked: Asked, name: &str, source: &str) -> Kept {
+        Kept {
+            asked,
+            name: name.to_owned(),
+            root: root.to_path_buf(),
+            source: Some(std::sync::Arc::from(source)),
+            hash: karakuri_store::hash::Hash::of(source.as_bytes()),
+            addr: "L3:0".to_owned(),
+            outcome: Ok(std::path::PathBuf::new()),
+            reply: None,
+        }
+        .run()
+    }
+
+    /// **The writer puts a node's source under the name it was given**, and
+    /// the outcome says where it went — ADR-0338 decision 4, and it is the act
+    /// that makes the operator's tier of the library exist at all (P-0096).
+    ///
+    /// A CPU test: the bytes are the run's and the store is a directory, so
+    /// nothing here takes a device.
+    #[test]
+    fn a_keep_writes_the_nodes_source_into_the_operators_library() {
+        let root = keep_root("library");
+        let source = "proc orbit_wide {\n  kind L3\n}\n";
+        let done = keep_run(&root, Asked::Operator, "orbit_wide", source);
+        let path = done
+            .outcome
+            .as_ref()
+            .unwrap_or_else(|e| panic!("the keep was refused: {e}"));
+        assert_eq!(
+            path,
+            &root.join("procedures").join("orbit_wide.kir"),
+            "an operator's own act landed outside the library"
+        );
+        assert_eq!(std::fs::read_to_string(path).unwrap(), source);
+        let said = done.said().expect("an outcome that landed");
+        assert!(
+            said.contains("orbit_wide") && said.contains("L3:0"),
+            "the outcome names neither what was kept nor where it came from: {said}"
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// **A name already kept is refused, and nothing claims otherwise.**
+    ///
+    /// The second keep leaves the first file exactly as it was — a keep is not
+    /// an instruction to replace, which is where it differs from a Set id and
+    /// an arrangement's name (`StoreError::ProcedureTaken`).
+    #[test]
+    fn a_keep_under_a_name_already_there_is_refused() {
+        let root = keep_root("taken");
+        let first = "proc orbit_wide {\n  kind L3\n}\n";
+        keep_run(&root, Asked::Operator, "orbit_wide", first)
+            .outcome
+            .expect("the first keep");
+
+        let again = keep_run(
+            &root,
+            Asked::Operator,
+            "orbit_wide",
+            "proc other {\n  kind L1\n}\n",
+        );
+        let said = again.said().expect_err("a taken name was accepted");
+        assert!(
+            said.contains("orbit_wide"),
+            "the refusal does not carry the name the next attempt has to change: {said}"
+        );
+        assert_eq!(
+            std::fs::read_to_string(root.join("procedures").join("orbit_wide.kir")).unwrap(),
+            first,
+            "a refused keep wrote over what was there"
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// **A model's keep lands in the sandbox and never in the library**, which
+    /// is a Set save's own division one file kind along (ADR-0261, ADR-0301).
+    #[test]
+    fn a_models_keep_lands_in_the_sandbox() {
+        let root = keep_root("sandbox");
+        let done = keep_run(
+            &root,
+            Asked::Model,
+            "20260910-120000",
+            "proc orbit_wide {\n  kind L3\n}\n",
+        );
+        let path = done.outcome.as_ref().expect("the keep");
+        assert_eq!(
+            path,
+            &root
+                .join(karakuri_store::store::Store::SANDBOX)
+                .join("20260910-120000.kir")
+        );
+        assert!(
+            !root.join("procedures").join("20260910-120000.kir").exists(),
+            "a model's keep turned up in the operator's library"
+        );
+        let said = done.said().expect("an outcome that landed");
+        assert!(
+            said.contains("sandbox"),
+            "a model is not told where its keep went: {said}"
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// **A node a build landed has its bytes in the store rather than in
+    /// hand**, which is `setfile::SavedNode::source` being `None`: the watcher
+    /// put the source there as it built it, so the keep reads it back by the
+    /// address it carries and never re-reads the `.kir` on disk.
+    #[test]
+    fn a_rebuilt_nodes_keep_reads_its_source_back_out_of_the_store() {
+        let root = keep_root("rebuilt");
+        let source = "proc orbit_wide {\n  kind L3\n}\n";
+        let store = Store::open(&root).expect("a store");
+        let hash = store.put_artifact(source.as_bytes()).expect("an artifact");
+
+        let done = Kept {
+            asked: Asked::Operator,
+            name: "orbit_wide".to_owned(),
+            root: root.clone(),
+            // **`None`, which is what a rebuilt node carries.**
+            source: None,
+            hash,
+            addr: "L3:0".to_owned(),
+            outcome: Ok(std::path::PathBuf::new()),
+            reply: None,
+        }
+        .run();
+        let path = done.outcome.as_ref().expect("the keep");
+        assert_eq!(std::fs::read_to_string(path).unwrap(), source);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
     /// **How far one press of the deck head's scrub goes, and the order its
     /// sync chip walks the modes in** — read from the control that has them
     /// rather than written again here: the arrow and the record it becomes
@@ -23184,6 +24724,9 @@ mod tests {
                 addr: "L2:0".to_owned(),
                 name: "warp".to_owned(),
                 authority: None,
+                // Not this test's control either: nothing here presses a
+                // node head's `keep`.
+                keep: None,
                 uses: Vec::new(),
                 renderers: Vec::new(),
                 params: vec![view::Param {
@@ -23779,6 +25322,10 @@ mod tests {
                             index: node as u32,
                         },
                         level: karakuri_operation::Authority::Manual,
+                    }),
+                    keep: Some(karakuri_operation::NodeAt {
+                        layer: karakuri_operation::Layer::L1,
+                        index: node as u32,
                     }),
                     uses: Vec::new(),
                     renderers: Vec::new(),
@@ -24442,7 +25989,7 @@ mod tests {
                 readout.view.menued(),
             )
             .expect("the menu is down");
-        let save = menu.save.center();
+        let save = menu.save.expect("a Set row's menu carries a send").center();
         let at = Point::new(save.x, save.y);
         assert_eq!(readout.pointer(&ctx, Pointer::Moved(at)).0, Claim::Panel);
         let (claim, did) = readout.pointer(&ctx, Pointer::Down);
@@ -24898,7 +26445,6 @@ mod tests {
     #[test]
     fn a_press_on_a_filter_field_asks_the_store_for_a_narrower_listing() {
         use karakuri_console::view::Field;
-        use karakuri_operation::Layer;
 
         let ctx = drawn_once();
         let mut readout = Readout::new(1440.0, 900.0);
@@ -24928,7 +26474,28 @@ mod tests {
             )
             .expect("the bay lists its rows")
             .field(which)
-            .expect("the bay draws its filter fields");
+            .expect("the bay draws its filter field");
+            Point::new(at.center().x, at.center().y)
+        };
+        // **And one kind chip's, asked of the walk that paints them**, which
+        // is the same rule one band down: a chip is as wide as the word in it,
+        // so where it is is `egui`'s answer and never a remembered number.
+        let kind_chip = |readout: &mut Readout, which: usize| {
+            readout.panel.solve();
+            let bay = library_bay(
+                readout.panel.layout(),
+                &readout.view.scopes,
+                &readout.view.library,
+                readout.view.opened(),
+                readout.view.pointed(),
+                readout.view.library_scroll(),
+            )
+            .expect("the bay lists its rows");
+            let at = bay
+                .kind_chips(&ctx)
+                .nth(which)
+                .expect("the bay draws six kind chips")
+                .1;
             Point::new(at.center().x, at.center().y)
         };
 
@@ -24960,20 +26527,24 @@ mod tests {
             "the listing narrowed and the cursor is still pointing into the one it left"
         );
 
-        // **And the field beside it, which has to carry the first one
-        // through**: what leaves is the pair as it now stands.
-        let at = field(&mut readout, Field::Layer);
+        // **And the kind chips under it, which have to carry the field
+        // through**: a press on a chip names all six and says nothing about
+        // `holds`, so what the console is narrowed to afterwards is the pair as
+        // it now stands (ADR-0338).
+        let at = kind_chip(&mut readout, 2);
         assert_eq!(readout.pointer(&ctx, Pointer::Moved(at)).0, Claim::Panel);
         assert_eq!(
             readout.pointer(&ctx, Pointer::Down).1,
-            Acted::Emitted(Some(Operation::ListSets {
-                holds: Some("drift_shell".to_owned()),
-                layer: Some(Layer::L1),
+            Acted::Emitted(Some(Operation::FilterLibrary {
+                kinds: karakuri_operation::LibraryKinds {
+                    l3: true,
+                    ..karakuri_operation::LibraryKinds::EVERYTHING
+                },
             })),
-            "the press did not reach the `layer` field, or it dropped the filter beside it"
+            "the press did not reach the `L3` chip, or it named something other than all six"
         );
         readout.pointer(&ctx, Pointer::Up);
-        assert_eq!(readout.view.filters().layer, Some(Layer::L1));
+        assert!(readout.view.filters().kinds.l3);
         assert_eq!(readout.view.filters().holds, Some("drift_shell"));
     }
 
@@ -25480,6 +27051,162 @@ mod tests {
     /// back afterwards is a narrower one — which is the whole point, and was
     /// impossible while this side asked `Store::list_sets` for names.
     ///
+    /// **A procedure is a row of `all` and of `presets`, with its kind on it —
+    /// and of neither `my sets` nor `folder`** (ADR-0338, decision 1).
+    ///
+    /// A CPU test: two tiers on a disk, a `View`, and no window.
+    #[test]
+    fn the_two_tiers_list_procedures_beside_sets_and_two_scopes_do_not() {
+        use karakuri_operation::LibraryKinds;
+        use karakuri_store::hash::Hash;
+        use karakuri_store::ndjson::Line;
+        use karakuri_store::record::Layer as Written;
+
+        let root = scratch_dir("procedure-listing");
+        let store = Store::open(&root).expect("a store to list");
+        store
+            .write_set(
+                "night01",
+                &[Line::new(Record::Slot {
+                    layer: Written::L1,
+                    index: 0,
+                    name: Some("drift_shell".to_owned()),
+                    proc_hash: Hash::of(b"drift_shell"),
+                })],
+            )
+            .expect("a Set to list");
+        std::fs::write(
+            root.join(Store::PROCEDURES).join("orbit_wide.kir"),
+            "proc orbit_wide {\n  kind L3\n}\n",
+        )
+        .expect("a kept procedure");
+        let shipped = root.join("shipped");
+        std::fs::create_dir_all(&shipped).expect("mkdir");
+        std::fs::write(shipped.join("beat_glow.kset"), "{}\n").expect("a shipped Set");
+        std::fs::write(shipped.join("tunnel_eye.kir"), "  kind L3\n").expect("a shipped procedure");
+        let presets = karakuri_environment::places::presets(Some(&shipped))
+            .expect("the root resolves")
+            .expect("a root");
+
+        let mut view = View::new(Room::Day);
+        view.scopes = Scope::ALL.to_vec();
+
+        // `all`: the Set and the kept procedure, and the procedure carries the
+        // kind its `kind` line declares while the Set carries its slots'.
+        let said = listing(&mut view, &root, Some(&presets), None, None);
+        assert!(
+            view.library.contains(&"orbit_wide".to_owned())
+                && view.library.contains(&"night01".to_owned()),
+            "`all` lists {:?} — {said}",
+            view.library
+        );
+        let at = view
+            .library
+            .iter()
+            .position(|row| row == "orbit_wide")
+            .expect("the procedure is a row");
+        assert_eq!(
+            view.kinds[at],
+            RowKind {
+                badges: vec![karakuri_operation::Layer::L3],
+                procedure: true
+            },
+            "the procedure row's badge is not its kind"
+        );
+        let at = view
+            .library
+            .iter()
+            .position(|row| row == "night01")
+            .expect("the Set is a row");
+        assert_eq!(
+            view.kinds[at],
+            RowKind {
+                badges: vec![karakuri_operation::Layer::L1],
+                procedure: false
+            },
+            "the Set row's badges are not the layers its slots fill"
+        );
+
+        // `presets`: the shipped Set and the shipped procedure, in name order.
+        assert!(view.select_scope(Scope::Presets));
+        listing(&mut view, &root, Some(&presets), None, None);
+        assert_eq!(
+            view.library,
+            vec!["beat_glow".to_owned(), "tunnel_eye".to_owned()]
+        );
+        assert!(view.kinds[1].procedure, "the shipped `.kir` is not a row");
+
+        // `my sets` lists no procedure, because a star is refused on anything
+        // `sets/` does not hold; `folder` lists none, because a folder row is a
+        // take and nothing takes a bare `.kir` in.
+        assert!(view.select_scope(Scope::MySets));
+        listing(&mut view, &root, Some(&presets), None, None);
+        assert!(
+            !view.library.contains(&"orbit_wide".to_owned()),
+            "`my sets` lists a procedure: {:?}",
+            view.library
+        );
+        assert!(view.select_scope(Scope::Folder));
+        listing(&mut view, &root, Some(&presets), Some(&shipped), None);
+        assert!(
+            !view.library.contains(&"tunnel_eye".to_owned()),
+            "`folder` lists a procedure: {:?}",
+            view.library
+        );
+
+        // **The kind chips narrow by OR, and none on is everything.**
+        assert!(view.select_scope(Scope::AllSets));
+        let cameras = LibraryKinds {
+            l3: true,
+            ..LibraryKinds::EVERYTHING
+        };
+        assert!(view.narrow(None, cameras));
+        listing(&mut view, &root, Some(&presets), None, None);
+        assert_eq!(
+            view.library,
+            vec!["orbit_wide".to_owned()],
+            "`L3` on lists {:?}",
+            view.library
+        );
+        let sets_only = LibraryKinds {
+            sets: true,
+            ..LibraryKinds::EVERYTHING
+        };
+        assert!(view.narrow(None, sets_only));
+        listing(&mut view, &root, Some(&presets), None, None);
+        assert_eq!(
+            view.library,
+            vec!["night01".to_owned()],
+            "`SET` on lists {:?}",
+            view.library
+        );
+        assert!(view.narrow(
+            None,
+            LibraryKinds {
+                l3: true,
+                sets: true,
+                ..LibraryKinds::EVERYTHING
+            }
+        ));
+        listing(&mut view, &root, Some(&presets), None, None);
+        assert_eq!(
+            view.library.len(),
+            2,
+            "an OR of two lists {:?}",
+            view.library
+        );
+        assert!(view.narrow(None, LibraryKinds::EVERYTHING));
+        listing(&mut view, &root, Some(&presets), None, None);
+        assert_eq!(
+            view.library.len(),
+            2,
+            "none on is not everything: {:?}",
+            view.library
+        );
+
+        std::fs::remove_dir_all(&root).expect("clean up");
+    }
+
     /// **What it narrows is the store's own listing**, which is `all` and is
     /// what *List what the store holds* lists. `my sets` is that listing
     /// starred (ADR-0299), so the same retain applies to it and the row is not
@@ -25492,7 +27219,6 @@ mod tests {
     /// A CPU test: a store, a `View`, and no window.
     #[test]
     fn the_filter_row_narrows_the_stores_listing_through_the_summary() {
-        use karakuri_operation::Layer;
         use karakuri_store::hash::Hash;
         use karakuri_store::ndjson::Line;
         use karakuri_store::record::Layer as Written;
@@ -25531,7 +27257,10 @@ mod tests {
         assert!(!said.contains("holding"), "{said}");
 
         // Narrowed by what a node is called.
-        assert!(view.narrow(Some("drift_shell"), None));
+        assert!(view.narrow(
+            Some("drift_shell"),
+            karakuri_operation::LibraryKinds::EVERYTHING
+        ));
         let said = listing(&mut view, &root, None, None, None);
         assert_eq!(view.library, vec!["night01".to_owned()], "{said}");
         assert!(
@@ -25539,17 +27268,16 @@ mod tests {
             "{said}"
         );
 
-        // And by which layer a Set uses, which is the other half of the row and
-        // is answered against the whole Set rather than against one node.
-        assert!(view.narrow(None, Some(Layer::L4)));
-        let said = listing(&mut view, &root, None, None, None);
-        assert_eq!(view.library, vec!["veil02".to_owned()], "{said}");
-        assert!(said.contains("L4"), "{said}");
-
         // **A filter that matched nothing is a different nothing from an empty
         // store**, and the line says which: the store is not empty, and what to
         // do about it is press a field rather than save a Set.
-        assert!(view.narrow(Some("drift_shell"), Some(Layer::L4)));
+        assert!(view.narrow(
+            Some("drift_shell"),
+            karakuri_operation::LibraryKinds {
+                l3: true,
+                ..karakuri_operation::LibraryKinds::EVERYTHING
+            },
+        ));
         let said = listing(&mut view, &root, None, None, None);
         assert!(view.library.is_empty(), "the bay lists {:?}", view.library);
         assert!(
@@ -25562,7 +27290,7 @@ mod tests {
         // starred: star one Set, mark the subset, and the filter that named
         // the other one leaves it with nothing — the narrowing is over what
         // the store holds and not over which chip is marked.
-        assert!(view.narrow(None, None));
+        assert!(view.narrow(None, karakuri_operation::LibraryKinds::EVERYTHING));
         favourite(
             &root,
             Asked::Operator,
@@ -25575,7 +27303,10 @@ mod tests {
         assert!(view.select_scope(Scope::MySets));
         let said = listing(&mut view, &root, None, None, None);
         assert_eq!(view.library, vec!["night01".to_owned()], "{said}");
-        assert!(view.narrow(None, Some(Layer::L4)));
+        assert!(view.narrow(
+            Some("soft_points"),
+            karakuri_operation::LibraryKinds::EVERYTHING
+        ));
         let said = listing(&mut view, &root, None, None, None);
         assert!(
             view.library.is_empty(),
@@ -25901,23 +27632,22 @@ mod tests {
     /// while its own sentence had become false. That is the failure mode
     /// `docs/contributing.md` §3 is about, met from the wrong side.
     ///
-    /// **It is `Operation::SetMaskPosition` now, and that one is genuinely
-    /// owed here.** Its record is `Record::Mask` written whole and it needs
-    /// the shape, the angle and the softness it does not name (ADR-0201) —
-    /// and [`reading`]'s mask arm answers for `SetMaskShape` and for a wipe's
-    /// arriving deck, and for nothing else, because **no control on this panel
-    /// emits a mask position**: the mask mini cycles a shape and the front's
-    /// travel is a value with nowhere on a strip to show it. So a press that
-    /// emitted one — a mapped controller, an MCP call — would be told *which*
-    /// reading was not handed over rather than getting a front sent back to
-    /// wherever a default put it, mid-wipe.
+    /// **It is `Operation::SetMaskPosition` against a reading nobody took**,
+    /// and the second half stopped being about this window on 2026-09-10. Its
+    /// record is `Record::Mask` written whole and it needs the shape, the angle
+    /// and the softness it does not name (ADR-0201). Until that day
+    /// [`reading`]'s mask arm answered for `SetMaskShape` and for a wipe's
+    /// arriving deck and for nothing else, so this *was* a gap in this file —
+    /// which is what ADR-0334 recorded and ADR-0341 closed with one arm.
     ///
-    /// **`Current::default()` is what this window would hand over for it**,
-    /// exactly: every arm of [`reading`] answers `None` for this operation, so
-    /// spelling the empty reading here and taking one off a deck are the same
-    /// value. That the two agree is asserted where there *is* a deck —
-    /// `gpu::the_go_pill_runs_a_wipe_against_the_settings_the_row_is_on`, which
-    /// is the half a test with no device cannot make.
+    /// **What it asserts now is the third answer itself**, which is why the
+    /// operation did not have to change a third time: handed a `Current` with
+    /// no mask in it — a reading that was not taken, whatever the reason —
+    /// the conversion says *which* reading is missing rather than sending a
+    /// front back to wherever a default put it, mid-wipe. That the real
+    /// reading is now taken is asserted where there *is* a deck,
+    /// `gpu::the_go_pill_runs_a_wipe_against_the_settings_the_row_is_on`,
+    /// which is the half a test with no device cannot make.
     ///
     /// **Neither sentence is asserted word for word.** What has to hold is
     /// that the window says something, that it names the operation and the
@@ -25947,16 +27677,17 @@ mod tests {
              question it is waiting on"
         );
 
-        // **And the other gap, which is this window's rather than nobody's.**
-        // A mask position converts now, and what it needs is the rest of the
-        // mask — the shape, the angle and the soft edge `Record::Mask` is
-        // written whole out of. This panel reads that for the mask mini and
-        // for the deck a wipe is arriving on, and for nothing else, because no
-        // control here emits a position at all. So a press that emitted one
-        // would be told *which reading* was not handed over rather than
-        // getting a front sent back to wherever a default put it, and the
-        // sentence has to be a different one from the tap's above or the two
-        // gaps read alike.
+        // **And the other answer, which is a reading nobody took rather than a
+        // record nobody has decided.** A mask position converts, and what it
+        // needs is the rest of the mask — the shape, the angle and the soft
+        // edge `Record::Mask` is written whole out of. Handed a reading with
+        // no mask in it, the conversion says *which reading* was not handed
+        // over rather than sending a front back to wherever a default put it,
+        // and the sentence has to be a different one from the tap's above or
+        // the two answers read alike. **This window took no mask for a
+        // position until 2026-09-10** and that was the gap this half named;
+        // it takes one now (ADR-0341), so what is left here is the third
+        // answer itself, asserted against a `Current` built by hand.
         let front = Operation::SetMaskPosition {
             deck: 1,
             position: 0.5,
@@ -26544,6 +28275,198 @@ mod tests {
     ///
     /// No window, no device and no `Deck` — `composited` is a free function
     /// over the aims for exactly this.
+    /// **A procedure loaded over a layer re-aims the slot with exactly one file
+    /// replaced, and leaves `Aim::set` where it is** — ADR-0338's decision 3,
+    /// at the seam it crosses.
+    ///
+    /// Three things it would be wrong about silently: the position it lands on
+    /// (the **first node of that kind**), the file it puts there (the
+    /// procedure's own bytes, in the deck's scratch), and everything else about
+    /// the aim, which has to come back restated rather than defaulted. The
+    /// fourth is the one the maintainer answered: the versions this slot writes
+    /// from here on go on being filed under the Set it started from.
+    ///
+    /// No window, no device and no `Deck` — `overlaying` takes the aim.
+    /// **The strip reads `<base> + <kir>` once a layer has been written over
+    /// what a deck is playing**, and the base is the Set it is filed under —
+    /// or the launch pair where it is filed under none (ADR-0338).
+    #[test]
+    fn the_strip_reads_the_base_and_the_procedure_written_over_it() {
+        assert_eq!(
+            derived_material(
+                &base_material(Some("drift_night"), "coil_vortex + star_flares"),
+                "orbit_wide"
+            ),
+            "drift_night + orbit_wide"
+        );
+        // **A slot nobody has loaded a Set onto**: no id names what it is
+        // running, so the base is the pair the run opened with.
+        assert_eq!(
+            derived_material(
+                &base_material(None, "coil_vortex + star_flares"),
+                "orbit_wide"
+            ),
+            "coil_vortex + star_flares + orbit_wide"
+        );
+    }
+
+    #[test]
+    fn a_procedure_load_replaces_one_file_and_keeps_the_base_set() {
+        let root = scratch_dir("procedure-load");
+        Store::open(&root).expect("a store to keep in");
+        std::fs::write(
+            root.join(Store::PROCEDURES).join("orbit_wide.kir"),
+            "proc orbit_wide {\n  kind L3\n}\n",
+        )
+        .expect("a kept procedure");
+        // The slot's own two files, written where a watcher would be looking:
+        // an L1 and an L4, which is the pair every run opens on.
+        let l1 = karakuri_environment::scratch::place(&root, "A0-drift_shell", "kind L1\n")
+            .expect("the geometry");
+        let l4 = karakuri_environment::scratch::place(&root, "A1-star_flares", "kind L4\n")
+            .expect("the renderer");
+
+        let (tx, rx) = std::sync::mpsc::channel();
+        let mut aim = Aiming::new(
+            tx,
+            watch::Aim {
+                head: karakuri_environment::compile::Named {
+                    name: Some("shell".into()),
+                    path: l1.clone(),
+                },
+                rest: vec![karakuri_environment::compile::Named {
+                    name: Some("flares".into()),
+                    path: l4.clone(),
+                }],
+                layering: Layering::Composite,
+                live: Some(2),
+                capacity: Some(2048),
+                seed_salt: 9,
+                salts: vec![9],
+                camera: karakuri_engine::camera::Orbit {
+                    radius: 3.5,
+                    ..karakuri_engine::camera::Orbit::default()
+                },
+                overrides: Vec::new(),
+                published: Vec::new(),
+                bindings: Vec::new(),
+                edges: vec![karakuri_engine::set::Edge {
+                    node: "flares".to_string(),
+                    slot: "shape".to_string(),
+                    to: "shell".to_string(),
+                }],
+                authorities: Vec::new(),
+                set: Some("drift_night".to_owned()),
+            },
+            karakuri_environment::mcp::Slots::unpointed(),
+            0,
+        );
+
+        // **The deck holds no camera, so the procedure is added as node 0 of
+        // its kind** — the case the row is for.
+        let line =
+            overlaying(&root, None, 0, &mut aim, "orbit_wide").expect("the load was refused");
+        assert!(
+            line.contains("orbit_wide") && line.contains("kept") && line.contains("L3"),
+            "{line}"
+        );
+        let sent = rx.try_recv().expect("no aim was sent");
+        assert_eq!(sent.head.path, l1, "the geometry moved");
+        assert_eq!(sent.rest.len(), 2, "the slot does not hold three nodes now");
+        assert_eq!(sent.rest[0].path, l4, "the renderer moved");
+        assert_eq!(
+            std::fs::read_to_string(&sent.rest[1].path).expect("the camera's file"),
+            "proc orbit_wide {\n  kind L3\n}\n",
+            "the file the aim names is not the procedure's own bytes"
+        );
+        assert_eq!(
+            sent.rest[1].name.as_deref(),
+            Some("orbit_wide"),
+            "a node added by this row is not named after it"
+        );
+
+        // **Everything else restated**, which is `Aiming::changed`'s single
+        // derivation — the layering, the capacity, the salts, the camera and
+        // the wiring come back as the slot's own.
+        assert_eq!(sent.layering, Layering::Composite);
+        assert_eq!(sent.capacity, Some(2048));
+        assert_eq!(sent.salts, vec![9]);
+        assert_eq!(sent.camera.radius, 3.5);
+        assert_eq!(sent.edges.len(), 1);
+        // **And the Set it is filed under does not move**, which is what keeps
+        // the snapshot every compile takes alive (ADR-0304, ADR-0308).
+        assert_eq!(sent.set.as_deref(), Some("drift_night"));
+
+        // **A second load of the same kind lands on the node the first one
+        // added**, which is *the first node of that kind* read a second time:
+        // the slot still holds three nodes.
+        std::fs::write(
+            root.join(Store::PROCEDURES).join("tunnel_eye.kir"),
+            "  kind L3\n",
+        )
+        .expect("a second camera");
+        overlaying(&root, None, 0, &mut aim, "tunnel_eye").expect("the second load was refused");
+        let sent = rx.try_recv().expect("no second aim was sent");
+        assert_eq!(
+            sent.rest.len(),
+            2,
+            "the second camera was added beside the first"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&sent.rest[1].path).expect("the camera's file"),
+            "  kind L3\n"
+        );
+        assert_eq!(
+            sent.rest[1].name.as_deref(),
+            Some("orbit_wide"),
+            "the replaced node did not keep the name the edges resolve against"
+        );
+
+        // **A renderer replaces the renderer that is there** — `L4:0`, and the
+        // geometry does not move.
+        std::fs::write(
+            root.join(Store::PROCEDURES).join("hard_dots.kir"),
+            "kind L4\n",
+        )
+        .expect("a renderer");
+        overlaying(&root, None, 0, &mut aim, "hard_dots").expect("the renderer load was refused");
+        let sent = rx.try_recv().expect("no third aim was sent");
+        assert_eq!(sent.head.path, l1, "the geometry moved on a renderer load");
+        assert_eq!(sent.rest.len(), 2);
+        assert_eq!(
+            sent.rest[0].name.as_deref(),
+            Some("flares"),
+            "the renderer did not keep its node name"
+        );
+        assert_ne!(
+            sent.rest[0].path, l4,
+            "the renderer's file was not replaced"
+        );
+
+        // **A name neither tier holds is refused with the name back**, and
+        // nothing is sent.
+        let why = overlaying(&root, None, 0, &mut aim, "no_such_thing")
+            .expect_err("a name nothing holds was loaded");
+        assert!(
+            why.contains("no_such_thing") && why.contains("procedures"),
+            "{why}"
+        );
+        assert!(rx.try_recv().is_err(), "a refused load sent an aim");
+
+        // **A `.kir` that declares no kind is refused too**, because there is
+        // no layer to write it over.
+        std::fs::write(
+            root.join(Store::PROCEDURES).join("mute.kir"),
+            "// nothing\n",
+        )
+        .expect("a procedure with no kind");
+        let why = overlaying(&root, None, 0, &mut aim, "mute")
+            .expect_err("a procedure with no kind was loaded");
+        assert!(why.contains("declares no `kind`"), "{why}");
+
+        std::fs::remove_dir_all(&root).expect("clean up");
+    }
+
     #[test]
     fn a_composite_press_re_aims_the_slot_and_restates_the_rest_of_its_aim() {
         let (tx, rx) = std::sync::mpsc::channel();
@@ -28727,6 +30650,16 @@ mod press_handler {
             "keep_pill(",
             &["pill.keep("],
         ),
+        // **The `▾` beside it and the card it puts down**, which is the `uses`
+        // line's arrangement one row up: the pick is asked before the mark,
+        // because a press inside the card belongs to the card and the mark the
+        // card came out of is above it. Both go through the same derivation on
+        // the view, so the mark that is painted is the mark a press lands on.
+        (
+            "the Inspector pane heads' deck pulldown",
+            "pane_pulldown(",
+            &["target.hit(", ".picked("],
+        ),
         // **The deck head's seven, one Inspector pane at a time.** The pane is
         // derived per index and the head from the pane, so the derivation
         // named here is the inner one: `inspector_pane` answers a rectangle
@@ -28794,6 +30727,16 @@ mod press_handler {
             "inspector_pane(",
             &["at_pane.set_authority("],
         ),
+        // **The `keep` capsule at the right of the same head**, and the pane is
+        // the whole derivation for the chips' reason: which group and where
+        // the capsule is are inside `InspectorPane::keep_procedure`. The two
+        // heads that carry none answer `None` there rather than being checked
+        // here (ADR-0338, decision 4).
+        (
+            "a node head's keep capsule",
+            "inspector_pane(",
+            &["at_pane.keep_procedure("],
+        ),
         // **The sensitivity row's curve chip and `take back`**, the two of its
         // four chips that are controls — the other two are readouts and answer
         // `None`, which is `view::SensChip`'s decision and not this file's.
@@ -28842,6 +30785,27 @@ mod press_handler {
             "library_bay(",
             &["bay.filter("],
         ),
+        // **The six kind chips one row under the field**, the same derivation
+        // again and told apart by the call — the scope chips' own arrangement
+        // two rows up. One entry for six capsules, because `LibraryBay::kind`
+        // is the whole of that row's offer: which chip a press landed on is
+        // inside it, and what leaves names all six (ADR-0338).
+        (
+            "the Library bay's kind chips",
+            "library_bay(",
+            &["bay.kind("],
+        ),
+        // **A row's badges are a readout and still a row here**, which is the
+        // `map` pill's own sentence in this table read one bay along — with one
+        // difference that is the whole of the entry: this press is **not**
+        // swallowed. A badge sits inside the row it is drawn on, so a press on
+        // it takes that row in hand exactly as a press on the name does, and
+        // the list's own entry below is what asks for it. What the row here
+        // buys is the tooltip: the words that say what a badge means and that
+        // the control which narrows by kind is the chip row above (ADR-0338).
+        // So it names no ask, and the derivation it names is the one the rows
+        // beneath it are hit-tested against.
+        ("the Library bay's row badges", "library_bay(", &[]),
         (
             "the params chip in the Library bay's foot",
             "library_bay(",
@@ -29404,6 +31368,7 @@ mod gpu {
         let (_, built) = std::sync::mpsc::channel();
         let (save_tx, saves) = std::sync::mpsc::channel();
         let (send_tx, sends) = std::sync::mpsc::channel();
+        let (keep_tx, keeps) = std::sync::mpsc::channel();
         Keeping {
             mcp: None,
             playing: Playing {
@@ -29415,6 +31380,8 @@ mod gpu {
             save_tx,
             sends,
             send_tx,
+            keeps,
+            keep_tx,
             in_flight: 0,
         }
     }
@@ -29868,7 +31835,13 @@ mod gpu {
         // this panel opens on declares no input, so every group's line count is
         // zero — which is what the assertion below says rather than assumes
         // (ADR-0329).
-        inspector(&engine.deck, &material, &engine.aimed, &mut panes);
+        inspector(
+            &engine.deck,
+            &material,
+            &engine.aimed,
+            view::PANE_DECKS,
+            &mut panes,
+        );
 
         // One pane per slot, up to the panes the arrangement has.
         assert_eq!(panes.len(), view::PANES);
@@ -32160,9 +34133,22 @@ mod gpu {
             "the wipe wrote its records and nothing is moving on the deck it arrives on"
         );
 
-        // **The other gap, off the same deck**: no control here emits a mask
-        // position, `reading` has no arm for one, and the conversion says so
-        // by name rather than writing a shape nobody chose.
+        // **And the gap that was here until 2026-09-10, closed off the same
+        // deck.** [`reading`] answered for a shape and for a wipe's arriving
+        // deck and not for a position, so `written` came back
+        // `Owed(NotRead(Mask))` and nothing moved — ADR-0334 recorded it and
+        // ADR-0341 fixed it with one arm. This is the other side of that
+        // assertion: the position is written whole, out of the number the
+        // operation carries and the shape, the angle and the soft edge the
+        // *deck* is wearing.
+        //
+        // **Read off this deck rather than spelled**, which is what makes it
+        // the half `an_operation_whose_record_is_owed_is_said_rather_than_swallowed`
+        // cannot make: a conversion that took a default here would pass
+        // against a hand-written `Current` and put a shape nobody chose on a
+        // deck mid-wipe.
+        let wearing = engine.deck.mask(over);
+        let (kind, angle, softness) = (wearing.kind(), wearing.angle(), wearing.softness());
         let front = Operation::SetMaskPosition {
             deck: over as u8,
             position: 0.5,
@@ -32172,12 +34158,16 @@ mod gpu {
                 &front,
                 &reading(&front, &engine.deck, &engine.look, &engine.chain, settings)
             ),
-            Written::Owed(karakuri_operation_record::Owed::NotRead(
-                karakuri_operation_record::Reading::Mask
-            )),
-            "this window reads a mask for an operation no control on it emits, so the \
-             sentence `an_operation_whose_record_is_owed_is_said_rather_than_swallowed` \
-             checks is about an operation that is no longer owed"
+            Written::Records(vec![Record::Mask {
+                slot: over as u8,
+                kind: wipe_kind(kind).name().to_string(),
+                angle,
+                position: 0.5,
+                softness,
+            }]),
+            "a mask position off a real deck did not come back as the deck's own mask with \
+             the asked-for front in it — the reading ADR-0341 added is not being taken, or \
+             it is being taken off the wrong slot"
         );
     }
 

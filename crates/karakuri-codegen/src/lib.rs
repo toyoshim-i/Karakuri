@@ -100,6 +100,7 @@ pub mod l1;
 pub mod l2;
 pub mod l3;
 pub mod l4;
+pub mod l5;
 pub mod layout;
 mod lower;
 mod prelude;
@@ -109,6 +110,7 @@ pub use l1::{generate_l1, L1Shader};
 pub use l2::{generate_l2, L2Shader};
 pub use l3::{generate_l3, L3Shader};
 pub use l4::{generate_l4, L4Shader};
+pub use l5::{generate_l5, L5Shader};
 
 use karakuri_ir::typed::Checked;
 use karakuri_ir::Kind;
@@ -122,6 +124,7 @@ pub enum Shader {
     L1(L1Shader),
     L3(L3Shader),
     L4(L4Shader),
+    L5(L5Shader),
 }
 
 /// Lowers a checked procedure to WGSL, picking the L1 or L4 path by
@@ -147,6 +150,13 @@ pub fn generate(checked: &Checked, elements: Option<&ElementLayout>) -> Shader {
         // bindings and no dispatch — there is nothing for a `Shader` to hold.
         Kind::Field => panic!("a field lowers into its callers: call generate_field"),
         Kind::L3 => Shader::L3(generate_l3(checked, &[])),
+        // **Reachable through here, unlike the two above**, and it is the
+        // signature rather than a preference that decides: an L5 is generated
+        // against nothing but itself. It reads no element buffer, evaluates no
+        // field and sits in no chain this function would have to be told about
+        // — what it needs is the picture it is handed, which is a binding
+        // rather than an argument.
+        Kind::L5 => Shader::L5(generate_l5(checked)),
         Kind::L4 => {
             let elements = elements.expect("an L4 procedure needs its paired L1's ElementLayout");
             Shader::L4(generate_l4(checked, elements, &[]))
@@ -201,6 +211,7 @@ mod tests {
             capacity: None,
             amplify: None,
             uses: Vec::new(),
+            retains: false,
             blend: None,
             params: Vec::new(),
             emit: Vec::new(),

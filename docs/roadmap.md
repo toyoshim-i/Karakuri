@@ -597,21 +597,43 @@ an eighth tool, `operate`, takes an operation of the vocabulary by its own headi
 route** — ADR-0235's *"a closed class is reached and answered with a refusal"* — so thirty of the
 thirty-one are refused today and reachable the moment their pill is pressed.
 
-**What stays, and it is nine rows in three groups.** Three carry an `Undecided` payload and no
-surface can say them: *Walk the edit history*, *Edit the file instead*, *Move a boundary*. Five are
-named by the vocabulary and performed nowhere on the frame the drain lands on, each of them a
-performer sitting in the window's own press arm or behind the event loop: *Star a Set*, *Send a Set
-to somebody*, *Narrow the published interface*, *Choose where the frame goes*, *Record the
-session*. **Moving a performer onto that frame is one line each**, and *Star a Set* is the
-shortest — ADR-0301 already wrote what it answers a model, in a function the drain could call. The
-ninth is *Set a deck's mask position*, and it is a defect rather than a scope:
-`crates/karakuri`'s `reading` supplies the mask for a shape and a wipe and not for a position, so
-the conversion answers *not read* and nothing moves. One arm.
+**Six of those nine closed on 2026-09-10**
+([ADR-0341](adr/0341-a-route-that-answers-is-built-and-a-send-that-ends-in-a-dialog-is-gap.md)), and
+none of them needed a performer written. Four were already written and sitting in the window's own
+press arm, and the drain now calls them where the pointer's button-up arm calls them: *Star a Set*,
+*Narrow the published interface*, *Choose where the frame goes*, *Record the session*. Two of those
+four were `plan` for want of an argument rather than of a performer — the drain is called from two
+`winit` handlers that hold the `ActiveEventLoop` a projector window is made on, and the store a
+recording's head is written into was one field away. *Set a deck's mask position* was the defect and
+is one arm of `reading`. **A route that answers is a built route even where the answer is no**: a
+model's star is refused by the performer, in ADR-0301's own sentence, and that record said the row
+was owed a tool rather than that it was unreachable.
 
-***Element capacity, seeds, the camera* was a tenth and left the day it was written**, which is
-what these nine are: ADR-0328 gave the Inspector's deck head two chips, `resized` and `re_salted`
-went onto the frame this drain lands on, and the row went `has operate` without anything on this
-surface changing. That is the shape each of the five above leaves in.
+***Send a Set to somebody* is `gap` rather than `plan`**, which is the one of the nine that turned
+into a decision. Both halves of it are outside what this protocol carries and no performer would
+change either: a send names no destination and never will
+([ADR-0260](adr/0260-sending-a-set-is-a-read-and-a-reads-answer-goes-where-the-surface-that-asked-puts-answers.md)),
+the destination this surface supplies is the system's own save dialog
+([ADR-0311](adr/0311-a-row-menu-loads-a-set-onto-a-named-deck-and-saves-it-through-the-systems-own-dialog.md))
+and a model cannot answer one, and a take names a file where paths never cross. The refusal names
+`--package` and `--take-in`.
+
+**ADR-0338's two went the same day**, in the pass that built them: *Keep a node's procedure* gained
+an arm in the drain, and *Load a procedure over a layer* turned out never to have needed one — its
+press arm sits in `App::performed` beside the fold and the Set load, exactly as *Narrow the
+published interface*'s did, so the sentence refusing it had stopped being true before it was read.
+
+**What stays is three rows, and none of them is work on this surface.** *Walk the edit history*,
+*Edit the file instead* and *Move a boundary* each carry an `Undecided` payload and no surface can
+say them, so what they wait on is the **vocabulary** settling what the operation acts on rather than
+a route. **`plan` in this column now means exactly that**: `mcp.rs`'s classification lost the answer
+*named, and nothing on this frame performs it yet* when the last row carrying it left, so a badge
+that is not `has` or `gap` is an unsettled payload and nothing else.
+
+***Element capacity, seeds, the camera* left this list the day ADR-0334 was written**, which is the
+shape all six of 2026-09-10's took: ADR-0328 gave the Inspector's deck head two chips, `resized` and
+`re_salted` went onto the frame this drain lands on, and the row went `has operate` with nothing on
+this surface changing.
 
 **The server exists in the instrument**, which is a change to what this sub-milestone is. `karakuri
 --mcp PORT` runs `karakuri_environment::mcp::serve` against the panel's own `Opening` and publishes
@@ -655,11 +677,11 @@ in the Library bay whose rows are one Set's versions, with a landing on them
 — so nothing here is owed to it.
 
 **Blocked on.** Nothing, and that changed with ADR-0334. It read *the bays above, for the rest* —
-a row whose operation the engine cannot yet perform has nothing for MCP to route to — and the bays
-have closed except M5.5. What is left is nine rows, and not one of them is work on this surface:
-five performers to move onto the frame the drain lands on and one reading to supply, all six in
-`crates/karakuri`, and three payloads for the vocabulary to settle. MCP is still a mouth rather
-than the control stick, which is why the list is short.
+a row whose operation the engine cannot yet perform has nothing for MCP to route to — and **every
+bay has closed**; the open sub-milestones carrying bays' rows are M5.15 and M5.16. What is left is
+three payloads for the vocabulary to settle, and not one of them is work on this surface — there is
+no performer owed anywhere any more. MCP is still a mouth rather than the control stick, which is
+why the list is short.
 
 #### M5.11 — Hover tooltips
 
@@ -729,10 +751,15 @@ no badge moved for it, because the grammar is one file both programs read.
 `0`. *Write a parameter* was the one row and now reads `cc → param N M`; every other row reads `has` or
 `gap`, and a `gap` here says a map line cannot name that operation rather than that one is waited for.
 
-What M5.12 left owed. **MIDI *out* and 14-bit control changes are the third MIDI phase's and are in
-flight now** — MIDI out so a surface's LEDs and motorised faders follow the deck, 14-bit so a fader is
-more than 128 positions. They are M2's, they are the surface itself rather than a route into it, they
-carry no row, and they are named here rather than rescheduled. **Reaching a map while running** is under
+What M5.12 left owed. **MIDI *out* and 14-bit control changes were the third MIDI phase's and landed
+on 2026-09-10** — every mapped control written back to the surface on the frame the deck changes it, so
+LEDs and motorised faders follow whichever of the four things moved the fader; and `cc14 <msb> <lsb>`,
+so a fader is 16384 positions, with the coarse half alone still reaching both ends exactly
+([ADR-0337](adr/0337-a-surface-is-written-to-as-well-and-a-fader-is-sixteen-thousand-positions.md)).
+They were M2's, they are the surface itself rather than a route into it, and they carry no row — a
+column measures what a map line can *name*, and neither of these changes that. **14-bit learn is owed**:
+inside one drain two faders 32 apart are indistinguishable from one pair, so `learn` writes a `cc` line
+and an operator changes the one word. **Reaching a map while running** is under
 *Mx — TODO*: the `map` pill is a **readout** of which file is loaded and has no chevron for that reason,
 and what is missing is the menu under it — *save · load · new*, and a `Surface::reload` beside
 `Surface::first` — which the arrangement pill already is over a different file (ADR-0221). Learning
@@ -1048,39 +1075,68 @@ presets tier fills the list from the first run.
 
 **The two implementation passes, named by the files they touch.**
 
-1. **The Library and host pass.** `crates/karakuri-store/src/store.rs` — a `procedures/` directory
-   established by `Store::open` the way `arrangements/` is, and the listing that reads it.
-   `crates/karakuri-environment/src/places.rs` — the presets root's `.kir` files listed beside its
-   `.kset` files, each carrying the kind `history::declared_kind` scans off it.
-   `crates/karakuri-console/src/view.rs` — the row kind and its badge, the `.lib-kinds` row and its
-   six chips, and `Field::Layer` retired with the `layer…` field.
-   `crates/karakuri-console/src/room.rs` and `src/input.rs` — the new row's arithmetic and its
-   claim. `crates/karakuri-console/src/hover.rs` — a `TIPS` entry per chip and per badge, and the
-   `layer field` entry deleted with the field it cites.
-   `crates/karakuri/src/main.rs` — `listing` handing the two new populations across the seam, and an
-   arm beside `played` that re-aims a slot with one file replaced and leaves `Aim::set` where it is.
-   `crates/karakuri-environment/src/mcp.rs` — `SPELLED`'s `Load a procedure over a layer` row given
-   a `make` once the frame performs it.
-2. **The Inspector pass.** `crates/karakuri-console/src/view.rs` — the `keep` capsule on a node
-   group's head, the pane head's pulldown, and the per-pane target beside `InspectorPane`'s scroll
-   position. `crates/karakuri-console/src/room.rs` and `src/input.rs` — both controls' rectangles
-   and their claims. `crates/karakuri-console/src/hover.rs` — a `TIPS` entry for each.
-   `crates/karakuri/src/main.rs` — the writer that puts a node's source under
-   `<store>/procedures/`, and the sandbox arm for a model's.
-   `crates/karakuri-environment/src/mcp.rs` — the same for `Keep a node's procedure`.
+1. **The Library and host pass — built on 2026-09-10**, and both its rows read `has` in the panel
+   column. `store.rs` gained `procedures/` — established by `Store::open` the way `arrangements/`
+   is — with `Store::PROCEDURES`, `PROCEDURE_FILE_SUFFIX`, `list_procedures`, `read_procedure` and
+   `StoreError::NoProcedure`; **it reads no `kind` line**, because this module keeps files it does
+   not parse, so `history::declared_kind` stays the one scanner and the callers pair it with the
+   listing. `places.rs` gained `PresetProcedure` and `Presets::list_procedures`, which **does** open
+   each file for its kind — one small read per row, on the press and never on a frame — and lists a
+   `.kir` that declares none as a row with no badge rather than dropping it.
+   `view.rs` carries `RowKind` and `Rows` for the seam, `LibraryBay::badges` for the readout,
+   `KindChip` with `LibraryBay::kinds`, `kind_chips` and `kind` for the six toggles, and
+   `Field::Layer`, `LAYER_UNSET` and `stepped_layer` retired with the `layer…` field; `Filters`
+   carries `kinds` where it carried `layer`, and `View::narrow` takes `LibraryKinds`. `RowMenu`'s
+   send became an `Option`, because a procedure row's menu is the loads and no separator — nothing
+   takes a bare `.kir` in. `room.rs` gained `LIB_KINDS_*`, `KIND_*` and `BADGE_*`; `input.rs` two
+   `PROBES` rows, one of them a readout that is claimed and **not** swallowed; `hover.rs` a `TIPS`
+   entry per chip and one for the badges, with the `layer field` entry deleted with the field it
+   cites. `panel.rs`'s carry says which load a drop names. `main.rs` carries `procedures`,
+   `ListedProcedure`, `set_row`/`kept_row`/`shipped_row`, `shows_kept` and `showing` for the
+   listing, and `overlaid`/`overlaying` beside `played` — the arm that re-aims a slot with one file
+   replaced, adds the procedure as node 0 where the slot has no node of that kind, keeps the node
+   name the edges resolve against, and leaves `Aim::set` where it is; `base_material` and
+   `derived_material` are the strip's `<base> + <kir>`. `mcp.rs`'s
+   `Load a procedure over a layer` gained its `make` and `shape`; **`sayable` stays
+   `Unperformed`**, because the drain the MCP tool lands on is not the press path this pass wired,
+   which is M5.10's owed row rather than this one's.
+2. **The Inspector pass — built on 2026-09-10**, and both its rows read `has` in the panel column.
+   `view.rs` carries `Node::keep`, `node_keep`, `auth_head` and `InspectorPane::keep_procedure` for
+   the capsule; `PaneTarget`, `pane_target`, `Pointing` and `View::pane_deck` behind `point_pane`,
+   `open_pane_target` and `shut_pane_target` for the pulldown, which is `DeckName::chevron` made
+   live — ADR-0292 reserved that rectangle and this is what took it. **`room.rs` gained no
+   constant**: the capsule is a `.mini` at the node head's own `gap: 7px` and the mark is
+   `CHEVRON_W`, so both were already spelled. `input.rs` gained two `PROBES` rows — the pulldown
+   claims two controls, the mark and its card — and `claim`'s rule 2 a sixth card; `hover.rs` a
+   `TIPS` entry each, citing the mock's own words. `main.rs` carries `Kept` and
+   `Keeping::keep_procedure` with `finished_keeps` beside `finished_saves`, `pointed_pane` beside
+   `pointed`, and `inspector` taking the per-pane targets instead of filling pane *n* from slot *n*
+   — which is what makes slots C and D reachable at all. `store.rs` gained `write_procedure` and
+   `write_sandbox_procedure` beside the listing the Library pass added, refusing a name already
+   kept. **`mcp.rs`'s `Keep a node's procedure` is `operate` rather than `plan`**: the drain hands
+   it to the same writer with `Asked::Model`, so a model's lands in `<store>/sandbox/`, and its MCP
+   badge went `has` with the panel's — one row of M5.10's owed list closed early rather than
+   deferred.
 
 **What it owes beyond the badges.**
 
-1. **The `layer…` filter field goes when the chips land.** The page supersedes it now and still
-   draws it, because the panel still draws it — *a control the panel draws that the mock does not is
-   a defect* (`docs/contributing.md` §5) — so the field stays on both until one pass takes it off
-   both. Its tip says which of the two it is, and `hover::TIPS`' `layer field` entry goes with it.
-   `Operation::ListSets` keeps its `layer` field either way: `list_sets` and `--list-sets` are where
-   *which Sets hold a node on this layer* lives once the panel stops asking it.
+1. **The `layer…` filter field is gone**, taken off the mock and off the panel together by the
+   Library pass — *a control the panel draws that the mock does not is a defect* and the converse
+   (`docs/contributing.md` §5) — with `hover::TIPS`' `layer field` entry deleted with it.
+   `Operation::ListSets` keeps its `layer` field and the panel now sends it unset: `list_sets` and
+   `--list-sets` are where *which Sets hold a node on this layer* lives, and the panel's way to it
+   is `holds…`, which asks by node name.
 2. **Two limits are recorded and not fixed**, and either is a later record rather than a defect. A
    procedure load lands on **node 0** of its kind, so the second renderer of a three-renderer Set is
    unreachable from a library row; and a `.kir` in a folder somebody dropped on the window is **not**
-   a row, because a folder row is a take and nothing takes in a bare `.kir`.
+   a row, because a folder row is a take and nothing takes in a bare `.kir`. **Three more the
+   Library pass recorded where they bite.** A preset **Set** row carries no badge, because
+   `Presets::list_sets` opens no file and reading twenty-two Set files on a press is a cost nobody
+   asked for — a procedure's kind is known there because that listing does read one small file per
+   row. A `params` press on a **procedure** row asks nothing: the reading a `ReadSet` opens is a
+   Set's, and what a procedure row's own card would be is a reading nobody has drawn. And a
+   procedure whose file declares no `kind` is a row with no badge that shows only while no chip is
+   on, and a load off it is refused by name — a file somebody kept is listed rather than dropped.
 3. **Listing procedures over MCP is nobody's yet.** *Filter the library by kind* is `gap` because a
    model has no window, and the question a model actually has — *what procedures does this store
    hold* — is *List what the store holds*' to grow. It is written here because a `gap` standing in
@@ -1088,8 +1144,15 @@ presets tier fills the list from the first run.
 4. **A node head with nothing to keep draws no capsule**, and there are two of those. A head
    standing over several nodes carries none, which is *Set a node's authority*'s own rule on the
    same head; and the **built-in camera** carries none, because it is a node with no procedure
-   behind it and there is no source to write. The mock draws both absences, and the pass reproduces
-   them rather than drawing a capsule that refuses.
+   behind it and there is no source to write. The mock draws both absences, and the pass reproduced
+   them: `view::Node::keep` is an `Option` beside the authority rather than that field read again,
+   because the two absences are not the same set — the camera has an authority and has nothing to
+   keep — and the host answers it off `Set::cameras`' own sentence, *the last camera node is always
+   the built-in orbit*.
+5. **A node's keep has no key and cannot have a map line**, which the two rows already say and this
+   list records once: a map line names a slot, a range or a word from a closed list, and neither a
+   node address nor a pane's name is any of the three. Both rows' key and MIDI columns are `gap`
+   and stay there.
 
 #### M5.16 — L5, the writable frame effect
 
@@ -1099,9 +1162,10 @@ The maintainer's, on 2026-09-10, asked whether — with M5.15 making a procedure
 loaded over a layer — an L5 could be dragged from the Library onto the master chain:
 *進める（M5.15 の後）*, **proceed, after M5.15**.
 [ADR-0340](adr/0340-kind-l5-is-written-and-the-master-chain-is-an-ordered-list-of-them.md) is the
-record and [ir-spec.md](ir-spec.md)'s *L5, written — not built* is the specification, which moves
-first for a file format the way the operations page moves first for an operation
-(`docs/contributing.md` §6). **This meets
+record and [ir-spec.md](ir-spec.md)'s specification moved first for a file format the way the
+operations page moves first for an operation (`docs/contributing.md` §6) — the kind, its three
+builtins and its cost are in the present tense there now, and *L5's chain — specified, not built*
+is what is left. **This meets
 [ADR-0317](adr/0317-the-master-chain-is-three-fixed-passes-and-feedback-reads-either-cut.md)'s own
 revival condition** — *somebody writing the compositing down* — which that record wrote into its
 own rejection, so the deferral is taken up rather than reversed.
@@ -1132,14 +1196,25 @@ which no aim carries — a drop there appends a chain slot and writes `Record::M
 **The passes, by file** (split by file rather than by phase,
 [ADR-0115](adr/0115-split-work-by-file-not-by-phase.md)):
 
-1. **IR and codegen.** `karakuri-ir`: `Kind::L5`, the `frame` block, the `retains` declaration,
-   `uses … : Texture`, and `texel` / `tap` / `frame_step` in `Builtin::ALL` — which is also how
-   they reach a model, `mcp.rs` serving the checker's own table rather than a second copy. Every
-   refusal in the specification with the case that must be accepted beside it
-   (`docs/contributing.md` §3). `cost.rs` prices an L5 on `ops_per_fragment` alone against the
-   fullscreen ceiling, which means `fragment_ceiling` — today a test on `topology == Fullscreen`,
-   which an L5 does not declare — switches on the kind as well. `karakuri-codegen`: `l5.rs`, and
-   the three shipped procedures through `naga_test.rs`, which is not optional for that crate.
+1. **IR and codegen — done.** `karakuri-ir` has `Kind::L5`, `BlockKind::Frame`, the bare
+   `retains` declaration, `SlotTy::Texture`, and `texel` / `tap` / `frame_step` in
+   `Builtin::ALL` — which is also how they reach a model, the MCP curriculum rendering the
+   checker's own table rather than a second copy. Every refusal in the specification has the
+   case that must be accepted beside it (`docs/contributing.md` §3), and the eight refused
+   ambients each name the fix rather than the rule. `cost.rs` prices an L5 on
+   `ops_per_fragment` alone and zero on the other two axes, and `fragment_ceiling` switches on
+   the kind as well as on the topology, so an L5 is held to `MAX_OPS_PER_FULLSCREEN_FRAGMENT`
+   without declaring a topology it has no per-element form to declare.
+   `karakuri-codegen` has `l5.rs` — one fullscreen pass over `master.wgsl`'s own bind group
+   layout, so pass 2 binds a written slot with the layout the engine has — and `naga_test.rs`
+   validates all three shipped procedures and asserts `feedback`'s and `rgb_shift`'s
+   expressions against the hand-written bodies term for term.
+
+   **What that half does not buy is a place to put one.** A Set holds no L5 node and the
+   master chain is still three fixed passes, so `compile::sort_compiled` refuses a `kind L5`
+   where a slot is loaded, with the reason, and MCP's `LAYERS` stays five — advertising a layer
+   a slot cannot hold would offer a client an address that cannot resolve. Pass 2 is what makes
+   the kind reachable.
 2. **The engine's chain as slots.** `master.rs` from three fixed passes to a list, `master.wgsl`
    retired with them, `present.rs`'s targets two plus one per retained cut instead of four, and the
    retained frame sanitised where it is copied instead of where it is read.
@@ -1173,11 +1248,12 @@ the master; **reordering**, above; and **the library tier of a chain saved under
 sits under *Mx — TODO* where that record left it — ADR-0340 says what the file holds (the record's
 slot list and nothing else) and leaves the directory's name there.
 
-**And two sentences of [architecture.md](architecture.md) go wrong the day this lands**, both about
-a count rather than about the layer: *"There are five"* under *Words that carry more than one
-sense*, with `karakuri_store::record::Layer` and `karakuri_operation::Layer` named beside it, and
-[ir-spec.md](ir-spec.md)'s *A note on the word* saying it from the other side. Correcting them is
-this sub-milestone's, not a note to leave behind it.
+**The two sentences of [architecture.md](architecture.md) that went wrong the day the kind
+landed are corrected**, both being about a count rather than about the layer: *"There are five"*
+under *Words that carry more than one sense* is six, with `karakuri_store::record::Layer` and
+`karakuri_operation::Layer` grown to match, and [ir-spec.md](ir-spec.md)'s *A note on the word*
+says it from the other side — the model position and the kind stay distinct words, and what
+changed is that `L0` is now the only position with no kind behind it.
 
 ---
 

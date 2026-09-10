@@ -466,3 +466,93 @@ proc guessed {
         "hint was: {hints}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// kind L5 — the grammar, which is two words and a block
+// ---------------------------------------------------------------------------
+
+/// **The whole of what the sixth kind adds to the grammar**: `L5` as a `kind`
+/// value, `retains` as a bare header word, `frame` as a block, and `Texture` as
+/// a `uses` type. Nothing else in the language moves.
+#[test]
+fn an_l5_header_parses_to_its_four_new_words() {
+    let src = r#"
+proc over {
+  kind L5
+  retains
+
+  param amount : float [0.0, 1.0] = 0.25
+
+  uses under : Texture
+
+  frame {
+    let s = texel(src);
+    color = vec4(s.xyz, s.w);
+  }
+}
+"#;
+    let proc = parse(src).expect("this is the grammar");
+    assert_eq!(proc.kind, Kind::L5);
+    assert!(proc.retains.is_some(), "`retains` takes no operand");
+    assert_eq!(proc.uses.len(), 1);
+    assert_eq!(proc.uses[0].name, "under");
+    assert_eq!(proc.uses[0].ty, karakuri_ir::ast::SlotTy::Texture);
+    assert!(proc.block(BlockKind::Frame).is_some());
+    // Declared nowhere and readable in the block: `src` is an ordinary
+    // identifier as far as the parser is concerned, and what it *means* is the
+    // check pass's.
+    assert_eq!(
+        stmt_tags(&proc.block(BlockKind::Frame).unwrap().stmts),
+        vec!["let", "assign"]
+    );
+}
+
+/// **`retains` carries no operand**, so a file that writes one is a file with a
+/// stray word after the declaration — refused where it is written rather than
+/// read as something.
+///
+/// The cut is the slot's answer, and putting it here would be two procedures
+/// where there is one.
+#[test]
+fn retains_with_an_operand_is_refused() {
+    let src = r#"
+proc echo {
+  kind L5
+  retains mix
+
+  frame {
+    color = texel(src);
+  }
+}
+"#;
+    let errs = parse(src).expect_err("`retains mix` is not the grammar");
+    assert!(
+        errs.iter()
+            .any(|e| e.message.contains("expected a header declaration or block")),
+        "{errs:?}"
+    );
+}
+
+/// An unknown kind names every one that exists, and the sixth is in the list.
+#[test]
+fn an_unknown_kind_names_l5_among_the_ones_that_exist() {
+    let errs = parse("proc x {\n  kind L9\n}\n").expect_err("`L9` is not a kind");
+    let hint = errs.iter().find_map(|e| e.hint.clone()).unwrap_or_default();
+    assert!(
+        hint.contains("`L5` (a frame effect"),
+        "the hint has to name the sixth kind: {hint}"
+    );
+}
+
+/// An unknown `uses` type names every one that exists, and `Texture` is in the
+/// list.
+#[test]
+fn an_unknown_slot_type_names_texture_among_the_ones_that_exist() {
+    let errs = parse("proc x {\n  kind L5\n  uses back : Picture\n}\n")
+        .expect_err("`Picture` is not a slot type");
+    let hint = errs.iter().find_map(|e| e.hint.clone()).unwrap_or_default();
+    assert!(
+        hint.contains("`Texture`, a picture an L5 folds in"),
+        "the hint has to name the fifth slot type: {hint}"
+    );
+}

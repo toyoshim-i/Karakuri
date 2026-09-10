@@ -1308,6 +1308,7 @@ fn record_layer(kind: karakuri_ir::Kind) -> Layer {
         karakuri_ir::Kind::L3 => Layer::L3,
         karakuri_ir::Kind::L4 => Layer::L4,
         karakuri_ir::Kind::Field => Layer::Field,
+        karakuri_ir::Kind::L5 => Layer::L5,
     }
 }
 
@@ -2778,17 +2779,24 @@ fn taken_in_file(root: &std::path::Path, file: &std::path::Path) -> Result<Strin
 
 /// What a Set holds, by layer and in the order the layers compose: `2 L1, 1 L2,
 /// 3 L4`. A layer nothing is on is left out rather than printed as a zero,
-/// because most Sets are on three of the five and a line of zeroes reads as
+/// because most Sets are on three of the six and a line of zeroes reads as
 /// something missing.
 fn holdings(nodes: &[setfile::NodeSummary]) -> String {
-    [Layer::L1, Layer::L2, Layer::L3, Layer::L4, Layer::Field]
-        .iter()
-        .filter_map(|layer| {
-            let n = nodes.iter().filter(|node| node.layer == *layer).count();
-            (n > 0).then(|| format!("{n} {}", setfile::layer_name(*layer)))
-        })
-        .collect::<Vec<_>>()
-        .join(", ")
+    [
+        Layer::L1,
+        Layer::L2,
+        Layer::L3,
+        Layer::L4,
+        Layer::Field,
+        Layer::L5,
+    ]
+    .iter()
+    .filter_map(|layer| {
+        let n = nodes.iter().filter(|node| node.layer == *layer).count();
+        (n > 0).then(|| format!("{n} {}", setfile::layer_name(*layer)))
+    })
+    .collect::<Vec<_>>()
+    .join(", ")
 }
 
 /// Write the material as a Set file, and say where it went.
@@ -4811,6 +4819,71 @@ fn refused(reply: Option<mcp::Reply>, said: String) {
     }
 }
 
+/// **What this program does with an operation: the records it writes, or the
+/// sentence saying it did nothing.**
+///
+/// [`Live::performed`] takes the readings and this decides, so that the answer
+/// a model is handed and the line a terminal is given are one string built
+/// once. It is a free function rather than a method for the same reason
+/// [`rewired`] is: it needs no `Live`, and a test can hold it against a real
+/// call over the socket without a window or a GPU.
+///
+/// **An operation that writes no record writes nothing here.** This surface
+/// performs an operation by converting it to records and reading them back —
+/// there is no second arm — so `Written::Silent` and `Written::Owed` both mean
+/// **nothing on this run changed**, and a caller that reported success for one
+/// would be reporting a change it did not make
+/// ([P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md):
+/// a silently wrong answer loses to a loud failure). That is the whole of why
+/// this is a `Result`: `Live::operate`'s printed line reaches an operator who
+/// is at the terminal, and a model on `--mcp` is not.
+///
+/// **The refusal names the operation and where it is answered**
+/// ([P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md)),
+/// and it is the performer's rather than the gate's — which is
+/// [ADR-0341](../../../docs/adr/0341-a-route-that-answers-is-built-and-a-send-that-ends-in-a-dialog-is-gap.md)'s
+/// *a route that answers is a built route* read on the surface that has no
+/// performer instead of the one that has one. `Silent::why` and `Owed::why`
+/// are the reasons in the words the crate that decided them says them in, so
+/// nothing is written down twice.
+fn answered(operation: &Operation, current: &Current) -> Result<Vec<Record>, String> {
+    match karakuri_operation_record::written(operation, current) {
+        Written::Records(records) => Ok(records),
+        Written::Silent(silent) => Err(format!(
+            "`{}` was not performed and nothing on this run changed: {}, and this program \
+             performs an operation by writing the records it converts to. `karakuri-cli` has \
+             no control for this one — the instrument, `cargo run -p karakuri`, is the \
+             surface that answers it.",
+            operation.title(),
+            silent.why()
+        )),
+        // **The reading, and not the control.** `Owed` says a record is owed
+        // and could not be made here — a deck the run does not hold, or a
+        // vocabulary question nobody has settled — so the sentence is that
+        // reason and not *this program has no control for it*, which would be
+        // false of an operation whose key is on this keyboard.
+        Written::Owed(owed) => Err(format!(
+            "`{}` was not performed and nothing on this run changed: {}",
+            operation.title(),
+            owed.why()
+        )),
+    }
+}
+
+/// **The answer an operation that was performed goes back with.**
+///
+/// One string, so that [`Live::run_operations`] and the test that drives it
+/// over a socket say the same thing — and so that the sentence which says
+/// *where a later answer lands* is beside the one that says nothing landed.
+fn performed_at_the_frame(title: &str) -> String {
+    format!(
+        "`{title}` was performed on the frame it arrived on, where the same operation from a \
+         key or a mapped control is performed. Anything it started rather than finished is \
+         reported where it lands: ask `swap_outcome` for a rebuild, and a scheduled move \
+         arrives on the grid."
+    )
+}
+
 /// Whether `at` names a renderer of a slot that draws with `count` of them, and
 /// the sentence if it does not. [`slot_in_range`]'s companion, returning the
 /// refusal rather than a bool because both callers print it.
@@ -5573,6 +5646,25 @@ impl Live {
             }
         }
         self.operations = operations;
+        // **And the surface is shown where the deck ended up** — MIDI out, on
+        // the frame the change lands and after the frame's operations have
+        // been applied, so a motorised fader follows the value the deck holds
+        // rather than the one it was asked for.
+        //
+        // **It does not wait**: `Surface::show` queues into a bounded channel
+        // and drops when it is full rather than blocking this thread, which is
+        // the same rule every other thing this frame does (P-0094,
+        // `crate::midi`). A run with no output port costs one branch.
+        //
+        // **Every source is shown, not just the surface's own.** A key press,
+        // a model over `--mcp` and a transition move the deck too, and the
+        // whole point of MIDI out is that two things can move a fader.
+        if let Some(surface) = &mut self.midi {
+            surface.show(&karakuri_environment::midi::Lit {
+                deck: &self.deck,
+                exposure: self.look.exposure,
+            });
+        }
     }
 
     /// **What a model has asked for since the last frame.**
@@ -5641,19 +5733,42 @@ impl Live {
     /// [`mcp::WireRequest`]'s third point one route along: what a rebuild or a
     /// scheduled move started here comes to is reported where it lands, and a
     /// tool that waited for it would hold a connection open across a transition.
+    ///
+    /// **An operation this program cannot perform is refused rather than
+    /// answered `ok`.** `operate` is the panel's tool as much as this one's,
+    /// and the two surfaces do not perform the same set: `crates/karakuri`'s
+    /// `App::operated` calls the window's own press arms for a star, a
+    /// projector, a recording and a kept procedure
+    /// ([ADR-0341](../../../docs/adr/0341-a-route-that-answers-is-built-and-a-send-that-ends-in-a-dialog-is-gap.md)),
+    /// and **this program has none of them** — it has keys, a MIDI map and the
+    /// records they write. So every operation whose conversion writes no
+    /// record does nothing here, and [`answered`] hands back the sentence that
+    /// says so, which goes to the client as the call's error and to the
+    /// terminal through [`refused`]. Reporting *performed* for it is the
+    /// plausible wrong answer
+    /// [P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)
+    /// is written against, and ADR-0334 refused it in as many words for the
+    /// panel — *"a call answered `ok` for work that did not happen"* — one
+    /// surface before it was this one's turn.
+    ///
+    /// **[`Operation::TapBeat`] is the one arm that is not a conversion**, and
+    /// it is here for [`Live::run_surface`]'s reason: a tap moves the beat
+    /// tracker, `written` answers `Owed::NotSettled` for it, and [`Live::tap`]
+    /// is the performer this surface does have.
     fn run_operations(&mut self, asked: Vec<mcp::OperateRequest>) {
         for mcp::OperateRequest { operation, reply } in asked {
             let title = operation.title();
-            match &operation {
-                Operation::TapBeat => self.tap(),
-                other => self.operate(other),
+            let done = match &operation {
+                Operation::TapBeat => {
+                    self.tap();
+                    Ok(())
+                }
+                other => self.performed(other),
+            };
+            match done {
+                Ok(()) => reply.settled(Ok(performed_at_the_frame(title))),
+                Err(said) => refused(Some(reply), said),
             }
-            reply.settled(Ok(format!(
-                "`{title}` was performed on the frame it arrived on, where the same \
-                 operation from a key or a mapped control is performed. Anything it started \
-                 rather than finished is reported where it lands: ask `swap_outcome` for a \
-                 rebuild, and a scheduled move arrives on the grid."
-            )));
         }
     }
 
@@ -5763,9 +5878,15 @@ impl Live {
     ///   `esc` (`Quit`). **These cannot route through `operate` either, and
     ///   that is a fact about `Silent` rather than an omission**: `operate`
     ///   turns an operation into the records it writes and applies those, so an
-    ///   operation that writes none would print *no record* and the key would
-    ///   do nothing. What most of them change is a surface's own state, and
-    ///   this surface is the only thing holding it.
+    ///   operation that writes none would print [`answered`]'s refusal and the
+    ///   key would do nothing. What most of them change is a surface's own
+    ///   state, and this surface is the only thing holding it.
+    ///
+    ///   **Two of them are reachable over `--mcp` and are refused there**, in
+    ///   that same sentence: `Operation::SetLatencyOffset` and
+    ///   `Operation::Quit` are `Sayable::Operable`, and a key that nudges is
+    ///   not a performer for an operation that names a value. See
+    ///   [`Live::run_operations`].
     /// - **The vocabulary does not name it at all.** `s` prints the status line
     ///   and `h`/`?` print [`BINDINGS`]. Neither has a row on
     ///   `docs/manual/operations.html`, which is the specification for which
@@ -6910,11 +7031,30 @@ impl Live {
     /// was asked for and what is on screen.
     ///
     /// The two answers that are not records are **printed rather than
-    /// swallowed**. Nothing routed through here produces one today, which is
-    /// exactly why silence would be the wrong response: reaching one means an
-    /// operation was routed here that this build cannot write, and an operator
-    /// pressing a key that does nothing deserves the sentence.
+    /// swallowed**, which is what this wrapper is: a key press and a mapped
+    /// control have nobody waiting on an answer, and an operator pressing a
+    /// key that does nothing deserves the sentence.
+    ///
+    /// **A model does have somebody waiting**, so [`Live::run_operations`]
+    /// calls [`Live::performed`] instead and hands the same sentence back as
+    /// the call's error. The words are one string built in one place
+    /// ([`answered`]), which is [`refused`]'s rule: a copy of them for the
+    /// second audience is free to be right on the day it is written and wrong
+    /// at the next correction.
     fn operate(&mut self, operation: &Operation) {
+        if let Err(said) = self.performed(operation) {
+            eprintln!("{said}");
+        }
+    }
+
+    /// **[`Live::operate`], with the answer handed back rather than printed.**
+    ///
+    /// `Ok` means the records were written and read back, which is the whole of
+    /// what performing an operation is on this surface. `Err` is the sentence
+    /// [`answered`] built, and it means **nothing on this run changed** — see
+    /// there for why that is a refusal rather than a line on a terminal
+    /// somebody may not be reading.
+    fn performed(&mut self, operation: &Operation) -> Result<(), String> {
         let transport = match operation {
             Operation::ScrubDeck { deck, .. } => {
                 let slot = usize::from(*deck);
@@ -7021,17 +7161,10 @@ impl Live {
             transition,
             mix,
         };
-        match karakuri_operation_record::written(operation, &current) {
-            Written::Records(records) => {
-                for record in records {
-                    self.record(record);
-                }
-            }
-            Written::Silent(silent) => {
-                eprintln!("{}: no record — {}", operation.title(), silent.why())
-            }
-            Written::Owed(owed) => eprintln!("{}: {}", operation.title(), owed.why()),
+        for record in answered(operation, &current)? {
+            self.record(record);
         }
+        Ok(())
     }
 
     fn record(&mut self, record: karakuri_store::record::Record) {
@@ -10277,14 +10410,17 @@ mod live_save_tests {
     /// pressed `k`, which is the worst place in the program to find out.
     ///
     /// **The `match` is what makes this exhaustive**, not the array. A list can
-    /// fall one short in silence; a sixth variant stops this file compiling,
-    /// which is the failure that was wanted in place of the runtime one.
+    /// fall one short in silence; a seventh variant stops this file compiling,
+    /// which is the failure that was wanted in place of the runtime one. The
+    /// array is `Kind::ALL` so that the walk cannot fall short either — the
+    /// sixth kind is exactly the case where a hand-written list and the match
+    /// beside it would have disagreed.
     #[test]
     fn every_kind_survives_the_round_trip_a_saved_node_makes() {
         use karakuri_ir::Kind;
-        for kind in [Kind::L1, Kind::L2, Kind::L3, Kind::L4, Kind::Field] {
+        for kind in Kind::ALL {
             match kind {
-                Kind::L1 | Kind::L2 | Kind::L3 | Kind::L4 | Kind::Field => {}
+                Kind::L1 | Kind::L2 | Kind::L3 | Kind::L4 | Kind::Field | Kind::L5 => {}
             }
             assert_eq!(
                 layer_named(setfile::kind_name(kind)),
@@ -10766,8 +10902,10 @@ mod live_save_tests {
     /// — so an entry that stops being owed fails there rather than lingering
     /// here as a stale excuse.
     const OWED_RECORD_PATHS: &[(&str, &str)] = &[(
-        "operate",
-        "the route itself: this is where `written`'s records are written",
+        "performed",
+        "the route itself: this is where `written`'s records are written, and \
+         `Live::operate` is the wrapper over it for a caller with nobody waiting on an \
+         answer",
     )];
 
     /// The method a byte offset falls inside, read off the nearest `fn` above
@@ -11933,6 +12071,133 @@ mod wire_tests {
             aims.try_recv().expect("the slot was not re-aimed").edges,
             vec![edge("morph", "far", "drift_shell")],
             "the edge was written and nothing was asked to rebuild with it"
+        );
+    }
+
+    /// **An `operate` naming an operation this program cannot perform comes
+    /// back as a failure, and one it can perform comes back as `ok`.**
+    ///
+    /// The two halves are one claim and are asserted together, because a
+    /// refusal that refused everything would pass the first on its own. `Star a
+    /// Set` is performed on the panel by `favourite` and by nothing here; `Gain`
+    /// is the fader every surface has, and both cross the same drain.
+    ///
+    /// **Why it matters more than a wrong line on a terminal**: the client is a
+    /// model, it reports what it is told to the person sitting there, and *"`Star
+    /// a Set` was performed"* for a star that landed nowhere is the plausible
+    /// wrong answer
+    /// [P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)
+    /// is written against. ADR-0334 refused it for the panel in as many words
+    /// and this surface answered `ok` all the same, which is the defect
+    /// [ADR-0341](../../../docs/adr/0341-a-route-that-answers-is-built-and-a-send-that-ends-in-a-dialog-is-gap.md)
+    /// left behind here.
+    ///
+    /// End to end: the call goes over the socket, the audit runs on the
+    /// server's own thread, the request crosses `mcp::Reporter::operations`,
+    /// and a stand-in frame loop answers it with the same [`answered`] and the
+    /// same [`performed_at_the_frame`] [`Live::run_operations`] answers with.
+    /// The loop is a thread rather than a `Live` for
+    /// `a_wire_request_is_answered_at_the_frame_it_was_applied_on`'s reason — a
+    /// `Live` needs a window and a GPU — and what it stands in for is the drain
+    /// and the answer. `Live::run_operations`' one arm this does not carry is
+    /// `Operation::TapBeat`, which is not a conversion and has its own
+    /// performer.
+    ///
+    /// **Watched to fail** with `answered`'s `Silent` arm answering
+    /// `Ok(Vec::new())`, which is what this program did before: the star comes
+    /// back as a success carrying *was performed*, and nothing was starred.
+    #[test]
+    fn an_operation_this_program_has_no_control_for_is_refused_over_the_wire() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let l1 = dir.path().join("l1.kir");
+        std::fs::write(&l1, "proc probe { kind L1 }").expect("fixture");
+        // **One class open, and it is the fader's.** A `SetGain` the audit
+        // refused would never reach the drain at all, and what is under test
+        // here is the answer a call gets *after* the audit has passed it — the
+        // star needs nothing opened, because `Standing::Open` is its whole
+        // audit (ADR-0301, ADR-0341).
+        let opening = karakuri_environment::Opening::closed();
+        opening.set(
+            karakuri_operation::gate::Open::CLOSED
+                .with(karakuri_operation::gate::Class::MixFaders, true),
+        );
+        let reporter = mcp::serve(
+            0,
+            mcp::Slots::of(vec![(l1, Vec::new())]),
+            dir.path().join("store"),
+            true,
+            opening,
+        )
+        .expect("serve");
+        let port = reporter.port();
+
+        // What the loop wrote, so that *nothing was performed* is asserted as
+        // well as *the call failed*. The thread never ends, which is what keeps
+        // the reporter alive: a dropped reporter is a run that has quit, and
+        // the tool has a different true sentence for that.
+        let written = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let taken = written.clone();
+        std::thread::spawn(move || loop {
+            for mcp::OperateRequest { operation, reply } in reporter.operations() {
+                // `Current::default()` is every reading absent, which is what
+                // this stand-in has: it holds no deck. Neither operation below
+                // asks for one — a gain carries everything its record says.
+                match answered(&operation, &Current::default()) {
+                    Ok(records) => {
+                        taken.lock().expect("what the loop wrote").extend(records);
+                        reply.settled(Ok(performed_at_the_frame(operation.title())));
+                    }
+                    Err(said) => reply.settled(Err(said)),
+                }
+            }
+            std::thread::sleep(Duration::from_millis(2));
+        });
+
+        let (failed, said) = call(
+            port,
+            "operate",
+            serde_json::json!({
+                "operation": "Star a Set, or take the star off",
+                "with": {"set": "a_set", "favourite": true},
+            }),
+        );
+        assert!(
+            failed,
+            "a star nothing on this surface performs was answered as a success: {said}"
+        );
+        assert!(
+            said.contains("`Star a Set, or take the star off` was not performed"),
+            "the refusal does not name the operation a model asked for: {said}"
+        );
+        assert!(
+            said.contains("has no control for this one"),
+            "the refusal does not say this program cannot perform it: {said}"
+        );
+        assert!(
+            written.lock().expect("what the loop wrote").is_empty(),
+            "the call was refused and the loop wrote a record anyway"
+        );
+
+        let (failed, said) = call(
+            port,
+            "operate",
+            serde_json::json!({"operation": "Gain", "with": {"deck": 0, "gain": 0.8}}),
+        );
+        assert!(
+            !failed,
+            "a fader this surface does perform was refused with it: {said}"
+        );
+        assert!(
+            said.contains("was performed on the frame it arrived on"),
+            "the client was told something other than what the loop did: {said}"
+        );
+        assert_eq!(
+            *written.lock().expect("what the loop wrote"),
+            vec![Record::Gain {
+                slot: 0,
+                value: 0.8
+            }],
+            "the client was answered `ok` and the loop wrote something else"
         );
     }
 }

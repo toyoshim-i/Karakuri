@@ -477,6 +477,9 @@ fn layer_ordinal(layer: Kind) -> u8 {
         Kind::L4 => 3,
         // Last, matching `Set::slot_of`.
         Kind::Field => 4,
+        // **After the fields, matching `Set::slot_of`** — placed at the end so
+        // that every address a Set file already carries keeps its number.
+        Kind::L5 => 5,
     }
 }
 
@@ -490,7 +493,10 @@ fn layer_from_ordinal(n: u8) -> Layer {
         // `--param Field:0:x` was saved as `L4:0:x` and reloaded onto renderer
         // zero — silently dropped if that renderer had no such name, and
         // silently wrong if it did.
-        _ => Layer::Field,
+        4 => Layer::Field,
+        // And the sixth is named for the same reason, one kind later: a
+        // catch-all here is how the fifth went wrong.
+        _ => Layer::L5,
     }
 }
 
@@ -508,6 +514,7 @@ pub fn kind_of(layer: Layer) -> Kind {
         Layer::L3 => Kind::L3,
         Layer::L4 => Kind::L4,
         Layer::Field => Kind::Field,
+        Layer::L5 => Kind::L5,
     }
 }
 
@@ -521,6 +528,7 @@ pub fn layer_of(kind: Kind) -> Layer {
         Kind::L3 => Layer::L3,
         Kind::L4 => Layer::L4,
         Kind::Field => Layer::Field,
+        Kind::L5 => Layer::L5,
     }
 }
 
@@ -562,6 +570,7 @@ pub fn layer_name(layer: Layer) -> &'static str {
         Layer::L3 => "L3",
         Layer::L4 => "L4",
         Layer::Field => "Field",
+        Layer::L5 => "L5",
     }
 }
 
@@ -796,6 +805,7 @@ pub fn kind_name(kind: Kind) -> &'static str {
         Kind::L3 => "L3",
         Kind::L4 => "L4",
         Kind::Field => "Field",
+        Kind::L5 => "L5",
     }
 }
 
@@ -2454,6 +2464,13 @@ pub fn layer_named(name: &str) -> Option<karakuri_ir::Kind> {
         // evaluates it writes the same value into its own uniform, so one
         // address reaches all of them.
         "Field" => karakuri_ir::Kind::Field,
+        // **Named rather than left to the wildcard**, which is what
+        // `kind_name`'s exhaustive match cannot enforce on this side: a word
+        // table has no compiler behind it, so a kind added to one half and not
+        // the other reads as *no such layer* instead of failing to build.
+        // `every_kind_survives_the_round_trip_a_saved_node_makes` is the test
+        // that asks both directions at once.
+        "L5" => karakuri_ir::Kind::L5,
         _ => return None,
     })
 }

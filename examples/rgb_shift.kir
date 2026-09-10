@@ -1,0 +1,27 @@
+// The master chain's third fixed pass, written down.
+//
+// `crates/karakuri-engine/src/shaders/master.wgsl`'s `fs_rgb_shift` term for
+// term: red and blue sampled apart along x, green where it was. What was
+// `SHIFT_MAX` there — 2% of the frame's height, past which the three channels
+// stop reading as one picture and start reading as three — is the literal
+// below, and it is a number anybody can read rather than a constant in a
+// shader nobody can see.
+//
+// **The centre tap is `texel` and not `tap`.** At an amount just above zero
+// the two outer taps land back on it, and a frame that went through this pass
+// should differ from one that did not by what the shift is rather than by what
+// a filter did. That is the whole reason `texel` takes no coordinate.
+
+proc rgb_shift {
+  kind L5
+
+  param amount : float [0.0, 1.0] = 0.0
+
+  frame {
+    let d      = frame_step(0.02 * amount);
+    let centre = texel(src);
+    let r      = tap(src, point_coord + vec2(d.x, 0.0));
+    let b      = tap(src, point_coord - vec2(d.x, 0.0));
+    color = vec4(r.x, centre.y, b.z, centre.w);
+  }
+}

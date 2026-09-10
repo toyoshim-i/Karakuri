@@ -60,7 +60,7 @@
 //! `ops_per_spawn` and `ops_per_fragment`, and there has never been a byte
 //! ceiling for such a figure to feed.
 
-use crate::ast::{BlockKind, Lit};
+use crate::ast::{BlockKind, Kind, Lit};
 use crate::builtin::Builtin;
 use crate::error::{IrError, IrResult};
 use crate::span::Span;
@@ -117,8 +117,17 @@ pub const MAX_OPS_PER_FULLSCREEN_FRAGMENT: u64 = MAX_OPS_PER_ELEMENT;
 
 /// Which fragment ceiling this procedure is held to. See
 /// [`MAX_OPS_PER_FULLSCREEN_FRAGMENT`] for why there are two.
+///
+/// **It asks the kind as well as the topology**, and the second question is not
+/// a widening of the first: an L5 covers the frame exactly once with nothing
+/// overdrawing, which is the whole of what the fullscreen ceiling is *about* —
+/// and it never declares a topology, because it has no per-element form for the
+/// absence of a `vertex` block to be an answer against. Asking only about
+/// `topology` held every L5 to 512, which is the per-element stand-in for
+/// `capacity` sprites times their area times whatever they overlap, applied to
+/// a pass that has none of those.
 fn fragment_ceiling(checked: &Checked) -> u64 {
-    if checked.topology == Some(crate::ast::Topology::Fullscreen) {
+    if checked.kind == Kind::L5 || checked.topology == Some(crate::ast::Topology::Fullscreen) {
         MAX_OPS_PER_FULLSCREEN_FRAGMENT
     } else {
         MAX_OPS_PER_FRAGMENT
@@ -193,6 +202,25 @@ const W_ROT_AXIS: u64 = 2 * W_TRIG + 10; // Rodrigues' formula: more vector term
 const W_SPHERE_POINT: u64 = 2 * W_TRIG + W_SQRT + 4;
 const W_DISC_POINT: u64 = W_TRIG + W_SQRT + 2;
 
+// **A fetch is priced as a fetch and not as arithmetic**, and these three are
+// the most ordinal numbers in this file. A texture read costs latency rather
+// than issue slots, and how much of that latency is hidden is a property of
+// occupancy rather than of the shader — so what is encoded here is only the
+// ordering: an unfiltered load is cheaper than a filtered one, and a filtered
+// one is about a `sqrt`.
+//
+// **The consequence is visible and is worth stating rather than hiding.**
+// `examples/bloom.kir` is 81 filtered taps and lands within a few hundred ops
+// of [`MAX_OPS_PER_FULLSCREEN_FRAGMENT`], which was calibrated against a
+// raymarcher — thirty-odd iterations of a distance function — rather than
+// against a blur. A tap weighted at a transcendental's 8 would refuse a 9x9
+// kernel outright, which is a ceiling saying no to a shape every
+// post-processing stack ships. `docs/adr/0340-…` owes that pass a measurement,
+// and the measurement is what should replace these three.
+const W_TEXEL: u64 = 2; // address arithmetic and an unfiltered load
+const W_TAP: u64 = 4; // the same, plus the filter the texture unit does
+const W_FRAME_STEP: u64 = 2; // a divide and a multiply against the viewport
+
 const W_HSV_RGB: u64 = 10; // piecewise-branchy conversion
 const W_SRGB_LINEAR: u64 = W_TRANSCENDENTAL + 2; // a pow-shaped curve
 
@@ -248,6 +276,10 @@ fn builtin_weight(func: Builtin, args: &[TExpr]) -> u64 {
 
         Builtin::RotX | Builtin::RotY | Builtin::RotZ => W_ROT,
         Builtin::RotAxis => W_ROT_AXIS,
+
+        Builtin::Texel => W_TEXEL,
+        Builtin::Tap => W_TAP,
+        Builtin::FrameStep => W_FRAME_STEP,
 
         Builtin::SpherePoint => W_SPHERE_POINT,
         Builtin::DiscPoint => W_DISC_POINT,
@@ -413,6 +445,33 @@ fn expr_cost(
             }
             expr_cost(point, mult, block, hot, calls)
         }
+        // **Weighed like the builtin it is, because it is one.** The texture
+        // itself costs nothing to name — it is a binding rather than a load —
+        // so what is charged is the fetch and whatever computing the coordinate
+        // took. It goes through the hot-spot tracker for the reason every
+        // builtin does: 81 taps under two loops is exactly the shape a
+        // rejection has to be able to name.
+        TExprKind::Sample {
+            func,
+            texture: _,
+            at,
+        } => {
+            let weight = builtin_weight(*func, &[]);
+            let contribution = weight.saturating_mul(mult);
+            let is_new_max = hot.as_ref().is_none_or(|h| contribution > h.contribution);
+            if is_new_max {
+                *hot = Some(HotSpot {
+                    builtin: *func,
+                    contribution,
+                    block,
+                    span: expr.span,
+                });
+            }
+            let at_cost = at
+                .as_ref()
+                .map_or(0, |a| expr_cost(a, mult, block, hot, calls));
+            weight.saturating_add(at_cost)
+        }
         TExprKind::Construct { args } => 1u64.saturating_add(args.iter().fold(0u64, |total, a| {
             total.saturating_add(expr_cost(a, mult, block, hot, calls))
         })),
@@ -474,7 +533,13 @@ pub fn estimate(checked: &Checked) -> IrResult<Cost> {
                     entry.per_spawn = entry.per_spawn.saturating_add(*n);
                 }
             }
-            BlockKind::Fragment => {
+            // **The same axis, and the same rate against the same quantity.**
+            // A `frame` block runs once per texel of the frame it is handed and
+            // never more — which is what `ops_per_fragment` counts — and an L5
+            // is zero on the other two, having no element and no spawn. The
+            // `Field`'s shape rather than a new one: a kind whose figure lives
+            // on one axis and whose other figures are zero.
+            BlockKind::Fragment | BlockKind::Frame => {
                 ops_per_fragment = ops_per_fragment.saturating_add(block_cost);
                 for (slot, n) in &block_calls {
                     let entry = field_calls.entry(slot);

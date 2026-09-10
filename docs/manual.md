@@ -921,12 +921,56 @@ this program. ` ?` means it has not said yet, ` stop` that the session is stoppe
 that the helper died (the grid holds where it was), and `x3` that it sent three anchors
 whose numbers could not be used.
 
-### Nothing follows a control that is not the keyboard
+### A learn writes a 7-bit line, and not every surface has an output port
 
-MIDI **in** works and a surface can do nothing a key cannot. MIDI **out** is not built, so a
-controller's LEDs and motorised faders do not follow the deck — and two things can move a
-fader now, since a transition is one of them. Control changes are read at 7 bits, so a fader
-is 128 positions, about 0.8% of its range per step.
+MIDI **in** works and a surface can do nothing a key cannot. MIDI **out** works too: every
+mapped control is written back to the surface on the frame the deck changes it, so LEDs and
+motorised faders follow — which matters the moment two things can move a fader, and a
+transition is one of them. What is left owed is smaller than it was.
+
+**A fader is 128 positions, or 16384.** A plain `cc` line reads seven bits, which is about
+0.8% of a gain's range per step and is visible on a slow move. `cc14 <msb> <lsb>` is the
+14-bit pair: one controller carries the top seven bits, a second carries the bottom seven,
+and the value is `(msb << 7) | lsb`.
+
+```
+cc14 1 33 -> gain 0         # controller 1 is the coarse half, 33 the fine one
+cc14 1 33 -> gain 0 [0, 2]  # ranges work exactly as they do on a `cc` line
+```
+
+**Both numbers are on the line.** The convention pairs `n` with `n + 32` and controllers
+exist that do not honour it, so the line says the two it means and you check them against
+your device's manual rather than against a convention. A pair that names one controller
+twice, or a second half past 127, is refused when the map loads and the complaint names both
+numbers.
+
+**The coarse half alone still moves the control.** A surface sends the MSB and then the LSB,
+and the two are two messages that a frame boundary is free to fall between. The MSB on its
+own is read exactly as `cc <msb>` would read it — so both ends of the fader are still
+exact, and a device that sends only the coarse half is a 128-position fader on the same line
+— and the LSB that follows refines it to the full 16384. **Nothing waits for a partner**, so
+no fader is ever left stuck between two values. An LSB that arrives before any MSB has been
+seen for that control moves nothing: there is nothing to refine yet.
+
+**`learn` writes a `cc <n>` line and never a `cc14`**, and that is the one thing owed here.
+Inside a single drain, two faders whose controller numbers happen to be 32 apart look exactly
+like one 14-bit pair, and a learn that guessed wrong would silently bind two faders to one
+control. So learn a 14-bit fader and you get its coarse half working immediately; change the
+`cc 1` it wrote to `cc14 1 33` by hand to get the rest.
+
+**MIDI out opens the same device's output port**, matched by name — the whole input name
+first, then its first word, since a controller's two ports usually differ past the
+manufacturer's name. A surface with no output port, or one another program is holding, is a
+state and not a fault: the run goes on exactly as it did before, and nothing is said. What is
+sent is a `cc` per mapped continuous control at its 7-bit or 14-bit position and a note per
+mapped pad — lit when the deck is in the state that pad names — and **only when the value
+moved**. A control no map line names is never sent, because the map is the list.
+
+**The send never waits.** Messages go into a bounded queue and a thread of its own writes
+them, and a frame that finds the queue full drops rather than blocking the render thread. A
+drop is counted and said once a run. **And nothing is recorded**: MIDI out is the wire, not
+the session stream, so a session recorded from a controller still replays with neither
+controller nor map attached.
 
 **Both programs take a surface, and they take it differently.** `karakuri-cli` is told which
 port with `--midi-in` and which map with `--midi-map`, and refuses the run without the port it

@@ -35,11 +35,18 @@ use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::{Panel, Released};
 use karakuri_console::room::size;
 use karakuri_console::view::{
-    library, mixer, program_bay, rearrange, LibraryBay, Mixer, ProgramBay, Scope, Strip, Tally,
-    View,
+    library, mixer, program_bay, rearrange, LibraryBay, Mixer, ProgramBay, Rows, Scope, Strip,
+    Tally, View,
 };
 use karakuri_layout::Point;
 use karakuri_operation::{BlendMode, Operation};
+
+/// **A listing of Sets and nothing else**, which is what every test in this
+/// file is about: a row with no entry in the kinds beside it is a Set with no
+/// badge, which is the seam's own default (`view::RowKind`).
+fn listed(names: &[String]) -> Rows<'_> {
+    Rows { names, kinds: &[] }
+}
 
 /// **The mock's own library, as names** — `library.rs`'s list, and the same
 /// five: a drag that named the wrong row has four wrong answers to give.
@@ -155,7 +162,7 @@ fn a_press_on_a_row_takes_that_rows_set_in_hand() {
 
     for index in 0..bay.rows {
         let taken = bay
-            .take(&view.library, row(&bay, index))
+            .take(listed(&view.library), row(&bay, index))
             .unwrap_or_else(|| panic!("no row answered a press on row {index}"));
         assert_eq!(taken.row, index, "a press on row {index} took another row");
         assert_eq!(
@@ -174,7 +181,7 @@ fn a_press_on_a_row_takes_that_rows_set_in_hand() {
         "the sweep is asking about the foot rather than about the list's ground"
     );
     assert_eq!(
-        bay.take(&view.library, ground),
+        bay.take(listed(&view.library), ground),
         None,
         "the list's own ground took a Set in hand"
     );
@@ -193,13 +200,24 @@ fn a_press_on_a_row_takes_that_rows_set_in_hand() {
         "the bay drew all {} rows, so there is no undrawn row to ask about",
         long.len()
     );
-    let undrawn = point(tall.row(tall.rows).center());
+    // **The first row whose whole box is below the list**, which is the one
+    // after the last drawn one where the rows fill the list exactly and the one
+    // after that where a cut row is drawn in the leftover. A cut row *is*
+    // pressable — `LibraryBay::drawn` includes it and the paint clips it — so
+    // the row this asks about is the first that is not drawn at all.
+    let undrawn = point(
+        (tall.rows..long.len())
+            .map(|index| tall.row(index))
+            .find(|row| row.min.y >= tall.list.max.y)
+            .expect("every row of a listing of eighty reaches the list")
+            .center(),
+    );
     assert!(
         undrawn.y > tall.list.max.y,
         "the row after the last drawn one is still inside the list, so the rows do not fill it"
     );
     assert_eq!(
-        tall.take(&long, undrawn),
+        tall.take(listed(&long), undrawn),
         None,
         "a press below the list took a Set the bay never drew"
     );
@@ -208,7 +226,7 @@ fn a_press_on_a_row_takes_that_rows_set_in_hand() {
     // the refusal that makes handing the listing in worth doing: a row index
     // answered bare would name a Set nobody can see.
     assert_eq!(
-        bay.take(&[], row(&bay, 0)),
+        bay.take(Rows::NONE, row(&bay, 0)),
         None,
         "a bay with nothing listed under it still handed a Set over"
     );
@@ -257,7 +275,7 @@ fn a_press_on_an_open_reading_takes_nothing_in_hand() {
             "line {line} of the reading is above the row it opened under"
         );
         assert_eq!(
-            bay.take(&view.library, at),
+            bay.take(listed(&view.library), at),
             None,
             "a press on line {line} of the reading took a Set in hand"
         );
@@ -266,7 +284,7 @@ fn a_press_on_an_open_reading_takes_nothing_in_hand() {
     // **And the rows under it are still their own**, pushed down by the block.
     for index in (block.under)..bay.rows {
         let taken = bay
-            .take(&view.library, row(&bay, index))
+            .take(listed(&view.library), row(&bay, index))
             .unwrap_or_else(|| panic!("row {index} under the block answered nothing"));
         assert_eq!(
             taken.set, view.library[index],
@@ -293,8 +311,8 @@ fn a_carry_is_in_hand_until_it_is_let_go() {
         None,
         "something was in hand before a press"
     );
-    let taken = bay.take(&view.library, at).expect("row 1 is drawn");
-    panel.carry(at, taken.set);
+    let taken = bay.take(listed(&view.library), at).expect("row 1 is drawn");
+    panel.carry(at, taken.set, taken.procedure);
     assert_eq!(
         panel.in_hand(),
         Some(InHand::Carrying),
@@ -322,8 +340,8 @@ fn a_carry_emits_nothing_until_it_is_let_go() {
     let bay = bay(&panel, &view);
     let strips = strips_bay(&panel, &ctx, &view);
     let at = row(&bay, 0);
-    let taken = bay.take(&view.library, at).expect("row 0 is drawn");
-    panel.carry(at, taken.set);
+    let taken = bay.take(listed(&view.library), at).expect("row 0 is drawn");
+    panel.carry(at, taken.set, taken.procedure);
 
     let mut asked = 0;
     for over in [
@@ -381,8 +399,8 @@ fn a_drop_on_a_strip_asks_to_load_that_strips_deck() {
     for deck in 0..4u8 {
         for index in 0..bay.rows {
             let at = row(&bay, index);
-            let taken = bay.take(&view.library, at).expect("a drawn row");
-            panel.carry(at, taken.set);
+            let taken = bay.take(listed(&view.library), at).expect("a drawn row");
+            panel.carry(at, taken.set, taken.procedure);
             let onto = strip_at(&strips, deck);
             assert_eq!(panel.moved(onto), None);
             assert_eq!(
@@ -419,8 +437,8 @@ fn a_drop_on_nothing_asks_for_nothing() {
         Point::new(-40.0, -40.0),
     ] {
         let at = row(&bay, 0);
-        let taken = bay.take(&view.library, at).expect("row 0 is drawn");
-        panel.carry(at, taken.set);
+        let taken = bay.take(listed(&view.library), at).expect("row 0 is drawn");
+        panel.carry(at, taken.set, taken.procedure);
         assert_eq!(panel.moved(over), None);
         assert_eq!(
             panel.released(strips.dropped(over)),
@@ -460,8 +478,8 @@ fn a_drop_on_a_live_deck_still_asks_for_the_load() {
     );
 
     let at = row(&bay, 0);
-    let taken = bay.take(&view.library, at).expect("row 0 is drawn");
-    panel.carry(at, taken.set);
+    let taken = bay.take(listed(&view.library), at).expect("row 0 is drawn");
+    panel.carry(at, taken.set, taken.procedure);
     let onto = strip_at(&strips, 0);
     assert_eq!(
         panel.released(strips.dropped(onto)),
@@ -519,8 +537,8 @@ fn a_carry_keeps_its_claim_while_the_pointer_leaves_the_bay() {
         Claim::Panel,
         "a press on a library row went to `egui`"
     );
-    let taken = bay.take(&view.library, at).expect("row 2 is drawn");
-    panel.carry(at, taken.set);
+    let taken = bay.take(listed(&view.library), at).expect("row 2 is drawn");
+    panel.carry(at, taken.set, taken.procedure);
 
     let mut asked = 0;
     for over in [
@@ -568,7 +586,7 @@ fn the_row_a_hand_takes_is_the_row_the_cursor_marks() {
 
     for index in (0..bay.rows).rev() {
         let taken = bay
-            .take(&view.library, row(&bay, index))
+            .take(listed(&view.library), row(&bay, index))
             .expect("a drawn row");
         let was = view.cursor_row();
         assert_eq!(
@@ -652,8 +670,8 @@ fn a_drop_on_a_preview_cell_asks_to_load_that_cells_deck() {
         );
         for index in 0..bay.rows {
             let at = row(&bay, index);
-            let taken = bay.take(&view.library, at).expect("a drawn row");
-            panel.carry(at, taken.set);
+            let taken = bay.take(listed(&view.library), at).expect("a drawn row");
+            panel.carry(at, taken.set, taken.procedure);
             assert_eq!(panel.moved(onto), None);
             assert_eq!(
                 panel.released(cells.dropped(onto, view.mixer.len())),
@@ -707,8 +725,8 @@ fn a_cell_whose_letter_names_no_slot_takes_no_drop() {
     );
 
     let at = row(&bay, 0);
-    let taken = bay.take(&view.library, at).expect("row 0 is drawn");
-    panel.carry(at, taken.set);
+    let taken = bay.take(listed(&view.library), at).expect("row 0 is drawn");
+    panel.carry(at, taken.set, taken.procedure);
     assert_eq!(
         panel.released(cells.dropped(onto, view.mixer.len())),
         Some(Released::Nowhere {
@@ -805,8 +823,8 @@ fn one_rectangle_is_marked_and_it_is_the_one_the_release_names() {
     let mut asked = 0;
     for onto in targets {
         let at = row(&bay, 0);
-        let taken = bay.take(&view.library, at).expect("row 0 is drawn");
-        panel.carry(at, taken.set);
+        let taken = bay.take(listed(&view.library), at).expect("row 0 is drawn");
+        panel.carry(at, taken.set, taken.procedure);
         panel.moved(onto);
         let marks = drop_marks(&mut view, &mut panel);
         assert_eq!(
@@ -870,8 +888,8 @@ fn nothing_is_marked_where_a_release_would_load_nothing() {
         cell_at(&cells, 3),
     ] {
         let at = row(&bay, 0);
-        let taken = bay.take(&view.library, at).expect("row 0 is drawn");
-        panel.carry(at, taken.set);
+        let taken = bay.take(listed(&view.library), at).expect("row 0 is drawn");
+        panel.carry(at, taken.set, taken.procedure);
         panel.moved(over);
         let marks = drop_marks(&mut view, &mut panel);
         assert_eq!(
@@ -922,8 +940,8 @@ fn the_pointer_is_a_grab_while_a_set_is_in_hand() {
     );
 
     let at = row(&bay, 2);
-    let taken = bay.take(&view.library, at).expect("row 2 is drawn");
-    panel.carry(at, taken.set);
+    let taken = bay.take(listed(&view.library), at).expect("row 2 is drawn");
+    panel.carry(at, taken.set, taken.procedure);
 
     let mut asked = 0;
     for over in [

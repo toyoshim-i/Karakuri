@@ -248,6 +248,16 @@ struct Fading {
 struct Carrying {
     /// Which Set, by the name the listing carried.
     set: String,
+    /// **Whether that name is a procedure's**, which decides which load the
+    /// release names: `Operation::LoadProcedure` writes one layer over what the
+    /// deck is playing where `Operation::LoadSet` replaces every layer
+    /// (ADR-0338).
+    ///
+    /// **It is carried and not looked up.** The operation is built at the
+    /// release and the listing the row came from is not in hand there — a
+    /// listing the host rewrote mid-drag would answer about a different row —
+    /// so what a press resolved travels with the name it resolved.
+    procedure: bool,
 }
 
 /// **Which fader a hand has hold of**, named after the operation each of them
@@ -1161,9 +1171,9 @@ impl Panel {
     ///
     /// It reports nothing back, for [`grab`](Panel::grab)'s reason: what the
     /// press found is what the caller just resolved for itself.
-    pub fn carry(&mut self, p: Point, set: String) {
+    pub fn carry(&mut self, p: Point, set: String, procedure: bool) {
         self.cursor = p;
-        self.drag = Some(Drag::Carry(Carrying { set }));
+        self.drag = Some(Drag::Carry(Carrying { set, procedure }));
     }
 
     /// A move with something in hand, and what it did — see [`Dragged`].
@@ -1426,9 +1436,15 @@ impl Panel {
                 // `Knob::operation`'s reason: the translation from what a hand
                 // did into one operation of the vocabulary is the model's, and
                 // the two operands are the payload and the destination.
-                Some(deck) => Released::Dropped(Operation::LoadSet {
-                    deck,
-                    set: carrying.set,
+                Some(deck) => Released::Dropped(match carrying.procedure {
+                    true => Operation::LoadProcedure {
+                        deck,
+                        procedure: carrying.set,
+                    },
+                    false => Operation::LoadSet {
+                        deck,
+                        set: carrying.set,
+                    },
                 }),
                 None => Released::Nowhere { set: carrying.set },
             }),
